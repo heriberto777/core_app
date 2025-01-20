@@ -25,16 +25,35 @@ const startCronJob = (interval) => {
 
     try {
       logger.info("Iniciando transferencias programadas...");
-      await runTransfers(); // Ejecuta todas las transferencias secuencialmente
+      const results = await runTransfers(); // Captura los resultados de las transferencias
       logger.info("Transferencias programadas completadas");
+
+      // console.log("Revisano que nos trae runTranfers", results);
+
+      // Construir el cuerpo del mensaje con los resultados
+      const successMessage = results
+        .map(
+          (result, index) =>
+            `<li><strong>Transfer ${index + 1} - ${result.name}:</strong> ${
+              result.success
+                ? `Éxito (${result.rowsTransferred} filas transferidas)`
+                : `Error (${result.errorMessage})`
+            }</li>`
+        )
+        .join("");
+
+      const emailBody = `
+        <p><strong>Transferencias Completadas</strong></p>
+        <ul>${successMessage}</ul>
+        <p>Las transferencias programadas se realizaron con los resultados indicados arriba.</p>
+      `;
 
       // Notificar éxito
       await sendEmail(
         "heriberto777@gmail.com",
-        "Transferencia de datos",
+        "Transferencia de datos - Informe Detallado",
         `La transferencia de datos fue exitosa.`,
-        `<p><strong>Transferencias Completadas</strong></p>
-                <p>Las transferencias programadas se realizaron exitosamente.</p>`
+        emailBody
       );
     } catch (error) {
       logger.error("Error en las transferencias programadas:", {
