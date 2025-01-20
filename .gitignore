@@ -15,3 +15,7 @@ build/              # Excluye la carpeta de construcción
 .vscode/            # Configuración de Visual Studio Code
 .idea/              # Configuración de JetBrains IDEs
 *.swp               # Archivos temporales de Vim
+
+
+/server/logs/
+/server/node_modules/ 

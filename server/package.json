@@ -17,8 +17,10 @@
   "license": "ISC",
   "description": "core para micro servicios de comunicacion server y telynet",
   "dependencies": {
+    "bull": "^4.16.5",
     "dotenv": "^16.4.7",
     "express": "^4.21.2",
+    "ioredis": "^5.4.2",
     "mongoose": "^8.9.5",
     "mssql": "^9.3.2",
     "node-cron": "^3.0.3",
