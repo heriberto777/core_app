@@ -1,5 +1,6 @@
 const Transport = require("winston-transport");
 const Log = require("../models/loggerModel"); // Modelo de MongoDB para logs
+const logger = require("./logger");
 
 class MongoDBTransport extends Transport {
   constructor(opts) {
@@ -20,6 +21,7 @@ class MongoDBTransport extends Transport {
       await log.save();
     } catch (err) {
       console.error("Error guardando log en MongoDB:", err);
+      logger.error("Error guardando log en MongoDB:", err);
     }
 
     callback();
