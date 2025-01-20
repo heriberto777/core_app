@@ -25,6 +25,7 @@ const server2Config = {
   options: {
     encrypt: true,
     trustServerCertificate: true,
+    instanceName: process.env.SERVER2_INSTANCE, // Instancia nombrada
   },
   requestTimeout: 60000, // Incrementa el tiempo de espera a 60 segundos
   pool: {
