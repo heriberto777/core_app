@@ -8,12 +8,13 @@ const server1Config = {
   options: {
     encrypt: true,
     trustServerCertificate: true,
+    enableArithAbort: true,
   },
-  requestTimeout: 60000, // Incrementa el tiempo de espera a 60 segundos
+  requestTimeout: 60000,
   pool: {
-    max: 10, // Máximo de conexiones en el pool
-    min: 0, // Mínimo de conexiones
-    idleTimeoutMillis: 30000, // Tiempo antes de cerrar conexiones inactivas
+    max: 10,
+    min: 2,
+    idleTimeoutMillis: 60000,
   },
 };
 
@@ -25,30 +26,46 @@ const server2Config = {
   options: {
     encrypt: true,
     trustServerCertificate: true,
-    instanceName: process.env.SERVER2_INSTANCE, // Instancia nombrada
+    enableArithAbort: true,
   },
-  requestTimeout: 60000, // Incrementa el tiempo de espera a 60 segundos
+  requestTimeout: 60000,
   pool: {
-    max: 10, // Máximo de conexiones en el pool
-    min: 0, // Mínimo de conexiones
-    idleTimeoutMillis: 30000, // Tiempo antes de cerrar conexiones inactivas
+    max: 10,
+    min: 2,
+    idleTimeoutMillis: 60000,
   },
 };
 
-const connectToServer1 = new sql.ConnectionPool(server1Config)
-  .connect()
-  .then((pool) => {
-    console.log("Conexión a SERVER1_DB establecida");
-    return pool;
-  })
-  .catch((err) => console.error("Error conectando a SERVER1_DB:", err));
+// Función para conectarse al servidor 1
+const connectToServer1 = async () => {
+  try {
+    if (!global.server1Pool) {
+      global.server1Pool = await new sql.ConnectionPool(
+        server1Config
+      ).connect();
+      console.log("✅ Conexión a SERVER1_DB establecida");
+    }
+    return global.server1Pool;
+  } catch (err) {
+    console.error("❌ Error conectando a SERVER1_DB:", err);
+    throw err;
+  }
+};
 
-const connectToServer2 = new sql.ConnectionPool(server2Config)
-  .connect()
-  .then((pool) => {
-    console.log("Conexión a SERVER2_DB establecida");
-    return pool;
-  })
-  .catch((err) => console.error("Error conectando a SERVER2_DB:", err));
+// Función para conectarse al servidor 2
+const connectToServer2 = async () => {
+  try {
+    if (!global.server2Pool) {
+      global.server2Pool = await new sql.ConnectionPool(
+        server2Config
+      ).connect();
+      console.log("✅ Conexión a SERVER2_DB establecida");
+    }
+    return global.server2Pool;
+  } catch (err) {
+    console.error("❌ Error conectando a SERVER2_DB:", err);
+    throw err;
+  }
+};
 
 module.exports = { connectToServer1, connectToServer2 };

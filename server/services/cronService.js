@@ -1,6 +1,7 @@
 const cron = require("node-cron");
 const logger = require("./logger");
-const { runTransfers } = require("./transferManager"); // Usa el manejador secuencial
+const { runSequentialTransfers } = require("./transferService");
+// const { runTransfers } = require("./transferManager"); // Usa el manejador secuencial
 const { sendEmail } = require("./emailService");
 
 let task;
@@ -25,10 +26,22 @@ const startCronJob = (interval) => {
 
     try {
       logger.info("Iniciando transferencias programadas...");
-      const results = await runTransfers(); // Captura los resultados de las transferencias
-      logger.info("Transferencias programadas completadas");
 
-      // console.log("Revisano que nos trae runTranfers", results);
+      // Asegurar que runSequentialTransfers es un array
+      if (!Array.isArray(runSequentialTransfers)) {
+        throw new Error("runSequentialTransfers no es un array válido");
+      }
+
+      const results = [];
+
+      // Ejecutar transferencias secuenciales
+      for (const task of runSequentialTransfers) {
+        logger.info(`Ejecutando transferencia: ${task.name}`);
+        const result = await task.execute(() => {});
+        results.push({ name: task.name, ...result });
+      }
+
+      logger.info("Transferencias programadas completadas");
 
       // Construir el cuerpo del mensaje con los resultados
       const successMessage = results
@@ -36,8 +49,8 @@ const startCronJob = (interval) => {
           (result, index) =>
             `<li><strong>Transfer ${index + 1} - ${result.name}:</strong> ${
               result.success
-                ? `Éxito (${result.rowsTransferred} filas transferidas)`
-                : `Error (${result.errorMessage})`
+                ? `Éxito (${result.rows} filas transferidas)`
+                : `Error (${result.message})`
             }</li>`
         )
         .join("");
