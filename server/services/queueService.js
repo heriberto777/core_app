@@ -15,12 +15,19 @@ transferQueue.process(5, async (job) => {
   const { executeTask } = job.data;
 
   try {
-    const result = await executeTask();
+    let progress = 0;
+    job.progress(progress);
+
+    const result = await executeTask((step) => {
+      progress += step;
+      job.progress(progress);
+    });   
+
     logger.info(`Tarea completada: ${job.data.taskName}`);
-    return result;
+    done(null, result);
   } catch (error) {
     logger.error(`Error en la tarea ${job.data.taskName}:`, error);
-    throw error;
+    done(error);
   }
 });
 
