@@ -2,7 +2,7 @@
 Seccion para definir las rutas para las apis
 */
 
-const SERVER_IP = `${window.location.hostname}:3000`; // Direccion del servidor de las APIS
+const SERVER_IP = `${window.location.hostname}:3979`; // Direccion del servidor de las APIS
 const PROTOCOL = window.location.protocol; //Detecta el protocolo actual http:/ o https:/
 
 export const ENV = {
