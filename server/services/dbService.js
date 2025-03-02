@@ -45,14 +45,52 @@ const getDBConfig = async (serverName) => {
  */
 const connectToMongoDB = async () => {
   try {
-    const MONGO_URI =
-      process.env.MONGO_URI ||
-      `mongodb://${process.env.DB_USER}:${process.env.DB_PASS}@${process.env.DB_HOST}:${process.env.DB_PORT}/${process.env.DB_NAME}`;
+    // Usando directamente MONGO_URI como primera opción
+    // Si no está disponible, verifica que todas las variables necesarias estén definidas
+    let MONGO_URI = process.env.MONGO_URI;
 
-    await mongoose.connect(MONGO_URI);
+    if (!MONGO_URI) {
+      const DB_USER = process.env.DB_USER;
+      const DB_PASS = process.env.DB_PASS;
+      const DB_HOST = process.env.DB_HOST || "localhost";
+      const DB_PORT = process.env.DB_PORT || "27017";
+      const DB_NAME = process.env.DB_NAME || "core_app";
+
+      // Validar que tenemos al menos host y nombre de la base de datos
+      if (!DB_HOST || !DB_NAME) {
+        throw new Error(
+          "Faltan variables de entorno para la conexión a MongoDB"
+        );
+      }
+
+      // Construir la URI con los valores disponibles
+      if (DB_USER && DB_PASS) {
+        MONGO_URI = `mongodb://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}`;
+      } else {
+        MONGO_URI = `mongodb://${DB_HOST}:${DB_PORT}/${DB_NAME}`;
+      }
+    }
+
+    logger.info(
+      `Intentando conectar a MongoDB con URI: ${MONGO_URI.replace(
+        /:[^:]*@/,
+        ":****@"
+      )}`
+    );
+
+    await mongoose.connect(MONGO_URI, {
+      useNewUrlParser: true,
+      useUnifiedTopology: true,
+      serverSelectionTimeoutMS: 5000,
+    });
+
     logger.info("✅ Conexión a MongoDB establecida.");
   } catch (error) {
-    logger.error("❌ Error al conectar a MongoDB:", error);
+    if (typeof logger.error === "function") {
+      logger.error("❌ Error al conectar a MongoDB:", error);
+    } else {
+      console.error("❌ Error al conectar a MongoDB:", error);
+    }
     throw error;
   }
 };
@@ -61,27 +99,39 @@ const connectToMongoDB = async () => {
  * Carga las configuraciones desde MongoDB al inicio
  */
 const loadConfigurations = async () => {
-  // Asegurar que siempre obtenemos configuraciones frescas
-  global.SQL_CONFIG = {
-    server1: await getDBConfig("server1"),
-    server2: await getDBConfig("server2"),
-  };
+  try {
+    // Primero establecer la conexión a MongoDB
+    await connectToMongoDB();
 
-  // Verificar que las configuraciones son válidas
-  if (!global.SQL_CONFIG.server1 || !global.SQL_CONFIG.server2) {
-    throw new Error(
-      "❌ No se pudieron cargar todas las configuraciones de bases de datos."
-    );
-  }
+    // Asegurar que siempre obtenemos configuraciones frescas
+    global.SQL_CONFIG = {
+      server1: await getDBConfig("server1"),
+      server2: await getDBConfig("server2"),
+    };
 
-  logger.info("✅ Configuración de bases de datos cargada en memoria.");
+    // Verificar que las configuraciones son válidas
+    if (!global.SQL_CONFIG.server1 || !global.SQL_CONFIG.server2) {
+      throw new Error(
+        "❌ No se pudieron cargar todas las configuraciones de bases de datos."
+      );
+    }
 
-  // Inicializar los pools globales solo si no existen
-  if (!global.server1Pool) {
-    global.server1Pool = null;
-  }
-  if (!global.server2Pool) {
-    global.server2Pool = null;
+    logger.info("✅ Configuración de bases de datos cargada en memoria.");
+
+    // Inicializar los pools globales solo si no existen
+    if (!global.server1Pool) {
+      global.server1Pool = null;
+    }
+    if (!global.server2Pool) {
+      global.server2Pool = null;
+    }
+  } catch (error) {
+    if (typeof logger.error === "function") {
+      logger.error("❌ Error cargando configuraciones:", error);
+    } else {
+      console.error("❌ Error cargando configuraciones:", error);
+    }
+    throw error;
   }
 };
 
