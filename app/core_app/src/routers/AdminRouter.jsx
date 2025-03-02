@@ -1,0 +1,74 @@
+import { Routes, Route, Navigate } from "react-router-dom";
+import {
+  AdminLayout,
+  Auth,
+  useAuth,
+  Dashbaord,
+  TransferTasks,
+  LoadsTasks,
+} from "../index";
+
+const LoadLayout = ({ Layout, Page }) => {
+  return (
+    <Layout>
+      <Page />
+    </Layout>
+  );
+};
+
+// Validar que el usuario tiene acceso
+const hasAccess = (user, requiredRoles) => {
+  if (!user || !user.role) return false;
+  return requiredRoles.some((role) => user.role.includes(role));
+};
+
+export function AdminRouter() {
+  const { user } = useAuth();
+
+  if (!user) {
+    return (
+      <Routes>
+        <Route path="/*" element={<Auth />} />
+      </Routes>
+    );
+  }
+
+  return (
+    <Routes>
+      {/* Redirigir automáticamente al Dashboard después del login */}
+      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+
+      {/* Asegurar que Dashboard tiene un componente válido */}
+      <Route
+        path="/dashboard"
+        element={
+          hasAccess(user, ["admin", "dashboard"]) ? (
+            <LoadLayout Layout={AdminLayout} Page={Dashbaord} />
+          ) : (
+            <Navigate to="/unauthorized" />
+          )
+        }
+      />
+      <Route
+        path="/tasks"
+        element={
+          hasAccess(user, ["admin", "dashboard"]) ? (
+            <LoadLayout Layout={AdminLayout} Page={TransferTasks} />
+          ) : (
+            <Navigate to="/unauthorized" />
+          )
+        }
+      />
+      <Route
+        path="/loads"
+        element={
+          hasAccess(user, ["admin", "dashboard"]) ? (
+            <LoadLayout Layout={AdminLayout} Page={LoadsTasks} />
+          ) : (
+            <Navigate to="/unauthorized" />
+          )
+        }
+      />
+    </Routes>
+  );
+}

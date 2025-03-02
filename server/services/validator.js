@@ -1,56 +1,54 @@
-const logger = require("./logger");
-
-/**
- * Valida los datos según las reglas proporcionadas.
- * @param {Array} data - Datos a validar.
- * @param {Object} rules - Reglas de validación.
- * @param {Object} server2Pool - Conexión al servidor 2 para verificar existencia.
- * @returns {Object} - Resultado de la validación con registros válidos e inválidos.
- */
-const validateData = async (data, rules, server2Pool) => {
+const validateData = async (data, rules, server2Pool, tableName) => {
   const validData = [];
   const invalidData = [];
 
-  // Verificar existencia previa en el servidor 2
-  let existingKeys = new Set();
-  if (rules.existenceCheck) {
-    const { table, key } = rules.existenceCheck;
-    const result = await server2Pool
-      .request()
-      .query(`SELECT ${key} FROM ${table}`);
-    existingKeys = new Set(result.recordset.map((row) => row[key]));
-  }
-
   for (const record of data) {
-    const errors = [];
+    const errors = {};
 
-    // Validar campos obligatorios
-    if (rules.requiredFields) {
-      for (const field of rules.requiredFields) {
-        if (!record[field] || record[field].toString().trim() === "") {
-          errors.push(`${field} es obligatorio`);
-        }
+    for (const [field, validation] of Object.entries(rules)) {
+      if (validation.required && !record[field]) {
+        errors[field] = `⚠️ ${field} es obligatorio`;
+      }
+      if (
+        validation.maxLength &&
+        record[field] &&
+        record[field].length > validation.maxLength
+      ) {
+        errors[
+          field
+        ] = `⚠️ ${field} excede el límite de ${validation.maxLength} caracteres`;
+      }
+      if (validation.numeric && isNaN(Number(record[field]))) {
+        errors[field] = `⚠️ ${field} debe ser un valor numérico`;
       }
     }
 
-    // Validar existencia
-    if (
-      rules.existenceCheck &&
-      existingKeys.has(record[rules.existenceCheck.key])
-    ) {
-      errors.push(`${rules.existenceCheck.key} ya existe en la tabla destino`);
+    // 📌 Validar si el registro ya existe en la base de datos destino
+    if (rules.checkExistence) {
+      try {
+        const existQuery = `SELECT COUNT(*) AS count FROM dbo.${tableName} WHERE ${rules.primaryKey} = @value`;
+        const request = server2Pool.request();
+        request.input("value", record[rules.primaryKey]);
+
+        const result = await request.query(existQuery);
+        if (result.recordset[0].count > 0) {
+          errors[rules.primaryKey] = `⚠️ El registro con ${
+            rules.primaryKey
+          } = ${
+            record[rules.primaryKey]
+          } ya existe en la base de datos destino`;
+        }
+      } catch (err) {
+        errors[
+          "DB_CHECK"
+        ] = `⚠️ Error al verificar existencia en la base de datos: ${err.message}`;
+      }
     }
 
-    // Clasificar el registro
-    if (errors.length > 0) {
-      invalidData.push({ record, errors });
-      logger.warn(
-        `Registro inválido: ${JSON.stringify(record)}, Errores: ${errors.join(
-          ", "
-        )}`
-      );
-    } else {
+    if (Object.keys(errors).length === 0) {
       validData.push(record);
+    } else {
+      invalidData.push({ record, errors });
     }
   }
 

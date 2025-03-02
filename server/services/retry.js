@@ -1,4 +1,4 @@
-const logger = require("../services/logger");
+const logger = require("./logger");
 
 const retry = async (fn, retries = 3, delay = 2000, taskName = "Tarea") => {
   for (let i = 0; i < retries; i++) {

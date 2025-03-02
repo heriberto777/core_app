@@ -1,35 +1,31 @@
-import { useState } from 'react'
-import reactLogo from './assets/react.svg'
-import viteLogo from '/vite.svg'
-import './App.css'
+import { createContext, useContext, useEffect, useState } from "react";
+import { AdminRouter, AuthContext, ReloadProvider, Light, Dark } from "./index";
+import {  ThemeProvider } from "styled-components";
 
-function App() {
-  const [count, setCount] = useState(0)
+export const ThemeContext = createContext(null);
 
+export function App() {
+   const { user } = useContext(AuthContext);
+  const [theme, setTheme] = useState("light");
+  const themeStyle = theme === "light" ? Light : Dark;
+
+
+  useEffect(() => {
+    if (user && user?.theme) {
+      setTheme(user?.theme);
+    }
+  }, [user]);
+
+  const toggleTheme = () => {
+    setTheme((curr) => (curr === "light" ? "dark" : "light"));
+  };
   return (
-    <>
-      <div>
-        <a href="https://vite.dev" target="_blank">
-          <img src={viteLogo} className="logo" alt="Vite logo" />
-        </a>
-        <a href="https://react.dev" target="_blank">
-          <img src={reactLogo} className="logo react" alt="React logo" />
-        </a>
-      </div>
-      <h1>Vite + React</h1>
-      <div className="card">
-        <button onClick={() => setCount((count) => count + 1)}>
-          count is {count}
-        </button>
-        <p>
-          Edit <code>src/App.jsx</code> and save to test HMR
-        </p>
-      </div>
-      <p className="read-the-docs">
-        Click on the Vite and React logos to learn more
-      </p>
-    </>
-  )
+    <ThemeContext.Provider value={{ toggleTheme, theme }}>
+      <ThemeProvider theme={themeStyle}>
+        <ReloadProvider>
+          <AdminRouter />
+        </ReloadProvider>
+      </ThemeProvider>
+    </ThemeContext.Provider>
+  );
 }
-
-export default App

@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 
 const configSchema = new mongoose.Schema({
-  interval: { type: Number, required: true }, // Intervalo en minutos
+  hour: { type: String, required: true }, // Intervalo en minutos
 });
 
 const Config = mongoose.model("Config", configSchema);

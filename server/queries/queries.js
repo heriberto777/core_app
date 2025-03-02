@@ -116,10 +116,11 @@ const queries = [
             WHEN SUBSTRING(CL.CLIENTE, PATINDEX('%[A-Za-z]%', CL.CLIENTE), 1) NOT LIKE 'O' 
             THEN CONCAT('CN', CL.CLIENTE) 
             ELSE CL.CLIENTE 
-        END AS Code_ofClient,
+        END AS Code_Account,
         CAST(CL.LIMITE_CREDITO AS NUMERIC(15,2)) AS Credit_Limit,
         CAST(CL.SALDO AS NUMERIC(15,2)) AS Credit_Consum,
         CL.MOROSO AS Lock_Credit,
+        '0' As Source_Create,
         '1' AS Transfer_Status
     FROM CATELLI.CLIENTE CL
     WHERE CL.ACTIVO = 'S' 
@@ -174,10 +175,8 @@ const queries = [
         CAST(ar.VOLUMEN AS NUMERIC(15,2)) AS Volume,
         NULL AS Unit_type_volume,
         CAST(im.IMPUESTO1 AS NUMERIC(15,2)) AS Tax1,
-        
         COALESCE(tui.Descripcion, ar.UNIDAD_EMPAQUE) AS Code_Unit_Type_Box,
-        
-        NULL AS variable_weight,
+        '0' As Source_Create,
         '1' AS Transfer_Status
     FROM CATELLI.ARTICULO ar
     LEFT JOIN CATELLI.IMPUESTO im ON im.IMPUESTO = ar.IMPUESTO
@@ -568,7 +567,7 @@ SELECT * FROM AccountsOrg;
             END AS Code_Region,
             NULL AS ZIP,
             LEFT(LTRIM(REPLACE(REPLACE(REPLACE(CAST(cl.DIRECCION AS VARCHAR(8000)), '|', ''), 'DETALLE:', ''), ',', '')), 75) AS Address1,
-            RIGHT(LTRIM(REPLACE(REPLACE(REPLACE(CAST(cl.DIRECCION AS VARCHAR(8000)), '|', ''), 'DETALLE:', ''), ',', '')), 150) AS Address2,
+            RIGHT(LTRIM(REPLACE(REPLACE(REPLACE(CAST(cl.DIRECCION AS VARCHAR(8000)), '|', ''), 'DETALLE:', ''), ',', '')), 75) AS Address2,
             NULL AS Population,
             LEFT(RTRIM(LTRIM(REPLACE(REPLACE(cl.TELEFONO1, '/', ''), '|', ''))), 12) AS Phone1,
             RIGHT(RTRIM(LTRIM(REPLACE(REPLACE(cl.TELEFONO1, '/', ''), '|', ''))), 30) AS Phone2,
@@ -717,27 +716,6 @@ SELECT * FROM AccountsOrg;
         FROM catelli.contacts_array
     )
     SELECT * FROM ContactsArray;
-  `,
-  },
-  {
-    name: "IMPLT_contacts_accounts",
-    query: `
-    WITH ContactsAccounts AS (
-        SELECT 
-            CASE 
-                WHEN SUBSTRING(CL.cliente, PATINDEX('%[A-Za-z]%', CL.cliente), 1) NOT LIKE 'O' 
-                THEN 'CN' + CL.cliente 
-                ELSE CL.cliente 
-            END AS Code_Contact,
-            'CATELLI' AS Code_Unit_Org,
-            'CATELLI' AS Code_Sales_Org,
-            '1' AS Code_Account,
-            1 AS Transfer_status
-        FROM CATELLI.CLIENTE CL 
-        WHERE CL.cliente NOT LIKE 'N%' 
-          AND CL.VENDEDOR NOT IN ('999','998','22')
-    )
-    SELECT * FROM ContactsAccounts;
   `,
   },
   {
