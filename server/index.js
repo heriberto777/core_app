@@ -1,5 +1,7 @@
 require("dotenv").config();
 const app = require("./app");
+const fs = require("fs");
+const https = require("https");
 const {
   connectToMongoDB,
   loadConfigurations,
@@ -7,15 +9,41 @@ const {
 } = require("./services/dbService");
 const { startCronJob } = require("./services/cronService");
 const Config = require("./models/configModel");
-const http = require("http");
 const { API_VERSION } = require("./config");
 
-const PORT = process.env.PORT || 3979;
+// Puerto para HTTPS - usar el mismo que tu otra aplicación para mantener consistencia
+const port = process.env.PORT || 3979;
+
+// Cargar certificados SSL
+let credentials;
+try {
+  const privateKey = fs.readFileSync(
+    "/etc/letsencrypt/live/catelli.ddns.net/privkey.pem",
+    "utf8"
+  );
+  const certificate = fs.readFileSync(
+    "/etc/letsencrypt/live/catelli.ddns.net/fullchain.pem",
+    "utf8"
+  );
+  const ca = fs.readFileSync(
+    "/etc/letsencrypt/live/catelli.ddns.net/chain.pem",
+    "utf8"
+  );
+
+  credentials = {
+    key: privateKey,
+    cert: certificate,
+    ca: ca,
+  };
+  console.log("✅ Certificados SSL cargados correctamente");
+} catch (error) {
+  console.error("❌ Error al leer los certificados:", error.message);
+  process.exit(1); // Salir si no podemos cargar los certificados, como en tu versión original
+}
 
 const startServer = async () => {
   try {
     await connectToMongoDB(); // 🔥 Conectar a MongoDB
-
     console.log("✅ Conexión a MongoDB establecida.");
 
     await loadConfigurations(); // 🔄 Cargar configuración de servidores SQL desde MongoDB
@@ -34,30 +62,40 @@ const startServer = async () => {
 
     startCronJob(executionHour); // Iniciar cronjob con la hora configurada
 
-    const server = http.createServer(app);
+    // Crear e iniciar servidor HTTPS (único servidor)
+    const httpsServer = https.createServer(credentials, app);
 
-    server.listen(PORT, () => {
+    httpsServer.listen(port, () => {
       console.log("******************************");
       console.log("****** API REST CATELLI ******");
       console.log("******************************");
       console.log(
-        `🚀 Servidor iniciado en: http://localhost:${PORT}/api/${API_VERSION}/`
+        `🔒 Servidor HTTPS iniciado en: https://localhost:${port}/api/${API_VERSION}/`
       );
     });
 
-    server.on("error", (err) => {
+    // Manejar errores del servidor HTTPS
+    httpsServer.on("error", (err) => {
       if (err.code === "EADDRINUSE") {
-        console.log(`⚠️ El puerto ${PORT} está en uso, intentando otro...`);
-        server.listen(0, () => {
-          console.log(`✅ Nuevo puerto asignado: ${server.address().port}`);
-        });
+        console.error(`⚠️ El puerto ${port} está en uso. Abortando...`);
+        process.exit(1);
       } else {
-        console.error("❌ Error en el servidor:", err);
+        console.error("❌ Error en el servidor HTTPS:", err);
       }
     });
   } catch (err) {
     console.error("❌ Error al iniciar el servidor:", err);
+    process.exit(1);
   }
 };
+
+// Manejar errores no capturados
+process.on("uncaughtException", (error) => {
+  console.error("❌ Error no capturado:", error);
+});
+
+process.on("unhandledRejection", (reason, promise) => {
+  console.error("❌ Rechazo de promesa no manejado:", reason);
+});
 
 startServer();
