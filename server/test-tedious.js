@@ -1,4 +1,5 @@
-const { Connection, Request } = require("tedious");
+// test-tedious.js
+const { Connection } = require("tedious");
 
 const config = {
   server: "sql-calidad.miami",
@@ -11,6 +12,7 @@ const config = {
   },
   options: {
     database: "stdb_gnd",
+    instanceName: "calidadstdb",
     trustServerCertificate: true,
     rowCollectionOnRequestCompletion: true,
   },
@@ -27,7 +29,7 @@ connection.on("connect", function (err) {
   console.log("Conectado a SQL Server");
 
   // Ejecutar una consulta simple
-  const request = new Request("SELECT @@VERSION AS Version", function (
+  const request = new Request("SELECT * FROM dbo.IMPLT_accounts", function (
     err,
     rowCount,
     rows
@@ -35,8 +37,7 @@ connection.on("connect", function (err) {
     if (err) {
       console.error("Error en consulta:", err);
     } else {
-      console.log("Versión SQL Server:");
-      console.log(rows);
+      console.log("Versión SQL Server:", rows[0]);
     }
     connection.close();
   });
