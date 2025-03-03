@@ -8,7 +8,9 @@ const {
   loadConfigurations,
   connectToDB,
   testEnvBasedConnection,
+  testDirectConnection,
 } = require("./services/dbService");
+const { Connection } = require("tedious");
 const { startCronJob } = require("./services/cronService");
 const Config = require("./models/configModel");
 const { API_VERSION } = require("./config");
@@ -97,6 +99,55 @@ const startServer = async () => {
 
     console.log("Intentando conexiones a SQL Server con timeout...");
     try {
+      // Ejecutando diagnóstico de conexión directa con tedious
+      console.log("Ejecutando diagnóstico de conexión directa con tedious...");
+      try {
+        const directTestResult = await testDirectConnection('server2');
+        console.log(`✅ Prueba directa exitosa. Servidor: ${directTestResult.server}`);
+        console.log(`Versión SQL: ${directTestResult.version.substring(0, 50)}...`);
+      } catch (directErr) {
+        console.error(`❌ Prueba directa fallida: ${directErr.message}`);
+        // Intentar con fallback explícito sin instanceName
+        try {
+          console.log("Intentando conexión de fallback sin instanceName...");
+          const fallbackConfig = {
+            server: process.env.SERVER2_HOST,
+            authentication: {
+              type: "default",
+              options: {
+                userName: process.env.SERVER2_USER,
+                password: process.env.SERVER2_PASS,
+              },
+            },
+            options: {
+              database: process.env.SERVER2_DB,
+              trustServerCertificate: true,
+              rowCollectionOnRequestCompletion: true,
+            }
+          };
+          
+          const connection = new Connection(fallbackConfig);
+          
+          // Probar conexión
+          await new Promise((resolve, reject) => {
+            connection.on("connect", (err) => {
+              if (err) {
+                console.error("Fallback también falló:", err.message);
+                reject(err);
+              } else {
+                console.log("✅ Conexión de fallback exitosa");
+                connection.close();
+                resolve();
+              }
+            });
+            
+            connection.connect();
+          });
+        } catch (fallbackErr) {
+          console.error("Fallback también falló:", fallbackErr.message);
+        }
+      }
+
       // Usar Promise.all pero con timeouts para evitar bloqueos
       const connections = await Promise.all([
         connectWithTimeout("server1", 15000),
