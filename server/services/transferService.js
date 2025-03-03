@@ -12,6 +12,125 @@ const { sendProgress } = require("./progressSse");
 const { sendEmail } = require("./emailService");
 
 /**
+ * Función de ayuda para verificar el estado de una transacción antes de intentar operaciones con ella
+ */
+function verificarTransaccion(transaction, transactionStarted) {
+  if (!transaction) {
+    throw new Error("Objeto de transacción no inicializado correctamente");
+  }
+
+  if (!transactionStarted) {
+    throw new Error("La transacción no ha sido iniciada correctamente");
+  }
+
+  // Verificar si el adaptador tiene su propia forma de validar
+  if (typeof transaction.active === "boolean" && !transaction.active) {
+    throw new Error("La transacción ha sido marcada como inactiva o fallida");
+  }
+
+  return true;
+}
+
+/**
+ * Mejora para iniciar una transacción con verificación y reintentos
+ */
+async function iniciarTransaccion(conexion, nombreOperacion = "operación") {
+  try {
+    // Verificar si la conexión está activa
+    if (!conexion || !conexion.connected) {
+      throw new Error(
+        `La conexión no está activa para iniciar la transacción de ${nombreOperacion}`
+      );
+    }
+
+    const transaction = conexion.transaction();
+    await transaction.begin();
+
+    return {
+      transaction,
+      transactionStarted: true,
+    };
+  } catch (error) {
+    logger.error(
+      `Error al iniciar la transacción para ${nombreOperacion}:`,
+      error
+    );
+    throw new Error(
+      `No se pudo iniciar la transacción para ${nombreOperacion}: ${error.message}`
+    );
+  }
+}
+
+/**
+ * Mejora para confirmar una transacción con verificación
+ */
+async function confirmarTransaccion(
+  transaction,
+  transactionStarted,
+  nombreOperacion = "operación"
+) {
+  if (!transaction || !transactionStarted) {
+    logger.warn(
+      `Intento de confirmar una transacción no iniciada para ${nombreOperacion}`
+    );
+    return false;
+  }
+
+  try {
+    await transaction.commit();
+    logger.debug(`Transacción de ${nombreOperacion} confirmada correctamente`);
+    return true;
+  } catch (error) {
+    logger.error(
+      `Error al confirmar la transacción de ${nombreOperacion}:`,
+      error
+    );
+
+    // Intentar rollback automático tras fallo de commit
+    try {
+      await transaction.rollback();
+      logger.debug(
+        `Rollback automático de la transacción de ${nombreOperacion} tras fallo en commit`
+      );
+    } catch (rollbackError) {
+      logger.warn(
+        `No se pudo hacer rollback automático tras fallo en commit de ${nombreOperacion}:`,
+        rollbackError
+      );
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * Mejora para revertir una transacción con manejo de errores mejorado
+ */
+async function revertirTransaccion(
+  transaction,
+  transactionStarted,
+  nombreOperacion = "operación"
+) {
+  if (!transaction || !transactionStarted) {
+    logger.debug(
+      `No hay transacción activa para revertir en ${nombreOperacion}`
+    );
+    return;
+  }
+
+  try {
+    await transaction.rollback();
+    logger.debug(`Transacción de ${nombreOperacion} revertida correctamente`);
+  } catch (error) {
+    logger.warn(
+      `Error al revertir la transacción de ${nombreOperacion}:`,
+      error
+    );
+    // No propagamos el error para evitar bloqueos en cadenas de finally
+  }
+}
+
+/**
  * 📌 Obtiene la clave primaria de la tabla desde validationRules.
  */
 function getPrimaryKey(validationRules) {
@@ -490,7 +609,7 @@ const executeTransfer = async (taskId) => {
           };
         }
 
-        // 9. Iniciar transacción
+        // 9. Iniciar transacción usando la función helper
         try {
           // Verificar que server2Pool sigue activo
           if (!server2Pool.connected) {
@@ -512,10 +631,13 @@ const executeTransfer = async (taskId) => {
             logger.info(`Reconexión exitosa a Server2`);
           }
 
-          transaction = server2Pool.transaction();
-          await transaction.begin();
-          transactionStarted = true;
-          logger.debug("Transacción iniciada correctamente");
+          const nombreOperacion = `transferencia de ${name}`;
+          const transactionData = await iniciarTransaccion(
+            server2Pool,
+            nombreOperacion
+          );
+          transaction = transactionData.transaction;
+          transactionStarted = transactionData.transactionStarted;
         } catch (txError) {
           logger.error("Error al iniciar la transacción", txError);
           await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
@@ -605,21 +727,23 @@ const executeTransfer = async (taskId) => {
                 );
               }
 
+              // Revertir transacción previa si existe
               if (transaction && transactionStarted) {
-                try {
-                  await transaction.rollback();
-                  logger.debug(`Transacción anterior revertida`);
-                } catch (e) {
-                  logger.warn(
-                    `No se pudo revertir la transacción anterior: ${e.message}`
-                  );
-                }
+                await revertirTransaccion(
+                  transaction,
+                  transactionStarted,
+                  `transferencia de ${name}`
+                );
+                transactionStarted = false;
               }
 
-              transaction = server2Pool.transaction();
-              await transaction.begin();
-              transactionStarted = true;
-              logger.debug(`Nueva transacción iniciada después de reconexión`);
+              // Iniciar nueva transacción
+              const transactionData = await iniciarTransaccion(
+                server2Pool,
+                `transferencia de ${name} (reconexión)`
+              );
+              transaction = transactionData.transaction;
+              transactionStarted = transactionData.transactionStarted;
             }
 
             // Procesar cada registro para inserción
@@ -632,6 +756,9 @@ const executeTransfer = async (taskId) => {
 
               for (const record of insertSubBatch) {
                 try {
+                  // Verificar que la transacción sigue activa
+                  verificarTransaccion(transaction, transactionStarted);
+
                   // Truncar strings según las longitudes máximas
                   for (const column in record) {
                     if (typeof record[column] === "string") {
@@ -710,6 +837,9 @@ const executeTransfer = async (taskId) => {
                       continue;
                     }
                   }
+
+                  // Verificar nuevamente estado de la transacción antes de insertar
+                  verificarTransaccion(transaction, transactionStarted);
 
                   const insertRequest = transaction.request();
                   insertRequest.timeout = 30000;
@@ -831,12 +961,13 @@ const executeTransfer = async (taskId) => {
             }
           }
 
-          // 13. Confirmar transacción
-          if (transaction && transactionStarted) {
-            await transaction.commit();
-            logger.debug("Transacción confirmada correctamente");
-            transactionStarted = false;
-          }
+          // 13. Confirmar transacción usando la función helper
+          await confirmarTransaccion(
+            transaction,
+            transactionStarted,
+            `transferencia de ${name}`
+          );
+          transactionStarted = false;
 
           await TransferTask.findByIdAndUpdate(taskId, {
             status: "completed",
@@ -966,15 +1097,14 @@ const executeTransfer = async (taskId) => {
             finalCount,
           };
         } catch (error) {
-          // Revertir transacción en caso de error
+          // Revertir transacción en caso de error usando la función helper
           if (transaction && transactionStarted) {
-            try {
-              await transaction.rollback();
-              logger.debug("Transacción revertida correctamente");
-              transactionStarted = false;
-            } catch (rollbackError) {
-              logger.error("Error al revertir la transacción", rollbackError);
-            }
+            await revertirTransaccion(
+              transaction,
+              transactionStarted,
+              `transferencia de ${name}`
+            );
+            transactionStarted = false;
           }
 
           await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
@@ -988,20 +1118,13 @@ const executeTransfer = async (taskId) => {
         }
       } catch (outerError) {
         // Manejo de errores generales
-
         if (transaction && transactionStarted) {
-          try {
-            await transaction.rollback();
-            logger.debug(
-              "Transacción revertida correctamente en error general"
-            );
-            transactionStarted = false;
-          } catch (rollbackError) {
-            logger.error(
-              "Error al revertir la transacción en error general",
-              rollbackError
-            );
-          }
+          await revertirTransaccion(
+            transaction,
+            transactionStarted,
+            "error general"
+          );
+          transactionStarted = false;
         }
 
         await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
@@ -1013,17 +1136,10 @@ const executeTransfer = async (taskId) => {
           errorDetail: outerError.message,
         };
       } finally {
-        // Asegurarse de que la transacción está cerrada
+        // Asegurarse de que la transacción está cerrada mediante la función helper
         if (transaction && transactionStarted) {
-          try {
-            await transaction.rollback();
-            logger.debug("Transacción revertida en bloque finally");
-          } catch (finalRollbackError) {
-            logger.error(
-              "Error al revertir la transacción en finally",
-              finalRollbackError
-            );
-          }
+          await revertirTransaccion(transaction, transactionStarted, "finally");
+          transactionStarted = false;
         }
 
         // Cerrar las conexiones
@@ -1253,34 +1369,40 @@ async function executeTransferUp(taskId) {
           };
         }
 
-        // 9. Iniciar transacción
+        // 9. Iniciar transacción usando la función helper
         try {
           // Verificar que server2Pool sigue activo
-          if (!server2Pool.connected) {
+          if (!server2Pool || !server2Pool.connected) {
             logger.warn(
               `Conexión perdida con Server2, intentando reconectar...`
             );
 
             try {
-              await server2Pool.close();
+              if (server2Pool) await server2Pool.close();
             } catch (e) {
               logger.warn(`Error al cerrar conexión a server2:`, e.message);
             }
 
             server2Pool = await connectToDB("server2");
 
-            if (!server2Pool.connected) {
+            if (!server2Pool || !server2Pool.connected) {
               throw new Error("No se pudo restablecer la conexión con Server2");
             }
             logger.info(`Reconexión exitosa a Server2`);
           }
 
-          transaction = server2Pool.transaction();
-          await transaction.begin();
-          transactionStarted = true;
-          logger.debug("Transacción iniciada correctamente");
+          const nombreOperacion = `transferencia UP de ${name}`;
+          const transactionData = await iniciarTransaccion(
+            server2Pool,
+            nombreOperacion
+          );
+          transaction = transactionData.transaction;
+          transactionStarted = transactionData.transactionStarted;
         } catch (txError) {
-          logger.error("Error al iniciar la transacción", txError);
+          logger.error(
+            "Error al iniciar la transacción para transferencia UP",
+            txError
+          );
           await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
           sendProgress(taskId, -1); // Enviar estado de error
           return {
@@ -1346,13 +1468,13 @@ async function executeTransferUp(taskId) {
             const batch = data.slice(i, i + batchSize);
 
             // Verificar si las conexiones siguen activas
-            if (!server2Pool.connected) {
+            if (!server2Pool || !server2Pool.connected) {
               logger.warn(
                 `Conexión perdida con Server2 durante procesamiento, intentando reconectar...`
               );
 
               try {
-                await server2Pool.close();
+                if (server2Pool) await server2Pool.close();
               } catch (e) {
                 logger.warn(
                   `Error al cerrar conexión anterior a server2:`,
@@ -1362,27 +1484,43 @@ async function executeTransferUp(taskId) {
 
               server2Pool = await connectToDB("server2");
 
-              if (!server2Pool.connected) {
+              if (!server2Pool || !server2Pool.connected) {
                 throw new Error(
                   "No se pudo restablecer la conexión con Server2"
                 );
               }
 
+              // Revertir transacción previa si existe
               if (transaction && transactionStarted) {
-                try {
-                  await transaction.rollback();
-                  logger.debug(`Transacción anterior revertida`);
-                } catch (e) {
-                  logger.warn(
-                    `No se pudo revertir la transacción anterior: ${e.message}`
-                  );
-                }
+                await revertirTransaccion(
+                  transaction,
+                  transactionStarted,
+                  `transferencia UP de ${name}`
+                );
+                transactionStarted = false;
               }
 
-              transaction = server2Pool.transaction();
-              await transaction.begin();
-              transactionStarted = true;
-              logger.debug(`Nueva transacción iniciada después de reconexión`);
+              // Iniciar nueva transacción
+              const transactionData = await iniciarTransaccion(
+                server2Pool,
+                `transferencia UP de ${name} (reconexión)`
+              );
+              transaction = transactionData.transaction;
+              transactionStarted = transactionData.transactionStarted;
+            }
+
+            // Verificar que la transacción sigue activa
+            if (!transaction || !transactionStarted) {
+              logger.warn(
+                "No hay transacción activa para transferencia UP, iniciando una nueva"
+              );
+
+              const transactionData = await iniciarTransaccion(
+                server2Pool,
+                `transferencia UP de ${name} (reinicio)`
+              );
+              transaction = transactionData.transaction;
+              transactionStarted = transactionData.transactionStarted;
             }
 
             // Procesar cada registro para inserción
@@ -1395,6 +1533,9 @@ async function executeTransferUp(taskId) {
 
               for (const record of insertSubBatch) {
                 try {
+                  // Verificar que la transacción sigue activa
+                  verificarTransaccion(transaction, transactionStarted);
+
                   // Truncar strings según las longitudes máximas
                   for (const column in record) {
                     if (typeof record[column] === "string") {
@@ -1473,6 +1614,9 @@ async function executeTransferUp(taskId) {
                       continue;
                     }
                   }
+
+                  // Verificar nuevamente la transacción antes de crear el request
+                  verificarTransaccion(transaction, transactionStarted);
 
                   const insertRequest = transaction.request();
                   insertRequest.timeout = 30000;
@@ -1594,12 +1738,13 @@ async function executeTransferUp(taskId) {
             }
           }
 
-          // 13. Confirmar transacción
-          if (transaction && transactionStarted) {
-            await transaction.commit();
-            logger.debug("Transacción confirmada correctamente");
-            transactionStarted = false;
-          }
+          // 13. Confirmar transacción usando la función helper
+          await confirmarTransaccion(
+            transaction,
+            transactionStarted,
+            `transferencia UP de ${name}`
+          );
+          transactionStarted = false;
 
           await TransferTask.findByIdAndUpdate(taskId, {
             status: "completed",
@@ -1718,7 +1863,7 @@ async function executeTransferUp(taskId) {
 
           return {
             success: true,
-            message: "Transferencia completada",
+            message: "Transferencia UP completada",
             rows: data.length,
             inserted: totalInserted,
             duplicates: duplicateCount,
@@ -1729,64 +1874,53 @@ async function executeTransferUp(taskId) {
             finalCount,
           };
         } catch (error) {
-          // Revertir transacción en caso de error
+          // Revertir transacción en caso de error usando la función helper
           if (transaction && transactionStarted) {
-            try {
-              await transaction.rollback();
-              logger.debug("Transacción revertida correctamente");
-              transactionStarted = false;
-            } catch (rollbackError) {
-              logger.error("Error al revertir la transacción", rollbackError);
-            }
+            await revertirTransaccion(
+              transaction,
+              transactionStarted,
+              `transferencia UP de ${name}`
+            );
+            transactionStarted = false;
           }
 
           await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
           sendProgress(taskId, -1); // Enviar estado de error
-          logger.error("Error en la transferencia", error);
+          logger.error("Error en la transferencia UP", error);
           return {
             success: false,
-            message: "Error en la transferencia",
+            message: "Error en la transferencia UP",
             errorDetail: error.message,
           };
         }
       } catch (outerError) {
         // Manejo de errores generales
-
         if (transaction && transactionStarted) {
-          try {
-            await transaction.rollback();
-            logger.debug(
-              "Transacción revertida correctamente en error general"
-            );
-            transactionStarted = false;
-          } catch (rollbackError) {
-            logger.error(
-              "Error al revertir la transacción en error general",
-              rollbackError
-            );
-          }
+          await revertirTransaccion(
+            transaction,
+            transactionStarted,
+            "error general UP"
+          );
+          transactionStarted = false;
         }
 
         await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
         sendProgress(taskId, -1); // Enviar estado de error
-        logger.error("Error general en la transferencia", outerError);
+        logger.error("Error general en la transferencia UP", outerError);
         return {
           success: false,
-          message: "Error general en la transferencia",
+          message: "Error general en la transferencia UP",
           errorDetail: outerError.message,
         };
       } finally {
-        // Asegurarse de que la transacción está cerrada
+        // Asegurarse de que la transacción está cerrada mediante la función helper
         if (transaction && transactionStarted) {
-          try {
-            await transaction.rollback();
-            logger.debug("Transacción revertida en bloque finally");
-          } catch (finalRollbackError) {
-            logger.error(
-              "Error al revertir la transacción en finally",
-              finalRollbackError
-            );
-          }
+          await revertirTransaccion(
+            transaction,
+            transactionStarted,
+            "finally UP"
+          );
+          transactionStarted = false;
         }
 
         // Cerrar las conexiones
@@ -1794,12 +1928,12 @@ async function executeTransferUp(taskId) {
           if (server1Pool && server1Pool.connected) {
             await server1Pool.close();
             logger.debug(
-              `Conexión server1Pool cerrada correctamente para tarea ${taskId}`
+              `Conexión server1Pool cerrada correctamente para tarea UP ${taskId}`
             );
           }
         } catch (closeError) {
           logger.error(
-            `Error al cerrar conexión server1Pool para tarea ${taskId}:`,
+            `Error al cerrar conexión server1Pool para tarea UP ${taskId}:`,
             closeError
           );
         }
@@ -1808,12 +1942,12 @@ async function executeTransferUp(taskId) {
           if (server2Pool && server2Pool.connected) {
             await server2Pool.close();
             logger.debug(
-              `Conexión server2Pool cerrada correctamente para tarea ${taskId}`
+              `Conexión server2Pool cerrada correctamente para tarea UP ${taskId}`
             );
           }
         } catch (closeError) {
           logger.error(
-            `Error al cerrar conexión server2Pool para tarea ${taskId}:`,
+            `Error al cerrar conexión server2Pool para tarea UP ${taskId}:`,
             closeError
           );
         }
@@ -1821,7 +1955,7 @@ async function executeTransferUp(taskId) {
     },
     3,
     5000,
-    `Ejecutar Transferencia para tarea ${taskId}`
+    `Ejecutar Transferencia UP para tarea ${taskId}`
   );
 }
 
@@ -1829,168 +1963,554 @@ async function executeTransferUp(taskId) {
  * 📌 Ejecuta una transferencia DOWN (Server2 -> Server1) según 'transferType = "down"'
  */
 async function executeTransferDown(taskId, updateProgress) {
-  return await retry(async () => {
-    const task = await TransferTask.findById(taskId);
-    if (!task) return { success: false, message: "Tarea no encontrada" };
-    if (!task.active) return { success: false, message: "Tarea inactiva" };
+  return await retry(
+    async () => {
+      let server1Pool = null;
+      let server2Pool = null;
+      let transaction = null;
+      let transactionStarted = false;
+      let lastReportedProgress = 0;
 
-    if (task.transferType !== "down") {
-      return {
-        success: false,
-        message: "La tarea no está configurada para Transfer Down",
-      };
-    }
+      try {
+        // 1. Obtener la tarea
+        const task = await TransferTask.findById(taskId);
+        if (!task) return { success: false, message: "Tarea no encontrada" };
+        if (!task.active) return { success: false, message: "Tarea inactiva" };
 
-    await TransferTask.findByIdAndUpdate(taskId, {
-      status: "running",
-      progress: 0,
-    });
+        if (task.transferType !== "down") {
+          return {
+            success: false,
+            message: "La tarea no está configurada para Transfer Down",
+          };
+        }
 
-    const server2Pool = await connectToDB("server2");
-    const server1Pool = await connectToDB("server1");
-    const taskName = `Transferencia Down de ${task.name}`;
-    logger.info(`${taskName}: 📥 Obteniendo datos de origen...`);
-
-    let data = [];
-    try {
-      const request = server2Pool.request();
-      let finalQuery = task.query;
-
-      if (task.parameters?.length > 0) {
-        const conditions = task.parameters.map(({ field, operator, value }) => {
-          request.input(field, value);
-          return `${field} ${operator} @${field}`;
+        // 2. Actualizar estado
+        await TransferTask.findByIdAndUpdate(taskId, {
+          status: "running",
+          progress: 0,
         });
-        finalQuery += ` WHERE ${conditions.join(" AND ")}`;
-      }
+        sendProgress(taskId, 0); // Enviar progreso inicial
 
-      const result = await request.query(finalQuery);
-      data = result.recordset;
-    } catch (queryError) {
-      await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
-      logger.error(`${taskName}: ❌ Error en origen (Server2)`, queryError);
-      return {
-        success: false,
-        message: "Error en la consulta en Server2",
-        errorDetail: queryError.message,
-      };
-    }
-
-    if (data.length === 0) {
-      await TransferTask.findByIdAndUpdate(taskId, {
-        status: "completed",
-        progress: 100,
-      });
-      return {
-        success: true,
-        message: "No hay datos para transferir",
-        rows: 0,
-      };
-    }
-
-    const primaryKey = getPrimaryKey(task.validationRules);
-    if (!primaryKey) {
-      await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
-      return { success: false, message: "No se especificó una clave primaria" };
-    }
-
-    const transaction = server1Pool.transaction();
-    await transaction.begin();
-
-    try {
-      for (const record of data) {
-        const request = transaction.request();
-        Object.keys(record).forEach((key) => request.input(key, record[key]));
-
-        // 📌 Verificación de longitud de columnas antes de insertarlas
-        for (const column in record) {
-          const maxLength = await getColumnMaxLength(
-            task.name,
-            column,
-            server1Pool
-          );
-          if (maxLength > 0 && record[column]?.length > maxLength) {
-            logger.warn(
-              `${taskName}: ⚠️ Truncando ${column} a ${maxLength} caracteres.`
-            );
-            record[column] = record[column].substring(0, maxLength);
-          }
-        }
-
-        const mergeQuery = `
-          MERGE INTO dbo.[${task.name}] AS target
-          USING (SELECT ${Object.keys(record)
-            .map((k) => `@${k} AS [${k}]`)
-            .join(", ")}) AS source
-          ON target.[${primaryKey}] = source.[${primaryKey}]
-          WHEN MATCHED THEN UPDATE SET ${Object.keys(record)
-            .map((k) => `target.[${k}] = source.[${k}]`)
-            .join(", ")}
-          WHEN NOT MATCHED THEN INSERT (${Object.keys(record)
-            .map((k) => `[${k}]`)
-            .join(", ")})
-          VALUES (${Object.keys(record)
-            .map((k) => `source.[${k}]`)
-            .join(", ")})
-          OUTPUT $action;`;
-
-        await request.query(mergeQuery);
-      }
-
-      await transaction.commit();
-      await TransferTask.findByIdAndUpdate(taskId, {
-        status: "completed",
-        progress: 100,
-      });
-
-      // 📌 Aplicamos la actualización post-transferencia usando `primaryKey`
-      if (postUpdateQuery && primaryKey && affectedRecords.length > 0) {
+        // 3. Establecer conexiones
         try {
-          logger.info(
-            `📌 Ejecutando consulta post-transferencia en Server1 para ${taskName}`
+          logger.debug(
+            `Intentando conectar a server2 para tarea DOWN ${taskId}...`
           );
+          server2Pool = await connectToDB("server2");
 
-          const postRequest = server1Pool.request();
-          affectedRecords.forEach((key, index) => {
-            postRequest.input(`key${index}`, key);
-          });
+          if (!server2Pool || !server2Pool.connected) {
+            throw new Error(
+              "No se pudo establecer una conexión válida con server2"
+            );
+          }
 
-          const keyParams = affectedRecords
-            .map((_, index) => `@key${index}`)
-            .join(", ");
-
-          const dynamicUpdateQuery = `
-          ${postUpdateQuery}
-          WHERE ${tableKey} IN (${keyParams})
-          `;
-
-          await postRequest.query(dynamicUpdateQuery);
-          logger.info(
-            `✅ Consulta post-transferencia ejecutada correctamente en Server1 para ${taskName}`
+          logger.debug(
+            `Intentando conectar a server1 para tarea DOWN ${taskId}...`
           );
-        } catch (postUpdateError) {
+          server1Pool = await connectToDB("server1");
+
+          if (!server1Pool || !server1Pool.connected) {
+            // Cerrar server2Pool que ya se conectó
+            if (server2Pool) {
+              try {
+                await server2Pool.close();
+                logger.debug(
+                  "Conexión a server2 cerrada debido a error en server1"
+                );
+              } catch (e) {
+                logger.warn("Error al cerrar conexión a server2:", e.message);
+              }
+              server2Pool = null;
+            }
+            throw new Error(
+              "No se pudo establecer una conexión válida con server1"
+            );
+          }
+
+          logger.info(
+            `Conexiones establecidas correctamente para tarea DOWN ${taskId}`
+          );
+        } catch (connError) {
           logger.error(
-            `❌ Error en consulta post-transferencia para ${taskName}`,
-            postUpdateError
+            `Error al establecer conexiones para tarea DOWN ${taskId}:`,
+            connError
+          );
+          await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
+          sendProgress(taskId, -1); // Enviar estado de error
+          return {
+            success: false,
+            message: "Error al establecer conexiones de base de datos",
+            errorDetail: connError.message,
+          };
+        }
+
+        const taskName = `Transferencia Down de ${task.name}`;
+        logger.info(`${taskName}: 📥 Obteniendo datos de origen...`);
+
+        // 4. Obtener datos del servidor 2
+        let data = [];
+        try {
+          const request = server2Pool.request();
+          request.timeout = 60000; // 60 segundos de timeout
+
+          let finalQuery = task.query;
+          if (task.parameters?.length > 0) {
+            const conditions = task.parameters.map(
+              ({ field, operator, value }) => {
+                request.input(field, value);
+                return `${field} ${operator} @${field}`;
+              }
+            );
+            finalQuery += ` WHERE ${conditions.join(" AND ")}`;
+          }
+
+          logger.debug(
+            `Ejecutando consulta en Server2: ${finalQuery.substring(0, 200)}...`
+          );
+          const result = await request.query(finalQuery);
+          data = result.recordset;
+          logger.info(
+            `Datos obtenidos correctamente de Server2: ${data.length} registros`
+          );
+        } catch (queryError) {
+          await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
+          logger.error(`${taskName}: ❌ Error en origen (Server2)`, queryError);
+          sendProgress(taskId, -1); // Enviar estado de error
+
+          if (queryError.code === "ECONNCLOSED") {
+            logger.warn(
+              `Detectada conexión cerrada en Server2 durante consulta.`
+            );
+          }
+
+          return {
+            success: false,
+            message: "Error en la consulta en Server2",
+            errorDetail: queryError.message,
+          };
+        }
+
+        // 5. Verificar si hay datos para transferir
+        if (data.length === 0) {
+          await TransferTask.findByIdAndUpdate(taskId, {
+            status: "completed",
+            progress: 100,
+          });
+          sendProgress(taskId, 100); // Enviar progreso completado
+          return {
+            success: true,
+            message: "No hay datos para transferir",
+            rows: 0,
+          };
+        }
+
+        // 6. Obtener clave primaria
+        const primaryKey = getPrimaryKey(task.validationRules);
+        if (!primaryKey) {
+          await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
+          sendProgress(taskId, -1); // Enviar estado de error
+          return {
+            success: false,
+            message: "No se especificó una clave primaria",
+          };
+        }
+
+        // 7. Iniciar transacción usando la función helper
+        try {
+          // Verificar que server1Pool sigue activo
+          if (!server1Pool || !server1Pool.connected) {
+            logger.warn(
+              `Conexión perdida con Server1, intentando reconectar...`
+            );
+
+            try {
+              if (server1Pool) await server1Pool.close();
+            } catch (e) {
+              logger.warn(`Error al cerrar conexión a server1:`, e.message);
+            }
+
+            server1Pool = await connectToDB("server1");
+
+            if (!server1Pool || !server1Pool.connected) {
+              throw new Error("No se pudo restablecer la conexión con Server1");
+            }
+            logger.info(`Reconexión exitosa a Server1`);
+          }
+
+          const nombreOperacion = `transferencia DOWN de ${task.name}`;
+          const transactionData = await iniciarTransaccion(
+            server1Pool,
+            nombreOperacion
+          );
+          transaction = transactionData.transaction;
+          transactionStarted = transactionData.transactionStarted;
+        } catch (txError) {
+          logger.error(
+            "Error al iniciar la transacción para transferencia DOWN",
+            txError
+          );
+          await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
+          sendProgress(taskId, -1); // Enviar estado de error
+          return {
+            success: false,
+            message: "Error al iniciar la transacción",
+            errorDetail: txError.message,
+          };
+        }
+
+        // 8. Preparar variables para tracking
+        let affectedRecords = [];
+        let totalProcessed = 0;
+        const columnLengthCache = new Map();
+
+        // 9. Procesar datos en lotes
+        try {
+          const batchSize = 100; // Menor para DOWN transfer por ser más crítica
+
+          for (let i = 0; i < data.length; i += batchSize) {
+            const batch = data.slice(i, i + batchSize);
+
+            // Verificar si las conexiones siguen activas
+            if (!server1Pool || !server1Pool.connected) {
+              logger.warn(
+                `Conexión perdida con Server1 durante procesamiento, intentando reconectar...`
+              );
+
+              try {
+                if (server1Pool) await server1Pool.close();
+              } catch (e) {
+                logger.warn(
+                  `Error al cerrar conexión anterior a server1:`,
+                  e.message
+                );
+              }
+
+              server1Pool = await connectToDB("server1");
+
+              if (!server1Pool || !server1Pool.connected) {
+                throw new Error(
+                  "No se pudo restablecer la conexión con Server1"
+                );
+              }
+
+              // Revertir transacción previa si existe
+              if (transaction && transactionStarted) {
+                await revertirTransaccion(
+                  transaction,
+                  transactionStarted,
+                  `transferencia DOWN de ${task.name}`
+                );
+                transactionStarted = false;
+              }
+
+              // Iniciar nueva transacción
+              const transactionData = await iniciarTransaccion(
+                server1Pool,
+                `transferencia DOWN de ${task.name} (reconexión)`
+              );
+              transaction = transactionData.transaction;
+              transactionStarted = transactionData.transactionStarted;
+            }
+
+            // Verificar que la transacción sigue activa
+            if (!transaction || !transactionStarted) {
+              logger.warn(
+                "No hay transacción activa para transferencia DOWN, iniciando una nueva"
+              );
+
+              const transactionData = await iniciarTransaccion(
+                server1Pool,
+                `transferencia DOWN de ${task.name} (reinicio)`
+              );
+              transaction = transactionData.transaction;
+              transactionStarted = transactionData.transactionStarted;
+            }
+
+            // Procesar cada registro para MERGE
+            for (const record of batch) {
+              try {
+                // Verificar que la transacción sigue activa
+                verificarTransaccion(transaction, transactionStarted);
+
+                // Truncar strings según las longitudes máximas
+                for (const column in record) {
+                  if (typeof record[column] === "string") {
+                    // Obtener la longitud máxima (usando cache)
+                    let maxLength;
+                    if (columnLengthCache.has(column)) {
+                      maxLength = columnLengthCache.get(column);
+                    } else {
+                      maxLength = await getColumnMaxLength(
+                        task.name,
+                        column,
+                        server1Pool
+                      );
+                      columnLengthCache.set(column, maxLength);
+                    }
+
+                    if (maxLength > 0 && record[column]?.length > maxLength) {
+                      logger.warn(
+                        `${taskName}: ⚠️ Truncando ${column} a ${maxLength} caracteres.`
+                      );
+                      record[column] = record[column].substring(0, maxLength);
+                    }
+                  }
+                }
+
+                // Recolectar IDs para post-actualización
+                if (task.postUpdateQuery && primaryKey) {
+                  if (
+                    record[primaryKey] !== null &&
+                    record[primaryKey] !== undefined
+                  ) {
+                    affectedRecords.push(record[primaryKey]);
+                  }
+                }
+
+                // Verificar nuevamente la transacción antes de crear el request
+                verificarTransaccion(transaction, transactionStarted);
+
+                const request = transaction.request();
+                request.timeout = 30000;
+
+                // Añadir parámetros
+                Object.keys(record).forEach((key) => {
+                  request.input(key, record[key]);
+                });
+
+                // Preparar consulta MERGE
+                const mergeQuery = `
+                MERGE INTO dbo.[${task.name}] AS target
+                USING (SELECT ${Object.keys(record)
+                  .map((k) => `@${k} AS [${k}]`)
+                  .join(", ")}) AS source
+                ON target.[${primaryKey}] = source.[${primaryKey}]
+                WHEN MATCHED THEN UPDATE SET ${Object.keys(record)
+                  .filter((k) => k !== primaryKey) // No actualizar la clave primaria
+                  .map((k) => `target.[${k}] = source.[${k}]`)
+                  .join(", ")}
+                WHEN NOT MATCHED THEN INSERT (${Object.keys(record)
+                  .map((k) => `[${k}]`)
+                  .join(", ")})
+                VALUES (${Object.keys(record)
+                  .map((k) => `source.[${k}]`)
+                  .join(", ")})
+                OUTPUT $action;`;
+
+                // Ejecutar el MERGE
+                const result = await request.query(mergeQuery);
+                totalProcessed++;
+
+                // Registrar la acción realizada (INSERT o UPDATE)
+                if (result.recordset && result.recordset.length > 0) {
+                  const action = result.recordset[0]["$action"];
+                  logger.debug(
+                    `MERGE para registro ${record[primaryKey]}: ${action}`
+                  );
+                }
+              } catch (mergeError) {
+                logger.error(
+                  `Error en MERGE para registro ${record[primaryKey]}:`,
+                  mergeError
+                );
+                // No lanzamos la excepción para que continúe con otros registros
+                // Solo la lanzaríamos si es un error crítico que debe detener todo el proceso
+                if (
+                  mergeError.message.includes("conexión") ||
+                  mergeError.message.includes("transacción") ||
+                  mergeError.message.includes("timeout")
+                ) {
+                  throw mergeError; // Propagar errores críticos de conexión
+                }
+              }
+            }
+
+            // Actualizar progreso con throttling
+            const progress = Math.round(
+              ((i + batch.length) / data.length) * 100
+            );
+            if (progress > lastReportedProgress + 5 || progress >= 100) {
+              lastReportedProgress = progress;
+              await TransferTask.findByIdAndUpdate(taskId, { progress });
+              sendProgress(taskId, progress); // Enviar actualización de progreso
+              logger.debug(`Progreso actualizado: ${progress}%`);
+            }
+          }
+
+          // 10. Confirmar transacción usando la función helper
+          await confirmarTransaccion(
+            transaction,
+            transactionStarted,
+            `transferencia DOWN de ${task.name}`
+          );
+          transactionStarted = false;
+
+          // 11. Actualizar estado a completado
+          await TransferTask.findByIdAndUpdate(taskId, {
+            status: "completed",
+            progress: 100,
+          });
+          sendProgress(taskId, 100); // Enviar progreso completado
+
+          // 12. Ejecutar consulta post-actualización si existe
+          if (
+            task.postUpdateQuery &&
+            primaryKey &&
+            affectedRecords.length > 0
+          ) {
+            try {
+              logger.info(
+                `📌 Ejecutando consulta post-transferencia en Server1 para ${taskName}`
+              );
+
+              const tableKey = task.postUpdateMapping?.tableKey || primaryKey;
+              const postUpdateBatchSize = 500;
+
+              for (
+                let i = 0;
+                i < affectedRecords.length;
+                i += postUpdateBatchSize
+              ) {
+                const keyBatch = affectedRecords.slice(
+                  i,
+                  i + postUpdateBatchSize
+                );
+                const postRequest = server1Pool.request();
+                postRequest.timeout = 60000;
+
+                // Preparar parámetros
+                keyBatch.forEach((key, index) => {
+                  // Procesar la clave si es necesario (por ejemplo, quitar prefijos)
+                  const processedKey =
+                    typeof key === "string" && key.startsWith("CN")
+                      ? key.replace(/^CN/, "")
+                      : key;
+
+                  postRequest.input(`key${index}`, processedKey);
+                });
+
+                // Construir lista de parámetros
+                const keyParams = keyBatch
+                  .map((_, index) => `@key${index}`)
+                  .join(", ");
+
+                // Construir consulta
+                const dynamicUpdateQuery = `
+                ${task.postUpdateQuery}
+                WHERE ${tableKey} IN (${keyParams})
+              `;
+
+                // Ejecutar y registrar resultado
+                const postUpdateResult = await postRequest.query(
+                  dynamicUpdateQuery
+                );
+                logger.info(
+                  `Post-actualización para DOWN transfer: ${postUpdateResult.rowsAffected[0]} filas afectadas`
+                );
+              }
+
+              logger.info(
+                `✅ Consulta post-transferencia DOWN ejecutada correctamente para ${task.name}`
+              );
+            } catch (postUpdateError) {
+              logger.error(
+                `❌ Error en consulta post-transferencia DOWN`,
+                postUpdateError
+              );
+              // No fallamos la transferencia por error en post-actualización
+            }
+          }
+
+          return {
+            success: true,
+            message: "Transferencia Down completada",
+            rows: data.length,
+            processed: totalProcessed,
+          };
+        } catch (error) {
+          // Revertir transacción en caso de error usando la función helper
+          if (transaction && transactionStarted) {
+            await revertirTransaccion(
+              transaction,
+              transactionStarted,
+              `transferencia DOWN de ${task.name}`
+            );
+            transactionStarted = false;
+          }
+
+          await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
+          sendProgress(taskId, -1); // Enviar estado de error
+          logger.error("Error en la transferencia DOWN", error);
+          return {
+            success: false,
+            message: "Error en la transferencia DOWN",
+            errorDetail: error.message,
+          };
+        }
+      } catch (outerError) {
+        // Manejo de errores generales
+        if (transaction && transactionStarted) {
+          await revertirTransaccion(
+            transaction,
+            transactionStarted,
+            "error general DOWN"
+          );
+          transactionStarted = false;
+        }
+
+        await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
+        sendProgress(taskId, -1); // Enviar estado de error
+        logger.error("Error general en la transferencia DOWN", outerError);
+        return {
+          success: false,
+          message: "Error general en la transferencia DOWN",
+          errorDetail: outerError.message,
+        };
+      } finally {
+        // Asegurarse de que la transacción está cerrada mediante la función helper
+        if (transaction && transactionStarted) {
+          await revertirTransaccion(
+            transaction,
+            transactionStarted,
+            "finally DOWN"
+          );
+          transactionStarted = false;
+        }
+
+        // Cerrar las conexiones
+        try {
+          if (server1Pool && server1Pool.connected) {
+            await server1Pool.close();
+            logger.debug(
+              `Conexión server1Pool cerrada correctamente para tarea DOWN ${taskId}`
+            );
+          }
+        } catch (closeError) {
+          logger.error(
+            `Error al cerrar conexión server1Pool para tarea DOWN ${taskId}:`,
+            closeError
+          );
+        }
+
+        try {
+          if (server2Pool && server2Pool.connected) {
+            await server2Pool.close();
+            logger.debug(
+              `Conexión server2Pool cerrada correctamente para tarea DOWN ${taskId}`
+            );
+          }
+        } catch (closeError) {
+          logger.error(
+            `Error al cerrar conexión server2Pool para tarea DOWN ${taskId}:`,
+            closeError
           );
         }
       }
-
-      return {
-        success: true,
-        message: "Transferencia Down completada",
-        rows: data.length,
-      };
-    } catch (mergeError) {
-      await transaction.rollback();
-      await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
-      return {
-        success: false,
-        message: "Error en la transferencia",
-        errorDetail: mergeError.message,
-      };
-    }
-  });
+    },
+    3,
+    5000,
+    `Ejecutar Transferencia DOWN para tarea ${taskId}`
+  );
 }
 
 /**
@@ -2026,6 +2546,9 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
 
     // 3) Conectarse a la DB de destino
     try {
+      logger.debug(
+        `Intentando conectar a server2 para inserción en lotes (taskId: ${taskId})...`
+      );
       server2Pool = await connectToDB("server2");
 
       if (!server2Pool || !server2Pool.connected) {
@@ -2034,10 +2557,12 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
         );
       }
 
-      logger.info(`Conexión establecida correctamente para tarea ${taskId}`);
+      logger.info(
+        `Conexión establecida correctamente para inserción en lotes (taskId: ${taskId})`
+      );
     } catch (connError) {
       logger.error(
-        `Error al establecer conexión para tarea ${taskId}:`,
+        `Error al establecer conexión para inserción en lotes (taskId: ${taskId}):`,
         connError
       );
       await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
@@ -2060,14 +2585,20 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
       initialCount = 0;
     }
 
-    // 5) Iniciar transacción
+    // 5) Iniciar transacción usando la función helper
     try {
-      transaction = server2Pool.transaction();
-      await transaction.begin();
-      transactionStarted = true;
-      logger.debug("Transacción iniciada correctamente");
+      const nombreOperacion = `inserción en lotes para ${name}`;
+      const transactionData = await iniciarTransaccion(
+        server2Pool,
+        nombreOperacion
+      );
+      transaction = transactionData.transaction;
+      transactionStarted = transactionData.transactionStarted;
     } catch (txError) {
-      logger.error("Error al iniciar la transacción", txError);
+      logger.error(
+        "Error al iniciar la transacción para inserción en lotes",
+        txError
+      );
       await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
       sendProgress(taskId, -1);
       throw new Error(`Error al iniciar la transacción: ${txError.message}`);
@@ -2086,14 +2617,14 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
     for (let i = 0; i < data.length; i += batchSize) {
       const batch = data.slice(i, i + batchSize);
 
-      // Verificar si la conexión sigue activa
-      if (!server2Pool.connected) {
+      // Verificar si la conexión sigue activa y reconectar si es necesario
+      if (!server2Pool || !server2Pool.connected) {
         logger.warn(
-          `Conexión perdida con Server2 durante procesamiento, intentando reconectar...`
+          `Conexión perdida con server2 durante procesamiento, intentando reconectar...`
         );
 
         try {
-          await server2Pool.close();
+          if (server2Pool) await server2Pool.close();
         } catch (e) {
           logger.warn(
             `Error al cerrar conexión anterior a server2:`,
@@ -2103,31 +2634,48 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
 
         server2Pool = await connectToDB("server2");
 
-        if (!server2Pool.connected) {
-          throw new Error("No se pudo restablecer la conexión con Server2");
+        if (!server2Pool || !server2Pool.connected) {
+          throw new Error("No se pudo restablecer la conexión con server2");
         }
 
+        // Revertir transacción anterior si existía
         if (transaction && transactionStarted) {
-          try {
-            await transaction.rollback();
-            logger.debug(`Transacción anterior revertida`);
-          } catch (e) {
-            logger.warn(
-              `No se pudo revertir la transacción anterior: ${e.message}`
-            );
-          }
+          await revertirTransaccion(
+            transaction,
+            transactionStarted,
+            `inserción en lotes para ${name}`
+          );
+          transaction = null;
+          transactionStarted = false;
         }
 
-        transaction = server2Pool.transaction();
-        await transaction.begin();
-        transactionStarted = true;
-        logger.debug(`Nueva transacción iniciada después de reconexión`);
+        // Crear nueva transacción
+        const transactionData = await iniciarTransaccion(
+          server2Pool,
+          `inserción en lotes para ${name} (reconexión)`
+        );
+        transaction = transactionData.transaction;
+        transactionStarted = transactionData.transactionStarted;
+      }
+
+      // Verificar que la transacción sigue activa
+      if (!transaction || !transactionStarted) {
+        logger.warn("No hay transacción activa, iniciando una nueva");
+        const transactionData = await iniciarTransaccion(
+          server2Pool,
+          `inserción en lotes para ${name} (reinicio)`
+        );
+        transaction = transactionData.transaction;
+        transactionStarted = transactionData.transactionStarted;
       }
 
       let batchInserted = 0;
 
       for (const record of batch) {
         try {
+          // Verificar que la transacción sigue activa antes de procesar
+          verificarTransaccion(transaction, transactionStarted);
+
           // Truncar strings según las longitudes máximas
           for (const column in record) {
             if (typeof record[column] === "string") {
@@ -2146,7 +2694,9 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
             }
           }
 
-          // Preparar consulta para inserción directa
+          // Verificar nuevamente la transacción antes de insertar
+          verificarTransaccion(transaction, transactionStarted);
+
           const insertRequest = transaction.request();
           insertRequest.timeout = 30000;
 
@@ -2183,6 +2733,15 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
             }:`,
             error
           );
+
+          // Si es un error crítico que podría afectar a la transacción, abortar el lote actual
+          if (
+            error.message.includes("transacción") ||
+            error.message.includes("conexión") ||
+            error.message.includes("timeout")
+          ) {
+            throw error; // Propagar errores críticos para manejo especial
+          }
         }
       }
 
@@ -2204,12 +2763,13 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
       }
     }
 
-    // 9. Confirmar transacción
-    if (transaction && transactionStarted) {
-      await transaction.commit();
-      logger.debug("Transacción confirmada correctamente");
-      transactionStarted = false;
-    }
+    // 9. Confirmar transacción usando la función helper
+    await confirmarTransaccion(
+      transaction,
+      transactionStarted,
+      `inserción en lotes para ${name}`
+    );
+    transactionStarted = false;
 
     // 10. Actualizar estado a completado
     await TransferTask.findByIdAndUpdate(taskId, {
@@ -2254,15 +2814,14 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
     // Manejo de errores
     logger.error(`Error en insertInBatchesSSE: ${error.message}`, error);
 
-    // Revertir transacción en caso de error
+    // Revertir transacción en caso de error usando la función helper
     if (transaction && transactionStarted) {
-      try {
-        await transaction.rollback();
-        logger.debug("Transacción revertida correctamente");
-        transactionStarted = false;
-      } catch (rollbackError) {
-        logger.error("Error al revertir la transacción", rollbackError);
-      }
+      await revertirTransaccion(
+        transaction,
+        transactionStarted,
+        `inserción en lotes para ${task?.name || "desconocido"}`
+      );
+      transactionStarted = false;
     }
 
     // Actualizar estado de la tarea
@@ -2277,17 +2836,27 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
 
     throw error;
   } finally {
+    // Asegurarse de que la transacción está cerrada usando la función helper
+    if (transaction && transactionStarted) {
+      await revertirTransaccion(
+        transaction,
+        transactionStarted,
+        `inserción en lotes (finally)`
+      );
+      transactionStarted = false;
+    }
+
     // Cerrar conexión
     try {
       if (server2Pool && server2Pool.connected) {
         await server2Pool.close();
         logger.debug(
-          `Conexión server2Pool cerrada correctamente para tarea ${taskId}`
+          `Conexión server2Pool cerrada correctamente para inserción en lotes (taskId: ${taskId})`
         );
       }
     } catch (closeError) {
       logger.error(
-        `Error al cerrar conexión server2Pool para tarea ${taskId}:`,
+        `Error al cerrar conexión server2Pool para inserción en lotes (taskId: ${taskId}):`,
         closeError
       );
     }
