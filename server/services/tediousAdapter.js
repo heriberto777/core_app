@@ -38,7 +38,7 @@ class TediousAdapter {
    * Verifica si la conexión está activa
    */
   get connected() {
-    return this.connection && this.connection.state.name === 'LoggedIn';
+    return this.connection && this.connection.state && this.connection.state.name === 'LoggedIn';
   }
 }
 

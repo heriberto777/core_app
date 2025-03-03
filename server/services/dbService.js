@@ -134,43 +134,95 @@ const loadConfigurations = async () => {
 };
 
 /**
- * Crea una conexión usando tedious
+ * Crea una conexión usando tedious con manejo de timeout mejorado
  */
-const createTediousConnection = (config) => {
+const createTediousConnection = (config, timeoutMs = 10000) => {
   return new Promise((resolve, reject) => {
-    const connection = new Connection({
-      server: config.server,
-      authentication: {
-        type: "default",
-        options: {
-          userName: config.user,
-          password: config.password,
+    // Si hay cualquier error, establecer un timeout de seguridad
+    const connectionTimeoutId = setTimeout(() => {
+      // Si llegamos aquí, la conexión nunca emitió un evento 'connect' o 'error'
+      logger.error(
+        `⚠️ Timeout excedido (${timeoutMs}ms) al conectar a ${config.server}`
+      );
+      reject(
+        new Error(
+          `Timeout al conectar a ${config.server} después de ${timeoutMs}ms`
+        )
+      );
+    }, timeoutMs);
+
+    try {
+      // Asegurar que los timeouts en la configuración son razonables
+      const options = {
+        ...config.options,
+        connectionTimeout: Math.min(
+          config.options.connectionTimeout || 10000,
+          15000
+        ),
+        requestTimeout: Math.min(config.options.requestTimeout || 30000, 30000),
+      };
+
+      logger.debug(`Creando conexión a ${config.server}...`);
+
+      const connection = new Connection({
+        server: config.server,
+        authentication: {
+          type: "default",
+          options: {
+            userName: config.user,
+            password: config.password,
+          },
         },
-      },
-      options: {
-        database: config.database,
-        port: config.port,
-        encrypt: config.options.encrypt,
-        trustServerCertificate: config.options.trustServerCertificate,
-        connectionTimeout: config.options.connectionTimeout,
-        requestTimeout: config.options.requestTimeout,
-        rowCollectionOnRequestCompletion: true,
-      },
-    });
+        options: {
+          database: config.database,
+          port: config.port,
+          encrypt: options.encrypt,
+          trustServerCertificate: options.trustServerCertificate,
+          connectionTimeout: options.connectionTimeout,
+          requestTimeout: options.requestTimeout,
+          rowCollectionOnRequestCompletion: true,
+        },
+      });
 
-    connection.on("connect", (err) => {
-      if (err) {
+      // Manejar eventos de conexión
+      connection.on("connect", (err) => {
+        clearTimeout(connectionTimeoutId);
+
+        if (err) {
+          logger.error(
+            `Error en evento connect: ${err.message || JSON.stringify(err)}`
+          );
+          reject(err);
+        } else {
+          logger.debug(`Conexión establecida a ${config.server}`);
+          // Envolver la conexión con nuestro adaptador
+          const wrappedConnection = wrapConnection(connection);
+          resolve(wrappedConnection);
+        }
+      });
+
+      connection.on("error", (err) => {
+        clearTimeout(connectionTimeoutId);
+        logger.error(`Error en conexión a ${config.server}: ${err.message}`);
         reject(err);
-      } else {
-        // Envolver la conexión con nuestro adaptador
-        const wrappedConnection = wrapConnection(connection);
-        resolve(wrappedConnection);
-      }
-    });
+      });
 
-    connection.on("error", (err) => {
-      reject(err);
-    });
+      // Manejar específicamente error de timeout
+      connection.on("connectTimeout", () => {
+        clearTimeout(connectionTimeoutId);
+        logger.error(`Timeout de conexión a ${config.server}`);
+        reject(new Error(`Timeout al conectar a ${config.server}`));
+      });
+
+      // Desconexión inesperada
+      connection.on("end", () => {
+        logger.warn(`Conexión a ${config.server} cerrada inesperadamente`);
+      });
+    } catch (error) {
+      clearTimeout(connectionTimeoutId);
+      logger.error(`Error creando conexión: ${error.message}`);
+      reject(error);
+    }
   });
 };
 
@@ -194,25 +246,66 @@ const closeConnection = async (serverKey) => {
 /**
  * Conecta a una base de datos SQL Server usando tedious
  * para el proceso actual (no global)
+ * Versión mejorada con timeout para evitar bloqueos
  */
-const connectToDB = async (serverKey) => {
-  try {
-    if (!global.SQL_CONFIG || !global.SQL_CONFIG[serverKey]) {
-      throw new Error(
-        `❌ Configuración de ${serverKey} no está cargada en memoria.`
+const connectToDB = async (serverKey, timeoutMs = 15000) => {
+  return new Promise(async (resolve, reject) => {
+    const timeoutId = setTimeout(() => {
+      reject(
+        new Error(
+          `Timeout al conectar a ${serverKey} después de ${timeoutMs}ms`
+        )
       );
+    }, timeoutMs);
+
+    try {
+      if (!global.SQL_CONFIG || !global.SQL_CONFIG[serverKey]) {
+        clearTimeout(timeoutId);
+        reject(
+          new Error(
+            `❌ Configuración de ${serverKey} no está cargada en memoria.`
+          )
+        );
+        return;
+      }
+
+      const config = global.SQL_CONFIG[serverKey];
+
+      // Asegurar que los tiempos de conexión son razonables
+      if (
+        !config.options.connectionTimeout ||
+        config.options.connectionTimeout > 30000
+      ) {
+        config.options.connectionTimeout = 10000; // 10 segundos máximo
+      }
+
+      if (
+        !config.options.requestTimeout ||
+        config.options.requestTimeout > 60000
+      ) {
+        config.options.requestTimeout = 30000; // 30 segundos máximo
+      }
+
+      logger.debug(`Intentando conectar a ${serverKey} con timeout...`);
+
+      const connection = await createTediousConnection(config).catch((err) => {
+        throw err;
+      });
+
+      clearTimeout(timeoutId);
+      logger.debug(
+        `✅ Nueva conexión a ${serverKey} establecida usando tedious`
+      );
+      resolve(connection);
+    } catch (err) {
+      clearTimeout(timeoutId);
+      logger.error(
+        `❌ Error en proceso de conexión a ${serverKey} usando tedious:`,
+        err
+      );
+      reject(err);
     }
-    const config = global.SQL_CONFIG[serverKey];
-    const connection = await createTediousConnection(config);
-    logger.debug(`✅ Nueva conexión a ${serverKey} establecida usando tedious`);
-    return connection;
-  } catch (err) {
-    logger.error(
-      `❌ Error en proceso de conexión a ${serverKey} usando tedious:`,
-      err
-    );
-    throw err;
-  }
+  });
 };
 
 /**
