@@ -88,16 +88,16 @@ const startServer = async () => {
     console.error("❌ Error al iniciar el servidor:", err);
     process.exit(1);
 
-    // Si falla la conexión normal, intenta la conexión de prueba
-    console.log("🧪 Intentando conexión alternativa...");
-    const testResult = await testEnvBasedConnection();
-    if (testResult) {
-      console.log(
-        "✅ Prueba alternativa exitosa. Revisa los logs para detalles."
-      );
-    } else {
-      console.log("❌ Prueba alternativa también falló.");
-    }
+    // // Si falla la conexión normal, intenta la conexión de prueba
+    // console.log("🧪 Intentando conexión alternativa...");
+    // const testResult = await testEnvBasedConnection();
+    // if (testResult) {
+    //   console.log(
+    //     "✅ Prueba alternativa exitosa. Revisa los logs para detalles."
+    //   );
+    // } else {
+    //   console.log("❌ Prueba alternativa también falló.");
+    // }
   }
 };
 
