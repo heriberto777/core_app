@@ -29,7 +29,9 @@ class TediousAdapter {
    */
   async close() {
     return new Promise((resolve, reject) => {
-      this.connection.close();
+      if (this.connection) {
+        this.connection.close();
+      }
       resolve();
     });
   }
@@ -139,8 +141,22 @@ class RequestAdapter {
         rows.push(row);
       });
 
+      // Verificar si la conexión sigue activa antes de ejecutar la consulta
+      if (
+        !this.connection ||
+        (this.connection.state && this.connection.state.name !== "LoggedIn")
+      ) {
+        return reject(
+          new Error("La conexión no está activa para ejecutar la consulta")
+        );
+      }
+
       // Ejecutar la consulta usando el objeto de conexión o transacción apropiado
-      if (this.transaction && this.transaction._transaction) {
+      if (
+        this.transaction &&
+        this.transaction._transaction &&
+        this.transaction._transactionStarted
+      ) {
         this.transaction._transaction.execSql(request);
       } else {
         this.connection.execSql(request);
@@ -157,6 +173,7 @@ class TransactionAdapter {
     this.connection = connection;
     this._transaction = null;
     this._transactionStarted = false;
+    this._transactionFailed = false;
   }
 
   /**
@@ -164,16 +181,50 @@ class TransactionAdapter {
    */
   async begin() {
     return new Promise((resolve, reject) => {
-      const transaction = this.connection.beginTransaction((err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
+      // Verificar que no hay una transacción activa
+      if (this._transactionStarted) {
+        reject(new Error("Ya existe una transacción activa"));
+        return;
+      }
 
-        this._transaction = transaction;
-        this._transactionStarted = true;
-        resolve();
-      });
+      // Verificar si la conexión está activa
+      if (
+        !this.connection ||
+        (this.connection.state && this.connection.state.name !== "LoggedIn")
+      ) {
+        reject(
+          new Error("La conexión no está activa para iniciar una transacción")
+        );
+        return;
+      }
+
+      // Timeout para evitar bloqueos
+      const beginTimeout = setTimeout(() => {
+        reject(new Error("Timeout al intentar iniciar la transacción"));
+      }, 30000);
+
+      try {
+        const transaction = this.connection.beginTransaction((err) => {
+          clearTimeout(beginTimeout);
+
+          if (err) {
+            this._transactionStarted = false;
+            this._transactionFailed = true;
+            reject(err);
+            return;
+          }
+
+          this._transaction = transaction;
+          this._transactionStarted = true;
+          this._transactionFailed = false;
+          resolve();
+        });
+      } catch (error) {
+        clearTimeout(beginTimeout);
+        this._transactionStarted = false;
+        this._transactionFailed = true;
+        reject(error);
+      }
     });
   }
 
@@ -181,20 +232,53 @@ class TransactionAdapter {
    * Emula transaction.commit() de mssql pero usando tedious
    */
   async commit() {
-    if (!this._transaction || !this._transactionStarted) {
-      throw new Error("No hay una transacción activa para confirmar");
-    }
-
     return new Promise((resolve, reject) => {
-      this._transaction.commitTransaction((err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
+      // Verificar que hay una transacción activa
+      if (!this._transaction || !this._transactionStarted) {
+        reject(new Error("No hay una transacción activa para confirmar"));
+        return;
+      }
 
-        this._transactionStarted = false;
-        resolve();
-      });
+      // Verificar si la transacción ya falló
+      if (this._transactionFailed) {
+        reject(new Error("La transacción ha fallado y no puede confirmarse"));
+        return;
+      }
+
+      // Verificar si la conexión está activa
+      if (
+        !this.connection ||
+        (this.connection.state && this.connection.state.name !== "LoggedIn")
+      ) {
+        reject(
+          new Error("La conexión no está activa para confirmar la transacción")
+        );
+        return;
+      }
+
+      // Timeout para evitar bloqueos
+      const commitTimeout = setTimeout(() => {
+        reject(new Error("Timeout al intentar confirmar la transacción"));
+      }, 30000);
+
+      try {
+        this._transaction.commitTransaction((err) => {
+          clearTimeout(commitTimeout);
+
+          if (err) {
+            this._transactionFailed = true;
+            reject(err);
+            return;
+          }
+
+          this._transactionStarted = false;
+          resolve();
+        });
+      } catch (error) {
+        clearTimeout(commitTimeout);
+        this._transactionFailed = true;
+        reject(error);
+      }
     });
   }
 
@@ -202,20 +286,56 @@ class TransactionAdapter {
    * Emula transaction.rollback() de mssql pero usando tedious
    */
   async rollback() {
-    if (!this._transaction || !this._transactionStarted) {
-      throw new Error("No hay una transacción activa para revertir");
-    }
-
     return new Promise((resolve, reject) => {
-      this._transaction.rollbackTransaction((err) => {
-        if (err) {
-          reject(err);
-          return;
-        }
-
+      // Si no hay transacción activa, simplemente resolvemos
+      if (!this._transaction || !this._transactionStarted) {
         this._transactionStarted = false;
         resolve();
-      });
+        return;
+      }
+
+      // Verificar si la conexión está activa
+      if (
+        !this.connection ||
+        (this.connection.state && this.connection.state.name !== "LoggedIn")
+      ) {
+        this._transactionStarted = false;
+        this._transactionFailed = true;
+        resolve();
+        return;
+      }
+
+      // Timeout para evitar bloqueos
+      const rollbackTimeout = setTimeout(() => {
+        this._transactionStarted = false;
+        this._transactionFailed = true;
+        resolve();
+      }, 30000);
+
+      try {
+        this._transaction.rollbackTransaction((err) => {
+          clearTimeout(rollbackTimeout);
+
+          this._transactionStarted = false;
+
+          if (err) {
+            this._transactionFailed = true;
+            // No rechazamos para evitar errores en cascada en finally blocks
+            console.error("Error en rollback:", err.message);
+            resolve();
+            return;
+          }
+
+          resolve();
+        });
+      } catch (error) {
+        clearTimeout(rollbackTimeout);
+        this._transactionStarted = false;
+        this._transactionFailed = true;
+        // No rechazamos para evitar errores en cascada en finally blocks
+        console.error("Excepción en rollback:", error.message);
+        resolve();
+      }
     });
   }
 
@@ -227,7 +347,18 @@ class TransactionAdapter {
       throw new Error("La transacción no ha sido iniciada");
     }
 
+    if (this._transactionFailed) {
+      throw new Error("La transacción ha fallado y no puede usarse");
+    }
+
     return new RequestAdapter(this.connection, this);
+  }
+
+  /**
+   * Verifica si la transacción está activa
+   */
+  get active() {
+    return this._transactionStarted && !this._transactionFailed;
   }
 }
 
