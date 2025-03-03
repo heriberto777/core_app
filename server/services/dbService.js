@@ -135,6 +135,7 @@ const loadConfigurations = async () => {
 
 /**
  * Crea una conexión usando tedious con manejo de timeout mejorado
+ * y soporte apropiado para instanceName
  */
 const createTediousConnection = (config, timeoutMs = 10000) => {
   return new Promise((resolve, reject) => {
@@ -152,19 +153,34 @@ const createTediousConnection = (config, timeoutMs = 10000) => {
     }, timeoutMs);
 
     try {
-      // Asegurar que los timeouts en la configuración son razonables
-      const options = {
-        ...config.options,
-        connectionTimeout: Math.min(
-          config.options.connectionTimeout || 10000,
-          15000
-        ),
-        requestTimeout: Math.min(config.options.requestTimeout || 30000, 30000),
+      // Debuggear la configuración para diagnóstico
+      logger.debug(`Configuración de conexión para ${config.server}:`, {
+        user: config.user,
+        server: config.server,
+        database: config.database,
+        instance: config.instance,
+        port: config.port,
+      });
+
+      // Preparar opciones para tedious
+      const tediousOptions = {
+        database: config.database,
+        port: config.port || 1433,
+        encrypt: config.options?.encrypt || false,
+        trustServerCertificate: config.options?.trustServerCertificate || true,
+        connectionTimeout: config.options?.connectionTimeout || 15000,
+        requestTimeout: config.options?.requestTimeout || 30000,
+        rowCollectionOnRequestCompletion: true,
       };
 
-      logger.debug(`Creando conexión a ${config.server}...`);
+      // Si hay un instance, añadirlo como instanceName (que es lo que tedious espera)
+      if (config.instance) {
+        tediousOptions.instanceName = config.instance;
+        logger.debug(`Usando instanceName: ${config.instance}`);
+      }
 
-      const connection = new Connection({
+      // Configuración completa para tedious
+      const tediousConfig = {
         server: config.server,
         authentication: {
           type: "default",
@@ -173,16 +189,12 @@ const createTediousConnection = (config, timeoutMs = 10000) => {
             password: config.password,
           },
         },
-        options: {
-          database: config.database,
-          port: config.port,
-          encrypt: options.encrypt,
-          trustServerCertificate: options.trustServerCertificate,
-          connectionTimeout: options.connectionTimeout,
-          requestTimeout: options.requestTimeout,
-          rowCollectionOnRequestCompletion: true,
-        },
-      });
+        options: tediousOptions,
+      };
+
+      logger.debug(`Intentando conectar a ${config.server} con tedious...`);
+
+      const connection = new Connection(tediousConfig);
 
       // Manejar eventos de conexión
       connection.on("connect", (err) => {
@@ -194,7 +206,7 @@ const createTediousConnection = (config, timeoutMs = 10000) => {
           );
           reject(err);
         } else {
-          logger.debug(`Conexión establecida a ${config.server}`);
+          logger.info(`✅ Conexión establecida a ${config.server}`);
           // Envolver la conexión con nuestro adaptador
           const wrappedConnection = wrapConnection(connection);
           resolve(wrappedConnection);
@@ -218,6 +230,9 @@ const createTediousConnection = (config, timeoutMs = 10000) => {
       connection.on("end", () => {
         logger.warn(`Conexión a ${config.server} cerrada inesperadamente`);
       });
+
+      // Iniciar la conexión
+      connection.connect();
     } catch (error) {
       clearTimeout(connectionTimeoutId);
       logger.error(`Error creando conexión: ${error.message}`);
@@ -246,7 +261,7 @@ const closeConnection = async (serverKey) => {
 /**
  * Conecta a una base de datos SQL Server usando tedious
  * para el proceso actual (no global)
- * Versión mejorada con timeout para evitar bloqueos
+ * Versión mejorada con timeout y mejor manejo de instancias SQL
  */
 const connectToDB = async (serverKey, timeoutMs = 15000) => {
   return new Promise(async (resolve, reject) => {
@@ -271,32 +286,73 @@ const connectToDB = async (serverKey, timeoutMs = 15000) => {
 
       const config = global.SQL_CONFIG[serverKey];
 
-      // Asegurar que los tiempos de conexión son razonables
-      if (
-        !config.options.connectionTimeout ||
-        config.options.connectionTimeout > 30000
-      ) {
-        config.options.connectionTimeout = 10000; // 10 segundos máximo
+      // Verificar campos críticos
+      if (!config.server) {
+        clearTimeout(timeoutId);
+        reject(
+          new Error(`Configuración de ${serverKey} no tiene server definido`)
+        );
+        return;
       }
 
-      if (
-        !config.options.requestTimeout ||
-        config.options.requestTimeout > 60000
-      ) {
-        config.options.requestTimeout = 30000; // 30 segundos máximo
+      if (!config.user || !config.password) {
+        clearTimeout(timeoutId);
+        reject(
+          new Error(
+            `Configuración de ${serverKey} no tiene credenciales válidas`
+          )
+        );
+        return;
       }
 
-      logger.debug(`Intentando conectar a ${serverKey} con timeout...`);
-
-      const connection = await createTediousConnection(config).catch((err) => {
-        throw err;
+      // Imprimir información de diagnóstico
+      logger.debug(`Intentando conectar a ${serverKey}:`, {
+        server: config.server,
+        user: config.user,
+        database: config.database,
+        instance: config.instance || "N/A",
       });
 
-      clearTimeout(timeoutId);
-      logger.debug(
-        `✅ Nueva conexión a ${serverKey} establecida usando tedious`
-      );
-      resolve(connection);
+      // Usar variables de entorno como fallback para server2
+      if (serverKey === "server2" && !config.server) {
+        logger.warn(
+          `⚠️ Usando variables de entorno para server2 como fallback`
+        );
+        config.server = process.env.SERVER2_HOST;
+        config.user = process.env.SERVER2_USER;
+        config.password = process.env.SERVER2_PASS;
+        config.database = process.env.SERVER2_DB;
+        config.instance = process.env.SERVER2_INSTANCE;
+      }
+
+      try {
+        const connection = await createTediousConnection(config);
+        clearTimeout(timeoutId);
+        logger.info(
+          `✅ Nueva conexión a ${serverKey} establecida usando tedious`
+        );
+
+        // Ejecutar una consulta simple para verificar que la conexión realmente funciona
+        try {
+          const request = connection.request();
+          const result = await request.query("SELECT @@VERSION as version");
+          logger.debug(`Prueba de conexión a ${serverKey} exitosa:`, {
+            version:
+              result.recordset[0]?.version?.substring(0, 50) ||
+              "No version info",
+          });
+        } catch (testError) {
+          logger.warn(
+            `⚠️ La conexión a ${serverKey} se estableció pero falló la prueba:`,
+            testError.message
+          );
+        }
+
+        resolve(connection);
+      } catch (connErr) {
+        clearTimeout(timeoutId);
+        throw connErr; // Re-lanzar para que el manejador de errores lo capture
+      }
     } catch (err) {
       clearTimeout(timeoutId);
       logger.error(
@@ -336,6 +392,151 @@ const getGlobalConnection = async (serverKey) => {
     );
     throw err;
   }
+};
+
+/**
+ * Prueba conexión directa a SQL Server sin usar adaptadores.
+ * Útil para diagnóstico cuando el adaptador no funciona pero sabemos que
+ * tedious debería funcionar.
+ */
+const testDirectConnection = async (serverKey = "server2") => {
+  return new Promise((resolve, reject) => {
+    let config;
+
+    // Usar configuración explícita para server2 (la que causa problemas)
+    if (serverKey === "server2") {
+      const server = process.env.SERVER2_HOST;
+      const user = process.env.SERVER2_USER;
+      const password = process.env.SERVER2_PASS;
+      const database = process.env.SERVER2_DB;
+      const instanceName = process.env.SERVER2_INSTANCE;
+
+      // Verificar que tenemos todos los datos necesarios
+      if (!server || !user || !password || !database) {
+        return reject(
+          new Error("Faltan variables de entorno para la conexión directa")
+        );
+      }
+
+      // Usar configuración similar a la de tu ejemplo que funciona
+      config = {
+        server,
+        authentication: {
+          type: "default",
+          options: {
+            userName: user,
+            password: password,
+          },
+        },
+        options: {
+          database,
+          trustServerCertificate: true,
+          rowCollectionOnRequestCompletion: true,
+        },
+      };
+
+      // Añadir instanceName solo si está definido
+      if (instanceName) {
+        config.options.instanceName = instanceName;
+        console.log(`Usando instanceName: ${instanceName}`);
+      }
+    } else {
+      // Para otras conexiones, usar la configuración de MongoDB adaptada
+      if (!global.SQL_CONFIG || !global.SQL_CONFIG[serverKey]) {
+        return reject(
+          new Error(`Configuración para ${serverKey} no disponible`)
+        );
+      }
+
+      const dbConfig = global.SQL_CONFIG[serverKey];
+
+      config = {
+        server: dbConfig.server,
+        authentication: {
+          type: "default",
+          options: {
+            userName: dbConfig.user,
+            password: dbConfig.password,
+          },
+        },
+        options: {
+          database: dbConfig.database,
+          trustServerCertificate:
+            dbConfig.options?.trustServerCertificate || true,
+          rowCollectionOnRequestCompletion: true,
+        },
+      };
+
+      // Añadir instanceName solo si hay instance definido
+      if (dbConfig.instance) {
+        config.options.instanceName = dbConfig.instance;
+        console.log(`Usando instanceName desde MongoDB: ${dbConfig.instance}`);
+      }
+    }
+
+    console.log(`Intentando conexión directa a ${config.server}...`);
+
+    // Usar la conexión directa de tedious (sin adaptador)
+    const connection = new Connection(config);
+
+    connection.on("connect", function (err) {
+      if (err) {
+        console.error(`Error en conexión directa a ${config.server}:`, err);
+        reject(err);
+      } else {
+        console.log(`✅ Conexión directa establecida a ${config.server}`);
+
+        // Ejecutar una consulta simple para verificar
+        const request = new Request("SELECT @@VERSION as version", function (
+          err,
+          rowCount,
+          rows
+        ) {
+          if (err) {
+            console.error("Error en consulta directa:", err);
+            reject(err);
+          } else {
+            console.log(`Consulta directa exitosa: ${rowCount} filas`);
+
+            // Extraer información de la versión
+            let version = "Desconocida";
+            if (rows && rows.length > 0 && rows[0] && rows[0].length > 0) {
+              version = rows[0][0].value;
+            }
+
+            console.log(`Versión SQL Server: ${version}`);
+
+            connection.close();
+            resolve({
+              success: true,
+              server: config.server,
+              version: version,
+            });
+          }
+        });
+
+        // Procesar los resultados (si queremos ver más detalles)
+        request.on("row", (columns) => {
+          let rowData = {};
+          columns.forEach((column) => {
+            rowData[column.metadata.colName] = column.value;
+          });
+          console.log("Fila recibida:", rowData);
+        });
+
+        connection.execSql(request);
+      }
+    });
+
+    // Manejar errores
+    connection.on("error", (err) => {
+      console.error(`Error en la conexión directa a ${config.server}:`, err);
+      reject(err);
+    });
+
+    // Iniciar la conexión
+    connection.connect();
+  });
 };
 
 /**
@@ -406,4 +607,5 @@ module.exports = {
   closeConnection,
   getGlobalConnection,
   testEnvBasedConnection,
+  testDirectConnection,
 };
