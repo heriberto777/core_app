@@ -271,7 +271,8 @@ const testEnvBasedConnection = async () => {
     const envBasedConfig = {
       user: "cliente-catelli",
       password: "Smk1$kE[qVc%5fY", // Contraseña exacta del .env
-      server: "sql-calidad.miami\\calidadstdb",
+      server: "sql-calidad.miami",
+      instance: "calidadstdb",
       database: "stdb_gnd",
       options: {
         encrypt: true,
