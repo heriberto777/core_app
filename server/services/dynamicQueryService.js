@@ -12,11 +12,142 @@ const {
   validateNonDestructiveQuery,
 } = require("../utils/validateQuery");
 
-const { NVarChar } = sql;
+/**
+ * Función de ayuda para verificar el estado de una transacción antes de intentar operaciones con ella
+ */
+function verificarTransaccion(transaction, transactionStarted) {
+  if (!transaction) {
+    throw new Error("Objeto de transacción no inicializado correctamente");
+  }
+
+  if (!transactionStarted) {
+    throw new Error("La transacción no ha sido iniciada correctamente");
+  }
+
+  // Verificar si el adaptador tiene su propia forma de validar
+  if (typeof transaction.isActive === "boolean" && !transaction.isActive) {
+    throw new Error("La transacción ha sido marcada como inactiva o fallida");
+  }
+
+  return true;
+}
+
+/**
+ * Mejora para iniciar una transacción con verificación y reintentos
+ */
+async function iniciarTransaccion(conexion, nombreOperacion = "operación") {
+  try {
+    // Verificar si la conexión está activa
+    if (!conexion || !conexion.connected) {
+      throw new Error(
+        `La conexión no está activa para iniciar la transacción de ${nombreOperacion}`
+      );
+    }
+
+    const transaction = conexion.transaction();
+    await transaction.begin();
+
+    return {
+      transaction,
+      transactionStarted: true,
+    };
+  } catch (error) {
+    logger.error(
+      `Error al iniciar la transacción para ${nombreOperacion}:`,
+      error
+    );
+    throw new Error(
+      `No se pudo iniciar la transacción para ${nombreOperacion}: ${error.message}`
+    );
+  }
+}
+
+/**
+ * Mejora para confirmar una transacción con verificación
+ */
+async function confirmarTransaccion(
+  transaction,
+  transactionStarted,
+  nombreOperacion = "operación"
+) {
+  if (!transaction || !transactionStarted) {
+    logger.warn(
+      `Intento de confirmar una transacción no iniciada para ${nombreOperacion}`
+    );
+    return false;
+  }
+
+  try {
+    // Verificar explícitamente si la transacción puede confirmarse
+    if (typeof transaction.isActive === "function" && !transaction.isActive()) {
+      logger.warn(
+        `La transacción no está en estado válido para confirmar para ${nombreOperacion} - omitiendo commit`
+      );
+      return false;
+    }
+
+    // Log para diagnóstico
+    logger.debug(
+      `Estado antes de commit (${nombreOperacion}) - transaction: ${!!transaction}, transactionStarted: ${transactionStarted}`
+    );
+
+    await transaction.commit();
+    logger.debug(`Transacción de ${nombreOperacion} confirmada correctamente`);
+    return true;
+  } catch (error) {
+    logger.error(
+      `Error al confirmar la transacción de ${nombreOperacion}:`,
+      error
+    );
+
+    // Intentar rollback automático tras fallo de commit
+    try {
+      await transaction.rollback();
+      logger.debug(
+        `Rollback automático de la transacción de ${nombreOperacion} tras fallo en commit`
+      );
+    } catch (rollbackError) {
+      logger.warn(
+        `No se pudo hacer rollback automático tras fallo en commit de ${nombreOperacion}:`,
+        rollbackError
+      );
+    }
+
+    throw error;
+  }
+}
+
+/**
+ * Mejora para revertir una transacción con manejo de errores mejorado
+ */
+async function revertirTransaccion(
+  transaction,
+  transactionStarted,
+  nombreOperacion = "operación"
+) {
+  if (!transaction || !transactionStarted) {
+    logger.debug(
+      `No hay transacción activa para revertir en ${nombreOperacion}`
+    );
+    return;
+  }
+
+  try {
+    await transaction.rollback();
+    logger.debug(`Transacción de ${nombreOperacion} revertida correctamente`);
+  } catch (error) {
+    logger.warn(
+      `Error al revertir la transacción de ${nombreOperacion}:`,
+      error
+    );
+    // No propagamos el error para evitar bloqueos en cadenas de finally
+  }
+}
 
 /**
  * Ejecuta una consulta SELECT usando la definición de la tarea almacenada en MongoDB,
  * sobrescribiendo sus parámetros con overrideParams (si se proporcionan).
+ * Compatible con adaptador tedious.
  *
  * @param {String} taskName - Nombre de la tarea en la colección TransferTask.
  * @param {Object} overrideParams - Objeto con los valores que sobrescriben los parámetros guardados.
@@ -103,8 +234,14 @@ async function executeDynamicSelect(
         if (param.operator === "BETWEEN") {
           if (fieldValue.from === undefined || fieldValue.to === undefined)
             continue;
-          request.input(`${param.field}_from`, fieldValue.from);
-          request.input(`${param.field}_to`, fieldValue.to);
+
+          // Convertir a string para evitar problemas con tedious
+          const fromValue =
+            fieldValue.from === null ? null : String(fieldValue.from);
+          const toValue = fieldValue.to === null ? null : String(fieldValue.to);
+
+          request.input(`${param.field}_from`, fromValue);
+          request.input(`${param.field}_to`, toValue);
           conditions.push(
             `${param.field} BETWEEN @${param.field}_from AND @${param.field}_to`
           );
@@ -113,19 +250,30 @@ async function executeDynamicSelect(
           if (arr.length === 0) {
             conditions.push("1=0");
           } else {
+            // Para adaptador tedious: convertir a string y verificar valores null
             const placeholders = arr.map((v, i) => {
               const pName = `${param.field}_in_${i}`;
-              // Especifica el tipo y longitud; en este ejemplo usamos NVarChar(10)
-              request.input(pName, NVarChar(10), v);
+              // Asegurarse de que el valor sea string para evitar errores de validación
+              const safeValue = v === null ? null : String(v);
+              request.input(pName, safeValue);
               return `@${pName}`;
             });
             conditions.push(`${param.field} IN (${placeholders.join(", ")})`);
           }
         } else if (param.operator === "LIKE") {
-          request.input(param.field, fieldValue);
+          // Asegurarse de que sea string para LIKE
+          const safeValue = fieldValue === null ? null : String(fieldValue);
+          request.input(param.field, safeValue);
           conditions.push(`${param.field} LIKE @${param.field}`);
         } else {
-          request.input(param.field, fieldValue);
+          // Convertir a string para garantizar compatibilidad con tedious
+          const safeValue =
+            fieldValue === null
+              ? null
+              : typeof fieldValue === "number"
+              ? fieldValue
+              : String(fieldValue);
+          request.input(param.field, safeValue);
           conditions.push(`${param.field} ${param.operator} @${param.field}`);
         }
       }
@@ -152,6 +300,21 @@ async function executeDynamicSelect(
       result = await request.query(finalQuery);
     } catch (error) {
       logger.error(`Error ejecutando query de "${taskName}":`, error);
+
+      // Log detallado para errores de validación de parámetros
+      if (error.code === "EPARAM") {
+        logger.error(
+          `Error de validación de parámetros en query "${taskName}". Detalles del error:`,
+          {
+            message: error.message,
+            cause: error.cause?.message,
+            stack: error.stack,
+            query: finalQuery,
+            params: JSON.stringify(request.params),
+          }
+        );
+      }
+
       await TransferTask.findByIdAndUpdate(task._id, { status: "failed" });
       throw error;
     }
@@ -191,6 +354,7 @@ async function executeDynamicSelect(
 /**
  * Ejecuta una consulta no destructiva (que puede incluir MERGE o INSERT),
  * pero valida que no contenga comandos peligrosos (DROP, TRUNCATE, etc.).
+ * Compatible con adaptador tedious.
  *
  * @param {String} taskName - Nombre de la tarea.
  * @param {Object} overrideParams - Parámetros para sobrescribir.
@@ -253,14 +417,14 @@ async function executeNonDestructiveQuery(
       );
     }
 
-    // Iniciar una transacción para operaciones no destructivas
+    // Iniciar una transacción para operaciones no destructivas usando la función helper
     try {
-      transaction = pool.transaction();
-      await transaction.begin();
-      transactionStarted = true;
-      logger.debug(
-        `Transacción iniciada correctamente para query no destructiva '${taskName}'`
+      const transactionData = await iniciarTransaccion(
+        pool,
+        `query no destructiva de ${taskName}`
       );
+      transaction = transactionData.transaction;
+      transactionStarted = transactionData.transactionStarted;
     } catch (txError) {
       logger.error(
         `Error al iniciar transacción para query no destructiva '${taskName}':`,
@@ -288,11 +452,18 @@ async function executeNonDestructiveQuery(
           ? overrideParams[param.field]
           : param.value;
         if (fieldValue === undefined || fieldValue === null) continue;
+
         if (param.operator === "BETWEEN") {
           if (fieldValue.from === undefined || fieldValue.to === undefined)
             continue;
-          request.input(`${param.field}_from`, fieldValue.from);
-          request.input(`${param.field}_to`, fieldValue.to);
+
+          // Convertir a string para tedious
+          const fromValue =
+            fieldValue.from === null ? null : String(fieldValue.from);
+          const toValue = fieldValue.to === null ? null : String(fieldValue.to);
+
+          request.input(`${param.field}_from`, fromValue);
+          request.input(`${param.field}_to`, toValue);
           conditions.push(
             `${param.field} BETWEEN @${param.field}_from AND @${param.field}_to`
           );
@@ -302,19 +473,30 @@ async function executeNonDestructiveQuery(
             // Si el array está vacío, forzamos la condición para que la query retorne 0 filas.
             conditions.push("1=0");
           } else {
+            // Convertir a string para tedious
             const placeholders = arr.map((v, i) => {
               const pName = `${param.field}_in_${i}`;
-              // Especifica el tipo y la longitud (aquí usamos NVarChar(10) como ejemplo)
-              request.input(pName, NVarChar(10), v);
+              // Asegurar valores string para tedious
+              const safeValue = v === null ? null : String(v);
+              request.input(pName, safeValue);
               return `@${pName}`;
             });
             conditions.push(`${param.field} IN (${placeholders.join(", ")})`);
           }
         } else if (param.operator === "LIKE") {
-          request.input(param.field, fieldValue);
+          // Asegurar valores string para LIKE
+          const safeValue = fieldValue === null ? null : String(fieldValue);
+          request.input(param.field, safeValue);
           conditions.push(`${param.field} LIKE @${param.field}`);
         } else {
-          request.input(param.field, fieldValue);
+          // Convertir a string para compatibilidad con tedious si no es número
+          const safeValue =
+            fieldValue === null
+              ? null
+              : typeof fieldValue === "number"
+              ? fieldValue
+              : String(fieldValue);
+          request.input(param.field, safeValue);
           conditions.push(`${param.field} ${param.operator} @${param.field}`);
         }
       }
@@ -335,86 +517,46 @@ async function executeNonDestructiveQuery(
     // 6) Ejecutar la consulta
     let result;
     try {
-      // Verificar que la transacción sigue activa
-      if (
-        !transaction ||
-        !transactionStarted ||
-        (typeof transaction.isActive === "function" && !transaction.isActive())
-      ) {
-        throw new Error(
-          "La transacción no está activa para ejecutar la consulta"
-        );
-      }
+      // Verificar que la transacción sigue activa con la función helper
+      verificarTransaccion(transaction, transactionStarted);
 
       result = await request.query(finalQuery);
     } catch (error) {
       logger.error(`Error en query no-destructivo de "${taskName}":`, error);
 
-      // Revertir la transacción en caso de error
-      if (transaction && transactionStarted) {
-        try {
-          await transaction.rollback();
-          logger.debug(
-            `Transacción revertida por error en query no destructiva '${taskName}'`
-          );
-          transactionStarted = false;
-        } catch (rollbackError) {
-          logger.error(
-            `Error al revertir transacción para '${taskName}':`,
-            rollbackError
-          );
-        }
+      // Log detallado para errores de validación de parámetros
+      if (error.code === "EPARAM") {
+        logger.error(
+          `Error de validación de parámetros en query no destructiva "${taskName}". Detalles del error:`,
+          {
+            message: error.message,
+            cause: error.cause?.message,
+            stack: error.stack,
+            query: finalQuery,
+            params: JSON.stringify(request.params),
+          }
+        );
       }
+
+      // Revertir la transacción en caso de error usando la función helper
+      await revertirTransaccion(
+        transaction,
+        transactionStarted,
+        `query no destructiva de ${taskName}`
+      );
+      transactionStarted = false;
 
       await TransferTask.findByIdAndUpdate(task._id, { status: "failed" });
       throw error;
     }
 
-    // Confirmar la transacción con verificación mejorada
-    if (transaction && transactionStarted) {
-      try {
-        // Verificar explícitamente si la transacción puede confirmarse
-        if (
-          typeof transaction.isActive === "function" &&
-          !transaction.isActive()
-        ) {
-          logger.warn(
-            `La transacción no está en estado válido para confirmar en '${taskName}' - omitiendo commit`
-          );
-          transactionStarted = false;
-        } else {
-          // Log para diagnóstico
-          logger.debug(
-            `Estado antes de commit para '${taskName}' - transaction: ${!!transaction}, transactionStarted: ${transactionStarted}`
-          );
-
-          await transaction.commit();
-          logger.debug(
-            `Transacción confirmada correctamente para '${taskName}'`
-          );
-          transactionStarted = false;
-        }
-      } catch (commitError) {
-        logger.error(
-          `Error al confirmar transacción para '${taskName}': ${commitError.message}`
-        );
-
-        // Intentar revertir en caso de error de commit
-        try {
-          await transaction.rollback();
-          logger.debug(
-            `Transacción revertida después de error en commit para '${taskName}'`
-          );
-        } catch (rollbackError) {
-          logger.warn(
-            `Error al revertir después de fallo en commit para '${taskName}': ${rollbackError.message}`
-          );
-        }
-
-        transactionStarted = false;
-        throw commitError; // Propagar el error original
-      }
-    }
+    // Confirmar la transacción con la función helper
+    await confirmarTransaccion(
+      transaction,
+      transactionStarted,
+      `query no destructiva de ${taskName}`
+    );
+    transactionStarted = false;
 
     // 7) Marcar la tarea como completada
     await TransferTask.findByIdAndUpdate(task._id, {
@@ -434,19 +576,13 @@ async function executeNonDestructiveQuery(
     );
     throw error;
   } finally {
-    // Asegurarse de que la transacción está cerrada
+    // Asegurarse de que la transacción está cerrada usando la función helper
     if (transaction && transactionStarted) {
-      try {
-        await transaction.rollback();
-        logger.debug(
-          `Transacción revertida en bloque finally para '${taskName}'`
-        );
-      } catch (rollbackError) {
-        logger.error(
-          `Error al revertir transacción en finally para '${taskName}':`,
-          rollbackError
-        );
-      }
+      await revertirTransaccion(
+        transaction,
+        transactionStarted,
+        `query no destructiva de ${taskName} (finally)`
+      );
     }
 
     // Cerrar la conexión
@@ -469,4 +605,9 @@ async function executeNonDestructiveQuery(
 module.exports = {
   executeDynamicSelect,
   executeNonDestructiveQuery,
+  // Exportar también las funciones helper por si se necesitan en otros módulos
+  verificarTransaccion,
+  iniciarTransaccion,
+  confirmarTransaccion,
+  revertirTransaccion,
 };
