@@ -2,6 +2,7 @@ const mongoose = require("mongoose");
 const sql = require("mssql");
 const DBConfig = require("../models/dbConfigModel");
 const logger = require("./logger");
+const { normalizeString } = require("../utils/stringUtils");
 
 /**
  * Obtiene la configuración de la base de datos desde MongoDB
@@ -16,7 +17,7 @@ const getDBConfig = async (serverName) => {
 
     return {
       user: config.user,
-      password: config.password,
+      password: normalizeString(config.password),
       server: config.host,
       database: config.database,
       port: config.port,
