@@ -229,35 +229,53 @@ class TransactionAdapter {
   }
 
   /**
+   * Verifica si la transacción está activa y lista para operaciones
+   */
+  isActive() {
+    // Verificación completa del estado de la transacción
+    return (
+      this._transaction &&
+      this._transactionStarted &&
+      !this._transactionFailed &&
+      this.connection &&
+      this.connection.state &&
+      this.connection.state.name === "LoggedIn"
+    );
+  }
+
+  /**
    * Emula transaction.commit() de mssql pero usando tedious
    */
   async commit() {
     return new Promise((resolve, reject) => {
-      // Verificar que hay una transacción activa
+      // Verificación más estricta
       if (!this._transaction || !this._transactionStarted) {
         reject(new Error("No hay una transacción activa para confirmar"));
         return;
       }
 
-      // Verificar si la transacción ya falló
-      if (this._transactionFailed) {
-        reject(new Error("La transacción ha fallado y no puede confirmarse"));
-        return;
-      }
-
-      // Verificar si la conexión está activa
+      // Verificar el estado de la conexión
       if (
         !this.connection ||
         (this.connection.state && this.connection.state.name !== "LoggedIn")
       ) {
+        this._transactionStarted = false; // Marcar como inactiva
         reject(
           new Error("La conexión no está activa para confirmar la transacción")
         );
         return;
       }
 
+      // Si la transacción está marcada como fallida, no permitir commit
+      if (this._transactionFailed) {
+        this._transactionStarted = false; // Marcar como inactiva
+        reject(new Error("La transacción ha fallado y no puede confirmarse"));
+        return;
+      }
+
       // Timeout para evitar bloqueos
       const commitTimeout = setTimeout(() => {
+        this._transactionFailed = true;
         reject(new Error("Timeout al intentar confirmar la transacción"));
       }, 30000);
 
