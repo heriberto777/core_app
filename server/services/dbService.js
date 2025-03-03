@@ -31,7 +31,7 @@ const getDBConfig = async (serverName) => {
 
     return {
       user: config.user,
-      password: normalizeString(config.password),
+      password: config.password,
       server: config.host,
       database: config.database,
       instance: config.instance,
