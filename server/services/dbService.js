@@ -15,6 +15,14 @@ const getDBConfig = async (serverName) => {
 
     // console.log("Aqui obtenemos los datos de conexion -> ", config);
 
+    // Tratar la contraseña como si viniera de un archivo .env con comillas
+    const password = config.password ? `"${config.password}"` : "";
+    // Ahora procesa la contraseña como lo hacía con .env
+    const processedPassword = password.replace(/^"(.*)"$/, "$1"); // Elimina comillas
+
+    console.log("Password original:", config.password);
+    console.log("Password procesado:", processedPassword);
+
     return {
       user: config.user,
       password: normalizeString(config.password),
