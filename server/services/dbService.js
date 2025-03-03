@@ -283,7 +283,9 @@ const testEnvBasedConnection = async () => {
       instance: SERVER2_INSTANCE,
       database: SERVER2_DB,
       options: {
+        encrypt: true,
         trustServerCertificate: true,
+        enableArithAbort: true,
       },
     };
 
