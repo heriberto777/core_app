@@ -260,10 +260,71 @@ const getGlobalPool = async (serverKey) => {
   }
 };
 
+/**
+ * Función de prueba para comparar la conexión con credenciales de .env vs MongoDB
+ */
+const testEnvBasedConnection = async () => {
+  try {
+    console.log("⚙️ Ejecutando prueba de conexión alternativa...");
+
+    // Usar la contraseña exacta que funcionaba en .env
+    const envBasedConfig = {
+      user: "cliente-catelli",
+      password: "Smk1$kE[qVc%5fY", // Contraseña exacta del .env
+      server: "sql-calidad.miami\\calidadstdb",
+      database: "stdb_gnd",
+      options: {
+        encrypt: true,
+        trustServerCertificate: true,
+        enableArithAbort: true,
+      },
+    };
+
+    console.log(
+      "Probando conexión con configuración hardcoded basada en .env..."
+    );
+    const pool = new sql.ConnectionPool(envBasedConfig);
+    await pool.connect();
+    console.log("✅ Conexión exitosa con configuración .env!");
+    await pool.close();
+
+    // Si llega aquí, la conexión fue exitosa
+    // Ahora prueba con la contraseña de MongoDB pero sin procesamiento
+    const mongoConfig = { ...envBasedConfig };
+    // Obtén el documento real de MongoDB
+    const dbConfig = await DBConfig.findOne({ serverName: "server2" });
+    mongoConfig.password = dbConfig.password; // Usa la contraseña tal cual de MongoDB
+
+    console.log("Probando con password directo de MongoDB sin procesar...");
+    const pool2 = new sql.ConnectionPool(mongoConfig);
+    await pool2.connect();
+    console.log("✅ Conexión exitosa con password directo de MongoDB!");
+    await pool2.close();
+
+    // Si funciona con el password sin procesar, prueba modificando el formato del servidor
+    const configWithProcessing = {
+      ...mongoConfig,
+      password: normalizeString(dbConfig.password),
+    };
+
+    console.log("Probando con password normalizado de MongoDB...");
+    const pool3 = new sql.ConnectionPool(configWithProcessing);
+    await pool3.connect();
+    console.log("✅ Conexión exitosa con password normalizado!");
+    await pool3.close();
+
+    return true;
+  } catch (error) {
+    console.error("❌ Error en prueba de conexión alternativa:", error);
+    return false;
+  }
+};
+
 module.exports = {
   loadConfigurations,
   connectToDB,
   connectToMongoDB,
   closePool,
   getGlobalPool,
+  testEnvBasedConnection,
 };
