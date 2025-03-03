@@ -1,5 +1,5 @@
 const mongoose = require("mongoose");
-const sql = require("mssql");
+const { Connection, Request } = require("tedious");
 const DBConfig = require("../models/dbConfigModel");
 const logger = require("./logger");
 const { normalizeString } = require("../utils/stringUtils");
@@ -21,12 +21,9 @@ const getDBConfig = async (serverName) => {
     if (!config)
       throw new Error(`⚠️ Configuración no encontrada para ${serverName}`);
 
-    // console.log("Aqui obtenemos los datos de conexion -> ", config);
-
     // Tratar la contraseña como si viniera de un archivo .env con comillas
     const password = config.password ? `"${config.password}"` : "";
-    // Ahora procesa la contraseña como lo hacía con .env
-    const processedPassword = password.replace(/^"(.*)"$/, "$1"); // Elimina comillas
+    const processedPassword = password.replace(/^"(.*)"$/, "$1");
 
     console.log("Password original:", config.password);
     console.log("Password procesado:", processedPassword);
@@ -38,18 +35,12 @@ const getDBConfig = async (serverName) => {
         ? `${config.host}\\${config.instance}`
         : config.host,
       database: config.database,
-      port: config.port || 1433, // Puerto por defecto de SQL Server si no está definido
+      port: config.port || 1433, // Puerto por defecto de SQL Server
       options: {
         encrypt: config.options?.encrypt || false,
         trustServerCertificate: config.options?.trustServerCertificate || true,
-        enableArithAbort: config.options?.enableArithAbort || true,
-        connectionTimeout: 30000, // 30 segundos timeout para conexión
-        requestTimeout: 60000, // 60 segundos timeout para solicitudes
-      },
-      pool: {
-        max: 10, // Máximo de 10 conexiones en el pool
-        min: 0, // Mínimo de 0 conexiones
-        idleTimeoutMillis: 30000, // 30 segundos para timeout de conexiones inactivas
+        connectionTimeout: config.options?.connectionTimeout || 30000,
+        requestTimeout: config.options?.requestTimeout || 60000,
       },
     };
   } catch (error) {
@@ -66,8 +57,6 @@ const getDBConfig = async (serverName) => {
  */
 const connectToMongoDB = async () => {
   try {
-    // Usando directamente MONGO_URI como primera opción
-    // Si no está disponible, verifica que todas las variables necesarias estén definidas
     let MONGO_URI = process.env.MONGO_URI;
 
     if (!MONGO_URI) {
@@ -77,14 +66,12 @@ const connectToMongoDB = async () => {
       const DB_PORT = process.env.DB_PORT || "27017";
       const DB_NAME = process.env.DB_NAME || "core_app";
 
-      // Validar que tenemos al menos host y nombre de la base de datos
       if (!DB_HOST || !DB_NAME) {
         throw new Error(
           "Faltan variables de entorno para la conexión a MongoDB"
         );
       }
 
-      // Construir la URI con los valores disponibles
       if (DB_USER && DB_PASS) {
         MONGO_URI = `mongodb://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}`;
       } else {
@@ -108,11 +95,7 @@ const connectToMongoDB = async () => {
 
     logger.info("✅ Conexión a MongoDB establecida.");
   } catch (error) {
-    if (typeof logger.error === "function") {
-      logger.error("❌ Error al conectar a MongoDB:", error);
-    } else {
-      console.error("❌ Error al conectar a MongoDB:", error);
-    }
+    logger.error("❌ Error al conectar a MongoDB:", error);
     throw error;
   }
 };
@@ -122,16 +105,13 @@ const connectToMongoDB = async () => {
  */
 const loadConfigurations = async () => {
   try {
-    // Primero establecer la conexión a MongoDB
     await connectToMongoDB();
 
-    // Asegurar que siempre obtenemos configuraciones frescas
     global.SQL_CONFIG = {
       server1: await getDBConfig("server1"),
       server2: await getDBConfig("server2"),
     };
 
-    // Verificar que las configuraciones son válidas
     if (!global.SQL_CONFIG.server1 || !global.SQL_CONFIG.server2) {
       throw new Error(
         "❌ No se pudieron cargar todas las configuraciones de bases de datos."
@@ -140,99 +120,103 @@ const loadConfigurations = async () => {
 
     logger.info("✅ Configuración de bases de datos cargada en memoria.");
 
-    // Inicializar los pools globales solo si no existen
-    if (!global.server1Pool) {
-      global.server1Pool = null;
+    // Inicializar las conexiones globales si no existen
+    if (!global.server1Connection) {
+      global.server1Connection = null;
     }
-    if (!global.server2Pool) {
-      global.server2Pool = null;
+    if (!global.server2Connection) {
+      global.server2Connection = null;
     }
   } catch (error) {
-    if (typeof logger.error === "function") {
-      logger.error("❌ Error cargando configuraciones:", error);
-    } else {
-      console.error("❌ Error cargando configuraciones:", error);
-    }
+    logger.error("❌ Error cargando configuraciones:", error);
     throw error;
   }
 };
 
 /**
- * Verifica si un pool está activo y utilizable
+ * Crea una conexión usando tedious
  */
-const isPoolActive = (pool) => {
-  return pool && pool.connected && !pool.closed;
+const createTediousConnection = (config) => {
+  return new Promise((resolve, reject) => {
+    const connection = new Connection({
+      server: config.server,
+      authentication: {
+        type: "default",
+        options: {
+          userName: config.user,
+          password: config.password,
+        },
+      },
+      options: {
+        database: config.database,
+        port: config.port,
+        encrypt: config.options.encrypt,
+        trustServerCertificate: config.options.trustServerCertificate,
+        connectionTimeout: config.options.connectionTimeout,
+        requestTimeout: config.options.requestTimeout,
+        rowCollectionOnRequestCompletion: true,
+      },
+    });
+
+    connection.on("connect", (err) => {
+      if (err) {
+        reject(err);
+      } else {
+        resolve(connection);
+      }
+    });
+
+    connection.on("error", (err) => {
+      reject(err);
+    });
+  });
 };
 
 /**
- * Cierra un pool de forma segura
+ * Cierra una conexión de forma segura
  */
-const closePool = async (serverKey) => {
+const closeConnection = async (serverKey) => {
   try {
-    const pool = global[`${serverKey}Pool`];
-    if (isPoolActive(pool)) {
-      await pool.close();
-      global[`${serverKey}Pool`] = null;
+    const connection = global[`${serverKey}Connection`];
+    if (connection && connection.connected) {
+      connection.close();
+      global[`${serverKey}Connection`] = null;
       logger.info(`✅ Conexión a ${serverKey} cerrada correctamente`);
     }
   } catch (error) {
     logger.error(`❌ Error al cerrar la conexión a ${serverKey}:`, error);
-    // Resetear la variable global en caso de error
-    global[`${serverKey}Pool`] = null;
+    global[`${serverKey}Connection`] = null;
   }
 };
 
 /**
- * Conecta a una base de datos SQL Server usando una conexión dedicada
- * para el proceso actual, no la global
+ * Conecta a una base de datos SQL Server usando tedious
+ * para el proceso actual (no global)
  */
 const connectToDB = async (serverKey) => {
   try {
-    // Verificar que tenemos la configuración
     if (!global.SQL_CONFIG || !global.SQL_CONFIG[serverKey]) {
       throw new Error(
         `❌ Configuración de ${serverKey} no está cargada en memoria.`
       );
     }
-
-    // Crear un nuevo pool de conexión específico para esta solicitud
     const config = global.SQL_CONFIG[serverKey];
-    const pool = new sql.ConnectionPool(config);
-
-    try {
-      await pool.connect();
-      logger.debug(`✅ Nueva conexión a ${serverKey} establecida`);
-      return pool;
-    } catch (connError) {
-      logger.error(`❌ Error al conectar a ${serverKey}:`, connError);
-
-      // Si hay un error de conexión, intentamos cerrar el pool
-      try {
-        if (pool && pool.connected) {
-          await pool.close();
-        }
-      } catch (closeError) {
-        logger.error(
-          `Error adicional al cerrar pool fallido de ${serverKey}:`,
-          closeError
-        );
-      }
-
-      throw new Error(
-        `No se pudo conectar a ${serverKey}: ${connError.message}`
-      );
-    }
+    const connection = await createTediousConnection(config);
+    logger.debug(`✅ Nueva conexión a ${serverKey} establecida usando tedious`);
+    return connection;
   } catch (err) {
-    logger.error(`❌ Error en proceso de conexión a ${serverKey}:`, err);
+    logger.error(
+      `❌ Error en proceso de conexión a ${serverKey} usando tedious:`,
+      err
+    );
     throw err;
   }
 };
 
 /**
- * Obtiene o crea un pool global para un servidor
- * Usar solo para conexiones que se mantienen a lo largo de toda la aplicación
+ * Obtiene o crea una conexión global para un servidor usando tedious
  */
-const getGlobalPool = async (serverKey) => {
+const getGlobalConnection = async (serverKey) => {
   try {
     if (!global.SQL_CONFIG || !global.SQL_CONFIG[serverKey]) {
       throw new Error(
@@ -240,91 +224,83 @@ const getGlobalPool = async (serverKey) => {
       );
     }
 
-    // Verificar si el pool global existe y está activo
-    if (!isPoolActive(global[`${serverKey}Pool`])) {
-      // Si no existe o no está activo, cerrarlo por si acaso y crear uno nuevo
-      if (global[`${serverKey}Pool`]) {
-        try {
-          await global[`${serverKey}Pool`].close();
-        } catch (e) {
-          logger.warn(
-            `Error al cerrar pool global existente de ${serverKey}:`,
-            e
-          );
-        }
-      }
-
-      global[`${serverKey}Pool`] = await new sql.ConnectionPool(
+    if (!global[`${serverKey}Connection`]) {
+      global[`${serverKey}Connection`] = await createTediousConnection(
         global.SQL_CONFIG[serverKey]
-      ).connect();
-
-      logger.info(`✅ Conexión global a ${serverKey} establecida`);
+      );
+      logger.info(
+        `✅ Conexión global a ${serverKey} establecida usando tedious`
+      );
     }
 
-    return global[`${serverKey}Pool`];
+    return global[`${serverKey}Connection`];
   } catch (err) {
-    logger.error(`❌ Error conectando al pool global de ${serverKey}:`, err);
+    logger.error(
+      `❌ Error conectando a la conexión global de ${serverKey} usando tedious:`,
+      err
+    );
     throw err;
   }
 };
 
 /**
- * Función de prueba para comparar la conexión con credenciales de .env vs MongoDB
+ * Función de prueba para comparar la conexión usando datos de .env versus MongoDB,
+ * usando tedious.
  */
 const testEnvBasedConnection = async () => {
   try {
-    console.log("⚙️ Ejecutando prueba de conexión alternativa...");
+    console.log("⚙️ Ejecutando prueba de conexión alternativa con tedious...");
 
-    // Usar la contraseña exacta que funcionaba en .env
     const envBasedConfig = {
       user: SERVER2_USER,
       password: SERVER2_PASS, // Contraseña exacta del .env
-      server: SERVER2_HOST,
-      instance: SERVER2_INSTANCE,
+      server: SERVER2_INSTANCE
+        ? `${SERVER2_HOST}\\${SERVER2_INSTANCE}`
+        : SERVER2_HOST,
       database: SERVER2_DB,
+      port: 1433, // Ajusta el puerto si es necesario
       options: {
         encrypt: true,
         trustServerCertificate: true,
-        enableArithAbort: true,
+        connectionTimeout: 30000,
+        requestTimeout: 60000,
       },
     };
 
     console.log(
-      "Probando conexión con configuración hardcoded basada en .env..."
+      "Probando conexión con configuración hardcoded basada en .env usando tedious..."
     );
-    const pool = new sql.ConnectionPool(envBasedConfig);
-    await pool.connect();
-    console.log("✅ Conexión exitosa con configuración .env!");
-    await pool.close();
+    const connection = await createTediousConnection(envBasedConfig);
+    console.log("✅ Conexión exitosa con configuración .env usando tedious!");
+    connection.close();
 
-    // Si llega aquí, la conexión fue exitosa
-    // Ahora prueba con la contraseña de MongoDB pero sin procesamiento
-    const mongoConfig = { ...envBasedConfig };
-    // Obtén el documento real de MongoDB
+    // Prueba usando la contraseña almacenada en MongoDB (sin procesar)
     const dbConfig = await DBConfig.findOne({ serverName: "server2" });
-    mongoConfig.password = dbConfig.password; // Usa la contraseña tal cual de MongoDB
+    envBasedConfig.password = dbConfig.password;
+    console.log(
+      "Probando con password directo de MongoDB sin procesar usando tedious..."
+    );
+    const connection2 = await createTediousConnection(envBasedConfig);
+    console.log(
+      "✅ Conexión exitosa con password directo de MongoDB usando tedious!"
+    );
+    connection2.close();
 
-    console.log("Probando con password directo de MongoDB sin procesar...");
-    const pool2 = new sql.ConnectionPool(mongoConfig);
-    await pool2.connect();
-    console.log("✅ Conexión exitosa con password directo de MongoDB!");
-    await pool2.close();
-
-    // Si funciona con el password sin procesar, prueba modificando el formato del servidor
-    const configWithProcessing = {
-      ...mongoConfig,
-      password: normalizeString(dbConfig.password),
-    };
-
-    console.log("Probando con password normalizado de MongoDB...");
-    const pool3 = new sql.ConnectionPool(configWithProcessing);
-    await pool3.connect();
-    console.log("✅ Conexión exitosa con password normalizado!");
-    await pool3.close();
+    // Prueba con la contraseña normalizada
+    envBasedConfig.password = normalizeString(dbConfig.password);
+    console.log(
+      "Probando con password normalizado de MongoDB usando tedious..."
+    );
+    const connection3 = await createTediousConnection(envBasedConfig);
+    console.log("✅ Conexión exitosa con password normalizado usando tedious!");
+    connection3.close();
 
     return true;
   } catch (error) {
-    console.error("❌ Error en prueba de conexión alternativa:", error);
+    console.error(
+      "❌ Error en prueba de conexión alternativa usando tedious:",
+      error
+    );
     return false;
   }
 };
@@ -333,7 +309,7 @@ module.exports = {
   loadConfigurations,
   connectToDB,
   connectToMongoDB,
-  closePool,
-  getGlobalPool,
+  closeConnection,
+  getGlobalConnection,
   testEnvBasedConnection,
 };
