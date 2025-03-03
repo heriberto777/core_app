@@ -609,7 +609,7 @@ const executeTransfer = async (taskId) => {
           };
         }
 
-        // 9. Iniciar transacción usando la función helper
+        // 9. Iniciar transacción
         try {
           // Verificar que server2Pool sigue activo
           if (!server2Pool.connected) {
@@ -631,13 +631,10 @@ const executeTransfer = async (taskId) => {
             logger.info(`Reconexión exitosa a Server2`);
           }
 
-          const nombreOperacion = `transferencia de ${name}`;
-          const transactionData = await iniciarTransaccion(
-            server2Pool,
-            nombreOperacion
-          );
-          transaction = transactionData.transaction;
-          transactionStarted = transactionData.transactionStarted;
+          transaction = server2Pool.transaction();
+          await transaction.begin();
+          transactionStarted = true;
+          logger.debug("Transacción iniciada correctamente");
         } catch (txError) {
           logger.error("Error al iniciar la transacción", txError);
           await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
@@ -729,21 +726,22 @@ const executeTransfer = async (taskId) => {
 
               // Revertir transacción previa si existe
               if (transaction && transactionStarted) {
-                await revertirTransaccion(
-                  transaction,
-                  transactionStarted,
-                  `transferencia de ${name}`
-                );
+                try {
+                  await transaction.rollback();
+                  logger.debug(`Transacción anterior revertida`);
+                } catch (e) {
+                  logger.warn(
+                    `No se pudo revertir la transacción anterior: ${e.message}`
+                  );
+                }
                 transactionStarted = false;
               }
 
               // Iniciar nueva transacción
-              const transactionData = await iniciarTransaccion(
-                server2Pool,
-                `transferencia de ${name} (reconexión)`
-              );
-              transaction = transactionData.transaction;
-              transactionStarted = transactionData.transactionStarted;
+              transaction = server2Pool.transaction();
+              await transaction.begin();
+              transactionStarted = true;
+              logger.debug(`Nueva transacción iniciada después de reconexión`);
             }
 
             // Procesar cada registro para inserción
@@ -757,8 +755,10 @@ const executeTransfer = async (taskId) => {
               for (const record of insertSubBatch) {
                 try {
                   // Verificar que la transacción sigue activa
-                  verificarTransaccion(transaction, transactionStarted);
-
+                  if (!transaction || !transactionStarted) {
+                    throw new Error("La transacción no está activa");
+                  }
+                  
                   // Truncar strings según las longitudes máximas
                   for (const column in record) {
                     if (typeof record[column] === "string") {
@@ -838,9 +838,11 @@ const executeTransfer = async (taskId) => {
                     }
                   }
 
-                  // Verificar nuevamente estado de la transacción antes de insertar
-                  verificarTransaccion(transaction, transactionStarted);
-
+                  // Verificar nuevamente estado de la transacción
+                  if (!transaction || !transactionStarted) {
+                    throw new Error("La transacción ya no está activa para la inserción");
+                  }
+                  
                   const insertRequest = transaction.request();
                   insertRequest.timeout = 30000;
 
@@ -961,13 +963,36 @@ const executeTransfer = async (taskId) => {
             }
           }
 
-          // 13. Confirmar transacción usando la función helper
-          await confirmarTransaccion(
-            transaction,
-            transactionStarted,
-            `transferencia de ${name}`
-          );
-          transactionStarted = false;
+          // 13. Confirmar transacción con verificación mejorada
+          if (transaction && transactionStarted) {
+            try {
+              // Verificar explícitamente si la transacción puede confirmarse
+              if (typeof transaction.isActive === 'function' && !transaction.isActive()) {
+                logger.warn("La transacción no está en estado válido para confirmar - omitiendo commit");
+                transactionStarted = false;
+              } else {
+                // Log para diagnóstico
+                logger.debug(`Estado antes de commit - transaction: ${!!transaction}, transactionStarted: ${transactionStarted}`);
+                
+                await transaction.commit();
+                logger.debug("Transacción confirmada correctamente");
+                transactionStarted = false;
+              }
+            } catch (commitError) {
+              logger.error(`Error al confirmar transacción: ${commitError.message}`);
+              
+              // Intentar revertir en caso de error de commit
+              try {
+                await transaction.rollback();
+                logger.debug("Transacción revertida después de error en commit");
+              } catch (rollbackError) {
+                logger.warn(`Error al revertir después de fallo en commit: ${rollbackError.message}`);
+              }
+              
+              transactionStarted = false;
+              throw commitError; // Propagar el error original
+            }
+          }
 
           await TransferTask.findByIdAndUpdate(taskId, {
             status: "completed",
@@ -1097,14 +1122,15 @@ const executeTransfer = async (taskId) => {
             finalCount,
           };
         } catch (error) {
-          // Revertir transacción en caso de error usando la función helper
+          // Revertir transacción en caso de error
           if (transaction && transactionStarted) {
-            await revertirTransaccion(
-              transaction,
-              transactionStarted,
-              `transferencia de ${name}`
-            );
-            transactionStarted = false;
+            try {
+              await transaction.rollback();
+              logger.debug("Transacción revertida correctamente");
+              transactionStarted = false;
+            } catch (rollbackError) {
+              logger.error("Error al revertir la transacción", rollbackError);
+            }
           }
 
           await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
@@ -1118,13 +1144,20 @@ const executeTransfer = async (taskId) => {
         }
       } catch (outerError) {
         // Manejo de errores generales
+
         if (transaction && transactionStarted) {
-          await revertirTransaccion(
-            transaction,
-            transactionStarted,
-            "error general"
-          );
-          transactionStarted = false;
+          try {
+            await transaction.rollback();
+            logger.debug(
+              "Transacción revertida correctamente en error general"
+            );
+            transactionStarted = false;
+          } catch (rollbackError) {
+            logger.error(
+              "Error al revertir la transacción en error general",
+              rollbackError
+            );
+          }
         }
 
         await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
@@ -1136,10 +1169,17 @@ const executeTransfer = async (taskId) => {
           errorDetail: outerError.message,
         };
       } finally {
-        // Asegurarse de que la transacción está cerrada mediante la función helper
+        // Asegurarse de que la transacción está cerrada
         if (transaction && transactionStarted) {
-          await revertirTransaccion(transaction, transactionStarted, "finally");
-          transactionStarted = false;
+          try {
+            await transaction.rollback();
+            logger.debug("Transacción revertida en bloque finally");
+          } catch (finalRollbackError) {
+            logger.error(
+              "Error al revertir la transacción en finally",
+              finalRollbackError
+            );
+          }
         }
 
         // Cerrar las conexiones
