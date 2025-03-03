@@ -2,6 +2,7 @@ require("dotenv").config();
 const app = require("./app");
 const fs = require("fs");
 const https = require("https");
+const http = require("http");  // Añadido para soporte HTTP
 const {
   connectToMongoDB,
   loadConfigurations,
@@ -12,35 +13,14 @@ const { startCronJob } = require("./services/cronService");
 const Config = require("./models/configModel");
 const { API_VERSION } = require("./config");
 
-// Puerto para HTTPS - usar el mismo que tu otra aplicación para mantener consistencia
+// Puerto para el servidor - usar el mismo que tu otra aplicación para mantener consistencia
 const port = process.env.PORT || 3979;
 
-// Cargar certificados SSL
-let credentials;
-try {
-  const privateKey = fs.readFileSync(
-    "/etc/letsencrypt/live/catelli.ddns.net/privkey.pem",
-    "utf8"
-  );
-  const certificate = fs.readFileSync(
-    "/etc/letsencrypt/live/catelli.ddns.net/fullchain.pem",
-    "utf8"
-  );
-  const ca = fs.readFileSync(
-    "/etc/letsencrypt/live/catelli.ddns.net/chain.pem",
-    "utf8"
-  );
+// Determinar si estamos en desarrollo o producción
+const isDev = process.env.NODE_ENV !== 'production';
 
-  credentials = {
-    key: privateKey,
-    cert: certificate,
-    ca: ca,
-  };
-  console.log("✅ Certificados SSL cargados correctamente");
-} catch (error) {
-  console.error("❌ Error al leer los certificados:", error.message);
-  process.exit(1); // Salir si no podemos cargar los certificados, como en tu versión original
-}
+// Variable para guardar el servidor (HTTP o HTTPS)
+let server;
 
 const startServer = async () => {
   try {
@@ -63,41 +43,85 @@ const startServer = async () => {
 
     startCronJob(executionHour); // Iniciar cronjob con la hora configurada
 
-    // Crear e iniciar servidor HTTPS (único servidor)
-    const httpsServer = https.createServer(credentials, app);
+    // Iniciar el servidor (HTTPS o HTTP)
+    if (isDev) {
+      // En desarrollo, podemos usar HTTP para simplificar
+      server = http.createServer(app);
+      
+      server.listen(port, () => {
+        console.log("******************************");
+        console.log("****** API REST CATELLI ******");
+        console.log("******************************");
+        console.log(
+          `🚀 Servidor HTTP iniciado en modo desarrollo: http://localhost:${port}/api/${API_VERSION}/`
+        );
+      });
+    } else {
+      // En producción, intentamos HTTPS con certificados
+      try {
+        // Cargar certificados SSL
+        const privateKey = fs.readFileSync(
+          "/etc/letsencrypt/live/catelli.ddns.net/privkey.pem",
+          "utf8"
+        );
+        const certificate = fs.readFileSync(
+          "/etc/letsencrypt/live/catelli.ddns.net/fullchain.pem",
+          "utf8"
+        );
+        const ca = fs.readFileSync(
+          "/etc/letsencrypt/live/catelli.ddns.net/chain.pem",
+          "utf8"
+        );
 
-    httpsServer.listen(port, () => {
-      console.log("******************************");
-      console.log("****** API REST CATELLI ******");
-      console.log("******************************");
-      console.log(
-        `🔒 Servidor HTTPS iniciado en: https://localhost:${port}/api/${API_VERSION}/`
-      );
-    });
+        const credentials = {
+          key: privateKey,
+          cert: certificate,
+          ca: ca,
+        };
+        
+        console.log("✅ Certificados SSL cargados correctamente");
+        
+        server = https.createServer(credentials, app);
+        
+        server.listen(port, () => {
+          console.log("******************************");
+          console.log("****** API REST CATELLI ******");
+          console.log("******************************");
+          console.log(
+            `🔒 Servidor HTTPS iniciado en: https://localhost:${port}/api/${API_VERSION}/`
+          );
+        });
+      } catch (error) {
+        console.error("❌ Error al leer los certificados:", error.message);
+        
+        // Si falla HTTPS, intentamos HTTP como fallback
+        console.log("⚠️ Fallback a HTTP debido a error en certificados...");
+        
+        server = http.createServer(app);
+        
+        server.listen(port, () => {
+          console.log("******************************");
+          console.log("****** API REST CATELLI ******");
+          console.log("******************************");
+          console.log(
+            `⚠️ Servidor HTTP (fallback) iniciado en: http://localhost:${port}/api/${API_VERSION}/`
+          );
+        });
+      }
+    }
 
-    // Manejar errores del servidor HTTPS
-    httpsServer.on("error", (err) => {
+    // Manejar errores del servidor de manera unificada
+    server.on("error", (err) => {
       if (err.code === "EADDRINUSE") {
         console.error(`⚠️ El puerto ${port} está en uso. Abortando...`);
         process.exit(1);
       } else {
-        console.error("❌ Error en el servidor HTTPS:", err);
+        console.error("❌ Error en el servidor:", err);
       }
     });
   } catch (err) {
     console.error("❌ Error al iniciar el servidor:", err);
     process.exit(1);
-
-    // // Si falla la conexión normal, intenta la conexión de prueba
-    // console.log("🧪 Intentando conexión alternativa...");
-    // const testResult = await testEnvBasedConnection();
-    // if (testResult) {
-    //   console.log(
-    //     "✅ Prueba alternativa exitosa. Revisa los logs para detalles."
-    //   );
-    // } else {
-    //   console.log("❌ Prueba alternativa también falló.");
-    // }
   }
 };
 
@@ -108,6 +132,19 @@ process.on("uncaughtException", (error) => {
 
 process.on("unhandledRejection", (reason, promise) => {
   console.error("❌ Rechazo de promesa no manejado:", reason);
+});
+
+// Manejo de señales para cierre graceful
+process.on('SIGTERM', () => {
+  console.log('Recibida señal SIGTERM. Cerrando servidor gracefully...');
+  if (server) {
+    server.close(() => {
+      console.log('Servidor cerrado. Proceso terminando...');
+      process.exit(0);
+    });
+  } else {
+    process.exit(0);
+  }
 });
 
 startServer();

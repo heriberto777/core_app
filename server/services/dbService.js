@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const { Connection, Request } = require("tedious");
+const { wrapConnection } = require("./tediousAdapter"); // Importar el adaptador
 const DBConfig = require("../models/dbConfigModel");
 const logger = require("./logger");
 const { normalizeString } = require("../utils/stringUtils");
@@ -161,7 +162,9 @@ const createTediousConnection = (config) => {
       if (err) {
         reject(err);
       } else {
-        resolve(connection);
+        // Envolver la conexión con nuestro adaptador
+        const wrappedConnection = wrapConnection(connection);
+        resolve(wrappedConnection);
       }
     });
 
