@@ -18,12 +18,14 @@ const getDBConfig = async (serverName) => {
     return {
       user: config.user,
       password: normalizeString(config.password),
-      server: config.host,
+      server: config.instance
+        ? `${config.host}\\${config.instance}`
+        : config.host,
       database: config.database,
       port: config.port || 1433, // Puerto por defecto de SQL Server si no está definido
       options: {
         encrypt: config.options?.encrypt || false,
-        trustServerCertificate: config.options?.trustServerCertificate || false,
+        trustServerCertificate: config.options?.trustServerCertificate || true,
         enableArithAbort: config.options?.enableArithAbort || true,
         connectionTimeout: 30000, // 30 segundos timeout para conexión
         requestTimeout: 60000, // 60 segundos timeout para solicitudes
