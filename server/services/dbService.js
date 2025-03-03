@@ -12,6 +12,8 @@ const getDBConfig = async (serverName) => {
     if (!config)
       throw new Error(`⚠️ Configuración no encontrada para ${serverName}`);
 
+    console.log("Aqui obtenemos los datos de conexion -> ", config);
+
     return {
       user: config.user,
       password: config.password,
