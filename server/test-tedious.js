@@ -1,5 +1,5 @@
 // test-tedious.js
-const { Connection } = require("tedious");
+const { Connection, Request } = require("tedious");
 
 const config = {
   server: "sql-calidad.miami",
