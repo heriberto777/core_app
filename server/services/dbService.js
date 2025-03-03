@@ -4,6 +4,14 @@ const DBConfig = require("../models/dbConfigModel");
 const logger = require("./logger");
 const { normalizeString } = require("../utils/stringUtils");
 
+const {
+  SERVER2_USER,
+  SERVER2_PASS,
+  SERVER2_HOST,
+  SERVER2_INSTANCE,
+  SERVER2_DB,
+} = process.env;
+
 /**
  * Obtiene la configuración de la base de datos desde MongoDB
  */
@@ -269,11 +277,11 @@ const testEnvBasedConnection = async () => {
 
     // Usar la contraseña exacta que funcionaba en .env
     const envBasedConfig = {
-      user: "cliente-catelli",
-      password: "Smk1$kE[qVc%5fY", // Contraseña exacta del .env
-      server: "sql-calidad.miami",
-      instance: "calidadstdb",
-      database: "stdb_gnd",
+      user: SERVER2_USER,
+      password: SERVER2_PASS, // Contraseña exacta del .env
+      server: SERVER2_HOST,
+      instance: SERVER2_INSTANCE,
+      database: SERVER2_DB,
       options: {
         encrypt: true,
         trustServerCertificate: true,
