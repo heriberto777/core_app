@@ -13,18 +13,18 @@ const getDBConfig = async (serverName) => {
     if (!config)
       throw new Error(`⚠️ Configuración no encontrada para ${serverName}`);
 
-    console.log("Aqui obtenemos los datos de conexion -> ", config);
+    // console.log("Aqui obtenemos los datos de conexion -> ", config);
 
     return {
       user: config.user,
       password: normalizeString(config.password),
       server: config.host,
       database: config.database,
-      port: config.port,
+      port: config.port || 1433, // Puerto por defecto de SQL Server si no está definido
       options: {
-        encrypt: config.options.encrypt,
-        trustServerCertificate: config.options.trustServerCertificate,
-        enableArithAbort: config.options.enableArithAbort,
+        encrypt: config.options?.encrypt || false,
+        trustServerCertificate: config.options?.trustServerCertificate || false,
+        enableArithAbort: config.options?.enableArithAbort || true,
         connectionTimeout: 30000, // 30 segundos timeout para conexión
         requestTimeout: 60000, // 60 segundos timeout para solicitudes
       },
