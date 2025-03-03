@@ -31,10 +31,9 @@ const getDBConfig = async (serverName) => {
     return {
       user: config.user,
       password: normalizeString(config.password),
-      server: config.instance
-        ? `${config.host}\\${config.instance}`
-        : config.host,
+      server: config.host,
       database: config.database,
+      instance: config.instance,
       port: config.port || 1433, // Puerto por defecto de SQL Server
       options: {
         encrypt: config.options?.encrypt || false,
@@ -254,10 +253,9 @@ const testEnvBasedConnection = async () => {
     const envBasedConfig = {
       user: SERVER2_USER,
       password: SERVER2_PASS, // Contraseña exacta del .env
-      server: SERVER2_INSTANCE
-        ? `${SERVER2_HOST}\\${SERVER2_INSTANCE}`
-        : SERVER2_HOST,
+      server: SERVER2_HOST,
       database: SERVER2_DB,
+      instance: SERVER2_INSTANCE,
       port: 1433, // Ajusta el puerto si es necesario
       options: {
         encrypt: true,
