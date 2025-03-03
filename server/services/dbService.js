@@ -25,8 +25,8 @@ const getDBConfig = async (serverName) => {
     const password = config.password ? `"${config.password}"` : "";
     const processedPassword = password.replace(/^"(.*)"$/, "$1");
 
-    console.log("Password original:", config.password);
-    console.log("Password procesado:", processedPassword);
+    // console.log("Password original:", config.password);
+    // console.log("Password procesado:", processedPassword);
 
     return {
       user: config.user,
