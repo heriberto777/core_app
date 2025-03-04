@@ -2575,8 +2575,6 @@ async function executeTransferDown(taskId, updateProgress) {
  */
 async function insertInBatchesSSE(taskId, data, batchSize = 100) {
   let server2Pool = null;
-  let transaction = null;
-  let transactionStarted = false;
   let lastReportedProgress = 0;
   let initialCount = 0;
   let taskName = "desconocida"; // Inicializar taskName por defecto
@@ -2644,36 +2642,24 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
       initialCount = 0;
     }
 
-    // 5) Iniciar transacción con la función helper
-    try {
-      const transactionData = await iniciarTransaccion(
-        server2Pool,
-        `inserción en lotes para ${taskName}`
-      );
-      transaction = transactionData.transaction;
-      transactionStarted = transactionData.transactionStarted;
-    } catch (txError) {
-      logger.error(
-        "Error al iniciar la transacción para inserción en lotes",
-        txError
-      );
-      await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
-      sendProgress(taskId, -1);
-      throw new Error(`Error al iniciar la transacción: ${txError.message}`);
-    }
-
-    // 6) Pre-cargar información de longitud de columnas
+    // 5) Pre-cargar información de longitud de columnas
     const columnLengthCache = new Map();
 
-    // 7) Contadores para tracking
+    // 6) Contadores para tracking
     const total = data.length;
     let totalInserted = 0;
     let processedCount = 0;
     let errorCount = 0;
 
-    // 8) Procesar data en lotes
+    // 7) Procesar data en lotes - CADA LOTE CON SU PROPIA TRANSACCIÓN
     for (let i = 0; i < data.length; i += batchSize) {
       const batch = data.slice(i, i + batchSize);
+      const currentBatchNumber = Math.floor(i / batchSize) + 1;
+      const totalBatches = Math.ceil(data.length / batchSize);
+
+      logger.debug(
+        `Procesando lote ${currentBatchNumber}/${totalBatches} (${batch.length} registros)...`
+      );
 
       // Verificar si la conexión sigue activa y reconectar si es necesario
       if (!server2Pool || !server2Pool.connected) {
@@ -2696,135 +2682,170 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
           throw new Error("No se pudo restablecer la conexión con server2");
         }
 
-        // Revertir transacción anterior si existía usando la función helper
-        if (transaction && transactionStarted) {
-          await revertirTransaccion(
-            transaction,
-            transactionStarted,
-            `inserción en lotes para ${taskName}`
-          );
-          transactionStarted = false;
-        }
-
-        // Crear nueva transacción usando la función helper
-        const transactionData = await iniciarTransaccion(
-          server2Pool,
-          `inserción en lotes para ${taskName} (reconexión)`
+        logger.info(
+          `Reconexión exitosa a server2 para lote ${currentBatchNumber}`
         );
-        transaction = transactionData.transaction;
-        transactionStarted = transactionData.transactionStarted;
       }
 
-      // Verificar que la transacción sigue activa
-      if (!transaction || !transactionStarted) {
-        logger.warn(
-          "No hay transacción activa para inserción en lotes, iniciando una nueva"
+      // Iniciar nueva transacción para este lote
+      let batchTransaction = null;
+      let batchTransactionStarted = false;
+
+      try {
+        // Crear e iniciar transacción para este lote
+        logger.debug(
+          `Iniciando transacción para lote ${currentBatchNumber}...`
         );
 
-        const transactionData = await iniciarTransaccion(
-          server2Pool,
-          `inserción en lotes para ${taskName} (reinicio)`
+        batchTransaction = server2Pool.transaction();
+        await batchTransaction.begin();
+        batchTransactionStarted = true;
+
+        logger.debug(
+          `Transacción iniciada correctamente para lote ${currentBatchNumber}`
         );
-        transaction = transactionData.transaction;
-        transactionStarted = transactionData.transactionStarted;
-      }
 
-      let batchInserted = 0;
+        // Procesar registros del lote con esta transacción
+        let batchInserted = 0;
+        let batchErrored = 0;
 
-      for (const record of batch) {
-        try {
-          // Verificar que la transacción sigue activa antes de procesar usando la función helper
-          verificarTransaccion(transaction, transactionStarted);
+        for (const record of batch) {
+          try {
+            // Truncar strings según las longitudes máximas
+            for (const column in record) {
+              if (typeof record[column] === "string") {
+                // Obtener la longitud máxima (usando cache)
+                let maxLength;
+                if (columnLengthCache.has(column)) {
+                  maxLength = columnLengthCache.get(column);
+                } else {
+                  maxLength = await getColumnMaxLength(
+                    task.name,
+                    column,
+                    server2Pool
+                  );
+                  columnLengthCache.set(column, maxLength);
+                }
 
-          // Truncar strings según las longitudes máximas
-          for (const column in record) {
-            if (typeof record[column] === "string") {
-              // Obtener la longitud máxima (usando cache)
-              let maxLength;
-              if (columnLengthCache.has(column)) {
-                maxLength = columnLengthCache.get(column);
-              } else {
-                maxLength = await getColumnMaxLength(
-                  task.name,
-                  column,
-                  server2Pool
-                );
-                columnLengthCache.set(column, maxLength);
-              }
-
-              if (maxLength > 0 && record[column]?.length > maxLength) {
-                record[column] = record[column].substring(0, maxLength);
+                if (maxLength > 0 && record[column]?.length > maxLength) {
+                  record[column] = record[column].substring(0, maxLength);
+                }
               }
             }
-          }
 
-          // Verificar nuevamente la transacción usando la función helper
-          verificarTransaccion(transaction, transactionStarted);
+            // Verificar que la transacción sigue activa
+            if (!batchTransaction || !batchTransactionStarted) {
+              throw new Error(
+                `La transacción del lote ${currentBatchNumber} no está activa`
+              );
+            }
 
-          const insertRequest = transaction.request();
-          insertRequest.timeout = 30000;
+            // Usar la transacción de este lote
+            const insertRequest = batchTransaction.request();
+            insertRequest.timeout = 30000;
 
-          const columns = Object.keys(record)
-            .map((k) => `[${k}]`)
-            .join(", ");
-          const values = Object.keys(record)
-            .map((k) => {
-              // Convertir a formato seguro para tedious
-              const value = record[k];
-              const safeValue =
-                value === null
-                  ? null
-                  : typeof value === "number"
-                  ? value
-                  : String(value);
+            const columns = Object.keys(record)
+              .map((k) => `[${k}]`)
+              .join(", ");
+            const values = Object.keys(record)
+              .map((k) => {
+                // Convertir a formato seguro para tedious
+                const value = record[k];
+                const safeValue =
+                  value === null
+                    ? null
+                    : typeof value === "number"
+                    ? value
+                    : String(value);
 
-              insertRequest.input(k, safeValue);
-              return `@${k}`;
-            })
-            .join(", ");
+                insertRequest.input(k, safeValue);
+                return `@${k}`;
+              })
+              .join(", ");
 
-          const insertQuery = `
-            INSERT INTO dbo.[${task.name}] (${columns})
-            VALUES (${values});
-            
-            SELECT @@ROWCOUNT AS rowsAffected;
-          `;
+            const insertQuery = `
+              INSERT INTO dbo.[${task.name}] (${columns})
+              VALUES (${values});
+              
+              SELECT @@ROWCOUNT AS rowsAffected;
+            `;
 
-          const insertResult = await insertRequest.query(insertQuery);
-          const rowsAffected = insertResult.recordset[0].rowsAffected;
+            const insertResult = await insertRequest.query(insertQuery);
+            const rowsAffected = insertResult.recordset[0].rowsAffected;
 
-          if (rowsAffected > 0) {
-            totalInserted += rowsAffected;
-            batchInserted += rowsAffected;
-          }
-        } catch (error) {
-          // Registrar el error pero continuar con el siguiente registro
-          errorCount++;
-          logger.error(
-            `Error al insertar registro en lote ${
-              Math.floor(i / batchSize) + 1
-            }:`,
-            error
-          );
-
-          // Si es un error crítico que podría afectar a la transacción, abortar el lote actual
-          if (
-            error.message.includes("transacción") ||
-            error.message.includes("conexión") ||
-            error.message.includes("timeout")
-          ) {
-            throw error; // Propagar errores críticos para manejo especial
+            if (rowsAffected > 0) {
+              totalInserted += rowsAffected;
+              batchInserted += rowsAffected;
+            }
+          } catch (recordError) {
+            // Registrar el error pero continuar con el siguiente registro
+            errorCount++;
+            batchErrored++;
+            logger.error(
+              `Error al insertar registro en lote ${currentBatchNumber}:`,
+              recordError
+            );
           }
         }
+
+        // Verificar si hubo errores en el lote antes de confirmar
+        if (batchErrored > 0) {
+          logger.warn(
+            `Lote ${currentBatchNumber} tuvo ${batchErrored} errores de ${batch.length} registros`
+          );
+
+          // Si todos los registros del lote fallaron, hacer rollback
+          if (batchErrored === batch.length) {
+            logger.warn(
+              `Todos los registros del lote ${currentBatchNumber} fallaron, haciendo rollback`
+            );
+            throw new Error(
+              `Todos los registros del lote ${currentBatchNumber} fallaron`
+            );
+          }
+        }
+
+        // Confirmar la transacción de este lote
+        if (batchTransactionStarted) {
+          logger.debug(
+            `Confirmando transacción para lote ${currentBatchNumber}...`
+          );
+          await batchTransaction.commit();
+          batchTransactionStarted = false;
+          logger.debug(
+            `Transacción de lote ${currentBatchNumber} confirmada correctamente`
+          );
+        }
+
+        logger.info(
+          `Lote ${currentBatchNumber}/${totalBatches}: ${batchInserted} registros insertados, ${batchErrored} errores`
+        );
+      } catch (batchError) {
+        // Si hay error en el lote, hacer rollback y continuar con el siguiente lote
+        if (batchTransaction && batchTransactionStarted) {
+          try {
+            logger.debug(
+              `Revertiendo transacción para lote ${currentBatchNumber} debido a error...`
+            );
+            await batchTransaction.rollback();
+            batchTransactionStarted = false;
+            logger.debug(
+              `Transacción de lote ${currentBatchNumber} revertida correctamente`
+            );
+          } catch (rollbackError) {
+            logger.warn(
+              `Error al revertir transacción de lote ${currentBatchNumber}: ${rollbackError.message}`
+            );
+          }
+        }
+
+        logger.error(
+          `Error en lote ${currentBatchNumber}: ${batchError.message}`
+        );
+        errorCount += batch.length; // Considerar todo el lote como error
       }
 
-      logger.debug(
-        `Lote ${
-          Math.floor(i / batchSize) + 1
-        }: ${batchInserted} registros insertados`
-      );
-
-      // Actualizar progreso con throttling
+      // Actualizar progreso después de cada lote
       processedCount += batch.length;
       const progress = Math.round((processedCount / total) * 100);
 
@@ -2836,22 +2857,14 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
       }
     }
 
-    // 9. Confirmar transacción usando la función helper
-    await confirmarTransaccion(
-      transaction,
-      transactionStarted,
-      `inserción en lotes para ${taskName}`
-    );
-    transactionStarted = false;
-
-    // 10. Actualizar estado a completado
+    // 8. Actualizar estado a completado
     await TransferTask.findByIdAndUpdate(taskId, {
       status: "completed",
       progress: 100,
     });
     sendProgress(taskId, 100);
 
-    // 11. Verificar conteo final
+    // 9. Verificar conteo final
     let finalCount = 0;
     try {
       const countRequest = server2Pool.request();
@@ -2868,7 +2881,7 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
       logger.warn(`No se pudo verificar conteo final: ${countError.message}`);
     }
 
-    // 12. Preparar resultado
+    // 10. Preparar resultado
     const result = {
       success: true,
       message: "Transferencia completada",
@@ -2879,23 +2892,23 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
       finalCount,
     };
 
-    // 13. Enviar correo con el resultado
-    await sendEmailNotification(task, result);
+    // 11. Enviar correo con el resultado
+    try {
+      await sendEmailNotification(task, result);
+      logger.info(`Correo de notificación enviado para ${taskName}`);
+    } catch (emailError) {
+      logger.error(
+        `Error al enviar correo de notificación: ${emailError.message}`
+      );
+    }
 
     return result;
   } catch (error) {
-    // Manejo de errores
-    logger.error(`Error en insertInBatchesSSE: ${error.message}`, error);
-
-    // Revertir transacción en caso de error usando la función helper
-    if (transaction && transactionStarted) {
-      await revertirTransaccion(
-        transaction,
-        transactionStarted,
-        `inserción en lotes para ${taskName}`
-      );
-      transactionStarted = false;
-    }
+    // Manejo de errores generales
+    logger.error(
+      `Error en insertInBatchesSSE para ${taskName}: ${error.message}`,
+      error
+    );
 
     // Actualizar estado de la tarea
     await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
@@ -2906,34 +2919,27 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
       const task = await TransferTask.findById(taskId);
       if (task) {
         await sendEmailError(task, error);
+        logger.info(`Correo de error enviado para ${taskName}`);
       }
     } catch (emailError) {
-      logger.error(`Error al enviar correo de error: ${emailError.message}`);
+      logger.error(
+        `Error al enviar correo de error para ${taskName}: ${emailError.message}`
+      );
     }
 
     throw error;
   } finally {
-    // Asegurarse de que la transacción está cerrada usando la función helper
-    if (transaction && transactionStarted) {
-      await revertirTransaccion(
-        transaction,
-        transactionStarted,
-        `inserción en lotes (finally)`
-      );
-      transactionStarted = false;
-    }
-
     // Cerrar conexión
     try {
       if (server2Pool && server2Pool.connected) {
         await server2Pool.close();
         logger.debug(
-          `Conexión server2Pool cerrada correctamente para inserción en lotes (taskId: ${taskId})`
+          `Conexión server2Pool cerrada correctamente para inserción en lotes de ${taskName} (taskId: ${taskId})`
         );
       }
     } catch (closeError) {
       logger.error(
-        `Error al cerrar conexión server2Pool para inserción en lotes (taskId: ${taskId}):`,
+        `Error al cerrar conexión server2Pool para inserción en lotes de ${taskName} (taskId: ${taskId}):`,
         closeError
       );
     }
