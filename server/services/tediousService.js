@@ -31,7 +31,7 @@ class SqlService {
   }
 
   /**
-   * Sanitiza un objeto de parámetros para evitar problemas con valores undefined
+   * Sanitiza un objeto de parámetros para evitar problemas con valores undefined y cadenas vacías
    * @param {Object} params - Objeto de parámetros original
    * @returns {Object} - Objeto de parámetros sanitizado
    */
@@ -39,8 +39,14 @@ class SqlService {
     const sanitized = {};
 
     for (const [key, value] of Object.entries(params)) {
-      // Si el valor es undefined, lo cambiamos a null para SQL Server
-      sanitized[key] = value === undefined ? null : value;
+      // Convertir undefined o cadenas vacías a null
+      if (value === undefined || value === "") {
+        sanitized[key] = null;
+      } else if (typeof value === "string" && value.trim() === "") {
+        sanitized[key] = null;
+      } else {
+        sanitized[key] = value;
+      }
     }
 
     return sanitized;
@@ -76,6 +82,11 @@ class SqlService {
       // Añadir parámetros sanitizados con logs para depuración
       try {
         Object.entries(sanitizedParams).forEach(([name, value]) => {
+          // IMPORTANTE: Si el valor es una cadena vacía, conviértelo a null
+          if (value === "") {
+            value = null;
+          }
+
           let type = this.determineType(value);
           request.addParameter(name, type, value);
         });
@@ -96,12 +107,6 @@ class SqlService {
           row[column.metadata.colName] = column.value;
         });
         rows.push(row);
-      });
-
-      // Manejar errores durante la ejecución
-      request.on("error", (err) => {
-        console.error("Error en la ejecución de la consulta SQL:", err);
-        reject(err);
       });
 
       // Ejecutar la consulta
