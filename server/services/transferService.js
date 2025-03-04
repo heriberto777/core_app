@@ -13,6 +13,81 @@ const logger = require("./logger");
 const { sendProgress } = require("./progressSse");
 const { sendEmail } = require("./emailService");
 
+// Función de utilidad para validar registros antes de insertarlos
+function validateRecord(record, requiredFields = []) {
+  if (!record || typeof record !== "object") {
+    throw new Error("El registro debe ser un objeto válido");
+  }
+
+  // Verificar campos requeridos
+  if (requiredFields.length > 0) {
+    const missingFields = requiredFields.filter((field) => {
+      const value = record[field];
+      return value === undefined || value === null || value === "";
+    });
+
+    if (missingFields.length > 0) {
+      throw new Error(
+        `Campos requeridos faltantes: ${missingFields.join(", ")}`
+      );
+    }
+  }
+
+  // Sanitizar todos los campos
+  const sanitized = {};
+
+  for (const [key, value] of Object.entries(record)) {
+    // Validación genérica basada en el tipo de dato, no en el nombre del campo
+    if (value === undefined) {
+      // Reemplazar undefined con null para SQL
+      sanitized[key] = null;
+    } else if (value === null) {
+      // Mantener valores null
+      sanitized[key] = null;
+    } else if (typeof value === "number") {
+      // Para números, asegurarse que sean válidos
+      sanitized[key] = Number.isFinite(value) ? value : 0;
+    } else if (value instanceof Date) {
+      // Para fechas, verificar que sean válidas
+      sanitized[key] = isNaN(value.getTime()) ? null : value;
+    } else if (typeof value === "string") {
+      // Para strings, intentar detectar si es una fecha en formato string
+      if (
+        /^\d{4}-\d{2}-\d{2}/.test(value) ||
+        /^\d{2}\/\d{2}\/\d{4}/.test(value)
+      ) {
+        try {
+          const date = new Date(value);
+          if (!isNaN(date.getTime())) {
+            sanitized[key] = date; // Convertir a Date si parece ser una fecha
+          } else {
+            sanitized[key] = value.trim(); // De lo contrario, mantener como string
+          }
+        } catch (e) {
+          sanitized[key] = value.trim(); // Si hay error, dejarlo como string
+        }
+      } else {
+        // Siempre hacer trim para eliminar espacios innecesarios
+        sanitized[key] = value.trim();
+      }
+    } else if (typeof value === "boolean") {
+      // Mantener booleanos sin cambios
+      sanitized[key] = value;
+    } else if (Array.isArray(value)) {
+      // Convertir arrays a JSON strings para almacenar
+      sanitized[key] = JSON.stringify(value);
+    } else if (typeof value === "object") {
+      // Convertir objetos a JSON strings para almacenar
+      sanitized[key] = JSON.stringify(value);
+    } else {
+      // Para cualquier otro tipo, convertir a string
+      sanitized[key] = String(value);
+    }
+  }
+
+  return sanitized;
+}
+
 /**
  * Obtiene la clave primaria de la tabla desde validationRules.
  */
@@ -653,9 +728,13 @@ const executeTransfer = async (taskId) => {
 
               for (const record of insertSubBatch) {
                 try {
+                  // AQUÍ: Validar y sanitizar el registro antes de procesarlo
+                  const validatedRecord = validateRecord(record);
+
                   // Truncar strings según las longitudes máximas
-                  for (const column in record) {
-                    if (typeof record[column] === "string") {
+                  // (Puedes mantener esta lógica o eliminarla si la validación ya maneja strings largos)
+                  for (const column in validatedRecord) {
+                    if (typeof validatedRecord[column] === "string") {
                       // Obtener la longitud máxima (usando cache)
                       let maxLength;
                       if (columnLengthCache.has(column)) {
@@ -663,11 +742,11 @@ const executeTransfer = async (taskId) => {
                       } else {
                         // Consultar longitud máxima de la columna
                         const lengthQuery = `
-                          SELECT CHARACTER_MAXIMUM_LENGTH 
-                          FROM INFORMATION_SCHEMA.COLUMNS 
-                          WHERE TABLE_NAME = '${name}' 
-                            AND COLUMN_NAME = '${column}'
-                        `;
+            SELECT CHARACTER_MAXIMUM_LENGTH 
+            FROM INFORMATION_SCHEMA.COLUMNS 
+            WHERE TABLE_NAME = '${name}' 
+              AND COLUMN_NAME = '${column}'
+          `;
                         const lengthResult = await SqlService.query(
                           server2Connection,
                           lengthQuery
@@ -678,28 +757,36 @@ const executeTransfer = async (taskId) => {
                         columnLengthCache.set(column, maxLength);
                       }
 
-                      if (maxLength > 0 && record[column]?.length > maxLength) {
-                        record[column] = record[column].substring(0, maxLength);
+                      if (
+                        maxLength > 0 &&
+                        validatedRecord[column]?.length > maxLength
+                      ) {
+                        validatedRecord[column] = validatedRecord[
+                          column
+                        ].substring(0, maxLength);
                       }
                     }
                   }
 
-                  // Recolectar IDs para post-actualización
+                  // Recolectar IDs para post-actualización usando el registro validado
                   if (postUpdateQuery && primaryKeys.length > 0) {
                     const primaryKey = primaryKeys[0];
                     if (
-                      record[primaryKey] !== null &&
-                      record[primaryKey] !== undefined
+                      validatedRecord[primaryKey] !== null &&
+                      validatedRecord[primaryKey] !== undefined
                     ) {
-                      affectedRecords.push(record[primaryKey]);
+                      affectedRecords.push(validatedRecord[primaryKey]);
                     }
                   }
 
-                  // Verificar si es un duplicado consultando el conjunto de claves existentes
+                  // Verificar si es un duplicado usando el registro validado
                   if (existingKeysSet.size > 0) {
                     const recordKey = mergeKeys
                       .map((k) => {
-                        const value = record[k] === null ? "NULL" : record[k];
+                        const value =
+                          validatedRecord[k] === null
+                            ? "NULL"
+                            : validatedRecord[k];
                         return `${k}:${value}`;
                       })
                       .join("|");
@@ -711,22 +798,22 @@ const executeTransfer = async (taskId) => {
 
                       // Construir mensaje claro para identificar el registro duplicado
                       const duplicateInfo = mergeKeys
-                        .map((k) => `${k}=${record[k]}`)
+                        .map((k) => `${k}=${validatedRecord[k]}`)
                         .join(", ");
 
                       // Guardar información del registro duplicado
                       const duplicateRecord = {};
                       mergeKeys.forEach((key) => {
-                        duplicateRecord[key] = record[key];
+                        duplicateRecord[key] = validatedRecord[key];
                       });
 
                       // Añadir campos adicionales de interés
-                      const additionalFields = Object.keys(record)
+                      const additionalFields = Object.keys(validatedRecord)
                         .filter((k) => !mergeKeys.includes(k))
                         .slice(0, 5);
 
                       additionalFields.forEach((key) => {
-                        duplicateRecord[key] = record[key];
+                        duplicateRecord[key] = validatedRecord[key];
                       });
 
                       duplicatedRecords.push(duplicateRecord);
@@ -737,34 +824,30 @@ const executeTransfer = async (taskId) => {
                     }
                   }
 
-                  // Preparar consulta para inserción
-                  const columns = Object.keys(record)
+                  // Preparar consulta para inserción usando el registro validado
+                  const columns = Object.keys(validatedRecord)
                     .map((k) => `[${k}]`)
                     .join(", ");
 
-                  const paramPlaceholders = Object.keys(record)
+                  const paramPlaceholders = Object.keys(validatedRecord)
                     .map((k) => `@${k}`)
                     .join(", ");
 
                   const insertQuery = `
-                    INSERT INTO dbo.[${name}] (${columns})
-                    VALUES (${paramPlaceholders});
-                    
-                    SELECT @@ROWCOUNT AS rowsAffected;
-                  `;
+                      INSERT INTO dbo.[${name}] (${columns})
+                      VALUES (${paramPlaceholders});
+                      
+                      SELECT @@ROWCOUNT AS rowsAffected;
+                    `;
 
-                  // Ejecutar la inserción
+                  // Ejecutar la inserción con el registro validado
                   try {
-                    const params = {};
-                    Object.entries(record).forEach(([key, value]) => {
-                      params[key] = value;
-                    });
-
                     const insertResult = await SqlService.query(
                       server2Connection,
                       insertQuery,
-                      params
+                      validatedRecord // <- Usa el registro validado
                     );
+
                     const rowsAffected = insertResult.recordset[0].rowsAffected;
 
                     if (rowsAffected > 0) {
