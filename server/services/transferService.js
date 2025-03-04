@@ -13,7 +13,7 @@ const logger = require("./logger");
 const { sendProgress } = require("./progressSse");
 const { sendEmail } = require("./emailService");
 
-// Función de utilidad para validar registros antes de insertarlos
+// Función de validación mejorada que maneja cadenas vacías
 function validateRecord(record, requiredFields = []) {
   if (!record || typeof record !== "object") {
     throw new Error("El registro debe ser un objeto válido");
@@ -37,12 +37,18 @@ function validateRecord(record, requiredFields = []) {
   const sanitized = {};
 
   for (const [key, value] of Object.entries(record)) {
-    // Validación genérica basada en el tipo de dato, no en el nombre del campo
+    // Validación genérica basada en el tipo de dato
     if (value === undefined) {
       // Reemplazar undefined con null para SQL
       sanitized[key] = null;
     } else if (value === null) {
       // Mantener valores null
+      sanitized[key] = null;
+    } else if (value === "") {
+      // IMPORTANTE: Convertir cadenas vacías a NULL
+      sanitized[key] = null;
+    } else if (typeof value === "string" && value.trim() === "") {
+      // También convertir strings que solo tienen espacios a NULL
       sanitized[key] = null;
     } else if (typeof value === "number") {
       // Para números, asegurarse que sean válidos
@@ -51,33 +57,16 @@ function validateRecord(record, requiredFields = []) {
       // Para fechas, verificar que sean válidas
       sanitized[key] = isNaN(value.getTime()) ? null : value;
     } else if (typeof value === "string") {
-      // Para strings, intentar detectar si es una fecha en formato string
-      if (
-        /^\d{4}-\d{2}-\d{2}/.test(value) ||
-        /^\d{2}\/\d{2}\/\d{4}/.test(value)
-      ) {
-        try {
-          const date = new Date(value);
-          if (!isNaN(date.getTime())) {
-            sanitized[key] = date; // Convertir a Date si parece ser una fecha
-          } else {
-            sanitized[key] = value.trim(); // De lo contrario, mantener como string
-          }
-        } catch (e) {
-          sanitized[key] = value.trim(); // Si hay error, dejarlo como string
-        }
-      } else {
-        // Siempre hacer trim para eliminar espacios innecesarios
-        sanitized[key] = value.trim();
-      }
+      // Para strings normales
+      sanitized[key] = value.trim();
     } else if (typeof value === "boolean") {
       // Mantener booleanos sin cambios
       sanitized[key] = value;
     } else if (Array.isArray(value)) {
-      // Convertir arrays a JSON strings para almacenar
+      // Convertir arrays a JSON strings
       sanitized[key] = JSON.stringify(value);
     } else if (typeof value === "object") {
-      // Convertir objetos a JSON strings para almacenar
+      // Convertir objetos a JSON strings
       sanitized[key] = JSON.stringify(value);
     } else {
       // Para cualquier otro tipo, convertir a string
