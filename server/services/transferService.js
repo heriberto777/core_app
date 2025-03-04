@@ -426,15 +426,14 @@ const executeTransfer = async (taskId) => {
   let server2Pool = null;
   let transaction = null;
   let transactionStarted = false;
-  let lastReportedProgress = 0; // Para throttling
-  let initialCount = 0; // Contador inicial
-  let duplicateCount = 0; // Contador de duplicados
-  let duplicatedRecords = []; // Array para almacenar los registros duplicados
+  let lastReportedProgress = 0;
+  let initialCount = 0;
+  let duplicateCount = 0;
+  let duplicatedRecords = [];
 
   return await retry(
     async () => {
       try {
-        // 1. Obtener la tarea
         const task = await TransferTask.findById(taskId);
         if (!task || !task.active) {
           logger.warn(
@@ -443,12 +442,17 @@ const executeTransfer = async (taskId) => {
           return { success: false, message: "Tarea inactiva" };
         }
 
-        // 2. Actualizar estado
+        logger.info(
+          `🔍 Ejecutando tarea '${task.name}' (ID: ${taskId}, tipo: ${
+            task.transferType || "estándar"
+          })`
+        );
+
         await TransferTask.findByIdAndUpdate(taskId, {
           status: "running",
           progress: 0,
         });
-        sendProgress(taskId, 0); // Enviar progreso inicial
+        sendProgress(taskId, 0);
         lastReportedProgress = 0;
 
         const {
@@ -460,21 +464,18 @@ const executeTransfer = async (taskId) => {
           postUpdateMapping,
         } = task;
 
-        // 3. Verificar validationRules
         if (!validationRules) {
           await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
-          sendProgress(taskId, -1); // Enviar estado de error
+          sendProgress(taskId, -1);
           return {
             success: false,
             message: "No se han especificado reglas de validación",
           };
         }
 
-        // 4. Establecer conexiones
         try {
-          // Intentar conectar a server1
           logger.debug(`Intentando conectar a server1 para tarea ${taskId}...`);
-          server1Pool = await connectToDB("server1");
+          server1Pool = await connectToDB("server1", 30000);
 
           if (!server1Pool || !server1Pool.connected) {
             throw new Error(
@@ -482,12 +483,38 @@ const executeTransfer = async (taskId) => {
             );
           }
 
-          // Intentar conectar a server2
+          try {
+            const testRequest = server1Pool.request();
+            testRequest.timeout = 15000;
+            await testRequest.query("SELECT 1 AS test");
+            logger.info(`✅ Conexión a server1 verificada con éxito`);
+          } catch (testError) {
+            logger.warn(
+              `⚠️ Prueba de conexión a server1 falló: ${testError.message}`
+            );
+
+            try {
+              if (server1Pool) await server1Pool.close();
+            } catch (e) {}
+
+            logger.info(`🔄 Reintentando conexión a server1...`);
+            server1Pool = await connectToDB("server1", 30000);
+
+            if (!server1Pool || !server1Pool.connected) {
+              throw new Error(
+                "No se pudo restablecer la conexión con server1 en el segundo intento"
+              );
+            }
+
+            const testRequest = server1Pool.request();
+            await testRequest.query("SELECT 1 AS test");
+            logger.info(`✅ Reconexión a server1 verificada con éxito`);
+          }
+
           logger.debug(`Intentando conectar a server2 para tarea ${taskId}...`);
-          server2Pool = await connectToDB("server2");
+          server2Pool = await connectToDB("server2", 30000);
 
           if (!server2Pool || !server2Pool.connected) {
-            // Cerrar server1Pool que ya se conectó
             if (server1Pool) {
               try {
                 await server1Pool.close();
@@ -504,8 +531,42 @@ const executeTransfer = async (taskId) => {
             );
           }
 
+          try {
+            const testRequest = server2Pool.request();
+            testRequest.timeout = 15000;
+            await testRequest.query("SELECT 1 AS test");
+            logger.info(`✅ Conexión a server2 verificada con éxito`);
+          } catch (testError) {
+            logger.warn(
+              `⚠️ Prueba de conexión a server2 falló: ${testError.message}`
+            );
+
+            try {
+              if (server2Pool) await server2Pool.close();
+            } catch (e) {}
+
+            logger.info(`🔄 Reintentando conexión a server2...`);
+            server2Pool = await connectToDB("server2", 30000);
+
+            if (!server2Pool || !server2Pool.connected) {
+              if (server1Pool) {
+                try {
+                  await server1Pool.close();
+                } catch (e) {}
+                server1Pool = null;
+              }
+              throw new Error(
+                "No se pudo restablecer la conexión con server2 en el segundo intento"
+              );
+            }
+
+            const testRequest = server2Pool.request();
+            await testRequest.query("SELECT 1 AS test");
+            logger.info(`✅ Reconexión a server2 verificada con éxito`);
+          }
+
           logger.info(
-            `Conexiones establecidas correctamente para tarea ${taskId}`
+            `Conexiones establecidas y verificadas para tarea ${taskId}`
           );
         } catch (connError) {
           logger.error(
@@ -513,7 +574,7 @@ const executeTransfer = async (taskId) => {
             connError
           );
           await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
-          sendProgress(taskId, -1); // Enviar estado de error
+          sendProgress(taskId, -1);
           return {
             success: false,
             message: "Error al establecer conexiones de base de datos",
@@ -521,9 +582,9 @@ const executeTransfer = async (taskId) => {
           };
         }
 
-        // 5. Verificar conteo inicial de registros
         try {
           const countRequest = server2Pool.request();
+          countRequest.timeout = 30000;
           const countResult = await countRequest.query(
             `SELECT COUNT(*) AS total FROM dbo.[${name}] WITH (NOLOCK)`
           );
@@ -538,11 +599,19 @@ const executeTransfer = async (taskId) => {
           initialCount = 0;
         }
 
-        // 6. Obtener datos del servidor 1
         let data = [];
         try {
+          if (!server1Pool || !server1Pool.connected) {
+            logger.warn(`Conexión a server1 perdida, reintentando...`);
+            server1Pool = await connectToDB("server1", 30000);
+            if (!server1Pool || !server1Pool.connected) {
+              throw new Error("No se pudo reconectar a server1");
+            }
+            logger.info(`Reconexión a server1 exitosa`);
+          }
+
           const request = server1Pool.request();
-          request.timeout = 60000; // 60 segundos de timeout
+          request.timeout = 60000;
 
           let finalQuery = query;
           if (parameters?.length > 0) {
@@ -564,7 +633,7 @@ const executeTransfer = async (taskId) => {
         } catch (queryError) {
           logger.error("Error en la consulta en Server1", queryError);
           await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
-          sendProgress(taskId, -1); // Enviar estado de error
+          sendProgress(taskId, -1);
 
           if (queryError.code === "ECONNCLOSED") {
             logger.warn(
@@ -579,13 +648,12 @@ const executeTransfer = async (taskId) => {
           };
         }
 
-        // 7. Verificar si hay datos para transferir
         if (data.length === 0) {
           await TransferTask.findByIdAndUpdate(taskId, {
             status: "completed",
             progress: 100,
           });
-          sendProgress(taskId, 100); // Enviar progreso completado
+          sendProgress(taskId, 100);
           return {
             success: true,
             message: "No hay datos para transferir",
@@ -593,52 +661,96 @@ const executeTransfer = async (taskId) => {
           };
         }
 
-        // 8. Configurar claves para identificar registros
         const primaryKeys = validationRules?.existenceCheck?.key
           ? [validationRules.existenceCheck.key]
           : [];
         const requiredFields = validationRules?.requiredFields || [];
-
         const mergeKeys = [...new Set([...primaryKeys, ...requiredFields])];
+
         if (mergeKeys.length === 0) {
           await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
-          sendProgress(taskId, -1); // Enviar estado de error
+          sendProgress(taskId, -1);
           return {
             success: false,
             message: "No se especificaron claves para identificar registros",
           };
         }
 
-        // 9. Iniciar transacción
         try {
-          // Verificar que server2Pool sigue activo
-          if (!server2Pool.connected) {
+          if (!server2Pool || !server2Pool.connected) {
             logger.warn(
               `Conexión perdida con Server2, intentando reconectar...`
             );
 
             try {
-              await server2Pool.close();
+              if (server2Pool) await server2Pool.close();
             } catch (e) {
               logger.warn(`Error al cerrar conexión a server2:`, e.message);
             }
 
-            server2Pool = await connectToDB("server2");
+            server2Pool = await connectToDB("server2", 30000);
 
-            if (!server2Pool.connected) {
+            if (!server2Pool || !server2Pool.connected) {
               throw new Error("No se pudo restablecer la conexión con Server2");
             }
-            logger.info(`Reconexión exitosa a Server2`);
+
+            const testRequest = server2Pool.request();
+            await testRequest.query("SELECT 1 AS test");
+            logger.info(`Reconexión exitosa a Server2 y verificada`);
           }
 
           transaction = server2Pool.transaction();
-          await transaction.begin();
-          transactionStarted = true;
-          logger.debug("Transacción iniciada correctamente");
+
+          let transactionAttempt = 0;
+          const maxTransactionAttempts = 3;
+          let transactionError = null;
+
+          while (transactionAttempt < maxTransactionAttempts) {
+            try {
+              if (transactionAttempt > 0) {
+                logger.info(
+                  `Reintento ${transactionAttempt} para iniciar transacción...`
+                );
+                await new Promise((resolve) =>
+                  setTimeout(resolve, 1000 * transactionAttempt)
+                );
+              }
+
+              await transaction.begin();
+              transactionStarted = true;
+              logger.debug("Transacción iniciada correctamente");
+
+              if (!transaction.active) {
+                throw new Error(
+                  "La transacción no está activa después de begin()"
+                );
+              }
+
+              break;
+            } catch (txError) {
+              transactionError = txError;
+              transactionAttempt++;
+              logger.warn(
+                `Error al iniciar transacción (intento ${transactionAttempt}): ${txError.message}`
+              );
+
+              if (transactionAttempt >= maxTransactionAttempts) {
+                throw txError;
+              }
+
+              transaction = server2Pool.transaction();
+            }
+          }
+
+          if (!transactionStarted) {
+            throw (
+              transactionError || new Error("No se pudo iniciar la transacción")
+            );
+          }
         } catch (txError) {
           logger.error("Error al iniciar la transacción", txError);
           await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
-          sendProgress(taskId, -1); // Enviar estado de error
+          sendProgress(taskId, -1);
           return {
             success: false,
             message: "Error al iniciar la transacción",
@@ -646,17 +758,12 @@ const executeTransfer = async (taskId) => {
           };
         }
 
-        // 10. Pre-cargar información de longitud de columnas
         const columnLengthCache = new Map();
-
-        // 11. Preparar variables para tracking
         let affectedRecords = [];
         let totalInserted = 0;
         const batchSize = 500;
 
-        // 12. Procesar por lotes para inserción
         try {
-          // Obtener listado de registros existentes para verificar duplicados
           let existingKeysSet = new Set();
 
           if (initialCount > 0 && mergeKeys.length > 0) {
@@ -665,8 +772,14 @@ const executeTransfer = async (taskId) => {
             );
 
             try {
+              if (!server2Pool || !server2Pool.connected) {
+                throw new Error(
+                  "Conexión perdida durante recolección de claves existentes"
+                );
+              }
+
               const existingKeysRequest = server2Pool.request();
-              existingKeysRequest.timeout = 30000;
+              existingKeysRequest.timeout = 60000;
 
               const keysQuery = `
                 SELECT DISTINCT ${mergeKeys.map((k) => `[${k}]`).join(", ")} 
@@ -675,9 +788,7 @@ const executeTransfer = async (taskId) => {
 
               const keysResult = await existingKeysRequest.query(keysQuery);
 
-              // Crear un conjunto de claves para verificación rápida de duplicados
               for (const record of keysResult.recordset) {
-                // Generar clave compuesta (todas las mergeKeys)
                 const key = mergeKeys
                   .map((k) => {
                     const value = record[k] === null ? "NULL" : record[k];
@@ -695,20 +806,63 @@ const executeTransfer = async (taskId) => {
               logger.warn(
                 `Error al obtener claves existentes: ${keysError.message}. Se intentará inserción sin verificación previa.`
               );
+
+              if (
+                !server2Pool ||
+                !server2Pool.connected ||
+                !transaction ||
+                !transactionStarted
+              ) {
+                logger.warn("Conexión o transacción perdida, reintentando...");
+
+                try {
+                  if (transaction && transactionStarted) {
+                    try {
+                      await transaction.rollback();
+                    } catch (e) {}
+                    transactionStarted = false;
+                  }
+
+                  if (server2Pool) {
+                    try {
+                      await server2Pool.close();
+                    } catch (e) {}
+                  }
+
+                  server2Pool = await connectToDB("server2", 30000);
+
+                  if (!server2Pool || !server2Pool.connected) {
+                    throw new Error("No se pudo restablecer la conexión");
+                  }
+
+                  transaction = server2Pool.transaction();
+                  await transaction.begin();
+                  transactionStarted = true;
+                  logger.info("Conexión y transacción restablecidas con éxito");
+                } catch (reconnectError) {
+                  logger.error("Error al reconectar:", reconnectError);
+                  throw reconnectError;
+                }
+              }
             }
           }
 
           for (let i = 0; i < data.length; i += batchSize) {
             const batch = data.slice(i, i + batchSize);
+            const batchNumber = Math.floor(i / batchSize) + 1;
+            const totalBatches = Math.ceil(data.length / batchSize);
 
-            // Verificar si las conexiones siguen activas
-            if (!server2Pool.connected) {
+            logger.debug(
+              `Procesando lote ${batchNumber}/${totalBatches} (${batch.length} registros)...`
+            );
+
+            if (!server2Pool || !server2Pool.connected) {
               logger.warn(
-                `Conexión perdida con Server2 durante procesamiento, intentando reconectar...`
+                `Conexión perdida con Server2 durante procesamiento del lote ${batchNumber}, intentando reconectar...`
               );
 
               try {
-                await server2Pool.close();
+                if (server2Pool) await server2Pool.close();
               } catch (e) {
                 logger.warn(
                   `Error al cerrar conexión anterior a server2:`,
@@ -716,15 +870,14 @@ const executeTransfer = async (taskId) => {
                 );
               }
 
-              server2Pool = await connectToDB("server2");
+              server2Pool = await connectToDB("server2", 30000);
 
-              if (!server2Pool.connected) {
+              if (!server2Pool || !server2Pool.connected) {
                 throw new Error(
                   "No se pudo restablecer la conexión con Server2"
                 );
               }
 
-              // Revertir transacción previa si existe
               if (transaction && transactionStarted) {
                 try {
                   await transaction.rollback();
@@ -737,32 +890,107 @@ const executeTransfer = async (taskId) => {
                 transactionStarted = false;
               }
 
-              // Iniciar nueva transacción
               transaction = server2Pool.transaction();
-              await transaction.begin();
-              transactionStarted = true;
-              logger.debug(`Nueva transacción iniciada después de reconexión`);
+
+              let txStarted = false;
+              for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                  await transaction.begin();
+                  transactionStarted = true;
+                  txStarted = true;
+                  logger.debug(
+                    `Nueva transacción iniciada después de reconexión (intento ${attempt})`
+                  );
+                  break;
+                } catch (txError) {
+                  if (attempt < 3) {
+                    logger.warn(
+                      `Error al iniciar transacción (intento ${attempt}): ${txError.message}, reintentando...`
+                    );
+                    await new Promise((r) => setTimeout(r, 1000 * attempt));
+                  } else {
+                    throw new Error(
+                      `No se pudo iniciar la transacción después de 3 intentos: ${txError.message}`
+                    );
+                  }
+                }
+              }
+
+              if (!txStarted) {
+                throw new Error(
+                  "No se pudo iniciar la transacción después de reconexión"
+                );
+              }
             }
 
-            // Procesar cada registro para inserción
+            if (!transaction || !transactionStarted || !transaction.active) {
+              logger.warn(
+                `Transacción no activa durante procesamiento del lote ${batchNumber}, iniciando una nueva`
+              );
+
+              if (transaction && transactionStarted) {
+                try {
+                  await transaction.rollback();
+                } catch (e) {
+                  logger.warn(
+                    `Error al revertir transacción previa: ${e.message}`
+                  );
+                }
+                transactionStarted = false;
+              }
+
+              transaction = server2Pool.transaction();
+
+              let txStarted = false;
+              for (let attempt = 1; attempt <= 3; attempt++) {
+                try {
+                  await transaction.begin();
+                  transactionStarted = true;
+                  txStarted = true;
+                  logger.debug(
+                    `Nueva transacción iniciada (intento ${attempt})`
+                  );
+                  break;
+                } catch (txError) {
+                  if (attempt < 3) {
+                    logger.warn(
+                      `Error al iniciar nueva transacción (intento ${attempt}): ${txError.message}, reintentando...`
+                    );
+                    await new Promise((r) => setTimeout(r, 1000 * attempt));
+                  } else {
+                    throw new Error(
+                      `No se pudo iniciar la nueva transacción después de 3 intentos: ${txError.message}`
+                    );
+                  }
+                }
+              }
+
+              if (!txStarted) {
+                throw new Error("No se pudo iniciar una nueva transacción");
+              }
+            }
+
             let batchInserted = 0;
             let batchSkipped = 0;
-            const insertBatchSize = 50; // Tamaño reducido para evitar problemas
+            const insertBatchSize = 50;
 
             for (let j = 0; j < batch.length; j += insertBatchSize) {
               const insertSubBatch = batch.slice(j, j + insertBatchSize);
 
               for (const record of insertSubBatch) {
                 try {
-                  // Verificar que la transacción sigue activa
-                  if (!transaction || !transactionStarted) {
-                    throw new Error("La transacción no está activa");
+                  if (
+                    !transaction ||
+                    !transactionStarted ||
+                    !transaction.active
+                  ) {
+                    throw new Error(
+                      "La transacción no está activa para la inserción"
+                    );
                   }
 
-                  // Truncar strings según las longitudes máximas
                   for (const column in record) {
                     if (typeof record[column] === "string") {
-                      // Obtener la longitud máxima (usando cache)
                       let maxLength;
                       if (columnLengthCache.has(column)) {
                         maxLength = columnLengthCache.get(column);
@@ -781,7 +1009,6 @@ const executeTransfer = async (taskId) => {
                     }
                   }
 
-                  // Recolectar IDs para post-actualización
                   if (postUpdateQuery && primaryKeys.length > 0) {
                     const primaryKey = primaryKeys[0];
                     if (
@@ -792,7 +1019,6 @@ const executeTransfer = async (taskId) => {
                     }
                   }
 
-                  // Verificar si es un duplicado consultando el conjunto de claves existentes
                   if (existingKeysSet.size > 0) {
                     const recordKey = mergeKeys
                       .map((k) => {
@@ -802,24 +1028,19 @@ const executeTransfer = async (taskId) => {
                       .join("|");
 
                     if (existingKeysSet.has(recordKey)) {
-                      // Es un duplicado, registrar advertencia y continuar
                       duplicateCount++;
                       batchSkipped++;
 
-                      // Construir mensaje claro para identificar el registro duplicado
                       const duplicateInfo = mergeKeys
                         .map((k) => `${k}=${record[k]}`)
                         .join(", ");
 
-                      // Guardar información del registro duplicado (limitado a campos clave y algunos adicionales)
                       const duplicateRecord = {};
 
-                      // Añadir campos clave
                       mergeKeys.forEach((key) => {
                         duplicateRecord[key] = record[key];
                       });
 
-                      // Añadir algunos campos adicionales de interés (hasta 5)
                       const additionalFields = Object.keys(record)
                         .filter((k) => !mergeKeys.includes(k))
                         .slice(0, 5);
@@ -828,9 +1049,7 @@ const executeTransfer = async (taskId) => {
                         duplicateRecord[key] = record[key];
                       });
 
-                      // Añadir a la lista de duplicados
                       duplicatedRecords.push(duplicateRecord);
-
                       logger.warn(
                         `⚠️ Registro duplicado encontrado y omitido: ${duplicateInfo}`
                       );
@@ -838,8 +1057,11 @@ const executeTransfer = async (taskId) => {
                     }
                   }
 
-                  // Verificar nuevamente estado de la transacción
-                  if (!transaction || !transactionStarted) {
+                  if (
+                    !transaction ||
+                    !transactionStarted ||
+                    !transaction.active
+                  ) {
                     throw new Error(
                       "La transacción ya no está activa para la inserción"
                     );
@@ -848,7 +1070,6 @@ const executeTransfer = async (taskId) => {
                   const insertRequest = transaction.request();
                   insertRequest.timeout = 30000;
 
-                  // Preparar consulta para inserción
                   const columns = Object.keys(record)
                     .map((k) => `[${k}]`)
                     .join(", ");
@@ -874,7 +1095,6 @@ const executeTransfer = async (taskId) => {
                       totalInserted += rowsAffected;
                       batchInserted += rowsAffected;
 
-                      // Añadir esta clave al conjunto para detectar duplicados en el mismo lote
                       if (existingKeysSet.size > 0) {
                         const newKey = mergeKeys
                           .map((k) => {
@@ -888,7 +1108,6 @@ const executeTransfer = async (taskId) => {
                       }
                     }
                   } catch (insertError) {
-                    // Capturar error por violación de clave primaria (duplicado)
                     if (
                       insertError.number === 2627 ||
                       insertError.number === 2601
@@ -896,20 +1115,16 @@ const executeTransfer = async (taskId) => {
                       duplicateCount++;
                       batchSkipped++;
 
-                      // Construir mensaje para identificar el registro duplicado
                       const duplicateInfo = mergeKeys
                         .map((k) => `${k}=${record[k]}`)
                         .join(", ");
 
-                      // Guardar información del registro duplicado
                       const duplicateRecord = {};
 
-                      // Añadir campos clave
                       mergeKeys.forEach((key) => {
                         duplicateRecord[key] = record[key];
                       });
 
-                      // Añadir algunos campos adicionales de interés (hasta 5)
                       const additionalFields = Object.keys(record)
                         .filter((k) => !mergeKeys.includes(k))
                         .slice(0, 5);
@@ -918,7 +1133,6 @@ const executeTransfer = async (taskId) => {
                         duplicateRecord[key] = record[key];
                       });
 
-                      // Añadir información del error
                       duplicateRecord._errorCode = insertError.number;
                       duplicateRecord._errorMessage =
                         insertError.message.substring(0, 100);
@@ -928,15 +1142,58 @@ const executeTransfer = async (taskId) => {
                         `⚠️ Error de inserción por duplicado: ${duplicateInfo}`
                       );
                     } else {
-                      // Para otros errores, propagar la excepción
-                      logger.error("Error al insertar registro", insertError);
+                      if (
+                        insertError.message.includes("conexión") ||
+                        insertError.message.includes("transacción") ||
+                        insertError.message.includes("Connection") ||
+                        insertError.message.includes("Transaction") ||
+                        insertError.message.includes("timeout")
+                      ) {
+                        logger.error(
+                          "Error crítico en inserción:",
+                          insertError
+                        );
+
+                        const connActive = server2Pool && server2Pool.connected;
+                        const txActive =
+                          transaction &&
+                          transaction.active &&
+                          transactionStarted;
+
+                        logger.warn(
+                          `Estado de conexión: ${
+                            connActive ? "Activa" : "Inactiva"
+                          }, Estado de transacción: ${
+                            txActive ? "Activa" : "Inactiva"
+                          }`
+                        );
+
+                        if (!connActive && !txActive) {
+                          throw new Error(
+                            `Conexión y transacción perdidas: ${insertError.message}`
+                          );
+                        } else if (connActive && !txActive) {
+                          throw new Error(
+                            `Transacción perdida pero conexión activa: ${insertError.message}`
+                          );
+                        } else if (!connActive && txActive) {
+                          throw new Error(
+                            `Conexión perdida pero transacción aparentemente activa: ${insertError.message}`
+                          );
+                        } else {
+                          throw new Error(
+                            `Error inesperado en inserción a pesar de conexión y transacción activas: ${insertError.message}`
+                          );
+                        }
+                      }
+
+                      logger.error("Error al insertar registro:", insertError);
                       throw new Error(
                         `Error al insertar registro: ${insertError.message}`
                       );
                     }
                   }
                 } catch (recordError) {
-                  // Errores no relacionados con duplicados
                   if (
                     recordError.number !== 2627 &&
                     recordError.number !== 2601
@@ -948,27 +1205,22 @@ const executeTransfer = async (taskId) => {
             }
 
             logger.debug(
-              `Lote ${
-                i / batchSize + 1
-              }: ${batchInserted} registros insertados, ${batchSkipped} omitidos por duplicados`
+              `Lote ${batchNumber}: ${batchInserted} registros insertados, ${batchSkipped} omitidos por duplicados`
             );
 
-            // Actualizar progreso con throttling
             const progress = Math.round(
               ((i + batch.length) / data.length) * 100
             );
             if (progress > lastReportedProgress + 5 || progress >= 100) {
               lastReportedProgress = progress;
               await TransferTask.findByIdAndUpdate(taskId, { progress });
-              sendProgress(taskId, progress); // Enviar actualización de progreso
+              sendProgress(taskId, progress);
               logger.debug(`Progreso actualizado: ${progress}%`);
             }
           }
 
-          // 13. Confirmar transacción con verificación mejorada
           if (transaction && transactionStarted) {
             try {
-              // Verificar explícitamente si la transacción puede confirmarse
               if (
                 typeof transaction.isActive === "function" &&
                 !transaction.isActive()
@@ -978,7 +1230,6 @@ const executeTransfer = async (taskId) => {
                 );
                 transactionStarted = false;
               } else {
-                // Log para diagnóstico
                 logger.debug(
                   `Estado antes de commit - transaction: ${!!transaction}, transactionStarted: ${transactionStarted}`
                 );
@@ -992,7 +1243,6 @@ const executeTransfer = async (taskId) => {
                 `Error al confirmar transacción: ${commitError.message}`
               );
 
-              // Intentar revertir en caso de error de commit
               try {
                 await transaction.rollback();
                 logger.debug(
@@ -1005,7 +1255,7 @@ const executeTransfer = async (taskId) => {
               }
 
               transactionStarted = false;
-              throw commitError; // Propagar el error original
+              throw commitError;
             }
           }
 
@@ -1013,9 +1263,8 @@ const executeTransfer = async (taskId) => {
             status: "completed",
             progress: 100,
           });
-          sendProgress(taskId, 100); // Enviar progreso completado
+          sendProgress(taskId, 100);
 
-          // 14. Verificar conteo final
           let finalCount = 0;
           try {
             const countRequest = server2Pool.request();
@@ -1034,7 +1283,6 @@ const executeTransfer = async (taskId) => {
             );
           }
 
-          // 15. Ejecutar consulta post-actualización
           if (postUpdateQuery && affectedRecords.length > 0) {
             try {
               // Verificar si la conexión sigue activa
@@ -1054,7 +1302,35 @@ const executeTransfer = async (taskId) => {
                   }
                 }
 
-                server1Pool = await connectToDB("server1");
+                // Intentar conectar con reintentos
+                let reconnectAttempt = 0;
+                while (reconnectAttempt < 3) {
+                  try {
+                    server1Pool = await connectToDB("server1", 30000);
+                    if (server1Pool && server1Pool.connected) {
+                      // Verificar que la conexión funciona
+                      const testRequest = server1Pool.request();
+                      await testRequest.query("SELECT 1 AS test");
+                      logger.info(
+                        `Reconexión a server1 para post-actualización exitosa`
+                      );
+                      break;
+                    }
+                    reconnectAttempt++;
+                  } catch (reconnectError) {
+                    logger.warn(
+                      `Error en reconexión para post-actualización (intento ${reconnectAttempt}): ${reconnectError.message}`
+                    );
+                    if (reconnectAttempt >= 3) {
+                      throw new Error(
+                        `No se pudo reconectar a server1 para post-actualización después de 3 intentos`
+                      );
+                    }
+                    await new Promise((r) =>
+                      setTimeout(r, 1000 * reconnectAttempt)
+                    );
+                  }
+                }
               }
 
               const postUpdateBatchSize = 500;
@@ -1068,8 +1344,22 @@ const executeTransfer = async (taskId) => {
                   i,
                   i + postUpdateBatchSize
                 );
+
+                // Verificar que la conexión sigue activa en cada lote
+                if (!server1Pool || !server1Pool.connected) {
+                  logger.warn(
+                    `Conexión perdida durante post-actualización, intentando reconectar...`
+                  );
+                  server1Pool = await connectToDB("server1", 30000);
+                  if (!server1Pool || !server1Pool.connected) {
+                    throw new Error(
+                      "No se pudo reconectar a server1 para continuar post-actualización"
+                    );
+                  }
+                }
+
                 const postRequest = server1Pool.request();
-                postRequest.timeout = 60000;
+                postRequest.timeout = 60000; // 60 segundos de timeout
 
                 // Procesar claves - quitar prefijo CN
                 const processedKeys = keyBatch.map((key) =>
@@ -1095,13 +1385,73 @@ const executeTransfer = async (taskId) => {
                 // Construir consulta
                 const dynamicUpdateQuery = `${postUpdateQuery} WHERE ${primaryKeyField} IN (${keyParams})`;
 
-                // Ejecutar y registrar resultado
-                const postUpdateResult = await postRequest.query(
-                  dynamicUpdateQuery
-                );
-                logger.info(
-                  `Post-actualización: ${postUpdateResult.rowsAffected[0]} filas afectadas`
-                );
+                try {
+                  // Ejecutar y registrar resultado
+                  const postUpdateResult = await postRequest.query(
+                    dynamicUpdateQuery
+                  );
+                  logger.info(
+                    `Post-actualización lote ${
+                      Math.floor(i / postUpdateBatchSize) + 1
+                    }: ${postUpdateResult.rowsAffected[0]} filas afectadas`
+                  );
+                } catch (queryError) {
+                  logger.error(
+                    `Error en consulta post-actualización lote ${
+                      Math.floor(i / postUpdateBatchSize) + 1
+                    }: ${queryError.message}`
+                  );
+
+                  // Para errores de conexión, intentar reconectar y reintentar una vez
+                  if (
+                    queryError.message.includes("conexión") ||
+                    queryError.message.includes("Connection") ||
+                    queryError.message.includes("timeout")
+                  ) {
+                    logger.info(
+                      `Reintentando post-actualización después de error de conexión...`
+                    );
+
+                    try {
+                      // Reconectar
+                      if (server1Pool) {
+                        try {
+                          await server1Pool.close();
+                        } catch (e) {}
+                      }
+
+                      server1Pool = await connectToDB("server1", 30000);
+                      if (!server1Pool || !server1Pool.connected) {
+                        throw new Error(
+                          "No se pudo reconectar para reintentar post-actualización"
+                        );
+                      }
+
+                      // Reintentar la misma consulta
+                      const retryRequest = server1Pool.request();
+                      retryRequest.timeout = 60000;
+
+                      // Preparar nuevamente los parámetros
+                      processedKeys.forEach((key, index) =>
+                        retryRequest.input(`key${index}`, key)
+                      );
+
+                      const retryResult = await retryRequest.query(
+                        dynamicUpdateQuery
+                      );
+                      logger.info(
+                        `Post-actualización (reintento) lote ${
+                          Math.floor(i / postUpdateBatchSize) + 1
+                        }: ${retryResult.rowsAffected[0]} filas afectadas`
+                      );
+                    } catch (retryError) {
+                      logger.error(
+                        `Falló también el reintento de post-actualización: ${retryError.message}`
+                      );
+                      // Continuamos con el siguiente lote en lugar de fallar toda la operación
+                    }
+                  }
+                }
               }
 
               logger.info(
@@ -1112,6 +1462,7 @@ const executeTransfer = async (taskId) => {
                 `❌ Error en consulta post-transferencia`,
                 postUpdateError
               );
+              // No fallamos toda la transferencia, solo registramos el error de post-actualización
             }
           }
 
@@ -1159,7 +1510,6 @@ const executeTransfer = async (taskId) => {
         }
       } catch (outerError) {
         // Manejo de errores generales
-
         if (transaction && transactionStarted) {
           try {
             await transaction.rollback();
@@ -1232,7 +1582,6 @@ const executeTransfer = async (taskId) => {
     `Ejecutar Transferencia para tarea ${taskId}`
   );
 };
-
 /**
  * 📌 Ejecuta una transferencia UP (Server1 -> Server2) según 'transferType = "up"'
  */
