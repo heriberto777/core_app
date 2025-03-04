@@ -1,6 +1,5 @@
 // services/traspasoService.js
 
-const sql = require("mssql");
 const { connectToDB } = require("./dbService");
 const logger = require("./logger");
 
@@ -21,38 +20,80 @@ const logger = require("./logger");
  * @returns {Object} Resultado con la información del documento generado.
  */
 async function traspasoBodega({ route, salesData }) {
-  // 1. Agrupar salesData por producto
-  const aggregated = {};
-  for (const sale of salesData) {
-    // Suponemos que cada sale tiene: Code_Product y Quantity.
-    const product = sale.Code_Product;
-    const qty = Number(sale.Quantity) || 0;
-    aggregated[product] = (aggregated[product] || 0) + qty;
-  }
-  const aggregatedSales = Object.keys(aggregated).map((product) => ({
-    Code_Product: product,
-    TotalQuantity: aggregated[product],
-  }));
+  let pool = null;
+  let transaction = null;
+  let transactionStarted = false;
 
-  // 2. Conectar a la base de datos y comenzar la transacción
-  const pool = await connectToDB("server1"); // Ajusta según la configuración (o "server2" si corresponde)
-  const transaction = new sql.Transaction(pool);
   try {
-    await transaction.begin();
+    // 1. Agrupar salesData por producto
+    const aggregated = {};
+    for (const sale of salesData) {
+      // Suponemos que cada sale tiene: Code_Product y Quantity.
+      const product = sale.Code_Product;
+      const qty = Number(sale.Quantity) || 0;
+      aggregated[product] = (aggregated[product] || 0) + qty;
+    }
+    const aggregatedSales = Object.keys(aggregated).map((product) => ({
+      Code_Product: product,
+      TotalQuantity: aggregated[product],
+    }));
 
-    // Crear un request para operaciones generales en la transacción
-    const request = new sql.Request(transaction);
+    // 2. Conectar a la base de datos con manejo mejorado de conexiones
+    try {
+      logger.debug(`Intentando conectar a server1 para traspaso de bodega...`);
+      pool = await connectToDB("server1");
 
-    // 3. Obtener el último consecutivo de CATELLI.CONSECUTIVO_CI filtrado por "TR%"
+      if (!pool || !pool.connected) {
+        throw new Error(
+          "No se pudo establecer una conexión válida con server1"
+        );
+      }
+
+      logger.info(`Conexión establecida correctamente para traspaso de bodega`);
+    } catch (connError) {
+      logger.error(
+        `Error al establecer conexión para traspaso de bodega:`,
+        connError
+      );
+      throw new Error(
+        `Error al establecer conexión de base de datos: ${connError.message}`
+      );
+    }
+
+    // 3. Iniciar transacción con manejo mejorado
+    try {
+      transaction = pool.transaction();
+      await transaction.begin();
+      transactionStarted = true;
+      logger.debug(
+        "Transacción iniciada correctamente para traspaso de bodega"
+      );
+    } catch (txError) {
+      logger.error(
+        "Error al iniciar transacción para traspaso de bodega:",
+        txError
+      );
+      throw new Error(`No se pudo iniciar la transacción: ${txError.message}`);
+    }
+
+    // 4. Obtener el último consecutivo con verificación de transacción
+    if (!transaction || !transactionStarted) {
+      throw new Error("La transacción no está activa para obtener consecutivo");
+    }
+
+    const request = transaction.request();
+    request.timeout = 30000;
+
     const queryConse = `
       SELECT TOP 1 SIGUIENTE_CONSEC 
       FROM CATELLI.CONSECUTIVO_CI 
       WHERE CONSECUTIVO LIKE @prefix 
       ORDER BY CONSECUTIVO DESC
     `;
-    request.input("prefix", sql.NVarChar, "TR%");
+    request.input("prefix", "TR%");
     const resultConsec = await request.query(queryConse);
-    console.log("Obtenemos el consecutivo -> ", resultConsec);
+    logger.debug("Resultado de consulta de consecutivo:", resultConsec);
+
     let lastConsec = "TRA0000000";
     if (
       resultConsec.recordset.length > 0 &&
@@ -60,103 +101,169 @@ async function traspasoBodega({ route, salesData }) {
     ) {
       lastConsec = resultConsec.recordset[0].SIGUIENTE_CONSEC;
     }
-    console.log("Obtenemos el consecutivo TR -> ", lastConsec);
+    logger.info(`Consecutivo actual: ${lastConsec}`);
 
-    // 4. Incrementar el consecutivo
-    // Aquí reemplazamos "TRA" en lugar de "TR"
+    // 5. Incrementar el consecutivo
     const numPart = parseInt(lastConsec.replace("TRA", ""), 10);
     const newNum = numPart + 1;
-    // Como la máscara es de 6 dígitos (NNN999999), usamos padStart(6, "0")
     const newConsec = "TRA" + newNum.toString().padStart(6, "0");
-    console.log("Obtenemos el consecutivo nuevo TR -> ", newConsec);
+    logger.info(`Nuevo consecutivo calculado: ${newConsec}`);
 
-    // 5. Actualizar la tabla Consecutivo_Ci
-    const updateRequest = new sql.Request(transaction);
-    updateRequest.input("newConsec", sql.NVarChar, newConsec);
-    updateRequest.input("lastConsec", sql.NVarChar, lastConsec);
+    // 6. Actualizar la tabla Consecutivo_Ci con verificación de transacción
+    if (!transaction || !transactionStarted) {
+      throw new Error(
+        "La transacción no está activa para actualizar consecutivo"
+      );
+    }
+
+    const updateRequest = transaction.request();
+    updateRequest.timeout = 30000;
+    updateRequest.input("newConsec", newConsec);
+    updateRequest.input("lastConsec", lastConsec);
     await updateRequest.query(`
       UPDATE CATELLI.CONSECUTIVO_CI 
       SET SIGUIENTE_CONSEC = @newConsec 
       WHERE SIGUIENTE_CONSEC = @lastConsec
     `);
 
-    // 6. Preparar el valor para DOCUMENTO_INV (por ejemplo, concatenar "TRA" + nuevo consecutivo)
+    // 7. Preparar el valor para DOCUMENTO_INV
     const documento_inv = newConsec;
 
-    // 7. Insertar el encabezado en DOCUMENTO_INV
-    const headerRequest = new sql.Request(transaction);
-    headerRequest.input("paquete", sql.NVarChar, "CS");
-    headerRequest.input("documento_inv", sql.NVarChar, documento_inv);
-    headerRequest.input("consecutivo", sql.NVarChar, "TR");
-    headerRequest.input("referencia", sql.NVarChar, `Trapaso de entre bodega del vendedor `);
-    headerRequest.input("seleccionado", sql.NVarChar, "N");
-    headerRequest.input("usuario", sql.NVarChar, "SA");
+    // 8. Insertar el encabezado en DOCUMENTO_INV con verificación de transacción
+    if (!transaction || !transactionStarted) {
+      throw new Error("La transacción no está activa para insertar encabezado");
+    }
+
+    const headerRequest = transaction.request();
+    headerRequest.timeout = 30000;
+    headerRequest.input("paquete", "CS");
+    headerRequest.input("documento_inv", documento_inv);
+    headerRequest.input("consecutivo", "TR");
+    headerRequest.input("referencia", `Trapaso de entre bodega del vendedor`);
+    headerRequest.input("seleccionado", "N");
+    headerRequest.input("usuario", "SA");
     await headerRequest.query(`
       INSERT INTO CATELLI.DOCUMENTO_INV 
         (PAQUETE_INVENTARIO, DOCUMENTO_INV, CONSECUTIVO, REFERENCIA, FECHA_HOR_CREACION, FECHA_DOCUMENTO, SELECCIONADO, USUARIO)
       VALUES 
-        (@paquete, @documento_inv, @consecutivo, @referencia,  GETDATE(), GETDATE(), @seleccionado, @usuario)
+        (@paquete, @documento_inv, @consecutivo, @referencia, GETDATE(), GETDATE(), @seleccionado, @usuario)
     `);
 
-    // 8. Insertar las líneas en LINEA_DOC_INV usando procesamiento en lotes.
-    // Parámetros:
-    // - BODEGA (origen) es fija, por ejemplo, 2.
-    // - BODEGA_DESTINO es el valor de route.
+    // 9. Insertar las líneas en LINEA_DOC_INV usando procesamiento en lotes.
     const batchSize = 100;
     let processedCount = 0;
     const bodega_origen = "01";
+
     for (let i = 0; i < aggregatedSales.length; i += batchSize) {
+      // Verificar que la transacción sigue activa antes de procesar el lote
+      if (!transaction || !transactionStarted) {
+        throw new Error("La transacción no está activa para procesar lote");
+      }
+
       const batch = aggregatedSales.slice(i, i + batchSize);
+      logger.debug(
+        `Procesando lote ${Math.floor(i / batchSize) + 1} (${
+          batch.length
+        } registros)...`
+      );
+
       for (const [index, detail] of batch.entries()) {
         const lineNumber = processedCount + index + 1; // Número de línea secuencial
-        const lineRequest = new sql.Request(transaction);
-        lineRequest.input("paquete", sql.NVarChar, "CS");
-        lineRequest.input("documento_inv", sql.NVarChar, documento_inv);
-        lineRequest.input("linea", sql.Int, lineNumber);
-        lineRequest.input("ajuste", sql.NVarChar, "~TT~");
-        lineRequest.input("articulo", sql.NVarChar, detail.Code_Product);
-        lineRequest.input("bodega", sql.NVarChar, bodega_origen);
-        lineRequest.input("bodegaDestino", sql.NVarChar, "02");
-        lineRequest.input("tipo", sql.NVarChar, "T");
-        lineRequest.input("subtipo", sql.NVarChar, "D");
-        lineRequest.input("subsubtipo", sql.NVarChar, "");
-        lineRequest.input("CostoTotalLocal", sql.Decimal, 0);
-        lineRequest.input("CostoTotalDolar", sql.Decimal, 0);
-        lineRequest.input("PrecioTotalLocal", sql.Decimal, 0);
-        lineRequest.input("PrecioTotalDolar", sql.Decimal, 0);
-        lineRequest.input("Localizacion", sql.NVarChar, "ND");
-        lineRequest.input("LocalizacionTest", sql.NVarChar, "ND");
-        lineRequest.input("CentroCosto", sql.NVarChar, "00-00-00");
-        lineRequest.input("Secuencia", sql.NVarChar, "");
-        // lineRequest.input("SerieCadena", sql.Int), null;
-        lineRequest.input("UnidadDistri", sql.NVarChar, "UND");
-        lineRequest.input("CuentaContable", sql.NVarChar, "100-01-05-99-00");
-        lineRequest.input("CostoTotalLocalComp", sql.Decimal, 0);
-        lineRequest.input("CostoTotalDolarComp", sql.Decimal, 0);
-        lineRequest.input("Cai", sql.NVarChar, "");
-        lineRequest.input("TipoOperacion", sql.NVarChar, "11");
-        lineRequest.input("TipoPago", sql.NVarChar, "ND");
-        lineRequest.input("cantidad", sql.Decimal, detail.TotalQuantity);
+
+        // Verificar transacción nuevamente antes de cada inserción
+        if (!transaction || !transactionStarted) {
+          throw new Error("La transacción no está activa para insertar línea");
+        }
+
+        const lineRequest = transaction.request();
+        lineRequest.timeout = 30000;
+        lineRequest.input("paquete", "CS");
+        lineRequest.input("documento_inv", documento_inv);
+        lineRequest.input("linea", lineNumber);
+        lineRequest.input("ajuste", "~TT~");
+        lineRequest.input("articulo", detail.Code_Product);
+        lineRequest.input("bodega", bodega_origen);
+        lineRequest.input("bodegaDestino", "02");
+        lineRequest.input("tipo", "T");
+        lineRequest.input("subtipo", "D");
+        lineRequest.input("subsubtipo", "");
+        lineRequest.input("CostoTotalLocal", 0);
+        lineRequest.input("CostoTotalDolar", 0);
+        lineRequest.input("PrecioTotalLocal", 0);
+        lineRequest.input("PrecioTotalDolar", 0);
+        lineRequest.input("Localizacion", "ND");
+        lineRequest.input("LocalizacionTest", "ND");
+        lineRequest.input("CentroCosto", "00-00-00");
+        lineRequest.input("Secuencia", "");
+        lineRequest.input("UnidadDistri", "UND");
+        lineRequest.input("CuentaContable", "100-01-05-99-00");
+        lineRequest.input("CostoTotalLocalComp", 0);
+        lineRequest.input("CostoTotalDolarComp", 0);
+        lineRequest.input("Cai", "");
+        lineRequest.input("TipoOperacion", "11");
+        lineRequest.input("TipoPago", "ND");
+        lineRequest.input("cantidad", detail.TotalQuantity);
+
         await lineRequest.query(`
           INSERT INTO CATELLI.LINEA_DOC_INV 
             (PAQUETE_INVENTARIO, DOCUMENTO_INV, LINEA_DOC_INV, AJUSTE_CONFIG, ARTICULO, BODEGA, BODEGA_DESTINO, CANTIDAD, TIPO, 
             SUBTIPO, SUBSUBTIPO, COSTO_TOTAL_LOCAL, COSTO_TOTAL_DOLAR, PRECIO_TOTAL_LOCAL, PRECIO_TOTAL_DOLAR, LOCALIZACION_DEST, 
-            CENTRO_COSTO,SECUENCIA, UNIDAD_DISTRIBUCIO, CUENTA_CONTABLE, COSTO_TOTAL_LOCAL_COMP, 
-            COSTO_TOTAL_DOLAR_COMP, CAI, TIPO_OPERACION, TIPO_PAGO, LOCALIZACION )
+            CENTRO_COSTO, SECUENCIA, UNIDAD_DISTRIBUCIO, CUENTA_CONTABLE, COSTO_TOTAL_LOCAL_COMP, 
+            COSTO_TOTAL_DOLAR_COMP, CAI, TIPO_OPERACION, TIPO_PAGO, LOCALIZACION)
           VALUES 
             (@paquete, @documento_inv, @linea, @ajuste, @articulo, @bodega, @bodegaDestino, @cantidad, @tipo, @subtipo,
-            @subsubtipo, @CostoTotalLocal, @CostoTotalDolar,@PrecioTotalLocal,@PrecioTotalDolar,@LocalizacionTest, @CentroCosto,
-             @Secuencia, @UnidadDistri, @CuentaContable, @CostoTotalLocalComp, @CostoTotalDolarComp, @Cai, 
-             @TipoOperacion, @TipoPago, @Localizacion )
+            @subsubtipo, @CostoTotalLocal, @CostoTotalDolar, @PrecioTotalLocal, @PrecioTotalDolar, @LocalizacionTest, @CentroCosto,
+            @Secuencia, @UnidadDistri, @CuentaContable, @CostoTotalLocalComp, @CostoTotalDolarComp, @Cai, 
+            @TipoOperacion, @TipoPago, @Localizacion)
         `);
       }
+
       processedCount += batch.length;
-      // Aquí podrías actualizar el progreso en la base de datos o enviar un SSE:
-      // Por ejemplo: await TransferTask.findByIdAndUpdate(taskId, { progress: Math.round((processedCount / aggregatedSales.length) * 100) });
+      logger.debug(
+        `Lote procesado: ${processedCount} de ${aggregatedSales.length} líneas`
+      );
     }
 
-    // 9. Commit de la transacción
-    await transaction.commit();
+    // 10. Commit de la transacción con verificación mejorada
+    if (transaction && transactionStarted) {
+      try {
+        // Verificar explícitamente si la transacción puede confirmarse
+        if (
+          typeof transaction.isActive === "function" &&
+          !transaction.isActive()
+        ) {
+          logger.warn(
+            "La transacción no está en estado válido para confirmar - omitiendo commit"
+          );
+          transactionStarted = false;
+        } else {
+          // Log para diagnóstico
+          logger.debug(
+            `Estado antes de commit - transaction: ${!!transaction}, transactionStarted: ${transactionStarted}`
+          );
+
+          await transaction.commit();
+          logger.debug("Transacción confirmada correctamente");
+          transactionStarted = false;
+        }
+      } catch (commitError) {
+        logger.error(`Error al confirmar transacción: ${commitError.message}`);
+
+        // Intentar revertir en caso de error de commit
+        try {
+          await transaction.rollback();
+          logger.debug("Transacción revertida después de error en commit");
+        } catch (rollbackError) {
+          logger.warn(
+            `Error al revertir después de fallo en commit: ${rollbackError.message}`
+          );
+        }
+
+        transactionStarted = false;
+        throw commitError; // Propagar el error original
+      }
+    }
+
     return {
       success: true,
       documento_inv,
@@ -164,9 +271,34 @@ async function traspasoBodega({ route, salesData }) {
       aggregatedSales,
     };
   } catch (error) {
-    await transaction.rollback();
+    // Manejo general de errores
     logger.error("Error en traspasoBodega:", error);
+
+    // Asegurarse de que la transacción se revierta
+    if (transaction && transactionStarted) {
+      try {
+        await transaction.rollback();
+        logger.debug("Transacción revertida por error");
+        transactionStarted = false;
+      } catch (rollbackError) {
+        logger.error("Error al revertir la transacción:", rollbackError);
+      }
+    }
+
     throw error;
+  } finally {
+    // Cerrar la conexión en el bloque finally
+    try {
+      if (pool && pool.connected) {
+        await pool.close();
+        logger.debug("Conexión cerrada correctamente para traspaso de bodega");
+      }
+    } catch (closeError) {
+      logger.error(
+        "Error al cerrar la conexión para traspaso de bodega:",
+        closeError
+      );
+    }
   }
 }
 
