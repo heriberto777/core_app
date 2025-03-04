@@ -758,7 +758,7 @@ const executeTransfer = async (taskId) => {
                   if (!transaction || !transactionStarted) {
                     throw new Error("La transacción no está activa");
                   }
-                  
+
                   // Truncar strings según las longitudes máximas
                   for (const column in record) {
                     if (typeof record[column] === "string") {
@@ -840,9 +840,11 @@ const executeTransfer = async (taskId) => {
 
                   // Verificar nuevamente estado de la transacción
                   if (!transaction || !transactionStarted) {
-                    throw new Error("La transacción ya no está activa para la inserción");
+                    throw new Error(
+                      "La transacción ya no está activa para la inserción"
+                    );
                   }
-                  
+
                   const insertRequest = transaction.request();
                   insertRequest.timeout = 30000;
 
@@ -967,28 +969,41 @@ const executeTransfer = async (taskId) => {
           if (transaction && transactionStarted) {
             try {
               // Verificar explícitamente si la transacción puede confirmarse
-              if (typeof transaction.isActive === 'function' && !transaction.isActive()) {
-                logger.warn("La transacción no está en estado válido para confirmar - omitiendo commit");
+              if (
+                typeof transaction.isActive === "function" &&
+                !transaction.isActive()
+              ) {
+                logger.warn(
+                  "La transacción no está en estado válido para confirmar - omitiendo commit"
+                );
                 transactionStarted = false;
               } else {
                 // Log para diagnóstico
-                logger.debug(`Estado antes de commit - transaction: ${!!transaction}, transactionStarted: ${transactionStarted}`);
-                
+                logger.debug(
+                  `Estado antes de commit - transaction: ${!!transaction}, transactionStarted: ${transactionStarted}`
+                );
+
                 await transaction.commit();
                 logger.debug("Transacción confirmada correctamente");
                 transactionStarted = false;
               }
             } catch (commitError) {
-              logger.error(`Error al confirmar transacción: ${commitError.message}`);
-              
+              logger.error(
+                `Error al confirmar transacción: ${commitError.message}`
+              );
+
               // Intentar revertir en caso de error de commit
               try {
                 await transaction.rollback();
-                logger.debug("Transacción revertida después de error en commit");
+                logger.debug(
+                  "Transacción revertida después de error en commit"
+                );
               } catch (rollbackError) {
-                logger.warn(`Error al revertir después de fallo en commit: ${rollbackError.message}`);
+                logger.warn(
+                  `Error al revertir después de fallo en commit: ${rollbackError.message}`
+                );
               }
-              
+
               transactionStarted = false;
               throw commitError; // Propagar el error original
             }
@@ -2564,9 +2579,10 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
   let transactionStarted = false;
   let lastReportedProgress = 0;
   let initialCount = 0;
+  let taskName = "desconocida"; // Inicializar taskName por defecto
 
   try {
-    // 1) Obtener la tarea
+    // 1) Obtener la tarea - Inicializar 'task' antes de usarla
     const task = await TransferTask.findById(taskId);
     if (!task) {
       throw new Error(`No se encontró la tarea con ID: ${taskId}`);
@@ -2575,6 +2591,9 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
       throw new Error(`La tarea "${task.name}" está inactiva.`);
     }
 
+    // Guardar el nombre de la tarea para usarlo en logs y mensajes
+    taskName = task.name;
+
     // 2) Marcar status "running", progress=0
     await TransferTask.findByIdAndUpdate(taskId, {
       status: "running",
@@ -2582,12 +2601,10 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
     });
     sendProgress(taskId, 0);
 
-    const { name } = task;
-
-    // 3) Conectarse a la DB de destino
+    // 3) Conectarse a la DB de destino con manejo mejorado de conexiones
     try {
       logger.debug(
-        `Intentando conectar a server2 para inserción en lotes (taskId: ${taskId})...`
+        `Intentando conectar a server2 para inserción en lotes (taskId: ${taskId}, task: ${taskName})...`
       );
       server2Pool = await connectToDB("server2");
 
@@ -2598,11 +2615,11 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
       }
 
       logger.info(
-        `Conexión establecida correctamente para inserción en lotes (taskId: ${taskId})`
+        `Conexión establecida correctamente para inserción en lotes (taskId: ${taskId}, task: ${taskName})`
       );
     } catch (connError) {
       logger.error(
-        `Error al establecer conexión para inserción en lotes (taskId: ${taskId}):`,
+        `Error al establecer conexión para inserción en lotes (taskId: ${taskId}, task: ${taskName}):`,
         connError
       );
       await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
@@ -2616,21 +2633,22 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
     try {
       const countRequest = server2Pool.request();
       const countResult = await countRequest.query(
-        `SELECT COUNT(*) AS total FROM dbo.[${name}] WITH (NOLOCK)`
+        `SELECT COUNT(*) AS total FROM dbo.[${task.name}] WITH (NOLOCK)`
       );
       initialCount = countResult.recordset[0].total;
-      logger.info(`Conteo inicial en tabla ${name}: ${initialCount} registros`);
+      logger.info(
+        `Conteo inicial en tabla ${task.name}: ${initialCount} registros`
+      );
     } catch (countError) {
       logger.warn(`No se pudo verificar conteo inicial: ${countError.message}`);
       initialCount = 0;
     }
 
-    // 5) Iniciar transacción usando la función helper
+    // 5) Iniciar transacción con la función helper
     try {
-      const nombreOperacion = `inserción en lotes para ${name}`;
       const transactionData = await iniciarTransaccion(
         server2Pool,
-        nombreOperacion
+        `inserción en lotes para ${taskName}`
       );
       transaction = transactionData.transaction;
       transactionStarted = transactionData.transactionStarted;
@@ -2678,21 +2696,20 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
           throw new Error("No se pudo restablecer la conexión con server2");
         }
 
-        // Revertir transacción anterior si existía
+        // Revertir transacción anterior si existía usando la función helper
         if (transaction && transactionStarted) {
           await revertirTransaccion(
             transaction,
             transactionStarted,
-            `inserción en lotes para ${name}`
+            `inserción en lotes para ${taskName}`
           );
-          transaction = null;
           transactionStarted = false;
         }
 
-        // Crear nueva transacción
+        // Crear nueva transacción usando la función helper
         const transactionData = await iniciarTransaccion(
           server2Pool,
-          `inserción en lotes para ${name} (reconexión)`
+          `inserción en lotes para ${taskName} (reconexión)`
         );
         transaction = transactionData.transaction;
         transactionStarted = transactionData.transactionStarted;
@@ -2700,10 +2717,13 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
 
       // Verificar que la transacción sigue activa
       if (!transaction || !transactionStarted) {
-        logger.warn("No hay transacción activa, iniciando una nueva");
+        logger.warn(
+          "No hay transacción activa para inserción en lotes, iniciando una nueva"
+        );
+
         const transactionData = await iniciarTransaccion(
           server2Pool,
-          `inserción en lotes para ${name} (reinicio)`
+          `inserción en lotes para ${taskName} (reinicio)`
         );
         transaction = transactionData.transaction;
         transactionStarted = transactionData.transactionStarted;
@@ -2713,7 +2733,7 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
 
       for (const record of batch) {
         try {
-          // Verificar que la transacción sigue activa antes de procesar
+          // Verificar que la transacción sigue activa antes de procesar usando la función helper
           verificarTransaccion(transaction, transactionStarted);
 
           // Truncar strings según las longitudes máximas
@@ -2724,7 +2744,11 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
               if (columnLengthCache.has(column)) {
                 maxLength = columnLengthCache.get(column);
               } else {
-                maxLength = await getColumnMaxLength(name, column, server2Pool);
+                maxLength = await getColumnMaxLength(
+                  task.name,
+                  column,
+                  server2Pool
+                );
                 columnLengthCache.set(column, maxLength);
               }
 
@@ -2734,7 +2758,7 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
             }
           }
 
-          // Verificar nuevamente la transacción antes de insertar
+          // Verificar nuevamente la transacción usando la función helper
           verificarTransaccion(transaction, transactionStarted);
 
           const insertRequest = transaction.request();
@@ -2745,13 +2769,22 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
             .join(", ");
           const values = Object.keys(record)
             .map((k) => {
-              insertRequest.input(k, record[k]);
+              // Convertir a formato seguro para tedious
+              const value = record[k];
+              const safeValue =
+                value === null
+                  ? null
+                  : typeof value === "number"
+                  ? value
+                  : String(value);
+
+              insertRequest.input(k, safeValue);
               return `@${k}`;
             })
             .join(", ");
 
           const insertQuery = `
-            INSERT INTO dbo.[${name}] (${columns})
+            INSERT INTO dbo.[${task.name}] (${columns})
             VALUES (${values});
             
             SELECT @@ROWCOUNT AS rowsAffected;
@@ -2807,7 +2840,7 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
     await confirmarTransaccion(
       transaction,
       transactionStarted,
-      `inserción en lotes para ${name}`
+      `inserción en lotes para ${taskName}`
     );
     transactionStarted = false;
 
@@ -2823,11 +2856,11 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
     try {
       const countRequest = server2Pool.request();
       const countResult = await countRequest.query(
-        `SELECT COUNT(*) AS total FROM dbo.[${name}] WITH (NOLOCK)`
+        `SELECT COUNT(*) AS total FROM dbo.[${task.name}] WITH (NOLOCK)`
       );
       finalCount = countResult.recordset[0].total;
       logger.info(
-        `Conteo final en tabla ${name}: ${finalCount} registros (${
+        `Conteo final en tabla ${task.name}: ${finalCount} registros (${
           finalCount - initialCount
         } nuevos)`
       );
@@ -2859,7 +2892,7 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
       await revertirTransaccion(
         transaction,
         transactionStarted,
-        `inserción en lotes para ${task?.name || "desconocido"}`
+        `inserción en lotes para ${taskName}`
       );
       transactionStarted = false;
     }
@@ -2869,9 +2902,13 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
     sendProgress(taskId, -1);
 
     // Enviar correo de error
-    const task = await TransferTask.findById(taskId);
-    if (task) {
-      await sendEmailError(task, error);
+    try {
+      const task = await TransferTask.findById(taskId);
+      if (task) {
+        await sendEmailError(task, error);
+      }
+    } catch (emailError) {
+      logger.error(`Error al enviar correo de error: ${emailError.message}`);
     }
 
     throw error;
