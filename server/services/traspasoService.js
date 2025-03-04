@@ -3,8 +3,63 @@ const { connectToDB } = require("./dbService");
 const logger = require("./logger");
 
 /**
+ * Función para iniciar una transacción de manera segura con tedious
+ */
+async function iniciarTransaccionSegura(conexion, nombreOperacion) {
+  try {
+    // Esta implementación es más directa, evitando problemas con el adaptador
+    const request = conexion.request();
+    await request.query("BEGIN TRANSACTION");
+    logger.debug(`Transacción iniciada manualmente para ${nombreOperacion}`);
+    return true;
+  } catch (error) {
+    logger.error(
+      `Error al iniciar transacción para ${nombreOperacion}:`,
+      error
+    );
+    throw error;
+  }
+}
+
+/**
+ * Función para confirmar una transacción de manera segura con tedious
+ */
+async function confirmarTransaccionSegura(conexion, nombreOperacion) {
+  try {
+    const request = conexion.request();
+    await request.query("COMMIT TRANSACTION");
+    logger.debug(`Transacción confirmada manualmente para ${nombreOperacion}`);
+    return true;
+  } catch (error) {
+    logger.error(
+      `Error al confirmar transacción para ${nombreOperacion}:`,
+      error
+    );
+    throw error;
+  }
+}
+
+/**
+ * Función para revertir una transacción de manera segura con tedious
+ */
+async function revertirTransaccionSegura(conexion, nombreOperacion) {
+  try {
+    const request = conexion.request();
+    await request.query("ROLLBACK TRANSACTION");
+    logger.debug(`Transacción revertida manualmente para ${nombreOperacion}`);
+    return true;
+  } catch (error) {
+    logger.error(
+      `Error al revertir transacción para ${nombreOperacion}:`,
+      error
+    );
+    // No propagamos el error para evitar bloqueos en finally
+  }
+}
+
+/**
  * Realiza el traspaso de bodega basándose en los datos de ventas.
- * Versión sin transacciones.
+ * Con garantía transaccional compatible con tedious.
  *
  * @param {Object} params - Objeto con:
  *    - route: (Number) Bodega destino.
@@ -13,6 +68,7 @@ const logger = require("./logger");
  */
 async function traspasoBodega({ route, salesData }) {
   let pool = null;
+  let transaccionIniciada = false;
 
   try {
     // 1. Agrupar salesData por producto
@@ -36,7 +92,13 @@ async function traspasoBodega({ route, salesData }) {
     }
     logger.info(`Conexión establecida correctamente para traspaso de bodega`);
 
-    // 3. Obtener el último consecutivo con request directo
+    // 3. Iniciar transacción con SQL directo (evitando el adaptador problemático)
+    transaccionIniciada = await iniciarTransaccionSegura(
+      pool,
+      "traspaso de bodega"
+    );
+
+    // 4. Obtener el último consecutivo
     const request = pool.request();
     request.timeout = 30000;
 
@@ -58,13 +120,13 @@ async function traspasoBodega({ route, salesData }) {
     }
     logger.info(`Consecutivo actual: ${lastConsec}`);
 
-    // 4. Incrementar el consecutivo
+    // 5. Incrementar el consecutivo
     const numPart = parseInt(lastConsec.replace("TRA", ""), 10);
     const newNum = numPart + 1;
     const newConsec = "TRA" + newNum.toString().padStart(6, "0");
     logger.info(`Nuevo consecutivo calculado: ${newConsec}`);
 
-    // 5. Actualizar la tabla Consecutivo_Ci
+    // 6. Actualizar la tabla Consecutivo_Ci
     const updateRequest = pool.request();
     updateRequest.timeout = 30000;
     updateRequest.input("newConsec", newConsec);
@@ -75,10 +137,10 @@ async function traspasoBodega({ route, salesData }) {
       WHERE SIGUIENTE_CONSEC = @lastConsec
     `);
 
-    // 6. Preparar el valor para DOCUMENTO_INV
+    // 7. Preparar el valor para DOCUMENTO_INV
     const documento_inv = newConsec;
 
-    // 7. Insertar el encabezado en DOCUMENTO_INV
+    // 8. Insertar el encabezado en DOCUMENTO_INV
     const headerRequest = pool.request();
     headerRequest.timeout = 30000;
     headerRequest.input("paquete", "CS");
@@ -94,7 +156,7 @@ async function traspasoBodega({ route, salesData }) {
         (@paquete, @documento_inv, @consecutivo, @referencia, GETDATE(), GETDATE(), @seleccionado, @usuario)
     `);
 
-    // 8. Insertar las líneas en LINEA_DOC_INV una por una
+    // 9. Insertar las líneas en LINEA_DOC_INV
     const bodega_origen = "01";
     let successCount = 0;
 
@@ -102,62 +164,55 @@ async function traspasoBodega({ route, salesData }) {
       const detail = aggregatedSales[i];
       const lineNumber = i + 1;
 
-      try {
-        const lineRequest = pool.request();
-        lineRequest.timeout = 30000;
-        lineRequest.input("paquete", "CS");
-        lineRequest.input("documento_inv", documento_inv);
-        lineRequest.input("linea", lineNumber);
-        lineRequest.input("ajuste", "~TT~");
-        lineRequest.input("articulo", detail.Code_Product);
-        lineRequest.input("bodega", bodega_origen);
-        lineRequest.input("bodegaDestino", "02");
-        lineRequest.input("tipo", "T");
-        lineRequest.input("subtipo", "D");
-        lineRequest.input("subsubtipo", "");
-        lineRequest.input("CostoTotalLocal", 0);
-        lineRequest.input("CostoTotalDolar", 0);
-        lineRequest.input("PrecioTotalLocal", 0);
-        lineRequest.input("PrecioTotalDolar", 0);
-        lineRequest.input("Localizacion", "ND");
-        lineRequest.input("LocalizacionTest", "ND");
-        lineRequest.input("CentroCosto", "00-00-00");
-        lineRequest.input("Secuencia", "");
-        lineRequest.input("UnidadDistri", "UND");
-        lineRequest.input("CuentaContable", "100-01-05-99-00");
-        lineRequest.input("CostoTotalLocalComp", 0);
-        lineRequest.input("CostoTotalDolarComp", 0);
-        lineRequest.input("Cai", "");
-        lineRequest.input("TipoOperacion", "11");
-        lineRequest.input("TipoPago", "ND");
-        lineRequest.input("cantidad", detail.TotalQuantity);
+      const lineRequest = pool.request();
+      lineRequest.timeout = 30000;
+      lineRequest.input("paquete", "CS");
+      lineRequest.input("documento_inv", documento_inv);
+      lineRequest.input("linea", lineNumber);
+      lineRequest.input("ajuste", "~TT~");
+      lineRequest.input("articulo", detail.Code_Product);
+      lineRequest.input("bodega", bodega_origen);
+      lineRequest.input("bodegaDestino", "02");
+      lineRequest.input("tipo", "T");
+      lineRequest.input("subtipo", "D");
+      lineRequest.input("subsubtipo", "");
+      lineRequest.input("CostoTotalLocal", 0);
+      lineRequest.input("CostoTotalDolar", 0);
+      lineRequest.input("PrecioTotalLocal", 0);
+      lineRequest.input("PrecioTotalDolar", 0);
+      lineRequest.input("Localizacion", "ND");
+      lineRequest.input("LocalizacionTest", "ND");
+      lineRequest.input("CentroCosto", "00-00-00");
+      lineRequest.input("Secuencia", "");
+      lineRequest.input("UnidadDistri", "UND");
+      lineRequest.input("CuentaContable", "100-01-05-99-00");
+      lineRequest.input("CostoTotalLocalComp", 0);
+      lineRequest.input("CostoTotalDolarComp", 0);
+      lineRequest.input("Cai", "");
+      lineRequest.input("TipoOperacion", "11");
+      lineRequest.input("TipoPago", "ND");
+      lineRequest.input("cantidad", detail.TotalQuantity);
 
-        await lineRequest.query(`
-          INSERT INTO CATELLI.LINEA_DOC_INV 
-            (PAQUETE_INVENTARIO, DOCUMENTO_INV, LINEA_DOC_INV, AJUSTE_CONFIG, ARTICULO, BODEGA, BODEGA_DESTINO, CANTIDAD, TIPO, 
-            SUBTIPO, SUBSUBTIPO, COSTO_TOTAL_LOCAL, COSTO_TOTAL_DOLAR, PRECIO_TOTAL_LOCAL, PRECIO_TOTAL_DOLAR, LOCALIZACION_DEST, 
-            CENTRO_COSTO, SECUENCIA, UNIDAD_DISTRIBUCIO, CUENTA_CONTABLE, COSTO_TOTAL_LOCAL_COMP, 
-            COSTO_TOTAL_DOLAR_COMP, CAI, TIPO_OPERACION, TIPO_PAGO, LOCALIZACION)
-          VALUES 
-            (@paquete, @documento_inv, @linea, @ajuste, @articulo, @bodega, @bodegaDestino, @cantidad, @tipo, @subtipo,
-            @subsubtipo, @CostoTotalLocal, @CostoTotalDolar, @PrecioTotalLocal, @PrecioTotalDolar, @LocalizacionTest, @CentroCosto,
-            @Secuencia, @UnidadDistri, @CuentaContable, @CostoTotalLocalComp, @CostoTotalDolarComp, @Cai, 
-            @TipoOperacion, @TipoPago, @Localizacion)
-        `);
+      await lineRequest.query(`
+        INSERT INTO CATELLI.LINEA_DOC_INV 
+          (PAQUETE_INVENTARIO, DOCUMENTO_INV, LINEA_DOC_INV, AJUSTE_CONFIG, ARTICULO, BODEGA, BODEGA_DESTINO, CANTIDAD, TIPO, 
+          SUBTIPO, SUBSUBTIPO, COSTO_TOTAL_LOCAL, COSTO_TOTAL_DOLAR, PRECIO_TOTAL_LOCAL, PRECIO_TOTAL_DOLAR, LOCALIZACION_DEST, 
+          CENTRO_COSTO, SECUENCIA, UNIDAD_DISTRIBUCIO, CUENTA_CONTABLE, COSTO_TOTAL_LOCAL_COMP, 
+          COSTO_TOTAL_DOLAR_COMP, CAI, TIPO_OPERACION, TIPO_PAGO, LOCALIZACION)
+        VALUES 
+          (@paquete, @documento_inv, @linea, @ajuste, @articulo, @bodega, @bodegaDestino, @cantidad, @tipo, @subtipo,
+          @subsubtipo, @CostoTotalLocal, @CostoTotalDolar, @PrecioTotalLocal, @PrecioTotalDolar, @LocalizacionTest, @CentroCosto,
+          @Secuencia, @UnidadDistri, @CuentaContable, @CostoTotalLocalComp, @CostoTotalDolarComp, @Cai, 
+          @TipoOperacion, @TipoPago, @Localizacion)
+      `);
 
-        successCount++;
-        logger.debug(`Línea ${lineNumber} insertada correctamente`);
-      } catch (lineError) {
-        logger.error(`Error al insertar línea ${lineNumber}:`, lineError);
-        // Continuar con la siguiente línea aunque falle esta
-      }
+      successCount++;
     }
 
-    // Verificar resultados
-    if (successCount === 0 && aggregatedSales.length > 0) {
-      throw new Error(
-        "No se pudo insertar ninguna línea de detalle en el documento"
-      );
+    // 10. Confirmar transacción para hacer efectivos todos los cambios
+    if (transaccionIniciada) {
+      await confirmarTransaccionSegura(pool, "traspaso de bodega");
+      transaccionIniciada = false;
     }
 
     return {
@@ -170,9 +225,21 @@ async function traspasoBodega({ route, salesData }) {
   } catch (error) {
     // Manejo general de errores
     logger.error("Error en traspasoBodega:", error);
+
+    // Revertir la transacción si está activa
+    if (transaccionIniciada && pool && pool.connected) {
+      await revertirTransaccionSegura(pool, "traspaso de bodega");
+      transaccionIniciada = false;
+    }
+
     throw error;
   } finally {
-    // Cerrar la conexión en el bloque finally
+    // Asegurarse de cerrar la transacción abierta si no se cerró antes
+    if (transaccionIniciada && pool && pool.connected) {
+      await revertirTransaccionSegura(pool, "traspaso de bodega (finally)");
+    }
+
+    // Cerrar la conexión
     try {
       if (pool && pool.connected) {
         await pool.close();
