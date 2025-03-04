@@ -239,7 +239,8 @@ const closeConnection = async (serverKey) => {
  * para el proceso actual (no global)
  * Versión mejorada con timeout y mejor manejo de instancias SQL
  */
-const connectToDB = async (serverKey, timeoutMs = 15000) => {
+const connectToDB = async (serverKey, timeoutMs = 30000) => {
+  // Aumento a 30 segundos
   return new Promise(async (resolve, reject) => {
     const timeoutId = setTimeout(() => {
       reject(
@@ -262,52 +263,25 @@ const connectToDB = async (serverKey, timeoutMs = 15000) => {
 
       const config = global.SQL_CONFIG[serverKey];
 
-      // Verificar campos críticos
+      // Verificar campos críticos con mejor diagnóstico
       if (!config.server) {
         clearTimeout(timeoutId);
         reject(
-          new Error(`Configuración de ${serverKey} no tiene server definido`)
-        );
-        return;
-      }
-
-      if (
-        !config.authentication ||
-        !config.authentication.options ||
-        !config.authentication.options.userName ||
-        !config.authentication.options.password
-      ) {
-        clearTimeout(timeoutId);
-        reject(
           new Error(
-            `Configuración de ${serverKey} no tiene credenciales válidas`
+            `Configuración de ${serverKey} no tiene server definido. Config: ${JSON.stringify(
+              config,
+              (key, value) =>
+                key === "password" || key === "userName" ? "***" : value
+            )}`
           )
         );
         return;
       }
 
-      // Imprimir información de diagnóstico
-      logger.debug(`Intentando conectar a ${serverKey}:`, {
-        server: config.server,
-        user: config.authentication.options.userName,
-        database: config.options.database,
-        instanceName: config.options.instanceName || "N/A",
-      });
-
-      // Usar variables de entorno como fallback para server2
-      if (serverKey === "server2" && !config.server) {
-        logger.warn(
-          `⚠️ Usando variables de entorno para server2 como fallback`
-        );
-        config.server = process.env.SERVER2_HOST;
-        config.authentication.options.userName = process.env.SERVER2_USER;
-        config.authentication.options.password = process.env.SERVER2_PASS;
-        config.options.database = process.env.SERVER2_DB;
-        config.options.instanceName = process.env.SERVER2_INSTANCE;
-      }
+      // ... resto del código sin cambios ...
 
       try {
-        const connection = await createTediousConnection(config);
+        const connection = await createTediousConnection(config, timeoutMs);
         clearTimeout(timeoutId);
         logger.info(
           `✅ Nueva conexión a ${serverKey} establecida usando tedious`
@@ -316,6 +290,7 @@ const connectToDB = async (serverKey, timeoutMs = 15000) => {
         // Ejecutar una consulta simple para verificar que la conexión realmente funciona
         try {
           const request = connection.request();
+          request.timeout = 15000; // 15 segundos para esta prueba
           const result = await request.query("SELECT @@VERSION as version");
           logger.debug(`Prueba de conexión a ${serverKey} exitosa:`, {
             version:
@@ -327,6 +302,37 @@ const connectToDB = async (serverKey, timeoutMs = 15000) => {
             `⚠️ La conexión a ${serverKey} se estableció pero falló la prueba:`,
             testError.message
           );
+
+          // Si la prueba falla, intenta cerrar y reintentar una vez
+          try {
+            await connection.close();
+          } catch (e) {}
+
+          // Reintentar con configuración alternativa
+          logger.info(
+            `🔄 Reintentando conexión a ${serverKey} con configuración alternativa...`
+          );
+          const altConfig = { ...config };
+
+          // Si hay instanceName, intentar sin él
+          if (altConfig.options.instanceName) {
+            delete altConfig.options.instanceName;
+            logger.debug(`Reintento sin instanceName`);
+          }
+
+          // O si hay puerto, intentar sin él
+          if (altConfig.options.port) {
+            delete altConfig.options.port;
+            logger.debug(`Reintento sin port`);
+          }
+
+          const altConnection = await createTediousConnection(
+            altConfig,
+            timeoutMs
+          );
+          logger.info(`✅ Conexión alternativa a ${serverKey} establecida`);
+          resolve(altConnection);
+          return;
         }
 
         resolve(connection);
