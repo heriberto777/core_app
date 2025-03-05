@@ -1,0 +1,230 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>{{title}}</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        line-height: 1.6;
+        color: #333;
+        max-width: 800px;
+        margin: 0 auto;
+        padding: 20px;
+      }
+      .header {
+        text-align: center;
+        margin-bottom: 20px;
+        border-bottom: 2px solid #2c3e50;
+        padding-bottom: 10px;
+      }
+      .header h1 {
+        color: #2c3e50;
+        margin-bottom: 5px;
+      }
+      .header p {
+        color: #7f8c8d;
+        margin-top: 0;
+      }
+      .company-info {
+        text-align: center;
+        margin-bottom: 20px;
+      }
+      .company-info h2 {
+        margin-bottom: 5px;
+        color: #2c3e50;
+      }
+      .summary {
+        background-color: #f9f9f9;
+        padding: 15px;
+        border-radius: 5px;
+        margin-bottom: 20px;
+        border: 1px solid #ddd;
+      }
+      .summary h2 {
+        margin-top: 0;
+        color: #2c3e50;
+        border-bottom: 1px solid #ddd;
+        padding-bottom: 8px;
+      }
+      .summary-item {
+        display: flex;
+        justify-content: space-between;
+        margin-bottom: 10px;
+      }
+      .summary-label {
+        font-weight: bold;
+      }
+      .success {
+        color: #27ae60;
+      }
+      .error {
+        color: #e74c3c;
+      }
+      .warning {
+        color: #f39c12;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-top: 20px;
+      }
+      th {
+        background-color: #2c3e50;
+        color: white;
+        text-align: left;
+        padding: 10px;
+      }
+      td {
+        padding: 8px;
+        border-bottom: 1px solid #ddd;
+      }
+      tr:nth-child(even) {
+        background-color: #f2f2f2;
+      }
+      .footer {
+        margin-top: 30px;
+        border-top: 1px solid #ddd;
+        padding-top: 15px;
+        color: #7f8c8d;
+        font-size: 0.9em;
+        text-align: center;
+      }
+      .note {
+        font-style: italic;
+        color: #7f8c8d;
+        margin-top: 15px;
+        background-color: #f9f9f9;
+        padding: 10px;
+        border-radius: 5px;
+      }
+      .signature {
+        margin-top: 40px;
+        display: flex;
+        justify-content: space-between;
+      }
+      .signature-line {
+        text-align: center;
+        border-top: 1px solid #333;
+        width: 200px;
+        padding-top: 5px;
+      }
+      .logo {
+        text-align: center;
+        margin-bottom: 20px;
+      }
+      .logo img {
+        max-width: 200px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="logo">
+      <!-- Sustituir con imagen real de logo -->
+      <div
+        style="
+          font-size: 24px;
+          font-weight: bold;
+          border: 2px solid #333;
+          padding: 10px;
+          display: inline-block;
+        "
+      >
+        CATELLI
+      </div>
+    </div>
+
+    <div class="header">
+      <h1>{{title}}</h1>
+      <p>{{subtitle}}</p>
+    </div>
+
+    <div class="company-info">
+      <h2>Traspaso de Bodega</h2>
+      <p><strong>Fecha:</strong> {{timestamp}}</p>
+    </div>
+
+    <div class="summary">
+      <h2>Información del Documento</h2>
+      <div class="summary-item">
+        <span class="summary-label">Estado:</span>
+        <span class="{{#if success}}success{{else}}error{{/if}}"
+          >{{#if success}}✅ Éxito{{else}}❌ Error{{/if}}</span
+        >
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">Documento:</span>
+        <span>{{documento_inv}}</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">Bodega Origen:</span>
+        <span>01 - Bodega Central</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">Bodega Destino:</span>
+        <span>02 - Vendedor {{route}}</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">Líneas Procesadas:</span>
+        <span>{{totalLineas}}</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">Líneas Exitosas:</span>
+        <span>{{lineasExitosas}}</span>
+      </div>
+      <div class="summary-item">
+        <span class="summary-label">Líneas Fallidas:</span>
+        <span>{{lineasFallidas}}</span>
+      </div>
+      {{#unless success}}
+      <div class="summary-item">
+        <span class="summary-label">Error:</span>
+        <span class="error">{{errorDetail}}</span>
+      </div>
+      {{/unless}}
+    </div>
+
+    {{#if detalleProductos}}
+    <h3>Detalle de Productos Traspasados</h3>
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 20%">Código</th>
+          <th style="width: 60%">Descripción</th>
+          <th style="width: 20%; text-align: right">Cantidad</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each detalleProductos}}
+        <tr>
+          <td>{{codigo}}</td>
+          <td>{{descripcion}}</td>
+          <td style="text-align: right">{{cantidad}}</td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+    {{/if}}
+
+    <div class="note">
+      <p>
+        Este documento fue generado automáticamente por el sistema de traspaso a
+        las {{timestamp}}.
+      </p>
+    </div>
+
+    <div class="signature">
+      <div class="signature-line">Entregado por</div>
+      <div class="signature-line">Recibido por</div>
+    </div>
+
+    <div class="footer">
+      <p>CATELLI - Documento de Traspaso - {{documento_inv}}</p>
+      <p>
+        Este es un documento oficial generado por el sistema. Por favor conserve
+        una copia para sus registros.
+      </p>
+    </div>
+  </body>
+</html>
