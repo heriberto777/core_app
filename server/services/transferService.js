@@ -362,6 +362,7 @@ const executeTransfer = async (taskId) => {
   let initialCount = 0;
   let duplicateCount = 0;
   let duplicatedRecords = [];
+  let columnTypes = null;
 
   return await retry(
     async () => {
@@ -496,6 +497,23 @@ const executeTransfer = async (taskId) => {
           logger.info(
             `Conexiones establecidas y verificadas para tarea ${taskId}`
           );
+
+          // Obtener los tipos de columnas de la tabla destino
+          try {
+            logger.debug(`Obteniendo tipos de columnas para tabla ${name}...`);
+            columnTypes = await SqlService.getColumnTypes(
+              server2Connection,
+              name
+            );
+            logger.debug(
+              `Tipos de columnas obtenidos correctamente para ${name}`
+            );
+          } catch (typesError) {
+            logger.warn(
+              `No se pudieron obtener los tipos de columnas para ${name}: ${typesError.message}. Se utilizará inferencia automática.`
+            );
+            columnTypes = {};
+          }
         } catch (connError) {
           logger.error(
             `Error al establecer conexiones para tarea ${taskId}:`,
@@ -577,11 +595,15 @@ const executeTransfer = async (taskId) => {
           logger.debug(
             `Ejecutando consulta en Server1: ${finalQuery.substring(0, 200)}...`
           );
+
+          // Sanitizar los parámetros antes de la consulta
+          const sanitizedParams = SqlService.sanitizeParams(params);
           const result = await SqlService.query(
             server1Connection,
             finalQuery,
-            params
+            sanitizedParams
           );
+
           data = result.recordset;
           logger.info(
             `Datos obtenidos correctamente: ${data.length} registros`
@@ -717,11 +739,10 @@ const executeTransfer = async (taskId) => {
 
               for (const record of insertSubBatch) {
                 try {
-                  // AQUÍ: Validar y sanitizar el registro antes de procesarlo
-                  const validatedRecord = validateRecord(record);
+                  // Validar y sanitizar el registro
+                  const validatedRecord = SqlService.validateRecord(record);
 
                   // Truncar strings según las longitudes máximas
-                  // (Puedes mantener esta lógica o eliminarla si la validación ya maneja strings largos)
                   for (const column in validatedRecord) {
                     if (typeof validatedRecord[column] === "string") {
                       // Obtener la longitud máxima (usando cache)
@@ -731,11 +752,11 @@ const executeTransfer = async (taskId) => {
                       } else {
                         // Consultar longitud máxima de la columna
                         const lengthQuery = `
-            SELECT CHARACTER_MAXIMUM_LENGTH 
-            FROM INFORMATION_SCHEMA.COLUMNS 
-            WHERE TABLE_NAME = '${name}' 
-              AND COLUMN_NAME = '${column}'
-          `;
+                          SELECT CHARACTER_MAXIMUM_LENGTH 
+                          FROM INFORMATION_SCHEMA.COLUMNS 
+                          WHERE TABLE_NAME = '${name}' 
+                            AND COLUMN_NAME = '${column}'
+                        `;
                         const lengthResult = await SqlService.query(
                           server2Connection,
                           lengthQuery
@@ -757,7 +778,7 @@ const executeTransfer = async (taskId) => {
                     }
                   }
 
-                  // Recolectar IDs para post-actualización usando el registro validado
+                  // Recolectar IDs para post-actualización
                   if (postUpdateQuery && primaryKeys.length > 0) {
                     const primaryKey = primaryKeys[0];
                     if (
@@ -768,7 +789,7 @@ const executeTransfer = async (taskId) => {
                     }
                   }
 
-                  // Verificar si es un duplicado usando el registro validado
+                  // Verificar si es un duplicado consultando el conjunto de claves existentes
                   if (existingKeysSet.size > 0) {
                     const recordKey = mergeKeys
                       .map((k) => {
@@ -813,31 +834,16 @@ const executeTransfer = async (taskId) => {
                     }
                   }
 
-                  // Preparar consulta para inserción usando el registro validado
-                  const columns = Object.keys(validatedRecord)
-                    .map((k) => `[${k}]`)
-                    .join(", ");
-
-                  const paramPlaceholders = Object.keys(validatedRecord)
-                    .map((k) => `@${k}`)
-                    .join(", ");
-
-                  const insertQuery = `
-                      INSERT INTO dbo.[${name}] (${columns})
-                      VALUES (${paramPlaceholders});
-                      
-                      SELECT @@ROWCOUNT AS rowsAffected;
-                    `;
-
-                  // Ejecutar la inserción con el registro validado
                   try {
-                    const insertResult = await SqlService.query(
-                      server2Connection,
-                      insertQuery,
-                      validatedRecord // <- Usa el registro validado
-                    );
+                    // Usar el nuevo método insertWithExplicitTypes para mayor seguridad
+                    const insertResult =
+                      await SqlService.insertWithExplicitTypes(
+                        server2Connection,
+                        `dbo.[${name}]`,
+                        validatedRecord
+                      );
 
-                    const rowsAffected = insertResult.recordset[0].rowsAffected;
+                    const rowsAffected = insertResult.rowsAffected;
 
                     if (rowsAffected > 0) {
                       totalInserted += rowsAffected;
@@ -848,7 +854,9 @@ const executeTransfer = async (taskId) => {
                         const newKey = mergeKeys
                           .map((k) => {
                             const value =
-                              record[k] === null ? "NULL" : record[k];
+                              validatedRecord[k] === null
+                                ? "NULL"
+                                : validatedRecord[k];
                             return `${k}:${value}`;
                           })
                           .join("|");
@@ -871,13 +879,13 @@ const executeTransfer = async (taskId) => {
 
                       // Construir mensaje para identificar el registro duplicado
                       const duplicateInfo = mergeKeys
-                        .map((k) => `${k}=${record[k]}`)
+                        .map((k) => `${k}=${validatedRecord[k]}`)
                         .join(", ");
 
                       // Guardar información del registro duplicado
                       const duplicateRecord = {};
                       mergeKeys.forEach((key) => {
-                        duplicateRecord[key] = record[key];
+                        duplicateRecord[key] = validatedRecord[key];
                       });
 
                       // Añadir información adicional
@@ -915,18 +923,14 @@ const executeTransfer = async (taskId) => {
                         }
 
                         // Reintentar la inserción
-                        const retryParams = {};
-                        Object.entries(record).forEach(([key, value]) => {
-                          retryParams[key] = value;
-                        });
+                        const retryResult =
+                          await SqlService.insertWithExplicitTypes(
+                            server2Connection,
+                            `dbo.[${name}]`,
+                            validatedRecord
+                          );
 
-                        const retryResult = await SqlService.query(
-                          server2Connection,
-                          insertQuery,
-                          retryParams
-                        );
-                        const rowsAffected =
-                          retryResult.recordset[0].rowsAffected;
+                        const rowsAffected = retryResult.rowsAffected;
 
                         if (rowsAffected > 0) {
                           totalInserted += rowsAffected;
@@ -1062,11 +1066,14 @@ const executeTransfer = async (taskId) => {
                 const dynamicUpdateQuery = `${postUpdateQuery} WHERE ${primaryKeyField} IN (${keyParams})`;
 
                 try {
+                  // Sanitizar los parámetros
+                  const sanitizedParams = SqlService.sanitizeParams(params);
+
                   // Ejecutar la actualización
                   const updateResult = await SqlService.query(
                     server1Connection,
                     dynamicUpdateQuery,
-                    params
+                    sanitizedParams
                   );
                   logger.info(
                     `Post-actualización: ${updateResult.rowsAffected} filas afectadas`
@@ -1099,11 +1106,14 @@ const executeTransfer = async (taskId) => {
                       );
                     }
 
+                    // Sanitizar los parámetros
+                    const sanitizedParams = SqlService.sanitizeParams(params);
+
                     // Reintentar la actualización
                     const retryResult = await SqlService.query(
                       server1Connection,
                       dynamicUpdateQuery,
-                      params
+                      sanitizedParams
                     );
                     logger.info(
                       `Post-actualización (reintento): ${retryResult.rowsAffected} filas afectadas`
@@ -1206,6 +1216,7 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
   let lastReportedProgress = 0;
   let initialCount = 0;
   let taskName = "desconocida"; // Inicializar taskName por defecto
+  let columnTypes = null;
 
   try {
     // 1) Obtener la tarea - Inicializar 'task' antes de usarla
@@ -1245,6 +1256,23 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
       logger.info(
         `Conexión establecida y verificada para inserción en lotes (taskId: ${taskId}, task: ${taskName})`
       );
+
+      // Obtener tipos de columnas para una inserción más segura
+      try {
+        logger.debug(`Obteniendo tipos de columnas para tabla ${taskName}...`);
+        columnTypes = await SqlService.getColumnTypes(
+          server2Connection,
+          taskName
+        );
+        logger.debug(
+          `Tipos de columnas obtenidos correctamente para ${taskName}`
+        );
+      } catch (typesError) {
+        logger.warn(
+          `No se pudieron obtener los tipos de columnas para ${taskName}: ${typesError.message}. Se utilizará inferencia automática.`
+        );
+        columnTypes = {};
+      }
     } catch (connError) {
       logger.error(
         `Error al establecer conexión para inserción en lotes (taskId: ${taskId}, task: ${taskName}):`,
@@ -1321,9 +1349,12 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
 
       for (const record of batch) {
         try {
+          // Validar y sanitizar el registro
+          const validatedRecord = SqlService.validateRecord(record);
+
           // Truncar strings según las longitudes máximas
-          for (const column in record) {
-            if (typeof record[column] === "string") {
+          for (const column in validatedRecord) {
+            if (typeof validatedRecord[column] === "string") {
               // Obtener la longitud máxima (usando cache)
               let maxLength;
               if (columnLengthCache.has(column)) {
@@ -1345,41 +1376,27 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
                 columnLengthCache.set(column, maxLength);
               }
 
-              if (maxLength > 0 && record[column]?.length > maxLength) {
-                record[column] = record[column].substring(0, maxLength);
+              if (
+                maxLength > 0 &&
+                validatedRecord[column]?.length > maxLength
+              ) {
+                validatedRecord[column] = validatedRecord[column].substring(
+                  0,
+                  maxLength
+                );
               }
             }
           }
 
-          // Preparar consulta para inserción
-          const columns = Object.keys(record)
-            .map((k) => `[${k}]`)
-            .join(", ");
-          const paramNames = Object.keys(record)
-            .map((k) => `@${k}`)
-            .join(", ");
-
-          const insertQuery = `
-            INSERT INTO dbo.[${task.name}] (${columns})
-            VALUES (${paramNames});
-            
-            SELECT @@ROWCOUNT AS rowsAffected;
-          `;
-
-          // Preparar parámetros
-          const params = {};
-          Object.entries(record).forEach(([key, value]) => {
-            params[key] = value;
-          });
-
-          // Ejecutar inserción
+          // Usar el método mejorado para inserción con tipos explícitos
           try {
-            const insertResult = await SqlService.query(
+            const insertResult = await SqlService.insertWithExplicitTypes(
               server2Connection,
-              insertQuery,
-              params
+              `dbo.[${task.name}]`,
+              validatedRecord
             );
-            const rowsAffected = insertResult.recordset[0]?.rowsAffected || 0;
+
+            const rowsAffected = insertResult.rowsAffected || 0;
 
             if (rowsAffected > 0) {
               totalInserted += rowsAffected;
@@ -1411,12 +1428,13 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
               }
 
               // Reintentar inserción
-              const retryResult = await SqlService.query(
+              const retryResult = await SqlService.insertWithExplicitTypes(
                 server2Connection,
-                insertQuery,
-                params
+                `dbo.[${task.name}]`,
+                validatedRecord
               );
-              const rowsAffected = retryResult.recordset[0]?.rowsAffected || 0;
+
+              const rowsAffected = retryResult.rowsAffected || 0;
 
               if (rowsAffected > 0) {
                 totalInserted += rowsAffected;
@@ -1429,6 +1447,14 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
               }
             } else {
               // Otros errores, registrar y continuar
+              logger.error(
+                `Error específico al insertar registro: ${JSON.stringify(
+                  validatedRecord,
+                  null,
+                  2
+                )}`
+              );
+              logger.error(`Detalles del error: ${insertError.message}`);
               throw insertError;
             }
           }
@@ -1439,6 +1465,9 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
           logger.error(
             `Error al insertar registro en lote ${currentBatchNumber}:`,
             recordError
+          );
+          logger.debug(
+            `Registro problemático: ${JSON.stringify(record, null, 2)}`
           );
         }
       }
