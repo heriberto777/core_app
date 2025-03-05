@@ -272,6 +272,20 @@ async function insertOrders(req, res) {
     if (!salesData || !Array.isArray(salesData) || salesData.length === 0) {
       return res.status(400).json({ message: "No hay ventas para insertar." });
     }
+
+    // Validar cada elemento de salesData
+    const validSalesData = salesData.map((item) => {
+      // Crear un nuevo objeto con propiedades validadas
+      const validItem = {};
+
+      // Asegúrate de que cada propiedad esté bien definida o sea null
+      Object.keys(item).forEach((key) => {
+        validItem[key] = item[key] === undefined ? null : item[key];
+      });
+
+      return validItem;
+    });
+
     // Buscar la tarea que representa la carga a IMPLT_Orders
     const task = await TransferTask.findOne({ name: "IMPLT_Orders" });
     if (!task) {
@@ -281,7 +295,7 @@ async function insertOrders(req, res) {
     }
 
     // Ejecutar la inserción en lotes con SSE (por ejemplo, con batchSize = 100)
-    const result = await insertInBatchesSSE(task._id, salesData, 100);
+    const result = await insertInBatchesSSE(task._id, validSalesData, 100);
     return res.json(result);
   } catch (error) {
     console.error("Error en insertOrders:", error);
