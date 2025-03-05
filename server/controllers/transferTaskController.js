@@ -10,7 +10,10 @@ const { startCronJob } = require("../services/cronService");
 const { executeDynamicSelect } = require("../services/dynamicQueryService");
 const { formatDateToYYYYMMDD } = require("../utils/formatDate");
 const obtenerConsecutivo = require("../utils/obtenerConsecutivo");
-const { traspasoBodega } = require("../services/traspasoService");
+const {
+  traspasoBodega,
+  realizarTraspaso,
+} = require("../services/traspasoService");
 
 /**
  * Obtener todas las tareas de transferencia
@@ -240,6 +243,7 @@ async function runTask(req, res) {
       Code_Seller: vendors.split(",").map((v) => v.trim()),
     };
 
+    console.log(overrideParams);
     // 2) Combinar sus parámetros con overrideParams
     //    (ejemplo: si la tarea tiene parameters con field="Fecha", operator="=", value="2023-01-01",
     //     y en overrideParams viene Fecha="2023-02-10", sobreescribes con 2023-02-10)
@@ -382,27 +386,29 @@ async function insertLoadsDetail(req, res) {
 async function insertLoadsTrapaso(req, res) {
   try {
     const { route, loadId, salesData } = req.body;
-    console.log("Datos recibidos:", {
+    console.log("Datos recibidos para traspaso:", {
       route,
-      loadId,
       salesData: salesData ? `${salesData.length} registros` : "no data",
     });
 
-    // Validación más detallada
+    // Validación básica
     if (!route) {
       return res.status(400).json({
+        success: false,
         message: "Parámetro 'route' es requerido",
       });
     }
 
     if (!salesData || !Array.isArray(salesData)) {
       return res.status(400).json({
+        success: false,
         message: "Parámetro 'salesData' debe ser un array",
       });
     }
 
     if (salesData.length === 0) {
       return res.status(400).json({
+        success: false,
         message: "No hay datos de ventas para procesar",
       });
     }
@@ -419,6 +425,7 @@ async function insertLoadsTrapaso(req, res) {
 
     if (validSalesData.length === 0) {
       return res.status(400).json({
+        success: false,
         message:
           "No hay productos válidos para traspasar. Cada producto debe tener Code_Product y Quantity > 0",
       });
@@ -428,36 +435,25 @@ async function insertLoadsTrapaso(req, res) {
       `Procesando traspaso con ${validSalesData.length} productos válidos`
     );
 
-    // Intentar usar el método alternativo si el principal falla
+    // Usar directamente el método alternativo que sabemos que funcionará
     try {
-      const result = await traspasoBodega({ route, salesData: validSalesData });
+      const result = await realizarTraspaso({
+        route,
+        salesData: validSalesData,
+      });
       return res.json(result);
-    } catch (primaryError) {
-      console.error("Error en método principal:", primaryError);
-      console.log("Intentando método alternativo...");
-
-      // Intentar con método alternativo
-      try {
-        const fallbackResult = await realizarTraspaso({
-          route,
-          salesData: validSalesData,
-        });
-        return res.json({
-          ...fallbackResult,
-          message: "Procesado con método alternativo",
-        });
-      } catch (fallbackError) {
-        throw new Error(
-          `Falló método principal: ${primaryError.message}. Falló método alternativo: ${fallbackError.message}`
-        );
-      }
+    } catch (error) {
+      console.error("Error en realizarTraspaso:", error);
+      return res.status(500).json({
+        success: false,
+        message: error.message,
+      });
     }
   } catch (error) {
     console.error("Error en insertLoadsTrapaso:", error);
     return res.status(500).json({
       success: false,
       message: error.message,
-      stackTrace: error.stack,
     });
   }
 }
