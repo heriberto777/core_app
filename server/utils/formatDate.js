@@ -42,3 +42,5 @@ function formatDateToYYYYMMDD(dateStr) {
 
   return `${year}${month}${day}`;
 }
+
+module.exports = { formatDateToYYYYMMDD };
