@@ -11,7 +11,11 @@ const logger = require("./logger");
 
 // Importar la función para SSE
 const { sendProgress } = require("./progressSse");
-const { sendEmail } = require("./emailService");
+// Actualización: importar los nuevos servicios de correo
+const {
+  sendTransferResultsEmail,
+  sendCriticalErrorEmail,
+} = require("./emailService");
 
 // Función de validación mejorada que maneja cadenas vacías
 function validateRecord(record, requiredFields = []) {
@@ -164,142 +168,12 @@ async function executeTransferManual(taskId) {
       totalDuplicates: result.totalDuplicates || 0,
     };
 
-    // Construir el mensaje de correo
-    let emailSubject = result.success
-      ? `✅ Transferencia Manual Completada: ${task.name}`
-      : `⚠️ Error en Transferencia Manual: ${task.name}`;
-
-    let emailTextBody = `Se ha ejecutado manualmente la transferencia '${
-      task.name
-    }' con los siguientes resultados:
-      - Estado: ${result.success ? "Éxito" : "Error"}
-      - Registros procesados: ${result.rows || 0}
-      - Registros insertados: ${result.inserted || 0}
-      ${
-        result.duplicates
-          ? `- Registros duplicados omitidos: ${result.duplicates}`
-          : ""
-      }
-      ${
-        result.success
-          ? ""
-          : `- Error: ${result.errorDetail || "No especificado"}`
-      }
-    `;
-
-    // Generar HTML para el correo con tabla de duplicados
-    let emailHtmlBody = `
-      <p><strong>Resultado de la transferencia manual: ${task.name}</strong></p>
-      <ul>
-        <li><strong>Estado:</strong> ${
-          result.success ? "✅ Éxito" : "❌ Error"
-        }</li>
-        <li><strong>Registros procesados:</strong> ${result.rows || 0}</li>
-        <li><strong>Registros insertados:</strong> ${result.inserted || 0}</li>
-        ${
-          result.duplicates
-            ? `<li><strong>Registros duplicados omitidos:</strong> ${result.duplicates}</li>`
-            : ""
-        }
-        ${
-          result.initialCount !== undefined
-            ? `<li><strong>Registros iniciales en destino:</strong> ${result.initialCount}</li>`
-            : ""
-        }
-        ${
-          result.finalCount !== undefined
-            ? `<li><strong>Registros finales en destino:</strong> ${result.finalCount}</li>`
-            : ""
-        }
-        ${
-          !result.success
-            ? `<li><strong>Error:</strong> ${
-                result.errorDetail || "No especificado"
-              }</li>`
-            : ""
-        }
-      </ul>
-    `;
-
-    // Agregar tabla de duplicados si hay registros
-    if (
-      formattedResult.duplicates > 0 &&
-      formattedResult.duplicatedRecords.length > 0
-    ) {
-      // Obtener los nombres de columnas de los registros duplicados
-      const sampleRecord = formattedResult.duplicatedRecords[0];
-      const columns = Object.keys(sampleRecord).filter(
-        (key) => !key.startsWith("_")
-      );
-
-      emailHtmlBody += `
-        <h3>Detalle de registros duplicados omitidos${
-          formattedResult.hasMoreDuplicates
-            ? " (primeros " +
-              formattedResult.duplicatedRecords.length +
-              " de " +
-              formattedResult.totalDuplicates +
-              ")"
-            : ""
-        }</h3>
-        <table border="1" cellpadding="5" style="border-collapse: collapse; width: 100%;">
-          <tr style="background-color: #f2f2f2;">
-            ${columns.map((col) => `<th>${col}</th>`).join("")}
-          </tr>
-      `;
-
-      // Añadir filas para cada registro duplicado
-      formattedResult.duplicatedRecords.forEach((record) => {
-        emailHtmlBody += `
-          <tr>
-            ${columns
-              .map((col) => {
-                // Formatear el valor según su tipo
-                let value = record[col];
-                if (value === null || value === undefined) {
-                  return '<td style="color: #999;">NULL</td>';
-                } else if (typeof value === "object" && value instanceof Date) {
-                  return `<td>${value.toLocaleString()}</td>`;
-                } else if (typeof value === "number") {
-                  return `<td style="text-align: right;">${value}</td>`;
-                } else {
-                  // Truncar textos muy largos
-                  const strValue = String(value);
-                  return `<td>${
-                    strValue.length > 50
-                      ? strValue.substring(0, 47) + "..."
-                      : strValue
-                  }</td>`;
-                }
-              })
-              .join("")}
-          </tr>
-        `;
-      });
-
-      emailHtmlBody += `</table>`;
-
-      // Agregar nota si hay más registros
-      if (formattedResult.hasMoreDuplicates) {
-        emailHtmlBody += `
-          <p><em>Nota: Se muestran solo los primeros ${formattedResult.duplicatedRecords.length} de ${formattedResult.totalDuplicates} registros duplicados omitidos.</em></p>
-        `;
-      }
-    }
-
-    // Añadir nota final
-    emailHtmlBody += `<p>Esta transferencia fue ejecutada manualmente.</p>`;
-
-    // Enviar correo con los resultados
+    // Enviar correo con el resultado usando el nuevo servicio
     try {
-      await sendEmail(
-        "heriberto777@gmail.com", // Destinatario (podría ser una configuración o parámetro)
-        emailSubject,
-        emailTextBody,
-        emailHtmlBody
-      );
+      // Usar el nuevo servicio de correo que obtiene destinatarios de la BD
+      await sendTransferResultsEmail([formattedResult], "manual");
       logger.info(
-        `📧 Correo de notificación enviado para la transferencia manual: ${task.name}`
+        `📧 Correo de notificación enviado para la transferencia: ${task.name}`
       );
     } catch (emailError) {
       logger.error(
@@ -330,14 +204,14 @@ async function executeTransferManual(taskId) {
     );
     console.log(error);
 
-    // Enviar correo de error
+    // Enviar correo de error usando el nuevo servicio
     try {
-      await sendEmail(
-        "heriberto777@gmail.com",
-        `🚨 Error crítico en Transferencia Manual`,
-        `Ocurrió un error crítico durante la ejecución manual de la transferencia.\nError: ${error.message}`,
-        `<p><strong>Error crítico en Transferencia Manual</strong></p><p>${error.message}</p>`
+      await sendCriticalErrorEmail(
+        `Error crítico en transferencia manual: ${error.message}`,
+        "manual",
+        `ID de tarea: ${taskId}`
       );
+      logger.info(`📧 Correo de error crítico enviado`);
     } catch (emailError) {
       logger.error(`❌ Error al enviar correo de error: ${emailError.message}`);
     }
@@ -1523,9 +1397,22 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
       finalCount,
     };
 
-    // 11. Enviar correo con el resultado
+    // 11. Enviar correo con el resultado usando el nuevo servicio
     try {
-      await sendEmailNotification(task, result);
+      // Formatear resultado para el correo
+      const formattedResult = {
+        name: task.name,
+        success: result.success,
+        inserted: result.inserted || 0,
+        rows: result.rows || 0,
+        message: result.message || "Transferencia completada",
+        errorDetail: result.errorDetail || "N/A",
+        initialCount: result.initialCount,
+        finalCount: result.finalCount,
+      };
+
+      // Enviar usando el nuevo servicio que consulta destinatarios desde BD
+      await sendTransferResultsEmail([formattedResult], "batch");
       logger.info(`Correo de notificación enviado para ${taskName}`);
     } catch (emailError) {
       logger.error(
@@ -1545,13 +1432,15 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
     await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
     sendProgress(taskId, -1);
 
-    // Enviar correo de error
+    // Enviar correo de error usando el nuevo servicio
     try {
-      const task = await TransferTask.findById(taskId);
-      if (task) {
-        await sendEmailError(task, error);
-        logger.info(`Correo de error enviado para ${taskName}`);
-      }
+      const errorMessage = `Error en inserción en lotes para ${taskName}: ${error.message}`;
+      await sendCriticalErrorEmail(
+        errorMessage,
+        "batch",
+        `ID de tarea: ${taskId}`
+      );
+      logger.info(`Correo de error enviado para ${taskName}`);
     } catch (emailError) {
       logger.error(
         `Error al enviar correo de error para ${taskName}: ${emailError.message}`
@@ -1574,598 +1463,11 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
         closeError
       );
     }
-  }
-}
-
-/**
- * Envía notificación por correo del resultado de la transferencia
- */
-async function sendEmailNotification(task, result) {
-  try {
-    // Preparar datos para el correo
-    const emailSubject = result.success
-      ? `✅ Transferencia Completada: ${task.name}`
-      : `⚠️ Error en Transferencia: ${task.name}`;
-
-    let emailTextBody = `Se ha ejecutado la transferencia '${
-      task.name
-    }' con los siguientes resultados:
-      - Estado: ${result.success ? "Éxito" : "Error"}
-      - Registros procesados: ${result.rows || 0}
-      - Registros insertados: ${result.inserted || 0}
-      ${result.errors ? `- Errores durante inserción: ${result.errors}` : ""}
-      ${
-        result.success
-          ? ""
-          : `- Error: ${result.errorDetail || "No especificado"}`
-      }
-    `;
-
-    // Generar HTML para el correo
-    let emailHtmlBody = `
-      <p><strong>Resultado de la transferencia: ${task.name}</strong></p>
-      <ul>
-        <li><strong>Estado:</strong> ${
-          result.success ? "✅ Éxito" : "❌ Error"
-        }</li>
-        <li><strong>Registros procesados:</strong> ${result.rows || 0}</li>
-        <li><strong>Registros insertados:</strong> ${result.inserted || 0}</li>
-        ${
-          result.errors
-            ? `<li><strong>Errores durante inserción:</strong> ${result.errors}</li>`
-            : ""
-        }
-        ${
-          result.initialCount !== undefined
-            ? `<li><strong>Registros iniciales en destino:</strong> ${result.initialCount}</li>`
-            : ""
-        }
-        ${
-          result.finalCount !== undefined
-            ? `<li><strong>Registros finales en destino:</strong> ${result.finalCount}</li>`
-            : ""
-        }
-        ${
-          !result.success
-            ? `<li><strong>Error:</strong> ${
-                result.errorDetail || "No especificado"
-              }</li>`
-            : ""
-        }
-      </ul>
-    `;
-
-    // Enviar correo con los resultados
-    await sendEmail(
-      "heriberto777@gmail.com", // Destinatario (podría ser una configuración o parámetro)
-      emailSubject,
-      emailTextBody,
-      emailHtmlBody
-    );
-
-    logger.info(
-      `📧 Correo de notificación enviado para la transferencia: ${task.name}`
-    );
-  } catch (emailError) {
-    logger.error(
-      `❌ Error al enviar correo de notificación: ${emailError.message}`
-    );
-  }
-}
-
-/**
- * Envía notificación por correo en caso de error
- */
-async function sendEmailError(task, error) {
-  try {
-    await sendEmail(
-      "heriberto777@gmail.com",
-      `🚨 Error en Transferencia ${task.name}`,
-      `Ocurrió un error durante la ejecución de la transferencia.\nError: ${error.message}`,
-      `<p><strong>Error en Transferencia: ${task.name}</strong></p>
-       <p>Se produjo un error que impidió la ejecución normal de la transferencia.</p>
-       <p><strong>Mensaje de error:</strong> ${error.message}</p>
-       <p><strong>Tabla:</strong> ${task.name}</p>`
-    );
-
-    logger.info(
-      `📧 Correo de error enviado para la transferencia: ${task.name}`
-    );
-  } catch (emailError) {
-    logger.error(`❌ Error al enviar correo de error: ${emailError.message}`);
   }
 }
 
 /**
  * Crea o actualiza una tarea de transferencia en MongoDB (upsert).
- */
-async function upsertTransferTask(taskData) {
-  try {
-    let task = await TransferTask.findOne({ name: taskData.name });
-    if (task) {
-      task = await TransferTask.findByIdAndUpdate(task._id, taskData, {
-        new: true,
-      });
-    } else {
-      task = await TransferTask.create(taskData);
-    }
-    return { success: true, task };
-  } catch (error) {
-    logger.error("Error en upsertTransferTask:", error);
-    return {
-      success: false,
-      message: "Error al guardar la tarea",
-      error: error.message,
-    };
-  }
-}
-
-// Exportar todas las funciones
-module.exports = {
-  getPrimaryKey,
-  getColumnMaxLength,
-  getTransferTasks,
-  executeTransferManual,
-  executeTransfer,
-  insertInBatchesSSE,
-  upsertTransferTask,
-  sendEmailNotification,
-  sendEmailError,
-};
-
-/**
- * 📌 Función que inserta TODOS los datos en lotes, reportando progreso SSE y enviando correo al finalizar.
- * No verifica duplicados, simplemente inserta todos los registros.
- * Requiere que el frontend esté suscrito a /api/transfer/progress/:taskId
- */
-async function insertInBatchesSSE(taskId, data, batchSize = 100) {
-  let server2Connection = null;
-  let lastReportedProgress = 0;
-  let initialCount = 0;
-  let taskName = "desconocida"; // Inicializar taskName por defecto
-
-  try {
-    // 1) Obtener la tarea - Inicializar 'task' antes de usarla
-    const task = await TransferTask.findById(taskId);
-    if (!task) {
-      throw new Error(`No se encontró la tarea con ID: ${taskId}`);
-    }
-    if (!task.active) {
-      throw new Error(`La tarea "${task.name}" está inactiva.`);
-    }
-
-    // Guardar el nombre de la tarea para usarlo en logs y mensajes
-    taskName = task.name;
-
-    // 2) Marcar status "running", progress=0
-    await TransferTask.findByIdAndUpdate(taskId, {
-      status: "running",
-      progress: 0,
-    });
-    sendProgress(taskId, 0);
-
-    // 3) Conectarse a la DB de destino con manejo mejorado de conexiones
-    try {
-      logger.debug(
-        `Intentando conectar a server2 para inserción en lotes (taskId: ${taskId}, task: ${taskName})...`
-      );
-      server2Connection = await connectToDB("server2", 30000);
-
-      if (!server2Connection) {
-        throw new Error(
-          "No se pudo establecer una conexión válida con server2"
-        );
-      }
-
-      // Verificar conexión con una consulta simple
-      await SqlService.query(server2Connection, "SELECT 1 AS test");
-      logger.info(
-        `Conexión establecida y verificada para inserción en lotes (taskId: ${taskId}, task: ${taskName})`
-      );
-    } catch (connError) {
-      logger.error(
-        `Error al establecer conexión para inserción en lotes (taskId: ${taskId}, task: ${taskName}):`,
-        connError
-      );
-      await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
-      sendProgress(taskId, -1);
-      throw new Error(
-        `Error al establecer conexión de base de datos: ${connError.message}`
-      );
-    }
-
-    // 4) Verificar conteo inicial de registros
-    try {
-      const countResult = await SqlService.query(
-        server2Connection,
-        `SELECT COUNT(*) AS total FROM dbo.[${task.name}] WITH (NOLOCK)`
-      );
-      initialCount = countResult.recordset[0].total;
-      logger.info(
-        `Conteo inicial en tabla ${task.name}: ${initialCount} registros`
-      );
-    } catch (countError) {
-      logger.warn(`No se pudo verificar conteo inicial: ${countError.message}`);
-      initialCount = 0;
-    }
-
-    // 5) Pre-cargar información de longitud de columnas
-    const columnLengthCache = new Map();
-
-    // 6) Contadores para tracking
-    const total = data.length;
-    let totalInserted = 0;
-    let processedCount = 0;
-    let errorCount = 0;
-
-    // 7) Procesar data en lotes - SIN TRANSACCIONES PARA MAYOR ESTABILIDAD
-    for (let i = 0; i < data.length; i += batchSize) {
-      const batch = data.slice(i, i + batchSize);
-      const currentBatchNumber = Math.floor(i / batchSize) + 1;
-      const totalBatches = Math.ceil(data.length / batchSize);
-
-      logger.debug(
-        `Procesando lote ${currentBatchNumber}/${totalBatches} (${batch.length} registros)...`
-      );
-
-      // Verificar si la conexión sigue activa y reconectar si es necesario
-      try {
-        await SqlService.query(server2Connection, "SELECT 1 AS test");
-      } catch (connError) {
-        logger.warn(
-          `Conexión perdida con server2 durante procesamiento, intentando reconectar...`
-        );
-
-        try {
-          await closeConnection(server2Connection);
-        } catch (e) {}
-
-        server2Connection = await connectToDB("server2", 30000);
-        if (!server2Connection) {
-          throw new Error("No se pudo restablecer la conexión con server2");
-        }
-
-        // Verificar la nueva conexión
-        await SqlService.query(server2Connection, "SELECT 1 AS test");
-        logger.info(
-          `Reconexión exitosa a server2 para lote ${currentBatchNumber}`
-        );
-      }
-
-      // Procesar cada registro del lote de forma independiente
-      let batchInserted = 0;
-      let batchErrored = 0;
-
-      for (const record of batch) {
-        try {
-          // Truncar strings según las longitudes máximas
-          for (const column in record) {
-            if (typeof record[column] === "string") {
-              // Obtener la longitud máxima (usando cache)
-              let maxLength;
-              if (columnLengthCache.has(column)) {
-                maxLength = columnLengthCache.get(column);
-              } else {
-                // Consultar longitud máxima de la columna
-                const lengthQuery = `
-                  SELECT CHARACTER_MAXIMUM_LENGTH 
-                  FROM INFORMATION_SCHEMA.COLUMNS 
-                  WHERE TABLE_NAME = '${task.name}' 
-                    AND COLUMN_NAME = '${column}'
-                `;
-                const lengthResult = await SqlService.query(
-                  server2Connection,
-                  lengthQuery
-                );
-                maxLength =
-                  lengthResult.recordset[0]?.CHARACTER_MAXIMUM_LENGTH || 0;
-                columnLengthCache.set(column, maxLength);
-              }
-
-              if (maxLength > 0 && record[column]?.length > maxLength) {
-                record[column] = record[column].substring(0, maxLength);
-              }
-            }
-          }
-
-          // Preparar consulta para inserción
-          const columns = Object.keys(record)
-            .map((k) => `[${k}]`)
-            .join(", ");
-          const paramNames = Object.keys(record)
-            .map((k) => `@${k}`)
-            .join(", ");
-
-          const insertQuery = `
-            INSERT INTO dbo.[${task.name}] (${columns})
-            VALUES (${paramNames});
-            
-            SELECT @@ROWCOUNT AS rowsAffected;
-          `;
-
-          // Preparar parámetros
-          const params = {};
-          Object.entries(record).forEach(([key, value]) => {
-            params[key] = value;
-          });
-
-          // Ejecutar inserción
-          try {
-            const insertResult = await SqlService.query(
-              server2Connection,
-              insertQuery,
-              params
-            );
-            const rowsAffected = insertResult.recordset[0]?.rowsAffected || 0;
-
-            if (rowsAffected > 0) {
-              totalInserted += rowsAffected;
-              batchInserted += rowsAffected;
-            }
-          } catch (insertError) {
-            // Verificar si es error de conexión
-            if (
-              insertError.message &&
-              (insertError.message.includes("conexión") ||
-                insertError.message.includes("connection") ||
-                insertError.message.includes("timeout") ||
-                insertError.message.includes("Timeout"))
-            ) {
-              // Intentar reconectar y reintentar
-              logger.warn(
-                `Error de conexión durante inserción, reconectando...`
-              );
-
-              try {
-                await closeConnection(server2Connection);
-              } catch (e) {}
-
-              server2Connection = await connectToDB("server2", 30000);
-              if (!server2Connection) {
-                throw new Error(
-                  "No se pudo restablecer la conexión para continuar inserciones"
-                );
-              }
-
-              // Reintentar inserción
-              const retryResult = await SqlService.query(
-                server2Connection,
-                insertQuery,
-                params
-              );
-              const rowsAffected = retryResult.recordset[0]?.rowsAffected || 0;
-
-              if (rowsAffected > 0) {
-                totalInserted += rowsAffected;
-                batchInserted += rowsAffected;
-                logger.info(`Inserción exitosa después de reconexión`);
-              } else {
-                throw new Error(
-                  "La inserción no afectó ninguna fila después de reconexión"
-                );
-              }
-            } else {
-              // Otros errores, registrar y continuar
-              throw insertError;
-            }
-          }
-        } catch (recordError) {
-          // Registrar el error pero continuar con el siguiente registro
-          errorCount++;
-          batchErrored++;
-          logger.error(
-            `Error al insertar registro en lote ${currentBatchNumber}:`,
-            recordError
-          );
-        }
-      }
-
-      logger.info(
-        `Lote ${currentBatchNumber}/${totalBatches}: ${batchInserted} registros insertados, ${batchErrored} errores`
-      );
-
-      // Actualizar progreso después de cada lote
-      processedCount += batch.length;
-      const progress = Math.round((processedCount / total) * 100);
-
-      if (progress > lastReportedProgress + 5 || progress >= 100) {
-        lastReportedProgress = progress;
-        await TransferTask.findByIdAndUpdate(taskId, { progress });
-        sendProgress(taskId, progress);
-        logger.debug(`Progreso actualizado: ${progress}%`);
-      }
-    }
-
-    // 8. Actualizar estado a completado
-    await TransferTask.findByIdAndUpdate(taskId, {
-      status: "completed",
-      progress: 100,
-    });
-    sendProgress(taskId, 100);
-
-    // 9. Verificar conteo final
-    let finalCount = 0;
-    try {
-      const countResult = await SqlService.query(
-        server2Connection,
-        `SELECT COUNT(*) AS total FROM dbo.[${task.name}] WITH (NOLOCK)`
-      );
-      finalCount = countResult.recordset[0].total;
-      logger.info(
-        `Conteo final en tabla ${task.name}: ${finalCount} registros (${
-          finalCount - initialCount
-        } nuevos)`
-      );
-    } catch (countError) {
-      logger.warn(`No se pudo verificar conteo final: ${countError.message}`);
-    }
-
-    // 10. Preparar resultado
-    const result = {
-      success: true,
-      message: "Transferencia completada",
-      rows: data.length,
-      inserted: totalInserted,
-      errors: errorCount,
-      initialCount,
-      finalCount,
-    };
-
-    // 11. Enviar correo con el resultado
-    try {
-      await sendEmailNotification(task, result);
-      logger.info(`Correo de notificación enviado para ${taskName}`);
-    } catch (emailError) {
-      logger.error(
-        `Error al enviar correo de notificación: ${emailError.message}`
-      );
-    }
-
-    return result;
-  } catch (error) {
-    // Manejo de errores generales
-    logger.error(
-      `Error en insertInBatchesSSE para ${taskName}: ${error.message}`,
-      error
-    );
-
-    // Actualizar estado de la tarea
-    await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
-    sendProgress(taskId, -1);
-
-    // Enviar correo de error
-    try {
-      const task = await TransferTask.findById(taskId);
-      if (task) {
-        await sendEmailError(task, error);
-        logger.info(`Correo de error enviado para ${taskName}`);
-      }
-    } catch (emailError) {
-      logger.error(
-        `Error al enviar correo de error para ${taskName}: ${emailError.message}`
-      );
-    }
-
-    throw error;
-  } finally {
-    // Cerrar conexión
-    try {
-      if (server2Connection) {
-        await closeConnection(server2Connection);
-        logger.debug(
-          `Conexión server2 cerrada correctamente para inserción en lotes de ${taskName} (taskId: ${taskId})`
-        );
-      }
-    } catch (closeError) {
-      logger.error(
-        `Error al cerrar conexión server2 para inserción en lotes de ${taskName} (taskId: ${taskId}):`,
-        closeError
-      );
-    }
-  }
-}
-
-/**
- * Envía notificación por correo del resultado de la transferencia
- */
-async function sendEmailNotification(task, result) {
-  try {
-    // Preparar datos para el correo
-    const emailSubject = result.success
-      ? `✅ Transferencia Completada: ${task.name}`
-      : `⚠️ Error en Transferencia: ${task.name}`;
-
-    let emailTextBody = `Se ha ejecutado la transferencia '${
-      task.name
-    }' con los siguientes resultados:
-      - Estado: ${result.success ? "Éxito" : "Error"}
-      - Registros procesados: ${result.rows || 0}
-      - Registros insertados: ${result.inserted || 0}
-      ${result.errors ? `- Errores durante inserción: ${result.errors}` : ""}
-      ${
-        result.success
-          ? ""
-          : `- Error: ${result.errorDetail || "No especificado"}`
-      }
-    `;
-
-    // Generar HTML para el correo
-    let emailHtmlBody = `
-      <p><strong>Resultado de la transferencia: ${task.name}</strong></p>
-      <ul>
-        <li><strong>Estado:</strong> ${
-          result.success ? "✅ Éxito" : "❌ Error"
-        }</li>
-        <li><strong>Registros procesados:</strong> ${result.rows || 0}</li>
-        <li><strong>Registros insertados:</strong> ${result.inserted || 0}</li>
-        ${
-          result.errors
-            ? `<li><strong>Errores durante inserción:</strong> ${result.errors}</li>`
-            : ""
-        }
-        ${
-          result.initialCount !== undefined
-            ? `<li><strong>Registros iniciales en destino:</strong> ${result.initialCount}</li>`
-            : ""
-        }
-        ${
-          result.finalCount !== undefined
-            ? `<li><strong>Registros finales en destino:</strong> ${result.finalCount}</li>`
-            : ""
-        }
-        ${
-          !result.success
-            ? `<li><strong>Error:</strong> ${
-                result.errorDetail || "No especificado"
-              }</li>`
-            : ""
-        }
-      </ul>
-    `;
-
-    // Enviar correo con los resultados
-    await sendEmail(
-      "heriberto777@gmail.com", // Destinatario (podría ser una configuración o parámetro)
-      emailSubject,
-      emailTextBody,
-      emailHtmlBody
-    );
-
-    logger.info(
-      `📧 Correo de notificación enviado para la transferencia: ${task.name}`
-    );
-  } catch (emailError) {
-    logger.error(
-      `❌ Error al enviar correo de notificación: ${emailError.message}`
-    );
-  }
-}
-
-/**
- * Envía notificación por correo en caso de error
- */
-async function sendEmailError(task, error) {
-  try {
-    await sendEmail(
-      "heriberto777@gmail.com",
-      `🚨 Error en Transferencia ${task.name}`,
-      `Ocurrió un error durante la ejecución de la transferencia.\nError: ${error.message}`,
-      `<p><strong>Error en Transferencia: ${task.name}</strong></p>
-       <p>Se produjo un error que impidió la ejecución normal de la transferencia.</p>
-       <p><strong>Mensaje de error:</strong> ${error.message}</p>
-       <p><strong>Tabla:</strong> ${task.name}</p>`
-    );
-
-    logger.info(
-      `📧 Correo de error enviado para la transferencia: ${task.name}`
-    );
-  } catch (emailError) {
-    logger.error(`❌ Error al enviar correo de error: ${emailError.message}`);
-  }
-}
-
-/**
- * 📌 Crea o actualiza una tarea de transferencia en MongoDB (upsert).
  */
 async function upsertTransferTask(taskData) {
   try {

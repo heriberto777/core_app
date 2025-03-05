@@ -2,105 +2,8 @@
 const { connectToDB, closeConnection } = require("./dbService");
 const { SqlService } = require("./tediousService");
 const logger = require("./logger");
-const { sendEmail } = require("./emailService"); // Importamos el servicio de email
-
-/**
- * Envía notificación por correo del resultado del traspaso
- * @param {Object} result - Resultado del traspaso
- * @param {Array} detalleProductos - Detalle de productos traspasados
- * @param {String} route - Ruta o bodega destino
- */
-async function enviarCorreoTraspaso(result, detalleProductos, route) {
-  try {
-    // Preparar datos para el correo
-    const emailSubject = result.success
-      ? `✅ Traspaso de Bodega Completado: ${result.documento_inv}`
-      : `⚠️ Error en Traspaso de Bodega: ${result.documento_inv || "N/A"}`;
-
-    let emailTextBody = `Se ha ejecutado un traspaso de bodega con los siguientes resultados:
-      - Estado: ${result.success ? "Éxito" : "Error"}
-      - Documento: ${result.documento_inv || "N/A"}
-      - Total de líneas: ${result.totalLineas || 0}
-      - Líneas exitosas: ${result.lineasExitosas || 0}
-      - Líneas fallidas: ${result.lineasFallidas || 0}
-      - Ruta/Bodega destino: ${route}
-      ${
-        result.success
-          ? ""
-          : `- Error: ${result.errorDetail || "No especificado"}`
-      }
-    `;
-
-    // Generar HTML para el correo con tabla de productos
-    let emailHtmlBody = `
-      <h2>Resultado del Traspaso de Bodega</h2>
-      <p><strong>Estado:</strong> ${
-        result.success ? "✅ Éxito" : "❌ Error"
-      }</p>
-      <p><strong>Documento:</strong> ${result.documento_inv || "N/A"}</p>
-      <p><strong>Total de líneas:</strong> ${result.totalLineas || 0}</p>
-      <p><strong>Líneas exitosas:</strong> ${result.lineasExitosas || 0}</p>
-      <p><strong>Líneas fallidas:</strong> ${result.lineasFallidas || 0}</p>
-      <p><strong>Ruta/Bodega destino:</strong> ${route}</p>
-      ${
-        !result.success
-          ? `<p><strong>Error:</strong> ${
-              result.errorDetail || "No especificado"
-            }</p>`
-          : ""
-      }
-    `;
-
-    // Agregar tabla de productos si hay registros
-    if (detalleProductos && detalleProductos.length > 0) {
-      emailHtmlBody += `
-        <h3>Detalle de Productos Traspasados</h3>
-        <table border="1" cellpadding="5" style="border-collapse: collapse; width: 100%;">
-          <tr style="background-color: #f2f2f2;">
-            <th>Artículo</th>
-            <th>Descripción</th>
-            <th style="text-align: right;">Cantidad</th>
-          </tr>
-      `;
-
-      // Añadir filas para cada producto
-      detalleProductos.forEach((producto) => {
-        emailHtmlBody += `
-          <tr>
-            <td>${producto.codigo || ""}</td>
-            <td>${producto.descripcion || "N/A"}</td>
-            <td style="text-align: right;">${producto.cantidad || 0}</td>
-          </tr>
-        `;
-      });
-
-      emailHtmlBody += `</table>`;
-    }
-
-    // Añadir nota final
-    emailHtmlBody += `<p>Este traspaso fue ejecutado a las ${new Date().toLocaleString()}.</p>`;
-
-    // Enviar correo con los resultados
-    await sendEmail(
-      "heriberto777@gmail.com", // Destinatario (podría ser una configuración o parámetro)
-      emailSubject,
-      emailTextBody,
-      emailHtmlBody
-    );
-
-    logger.info(
-      `📧 Correo de notificación enviado para el traspaso: ${
-        result.documento_inv || "N/A"
-      }`
-    );
-    return true;
-  } catch (emailError) {
-    logger.error(
-      `❌ Error al enviar correo de notificación: ${emailError.message}`
-    );
-    return false;
-  }
-}
+const { sendTraspasoEmail } = require("./emailService");
+const PDFService = require("./pdfService");
 
 /**
  * Obtiene información adicional de los productos desde la base de datos
@@ -176,6 +79,7 @@ async function obtenerDetalleProductos(connection, productos) {
 async function traspasoBodega({ route, salesData }) {
   let connection = null;
   let detalleProductos = [];
+  let pdfPath = null;
 
   try {
     // Validar datos de entrada
@@ -426,10 +330,27 @@ async function traspasoBodega({ route, salesData }) {
       totalLineas: aggregatedSales.length,
       lineasExitosas: successCount,
       lineasFallidas: failedCount,
+      detalleProductos,
+      route,
     };
 
-    // Enviar correo con el resultado
-    await enviarCorreoTraspaso(result, detalleProductos, route);
+    // Generar PDF del traspaso
+    try {
+      const pdfResult = await PDFService.generateTraspasoPDF(result);
+      pdfPath = pdfResult.path;
+      logger.info(`PDF de traspaso generado: ${pdfPath}`);
+    } catch (pdfError) {
+      logger.error(`Error al generar PDF del traspaso: ${pdfError.message}`);
+      // Continuamos aunque falle la generación del PDF
+    }
+
+    // Enviar correo con el resultado y PDF adjunto si se generó correctamente
+    await sendTraspasoEmail(result, pdfPath);
+    logger.info(
+      `Correo de notificación enviado para el traspaso: ${
+        result.documento_inv || "N/A"
+      }`
+    );
 
     return result;
   } catch (error) {
@@ -444,11 +365,24 @@ async function traspasoBodega({ route, salesData }) {
       totalLineas: detalleProductos.length,
       lineasExitosas: 0,
       lineasFallidas: detalleProductos.length,
+      detalleProductos,
+      route,
     };
 
-    // Intentar enviar correo de error
+    // Intentar generar PDF del error
     try {
-      await enviarCorreoTraspaso(errorResult, detalleProductos, route);
+      const pdfResult = await PDFService.generateTraspasoPDF(errorResult);
+      pdfPath = pdfResult.path;
+      logger.info(`PDF de error de traspaso generado: ${pdfPath}`);
+    } catch (pdfError) {
+      logger.error(`Error al generar PDF del error: ${pdfError.message}`);
+      // Continuamos aunque falle la generación del PDF
+    }
+
+    // Intentar enviar correo de error con PDF si se generó
+    try {
+      await sendTraspasoEmail(errorResult, pdfPath);
+      logger.info(`Correo de error enviado para el traspaso fallido`);
     } catch (emailError) {
       logger.error(`Error al enviar correo de error: ${emailError.message}`);
     }
@@ -467,6 +401,19 @@ async function traspasoBodega({ route, salesData }) {
         closeError
       );
     }
+
+    // Limpiar archivo PDF temporal tras enviar el correo
+    try {
+      if (pdfPath) {
+        setTimeout(async () => {
+          await PDFService.cleanupTempFile(pdfPath);
+        }, 60000); // Eliminar después de 1 minuto para asegurar que se envió el correo
+      }
+    } catch (cleanupError) {
+      logger.warn(
+        `Error al programar limpieza de PDF temporal: ${cleanupError.message}`
+      );
+    }
   }
 }
 
@@ -477,6 +424,7 @@ async function traspasoBodega({ route, salesData }) {
 async function realizarTraspaso({ route, salesData }) {
   let connection = null;
   let detalleProductos = [];
+  let pdfPath = null;
 
   try {
     // 1. Validar datos de entrada - filtrar productos válidos
@@ -644,19 +592,39 @@ async function realizarTraspaso({ route, salesData }) {
       );
     }
 
-    // 9. Preparar resultado y enviar correo
+    // 9. Preparar resultado
     const resultado = {
       success: true,
       documento_inv: nuevoConsecutivo,
       totalLineas: productosArray.length,
       lineasExitosas,
       lineasFallidas,
+      detalleProductos,
+      route,
     };
 
+    // 10. Generar PDF del traspaso
     try {
-      await enviarCorreoTraspaso(resultado, detalleProductos, route);
+      const pdfResult = await PDFService.generateTraspasoPDF(resultado);
+      pdfPath = pdfResult.path;
+      logger.info(`PDF de traspaso generado: ${pdfPath}`);
+    } catch (pdfError) {
+      logger.error(`Error al generar PDF del traspaso: ${pdfError.message}`);
+      // Continuamos aunque falle la generación del PDF
+    }
+
+    // 11. Enviar correo con el resultado y PDF adjunto
+    try {
+      await sendTraspasoEmail(resultado, pdfPath);
+      logger.info(
+        `Correo de notificación enviado para el traspaso: ${
+          resultado.documento_inv || "N/A"
+        }`
+      );
     } catch (errorCorreo) {
-      logger.error(`Error al enviar correo: ${errorCorreo.message}`);
+      logger.error(
+        `Error al enviar correo de traspaso: ${errorCorreo.message}`
+      );
     }
 
     return resultado;
@@ -671,11 +639,23 @@ async function realizarTraspaso({ route, salesData }) {
       totalLineas: detalleProductos.length,
       lineasExitosas: 0,
       lineasFallidas: detalleProductos.length,
+      detalleProductos,
+      route,
     };
 
-    // Intentar enviar correo de error
+    // Intentar generar PDF del error
     try {
-      await enviarCorreoTraspaso(resultadoError, detalleProductos, route);
+      const pdfResult = await PDFService.generateTraspasoPDF(resultadoError);
+      pdfPath = pdfResult.path;
+      logger.info(`PDF de error de traspaso generado: ${pdfPath}`);
+    } catch (pdfError) {
+      logger.error(`Error al generar PDF del error: ${pdfError.message}`);
+    }
+
+    // Intentar enviar correo de error con PDF
+    try {
+      await sendTraspasoEmail(resultadoError, pdfPath);
+      logger.info(`Correo de error enviado para el traspaso fallido`);
     } catch (errorCorreo) {
       logger.error(`Error al enviar correo de error: ${errorCorreo.message}`);
     }
@@ -691,7 +671,20 @@ async function realizarTraspaso({ route, salesData }) {
     } catch (errorCierre) {
       logger.error("Error al cerrar la conexión:", errorCierre);
     }
+
+    // Limpiar archivo PDF temporal después de un tiempo
+    try {
+      if (pdfPath) {
+        setTimeout(async () => {
+          await PDFService.cleanupTempFile(pdfPath);
+        }, 60000); // Eliminar después de 1 minuto
+      }
+    } catch (cleanupError) {
+      logger.warn(
+        `Error al programar limpieza de PDF temporal: ${cleanupError.message}`
+      );
+    }
   }
 }
 
-module.exports = { traspasoBodega, realizarTraspaso, enviarCorreoTraspaso };
+module.exports = { traspasoBodega, realizarTraspaso };
