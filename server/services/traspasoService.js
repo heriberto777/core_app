@@ -2,10 +2,171 @@
 const { connectToDB, closeConnection } = require("./dbService");
 const { SqlService } = require("./tediousService");
 const logger = require("./logger");
+const { sendEmail } = require("./emailService"); // Importamos el servicio de email
+
+/**
+ * Envía notificación por correo del resultado del traspaso
+ * @param {Object} result - Resultado del traspaso
+ * @param {Array} detalleProductos - Detalle de productos traspasados
+ * @param {String} route - Ruta o bodega destino
+ */
+async function enviarCorreoTraspaso(result, detalleProductos, route) {
+  try {
+    // Preparar datos para el correo
+    const emailSubject = result.success
+      ? `✅ Traspaso de Bodega Completado: ${result.documento_inv}`
+      : `⚠️ Error en Traspaso de Bodega: ${result.documento_inv || "N/A"}`;
+
+    let emailTextBody = `Se ha ejecutado un traspaso de bodega con los siguientes resultados:
+      - Estado: ${result.success ? "Éxito" : "Error"}
+      - Documento: ${result.documento_inv || "N/A"}
+      - Total de líneas: ${result.totalLineas || 0}
+      - Líneas exitosas: ${result.lineasExitosas || 0}
+      - Líneas fallidas: ${result.lineasFallidas || 0}
+      - Ruta/Bodega destino: ${route}
+      ${
+        result.success
+          ? ""
+          : `- Error: ${result.errorDetail || "No especificado"}`
+      }
+    `;
+
+    // Generar HTML para el correo con tabla de productos
+    let emailHtmlBody = `
+      <h2>Resultado del Traspaso de Bodega</h2>
+      <p><strong>Estado:</strong> ${
+        result.success ? "✅ Éxito" : "❌ Error"
+      }</p>
+      <p><strong>Documento:</strong> ${result.documento_inv || "N/A"}</p>
+      <p><strong>Total de líneas:</strong> ${result.totalLineas || 0}</p>
+      <p><strong>Líneas exitosas:</strong> ${result.lineasExitosas || 0}</p>
+      <p><strong>Líneas fallidas:</strong> ${result.lineasFallidas || 0}</p>
+      <p><strong>Ruta/Bodega destino:</strong> ${route}</p>
+      ${
+        !result.success
+          ? `<p><strong>Error:</strong> ${
+              result.errorDetail || "No especificado"
+            }</p>`
+          : ""
+      }
+    `;
+
+    // Agregar tabla de productos si hay registros
+    if (detalleProductos && detalleProductos.length > 0) {
+      emailHtmlBody += `
+        <h3>Detalle de Productos Traspasados</h3>
+        <table border="1" cellpadding="5" style="border-collapse: collapse; width: 100%;">
+          <tr style="background-color: #f2f2f2;">
+            <th>Artículo</th>
+            <th>Descripción</th>
+            <th style="text-align: right;">Cantidad</th>
+          </tr>
+      `;
+
+      // Añadir filas para cada producto
+      detalleProductos.forEach((producto) => {
+        emailHtmlBody += `
+          <tr>
+            <td>${producto.codigo || ""}</td>
+            <td>${producto.descripcion || "N/A"}</td>
+            <td style="text-align: right;">${producto.cantidad || 0}</td>
+          </tr>
+        `;
+      });
+
+      emailHtmlBody += `</table>`;
+    }
+
+    // Añadir nota final
+    emailHtmlBody += `<p>Este traspaso fue ejecutado a las ${new Date().toLocaleString()}.</p>`;
+
+    // Enviar correo con los resultados
+    await sendEmail(
+      "heriberto777@gmail.com", // Destinatario (podría ser una configuración o parámetro)
+      emailSubject,
+      emailTextBody,
+      emailHtmlBody
+    );
+
+    logger.info(
+      `📧 Correo de notificación enviado para el traspaso: ${
+        result.documento_inv || "N/A"
+      }`
+    );
+    return true;
+  } catch (emailError) {
+    logger.error(
+      `❌ Error al enviar correo de notificación: ${emailError.message}`
+    );
+    return false;
+  }
+}
+
+/**
+ * Obtiene información adicional de los productos desde la base de datos
+ * @param {Connection} connection - Conexión a la base de datos
+ * @param {Array} productos - Array de productos con código y cantidad
+ * @returns {Promise<Array>} - Array con información completa de los productos
+ */
+async function obtenerDetalleProductos(connection, productos) {
+  try {
+    const detalleCompleto = [];
+
+    // Obtener descripciones en un solo query para mejor rendimiento
+    const codigos = productos
+      .map((p) => `'${p.codigo || p.Code_Product}'`)
+      .join(",");
+
+    if (!codigos) {
+      return productos.map((p) => ({
+        codigo: p.codigo || p.Code_Product,
+        descripcion: "Desconocido",
+        cantidad: p.cantidad || p.TotalQuantity || 0,
+      }));
+    }
+
+    const query = `
+      SELECT ARTICULO, DESCRIPCION 
+      FROM CATELLI.ARTICULO 
+      WHERE ARTICULO IN (${codigos})
+    `;
+
+    const result = await SqlService.query(connection, query);
+
+    // Crear un mapa para búsqueda rápida
+    const descripcionesMap = {};
+    result.recordset.forEach((item) => {
+      descripcionesMap[item.ARTICULO] = item.DESCRIPCION;
+    });
+
+    // Completar la información
+    for (const producto of productos) {
+      const codigo = producto.codigo || producto.Code_Product;
+      detalleCompleto.push({
+        codigo,
+        descripcion: descripcionesMap[codigo] || "Descripción no disponible",
+        cantidad: producto.cantidad || producto.TotalQuantity || 0,
+      });
+    }
+
+    return detalleCompleto;
+  } catch (error) {
+    logger.warn(
+      `No se pudo obtener detalle completo de productos: ${error.message}`
+    );
+    // En caso de error, devolver lo que tenemos sin descripción
+    return productos.map((p) => ({
+      codigo: p.codigo || p.Code_Product,
+      descripcion: "No disponible",
+      cantidad: p.cantidad || p.TotalQuantity || 0,
+    }));
+  }
+}
 
 /**
  * Realiza el traspaso de bodega basándose en los datos de ventas.
  * Adaptado para usar Tedious directamente con manejo mejorado de nulos y tipos.
+ * Incluye envío de correo con información detallada.
  *
  * @param {Object} params - Objeto con:
  *    - route: (Number) Bodega destino.
@@ -14,19 +175,50 @@ const logger = require("./logger");
  */
 async function traspasoBodega({ route, salesData }) {
   let connection = null;
+  let detalleProductos = [];
 
   try {
+    // Validar datos de entrada
+    if (!salesData || !Array.isArray(salesData) || salesData.length === 0) {
+      throw new Error("No hay datos de ventas para procesar");
+    }
+
+    // Filtrar y verificar productos válidos
+    const productosValidos = salesData.filter(
+      (item) =>
+        item &&
+        item.Code_Product &&
+        typeof item.Quantity !== "undefined" &&
+        Number(item.Quantity) > 0
+    );
+
+    if (productosValidos.length === 0) {
+      throw new Error("No hay productos válidos en los datos de ventas");
+    }
+
     // 1. Agrupar salesData por producto
     const aggregated = {};
-    for (const sale of salesData) {
-      const product = sale.Code_Product;
-      const qty = Number(sale.Quantity) || 0;
-      aggregated[product] = (aggregated[product] || 0) + qty;
+    for (const sale of productosValidos) {
+      const product = sale.Code_Product.trim();
+      const qty = Math.max(0, Number(sale.Quantity) || 0);
+
+      if (product && qty > 0) {
+        aggregated[product] = (aggregated[product] || 0) + qty;
+      }
     }
+
     const aggregatedSales = Object.keys(aggregated).map((product) => ({
       Code_Product: product,
       TotalQuantity: aggregated[product],
     }));
+
+    if (aggregatedSales.length === 0) {
+      throw new Error(
+        "No hay productos válidos para traspasar después de la validación"
+      );
+    }
+
+    logger.info(`Procesando traspaso con ${aggregatedSales.length} productos`);
 
     // 2. Conectar a la base de datos
     logger.debug(`Intentando conectar a server1 para traspaso de bodega...`);
@@ -36,6 +228,12 @@ async function traspasoBodega({ route, salesData }) {
       throw new Error("No se pudo establecer una conexión válida con server1");
     }
     logger.info(`Conexión establecida correctamente para traspaso de bodega`);
+
+    // Obtener información detallada de los productos para el correo
+    detalleProductos = await obtenerDetalleProductos(
+      connection,
+      aggregatedSales
+    );
 
     // 3. Obtener el último consecutivo
     const queryConse = `
@@ -220,7 +418,8 @@ async function traspasoBodega({ route, salesData }) {
       );
     }
 
-    return {
+    // Preparar el resultado
+    const result = {
       success: true,
       documento_inv,
       newConsec,
@@ -228,9 +427,32 @@ async function traspasoBodega({ route, salesData }) {
       lineasExitosas: successCount,
       lineasFallidas: failedCount,
     };
+
+    // Enviar correo con el resultado
+    await enviarCorreoTraspaso(result, detalleProductos, route);
+
+    return result;
   } catch (error) {
     // Manejo general de errores
     logger.error("Error en traspasoBodega:", error);
+
+    // Preparar resultado de error
+    const errorResult = {
+      success: false,
+      mensaje: error.message,
+      errorDetail: error.stack,
+      totalLineas: detalleProductos.length,
+      lineasExitosas: 0,
+      lineasFallidas: detalleProductos.length,
+    };
+
+    // Intentar enviar correo de error
+    try {
+      await enviarCorreoTraspaso(errorResult, detalleProductos, route);
+    } catch (emailError) {
+      logger.error(`Error al enviar correo de error: ${emailError.message}`);
+    }
+
     throw error;
   } finally {
     // Cerrar la conexión en el bloque finally
@@ -248,145 +470,4 @@ async function traspasoBodega({ route, salesData }) {
   }
 }
 
-/**
- * Transfiere un conjunto de productos de una bodega a otra.
- * Versión simplificada para manejar mejor los tipos de datos problemáticos.
- *
- * @param {Object} params - Objeto con route y salesData
- * @returns {Promise<Object>} - Resultado de la operación
- */
-async function realizarTraspaso({ route, salesData }) {
-  const connection = await connectToDB("server1");
-
-  try {
-    logger.info(
-      `Iniciando traspaso de bodega para ruta ${route} con ${salesData.length} productos`
-    );
-
-    // Convertir a conjunto de productos agrupados
-    const productos = {};
-    for (const item of salesData) {
-      const codigo = item.Code_Product;
-      if (!codigo) continue;
-
-      const cantidad = Number(item.Quantity) || 0;
-      if (cantidad <= 0) continue;
-
-      if (!productos[codigo]) {
-        productos[codigo] = 0;
-      }
-      productos[codigo] += cantidad;
-    }
-
-    // Verificar si hay productos válidos
-    const productosArray = Object.entries(productos).map(
-      ([codigo, cantidad]) => ({
-        codigo,
-        cantidad,
-      })
-    );
-
-    if (productosArray.length === 0) {
-      return {
-        success: false,
-        message: "No hay productos válidos para traspasar",
-      };
-    }
-
-    // Obtener consecutivo usando consulta directa sin parámetros para evitar problemas
-    const resConsecutivo = await SqlService.query(
-      connection,
-      `SELECT TOP 1 SIGUIENTE_CONSEC 
-       FROM CATELLI.CONSECUTIVO_CI 
-       WITH (UPDLOCK, ROWLOCK)
-       WHERE CONSECUTIVO LIKE 'TR%' 
-       ORDER BY CONSECUTIVO DESC`
-    );
-
-    // Procesar el consecutivo
-    let ultimoConsec = "TRA0000000";
-    if (resConsecutivo.recordset.length > 0) {
-      ultimoConsec =
-        resConsecutivo.recordset[0].SIGUIENTE_CONSEC || ultimoConsec;
-    }
-
-    // Calcular nuevo consecutivo
-    const numBase = parseInt(ultimoConsec.replace("TRA", ""), 10);
-    const nuevoConsec = "TRA" + (numBase + 1).toString().padStart(6, "0");
-
-    // Actualizar consecutivo - usando consulta segura
-    const updateConsecRes = await SqlService.query(
-      connection,
-      `UPDATE CATELLI.CONSECUTIVO_CI 
-       SET SIGUIENTE_CONSEC = '${nuevoConsec}' 
-       WHERE SIGUIENTE_CONSEC = '${ultimoConsec}'`
-    );
-
-    if (updateConsecRes.rowsAffected === 0) {
-      throw new Error(
-        "No se pudo actualizar el consecutivo, posible concurrencia"
-      );
-    }
-
-    // Insertar documento principal - usando valores directos en vez de parámetros
-    await SqlService.query(
-      connection,
-      `INSERT INTO CATELLI.DOCUMENTO_INV 
-         (PAQUETE_INVENTARIO, DOCUMENTO_INV, CONSECUTIVO, REFERENCIA, FECHA_HOR_CREACION, FECHA_DOCUMENTO, SELECCIONADO, USUARIO)
-       VALUES 
-         ('CS', '${nuevoConsec}', 'TR', 'Traspaso de bodega para vendedor ${route}', GETDATE(), GETDATE(), 'N', 'SA')`
-    );
-
-    // Procesar líneas
-    let lineasExitosas = 0;
-    let lineasFallidas = 0;
-
-    for (let i = 0; i < productosArray.length; i++) {
-      const producto = productosArray[i];
-      const lineNum = i + 1;
-
-      try {
-        // Insertar línea usando consulta SQL directa para evitar problemas con parámetros
-        await SqlService.query(
-          connection,
-          `INSERT INTO CATELLI.LINEA_DOC_INV 
-             (PAQUETE_INVENTARIO, DOCUMENTO_INV, LINEA_DOC_INV, AJUSTE_CONFIG, ARTICULO, 
-              BODEGA, BODEGA_DESTINO, CANTIDAD, TIPO, SUBTIPO, SUBSUBTIPO, 
-              COSTO_TOTAL_LOCAL, COSTO_TOTAL_DOLAR, PRECIO_TOTAL_LOCAL, PRECIO_TOTAL_DOLAR, 
-              LOCALIZACION_DEST, CENTRO_COSTO, SECUENCIA, UNIDAD_DISTRIBUCIO, CUENTA_CONTABLE, 
-              COSTO_TOTAL_LOCAL_COMP, COSTO_TOTAL_DOLAR_COMP, CAI, TIPO_OPERACION, TIPO_PAGO, LOCALIZACION)
-           VALUES 
-             ('CS', '${nuevoConsec}', ${lineNum}, '~TT~', '${producto.codigo}', 
-              '01', '02', ${producto.cantidad}, 'T', 'D', '', 
-              0, 0, 0, 0, 
-              'ND', '00-00-00', '', 'UND', '100-01-05-99-00', 
-              0, 0, '', '11', 'ND', 'ND')`
-        );
-
-        lineasExitosas++;
-      } catch (lineError) {
-        lineasFallidas++;
-        logger.error(
-          `Error en línea ${lineNum}, producto ${producto.codigo}:`,
-          lineError
-        );
-        // Continuar con el siguiente producto
-      }
-    }
-
-    return {
-      success: true,
-      documento_inv: nuevoConsec,
-      totalLineas: productosArray.length,
-      lineasExitosas,
-      lineasFallidas,
-    };
-  } catch (error) {
-    logger.error("Error en realizarTraspaso:", error);
-    throw error;
-  } finally {
-    await closeConnection(connection);
-  }
-}
-
-module.exports = { traspasoBodega, realizarTraspaso };
+module.exports = { traspasoBodega, realizarTraspaso, enviarCorreoTraspaso };
