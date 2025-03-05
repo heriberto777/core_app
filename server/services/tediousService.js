@@ -82,11 +82,14 @@ class SqlService {
       // Añadir parámetros con tipos explícitos si están disponibles
       try {
         Object.entries(sanitizedParams).forEach(([name, value]) => {
-          // Usar tipo explícito si está disponible, o inferir automáticamente
-          const type = paramTypes[name] || this.determineType(value);
-
-          // Agregar el parámetro a la solicitud
-          request.addParameter(name, type, value);
+          // Si el valor es undefined o null, usar explícitamente null
+          if (value === undefined || value === null) {
+            request.addParameter(name, TYPES.Null, null);
+          } else {
+            // Usar tipo explícito si está disponible, o inferir automáticamente
+            const type = paramTypes[name] || this.determineType(value);
+            request.addParameter(name, type, value);
+          }
         });
       } catch (paramError) {
         console.error(
@@ -328,11 +331,28 @@ class SqlService {
    */
   static async insertWithExplicitTypes(connection, tableName, record) {
     try {
+      console.log(
+        "Record antes de sanitizar:",
+        JSON.stringify(record, null, 2)
+      );
+
       // Obtener tipos de columnas
       const columnTypes = await this.getColumnTypes(connection, tableName);
 
-      // Validar y sanitizar el registro
+      // Validar y sanitizar el registro con mejor manejo de nulos y undefined
       const sanitizedRecord = this.validateRecord(record);
+
+      console.log(
+        "Record después de sanitizar:",
+        JSON.stringify(sanitizedRecord, null, 2)
+      );
+
+      // Verificar que no haya valores undefined en el registro sanitizado
+      for (const key in sanitizedRecord) {
+        if (sanitizedRecord[key] === undefined) {
+          sanitizedRecord[key] = null; // Convertir undefined a null explícitamente
+        }
+      }
 
       // Preparar la consulta
       const columns = Object.keys(sanitizedRecord)
@@ -342,6 +362,9 @@ class SqlService {
         .map((k) => `@${k}`)
         .join(", ");
 
+      console.log("Columnas:", columns);
+      console.log("Parámetros:", paramNames);
+
       const sql = `
         INSERT INTO ${tableName} (${columns})
         VALUES (${paramNames});
@@ -349,8 +372,21 @@ class SqlService {
         SELECT @@ROWCOUNT AS rowsAffected;
       `;
 
-      // Ejecutar la consulta con tipos explícitos
-      return await this.query(connection, sql, sanitizedRecord, columnTypes);
+      // Ejecutar la consulta con tipos explícitos y mejor manejo de errores
+      try {
+        return await this.query(connection, sql, sanitizedRecord, columnTypes);
+      } catch (queryError) {
+        console.error(
+          `Error en la consulta SQL para inserción: ${queryError.message}`
+        );
+        // Agregar más información sobre los parámetros
+        console.error(`Tabla: ${tableName}`);
+        console.error(`SQL: ${sql}`);
+        console.error(
+          `Parámetros: ${JSON.stringify(sanitizedRecord, null, 2)}`
+        );
+        throw queryError;
+      }
     } catch (error) {
       console.error(
         `Error en insertWithExplicitTypes para tabla ${tableName}:`,
