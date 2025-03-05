@@ -382,26 +382,83 @@ async function insertLoadsDetail(req, res) {
 async function insertLoadsTrapaso(req, res) {
   try {
     const { route, loadId, salesData } = req.body;
-    console.log(req.body);
-    // Validación básica
-    if (
-      !route ||
-      !salesData ||
-      !Array.isArray(salesData) ||
-      salesData.length === 0
-    ) {
+    console.log("Datos recibidos:", {
+      route,
+      loadId,
+      salesData: salesData ? `${salesData.length} registros` : "no data",
+    });
+
+    // Validación más detallada
+    if (!route) {
       return res.status(400).json({
-        message: "Parámetros faltantes: route y salesData son requeridos.",
+        message: "Parámetro 'route' es requerido",
       });
     }
 
-    // El parámetro loadId se ignora, ya que la lógica de traspaso genera un nuevo consecutivo.
-    const result = await traspasoBodega({ route, salesData });
+    if (!salesData || !Array.isArray(salesData)) {
+      return res.status(400).json({
+        message: "Parámetro 'salesData' debe ser un array",
+      });
+    }
 
-    return res.json(result);
+    if (salesData.length === 0) {
+      return res.status(400).json({
+        message: "No hay datos de ventas para procesar",
+      });
+    }
+
+    // Filtrar datos inválidos
+    const validSalesData = salesData.filter(
+      (item) =>
+        item &&
+        item.Code_Product &&
+        typeof item.Quantity !== "undefined" &&
+        item.Quantity !== null &&
+        Number(item.Quantity) > 0
+    );
+
+    if (validSalesData.length === 0) {
+      return res.status(400).json({
+        message:
+          "No hay productos válidos para traspasar. Cada producto debe tener Code_Product y Quantity > 0",
+      });
+    }
+
+    console.log(
+      `Procesando traspaso con ${validSalesData.length} productos válidos`
+    );
+
+    // Intentar usar el método alternativo si el principal falla
+    try {
+      const result = await traspasoBodega({ route, salesData: validSalesData });
+      return res.json(result);
+    } catch (primaryError) {
+      console.error("Error en método principal:", primaryError);
+      console.log("Intentando método alternativo...");
+
+      // Intentar con método alternativo
+      try {
+        const fallbackResult = await realizarTraspaso({
+          route,
+          salesData: validSalesData,
+        });
+        return res.json({
+          ...fallbackResult,
+          message: "Procesado con método alternativo",
+        });
+      } catch (fallbackError) {
+        throw new Error(
+          `Falló método principal: ${primaryError.message}. Falló método alternativo: ${fallbackError.message}`
+        );
+      }
+    }
   } catch (error) {
-    console.error("Error en insertLoads controller:", error);
-    return res.status(500).json({ message: error.message });
+    console.error("Error en insertLoadsTrapaso:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+      stackTrace: error.stack,
+    });
   }
 }
 

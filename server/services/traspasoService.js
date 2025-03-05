@@ -470,4 +470,4 @@ async function traspasoBodega({ route, salesData }) {
   }
 }
 
-module.exports = { traspasoBodega, realizarTraspaso, enviarCorreoTraspaso };
+module.exports = { traspasoBodega, enviarCorreoTraspaso };
