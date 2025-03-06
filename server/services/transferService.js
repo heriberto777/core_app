@@ -535,6 +535,53 @@ const executeTransfer = async (taskId) => {
           };
         }
 
+        // Verificar si la tarea tiene habilitada la opción de borrar antes de insertar
+        if (task.clearBeforeInsert) {
+          try {
+            logger.info(
+              `🧹 Borrando registros existentes de la tabla ${name} antes de insertar`
+            );
+            const deletedCount = await SqlService.clearTableData(
+              server2Connection,
+              `dbo.[${name}]`
+            );
+            logger.info(
+              `✅ Se eliminaron ${deletedCount} registros de la tabla ${name}`
+            );
+          } catch (clearError) {
+            logger.error(
+              `❌ Error al borrar registros de la tabla ${name}:`,
+              clearError
+            );
+
+            // Decidir si continuar o abortar
+            if (
+              clearError.message &&
+              clearError.message.includes("no existe")
+            ) {
+              logger.warn(
+                `⚠️ La tabla no existe, continuando con la inserción...`
+              );
+            } else {
+              // Si es otro tipo de error, puedes decidir si continuar o abortar
+              logger.warn(
+                `⚠️ Error al borrar registros pero continuando con la inserción...`
+              );
+
+              // Si quieres abortar en caso de error:
+              await TransferTask.findByIdAndUpdate(taskId, {
+                status: "failed",
+              });
+              sendProgress(taskId, -1);
+              return {
+                success: false,
+                message: "Error al borrar registros existentes",
+                errorDetail: clearError.message,
+              };
+            }
+          }
+        }
+
         // 8. Configurar claves para identificar registros
         const primaryKeys = validationRules?.existenceCheck?.key
           ? [validationRules.existenceCheck.key]
@@ -1139,6 +1186,65 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
       progress: 0,
     });
     sendProgress(taskId, 0);
+
+    // Si la tarea tiene habilitada la opción de borrar antes de insertar
+    if (task.clearBeforeInsert) {
+      try {
+        logger.info(
+          `🧹 Borrando registros existentes de la tabla ${task.name} antes de insertar en lotes`
+        );
+
+        // Conectar a server2 solo para el borrado si aún no estamos conectados
+        let tempConnection = null;
+        let shouldCloseConnection = false;
+
+        if (!server2Connection) {
+          logger.debug(
+            `Conectando temporalmente a server2 para borrado en ${task.name}...`
+          );
+          tempConnection = await connectToDB("server2", 30000);
+          shouldCloseConnection = true;
+        }
+
+        const connectionToUse = server2Connection || tempConnection;
+
+        // Realizar el borrado
+        const deletedCount = await SqlService.clearTableData(
+          connectionToUse,
+          `dbo.[${task.name}]`
+        );
+        logger.info(
+          `✅ Se eliminaron ${deletedCount} registros de la tabla ${task.name}`
+        );
+
+        // Cerrar conexión temporal si fue creada
+        if (shouldCloseConnection && tempConnection) {
+          await closeConnection(tempConnection);
+          logger.debug(
+            `Conexión temporal cerrada después del borrado en ${task.name}`
+          );
+        }
+      } catch (clearError) {
+        logger.error(
+          `❌ Error al borrar registros de la tabla ${task.name}:`,
+          clearError
+        );
+
+        // Decidir si continuar o abortar
+        if (clearError.message && clearError.message.includes("no existe")) {
+          logger.warn(`⚠️ La tabla no existe, continuando con la inserción...`);
+        } else {
+          logger.warn(
+            `⚠️ Error al borrar registros pero continuando con la inserción...`
+          );
+
+          // Si quieres abortar en caso de error:
+          await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
+          sendProgress(taskId, -1);
+          throw new Error(`Error al borrar registros existentes: ${clearError.message}`);
+        }
+      }
+    }
 
     // 3) Conectarse a la DB de destino con manejo mejorado de conexiones
     try {

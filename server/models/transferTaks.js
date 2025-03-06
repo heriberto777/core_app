@@ -59,6 +59,12 @@ const transferTaskSchema = new mongoose.Schema({
     enum: ["normal", "batchesSSE"],
     default: "normal",
   },
+  clearBeforeInsert: {
+    type: Boolean,
+    default: false,
+    description:
+      "Si se deben borrar registros de la tabla destino antes de insertar",
+  },
 
   // Ejemplo de flag para ejecutar un procedimiento almacenado antes
   executeProcedureBefore: { type: Boolean, default: false },

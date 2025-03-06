@@ -33,6 +33,93 @@ class SqlService {
   }
 
   /**
+   * Borra todos los registros de una tabla antes de insertar
+   * @param {Connection} connection - Conexión a la base de datos
+   * @param {string} tableName - Nombre de la tabla a limpiar
+   * @returns {Promise<number>} - Número de registros eliminados
+   */
+  static async clearTableData(connection, tableName) {
+    try {
+      // Limpiar el nombre de la tabla (quitar corchetes si existen)
+      const cleanTableName = tableName.replace(/[\[\]]/g, "");
+
+      // Verificar si la tabla existe
+      const tableExists = await this.tableExists(connection, cleanTableName);
+      if (!tableExists) {
+        console.warn(
+          `⚠️ La tabla ${cleanTableName} no existe, no se puede borrar`
+        );
+        return 0;
+      }
+
+      // Obtener conteo de registros antes del borrado
+      const countSql = `SELECT COUNT(*) AS record_count FROM ${tableName} WITH (NOLOCK)`;
+      const countResult = await this.query(connection, countSql);
+      const recordCount = countResult.recordset[0]?.record_count || 0;
+
+      // Si no hay registros, no es necesario borrar
+      if (recordCount === 0) {
+        console.log(
+          `Tabla ${cleanTableName} ya está vacía, no se requiere borrado`
+        );
+        return 0;
+      }
+
+      // Ejecutar el borrado
+      const deleteSql = `DELETE FROM ${tableName}`;
+      const result = await this.query(connection, deleteSql);
+      const deletedCount = result.rowsAffected || 0;
+
+      console.log(
+        `✅ Borrado completado en ${cleanTableName}: ${deletedCount} registros eliminados`
+      );
+      return deletedCount;
+    } catch (error) {
+      console.error(`Error al borrar registros de ${tableName}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Verifica si una tabla existe en la base de datos
+   * @param {Connection} connection - Conexión a la base de datos
+   * @param {string} tableName - Nombre de la tabla a verificar
+   * @returns {Promise<boolean>} - true si la tabla existe, false en caso contrario
+   */
+  static async tableExists(connection, tableName) {
+    try {
+      // Extraer esquema y nombre de tabla
+      let schema = "dbo";
+      let table = tableName;
+
+      if (tableName.includes(".")) {
+        const parts = tableName.replace(/[\[\]]/g, "").split(".");
+        schema = parts[0];
+        table = parts[1];
+      } else {
+        // Si no hay esquema, eliminar corchetes si existen
+        table = table.replace(/[\[\]]/g, "");
+      }
+
+      const sql = `
+      SELECT COUNT(*) AS exists_count
+      FROM INFORMATION_SCHEMA.TABLES 
+      WHERE TABLE_SCHEMA = '${schema}' 
+      AND TABLE_NAME = '${table}'
+    `;
+
+      const result = await this.query(connection, sql);
+      return result.recordset[0].exists_count > 0;
+    } catch (error) {
+      console.error(
+        `Error verificando existencia de tabla ${tableName}:`,
+        error
+      );
+      return false;
+    }
+  }
+
+  /**
    * Sanitiza un objeto de parámetros para evitar problemas con valores undefined y cadenas vacías
    * @param {Object} params - Objeto de parámetros original
    * @returns {Object} - Objeto de parámetros sanitizado
@@ -385,45 +472,6 @@ class SqlService {
     }
 
     return sanitized;
-  }
-
-  /**
-   * Verifica si una tabla existe en la base de datos
-   * @param {Connection} connection - Conexión a la base de datos
-   * @param {string} tableName - Nombre de la tabla a verificar
-   * @returns {Promise<boolean>} - true si la tabla existe, false en caso contrario
-   */
-  static async tableExists(connection, tableName) {
-    try {
-      // Extraer esquema y nombre de tabla
-      let schema = "dbo";
-      let table = tableName;
-
-      if (tableName.includes(".")) {
-        const parts = tableName.replace(/[\[\]]/g, "").split(".");
-        schema = parts[0];
-        table = parts[1];
-      } else {
-        // Si no hay esquema, eliminar corchetes si existen
-        table = table.replace(/[\[\]]/g, "");
-      }
-
-      const sql = `
-      SELECT COUNT(*) AS exists_count
-      FROM INFORMATION_SCHEMA.TABLES 
-      WHERE TABLE_SCHEMA = '${schema}' 
-      AND TABLE_NAME = '${table}'
-    `;
-
-      const result = await this.query(connection, sql);
-      return result.recordset[0].exists_count > 0;
-    } catch (error) {
-      console.error(
-        `Error verificando existencia de tabla ${tableName}:`,
-        error
-      );
-      return false;
-    }
   }
 
   /**

@@ -170,11 +170,18 @@ ${JSON.stringify(task?.parameters || [], null, 2)}</textarea>
           }</textarea>
 
         <div class="swal2-checkbox-container">
-          <input id="swal-active" type="checkbox" ${
-            task?.active ? "checked" : ""
-          } />
-          <label for="swal-active">Activo</label>
-        </div>
+        <input id="swal-active" type="checkbox" ${
+          task?.active ? "checked" : ""
+        } />
+        <label for="swal-active">Activo</label>
+      </div>
+
+      <div class="swal2-checkbox-container">
+        <input id="swal-clearBeforeInsert" type="checkbox" ${
+          task?.clearBeforeInsert ? "checked" : ""
+        } />
+        <label for="swal-clearBeforeInsert">Borrar registros antes de insertar</label>
+      </div>
         
         <label class="swal2-label">Clave en Vista:</label>
         <input id="swal-postUpdateKeyView" class="swal2-input" placeholder="Ejemplo: Code_OfClient"
@@ -233,6 +240,8 @@ ${JSON.stringify(task?.parameters || [], null, 2)}</textarea>
                   .value.trim() || null,
             },
             active: document.getElementById("swal-active").checked,
+            clearBeforeInsert: document.getElementById("swal-clearBeforeInsert")
+              .checked,
           };
         } catch (error) {
           Swal.showValidationMessage(
