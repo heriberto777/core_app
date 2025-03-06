@@ -238,6 +238,34 @@ const executeTransfer = async (taskId) => {
   let duplicatedRecords = [];
   let columnTypes = null;
 
+  // Monitoring de memoria
+  const memoryUsage = process.memoryUsage();
+  logger.info(`Uso de memoria al inicio de transferencia:`, {
+    rss: `${Math.round(memoryUsage.rss / 1024 / 1024)} MB`,
+    heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)} MB`,
+    heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)} MB`,
+    external: `${Math.round(memoryUsage.external / 1024 / 1024)} MB`,
+  });
+
+  // Monitorear memoria cada 50 registros procesados
+  let processedCount = 0;
+  const memoryCheckInterval = 50;
+
+  // Dentro del bucle de procesamiento, añadir:
+  processedCount++;
+  if (processedCount % memoryCheckInterval === 0) {
+    // Liberar memoria no utilizada
+    if (global.gc) {
+      global.gc();
+    }
+
+    const currentMemory = process.memoryUsage();
+    logger.debug(`Uso de memoria (${processedCount} registros):`, {
+      rss: `${Math.round(currentMemory.rss / 1024 / 1024)} MB`,
+      heapUsed: `${Math.round(currentMemory.heapUsed / 1024 / 1024)} MB`,
+    });
+  }
+
   return await retry(
     async () => {
       try {
