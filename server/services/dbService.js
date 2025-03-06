@@ -555,14 +555,22 @@ const getPoolsStatus = () => {
 
   Object.keys(pools).forEach((serverKey) => {
     if (pools[serverKey]) {
-      status[serverKey] = {
-        available: pools[serverKey].availableObjectsCount(),
-        used:
-          pools[serverKey].getPoolSize() -
-          pools[serverKey].availableObjectsCount(),
-        total: pools[serverKey].getPoolSize(),
-        pendingAcquires: pools[serverKey].waitingClientsCount(),
-      };
+      try {
+        // Usar métodos compatibles con tedious-connection-pool
+        status[serverKey] = {
+          available: pools[serverKey].available || 0,
+          used: pools[serverKey].borrowed || 0,
+          total: pools[serverKey].size || 0,
+          pending: pools[serverKey].pending || 0,
+        };
+      } catch (error) {
+        status[serverKey] = {
+          error: `Error al obtener estadísticas: ${error.message}`,
+          available: 0,
+          used: 0,
+          total: 0,
+        };
+      }
     }
   });
 
