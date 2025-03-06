@@ -1,8 +1,22 @@
 const mongoose = require("mongoose");
 const { Connection } = require("tedious");
-const SqlService = require("./tediousService");
+const { SqlService } = require("./tediousService");
 const DBConfig = require("../models/dbConfigModel");
 const logger = require("./logger");
+const ConnectionPool = require("tedious-connection-pool");
+
+// Configuración del pool
+const poolConfig = {
+  min: 2, // Mínimo de conexiones en el pool
+  max: 10, // Máximo de conexiones en el pool
+  log: false, // Desactivar logs internos del pool
+  acquireTimeout: 30000, // Timeout para adquirir conexión (30s)
+  idleTimeoutMillis: 300000, // Timeout de conexiones inactivas (5min)
+  retryDelay: 5000, // Delay entre reintentos (5s)
+};
+
+// Objeto para almacenar los pools
+const pools = {};
 
 /**
  * Obtiene la configuración de la base de datos desde MongoDB
@@ -90,6 +104,115 @@ const connectToMongoDB = async () => {
 };
 
 /**
+ * Inicializa los pools de conexiones
+ */
+function initPools() {
+  if (!global.SQL_CONFIG) {
+    logger.warn("SQL_CONFIG no está definido, no se pueden inicializar pools");
+    return false;
+  }
+
+  try {
+    // Crear pool para server1
+    if (global.SQL_CONFIG.server1) {
+      pools.server1 = new ConnectionPool(poolConfig, global.SQL_CONFIG.server1);
+
+      pools.server1.on("error", (err) => {
+        logger.error("Error en pool de server1:", err);
+      });
+    }
+
+    // Crear pool para server2
+    if (global.SQL_CONFIG.server2) {
+      pools.server2 = new ConnectionPool(poolConfig, global.SQL_CONFIG.server2);
+
+      pools.server2.on("error", (err) => {
+        logger.error("Error en pool de server2:", err);
+      });
+    }
+
+    logger.info("✅ Pools de conexiones inicializados correctamente");
+    return true;
+  } catch (error) {
+    logger.error("❌ Error al inicializar pools de conexiones:", error);
+    return false;
+  }
+}
+
+/**
+ * Cierra todos los pools de conexiones
+ */
+function closePools() {
+  Object.keys(pools).forEach((serverKey) => {
+    if (pools[serverKey]) {
+      try {
+        pools[serverKey].drain();
+        logger.info(`Pool para ${serverKey} cerrado correctamente`);
+      } catch (error) {
+        logger.error(`Error al cerrar pool para ${serverKey}:`, error);
+      }
+    }
+  });
+}
+
+/**
+ * Obtiene una conexión del pool
+ * @param {string} serverKey - Clave del servidor (server1 o server2)
+ * @returns {Promise<Connection>} - Conexión del pool
+ */
+async function getPoolConnection(serverKey) {
+  return new Promise((resolve, reject) => {
+    if (!pools[serverKey]) {
+      return reject(new Error(`Pool para ${serverKey} no está inicializado`));
+    }
+
+    pools[serverKey].acquire((err, connection) => {
+      if (err) {
+        logger.error(`Error al obtener conexión de ${serverKey}:`, err);
+        return reject(err);
+      }
+
+      // Agregar un manejador de error a la conexión
+      connection.on("error", (err) => {
+        logger.error(`Error en conexión de ${serverKey}:`, err);
+      });
+
+      logger.debug(`Conexión obtenida del pool para ${serverKey}`);
+
+      // Marcar la conexión como proveniente del pool
+      connection._pooled = true;
+
+      resolve(connection);
+    });
+  });
+}
+
+/**
+ * Devuelve una conexión al pool
+ * @param {string} serverKey - Clave del servidor (server1 o server2)
+ * @param {Connection} connection - Conexión a devolver
+ */
+function releasePoolConnection(serverKey, connection) {
+  if (!pools[serverKey]) {
+    logger.warn(
+      `Pool para ${serverKey} no está inicializado, no se puede liberar la conexión`
+    );
+    return;
+  }
+
+  if (!connection._pooled) {
+    logger.warn(`La conexión no parece provenir del pool para ${serverKey}`);
+  }
+
+  try {
+    pools[serverKey].release(connection);
+    logger.debug(`Conexión devuelta al pool para ${serverKey}`);
+  } catch (error) {
+    logger.warn(`Error al devolver conexión al pool para ${serverKey}:`, error);
+  }
+}
+
+/**
  * Carga las configuraciones desde MongoDB al inicio
  */
 const loadConfigurations = async () => {
@@ -108,6 +231,9 @@ const loadConfigurations = async () => {
     }
 
     logger.info("✅ Configuración de bases de datos cargada en memoria.");
+
+    // Inicializar los pools de conexiones
+    initPools();
 
     // Inicializar las conexiones globales si no existen
     if (!global.server1Connection) {
@@ -270,6 +396,49 @@ const closeConnection = async (connection) => {
 };
 
 /**
+ * Obtiene una conexión del pool o crea una nueva si no hay pool disponible
+ * @param {string} serverKey - Clave del servidor (server1 o server2)
+ * @param {number} timeoutMs - Timeout en milisegundos
+ * @returns {Promise<Connection>} - Conexión
+ */
+const getConnection = async (serverKey, timeoutMs = 30000) => {
+  try {
+    // Intentar obtener conexión del pool
+    return await getPoolConnection(serverKey);
+  } catch (poolError) {
+    logger.warn(
+      `No se pudo obtener conexión del pool para ${serverKey}, intentando conexión directa:`,
+      poolError.message
+    );
+
+    // Fallback a conexión directa (tu método actual)
+    return await connectToDB(serverKey, timeoutMs);
+  }
+};
+
+/**
+ * Libera o cierra una conexión dependiendo de su origen
+ * @param {Connection} connection - Conexión a liberar o cerrar
+ * @param {string} serverKey - Clave del servidor
+ */
+const releaseConnection = async (connection, serverKey) => {
+  if (!connection) return;
+
+  try {
+    // Verificar si la conexión proviene del pool
+    if (connection._pooled) {
+      // Devolver al pool
+      releasePoolConnection(serverKey, connection);
+    } else {
+      // Cerrar conexión directa
+      await closeConnection(connection);
+    }
+  } catch (error) {
+    logger.error(`Error al liberar conexión para ${serverKey}:`, error);
+  }
+};
+
+/**
  * Obtiene o crea una conexión global para un servidor
  */
 const getGlobalConnection = async (serverKey) => {
@@ -292,6 +461,39 @@ const getGlobalConnection = async (serverKey) => {
       err
     );
     throw err;
+  }
+};
+
+/**
+ * Ejecuta una consulta SQL utilizando una conexión del pool
+ * @param {string} serverKey - Clave del servidor
+ * @param {string} query - Consulta SQL
+ * @param {Object} params - Parámetros
+ * @returns {Promise<Object>} - Resultado de la consulta
+ */
+const executePoolQuery = async (serverKey, query, params = {}) => {
+  let connection = null;
+
+  try {
+    // Obtener conexión del pool
+    connection = await getConnection(serverKey);
+
+    // Ejecutar la consulta
+    const result = await SqlService.query(connection, query, params);
+
+    // Devolver la conexión al pool o cerrarla
+    await releaseConnection(connection, serverKey);
+
+    return result;
+  } catch (error) {
+    logger.error(`Error en executePoolQuery para ${serverKey}:`, error);
+
+    // En caso de error, asegurarse de liberar la conexión
+    if (connection) {
+      await releaseConnection(connection, serverKey);
+    }
+
+    throw error;
   }
 };
 
@@ -321,6 +523,52 @@ const testDirectConnection = async (serverKey = "server2") => {
   }
 };
 
+/**
+ * Prueba una conexión usando el pool
+ */
+const testPoolConnection = async (serverKey = "server2") => {
+  try {
+    const result = await executePoolQuery(
+      serverKey,
+      "SELECT @@VERSION as version"
+    );
+
+    logger.info(`✅ Prueba de pool exitosa para ${serverKey}`);
+
+    return {
+      success: true,
+      server: serverKey,
+      version: result.recordset[0]?.version || "Unknown",
+      fromPool: true,
+    };
+  } catch (error) {
+    logger.error(`❌ Prueba de pool fallida para ${serverKey}:`, error);
+    throw error;
+  }
+};
+
+/**
+ * Obtiene el estado de los pools de conexiones
+ */
+const getPoolsStatus = () => {
+  const status = {};
+
+  Object.keys(pools).forEach((serverKey) => {
+    if (pools[serverKey]) {
+      status[serverKey] = {
+        available: pools[serverKey].availableObjectsCount(),
+        used:
+          pools[serverKey].getPoolSize() -
+          pools[serverKey].availableObjectsCount(),
+        total: pools[serverKey].getPoolSize(),
+        pendingAcquires: pools[serverKey].waitingClientsCount(),
+      };
+    }
+  });
+
+  return status;
+};
+
 module.exports = {
   loadConfigurations,
   connectToDB,
@@ -329,4 +577,14 @@ module.exports = {
   getGlobalConnection,
   testDirectConnection,
   getDBConfig,
+  // Funciones del pool
+  initPools,
+  closePools,
+  getPoolConnection,
+  releasePoolConnection,
+  getConnection,
+  releaseConnection,
+  executePoolQuery,
+  testPoolConnection,
+  getPoolsStatus,
 };

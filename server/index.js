@@ -6,11 +6,12 @@ const http = require("http");
 const {
   connectToMongoDB,
   loadConfigurations,
-  connectToDB,
-  testEnvBasedConnection,
   testDirectConnection,
+  getPoolsStatus,
+  testPoolConnection,
+  initPools,
+  closePools,
 } = require("./services/dbService");
-const { Connection } = require("tedious");
 const { startCronJob } = require("./services/cronService");
 const Config = require("./models/configModel");
 const { API_VERSION } = require("./config");
@@ -43,42 +44,26 @@ const isPortInUse = async (port) => {
   });
 };
 
-// Función para conectar a SQL Server con timeout
-const connectWithTimeout = async (serverKey, timeoutMs = 10000) => {
-  return new Promise(async (resolve) => {
-    // Flag para controlar si ya se resolvió la promesa
-    let resolved = false;
+// Determina si un error es fatal y requiere terminar el proceso
+function isFatalError(error) {
+  // Personaliza esta lógica según tus necesidades
 
-    // Timer para el timeout
-    const timer = setTimeout(() => {
-      if (!resolved) {
-        console.warn(
-          `⚠️ Timeout al conectar a ${serverKey} después de ${timeoutMs}ms`
-        );
-        resolved = true;
-        resolve(null);
-      }
-    }, timeoutMs);
+  const fatalErrorTypes = [
+    "RangeError",
+    "TypeError", // Solo ciertos tipos podrían ser fatales
+  ];
 
-    try {
-      const connection = await connectToDB(serverKey);
-      // Si llegamos aquí, la conexión fue exitosa
-      if (!resolved) {
-        clearTimeout(timer);
-        resolved = true;
-        console.log(`✅ Conexión a ${serverKey} establecida correctamente`);
-        resolve(connection);
-      }
-    } catch (error) {
-      if (!resolved) {
-        clearTimeout(timer);
-        resolved = true;
-        console.warn(`⚠️ Error conectando a ${serverKey}:`, error.message);
-        resolve(null);
-      }
-    }
-  });
-};
+  // Si es un error de memoria, es fatal
+  if (
+    error.message &&
+    (error.message.includes("heap out of memory") ||
+      error.message.includes("JavaScript heap out of memory"))
+  ) {
+    return true;
+  }
+
+  return false;
+}
 
 const startServer = async () => {
   try {
@@ -101,6 +86,10 @@ const startServer = async () => {
     await loadConfigurations();
     console.log("✅ Configuraciones cargadas.");
 
+    console.log("Inicializando pools de conexiones...");
+    initPools();
+    console.log("✅ Pools de conexiones inicializados.");
+
     console.log("Intentando conexiones a SQL Server con timeout...");
     try {
       // Ejecutando diagnóstico de conexión directa con tedious
@@ -115,77 +104,26 @@ const startServer = async () => {
         );
       } catch (directErr) {
         console.error(`❌ Prueba directa fallida: ${directErr.message}`);
-        // Intentar con fallback explícito sin instanceName
-        try {
-          console.log("Intentando conexión de fallback sin instanceName...");
-          const fallbackConfig = {
-            server: process.env.SERVER2_HOST,
-            authentication: {
-              type: "default",
-              options: {
-                userName: process.env.SERVER2_USER,
-                password: process.env.SERVER2_PASS,
-              },
-            },
-            options: {
-              database: process.env.SERVER2_DB,
-              trustServerCertificate: true,
-              rowCollectionOnRequestCompletion: true,
-            },
-          };
-
-          const connection = new Connection(fallbackConfig);
-
-          // Probar conexión
-          await new Promise((resolve, reject) => {
-            connection.on("connect", (err) => {
-              if (err) {
-                console.error("Fallback también falló:", err.message);
-                reject(err);
-              } else {
-                console.log("✅ Conexión de fallback exitosa");
-                connection.close();
-                resolve();
-              }
-            });
-
-            connection.connect();
-          });
-        } catch (fallbackErr) {
-          console.error("Fallback también falló:", fallbackErr.message);
-        }
       }
 
-      // Usar Promise.all pero con timeouts para evitar bloqueos
-      const connections = await Promise.all([
-        connectWithTimeout("server1", 15000),
-        connectWithTimeout("server2", 15000),
-      ]);
-
-      // Verificar resultados de conexiones
-      if (connections[0]) {
-        console.log("✅ Conexión a server1 exitosa");
-        // Cerrar conexión para no mantenerla abierta innecesariamente
-        try {
-          await connections[0].close();
-        } catch (err) {
-          console.warn("No se pudo cerrar la conexión a server1:", err.message);
-        }
-      } else {
-        console.warn("⚠️ No se pudo conectar a server1, pero continuamos");
+      // Ejecutando diagnóstico usando el pool
+      console.log("Ejecutando diagnóstico de conexión usando el pool...");
+      try {
+        const poolTestResult = await testPoolConnection("server2");
+        console.log(
+          `✅ Prueba de pool exitosa. Servidor: ${poolTestResult.server}`
+        );
+        console.log(
+          `Versión SQL: ${poolTestResult.version.substring(0, 50)}...`
+        );
+      } catch (poolErr) {
+        console.error(`❌ Prueba de pool fallida: ${poolErr.message}`);
       }
 
-      if (connections[1]) {
-        console.log("✅ Conexión a server2 exitosa");
-        // Cerrar conexión
-        try {
-          await connections[1].close();
-        } catch (err) {
-          console.warn("No se pudo cerrar la conexión a server2:", err.message);
-        }
-      } else {
-        console.warn("⚠️ No se pudo conectar a server2, pero continuamos");
-      }
+      // Mostrar estado de los pools
+      console.log("Estado de los pools de conexiones:");
+      const poolStatus = getPoolsStatus();
+      console.log(JSON.stringify(poolStatus, null, 2));
 
       console.log(
         "✅ Pruebas de conexión a SQL Server completadas (con o sin éxito)"
@@ -352,34 +290,60 @@ const startServer = async () => {
   }
 };
 
-// Manejar errores no capturados
+// Manejar errores no capturados de manera más robusta
 process.on("uncaughtException", (error) => {
-  console.error("❌ Error no capturado:", error);
-  // En producción, posiblemente quieras reiniciar el servidor
-  if (!isDev && server) {
-    console.log(
-      "Intentando cerrar el servidor gracefully después de un error no capturado..."
-    );
-    server.close(() => {
-      console.log("Servidor cerrado. Saliendo...");
-      process.exit(1);
-    });
+  console.error("⚠️ Error no capturado:", error);
 
-    // Por si server.close() nunca termina
-    setTimeout(() => {
-      console.log("Forzando salida después de error no capturado");
-      process.exit(1);
-    }, 5000);
+  // Intenta registrar el error en el sistema de logging
+  try {
+    const logger = require("./services/logger");
+    logger.error("Error no capturado en el proceso principal:", error);
+  } catch (logError) {
+    console.error("No se pudo registrar el error en el logger:", logError);
+  }
+
+  // En producción, no queremos que el servidor se detenga por errores no críticos
+  if (isFatalError(error)) {
+    console.error("Error fatal detectado. Terminando proceso...");
+
+    // Cerrar pools de conexiones antes de terminar
+    try {
+      closePools();
+    } catch (e) {
+      console.error("Error al cerrar pools antes de terminar:", e);
+    }
+
+    process.exit(1);
   }
 });
 
+// Manejar rechazos de promesas no capturados
 process.on("unhandledRejection", (reason, promise) => {
-  console.error("❌ Rechazo de promesa no manejado:", reason);
+  console.warn("⚠️ Promesa rechazada no manejada:", reason);
+
+  // Intenta registrar en el logger
+  try {
+    const logger = require("./services/logger");
+    logger.warn("Promesa rechazada no manejada:", reason);
+  } catch (logError) {
+    console.error("No se pudo registrar el rechazo en el logger:", logError);
+  }
+
+  // No terminamos el proceso por rechazos de promesas no manejados
 });
 
 // Manejo de señales para cierre graceful
 process.on("SIGTERM", () => {
   console.log("Recibida señal SIGTERM. Cerrando servidor gracefully...");
+
+  // Cerrar pools de conexiones
+  try {
+    closePools();
+    console.log("Pools de conexiones cerrados correctamente");
+  } catch (poolError) {
+    console.error("Error al cerrar pools de conexiones:", poolError);
+  }
+
   if (server) {
     server.close(() => {
       console.log("Servidor cerrado. Proceso terminando...");
@@ -399,6 +363,15 @@ process.on("SIGTERM", () => {
 // Manejar Ctrl+C
 process.on("SIGINT", () => {
   console.log("Recibida señal SIGINT (Ctrl+C). Cerrando servidor...");
+
+  // Cerrar pools de conexiones
+  try {
+    closePools();
+    console.log("Pools de conexiones cerrados correctamente");
+  } catch (poolError) {
+    console.error("Error al cerrar pools de conexiones:", poolError);
+  }
+
   if (server) {
     server.close(() => {
       console.log("Servidor cerrado. Saliendo...");
