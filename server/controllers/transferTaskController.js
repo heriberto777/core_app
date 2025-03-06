@@ -59,7 +59,8 @@ const upsertTransferTaskController = async (req, res) => {
       validationRules,
       executionMode,
       postUpdateQuery,
-      postUpdateMapping, // Nuevo campo agregado
+      postUpdateMapping,
+      clearBeforeInsert, // Nueva propiedad
     } = req.body;
 
     if (!name || !query) {
@@ -78,9 +79,9 @@ const upsertTransferTaskController = async (req, res) => {
       validationRules: validationRules || {},
       executionMode: executionMode || "normal",
       postUpdateQuery: postUpdateQuery || null,
-      postUpdateMapping: postUpdateMapping || {}, // Guardar el mapeo de claves
+      postUpdateMapping: postUpdateMapping || {},
+      clearBeforeInsert: clearBeforeInsert || false, // Guardar la nueva propiedad
     };
-
     // Llamas al servicio
     const result = await upsertTransferTaskService(taskData);
 
