@@ -388,6 +388,45 @@ class SqlService {
   }
 
   /**
+   * Verifica si una tabla existe en la base de datos
+   * @param {Connection} connection - Conexión a la base de datos
+   * @param {string} tableName - Nombre de la tabla a verificar
+   * @returns {Promise<boolean>} - true si la tabla existe, false en caso contrario
+   */
+  static async tableExists(connection, tableName) {
+    try {
+      // Extraer esquema y nombre de tabla
+      let schema = "dbo";
+      let table = tableName;
+
+      if (tableName.includes(".")) {
+        const parts = tableName.replace(/[\[\]]/g, "").split(".");
+        schema = parts[0];
+        table = parts[1];
+      } else {
+        // Si no hay esquema, eliminar corchetes si existen
+        table = table.replace(/[\[\]]/g, "");
+      }
+
+      const sql = `
+      SELECT COUNT(*) AS exists_count
+      FROM INFORMATION_SCHEMA.TABLES 
+      WHERE TABLE_SCHEMA = '${schema}' 
+      AND TABLE_NAME = '${table}'
+    `;
+
+      const result = await this.query(connection, sql);
+      return result.recordset[0].exists_count > 0;
+    } catch (error) {
+      console.error(
+        `Error verificando existencia de tabla ${tableName}:`,
+        error
+      );
+      return false;
+    }
+  }
+
+  /**
    * Inserta un registro en la base de datos con tipos explícitos
    * @param {Connection} connection - Conexión a la base de datos
    * @param {string} tableName - Nombre de la tabla
@@ -396,6 +435,34 @@ class SqlService {
    */
   static async insertWithExplicitTypes(connection, tableName, record) {
     try {
+      // Verificar si la tabla existe antes de intentar insertar
+      const tableNameClean = tableName.replace(/[\[\]]/g, "");
+      const exists = await this.tableExists(connection, tableNameClean);
+
+      if (!exists) {
+        const error = new Error(
+          `La tabla ${tableNameClean} no existe en la base de datos`
+        );
+        this.logValidationError(
+          tableNameClean,
+          "table_not_found",
+          record,
+          error
+        );
+
+        // Corregir errores comunes de ortografía en nombres de tablas
+        let suggestedName = tableNameClean;
+        if (tableNameClean.includes("conctacts")) {
+          suggestedName = tableNameClean.replace("conctacts", "contacts");
+          console.warn(
+            `⚠️ Posible error ortográfico en nombre de tabla. ¿Querías decir "${suggestedName}"?`
+          );
+        }
+
+        // Si no existe la tabla, no continuar
+        throw error;
+      }
+
       if (process.env.NODE_ENV !== "production") {
         console.log(
           "Record antes de sanitizar:",
