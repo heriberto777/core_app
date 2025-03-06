@@ -19,6 +19,7 @@ export const ENV = {
     TRANSFER: "task",
     LOAD: "load",
     CONFIG_TASK: "config",
+    EMAIL_RECIPIENTS: "email-recipients",
   },
   JWT: {
     ACCESS: "access",

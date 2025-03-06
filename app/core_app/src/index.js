@@ -1,5 +1,6 @@
 export * from './App';
 export * from './api/authApi';
+export * from './api/emailRecipientApi';
 export * from './api/transferApi';
 export * from './api/userApi';
 export * from './components/atomos/ContentHeader';
@@ -10,6 +11,7 @@ export * from './components/meleculas/ListaMenuDesplegable';
 export * from './components/organismos/DataUser';
 export * from './components/organismos/Header';
 export * from './components/organismos/Sidebar';
+export * from './components/templates/ControlPlanilla';
 export * from './components/templates/Dashboard';
 export * from './components/templates/LoadsTasks';
 export * from './components/templates/LoginForm';

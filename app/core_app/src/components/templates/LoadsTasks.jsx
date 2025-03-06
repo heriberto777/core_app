@@ -1,8 +1,8 @@
 import styled from "styled-components";
 import { Header, TransferApi, useAuth, useFetchData } from "../../index";
 import { useState } from "react";
-
 import Swal from "sweetalert2";
+import { FaPlay, FaSync, FaList, FaTable } from "react-icons/fa";
 
 const cnnApi = new TransferApi();
 
@@ -18,6 +18,7 @@ export function LoadsTasks() {
     setData: setTasks,
     loading,
     error,
+    refetch: fetchTasks,
   } = useFetchData(() => cnnApi.getTasks(accessToken), [accessToken], false, 0);
 
   // Aquí forzamos que siempre cumplan executionMode = "batchesSSE"
@@ -78,7 +79,7 @@ export function LoadsTasks() {
     // ──────────────────────────────────────────────────────────────────────────
     await new Promise((resolve, reject) => {
       Swal.fire({
-        title: `Obteniendo la ventas para - ${loadId}`,
+        title: `Obteniendo ventas para - ${loadId}`,
         html: `
         <div style="text-align:left;">
           <label>Fecha:</label>
@@ -175,7 +176,7 @@ export function LoadsTasks() {
       });
     });
 
-    // Si llegamos aquí, es que el usuario hizo clic en “Siguiente” y tenemos salesData
+    // Si llegamos aquí, es que el usuario hizo clic en "Siguiente" y tenemos salesData
     if (!salesData.length) {
       const noSales = await Swal.fire({
         icon: "info",
@@ -279,7 +280,7 @@ export function LoadsTasks() {
 
           // (Ya tenemos loadId, no hace falta volver a pedirlo)
 
-          // Habilitar “Siguiente” cuando se ingrese la ruta
+          // Habilitar "Siguiente" cuando se ingrese la ruta
           inputRoute.addEventListener("input", () => {
             btnSiguienteLoad.disabled = !inputRoute.value.trim();
           });
@@ -411,106 +412,146 @@ export function LoadsTasks() {
           }}
         />
       </header>
+
       <section className="area1">
         <ToolbarContainer>
-          {/* <SearchSection>
-            <Button color="#28a745" onClick={() => startLoadProcess()}>
-              {" "}
-              ➕ Iniciar
-            </Button>
+          <InfoSection>
+            <h2>Gestor de Tareas de Carga</h2>
+            <p>
+              Administre y ejecute las tareas de carga de camiones y traspasos
+              entre bodegas.
+            </p>
+          </InfoSection>
+        </ToolbarContainer>
+      </section>
+
+      <section className="area2">
+        <ActionsContainer>
+          <SearchInputContainer>
             <SearchInput
               type="text"
               placeholder="Buscar tarea..."
               value={search}
               onChange={handleSearch}
             />
-          </SearchSection> */}
+          </SearchInputContainer>
 
-          <OptionsContainer>
-            <ViewSection>
-              <ViewButton color="#28a745" onClick={() => setViewMode("cards")}>
-                🃏 Cards
+          <ButtonsRow>
+            <RefreshButton onClick={fetchTasks}>
+              <FaSync /> Refrescar
+            </RefreshButton>
+
+            <ViewButtonsGroup>
+              <ViewButton
+                $active={viewMode === "cards"}
+                onClick={() => setViewMode("cards")}
+                title="Ver como tarjetas"
+              >
+                <FaList /> Cards
               </ViewButton>
-              <ViewButton color="#ffc107" onClick={() => setViewMode("table")}>
-                📊 Table
+              <ViewButton
+                $active={viewMode === "table"}
+                onClick={() => setViewMode("table")}
+                title="Ver como tabla"
+              >
+                <FaTable /> Tabla
               </ViewButton>
-            </ViewSection>
-          </OptionsContainer>
-        </ToolbarContainer>
+            </ViewButtonsGroup>
+          </ButtonsRow>
+        </ActionsContainer>
       </section>
-      <section className="area2"></section>
+
       <section className="main">
-        <ContainerTask>
-          {loading ? (
-            <p>Cargando tareas...</p>
-          ) : viewMode === "cards" ? (
-            <CardsContainer>
-              {tasks
-                .filter((task) => task.executionMode === "batchesSSE")
-                .map((task) => (
-                  <Card
-                    key={task._id}
-                    selected={selectedTask && selectedTask._id === task._id}
+        {loading && (
+          <LoadingContainer>
+            <LoadingMessage>Cargando tareas...</LoadingMessage>
+          </LoadingContainer>
+        )}
+
+        {error && <ErrorMessage>{error}</ErrorMessage>}
+
+        {!loading && !error && filteredTasks.length === 0 && (
+          <EmptyMessage>
+            No hay tareas de carga disponibles. Las tareas deben tener modo de
+            ejecución "batchesSSE".
+          </EmptyMessage>
+        )}
+
+        {!loading && filteredTasks.length > 0 && viewMode === "cards" && (
+          <CardsContainer>
+            {filteredTasks.map((task) => (
+              <Card
+                key={task._id}
+                $selected={selectedTask && selectedTask._id === task._id}
+                $active={task.active}
+              >
+                <CardHeader>
+                  <CardTitle>{task.name}</CardTitle>
+                  <StatusBadge $status={task.status} $active={task.active}>
+                    {task.status === "completed" && "✅ Completada"}
+                    {task.status === "running" && "🔄 En Progreso"}
+                    {task.status === "error" && "⚠️ Error"}
+                    {!task.status && (task.active ? "Activa" : "Inactiva")}
+                  </StatusBadge>
+                </CardHeader>
+
+                <CardContent>
+                  <CardInfo>
+                    <InfoItem>
+                      <InfoLabel>Tipo:</InfoLabel>
+                      <InfoValue>{task.type}</InfoValue>
+                    </InfoItem>
+
+                    <InfoItem>
+                      <InfoLabel>Modo de ejecución:</InfoLabel>
+                      <InfoValue>{task.executionMode}</InfoValue>
+                    </InfoItem>
+
+                    {task.transferType && (
+                      <InfoItem>
+                        <InfoLabel>Dirección:</InfoLabel>
+                        <InfoValue>
+                          {task.transferType === "up" && "Transfer Up ↑"}
+                          {task.transferType === "down" && "Transfer Down ↓"}
+                          {task.transferType === "general" && "General"}
+                        </InfoValue>
+                      </InfoItem>
+                    )}
+                  </CardInfo>
+
+                  <CardQuerySection>
+                    <QueryLabel>Consulta SQL:</QueryLabel>
+                    <QueryBox readOnly value={task.query} />
+                  </CardQuerySection>
+
+                  {/* Barra de progreso para tareas en ejecución */}
+                  {task.status === "running" && (
+                    <ProgressBar>
+                      <ProgressFill style={{ width: `${task.progress}%` }}>
+                        {task.progress}%
+                      </ProgressFill>
+                    </ProgressBar>
+                  )}
+                </CardContent>
+
+                <CardActions>
+                  <ActionButton
+                    $color="#17a2b8"
+                    onClick={() => startLoadProcess(task.name)}
+                    disabled={task.status === "running" || !task.active}
+                    title="Iniciar proceso de carga"
                   >
-                    <CardContent>
-                      <h3>{task.name}</h3>
+                    <FaPlay /> Iniciar Proceso
+                  </ActionButton>
+                </CardActions>
+              </Card>
+            ))}
+          </CardsContainer>
+        )}
 
-                      {/* Estado con iconos */}
-                      <StatusContainer>
-                        {task.status === "completed" && (
-                          <SuccessIcon>✅ Completada</SuccessIcon>
-                        )}
-                        {task.status === "running" && (
-                          <LoadingIcon>🔄 En Progreso</LoadingIcon>
-                        )}
-                        {task.status === "error" && (
-                          <ErrorIcon>⚠️ Error</ErrorIcon>
-                        )}
-                      </StatusContainer>
-
-                      <p>
-                        <strong>Estado:</strong>{" "}
-                        {task.active ? "Activo" : "Inactivo"}
-                      </p>
-                      <p>
-                        <strong>Tipo:</strong> {task.type}
-                      </p>
-
-                      <Textarea readOnly value={task.query} />
-
-                      {/* Barra de progreso si está corriendo */}
-                      {task.status === "running" && (
-                        <ProgressBar>
-                          <ProgressFill style={{ width: `${task.progress}%` }}>
-                            {task.progress}%
-                          </ProgressFill>
-                        </ProgressBar>
-                      )}
-
-                      <ButtonGroup>
-                        {/* Botón "Editar" */}
-                        {/* <Button
-                          color="#007bff"
-                          onClick={() => addOrEditTask(task)}
-                          disabled={task.status === "running"}
-                        >
-                          ✏ Editar
-                        </Button> */}
-                        {/* Botón "Iniciar" */}
-                        <ButtonAcction
-                          color="#17a2b8"
-                          onClick={() => startLoadProcess(task.name)}
-                          disabled={task.status === "running"}
-                        >
-                          🚀 Iniciar
-                        </ButtonAcction>
-                      </ButtonGroup>
-                    </CardContent>
-                  </Card>
-                ))}
-            </CardsContainer>
-          ) : (
-            <Table>
+        {!loading && filteredTasks.length > 0 && viewMode === "table" && (
+          <TableContainer>
+            <StyledTable>
               <thead>
                 <tr>
                   <th>Nombre</th>
@@ -521,44 +562,56 @@ export function LoadsTasks() {
               </thead>
               <tbody>
                 {filteredTasks.map((task) => (
-                  <tr key={task._id}>
+                  <tr key={task._id} className={!task.active ? "disabled" : ""}>
                     <td>{task.name}</td>
-                    <td>{task.active ? "Activo" : "Inactivo"}</td>
+                    <td>
+                      <StatusBadge
+                        $status={task.status}
+                        $active={task.active}
+                        $small
+                      >
+                        {task.status === "completed" && "✅ Completada"}
+                        {task.status === "running" && "🔄 En Progreso"}
+                        {task.status === "error" && "⚠️ Error"}
+                        {!task.status && (task.active ? "Activa" : "Inactiva")}
+                      </StatusBadge>
+                    </td>
                     <td>{task.type}</td>
                     <td>
-                      <ButtonGroup>
-                        <ButtonAcction
-                          color="#17a2b8"
+                      <ActionButtons>
+                        <TableActionButton
+                          title="Iniciar proceso de carga"
+                          $color="#17a2b8"
                           onClick={() => startLoadProcess(task.name)}
-                          disabled={task.status === "running"}
+                          disabled={task.status === "running" || !task.active}
                         >
-                          🚀 Iniciar
-                        </ButtonAcction>
-                      </ButtonGroup>
+                          <FaPlay />
+                        </TableActionButton>
+                      </ActionButtons>
                     </td>
                   </tr>
                 ))}
               </tbody>
-            </Table>
-          )}
-        </ContainerTask>
+            </StyledTable>
+          </TableContainer>
+        )}
       </section>
     </Container>
   );
 }
+// Estilos del Contenedor Principal
 const Container = styled.div`
   min-height: 100vh;
   padding: 15px;
   width: 100%;
   background-color: ${(props) => props.theme.bg};
-  color: ${({ theme }) => theme.text};
+  color: ${(props) => props.theme.text};
   display: grid;
-
   grid-template:
     "header" 90px
-    "area1" 50px
-    "area2" 80px
-    "main" auto;
+    "area1" auto
+    "area2" auto
+    "main" 1fr;
 
   @media (max-width: 768px) {
     grid-template:
@@ -594,9 +647,8 @@ const Container = styled.div`
     grid-area: area2;
     display: flex;
     align-items: center;
-    justify-content: center;
-    margin-top: 20px;
-    margin-bottom: 15px;
+    justify-content: flex-end;
+    margin-bottom: 20px;
 
     @media (max-width: 768px) {
       margin-top: 15px;
@@ -625,237 +677,309 @@ const Container = styled.div`
   }
 `;
 
-const ContainerTask = styled.div`
-  width: 90%;
-  max-width: 1200px;
-  margin: 0px;
-  padding: 10px;
-  display: flex;
-  flex-direction: center;
-  align-items: center;
-`;
-
-const Button = styled.button`
-  padding: 10px 15px;
-  font-size: 14px;
-  border: none;
-  color: white;
-  border-radius: 5px;
-  cursor: pointer;
-  background-color: ${(props) => props.color || "#28a745"};
-
-  &:hover {
-    opacity: 0.8;
-  }
-
-  &:disabled {
-    background-color: #ccc;
-    cursor: not-allowed;
-  }
-
-  /* 📌 En pantallas pequeñas, los botones ocupan el 100% del ancho */
-  @media (max-width: 768px) {
-    width: 100%;
-  }
-`;
-
-const ButtonAcction = styled.button`
-  width: 100%;
-  padding: 10px 15px;
-  font-size: 14px;
-  border: none;
-  color: white;
-  border-radius: 5px;
-  cursor: pointer;
-  background-color: ${(props) => props.color || "#28a745"};
-
-  &:hover {
-    opacity: 0.8;
-  }
-
-  &:disabled {
-    background-color: #ccc;
-    cursor: not-allowed;
-  }
-
-  /* 📌 En pantallas pequeñas, los botones ocupan el 100% del ancho */
-  @media (max-width: 768px) {
-    width: 100%;
-  }
-`;
-
-const CardsContainer = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 20px;
-  width: 100%;
-`;
-
-const Card = styled.div`
-  width: 300px;
-  background: ${(props) => (props.selected ? "#f0f8ff" : "#fff")};
-  padding: 20px;
-  border-radius: 10px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  cursor: pointer;
-  &:hover {
-    background-color: #f9f9f9;
-  }
-`;
-
-const CardContent = styled.div`
-  text-align: center;
-`;
-
-const Textarea = styled.textarea`
-  width: 100%;
-  height: 80px;
-  margin-top: 10px;
-  padding: 5px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-  resize: none;
-`;
-const ButtonGroup = styled.div`
-  display: flex;
-  gap: 5px;
-  margin-top: 10px;
-`;
-
-const Table = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 20px;
-
-  th,
-  td {
-    border: 1px solid #ddd;
-    padding: 10px;
-    text-align: left;
-  }
-
-  th {
-    background-color: #f4f4f4;
-  }
-`;
-
+// Sección de Información
 const ToolbarContainer = styled.div`
   display: flex;
   flex-direction: column;
-  justify-content: space-between;
-  align-items: center;
-  width: ${({ sidebarOpen }) => (sidebarOpen ? "calc(100% - 250px)" : "100%")};
-  margin-left: ${({ sidebarOpen }) => (sidebarOpen ? "250px" : "0")};
-  transition: margin-left 0.3s ease-in-out, width 0.3s ease-in-out;
-  margin-bottom: 5px;
-  gap: 10px;
   width: 100%;
+  padding: 15px 0;
+`;
 
-  /* 📌 En pantallas pequeñas, los elementos se apilan en columna */
+const InfoSection = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 5px;
+  text-align: center;
+
+  h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: ${({ theme }) => theme.title || theme.text};
+  }
+
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.textSecondary || "#666"};
+  }
+`;
+
+// Barra de Acciones
+const ActionsContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+
   @media (max-width: 768px) {
-    flex-direction: column;
-    align-items: stretch;
-    width: 90%;
-    margin-left: 0;
-  }
-`;
-
-const SearchSection = styled.div`
-  display: flex;
-  width: 100%;
-  justify-content: center;
-  gap: 10px;
-
-  @media (max-width: 600px) {
-    flex-direction: column;
-    align-items: center;
-  }
-`;
-
-const SearchInput = styled.input`
-  padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  width: 85%;
-
-  @media (max-width: 600px) {
-    width: 90%;
-  }
-`;
-const OptionsContainer = styled.div`
-  display: flex;
-  justify-content: space-between;
-  width: 100%;
-  max-width: 600px;
-  flex-wrap: wrap;
-  gap: 10px;
-
-  @media (max-width: 600px) {
-    flex-direction: column;
-    align-items: center;
-  }
-`;
-const ViewSection = styled.div`
-  display: flex;
-  gap: 10px;
-
-  @media (max-width: 600px) {
-    width: 90%;
     justify-content: center;
   }
 `;
 
-const ViewButton = styled.button`
-  padding: 8px 12px;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  background-color: ${(props) => props.color || "#28a745"};
-  cursor: pointer;
-
-  &:hover {
-    opacity: 0.8;
-  }
-
-  @media (max-width: 600px) {
-    width: 45%;
-  }
-`;
-// CSS STATUS
-const StatusContainer = styled.div`
+const SearchInputContainer = styled.div`
   display: flex;
-  align-items: center;
-  gap: 10px;
+  width: 100%;
+  justify-content: center;
   margin-bottom: 10px;
 `;
 
-const SuccessIcon = styled.span`
-  color: #28a745;
-  font-weight: bold;
+const SearchInput = styled.input`
+  width: 100%;
+  max-width: 800px;
+  padding: 10px 15px;
+  border: 1px solid ${({ theme }) => theme.border || "#ccc"};
+  border-radius: 4px;
+  font-size: 14px;
+  color: ${({ theme }) => theme.text};
+  background-color: ${({ theme }) => theme.inputBg || "#fff"};
+
+  &:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+  }
 `;
 
-const LoadingIcon = styled.span`
-  color: #ffc107;
-  font-weight: bold;
-  animation: blink 1s infinite alternate;
+const ButtonsRow = styled.div`
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+
+  @media (max-width: 480px) {
+    flex-direction: column;
+    width: 100%;
+  }
+`;
+
+const ViewButtonsGroup = styled.div`
+  display: flex;
+  margin-left: 10px;
+`;
+
+// Se ha reemplazado por ViewButtonsGroup
+
+const RefreshButton = styled.button`
+  background-color: #17a2b8;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 10px 15px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 0.3s;
+
+  &:hover {
+    background-color: #138496;
+  }
+
+  @media (max-width: 480px) {
+    width: 100%;
+  }
+`;
+
+const ViewButton = styled.button`
+  background-color: ${(props) => (props.$active ? "#6c757d" : "#f8f9fa")};
+  color: ${(props) => (props.$active ? "white" : "#212529")};
+  border: 1px solid #dee2e6;
+  border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
+
+  &:hover {
+    background-color: ${(props) => (props.$active ? "#5a6268" : "#e2e6ea")};
+  }
+
+  @media (max-width: 480px) {
+    flex: 1;
+  }
+`;
+
+// Contenedores de Carga, Error y Mensaje Vacío
+const LoadingContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+`;
+
+const LoadingMessage = styled.div`
+  padding: 20px;
+  text-align: center;
+  color: ${({ theme }) => theme.textSecondary || "#666"};
+`;
+
+const ErrorMessage = styled.div`
+  padding: 20px;
+  text-align: center;
+  color: #dc3545;
+  background-color: rgba(220, 53, 69, 0.1);
+  border-radius: 8px;
+  margin: 20px 0;
+`;
+
+const EmptyMessage = styled.div`
+  padding: 30px;
+  text-align: center;
+  background-color: ${({ theme }) => theme.cardBg || "#fff"};
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+`;
+
+// Vista de Tarjetas
+const CardsContainer = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: center;
+  padding: 10px;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+`;
+
+const Card = styled.div`
+  width: 320px;
+  background-color: ${({ theme }) => theme.cardBg || "#fff"};
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-left: 4px solid
+    ${(props) =>
+      props.$selected ? "#007bff" : props.$active ? "#28a745" : "#6c757d"};
+  opacity: ${(props) => (props.$active ? 1 : 0.7)};
+  transition: all 0.2s;
+
+  &:hover {
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+  }
+`;
+
+const CardHeader = styled.div`
+  padding: 15px;
+  border-bottom: 1px solid ${({ theme }) => theme.border || "#eee"};
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: ${({ theme }) => theme.cardHeaderBg || "#f8f9fa"};
+`;
+
+const CardTitle = styled.h3`
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: ${({ theme }) => theme.title || theme.text};
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 10px;
+`;
+
+const StatusBadge = styled.div`
+  padding: ${(props) => (props.$small ? "3px 8px" : "5px 10px")};
+  border-radius: 50px;
+  font-size: ${(props) => (props.$small ? "12px" : "14px")};
+  font-weight: 500;
+  color: white;
+  background-color: ${(props) => {
+    if (!props.$active) return "#6c757d";
+    switch (props.$status) {
+      case "completed":
+        return "#28a745";
+      case "running":
+        return "#ffc107";
+      case "error":
+        return "#dc3545";
+      default:
+        return "#17a2b8";
+    }
+  }};
+  display: flex;
+  align-items: center;
+  gap: 5px;
+  flex-shrink: 0;
+  min-width: 80px;
+  justify-content: center;
+  animation: ${(props) =>
+    props.$status === "running" ? "blink 1s infinite alternate" : "none"};
 
   @keyframes blink {
     from {
       opacity: 1;
     }
     to {
-      opacity: 0.4;
+      opacity: 0.6;
     }
   }
 `;
 
-const ErrorIcon = styled.span`
-  color: #dc3545;
-  font-weight: bold;
+const CardContent = styled.div`
+  padding: 15px;
+  margin: 10px;
+  flex: 1;
+`;
+
+const CardInfo = styled.div`
+  margin-bottom: 15px;
+`;
+
+const InfoItem = styled.div`
+  display: flex;
+  margin-bottom: 8px;
+  font-size: 14px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+`;
+
+const InfoLabel = styled.span`
+  font-weight: 500;
+  width: 120px;
+  color: ${({ theme }) => theme.textSecondary || "#666"};
+`;
+
+const InfoValue = styled.span`
+  flex: 1;
+`;
+
+const CardQuerySection = styled.div`
+  margin-top: 15px;
+`;
+
+const QueryLabel = styled.div`
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 5px;
+  color: ${({ theme }) => theme.textSecondary || "#666"};
+`;
+
+const QueryBox = styled.textarea`
+  width: 100%;
+  height: 80px;
+  padding: 8px;
+  border: 1px solid ${({ theme }) => theme.border || "#ddd"};
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 12px;
+  resize: none;
+  background-color: ${({ theme }) => theme.codeBg || "#f5f5f5"};
+  color: ${({ theme }) => theme.text};
 `;
 
 const ProgressBar = styled.div`
@@ -863,7 +987,7 @@ const ProgressBar = styled.div`
   height: 20px;
   background-color: #eee;
   border-radius: 10px;
-  margin-top: 10px;
+  margin-top: 15px;
   overflow: hidden;
 `;
 
@@ -871,8 +995,117 @@ const ProgressFill = styled.div`
   height: 100%;
   background-color: #17a2b8;
   text-align: center;
-  font-size: 14px;
+  font-size: 12px;
+  font-weight: 500;
   color: white;
   line-height: 20px;
   transition: width 0.5s ease-in-out;
+`;
+
+const CardActions = styled.div`
+  display: flex;
+  gap: 8px;
+  padding: 15px;
+  border-top: 1px solid ${({ theme }) => theme.border || "#eee"};
+  background-color: ${({ theme }) => theme.cardFooterBg || "#f8f9fa"};
+`;
+
+const ActionButton = styled.button`
+  flex: 1;
+  padding: 10px 15px;
+  border: none;
+  border-radius: 4px;
+  background-color: ${(props) => props.$color || "#6c757d"};
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background-color 0.2s;
+
+  &:hover {
+    filter: brightness(90%);
+  }
+
+  &:disabled {
+    background-color: #adb5bd;
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+`;
+
+// Vista de Tabla
+const TableContainer = styled.div`
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  overflow-x: auto;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+`;
+
+const StyledTable = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  background-color: ${({ theme }) => theme.cardBg || "#fff"};
+  color: ${({ theme }) => theme.text};
+
+  th,
+  td {
+    padding: 12px 15px;
+    text-align: left;
+  }
+
+  th {
+    background-color: ${({ theme }) => theme.tableHeader || "#f0f0f0"};
+    color: ${({ theme }) => theme.tableHeaderText || "#333"};
+    font-weight: bold;
+  }
+
+  tr {
+    border-bottom: 1px solid ${({ theme }) => theme.border || "#ddd"};
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    &:hover {
+      background-color: ${({ theme }) => theme.tableHover || "#f8f9fa"};
+    }
+
+    &.disabled {
+      opacity: 0.6;
+      background-color: ${({ theme }) => theme.tableDisabled || "#f2f2f2"};
+    }
+  }
+`;
+
+const ActionButtons = styled.div`
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+`;
+
+const TableActionButton = styled.button`
+  background: none;
+  border: none;
+  color: ${(props) => props.$color || "#0275d8"};
+  font-size: 16px;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 4px;
+  transition: all 0.2s;
+
+  &:hover {
+    color: ${(props) => props.$color || "#0275d8"};
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+
+  &:disabled {
+    color: #adb5bd;
+    cursor: not-allowed;
+  }
 `;

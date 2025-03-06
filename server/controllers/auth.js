@@ -59,12 +59,12 @@ async function login(req, res) {
       });
     }
 
-    console.log(
-      "Password",
-      password,
-      "pass usuarios Tabla",
-      userStore.password
-    );
+    // console.log(
+    //   "Password",
+    //   password,
+    //   "pass usuarios Tabla",
+    //   userStore.password
+    // );
     // 📌 Verificar la contraseña con `bcrypt.compare`
     const isPasswordValid = await bcrypt
       .compare(password, userStore.password)

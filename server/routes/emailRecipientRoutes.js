@@ -13,6 +13,6 @@ router.get("/:id", emailRecipientController.getRecipientById);
 router.post("/", emailRecipientController.createRecipient);
 router.put("/:id", emailRecipientController.updateRecipient);
 router.delete("/:id", emailRecipientController.deleteRecipient);
-router.patch("/:id/toggle-send", emailRecipientController.toggleSendStatus);
+router.put("/toggle-send/:id", emailRecipientController.toggleSendStatus);
 
 module.exports = router;

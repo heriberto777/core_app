@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useEffect, useState } from "react";
 
 export function useFetchData(
   fetchFunction,
@@ -6,32 +6,36 @@ export function useFetchData(
   autoRefresh = false,
   intervalTime = 5000
 ) {
-  const [data, setData] = useState([]); // Inicializa con un array vacío en lugar de undefined
+  const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      const response = await fetchFunction();
+      if (response) {
+        setData(response);
+      }
+    } catch (err) {
+      setError(err.message || "Error desconocido");
+    } finally {
+      setLoading(false);
+    }
+  };
 
   useEffect(() => {
     let isMounted = true;
 
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        const response = await fetchFunction();
-        if (isMounted && response) {
-          setData(response);
-        }
-      } catch (err) {
-        if (isMounted) setError(err.message || "Error desconocido");
-      } finally {
-        if (isMounted) setLoading(false);
-      }
+    const performFetch = async () => {
+      if (isMounted) await fetchData();
     };
 
-    fetchData();
+    performFetch();
 
     let interval;
     if (autoRefresh) {
-      interval = setInterval(fetchData, intervalTime);
+      interval = setInterval(performFetch, intervalTime);
     }
 
     return () => {
@@ -40,5 +44,11 @@ export function useFetchData(
     };
   }, dependencies);
 
-  return { data, setData, loading, error };
+  return {
+    data,
+    setData,
+    loading,
+    error,
+    refetch: fetchData, // Add this line to return the refetch function
+  };
 }

@@ -19,6 +19,7 @@ import {
   FaUndo,
   FaCashRegister,
   FaTasks,
+  FaEnvelope,
   FaTruckLoading,
 } from "react-icons/fa";
 import { BsArrowDown, BsArrowUpShort } from "react-icons/bs";
@@ -91,6 +92,7 @@ export const v = {
   iconoDevolucion: FaUndo,
   iconoCaja: FaCashRegister,
   iconoInicio: FaHome,
+  iconoCorreo: FaEnvelope,
   iconoGestion: FaUserFriends,
   flechaabajolarga: BsArrowDown,
   flechaarribalarga: BsArrowUpShort,

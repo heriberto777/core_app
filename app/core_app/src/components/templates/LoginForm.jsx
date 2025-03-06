@@ -16,7 +16,7 @@ export function LoginForm() {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    console.log(formData);
+    // console.log(formData);
     const validationErrors = validateForm(formData);
     setErrors(validationErrors);
 
@@ -32,7 +32,7 @@ export function LoginForm() {
     try {
       // setLoading(true);
       const response = await authController.login(formData);
-      console.log(response.state);
+      // console.log(response.state);
 
       if (response.state) {
         // ✅ Login exitoso
@@ -45,7 +45,7 @@ export function LoginForm() {
           icon: "error",
           title: "Error en inicio de sesión",
           text: response.msg,
-        });       
+        });
       }
     } catch (error) {
       console.log(error);

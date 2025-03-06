@@ -38,11 +38,17 @@ export const LinkArray = [
     roles: ["admin"],
   },
   {
-    label: "Usuarios",
-    icon: <v.iconoUser />,
-    to: "/usuarios",
+    label: "Receptores de correo",
+    icon: <v.iconoCorreo />,
+    to: "/email-recipients",
     roles: ["admin"],
   },
+  // {
+  //   label: "Usuarios",
+  //   icon: <v.iconoUser />,
+  //   to: "/usuarios",
+  //   roles: ["admin"],
+  // },
 ];
 
 export const SecondarylinksArray = [
