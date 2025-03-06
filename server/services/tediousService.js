@@ -331,10 +331,12 @@ class SqlService {
    */
   static async insertWithExplicitTypes(connection, tableName, record) {
     try {
-      console.log(
-        "Record antes de sanitizar:",
-        JSON.stringify(record, null, 2)
-      );
+      if (process.env.NODE_ENV !== "production") {
+        console.log(
+          "Record antes de sanitizar:",
+          JSON.stringify(record, null, 2)
+        );
+      }
 
       // Obtener tipos de columnas
       const columnTypes = await this.getColumnTypes(connection, tableName);
@@ -342,15 +344,43 @@ class SqlService {
       // Validar y sanitizar el registro con mejor manejo de nulos y undefined
       const sanitizedRecord = this.validateRecord(record);
 
-      console.log(
-        "Record después de sanitizar:",
-        JSON.stringify(sanitizedRecord, null, 2)
-      );
+      if (process.env.NODE_ENV !== "production") {
+        console.log(
+          "Record después de sanitizar:",
+          JSON.stringify(sanitizedRecord, null, 2)
+        );
+      }
 
       // Verificar que no haya valores undefined en el registro sanitizado
       for (const key in sanitizedRecord) {
         if (sanitizedRecord[key] === undefined) {
           sanitizedRecord[key] = null; // Convertir undefined a null explícitamente
+        }
+      }
+
+      // SOLUCIÓN GENERAL: Asegurar que todos los campos de tipo string tengan valores válidos
+      for (const key in sanitizedRecord) {
+        // Si el valor no es null pero debería ser string (o no sabemos qué tipo es)
+        if (sanitizedRecord[key] !== null) {
+          const paramType =
+            columnTypes[key] || this.determineType(sanitizedRecord[key]);
+
+          // Si es un tipo string o si no conocemos el tipo, asegurar que sea un string válido
+          if (
+            paramType?.name === "NVarChar" ||
+            paramType?.name === "VarChar" ||
+            paramType?.name === "Char" ||
+            paramType?.name === "NChar" ||
+            paramType?.name === "Text" ||
+            paramType?.name === "NText" ||
+            typeof sanitizedRecord[key] === "string"
+          ) {
+            // Asegurar que sea un string y recortar su longitud si es necesario
+            sanitizedRecord[key] = String(sanitizedRecord[key]).substring(
+              0,
+              4000
+            );
+          }
         }
       }
 
@@ -362,24 +392,84 @@ class SqlService {
         .map((k) => `@${k}`)
         .join(", ");
 
-      console.log("Columnas:", columns);
-      console.log("Parámetros:", paramNames);
+      if (process.env.NODE_ENV !== "production") {
+        console.log("Columnas:", columns);
+        console.log("Parámetros:", paramNames);
+      }
 
       const sql = `
-        INSERT INTO ${tableName} (${columns})
-        VALUES (${paramNames});
-        
-        SELECT @@ROWCOUNT AS rowsAffected;
-      `;
+      INSERT INTO ${tableName} (${columns})
+      VALUES (${paramNames});
+      
+      SELECT @@ROWCOUNT AS rowsAffected;
+    `;
 
-      // Ejecutar la consulta con tipos explícitos y mejor manejo de errores
+      // Ejecutar la consulta con manejo mejorado de errores
       try {
         return await this.query(connection, sql, sanitizedRecord, columnTypes);
       } catch (queryError) {
         console.error(
           `Error en la consulta SQL para inserción: ${queryError.message}`
         );
-        // Agregar más información sobre los parámetros
+
+        // Si es un error de validación de parámetros, intentar recuperación
+        if (
+          queryError.code === "EPARAM" &&
+          queryError.message.includes("Validation failed")
+        ) {
+          // Extraer el nombre del parámetro problemático
+          const paramMatch = queryError.message.match(/parameter '([^']+)'/);
+          const problemParam = paramMatch ? paramMatch[1] : null;
+
+          if (problemParam && problemParam in sanitizedRecord) {
+            console.warn(
+              `Parámetro problemático: ${problemParam}, intentando manejo alternativo`
+            );
+
+            // Crear nuevo conjunto de parámetros con el valor problemático como null
+            const recoveryParams = { ...sanitizedRecord };
+
+            // Guardar valor original para diagnóstico
+            const originalValue = recoveryParams[problemParam];
+
+            // Establecer el valor problemático como null
+            recoveryParams[problemParam] = null;
+
+            console.warn(
+              `Valor original de ${problemParam}: ${JSON.stringify(
+                originalValue
+              )}, cambiado a null`
+            );
+
+            try {
+              // Reintentar la consulta con el valor corregido
+              const result = await this.query(
+                connection,
+                sql,
+                recoveryParams,
+                columnTypes
+              );
+              console.warn(
+                `Inserción recuperada exitosamente después de establecer ${problemParam} a null`
+              );
+              return result;
+            } catch (recoveryError) {
+              console.error(
+                `Error en intento de recuperación: ${recoveryError.message}`
+              );
+              // Registrar detalles del error para diagnóstico posterior
+              this.logValidationError(
+                tableName,
+                problemParam,
+                originalValue,
+                queryError
+              );
+              throw recoveryError;
+            }
+          }
+        }
+
+        // Si no es un error de validación o no pudimos recuperar, registrar detalles y relanzar
         console.error(`Tabla: ${tableName}`);
         console.error(`SQL: ${sql}`);
         console.error(
@@ -393,6 +483,32 @@ class SqlService {
         error
       );
       throw error;
+    }
+  }
+
+  // Método auxiliar para registrar errores de validación para análisis posterior
+  static logValidationError(tableName, paramName, value, error) {
+    try {
+      const fs = require("fs");
+      const path = require("path");
+      const logDir = path.join(process.cwd(), "logs");
+      const logPath = path.join(logDir, "validation_errors.log");
+
+      // Crear directorio de logs si no existe
+      if (!fs.existsSync(logDir)) {
+        fs.mkdirSync(logDir, { recursive: true });
+      }
+
+      const timestamp = new Date().toISOString();
+      const logEntry = `[${timestamp}] Error en tabla ${tableName}, parámetro ${paramName}: ${
+        error.message
+      }\nValor: ${JSON.stringify(value)}\n\n`;
+
+      fs.appendFile(logPath, logEntry, (err) => {
+        if (err) console.error("Error al escribir log de validación:", err);
+      });
+    } catch (logError) {
+      console.error("Error al registrar error de validación:", logError);
     }
   }
 
