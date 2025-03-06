@@ -551,28 +551,46 @@ const testPoolConnection = async (serverKey = "server2") => {
  * Obtiene el estado de los pools de conexiones
  */
 const getPoolsStatus = () => {
+  if (!pools) {
+    return { error: "Pools no inicializados" };
+  }
+
   const status = {};
 
-  Object.keys(pools).forEach((serverKey) => {
-    if (pools[serverKey]) {
-      try {
-        // Usar métodos compatibles con tedious-connection-pool
-        status[serverKey] = {
-          available: pools[serverKey].available || 0,
-          used: pools[serverKey].borrowed || 0,
-          total: pools[serverKey].size || 0,
-          pending: pools[serverKey].pending || 0,
-        };
-      } catch (error) {
-        status[serverKey] = {
-          error: `Error al obtener estadísticas: ${error.message}`,
-          available: 0,
-          used: 0,
-          total: 0,
-        };
+  try {
+    Object.keys(pools).forEach((serverKey) => {
+      if (!pools[serverKey]) {
+        status[serverKey] = { status: "no inicializado" };
+        return;
       }
-    }
-  });
+
+      // Verificar si los métodos existen antes de llamarlos
+      status[serverKey] = {
+        status: "activo",
+        size:
+          typeof pools[serverKey].getPoolSize === "function"
+            ? pools[serverKey].getPoolSize()
+            : "n/a",
+        // Compatibilidad con diferentes versiones de pool de conexiones
+        available:
+          typeof pools[serverKey].availableObjectsCount === "function"
+            ? pools[serverKey].availableObjectsCount()
+            : pools[serverKey].available || "n/a",
+        used:
+          typeof pools[serverKey].getPoolSize === "function" &&
+          typeof pools[serverKey].availableObjectsCount === "function"
+            ? pools[serverKey].getPoolSize() -
+              pools[serverKey].availableObjectsCount()
+            : pools[serverKey].borrowed || "n/a",
+        pending:
+          typeof pools[serverKey].waitingClientsCount === "function"
+            ? pools[serverKey].waitingClientsCount()
+            : pools[serverKey].pending || "n/a",
+      };
+    });
+  } catch (error) {
+    status.error = `Error obteniendo estado: ${error.message}`;
+  }
 
   return status;
 };
