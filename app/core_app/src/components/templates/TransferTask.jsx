@@ -2,6 +2,17 @@ import styled from "styled-components";
 import { Header, TransferApi, useAuth, useFetchData } from "../../index";
 import { useEffect, useState } from "react";
 import Swal from "sweetalert2";
+import {
+  FaEdit,
+  FaTrash,
+  FaPlay,
+  FaPlus,
+  FaSync,
+  FaToggleOn,
+  FaToggleOff,
+  FaList,
+  FaTable,
+} from "react-icons/fa";
 
 const cnnApi = new TransferApi();
 
@@ -18,6 +29,7 @@ export function TransferTasks() {
     setData: setTasks,
     loading,
     error,
+    refetch: fetchTasks,
   } = useFetchData(
     () => cnnApi.getTasks(accessToken),
     [accessToken],
@@ -47,31 +59,41 @@ export function TransferTasks() {
   };
 
   const handleTimeChange = async () => {
-    // onTimeChange(executionTime);
-
     try {
+      // Mostrar indicador de carga
+      Swal.fire({
+        title: "Guardando horario...",
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
       const result = await cnnApi.addTimeTransfer(accessToken, {
         hour: executionTime,
       });
+
       if (result) {
-        // fetchTasks();
         Swal.fire(
           "Éxito",
-          `Tarea se ejecutara todo los dias ${executionTime} .`,
+          `Las tareas se ejecutarán todos los días a las ${executionTime}.`,
           "success"
         );
       } else {
-        throw new Error("No se pudo guardar la tarea.");
+        throw new Error("No se pudo guardar el horario.");
       }
     } catch (error) {
       console.log(error);
-      Swal.fire("Error", error, "error");
+      Swal.fire(
+        "Error",
+        error.message || "Ocurrió un error al guardar",
+        "error"
+      );
     }
   };
 
   const addOrEditTask = async (task = null) => {
     const isEdit = Boolean(task);
-    console.log("Hola mundo -> ", task);
 
     const { value: formValues } = await Swal.fire({
       title: isEdit ? "Editar Tarea" : "Nueva Tarea",
@@ -141,11 +163,11 @@ ${JSON.stringify(task?.parameters || [], null, 2)}</textarea>
         <input id="swal-existenceKey" class="swal2-input" placeholder="Ejemplo: Code_ofClient" 
           value="${task?.validationRules?.existenceCheck?.key || ""}" />
 
-       <label class="swal2-label">Consulta Post-Transferencia:</label>
-<textarea id="swal-postUpdateQuery" class="swal2-textarea"
-  placeholder="Ejemplo: UPDATE CATELLI.CLIENTE SET U_ESTATUS = 'Normal'">${
-    task?.postUpdateQuery || ""
-  }</textarea>
+        <label class="swal2-label">Consulta Post-Transferencia:</label>
+        <textarea id="swal-postUpdateQuery" class="swal2-textarea"
+          placeholder="Ejemplo: UPDATE CATELLI.CLIENTE SET U_ESTATUS = 'Normal'">${
+            task?.postUpdateQuery || ""
+          }</textarea>
 
         <div class="swal2-checkbox-container">
           <input id="swal-active" type="checkbox" ${
@@ -153,15 +175,16 @@ ${JSON.stringify(task?.parameters || [], null, 2)}</textarea>
           } />
           <label for="swal-active">Activo</label>
         </div>
+        
+        <label class="swal2-label">Clave en Vista:</label>
+        <input id="swal-postUpdateKeyView" class="swal2-input" placeholder="Ejemplo: Code_OfClient"
+          value="${task?.postUpdateMapping?.viewKey || ""}" />
+        
+        <label class="swal2-label">Clave en Tabla Real:</label>
+        <input id="swal-postUpdateKeyTable" class="swal2-input" placeholder="Ejemplo: CLIENTE"
+          value="${task?.postUpdateMapping?.tableKey || ""}" />
       </div>
-      <label class="swal2-label">Clave en Vista:</label>
-<input id="swal-postUpdateKeyView" class="swal2-input" placeholder="Ejemplo: Code_OfClient"
-  value="${task?.postUpdateMapping?.viewKey || ""}" />
-
-<label class="swal2-label">Clave en Tabla Real:</label>
-<input id="swal-postUpdateKeyTable" class="swal2-input" placeholder="Ejemplo: CLIENTE"
-  value="${task?.postUpdateMapping?.tableKey || ""}" />
-    `,
+      `,
       showCancelButton: true,
       confirmButtonText: isEdit ? "Actualizar" : "Agregar",
       preConfirm: () => {
@@ -200,7 +223,6 @@ ${JSON.stringify(task?.parameters || [], null, 2)}</textarea>
               document.getElementById("swal-postUpdateQuery").value.trim() ||
               null,
             postUpdateMapping: {
-              // 🔹 AHORA SÍ SE ENVÍA EL MAPEADO
               viewKey:
                 document
                   .getElementById("swal-postUpdateKeyView")
@@ -222,20 +244,32 @@ ${JSON.stringify(task?.parameters || [], null, 2)}</textarea>
 
     if (!formValues) return; // Usuario canceló
 
-    console.log(formValues);
-
     try {
+      // Mostrar indicador de carga
+      Swal.fire({
+        title: isEdit ? "Actualizando..." : "Creando...",
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
       // Llamada a tu API para guardar la tarea
       const result = await cnnApi.upsertTransferTask(accessToken, formValues);
 
       if (result) {
+        // Refrescar la lista
+        await fetchTasks();
+
         Swal.fire(
           "Éxito",
-          `Tarea ${isEdit ? "actualizada" : "creada"}.`,
+          `Tarea ${isEdit ? "actualizada" : "creada"} correctamente.`,
           "success"
         );
       } else {
-        throw new Error("No se pudo guardar la tarea.");
+        throw new Error(
+          `No se pudo ${isEdit ? "actualizar" : "crear"} la tarea.`
+        );
       }
     } catch (error) {
       console.log(error.message);
@@ -244,7 +278,6 @@ ${JSON.stringify(task?.parameters || [], null, 2)}</textarea>
   };
 
   const executeTask = async (taskId) => {
-    console.log(taskId);
     const selectedTask = tasks.find((task) => task._id === taskId);
     if (!selectedTask) {
       Swal.fire("Error", "No se encontró la tarea.", "error");
@@ -295,6 +328,15 @@ ${JSON.stringify(task?.parameters || [], null, 2)}</textarea>
     if (!confirm.isConfirmed) return;
 
     try {
+      // Mostrar indicador de carga
+      Swal.fire({
+        title: "Ejecutando tarea...",
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
       // 🔄 Actualizar estado antes de ejecutar
       setTasks((prevTasks) =>
         prevTasks.map((task) =>
@@ -334,24 +376,44 @@ ${JSON.stringify(task?.parameters || [], null, 2)}</textarea>
     }
   };
 
-  const deleteTask = async () => {
-    if (!selectedTask) return;
+  const deleteTask = async (taskId) => {
+    const taskToDelete = tasks.find((task) => task._id === taskId);
+    if (!taskToDelete) {
+      Swal.fire("Error", "No se encontró la tarea.", "error");
+      return;
+    }
+
     const confirmDelete = await Swal.fire({
       title: "¿Eliminar tarea?",
-      text: "Esta acción no se puede deshacer",
+      text: `¿Deseas eliminar la tarea "${taskToDelete.name}"? Esta acción no se puede deshacer.`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonText: "Sí, eliminar",
       cancelButtonText: "Cancelar",
+      confirmButtonColor: "#dc3545",
     });
 
     if (!confirmDelete.isConfirmed) return;
 
     try {
-      await axios.delete(`/api/tasks/${selectedTask._id}`);
-      setSelectedTask(null);
+      // Mostrar indicador de carga
+      Swal.fire({
+        title: "Eliminando...",
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
+      // Llamada a la API para eliminar
+      await cnnApi.deleteTask(accessToken, taskId);
+
+      // Refrescar la lista
+      await fetchTasks();
+
       Swal.fire("Eliminado", "La tarea ha sido eliminada.", "success");
     } catch (error) {
+      console.error("Error al eliminar tarea:", error);
       Swal.fire("Error", "No se pudo eliminar la tarea.", "error");
     }
   };
@@ -366,177 +428,285 @@ ${JSON.stringify(task?.parameters || [], null, 2)}</textarea>
           }}
         />
       </header>
+
       <section className="area1">
         <ToolbarContainer>
-          <SearchSection>
+          <InfoSection>
+            <h2>Gestor de Tareas de Transferencia</h2>
+            <p>
+              Configure y administre las tareas de transferencia de datos entre
+              sistemas.
+            </p>
+          </InfoSection>
+        </ToolbarContainer>
+      </section>
+
+      <section className="area2">
+        <ActionsContainer>
+          <SearchInputContainer>
             <SearchInput
               type="text"
               placeholder="Buscar tarea..."
               value={search}
               onChange={handleSearch}
             />
-            <Button color="#28a745" onClick={() => addOrEditTask()}>
-              ➕ Nuevo
-            </Button>
-          </SearchSection>
+          </SearchInputContainer>
 
-          <OptionsContainer>
-            <ViewSection>
-              <ViewButton color="#28a745" onClick={() => setViewMode("cards")}>
-                🃏 Cards
-              </ViewButton>
-              <ViewButton color="#ffc107" onClick={() => setViewMode("table")}>
-                📊 Table
-              </ViewButton>
-            </ViewSection>
+          <ButtonsRow>
+            <AddButton onClick={() => addOrEditTask()}>
+              <FaPlus /> Nueva Tarea
+            </AddButton>
 
-            <ScheduleSection>
-              <ScheduleText>Tareas programadas para la: </ScheduleText>
-              <TimeInput
-                type="time"
-                value={executionTime}
-                onChange={(e) => setExecutionTime(e.target.value)}
-              />
-              <ChangeButton onClick={handleTimeChange}>Cambiar</ChangeButton>
-            </ScheduleSection>
-          </OptionsContainer>
-        </ToolbarContainer>
+            <RefreshButton onClick={fetchTasks}>
+              <FaSync /> Refrescar
+            </RefreshButton>
+
+            <ViewButtonsGroup>
+              <ViewButton
+                $active={viewMode === "cards"}
+                onClick={() => setViewMode("cards")}
+                title="Ver como tarjetas"
+              >
+                <FaList /> Cards
+              </ViewButton>
+              <ViewButton
+                $active={viewMode === "table"}
+                onClick={() => setViewMode("table")}
+                title="Ver como tabla"
+              >
+                <FaTable /> Tabla
+              </ViewButton>
+            </ViewButtonsGroup>
+          </ButtonsRow>
+
+          <ScheduleRow>
+            <ScheduleText>Programar tareas para las:</ScheduleText>
+            <TimeInput
+              type="time"
+              value={executionTime}
+              onChange={(e) => setExecutionTime(e.target.value)}
+            />
+            <ScheduleButton onClick={handleTimeChange}>
+              Guardar horario
+            </ScheduleButton>
+          </ScheduleRow>
+        </ActionsContainer>
       </section>
+
       <section className="main">
-        <ContainerTask>
-          {loading ? (
-            <p>Cargando tareas...</p>
-          ) : viewMode === "cards" ? (
-            <CardsContainer>
-              {filteredTasks.map((task) => (
-                <Card
-                  key={task._id}
-                  selected={selectedTask && selectedTask._id === task._id}
-                >
-                  <CardContent>
-                    <h3>{task.name}</h3>
+        {loading && (
+          <LoadingContainer>
+            <LoadingMessage>Cargando tareas...</LoadingMessage>
+          </LoadingContainer>
+        )}
 
-                    {/* 🔹 Estado con iconos */}
-                    <StatusContainer>
-                      {task.status === "completed" && (
-                        <SuccessIcon>✅ Completada</SuccessIcon>
-                      )}
-                      {task.status === "running" && (
-                        <LoadingIcon>🔄 En Progreso</LoadingIcon>
-                      )}
-                      {task.status === "error" && (
-                        <ErrorIcon>⚠️ Error</ErrorIcon>
-                      )}
-                    </StatusContainer>
+        {error && <ErrorMessage>{error}</ErrorMessage>}
 
-                    <p>
-                      <strong>Estado:</strong>{" "}
-                      {task.active ? "Activo" : "Inactivo"}
-                    </p>
-                    <p>
-                      <strong>Tipo:</strong> {task.type}
-                    </p>
+        {!loading && !error && filteredTasks.length === 0 && (
+          <EmptyMessage>
+            No hay tareas disponibles. Haga clic en "Nueva Tarea" para crear
+            una.
+          </EmptyMessage>
+        )}
 
-                    <Textarea readOnly value={task.query} />
+        {!loading && filteredTasks.length > 0 && viewMode === "cards" && (
+          <CardsContainer>
+            {filteredTasks.map((task) => (
+              <Card
+                key={task._id}
+                $selected={selectedTask && selectedTask._id === task._id}
+                $active={task.active}
+              >
+                <CardHeader>
+                  <CardTitle>{task.name}</CardTitle>
+                  <StatusBadge $status={task.status} $active={task.active}>
+                    {task.status === "completed" && "✅ Completada"}
+                    {task.status === "running" && "🔄 En Progreso"}
+                    {task.status === "error" && "⚠️ Error"}
+                    {!task.status && (task.active ? "Activa" : "Inactiva")}
+                  </StatusBadge>
+                </CardHeader>
 
-                    {/* 🔹 Barra de progreso */}
-                    {task.status === "running" && (
-                      <ProgressBar>
-                        <ProgressFill style={{ width: `${task.progress}%` }}>
-                          {task.progress}%
-                        </ProgressFill>
-                      </ProgressBar>
+                <CardContent>
+                  <CardInfo>
+                    <InfoItem>
+                      <InfoLabel>Tipo:</InfoLabel>
+                      <InfoValue>{task.type}</InfoValue>
+                    </InfoItem>
+
+                    <InfoItem>
+                      <InfoLabel>Modo de ejecución:</InfoLabel>
+                      <InfoValue>{task.executionMode}</InfoValue>
+                    </InfoItem>
+
+                    {task.transferType && (
+                      <InfoItem>
+                        <InfoLabel>Dirección:</InfoLabel>
+                        <InfoValue>
+                          {task.transferType === "up" && "Transfer Up ↑"}
+                          {task.transferType === "down" && "Transfer Down ↓"}
+                          {task.transferType === "general" && "General"}
+                        </InfoValue>
+                      </InfoItem>
                     )}
+                  </CardInfo>
 
-                    <ButtonGroup>
-                      <Button
-                        color="#007bff"
-                        onClick={() => addOrEditTask(task)}
-                        disabled={task.status === "running"}
-                      >
-                        ✏ Editar
-                      </Button>
-                      <Button
-                        color="#dc3545"
-                        onClick={() => deleteTask(task._id)}
-                        disabled={task.status === "running"}
-                      >
-                        🗑 Eliminar
-                      </Button>
-                      <Button
-                        color="#17a2b8"
-                        onClick={() => executeTask(task._id)}
-                        disabled={
-                          task.status === "running" ||
-                          tasks.some(
-                            (t) =>
-                              t.status === "running" &&
-                              ["auto", "both"].includes(t.type)
-                          )
-                        }
-                      >
-                        🚀 Ejecutar Manual
-                      </Button>
-                    </ButtonGroup>
-                  </CardContent>
-                </Card>
-              ))}
-            </CardsContainer>
-          ) : (
-            <Table>
+                  <CardQuerySection>
+                    <QueryLabel>Consulta SQL:</QueryLabel>
+                    <QueryBox readOnly value={task.query} />
+                  </CardQuerySection>
+
+                  {/* Barra de progreso para tareas en ejecución */}
+                  {task.status === "running" && (
+                    <ProgressBar>
+                      <ProgressFill style={{ width: `${task.progress}%` }}>
+                        {task.progress}%
+                      </ProgressFill>
+                    </ProgressBar>
+                  )}
+                </CardContent>
+
+                <CardActions>
+                  <ActionButton
+                    $color="#007bff"
+                    onClick={() => addOrEditTask(task)}
+                    disabled={task.status === "running"}
+                    title="Editar tarea"
+                  >
+                    <FaEdit /> Editar
+                  </ActionButton>
+
+                  <ActionButton
+                    $color="#dc3545"
+                    onClick={() => deleteTask(task._id)}
+                    disabled={task.status === "running"}
+                    title="Eliminar tarea"
+                  >
+                    <FaTrash /> Eliminar
+                  </ActionButton>
+
+                  <ActionButton
+                    $color="#17a2b8"
+                    onClick={() => executeTask(task._id)}
+                    disabled={
+                      task.status === "running" ||
+                      !task.active ||
+                      (task.type !== "manual" && task.type !== "both") ||
+                      tasks.some(
+                        (t) =>
+                          t.status === "running" &&
+                          ["auto", "both"].includes(t.type)
+                      )
+                    }
+                    title="Ejecutar tarea manualmente"
+                  >
+                    <FaPlay /> Ejecutar
+                  </ActionButton>
+                </CardActions>
+              </Card>
+            ))}
+          </CardsContainer>
+        )}
+
+        {!loading && filteredTasks.length > 0 && viewMode === "table" && (
+          <TableContainer>
+            <StyledTable>
               <thead>
                 <tr>
                   <th>Nombre</th>
                   <th>Estado</th>
                   <th>Tipo</th>
+                  <th>Modo</th>
                   <th>Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {filteredTasks.map((task) => (
-                  <tr key={task._id}>
+                  <tr key={task._id} className={!task.active ? "disabled" : ""}>
                     <td>{task.name}</td>
-                    <td>{task.active ? "Activo" : "Inactivo"}</td>
-                    <td>{task.type}</td>
                     <td>
-                      <ButtonGroup>
-                        <Button
-                          color="#007bff"
+                      <StatusBadge
+                        $status={task.status}
+                        $active={task.active}
+                        $small
+                      >
+                        {task.status === "completed" && "✅ Completada"}
+                        {task.status === "running" && "🔄 En Progreso"}
+                        {task.status === "error" && "⚠️ Error"}
+                        {!task.status && (task.active ? "Activa" : "Inactiva")}
+                      </StatusBadge>
+                    </td>
+                    <td>{task.type}</td>
+                    <td>{task.executionMode}</td>
+                    <td>
+                      <ActionButtons>
+                        <TableActionButton
+                          title="Editar"
+                          $color="#007bff"
                           onClick={() => addOrEditTask(task)}
+                          disabled={task.status === "running"}
                         >
-                          ✏ Editar
-                        </Button>
-                        <Button color="#dc3545">🗑 Eliminar</Button>
-                      </ButtonGroup>
+                          <FaEdit />
+                        </TableActionButton>
+
+                        <TableActionButton
+                          title="Eliminar"
+                          $color="#dc3545"
+                          onClick={() => deleteTask(task._id)}
+                          disabled={task.status === "running"}
+                        >
+                          <FaTrash />
+                        </TableActionButton>
+
+                        <TableActionButton
+                          title="Ejecutar tarea"
+                          $color="#17a2b8"
+                          onClick={() => executeTask(task._id)}
+                          disabled={
+                            task.status === "running" ||
+                            !task.active ||
+                            (task.type !== "manual" && task.type !== "both") ||
+                            tasks.some(
+                              (t) =>
+                                t.status === "running" &&
+                                ["auto", "both"].includes(t.type)
+                            )
+                          }
+                        >
+                          <FaPlay />
+                        </TableActionButton>
+                      </ActionButtons>
                     </td>
                   </tr>
                 ))}
               </tbody>
-            </Table>
-          )}
-        </ContainerTask>
+            </StyledTable>
+          </TableContainer>
+        )}
       </section>
     </Container>
   );
 }
+
+// Estilos del Contenedor Principal
 const Container = styled.div`
   min-height: 100vh;
   padding: 15px;
   width: 100%;
   background-color: ${(props) => props.theme.bg};
-  color: ${({ theme }) => theme.text};
+  color: ${(props) => props.theme.text};
   display: grid;
   grid-template:
-    "header" 100px
-    "area1" 100px
-    /* "area2" 100px */
-    "main" auto;
+    "header" 90px
+    "area1" auto
+    "area2" auto
+    "main" 1fr;
 
   @media (max-width: 768px) {
     grid-template:
       "header" 70px
       "area1" auto
-      /* "area2" auto */
+      "area2" auto
       "main" 1fr;
     padding: 10px;
   }
@@ -545,7 +715,7 @@ const Container = styled.div`
     grid-template:
       "header" 60px
       "area1" auto
-      /* "area2" auto */
+      "area2" auto
       "main" 1fr;
     padding: 5px;
   }
@@ -559,13 +729,15 @@ const Container = styled.div`
 
   .area1 {
     grid-area: area1;
-    /* background-color: rgba(229, 67, 26, 0.14); */
-    display: flex;
-    flex-direction: row;
-    align-items: center;
-    justify-content: center;
-    margin-top: 20px;
     margin-bottom: 10px;
+  }
+
+  .area2 {
+    grid-area: area2;
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    margin-bottom: 20px;
 
     @media (max-width: 768px) {
       margin-top: 15px;
@@ -579,29 +751,9 @@ const Container = styled.div`
     }
   }
 
-  /* .area2 {
-    grid-area: area2;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    margin-top: 20px;
-    margin-bottom: 15px;
-
-    @media (max-width: 768px) {
-      margin-top: 15px;
-      margin-bottom: 10px;
-    }
-
-    @media (max-width: 480px) {
-      margin-top: 10px;
-      margin-bottom: 5px;
-      flex-direction: column;
-    }
-  } */
-
   .main {
     grid-area: main;
-    margin-top: 0px;
+    margin-top: 10px;
     overflow-x: auto;
 
     @media (max-width: 768px) {
@@ -614,272 +766,393 @@ const Container = styled.div`
   }
 `;
 
-const ContainerTask = styled.div`
-  width: 90%;
-  max-width: 1200px;
-  margin: 0px;
-  padding: 10px;
+// Sección de Información
+const ToolbarContainer = styled.div`
   display: flex;
-  flex-direction: center;
-  align-items: center;
+  flex-direction: column;
+  width: 100%;
+  padding: 15px 0;
 `;
 
-const Button = styled.button`
-  padding: 10px 15px;
-  font-size: 14px;
-  border: none;
-  color: white;
-  border-radius: 5px;
-  cursor: pointer;
-  background-color: ${(props) => props.color || "#28a745"};
+const InfoSection = styled.div`
+  display: flex;
+  flex-direction: column;
+  text-align: center;
+  gap: 5px;
 
-  &:hover {
-    opacity: 0.8;
+  h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    color: ${({ theme }) => theme.title || theme.text};
   }
 
-  &:disabled {
-    background-color: #ccc;
-    cursor: not-allowed;
+  p {
+    margin: 0;
+    color: ${({ theme }) => theme.textSecondary || "#666"};
   }
+`;
 
-  /* 📌 En pantallas pequeñas, los botones ocupan el 100% del ancho */
+// Barra de Acciones
+const ActionsContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 15px;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+
   @media (max-width: 768px) {
+    justify-content: center;
+  }
+`;
+
+const SearchInputContainer = styled.div`
+  display: flex;
+  width: 100%;
+  justify-content: center;
+  margin-bottom: 10px;
+`;
+
+const SearchInput = styled.input`
+  width: 100%;
+  max-width: 800px;
+  padding: 10px 15px;
+  border: 1px solid ${({ theme }) => theme.border || "#ccc"};
+  border-radius: 4px;
+  font-size: 14px;
+  color: ${({ theme }) => theme.text};
+  background-color: ${({ theme }) => theme.inputBg || "#fff"};
+
+  &:focus {
+    outline: none;
+    border-color: #007bff;
+    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+  }
+`;
+
+const ButtonsRow = styled.div`
+  display: flex;
+  gap: 10px;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: center;
+  margin-bottom: 10px;
+
+  @media (max-width: 480px) {
+    flex-direction: column;
     width: 100%;
   }
 `;
 
-const CardsContainer = styled.div`
+const ViewButtonsGroup = styled.div`
   display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 20px;
-  width: 100%;
+  margin-left: 10px;
 `;
 
-const Card = styled.div`
-  width: 300px;
-  background: ${(props) => (props.selected ? "#f0f8ff" : "#fff")};
-  padding: 20px;
-  border-radius: 10px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  cursor: pointer;
-  &:hover {
-    background-color: #f9f9f9;
-  }
-`;
-
-const CardContent = styled.div`
-  text-align: center;
-`;
-
-const Textarea = styled.textarea`
-  width: 100%;
-  height: 80px;
-  margin-top: 10px;
-  padding: 5px;
-  border: 1px solid #ddd;
-  border-radius: 5px;
-  resize: none;
-`;
-const ButtonGroup = styled.div`
-  display: flex;
-  gap: 5px;
-  margin-top: 10px;
-`;
-
-const Table = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-  margin-top: 20px;
-
-  th,
-  td {
-    border: 1px solid #ddd;
-    padding: 10px;
-    text-align: left;
-  }
-
-  th {
-    background-color: #f4f4f4;
-  }
-`;
-
-const ToolbarContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  justify-content: space-between;
-  align-items: center;
-  width: ${({ sidebarOpen }) => (sidebarOpen ? "calc(100% - 250px)" : "100%")};
-  margin-left: ${({ sidebarOpen }) => (sidebarOpen ? "250px" : "0")};
-  transition: margin-left 0.3s ease-in-out, width 0.3s ease-in-out;
-  margin-bottom: 5px;
-  gap: 10px;
-  width: 100%;
-
-  /* 📌 En pantallas pequeñas, los elementos se apilan en columna */
-  @media (max-width: 768px) {
-    flex-direction: column;
-    align-items: stretch;
-    width: 90%;
-    margin-left: 0;
-  }
-`;
-
-const SearchSection = styled.div`
-  display: flex;
-  width: 100%;
-  justify-content: center;
-  gap: 10px;
-
-  @media (max-width: 600px) {
-    flex-direction: column;
-    align-items: center;
-  }
-`;
-
-const SearchInput = styled.input`
-  padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  width: 85%;
-
-  @media (max-width: 600px) {
-    width: 90%;
-  }
-`;
-
-const SearchButton = styled.button`
-  padding: 8px 12px;
-  background-color: #0d6efd;
+const AddButton = styled.button`
+  background-color: #28a745;
   color: white;
   border: none;
   border-radius: 4px;
+  padding: 10px 15px;
+  font-size: 14px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 0.3s;
 
   &:hover {
-    background-color: #0b5ed7;
+    background-color: #218838;
   }
 
-  @media (max-width: 600px) {
-    width: 90%;
+  @media (max-width: 480px) {
+    width: 100%;
   }
 `;
 
-const OptionsContainer = styled.div`
+const RefreshButton = styled.button`
+  background-color: #17a2b8;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 10px 15px;
+  font-size: 14px;
+  cursor: pointer;
   display: flex;
-  justify-content: space-between;
-  width: 100%;
-  max-width: 600px;
-  flex-wrap: wrap;
-  gap: 10px;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 0.3s;
 
-  @media (max-width: 600px) {
-    flex-direction: column;
-    align-items: center;
+  &:hover {
+    background-color: #138496;
+  }
+
+  @media (max-width: 480px) {
+    width: 100%;
   }
 `;
 
 const ViewSection = styled.div`
   display: flex;
-  gap: 10px;
+  gap: 5px;
 
   @media (max-width: 600px) {
-    width: 90%;
+    width: 100%;
     justify-content: center;
   }
 `;
 
 const ViewButton = styled.button`
-  padding: 8px 12px;
-  color: white;
-  border: none;
+  background-color: ${(props) => (props.$active ? "#6c757d" : "#f8f9fa")};
+  color: ${(props) => (props.$active ? "white" : "#212529")};
+  border: 1px solid #dee2e6;
   border-radius: 4px;
-  background-color: ${(props) => props.color || "#28a745"};
+  padding: 8px 12px;
+  font-size: 14px;
   cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.2s;
 
   &:hover {
-    opacity: 0.8;
+    background-color: ${(props) => (props.$active ? "#5a6268" : "#e2e6ea")};
   }
 
-  @media (max-width: 600px) {
-    width: 45%;
+  @media (max-width: 480px) {
+    flex: 1;
   }
 `;
 
-const ScheduleSection = styled.div`
+const ScheduleRow = styled.div`
   display: flex;
   align-items: center;
   gap: 10px;
+  justify-content: center;
 
-  @media (max-width: 600px) {
+  @media (max-width: 768px) {
+    flex-wrap: wrap;
+  }
+
+  @media (max-width: 480px) {
     flex-direction: column;
-    width: 90%;
-    align-items: center;
+    width: 100%;
   }
 `;
 
 const ScheduleText = styled.span`
   font-size: 14px;
-  font-weight: bold;
+  font-weight: 500;
+  color: ${({ theme }) => theme.text};
 `;
 
 const TimeInput = styled.input`
-  padding: 8px;
-  border: 1px solid #ccc;
+  padding: 8px 12px;
+  border: 1px solid ${({ theme }) => theme.border || "#ccc"};
   border-radius: 4px;
+  font-size: 14px;
+  color: ${({ theme }) => theme.text};
+  background-color: ${({ theme }) => theme.inputBg || "#fff"};
+
+  @media (max-width: 480px) {
+    width: 100%;
+  }
 `;
 
-const ChangeButton = styled.button`
-  padding: 8px 12px;
+const ScheduleButton = styled.button`
   background-color: #6f42c1;
   color: white;
   border: none;
   border-radius: 4px;
+  padding: 8px 12px;
+  font-size: 14px;
   cursor: pointer;
+  transition: background-color 0.3s;
 
   &:hover {
     background-color: #5a36a5;
   }
 
-  @media (max-width: 600px) {
-    width: 90%;
+  @media (max-width: 480px) {
+    width: 100%;
   }
 `;
 
-// CSS STATUS
-const StatusContainer = styled.div`
+// Contenedores de Carga, Error y Mensaje Vacío
+const LoadingContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+`;
+
+const LoadingMessage = styled.div`
+  padding: 20px;
+  text-align: center;
+  color: ${({ theme }) => theme.textSecondary || "#666"};
+`;
+
+const ErrorMessage = styled.div`
+  padding: 20px;
+  text-align: center;
+  color: #dc3545;
+  background-color: rgba(220, 53, 69, 0.1);
+  border-radius: 8px;
+  margin: 20px 0;
+`;
+
+const EmptyMessage = styled.div`
+  padding: 30px;
+  text-align: center;
+  background-color: ${({ theme }) => theme.cardBg || "#fff"};
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+`;
+
+// Vista de Tarjetas
+const CardsContainer = styled.div`
+  display: flex;
+  flex-wrap: wrap;
+  gap: 20px;
+  justify-content: center;
+  padding: 10px;
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+`;
+
+const Card = styled.div`
+  width: 320px;
+  background-color: ${({ theme }) => theme.cardBg || "#fff"};
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  border-left: 4px solid
+    ${(props) =>
+      props.$selected ? "#007bff" : props.$active ? "#28a745" : "#6c757d"};
+  opacity: ${(props) => (props.$active ? 1 : 0.7)};
+  transition: all 0.2s;
+
+  &:hover {
+    box-shadow: 0 6px 12px rgba(0, 0, 0, 0.15);
+    transform: translateY(-2px);
+  }
+`;
+
+const CardHeader = styled.div`
+  padding: 15px;
+  border-bottom: 1px solid ${({ theme }) => theme.border || "#eee"};
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  background-color: ${({ theme }) => theme.cardHeaderBg || "#f8f9fa"};
+`;
+
+const CardTitle = styled.h3`
+  margin: 0;
+  font-size: 12px;
+  font-weight: 600;
+  color: ${({ theme }) => theme.title || theme.text};
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  padding-right: 10px;
+`;
+
+const StatusBadge = styled.div`
+  padding: ${(props) => (props.$small ? "3px 8px" : "5px 10px")};
+  border-radius: 50px;
+  font-size: ${(props) => (props.$small ? "12px" : "14px")};
+  font-weight: 500;
+  color: white;
+  background-color: ${(props) => {
+    if (!props.$active) return "#6c757d";
+    switch (props.$status) {
+      case "completed":
+        return "#28a745";
+      case "running":
+        return "#ffc107";
+      case "error":
+        return "#dc3545";
+      default:
+        return "#17a2b8";
+    }
+  }};
   display: flex;
   align-items: center;
-  gap: 10px;
-  margin-bottom: 10px;
-`;
-
-const SuccessIcon = styled.span`
-  color: #28a745;
-  font-weight: bold;
-`;
-
-const LoadingIcon = styled.span`
-  color: #ffc107;
-  font-weight: bold;
-  animation: blink 1s infinite alternate;
+  gap: 5px;
+  flex-shrink: 0;
+  min-width: 80px;
+  justify-content: center;
+  animation: ${(props) =>
+    props.$status === "running" ? "blink 1s infinite alternate" : "none"};
 
   @keyframes blink {
     from {
       opacity: 1;
     }
     to {
-      opacity: 0.4;
+      opacity: 0.6;
     }
   }
 `;
 
-const ErrorIcon = styled.span`
-  color: #dc3545;
-  font-weight: bold;
+const CardContent = styled.div`
+  padding: 15px;
+  margin: 10px;
+  flex: 1;
+`;
+
+const CardInfo = styled.div`
+  margin-bottom: 15px;
+`;
+
+const InfoItem = styled.div`
+  display: flex;
+  margin-bottom: 8px;
+  font-size: 14px;
+
+  &:last-child {
+    margin-bottom: 0;
+  }
+`;
+
+const InfoLabel = styled.span`
+  font-weight: 500;
+  width: 120px;
+  color: ${({ theme }) => theme.textSecondary || "#666"};
+`;
+
+const InfoValue = styled.span`
+  flex: 1;
+`;
+
+const CardQuerySection = styled.div`
+  margin-top: 15px;
+`;
+
+const QueryLabel = styled.div`
+  font-size: 14px;
+  font-weight: 500;
+  margin-bottom: 5px;
+  color: ${({ theme }) => theme.textSecondary || "#666"};
+`;
+
+const QueryBox = styled.textarea`
+  width: 100%;
+  height: 80px;
+  padding: 8px;
+  border: 1px solid ${({ theme }) => theme.border || "#ddd"};
+  border-radius: 4px;
+  font-family: monospace;
+  font-size: 12px;
+  resize: none;
+  background-color: ${({ theme }) => theme.codeBg || "#f5f5f5"};
+  color: ${({ theme }) => theme.text};
 `;
 
 const ProgressBar = styled.div`
@@ -887,7 +1160,7 @@ const ProgressBar = styled.div`
   height: 20px;
   background-color: #eee;
   border-radius: 10px;
-  margin-top: 10px;
+  margin-top: 15px;
   overflow: hidden;
 `;
 
@@ -895,8 +1168,117 @@ const ProgressFill = styled.div`
   height: 100%;
   background-color: #17a2b8;
   text-align: center;
-  font-size: 14px;
+  font-size: 12px;
+  font-weight: 500;
   color: white;
   line-height: 20px;
   transition: width 0.5s ease-in-out;
+`;
+
+const CardActions = styled.div`
+  display: flex;
+  gap: 8px;
+  padding: 15px;
+  border-top: 1px solid ${({ theme }) => theme.border || "#eee"};
+  background-color: ${({ theme }) => theme.cardFooterBg || "#f8f9fa"};
+`;
+
+const ActionButton = styled.button`
+  flex: 1;
+  padding: 8px 12px;
+  border: none;
+  border-radius: 4px;
+  background-color: ${(props) => props.$color || "#6c757d"};
+  color: white;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  transition: background-color 0.2s;
+
+  &:hover {
+    filter: brightness(90%);
+  }
+
+  &:disabled {
+    background-color: #adb5bd;
+    cursor: not-allowed;
+    opacity: 0.7;
+  }
+`;
+
+// Vista de Tabla
+const TableContainer = styled.div`
+  width: 100%;
+  max-width: 1200px;
+  margin: 0 auto;
+  overflow-x: auto;
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+`;
+
+const StyledTable = styled.table`
+  width: 100%;
+  border-collapse: collapse;
+  background-color: ${({ theme }) => theme.cardBg || "#fff"};
+  color: ${({ theme }) => theme.text};
+
+  th,
+  td {
+    padding: 12px 15px;
+    text-align: left;
+  }
+
+  th {
+    background-color: ${({ theme }) => theme.tableHeader || "#f0f0f0"};
+    color: ${({ theme }) => theme.tableHeaderText || "#333"};
+    font-weight: bold;
+  }
+
+  tr {
+    border-bottom: 1px solid ${({ theme }) => theme.border || "#ddd"};
+
+    &:last-child {
+      border-bottom: none;
+    }
+
+    &:hover {
+      background-color: ${({ theme }) => theme.tableHover || "#f8f9fa"};
+    }
+
+    &.disabled {
+      opacity: 0.6;
+      background-color: ${({ theme }) => theme.tableDisabled || "#f2f2f2"};
+    }
+  }
+`;
+
+const ActionButtons = styled.div`
+  display: flex;
+  gap: 8px;
+  justify-content: center;
+`;
+
+const TableActionButton = styled.button`
+  background: none;
+  border: none;
+  color: ${(props) => props.$color || "#0275d8"};
+  font-size: 16px;
+  cursor: pointer;
+  padding: 5px;
+  border-radius: 4px;
+  transition: all 0.2s;
+
+  &:hover {
+    color: ${(props) => props.$color || "#0275d8"};
+    background-color: rgba(0, 0, 0, 0.05);
+  }
+
+  &:disabled {
+    color: #adb5bd;
+    cursor: not-allowed;
+  }
 `;

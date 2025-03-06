@@ -2,18 +2,32 @@
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
   font-weight: 400;
-
   font-synthesis: none;
   text-rendering: optimizeLegibility;
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
+  --primary-color: #28a745;
+  --primary-hover: #218838;
+  --secondary-color: #6c757d;
+  --secondary-hover: #5a6268;
+  --info-color: #17a2b8;
+  --info-hover: #138496;
+  --danger-color: #dc3545;
+  --danger-hover: #c82333;
+  --light-bg: #f8f9fa;
+  --white: #ffffff;
+  --border-color: #ddd;
+  --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  --transition: all 0.3s ease;
 }
+
 /* Estilos generales */
 body {
-  font-family: Arial, sans-serif;
-  background-color: #f8f9fa;
+  font-family: "Inter", system-ui, sans-serif;
+  background-color: var(--light-bg);
   margin: 0;
   padding: 0;
+  color: #333;
 }
 
 /* Contenedor principal */
@@ -32,6 +46,8 @@ h2 {
   text-align: center;
   width: 100%;
   margin-bottom: 20px;
+  font-weight: 600;
+  color: #333;
 }
 
 /* Barra de herramientas */
@@ -41,35 +57,63 @@ h2 {
   align-items: center;
   width: 100%;
   margin-bottom: 20px;
-  gap: 10px;
+  gap: 12px;
+  flex-wrap: wrap;
+}
+
+@media (max-width: 768px) {
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
 }
 
 /* Input de búsqueda */
 .input-search {
-  padding: 8px;
+  padding: 10px 12px;
   flex: 1;
-  border: 1px solid #ddd;
-  border-radius: 5px;
+  border: 1px solid var(--border-color);
+  border-radius: 6px;
+  font-size: 0.95rem;
+  transition: var(--transition);
+}
+
+.input-search:focus {
+  outline: none;
+  border-color: var(--primary-color);
+  box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.15);
 }
 
 /* Botones */
 .button {
-  padding: 8px 12px;
+  padding: 10px 16px;
   cursor: pointer;
   border: none;
   color: white;
-  border-radius: 5px;
-  background-color: #28a745;
-  transition: all 0.3s ease;
+  border-radius: 6px;
+  font-weight: 500;
+  font-size: 0.95rem;
+  background-color: var(--primary-color);
+  transition: var(--transition);
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
 }
 
 .button:hover {
-  opacity: 0.8;
+  background-color: var(--primary-hover);
+  transform: translateY(-1px);
+}
+
+.button:active {
+  transform: translateY(0);
 }
 
 .button:disabled {
   background-color: #ccc;
   cursor: not-allowed;
+  transform: none;
 }
 
 /* Contenedor de tarjetas */
@@ -84,23 +128,27 @@ h2 {
 /* Tarjetas */
 .card {
   width: 320px;
-  background: #ffffff;
-  padding: 20px;
-  border-radius: 10px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
+  background: var(--white);
+  padding: 24px;
+  border-radius: 12px;
+  box-shadow: var(--card-shadow);
   display: flex;
   flex-direction: column;
   align-items: center;
   cursor: pointer;
-  transition: all 0.3s ease;
+  transition: var(--transition);
+  border: 1px solid transparent;
 }
 
 .card:hover {
-  background-color: #f9f9f9;
+  transform: translateY(-3px);
+  box-shadow: 0 6px 12px rgba(0, 0, 0, 0.1);
+  border-color: rgba(0, 0, 0, 0.05);
 }
 
 .card.selected {
   background-color: #f0f8ff;
+  border-color: #4a90e2;
 }
 
 /* Contenido de tarjeta */
@@ -109,162 +157,287 @@ h2 {
   width: 100%;
 }
 
-/* 🌎 Estilos generales */
-body {
-  font-family: Arial, sans-serif;
-  background-color: #f8f9fa;
-  margin: 0;
-  padding: 0;
+/* Estilos optimizados para el formulario de TransferTask en SweetAlert2 */
+.swal2-container {
+  padding: 15px !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow-y: auto !important;
 }
 
-/* 🔹 Contenedor principal */
-.container {
-  width: 90%;
-  max-width: 1200px;
-  margin: auto;
-  padding: 20px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
+.swal2-popup {
+  font-family: "Inter", system-ui, sans-serif !important;
+  border-radius: 12px !important;
+  padding: 1.5rem !important;
+  width: auto !important;
+  min-width: 35rem !important;
+  max-width: 85vw !important;
+  max-height: 85vh !important;
+  margin: 1.5rem auto !important;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1) !important;
+  overflow-y: auto !important;
 }
 
-/* 🏷️ Títulos */
-h2 {
-  text-align: center;
-  width: 100%;
-  margin-bottom: 20px;
+.swal2-title {
+  font-size: 1.4rem !important;
+  font-weight: 600 !important;
+  color: #333 !important;
+  margin-bottom: 1rem !important;
+  border-bottom: 1px solid #eee !important;
+  padding-bottom: 0.75rem !important;
 }
 
-/* 🛠️ Barra de herramientas */
-.toolbar {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-  margin-bottom: 20px;
-  gap: 10px;
+.swal2-html-container {
+  overflow-y: visible !important;
+  margin: 0 !important;
+  padding: 0 !important;
 }
 
-/* 🔍 Input de búsqueda */
-.input-search {
-  padding: 8px;
-  flex: 1;
-  border: 1px solid #ddd;
-  border-radius: 5px;
+/* Estilos para etiquetas y campos - ESPACIADO REDUCIDO */
+.swal2-label {
+  display: block !important;
+  margin-top: 0.5rem !important; /* Reducido desde 1rem */
+  margin-bottom: 0.25rem !important; /* Reducido desde 0.5rem */
+  font-weight: 600 !important;
+  font-size: 0.9rem !important;
+  color: #444 !important;
 }
 
-/* 🎨 Botones */
-.button {
-  padding: 10px 15px;
-  cursor: pointer;
-  border: none;
-  color: white;
-  border-radius: 5px;
-  font-weight: bold;
-  background-color: #28a745;
-  transition: all 0.3s ease;
+.swal2-input,
+.swal2-select {
+  height: auto !important;
+  padding: 0.6rem 0.75rem !important; /* Reducido desde 0.75rem 1rem */
+  width: 100% !important;
+  border-radius: 6px !important;
+  border: 1px solid #ddd !important;
+  box-shadow: none !important;
+  font-size: 0.95rem !important;
+  color: #333 !important;
+  background-color: #fff !important;
+  transition: all 0.2s ease !important;
+  margin-bottom: 0.5rem !important; /* Reducido desde 1.25rem */
 }
 
-.button:hover {
-  opacity: 0.8;
+.swal2-input:focus,
+.swal2-select:focus {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 3px rgba(40, 167, 69, 0.15) !important;
 }
 
-.button:disabled {
-  background-color: #ccc;
-  cursor: not-allowed;
+/* Estilos para textareas - ALTURA REDUCIDA */
+.textarea-sql,
+.swal2-textarea {
+  padding: 0.6rem 0.75rem !important; /* Reducido */
+  border-radius: 6px !important;
+  border: 1px solid #ddd !important;
+  box-shadow: none !important;
+  width: 100% !important;
+  font-family: "Consolas", "Monaco", monospace !important;
+  line-height: 1.4 !important; /* Reducido desde 1.5 */
+  transition: all 0.2s ease !important;
+  margin-bottom: 0.5rem !important; /* Reducido desde 1.25rem */
 }
 
-/* 🗂️ Contenedor de tarjetas */
-.cards-container {
-  display: flex;
-  flex-wrap: wrap;
-  justify-content: center;
-  gap: 20px;
-  width: 100%;
+.textarea-sql {
+  min-height: 100px !important; /* Reducido desde 150px */
+  max-height: 250px !important; /* Reducido desde 300px */
+  background-color: #282c34 !important;
+  color: #abb2bf !important;
+  font-size: 0.9rem !important;
 }
 
-/* 📌 Tarjetas */
-.card {
-  width: 350px;
-  background: #ffffff;
-  padding: 20px;
-  border-radius: 10px;
-  box-shadow: 0 2px 10px rgba(0, 0, 0, 0.1);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  cursor: pointer;
-  transition: all 0.3s ease;
+.swal2-textarea {
+  min-height: 80px !important; /* Reducido desde 100px */
+  font-size: 0.95rem !important;
+  color: #333 !important;
 }
 
-.card:hover {
-  background-color: #f9f9f9;
-}
-
-.card.selected {
-  background-color: #f0f8ff;
-}
-
-/* 📌 Contenido de tarjeta */
-.card-content {
-  text-align: center;
-  width: 100%;
-}
-
+/* Estilos para secciones del formulario - ESPACIADO REDUCIDO */
 .swal2-form-container {
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  width: 100%;
-  max-width: 500px;
-  gap: 10px;
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.25rem !important; /* Reducido desde 0.5rem */
 }
 
+/* Estilos para checkboxes - ESPACIADO REDUCIDO */
+.swal2-checkbox-container {
+  display: flex !important;
+  align-items: center !important;
+  margin: 0.5rem 0 !important; /* Reducido desde 1rem */
+  padding: 0.4rem 0.75rem !important; /* Reducido */
+  background-color: #f8f9fa !important;
+  border-radius: 6px !important;
+}
+
+/* Estilos para botones de acción - ESPACIADO REDUCIDO */
+.swal2-actions {
+  margin-top: 1rem !important; /* Reducido desde 1.5rem */
+  gap: 0.5rem !important; /* Reducido desde 0.75rem */
+  border-top: 1px solid #eee !important;
+  padding-top: 1rem !important; /* Reducido desde 1.5rem */
+}
+
+/* Estilo específico para campos de parámetros JSON */
+#swal-parameters {
+  min-height: 80px !important;
+}
+
+/* Media queries para responsividad */
+@media (max-width: 768px) {
+  .swal2-popup {
+    min-width: 75% !important;
+    max-width: 90vw !important;
+    padding: 1.25rem !important; /* Reducido */
+  }
+}
+
+@media (max-width: 480px) {
+  .swal2-popup {
+    min-width: 95% !important;
+    max-width: 95vw !important;
+    padding: 1rem !important; /* Reducido */
+    margin: 0.5rem auto !important;
+  }
+}
+
+.swal2-title {
+  font-size: 1.5rem !important;
+  font-weight: 600 !important;
+  color: #333 !important;
+}
+
+.swal2-html-container {
+  margin: 1rem 0 !important;
+}
+
+.swal2-input,
+.swal2-textarea {
+  border: 1px solid #ddd !important;
+  border-radius: 6px !important;
+  padding: 0.75rem !important;
+  font-size: 0.95rem !important;
+  margin: 0.5rem 0 1rem 0 !important;
+  box-shadow: none !important;
+  width: 100% !important;
+  transition: border-color 0.2s !important;
+}
+
+.swal2-input:focus,
+.swal2-textarea:focus {
+  border-color: var(--primary-color) !important;
+  box-shadow: 0 0 0 2px rgba(40, 167, 69, 0.15) !important;
+}
+
+/* Form groups in SweetAlert */
 .form-group {
-  display: flex;
-  align-items: center;
-  justify-content: center;
+  margin-bottom: 1rem;
   width: 100%;
-  flex: 1;
-  margin-bottom: 5px;
   text-align: left;
 }
 
-/* 📝 Editor SQL (Textarea) */
+.form-group label {
+  display: block;
+  margin-bottom: 0.5rem;
+  font-weight: 500;
+  color: #555;
+}
+
+/* Checkbox styles */
+.form-check {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.8rem;
+  width: 100%;
+}
+
+.form-check input[type="checkbox"] {
+  margin-right: 0.75rem;
+  width: 18px;
+  height: 18px;
+}
+
+.form-check label {
+  cursor: pointer;
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+/* SweetAlert buttons */
+.swal2-actions {
+  gap: 0.5rem;
+}
+
+.swal2-styled.swal2-confirm {
+  background-color: var(--primary-color) !important;
+  padding: 0.75rem 1.5rem !important;
+  border-radius: 6px !important;
+}
+
+.swal2-styled.swal2-confirm:hover {
+  background-color: var(--primary-hover) !important;
+}
+
+.swal2-styled.swal2-cancel {
+  background-color: var(--secondary-color) !important;
+  padding: 0.75rem 1.5rem !important;
+  border-radius: 6px !important;
+}
+
+.swal2-styled.swal2-cancel:hover {
+  background-color: var(--secondary-hover) !important;
+}
+
+@media (max-width: 480px) {
+  .swal2-actions {
+    flex-direction: column;
+    width: 100%;
+  }
+
+  .swal2-styled.swal2-confirm,
+  .swal2-styled.swal2-cancel {
+    margin: 0.5rem 0 !important;
+    width: 100% !important;
+  }
+}
+
+/* TextArea para SQL */
 .textarea-sql {
   width: 100%;
   min-height: 250px;
   max-height: 600px;
   overflow-y: auto;
-  margin-top: 0px;
-  padding: 0px;
-  border: 1px solid #ccc;
-  border-radius: 5px;
-  font-family: "Courier New", monospace;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-family: "Consolas", "Monaco", "Courier New", monospace;
   font-size: 14px;
   background: #282c34;
   color: #abb2bf;
   line-height: 1.5;
   white-space: pre-wrap;
+  resize: vertical;
 }
 
-/* Estilo del textarea para parámetros JSON */
+/* TextArea para JSON */
 .textarea-json {
   width: 100%;
   min-height: 150px;
   max-height: 400px;
-  padding: 8px;
-  border: 1px solid #ccc;
-  border-radius: 5px;
-  font-family: monospace;
+  padding: 12px;
+  border: 1px solid #ddd;
+  border-radius: 6px;
+  font-family: "Consolas", "Monaco", "Courier New", monospace;
+  font-size: 14px;
   background-color: #f4f4f4;
   color: #333;
   resize: vertical;
   overflow-y: auto;
   white-space: pre-wrap;
+  line-height: 1.5;
 }
 
-/* 🎨 Resaltado en SQL */
+/* Resaltado en SQL */
 .textarea-sql::selection {
   background: rgba(255, 255, 0, 0.3);
 }
@@ -282,33 +455,7 @@ h2 {
   border-radius: 5px;
 }
 
-/* 📌 SweetAlert2 - Formularios */
-.swal2-popup {
-  font-family: Arial, sans-serif;
-  border-radius: 10px;
-  width: 600px !important;
-}
-
-.swal2-input,
-.swal2-textarea {
-  width: 95%;
-  padding: 12px;
-  border-radius: 5px;
-  border: 1px solid #ccc;
-  margin: 8px 0;
-  font-size: 14px;
-}
-
-/* 🎨 Estilo de textarea para validación y parámetros */
-.swal2-textarea {
-  min-height: 120px;
-  max-height: 500px;
-  overflow-y: auto;
-  font-family: "Courier New", monospace;
-  background: #f4f4f4;
-}
-
-/* 📌 Alineación de checkbox */
+/* Alineación de checkbox en SweetAlert */
 .swal2-checkbox-container {
   display: flex;
   align-items: center;
@@ -320,35 +467,130 @@ h2 {
   font-size: 14px;
 }
 
-/* 📌 Estilo de select en SweetAlert */
+/* Selects en SweetAlert */
 .swal2-select {
-  width: 95%;
-  padding: 10px;
-  border-radius: 5px;
-  border: 1px solid #ccc;
-  font-size: 14px;
+  width: 100%;
+  padding: 0.75rem;
+  border-radius: 6px;
+  border: 1px solid #ddd;
+  font-size: 0.95rem;
+  margin-bottom: 1rem;
 }
 
-/* 📌 Contenedor del checkbox */
-.swal2-checkbox-container {
+/* Estilos de validación */
+.swal2-validation-message {
+  background-color: rgba(220, 53, 69, 0.1) !important;
+  color: var(--danger-color) !important;
+  padding: 0.5rem !important;
+  border-radius: 4px !important;
+  margin-top: 0.5rem !important;
+  font-size: 0.9rem !important;
+}
+
+/* Tabla para el componente ControlPlanilla */
+table {
+  width: 100%;
+  border-collapse: collapse;
+  background-color: var(--white);
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: var(--card-shadow);
+}
+
+table th,
+table td {
+  padding: 12px 15px;
+  text-align: left;
+  border-bottom: 1px solid var(--border-color);
+}
+
+table th {
+  background-color: #f0f0f0;
+  color: #333;
+  font-weight: 600;
+  font-size: 0.9rem;
+}
+
+table tr:last-child td {
+  border-bottom: none;
+}
+
+table tr:hover {
+  background-color: #f8f9fa;
+}
+
+table tr.disabled {
+  opacity: 0.6;
+  background-color: #f2f2f2;
+}
+
+/* Íconos para estados */
+.check-icon {
+  color: var(--primary-color);
+  font-weight: bold;
+}
+
+.cross-icon {
+  color: var(--danger-color);
+  font-weight: bold;
+}
+
+.status-icon {
   display: flex;
   align-items: center;
-  justify-content: flex-start;
-  margin-top: 15px;
-  width: 95%;
-}
-
-/* 📌 Checkbox con más espacio */
-.swal2-checkbox-container input[type="checkbox"] {
-  width: 18px;
-  height: 18px;
-  margin-right: 10px;
-  cursor: pointer;
-}
-
-/* 📌 Texto del checkbox */
-.swal2-checkbox-container label {
-  font-size: 14px;
+  gap: 5px;
   font-weight: 500;
-  cursor: pointer;
+}
+
+.status-icon.active {
+  color: var(--primary-color);
+}
+
+.status-icon.inactive {
+  color: var(--danger-color);
+}
+
+/* Media queries para responsividad */
+@media (max-width: 992px) {
+  table {
+    font-size: 0.9rem;
+  }
+
+  table th,
+  table td {
+    padding: 10px 12px;
+  }
+}
+
+@media (max-width: 768px) {
+  .container {
+    width: 95%;
+    padding: 15px;
+  }
+
+  h2 {
+    font-size: 1.4rem;
+  }
+
+  table {
+    display: block;
+    overflow-x: auto;
+    white-space: nowrap;
+  }
+}
+
+@media (max-width: 480px) {
+  .container {
+    width: 100%;
+    padding: 10px;
+  }
+
+  h2 {
+    font-size: 1.2rem;
+  }
+
+  .button {
+    width: 100%;
+    margin-bottom: 8px;
+  }
 }

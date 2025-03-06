@@ -13,12 +13,10 @@ const getAllRecipients = async (req, res) => {
     res.json(recipients);
   } catch (error) {
     logger.error("Error al obtener destinatarios de correo:", error);
-    res
-      .status(500)
-      .json({
-        message: "Error al obtener destinatarios",
-        error: error.message,
-      });
+    res.status(500).json({
+      message: "Error al obtener destinatarios",
+      error: error.message,
+    });
   }
 };
 
@@ -146,12 +144,10 @@ const updateRecipient = async (req, res) => {
       return res.status(404).json({ message: error.message });
     }
 
-    res
-      .status(500)
-      .json({
-        message: "Error al actualizar destinatario",
-        error: error.message,
-      });
+    res.status(500).json({
+      message: "Error al actualizar destinatario",
+      error: error.message,
+    });
   }
 };
 
@@ -176,12 +172,10 @@ const deleteRecipient = async (req, res) => {
       return res.status(404).json({ message: error.message });
     }
 
-    res
-      .status(500)
-      .json({
-        message: "Error al eliminar destinatario",
-        error: error.message,
-      });
+    res.status(500).json({
+      message: "Error al eliminar destinatario",
+      error: error.message,
+    });
   }
 };
 
@@ -191,6 +185,7 @@ const deleteRecipient = async (req, res) => {
  * @param {Response} res - Objeto de respuesta Express
  */
 const toggleSendStatus = async (req, res) => {
+  console.log(req.params);
   try {
     const { id } = req.params;
     const updatedRecipient = await EmailRecipientService.toggleSendStatus(id);
@@ -211,12 +206,10 @@ const toggleSendStatus = async (req, res) => {
       return res.status(404).json({ message: error.message });
     }
 
-    res
-      .status(500)
-      .json({
-        message: "Error al alternar estado de envío",
-        error: error.message,
-      });
+    res.status(500).json({
+      message: "Error al alternar estado de envío",
+      error: error.message,
+    });
   }
 };
 
@@ -233,12 +226,10 @@ const initializeDefaultRecipients = async (req, res) => {
     });
   } catch (error) {
     logger.error("Error al inicializar destinatarios por defecto:", error);
-    res
-      .status(500)
-      .json({
-        message: "Error al inicializar destinatarios",
-        error: error.message,
-      });
+    res.status(500).json({
+      message: "Error al inicializar destinatarios",
+      error: error.message,
+    });
   }
 };
 
