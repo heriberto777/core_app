@@ -5,7 +5,7 @@ export class TransferApi {
 
   async getTasks(accessToken) {
     try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFERS}`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}`;
       const params = {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -97,7 +97,7 @@ export class TransferApi {
   async addTimeTransfer(accessToken, datos) {
     // console.log(datos);
     try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.CONFIG_TASK}/horas`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/config/horas`;
       const params = {
         method: "POST",
         headers: {
@@ -121,7 +121,7 @@ export class TransferApi {
   async getSchuledTime(accessToken) {
     console.log("##### TIME ######");
     try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.CONFIG_TASK}/horas`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/config/horas`;
       const params = {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -143,7 +143,7 @@ export class TransferApi {
   async getTaskStatus(accessToken) {
     console.log("##### TIME ######");
     try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.CONFIG_TASK}/task-status`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/config/task-status`;
       const params = {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -432,6 +432,49 @@ export class TransferApi {
       return result;
     } catch (error) {
       console.log(error);
+      throw error;
+    }
+  }
+
+  // En TransferApi.js
+  async getTaskHistory(accessToken, taskId) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/task-history/${taskId}`;
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+
+      return result;
+    } catch (error) {
+      console.error("Error al obtener historial de tarea:", error);
+      throw error;
+    }
+  }
+
+  // En tu cliente de API (TransferApi.js o similar)
+  async cancelTask(accessToken, taskId) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/cancel/${taskId}`;
+      const params = {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      };
+      const response = await fetch(url, params);
+      const result = await response.json();
+      if (response.status !== 200) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al cancelar tarea:", error);
       throw error;
     }
   }

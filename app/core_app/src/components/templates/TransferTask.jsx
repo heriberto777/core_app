@@ -8,10 +8,10 @@ import {
   FaPlay,
   FaPlus,
   FaSync,
-  FaToggleOn,
-  FaToggleOff,
   FaList,
   FaTable,
+  FaHistory,
+  FaStop,
 } from "react-icons/fa";
 
 const cnnApi = new TransferApi();
@@ -23,6 +23,9 @@ export function TransferTasks() {
   const [openstate, setOpenState] = useState(false);
   const [viewMode, setViewMode] = useState("cards"); // "cards", "list", "table"
   const [executionTime, setExecutionTime] = useState("20:30");
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
+
+  const [cancelling, setCancelling] = useState(false);
 
   const {
     data: tasks,
@@ -427,6 +430,192 @@ ${JSON.stringify(task?.parameters || [], null, 2)}</textarea>
     }
   };
 
+  const viewTaskHistory = async (taskId) => {
+    try {
+      // Mostrar indicador de carga
+      Swal.fire({
+        title: "Cargando historial...",
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
+      // Llamar a la API para obtener el historial
+      const result = await cnnApi.getTaskHistory(accessToken, taskId);
+
+      if (!result.success) {
+        throw new Error(result.message || "Error al obtener historial");
+      }
+
+      console.log(result);
+      const { task, history } = result;
+
+      // Opcional: Si no hay historial, mostrar mensaje
+      if (history.length === 0) {
+        Swal.fire({
+          title: "Sin historial",
+          text: `No hay registros de ejecuciones para la tarea "${task.name}"`,
+          icon: "info",
+        });
+        return;
+      }
+
+      // Crear HTML para el historial
+      const historyHtml = history
+        .map(
+          (entry, index) => `
+      <tr>
+        <td>${new Date(entry.date).toLocaleString()}</td>
+        <td>${entry.documentId || "N/A"}</td>
+        <td>${entry.totalProducts || 0}</td>
+        <td>${entry.totalQuantity || 0}</td>
+        <td>
+          <span class="status-badge ${entry.status}">
+            ${
+              entry.status === "completed"
+                ? "Completado"
+                : entry.status === "partial_return"
+                ? "Devolución Parcial"
+                : entry.status === "full_return"
+                ? "Devolución Total"
+                : entry.status
+            }
+          </span>
+        </td>
+      </tr>
+    `
+        )
+        .join("");
+
+      // Mostrar historial con SweetAlert2
+      Swal.fire({
+        title: `Historial de Transferencias: ${task.name}`,
+        html: `
+        <div class="history-details">
+          <p><strong>Total de ejecuciones:</strong> ${task.executionCount}</p>
+          <p><strong>Última ejecución:</strong> ${
+            task.lastExecutionDate
+              ? new Date(task.lastExecutionDate).toLocaleString()
+              : "Nunca"
+          }</p>
+          
+          <h4>Últimas transferencias</h4>
+          <div class="history-table-container">
+            <table class="swal2-table">
+              <thead>
+                <tr>
+                  <th>Fecha</th>
+                  <th>Documento</th>
+                  <th>Productos</th>
+                  <th>Cantidad</th>
+                  <th>Estado</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${historyHtml}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `,
+        width: "800px",
+        showConfirmButton: true,
+        customClass: {
+          container: "history-modal",
+        },
+      });
+
+      // Agregar estilos para las badges
+      const styleSheet = document.createElement("style");
+      styleSheet.textContent = `
+      .history-modal .history-table-container {
+        max-height: 400px;
+        overflow-y: auto;
+      }
+      .history-modal .status-badge {
+        padding: 3px 8px;
+        border-radius: 50px;
+        font-size: 12px;
+        font-weight: 500;
+        color: white;
+      }
+      .history-modal .status-badge.completed {
+        background-color: #28a745;
+      }
+      .history-modal .status-badge.partial_return {
+        background-color: #ffc107;
+        color: #212529;
+      }
+      .history-modal .status-badge.full_return {
+        background-color: #dc3545;
+      }
+    `;
+      document.head.appendChild(styleSheet);
+    } catch (error) {
+      console.error("Error al ver historial:", error);
+      Swal.fire("Error", error.message, "error");
+    }
+  };
+
+  const handleCancelTask = async (taskId) => {
+    // Usar SweetAlert2 para la confirmación
+    const result = await Swal.fire({
+      title: "¿Detener tarea?",
+      text: "¿Estás seguro de que deseas detener esta tarea en ejecución? Esta acción no se puede deshacer.",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#d33",
+      cancelButtonColor: "#3085d6",
+      confirmButtonText: "Sí, detener",
+      cancelButtonText: "Cancelar",
+    });
+
+    // Si el usuario cancela la acción
+    if (!result.isConfirmed) {
+      return;
+    }
+
+    setCancelling(true);
+
+    // Mostrar indicador de carga
+    Swal.fire({
+      title: "Deteniendo tarea...",
+      text: "Por favor espera mientras se detiene la tarea.",
+      allowOutsideClick: false,
+      didOpen: () => {
+        Swal.showLoading();
+      },
+    });
+
+    try {
+      const response = await cnnApi.cancelTask(accessToken, taskId);
+
+      // Mostrar notificación de éxito
+      Swal.fire({
+        title: "Tarea detenida",
+        text: "La solicitud de cancelación se ha enviado correctamente. La tarea se detendrá en breve.",
+        icon: "success",
+        timer: 3000,
+        timerProgressBar: true,
+      });
+
+      // Actualizar la lista de tareas después de un breve retraso
+      setTimeout(() => {
+        fetchTasks();
+      }, 2000);
+    } catch (error) {
+      // Mostrar notificación de error
+      Swal.fire({
+        title: "Error",
+        text: `No se pudo detener la tarea: ${error.message}`,
+        icon: "error",
+      });
+    } finally {
+      setCancelling(false);
+    }
+  };
+
   return (
     <Container>
       <header className="header">
@@ -548,6 +737,24 @@ ${JSON.stringify(task?.parameters || [], null, 2)}</textarea>
                       <InfoValue>{task.executionMode}</InfoValue>
                     </InfoItem>
 
+                    {task.lastExecutionDate && (
+                      <InfoItem>
+                        <InfoLabel>Última ejecución:</InfoLabel>
+                        <InfoValue>
+                          {new Date(task.lastExecutionDate).toLocaleString()}
+                          {task.lastExecutionResult?.success ? (
+                            <StatusBadge $status="completed" $small>
+                              Éxito
+                            </StatusBadge>
+                          ) : (
+                            <StatusBadge $status="error" $small>
+                              Error
+                            </StatusBadge>
+                          )}
+                        </InfoValue>
+                      </InfoItem>
+                    )}
+
                     {task.transferType && (
                       <InfoItem>
                         <InfoLabel>Dirección:</InfoLabel>
@@ -576,41 +783,64 @@ ${JSON.stringify(task?.parameters || [], null, 2)}</textarea>
                 </CardContent>
 
                 <CardActions>
-                  <ActionButton
-                    $color="#007bff"
-                    onClick={() => addOrEditTask(task)}
-                    disabled={task.status === "running"}
-                    title="Editar tarea"
-                  >
-                    <FaEdit /> Editar
-                  </ActionButton>
+                  <ActionButtonsContainer>
+                    <ActionRow>
+                      <ActionButton
+                        $color="#007bff"
+                        onClick={() => addOrEditTask(task)}
+                        disabled={task.status === "running"}
+                        title="Editar tarea"
+                      >
+                        <FaEdit />
+                      </ActionButton>
 
-                  <ActionButton
-                    $color="#dc3545"
-                    onClick={() => deleteTask(task._id)}
-                    disabled={task.status === "running"}
-                    title="Eliminar tarea"
-                  >
-                    <FaTrash /> Eliminar
-                  </ActionButton>
+                      <ActionButton
+                        $color="#dc3545"
+                        onClick={() => deleteTask(task._id)}
+                        disabled={task.status === "running"}
+                        title="Eliminar tarea"
+                      >
+                        <FaTrash />
+                      </ActionButton>
 
-                  <ActionButton
-                    $color="#17a2b8"
-                    onClick={() => executeTask(task._id)}
-                    disabled={
-                      task.status === "running" ||
-                      !task.active ||
-                      (task.type !== "manual" && task.type !== "both") ||
-                      tasks.some(
-                        (t) =>
-                          t.status === "running" &&
-                          ["auto", "both"].includes(t.type)
-                      )
-                    }
-                    title="Ejecutar tarea manualmente"
-                  >
-                    <FaPlay /> Ejecutar
-                  </ActionButton>
+                      <ActionButton
+                        $color="#17a2b8"
+                        onClick={() => executeTask(task._id)}
+                        disabled={
+                          task.status === "running" ||
+                          !task.active ||
+                          (task.type !== "manual" && task.type !== "both") ||
+                          tasks.some(
+                            (t) =>
+                              t.status === "running" &&
+                              ["auto", "both"].includes(t.type)
+                          )
+                        }
+                        title="Ejecutar tarea manualmente"
+                      >
+                        <FaPlay />
+                      </ActionButton>
+
+                      <ActionButton
+                        $color="#6f42c1"
+                        onClick={() => viewTaskHistory(task._id)}
+                        title="Ver historial de ejecuciones"
+                      >
+                        <FaHistory />
+                      </ActionButton>
+
+                      {task.status === "running" && (
+                        <ActionButton
+                          $color="#dc3545"
+                          onClick={() => handleCancelTask(task._id)}
+                          disabled={cancelling}
+                          title="Detener tarea en ejecución"
+                        >
+                          <FaStop />
+                        </ActionButton>
+                      )}
+                    </ActionRow>
+                  </ActionButtonsContainer>
                 </CardActions>
               </Card>
             ))}
@@ -684,6 +914,25 @@ ${JSON.stringify(task?.parameters || [], null, 2)}</textarea>
                         >
                           <FaPlay />
                         </TableActionButton>
+
+                        <TableActionButton
+                          title="Ver historial"
+                          $color="#6f42c1"
+                          onClick={() => viewTaskHistory(task._id)}
+                        >
+                          <FaHistory />
+                        </TableActionButton>
+
+                        {task.status === "running" && (
+                          <TableActionButton
+                            title="Detener tarea"
+                            $color="#dc3545"
+                            onClick={() => handleCancelTask(task._id)}
+                            disabled={cancelling}
+                          >
+                            <FaStop />
+                          </TableActionButton>
+                        )}
                       </ActionButtons>
                     </td>
                   </tr>
@@ -1192,9 +1441,22 @@ const CardActions = styled.div`
   background-color: ${({ theme }) => theme.cardFooterBg || "#f8f9fa"};
 `;
 
+const ActionButtonsContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+`;
+
+const ActionRow = styled.div`
+  display: flex;
+  gap: 8px;
+  justify-content: space-between;
+`;
+
+// Modificar ActionButton para que sea más compacto en esta vista
 const ActionButton = styled.button`
   flex: 1;
-  padding: 8px 12px;
+  padding: 8px;
   border: none;
   border-radius: 4px;
   background-color: ${(props) => props.$color || "#6c757d"};
@@ -1205,7 +1467,6 @@ const ActionButton = styled.button`
   display: flex;
   align-items: center;
   justify-content: center;
-  gap: 8px;
   transition: background-color 0.2s;
 
   &:hover {

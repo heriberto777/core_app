@@ -2,7 +2,8 @@ import styled from "styled-components";
 import { Header, TransferApi, useAuth, useFetchData } from "../../index";
 import { useState } from "react";
 import Swal from "sweetalert2";
-import { FaPlay, FaSync, FaList, FaTable } from "react-icons/fa";
+import { FaPlay, FaSync, FaList, FaTable, FaHistory } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
 
 const cnnApi = new TransferApi();
 
@@ -12,6 +13,8 @@ export function LoadsTasks() {
   const { accessToken, user } = useAuth();
   const [viewMode, setViewMode] = useState("cards"); // "cards", "list", "table"
   const [selectedTask, setSelectedTask] = useState(null);
+
+  const navigate = useNavigate();
 
   const {
     data: tasks,
@@ -543,6 +546,13 @@ export function LoadsTasks() {
                   >
                     <FaPlay /> Iniciar Proceso
                   </ActionButton>
+                  <ActionButton
+                    $color="#6f42c1"
+                    onClick={() => navigate(`/summaries`)}
+                    title="Ver histórico de traspasos"
+                  >
+                    <FaHistory /> Histórico
+                  </ActionButton>
                 </CardActions>
               </Card>
             ))}
@@ -586,6 +596,13 @@ export function LoadsTasks() {
                           disabled={task.status === "running" || !task.active}
                         >
                           <FaPlay />
+                        </TableActionButton>
+                        <TableActionButton
+                          $color="#6f42c1"
+                          onClick={() => navigate(`/summaries`)}
+                          title="Ver histórico de traspasos"
+                        >
+                          <FaHistory />
                         </TableActionButton>
                       </ActionButtons>
                     </td>

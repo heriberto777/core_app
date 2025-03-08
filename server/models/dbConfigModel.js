@@ -1,7 +1,7 @@
 const mongoose = require("mongoose");
 
 const dbConfigSchema = new mongoose.Schema({
-  serverName: { type: String, required: true, unique: true }, // Debe coincidir con JSON
+  serverName: { type: String, required: true, unique: true },
   type: {
     type: String,
     required: true,
@@ -9,16 +9,16 @@ const dbConfigSchema = new mongoose.Schema({
   },
   user: { type: String, required: true },
   password: { type: String, required: true },
-  host: { type: String, required: true }, // Antes era "server"
+  host: { type: String, required: true },
   port: { type: Number, required: true },
   database: { type: String, required: true },
-  instance: { type: String, default: null }, // Opcional para MSSQL
+  instance: { type: String, default: null },
   options: {
     encrypt: { type: Boolean, default: true },
     trustServerCertificate: { type: Boolean, default: true },
     enableArithAbort: { type: Boolean, default: true },
-    ssl: { type: Boolean, default: false }, // Para PostgreSQL y MySQL
-    authSource: { type: String, default: null }, // Para MongoDB
+    ssl: { type: Boolean, default: false },
+    authSource: { type: String, default: null },
     useNewUrlParser: { type: Boolean, default: true },
     useUnifiedTopology: { type: Boolean, default: true },
   },

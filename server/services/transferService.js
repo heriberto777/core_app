@@ -1,88 +1,33 @@
-/**
- * Ejecuta una transferencia de datos (Server1 -> Server2).
- * Implementación utilizando Tedious directamente.
- */
-// services/transferService-tedious.js
+// services/transferService.js - CORREGIDO
 const retry = require("./retry");
 const { connectToDB, closeConnection } = require("./dbService");
 const { SqlService } = require("./tediousService");
 const TransferTask = require("../models/transferTaks");
 const logger = require("./logger");
-
-// Importar la función para SSE
 const { sendProgress } = require("./progressSse");
-// Actualización: importar los nuevos servicios de correo
 const {
   sendTransferResultsEmail,
   sendCriticalErrorEmail,
 } = require("./emailService");
+const {
+  registerTask,
+  cancelTask,
+  isTaskActive,
+  completeTask,
+} = require("../utils/taskTracker");
 
-// Función de validación mejorada que maneja cadenas vacías
-function validateRecord(record, requiredFields = []) {
-  if (!record || typeof record !== "object") {
-    throw new Error("El registro debe ser un objeto válido");
-  }
-
-  // Verificar campos requeridos
-  if (requiredFields.length > 0) {
-    const missingFields = requiredFields.filter((field) => {
-      const value = record[field];
-      return value === undefined || value === null || value === "";
-    });
-
-    if (missingFields.length > 0) {
-      throw new Error(
-        `Campos requeridos faltantes: ${missingFields.join(", ")}`
-      );
-    }
-  }
-
-  // Sanitizar todos los campos
-  const sanitized = {};
-
-  for (const [key, value] of Object.entries(record)) {
-    // Validación genérica basada en el tipo de dato
-    if (value === undefined) {
-      // Reemplazar undefined con null para SQL
-      sanitized[key] = null;
-    } else if (value === null) {
-      // Mantener valores null
-      sanitized[key] = null;
-    } else if (value === "") {
-      // IMPORTANTE: Convertir cadenas vacías a NULL
-      sanitized[key] = null;
-    } else if (typeof value === "string" && value.trim() === "") {
-      // También convertir strings que solo tienen espacios a NULL
-      sanitized[key] = null;
-    } else if (typeof value === "number") {
-      // Para números, asegurarse que sean válidos
-      sanitized[key] = Number.isFinite(value) ? value : 0;
-    } else if (value instanceof Date) {
-      // Para fechas, verificar que sean válidas
-      sanitized[key] = isNaN(value.getTime()) ? null : value;
-    } else if (typeof value === "string") {
-      // Para strings normales
-      sanitized[key] = value.trim();
-    } else if (typeof value === "boolean") {
-      // Mantener booleanos sin cambios
-      sanitized[key] = value;
-    } else if (Array.isArray(value)) {
-      // Convertir arrays a JSON strings
-      sanitized[key] = JSON.stringify(value);
-    } else if (typeof value === "object") {
-      // Convertir objetos a JSON strings
-      sanitized[key] = JSON.stringify(value);
-    } else {
-      // Para cualquier otro tipo, convertir a string
-      sanitized[key] = String(value);
-    }
-  }
-
-  return sanitized;
-}
+// Opciones mejoradas para reintentos de conexión
+const CONNECTION_OPTIONS = {
+  maxAttempts: 3, // Máximo de intentos de conexión
+  retryDelay: 3000, // Delay inicial entre reintentos (3s)
+  timeout: 60000, // Timeout por intento (60s)
+  useBackoff: true, // Usar backoff exponencial
+};
 
 /**
  * Obtiene la clave primaria de la tabla desde validationRules.
+ * @param {Object} validationRules - Reglas de validación definidas para la tarea
+ * @returns {string} - Nombre del campo de clave primaria
  */
 function getPrimaryKey(validationRules) {
   if (!validationRules || !validationRules.existenceCheck) {
@@ -93,6 +38,10 @@ function getPrimaryKey(validationRules) {
 
 /**
  * Obtiene la longitud máxima permitida de una columna en SQL Server usando Tedious.
+ * @param {string} tableName - Nombre de la tabla
+ * @param {string} columnName - Nombre de la columna
+ * @param {Object} connection - Conexión a SQL Server
+ * @returns {Promise<number>} - Longitud máxima permitida
  */
 async function getColumnMaxLength(tableName, columnName, connection) {
   const query = `
@@ -104,6 +53,127 @@ async function getColumnMaxLength(tableName, columnName, connection) {
 
   const result = await SqlService.query(connection, query);
   return result.recordset[0]?.CHARACTER_MAXIMUM_LENGTH || 0;
+}
+
+/**
+ * Función robusta para conectar a la base de datos con múltiples reintentos
+ * @param {string} serverKey - Servidor al que conectar ("server1" o "server2")
+ * @returns {Promise<Object>} - Conexión o error detallado
+ */
+async function robustConnect(serverKey) {
+  let connection = null;
+  let lastError = null;
+  let attempt = 0;
+  let delay = CONNECTION_OPTIONS.retryDelay;
+
+  // Registrar intento de conexión inicial
+  logger.info(`🔄 Intentando conectar robustamente a ${serverKey}...`);
+
+  while (attempt < CONNECTION_OPTIONS.maxAttempts) {
+    attempt++;
+
+    try {
+      if (attempt > 1) {
+        logger.info(
+          `Intento ${attempt}/${CONNECTION_OPTIONS.maxAttempts} para conectar a ${serverKey}...`
+        );
+      }
+
+      connection = await connectToDB(serverKey, CONNECTION_OPTIONS.timeout);
+
+      if (!connection) {
+        throw new Error(
+          `No se pudo obtener una conexión a ${serverKey} (devolvió null)`
+        );
+      }
+
+      // Verificar la conexión con una consulta simple
+      try {
+        const testResult = await SqlService.query(
+          connection,
+          "SELECT @@SERVERNAME AS ServerName, @@VERSION AS Version"
+        );
+
+        // Registrar información del servidor para diagnóstico
+        const serverInfo = testResult.recordset[0];
+        logger.info(
+          `✅ Conexión a ${serverKey} establecida y verificada correctamente.`
+        );
+        logger.debug(
+          `Información del servidor ${serverKey}: ${JSON.stringify(serverInfo)}`
+        );
+
+        return { success: true, connection };
+      } catch (testError) {
+        logger.warn(
+          `⚠️ La conexión a ${serverKey} se estableció pero falló la consulta de prueba: ${testError.message}`
+        );
+
+        // Intentar cerrar esta conexión fallida
+        try {
+          await closeConnection(connection);
+        } catch (closeError) {}
+
+        // Guardar el error para devolverlo si todos los intentos fallan
+        lastError = new Error(
+          `Conexión establecida pero falló la consulta de prueba: ${testError.message}`
+        );
+      }
+    } catch (error) {
+      lastError = error;
+      logger.warn(
+        `⚠️ Error al conectar a ${serverKey} (intento ${attempt}/${CONNECTION_OPTIONS.maxAttempts}): ${error.message}`
+      );
+
+      // Verificar si es un error que podemos intentar de nuevo
+      const isRetryableError =
+        error.message.includes("timeout") ||
+        error.message.includes("conexión") ||
+        error.message.includes("network") ||
+        error.message.includes("connect");
+
+      if (!isRetryableError) {
+        logger.error(
+          `Error no recuperable al conectar a ${serverKey}: ${error.message}`
+        );
+        break; // Salir del bucle para errores no recuperables
+      }
+    }
+
+    // Si no es el último intento, esperar antes de reintentar
+    if (attempt < CONNECTION_OPTIONS.maxAttempts) {
+      logger.debug(
+        `Esperando ${delay}ms antes de reintentar conexión a ${serverKey}...`
+      );
+      await new Promise((resolve) => setTimeout(resolve, delay));
+
+      // Aumentar el delay si estamos usando backoff exponencial
+      if (CONNECTION_OPTIONS.useBackoff) {
+        delay = Math.min(delay * 1.5, 30000); // Máximo 30 segundos
+      }
+    }
+  }
+
+  // Si llegamos aquí, todos los intentos fallaron
+  logger.error(
+    `❌ No se pudo establecer conexión a ${serverKey} después de ${CONNECTION_OPTIONS.maxAttempts} intentos.`
+  );
+
+  // Añadir información para diagnóstico
+  const errorDetail = {
+    serverKey,
+    attempts: attempt,
+    lastErrorMessage: lastError?.message || "Error desconocido",
+    lastErrorStack: lastError?.stack,
+  };
+
+  return {
+    success: false,
+    error: new Error(
+      `No se pudo establecer conexión a ${serverKey} después de ${attempt} intentos: ${lastError?.message}`
+    ),
+    details: errorDetail,
+  };
 }
 
 /**
@@ -128,32 +198,38 @@ async function getTransferTasks() {
 
 /**
  * Ejecuta una transferencia manualmente y envía resultados detallados por correo.
- * Incluye tabla con información de registros duplicados.
- * Adaptado para usar Tedious.
+ * Versión mejorada con manejo de errores robustos y diagnóstico detallado.
  */
 async function executeTransferManual(taskId) {
   logger.info(`🔄 Ejecutando transferencia manual: ${taskId}`);
+  let task = null;
+  let transferName = "desconocida";
 
   try {
-    const task = await TransferTask.findById(taskId);
+    // 1. Buscar la tarea en la base de datos
+    task = await TransferTask.findById(taskId);
     if (!task) {
       logger.error(`❌ No se encontró la tarea con ID: ${taskId}`);
       return { success: false, message: "Tarea no encontrada" };
     }
 
+    transferName = task.name;
+    logger.info(
+      `📌 Encontrada tarea de transferencia: ${transferName} (${taskId})`
+    );
+
     if (!task.active) {
-      logger.warn(`⚠️ La tarea ${task.name} está inactiva.`);
+      logger.warn(`⚠️ La tarea ${transferName} está inactiva.`);
       return { success: false, message: "Tarea inactiva" };
     }
 
-    // Determinar qué tipo de transferencia ejecutar
-    let result;
-    logger.info(`📌 Ejecutando transferencia para la tarea: ${task.name}`);
-    result = await executeTransfer(taskId);
+    // 2. Ejecutar la transferencia
+    logger.info(`📌 Ejecutando transferencia para la tarea: ${transferName}`);
+    const result = await executeTransfer(taskId);
 
-    // Preparar datos para el correo
+    // 3. Preparar datos para el correo
     const formattedResult = {
-      name: task.name,
+      name: transferName,
       success: result.success,
       inserted: result.inserted || 0,
       updated: result.updated || 0,
@@ -168,12 +244,11 @@ async function executeTransferManual(taskId) {
       totalDuplicates: result.totalDuplicates || 0,
     };
 
-    // Enviar correo con el resultado usando el nuevo servicio
+    // 4. Enviar correo con el resultado
     try {
-      // Usar el nuevo servicio de correo que obtiene destinatarios de la BD
       await sendTransferResultsEmail([formattedResult], "manual");
       logger.info(
-        `📧 Correo de notificación enviado para la transferencia: ${task.name}`
+        `📧 Correo de notificación enviado para la transferencia: ${transferName}`
       );
     } catch (emailError) {
       logger.error(
@@ -181,8 +256,22 @@ async function executeTransferManual(taskId) {
       );
     }
 
+    // 5. Devolver el resultado
     if (result.success) {
-      logger.info(`✅ Transferencia manual completada con éxito: ${task.name}`);
+      logger.info(
+        `✅ Transferencia manual completada con éxito: ${transferName}`
+      );
+      // Al final de la ejecución exitosa de una tarea:
+      await TransferTask.findByIdAndUpdate(taskId, {
+        lastExecutionDate: new Date(),
+        $inc: { executionCount: 1 },
+        lastExecutionResult: {
+          success: result.success,
+          message: result.message || "Transferencia completada",
+          affectedRecords: result.inserted + result.updated || 0,
+        },
+      });
+
       return {
         success: true,
         message: "Transferencia manual ejecutada con éxito",
@@ -190,7 +279,10 @@ async function executeTransferManual(taskId) {
         emailSent: true,
       };
     } else {
-      logger.error(`❌ Error en la transferencia manual: ${task.name}`, result);
+      logger.error(
+        `❌ Error en la transferencia manual: ${transferName}`,
+        result
+      );
       return {
         success: false,
         message: "Error en la ejecución de la transferencia manual",
@@ -200,16 +292,16 @@ async function executeTransferManual(taskId) {
     }
   } catch (error) {
     logger.error(
-      `❌ Error en la ejecución manual de la transferencia: ${error.message}`
+      `❌ Error en la ejecución manual de la transferencia ${transferName}: ${error.message}`
     );
     console.log(error);
 
-    // Enviar correo de error usando el nuevo servicio
+    // Enviar correo de error crítico
     try {
       await sendCriticalErrorEmail(
         `Error crítico en transferencia manual: ${error.message}`,
         "manual",
-        `ID de tarea: ${taskId}`
+        `ID de tarea: ${taskId}, Nombre: ${transferName}`
       );
       logger.info(`📧 Correo de error crítico enviado`);
     } catch (emailError) {
@@ -227,7 +319,7 @@ async function executeTransferManual(taskId) {
 
 /**
  * Ejecuta una transferencia de datos (Server1 -> Server2).
- * Implementación adaptada para usar Tedious directamente.
+ * Implementación mejorada con mejor manejo de errores y diagnóstico.
  */
 const executeTransfer = async (taskId) => {
   let server1Connection = null;
@@ -238,37 +330,45 @@ const executeTransfer = async (taskId) => {
   let duplicatedRecords = [];
   let columnTypes = null;
 
-  // Monitoring de memoria
+  // Crear un AbortController para poder cancelar la operación
+  const abortController = new AbortController();
+  const { signal } = abortController;
+
+  // Registrar la tarea para poder cancelarla posteriormente
+  registerTask(taskId, abortController);
+
+  // Registrar uso de memoria inicial
   const memoryUsage = process.memoryUsage();
   logger.info(`Uso de memoria al inicio de transferencia:`, {
     rss: `${Math.round(memoryUsage.rss / 1024 / 1024)} MB`,
     heapTotal: `${Math.round(memoryUsage.heapTotal / 1024 / 1024)} MB`,
     heapUsed: `${Math.round(memoryUsage.heapUsed / 1024 / 1024)} MB`,
-    external: `${Math.round(memoryUsage.external / 1024 / 1024)} MB`,
   });
 
-  // Monitorear memoria cada 50 registros procesados
+  // Variables para monitoreo de memoria
   let processedCount = 0;
   const memoryCheckInterval = 50;
-
-  // Dentro del bucle de procesamiento, añadir:
-  processedCount++;
-  if (processedCount % memoryCheckInterval === 0) {
-    // Liberar memoria no utilizada
-    if (global.gc) {
-      global.gc();
-    }
-
-    const currentMemory = process.memoryUsage();
-    logger.debug(`Uso de memoria (${processedCount} registros):`, {
-      rss: `${Math.round(currentMemory.rss / 1024 / 1024)} MB`,
-      heapUsed: `${Math.round(currentMemory.heapUsed / 1024 / 1024)} MB`,
-    });
-  }
 
   return await retry(
     async () => {
       try {
+        // Verificar si la tarea fue cancelada desde el principio
+        if (signal.aborted) {
+          logger.info(
+            `Tarea ${taskId} cancelada por el usuario antes de iniciar`
+          );
+          await TransferTask.findByIdAndUpdate(taskId, {
+            status: "cancelled",
+            progress: -1,
+          });
+          sendProgress(taskId, -1);
+          completeTask(taskId, "cancelled");
+          return {
+            success: false,
+            message: "Transferencia cancelada por el usuario",
+          };
+        }
+
         // 1. Obtener la tarea
         const task = await TransferTask.findById(taskId);
         if (!task || !task.active) {
@@ -278,11 +378,44 @@ const executeTransfer = async (taskId) => {
           return { success: false, message: "Tarea inactiva" };
         }
 
-        logger.info(
-          `🔍 Ejecutando tarea '${task.name}' (ID: ${taskId}, tipo: ${
-            task.transferType || "estándar"
-          })`
-        );
+        logger.info(`🔍 Ejecutando tarea '${task.name}' (ID: ${taskId})`);
+
+        // Comprobar periódicamente si la tarea ha sido cancelada
+        signal.addEventListener("abort", async () => {
+          logger.info(
+            `Tarea ${taskId} (${task.name}) cancelada durante la ejecución`
+          );
+
+          // Liberar recursos
+          if (server1Connection) {
+            try {
+              await closeConnection(server1Connection);
+              server1Connection = null;
+            } catch (error) {
+              logger.error(
+                `Error al cerrar conexión server1 tras cancelación: ${error.message}`
+              );
+            }
+          }
+
+          if (server2Connection) {
+            try {
+              await closeConnection(server2Connection);
+              server2Connection = null;
+            } catch (error) {
+              logger.error(
+                `Error al cerrar conexión server2 tras cancelación: ${error.message}`
+              );
+            }
+          }
+
+          // Actualizar estado en la BD
+          await TransferTask.findByIdAndUpdate(taskId, {
+            status: "cancelled",
+            progress: -1,
+          });
+          sendProgress(taskId, -1);
+        });
 
         // 2. Actualizar estado
         await TransferTask.findByIdAndUpdate(taskId, {
@@ -313,94 +446,55 @@ const executeTransfer = async (taskId) => {
 
         // 4. Establecer conexiones con manejo mejorado
         try {
-          // Intentar conectar a server1
-          logger.debug(`Intentando conectar a server1 para tarea ${taskId}...`);
-          server1Connection = await connectToDB("server1", 30000);
+          // 4.1 Conectar a server1 con conexión robusta
+          logger.info(
+            `Estableciendo conexión a server1 para tarea ${task.name}...`
+          );
 
-          if (!server1Connection) {
+          const server1Result = await robustConnect("server1");
+
+          if (!server1Result.success) {
             throw new Error(
-              "No se pudo establecer una conexión válida con server1"
+              `No se pudo establecer conexión a server1: ${server1Result.error.message}`
             );
           }
 
-          // Verificar con consulta sencilla
-          try {
-            await SqlService.query(server1Connection, "SELECT 1 AS test");
-            logger.info(`✅ Conexión a server1 verificada con éxito`);
-          } catch (testError) {
-            logger.warn(
-              `⚠️ Prueba de conexión a server1 falló: ${testError.message}`
-            );
+          server1Connection = server1Result.connection;
+          logger.info(
+            `✅ Conexión a server1 establecida exitosamente para tarea ${task.name}`
+          );
 
-            // Reintentar la conexión una vez más
-            try {
-              await closeConnection(server1Connection);
-            } catch (e) {}
+          // Verificar cancelación después de primera conexión
+          if (signal.aborted) throw new Error("Tarea cancelada por el usuario");
 
-            logger.info(`🔄 Reintentando conexión a server1...`);
-            server1Connection = await connectToDB("server1", 30000);
+          // 4.2 Conectar a server2 con conexión robusta
+          logger.info(
+            `Estableciendo conexión a server2 para tarea ${task.name}...`
+          );
 
-            if (!server1Connection) {
-              throw new Error(
-                "No se pudo restablecer la conexión con server1 en el segundo intento"
-              );
-            }
+          const server2Result = await robustConnect("server2");
 
-            // Verificar la nueva conexión
-            await SqlService.query(server1Connection, "SELECT 1 AS test");
-            logger.info(`✅ Reconexión a server1 verificada con éxito`);
-          }
-
-          // Intentar conectar a server2
-          logger.debug(`Intentando conectar a server2 para tarea ${taskId}...`);
-          server2Connection = await connectToDB("server2", 30000);
-
-          if (!server2Connection) {
-            // Cerrar server1Connection que ya se conectó
+          if (!server2Result.success) {
+            // Cerrar la conexión a server1 antes de lanzar el error
             if (server1Connection) {
               await closeConnection(server1Connection);
               server1Connection = null;
             }
+
             throw new Error(
-              "No se pudo establecer una conexión válida con server2"
+              `No se pudo establecer conexión a server2: ${server2Result.error.message}`
             );
           }
 
-          // Verificar con consulta sencilla
-          try {
-            await SqlService.query(server2Connection, "SELECT 1 AS test");
-            logger.info(`✅ Conexión a server2 verificada con éxito`);
-          } catch (testError) {
-            logger.warn(
-              `⚠️ Prueba de conexión a server2 falló: ${testError.message}`
-            );
-
-            // Cerrar y reintentar
-            try {
-              await closeConnection(server2Connection);
-            } catch (e) {}
-
-            logger.info(`🔄 Reintentando conexión a server2...`);
-            server2Connection = await connectToDB("server2", 30000);
-
-            if (!server2Connection) {
-              await closeConnection(server1Connection);
-              server1Connection = null;
-              throw new Error(
-                "No se pudo restablecer la conexión con server2 en el segundo intento"
-              );
-            }
-
-            // Verificar la nueva conexión
-            await SqlService.query(server2Connection, "SELECT 1 AS test");
-            logger.info(`✅ Reconexión a server2 verificada con éxito`);
-          }
-
+          server2Connection = server2Result.connection;
           logger.info(
-            `Conexiones establecidas y verificadas para tarea ${taskId}`
+            `✅ Conexión a server2 establecida exitosamente para tarea ${task.name}`
           );
 
-          // Obtener los tipos de columnas de la tabla destino
+          // Verificar cancelación después de segunda conexión
+          if (signal.aborted) throw new Error("Tarea cancelada por el usuario");
+
+          // 4.3 Obtener los tipos de columnas de la tabla destino
           try {
             logger.debug(`Obteniendo tipos de columnas para tabla ${name}...`);
             columnTypes = await SqlService.getColumnTypes(
@@ -417,12 +511,35 @@ const executeTransfer = async (taskId) => {
             columnTypes = {};
           }
         } catch (connError) {
+          // Verificar si el error fue por cancelación
+          if (signal.aborted) {
+            logger.info(
+              `Tarea ${taskId} cancelada durante establecimiento de conexiones`
+            );
+            completeTask(taskId, "cancelled");
+            return {
+              success: false,
+              message: "Transferencia cancelada por el usuario",
+            };
+          }
+
           logger.error(
-            `Error al establecer conexiones para tarea ${taskId}:`,
+            `Error al establecer conexiones para tarea ${task.name}:`,
             connError
           );
+
+          // Registrar detalles adicionales para diagnóstico
+          logger.error(
+            `Detalles de error de conexión: ${JSON.stringify({
+              message: connError.message,
+              stack: connError.stack,
+              details: connError.details || "No details available",
+            })}`
+          );
+
           await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
           sendProgress(taskId, -1);
+
           return {
             success: false,
             message: "Error al establecer conexiones de base de datos",
@@ -432,6 +549,8 @@ const executeTransfer = async (taskId) => {
 
         // 5. Verificar conteo inicial de registros
         try {
+          if (signal.aborted) throw new Error("Tarea cancelada por el usuario");
+
           const countResult = await SqlService.query(
             server2Connection,
             `SELECT COUNT(*) AS total FROM dbo.[${name}] WITH (NOLOCK)`
@@ -441,6 +560,18 @@ const executeTransfer = async (taskId) => {
             `Conteo inicial en tabla ${name}: ${initialCount} registros`
           );
         } catch (countError) {
+          // Verificar si el error fue por cancelación
+          if (signal.aborted) {
+            logger.info(
+              `Tarea ${taskId} cancelada durante verificación de conteo inicial`
+            );
+            completeTask(taskId, "cancelled");
+            return {
+              success: false,
+              message: "Transferencia cancelada por el usuario",
+            };
+          }
+
           logger.warn(
             `No se pudo verificar conteo inicial: ${countError.message}`
           );
@@ -450,6 +581,9 @@ const executeTransfer = async (taskId) => {
         // 6. Obtener datos del servidor 1
         let data = [];
         try {
+          // Verificar cancelación
+          if (signal.aborted) throw new Error("Tarea cancelada por el usuario");
+
           // Construir consulta final con parámetros
           let finalQuery = query;
           const params = {};
@@ -474,7 +608,6 @@ const executeTransfer = async (taskId) => {
                 param.operator === "IN" &&
                 Array.isArray(param.value)
               ) {
-                // Para operador IN, creamos parámetros dinámicos para cada valor
                 const placeholders = param.value.map((val, idx) => {
                   const paramName = `${param.field}_${idx}`;
                   params[paramName] = val;
@@ -484,7 +617,6 @@ const executeTransfer = async (taskId) => {
                   `${param.field} IN (${placeholders.join(", ")})`
                 );
               } else {
-                // Operadores simples
                 conditions.push(
                   `${param.field} ${param.operator} @${param.field}`
                 );
@@ -495,7 +627,9 @@ const executeTransfer = async (taskId) => {
           }
 
           logger.debug(
-            `Ejecutando consulta en Server1: ${finalQuery.substring(0, 200)}...`
+            `Ejecutando consulta en Server1 para ${
+              task.name
+            }: ${finalQuery.substring(0, 200)}...`
           );
 
           // Sanitizar los parámetros antes de la consulta
@@ -508,10 +642,23 @@ const executeTransfer = async (taskId) => {
 
           data = result.recordset;
           logger.info(
-            `Datos obtenidos correctamente: ${data.length} registros`
+            `Datos obtenidos correctamente para ${task.name}: ${data.length} registros`
           );
         } catch (queryError) {
-          logger.error("Error en la consulta en Server1", queryError);
+          // Verificar si el error fue por cancelación
+          if (signal.aborted) {
+            logger.info(`Tarea ${taskId} cancelada durante consulta de datos`);
+            completeTask(taskId, "cancelled");
+            return {
+              success: false,
+              message: "Transferencia cancelada por el usuario",
+            };
+          }
+
+          logger.error(
+            `Error en la consulta en Server1 para ${task.name}:`,
+            queryError
+          );
           await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
           sendProgress(taskId, -1);
           return {
@@ -535,7 +682,10 @@ const executeTransfer = async (taskId) => {
           };
         }
 
-        // Verificar si la tarea tiene habilitada la opción de borrar antes de insertar
+        // Verificar cancelación antes de continuar con el procesamiento principal
+        if (signal.aborted) throw new Error("Tarea cancelada por el usuario");
+
+        // 8. Verificar si hay que borrar registros existentes
         if (task.clearBeforeInsert) {
           try {
             logger.info(
@@ -549,12 +699,22 @@ const executeTransfer = async (taskId) => {
               `✅ Se eliminaron ${deletedCount} registros de la tabla ${name}`
             );
           } catch (clearError) {
+            // Verificar si el error fue por cancelación
+            if (signal.aborted) {
+              logger.info(
+                `Tarea ${taskId} cancelada durante borrado de registros`
+              );
+              completeTask(taskId, "cancelled");
+              return {
+                success: false,
+                message: "Transferencia cancelada por el usuario",
+              };
+            }
             logger.error(
               `❌ Error al borrar registros de la tabla ${name}:`,
               clearError
             );
 
-            // Decidir si continuar o abortar
             if (
               clearError.message &&
               clearError.message.includes("no existe")
@@ -563,16 +723,14 @@ const executeTransfer = async (taskId) => {
                 `⚠️ La tabla no existe, continuando con la inserción...`
               );
             } else {
-              // Si es otro tipo de error, puedes decidir si continuar o abortar
               logger.warn(
                 `⚠️ Error al borrar registros pero continuando con la inserción...`
               );
-
-              // Si quieres abortar en caso de error:
               await TransferTask.findByIdAndUpdate(taskId, {
                 status: "failed",
               });
               sendProgress(taskId, -1);
+              completeTask(taskId, "failed");
               return {
                 success: false,
                 message: "Error al borrar registros existentes",
@@ -582,7 +740,10 @@ const executeTransfer = async (taskId) => {
           }
         }
 
-        // 8. Configurar claves para identificar registros
+        // Verificar cancelación antes de continuar
+        if (signal.aborted) throw new Error("Tarea cancelada por el usuario");
+
+        // 9. Configurar claves para identificar registros
         const primaryKeys = validationRules?.existenceCheck?.key
           ? [validationRules.existenceCheck.key]
           : [];
@@ -598,17 +759,18 @@ const executeTransfer = async (taskId) => {
           };
         }
 
-        // 9. Pre-cargar información de longitud de columnas
+        // 10. Pre-cargar información de longitud de columnas
         const columnLengthCache = new Map();
 
-        // 10. Preparar variables para tracking
+        // 11. Preparar variables para tracking
         let affectedRecords = [];
         let totalInserted = 0;
         const batchSize = 500;
 
-        // 11. Procesar por lotes para inserción
+        // 12. Procesar por lotes para inserción
         try {
-          // Obtener listado de registros existentes para verificar duplicados
+          if (signal.aborted) throw new Error("Tarea cancelada por el usuario");
+          // 12.1 Obtener listado de registros existentes para verificar duplicados
           let existingKeysSet = new Set();
 
           if (initialCount > 0 && mergeKeys.length > 0) {
@@ -629,7 +791,6 @@ const executeTransfer = async (taskId) => {
 
               // Crear un conjunto de claves para verificación rápida de duplicados
               for (const record of keysResult.recordset) {
-                // Generar clave compuesta (todas las mergeKeys)
                 const key = mergeKeys
                   .map((k) => {
                     const value = record[k] === null ? "NULL" : record[k];
@@ -641,49 +802,76 @@ const executeTransfer = async (taskId) => {
               }
 
               logger.debug(
-                `Se encontraron ${existingKeysSet.size} claves existentes en la tabla destino`
+                `Se encontraron ${existingKeysSet.size} claves existentes en la tabla destino para ${task.name}`
               );
             } catch (keysError) {
               logger.warn(
-                `Error al obtener claves existentes: ${keysError.message}. Se intentará inserción sin verificación previa.`
+                `Error al obtener claves existentes para ${task.name}: ${keysError.message}. Se intentará inserción sin verificación previa.`
               );
             }
           }
 
+          // 12.2 Procesar datos en lotes
           for (let i = 0; i < data.length; i += batchSize) {
+            // Verificar cancelación al principio de cada lote
+            if (signal.aborted)
+              throw new Error("Tarea cancelada por el usuario");
+
             const batch = data.slice(i, i + batchSize);
             const batchNumber = Math.floor(i / batchSize) + 1;
             const totalBatches = Math.ceil(data.length / batchSize);
 
             logger.debug(
-              `Procesando lote ${batchNumber}/${totalBatches} (${batch.length} registros)...`
+              `Procesando lote ${batchNumber}/${totalBatches} (${batch.length} registros) para ${task.name}...`
             );
 
-            // Verificar si la conexión sigue activa mediante una consulta sencilla
+            // Verificar si la conexión sigue activa
             try {
               await SqlService.query(server2Connection, "SELECT 1 AS test");
             } catch (connError) {
+              // Verificar si el error fue por cancelación
+              if (signal.aborted) {
+                logger.info(
+                  `Tarea ${taskId} cancelada durante obtención de claves existentes`
+                );
+                completeTask(taskId, "cancelled");
+                return {
+                  success: false,
+                  message: "Transferencia cancelada por el usuario",
+                };
+              }
               logger.warn(
-                `Conexión perdida durante procesamiento, intentando reconectar...`
+                `Conexión perdida durante procesamiento de ${task.name}, intentando reconectar...`
               );
+
               try {
                 await closeConnection(server2Connection);
               } catch (e) {}
 
-              server2Connection = await connectToDB("server2", 30000);
-              if (!server2Connection) {
+              // Usar robustConnect para mejorar la reconexión
+              const reconnectResult = await robustConnect("server2");
+
+              if (!reconnectResult.success) {
                 throw new Error(
-                  "No se pudo restablecer la conexión durante el procesamiento"
+                  `No se pudo restablecer la conexión durante el procesamiento: ${reconnectResult.error.message}`
                 );
               }
+
+              server2Connection = reconnectResult.connection;
+              logger.info(
+                `✅ Reconexión exitosa a server2 durante procesamiento de ${task.name}`
+              );
             }
 
-            // Procesar cada registro individualmente para inserción
+            // Procesar cada registro individualmente
             let batchInserted = 0;
             let batchSkipped = 0;
             const insertBatchSize = 50;
 
             for (let j = 0; j < batch.length; j += insertBatchSize) {
+              // Verificar cancelación al principio de cada lote
+              if (signal.aborted)
+                throw new Error("Tarea cancelada por el usuario");
               const insertSubBatch = batch.slice(j, j + insertBatchSize);
 
               for (const record of insertSubBatch) {
@@ -738,7 +926,7 @@ const executeTransfer = async (taskId) => {
                     }
                   }
 
-                  // Verificar si es un duplicado consultando el conjunto de claves existentes
+                  // Verificar si es un duplicado usando el conjunto de claves
                   if (existingKeysSet.size > 0) {
                     const recordKey = mergeKeys
                       .map((k) => {
@@ -751,11 +939,11 @@ const executeTransfer = async (taskId) => {
                       .join("|");
 
                     if (existingKeysSet.has(recordKey)) {
-                      // Es un duplicado, registrar advertencia y continuar
+                      // Es un duplicado, registrar y continuar
                       duplicateCount++;
                       batchSkipped++;
 
-                      // Construir mensaje claro para identificar el registro duplicado
+                      // Información para identificar el registro duplicado
                       const duplicateInfo = mergeKeys
                         .map((k) => `${k}=${validatedRecord[k]}`)
                         .join(", ");
@@ -766,7 +954,7 @@ const executeTransfer = async (taskId) => {
                         duplicateRecord[key] = validatedRecord[key];
                       });
 
-                      // Añadir campos adicionales de interés
+                      // Añadir campos adicionales
                       const additionalFields = Object.keys(validatedRecord)
                         .filter((k) => !mergeKeys.includes(k))
                         .slice(0, 5);
@@ -776,15 +964,15 @@ const executeTransfer = async (taskId) => {
                       });
 
                       duplicatedRecords.push(duplicateRecord);
-                      logger.warn(
-                        `⚠️ Registro duplicado encontrado y omitido: ${duplicateInfo}`
+                      logger.debug(
+                        `⚠️ Registro duplicado omitido en ${task.name}: ${duplicateInfo}`
                       );
                       continue;
                     }
                   }
 
+                  // Intentar insertar el registro
                   try {
-                    // Usar el nuevo método insertWithExplicitTypes para mayor seguridad
                     const insertResult =
                       await SqlService.insertWithExplicitTypes(
                         server2Connection,
@@ -798,7 +986,7 @@ const executeTransfer = async (taskId) => {
                       totalInserted += rowsAffected;
                       batchInserted += rowsAffected;
 
-                      // Añadir esta clave al conjunto para detectar duplicados en el mismo lote
+                      // Añadir clave al conjunto para evitar duplicados en el mismo lote
                       if (existingKeysSet.size > 0) {
                         const newKey = mergeKeys
                           .map((k) => {
@@ -814,7 +1002,10 @@ const executeTransfer = async (taskId) => {
                       }
                     }
                   } catch (insertError) {
-                    // Capturar error por violación de clave primaria (duplicado)
+                    // Verificar si el error fue por cancelación
+                    if (signal.aborted)
+                      throw new Error("Tarea cancelada por el usuario");
+                    // Manejar error por clave duplicada
                     if (
                       insertError.number === 2627 ||
                       insertError.number === 2601 ||
@@ -826,7 +1017,7 @@ const executeTransfer = async (taskId) => {
                       duplicateCount++;
                       batchSkipped++;
 
-                      // Construir mensaje para identificar el registro duplicado
+                      // Información para identificar el registro duplicado
                       const duplicateInfo = mergeKeys
                         .map((k) => `${k}=${validatedRecord[k]}`)
                         .join(", ");
@@ -837,70 +1028,73 @@ const executeTransfer = async (taskId) => {
                         duplicateRecord[key] = validatedRecord[key];
                       });
 
-                      // Añadir información adicional
                       duplicateRecord._errorMessage =
                         insertError.message.substring(0, 100);
                       duplicatedRecords.push(duplicateRecord);
 
-                      logger.warn(
-                        `⚠️ Error de inserción por duplicado: ${duplicateInfo}`
+                      logger.debug(
+                        `⚠️ Error de inserción por duplicado en ${task.name}: ${duplicateInfo}`
                       );
-                    } else {
-                      // Verificar si es error de conexión
-                      if (
-                        insertError.message &&
-                        (insertError.message.includes("conexión") ||
-                          insertError.message.includes("connection") ||
-                          insertError.message.includes("timeout") ||
-                          insertError.message.includes("Timeout"))
-                      ) {
-                        // Reconectar y reintentar
-                        logger.warn(
-                          `Error de conexión durante inserción, reconectando...`
-                        );
+                    } else if (
+                      insertError.message &&
+                      (insertError.message.includes("conexión") ||
+                        insertError.message.includes("connection") ||
+                        insertError.message.includes("timeout") ||
+                        insertError.message.includes("Timeout"))
+                    ) {
+                      // Error de conexión - reconectar y reintentar
+                      logger.warn(
+                        `Error de conexión durante inserción en ${task.name}, reconectando...`
+                      );
 
-                        try {
-                          await closeConnection(server2Connection);
-                        } catch (e) {}
+                      try {
+                        await closeConnection(server2Connection);
+                      } catch (e) {}
 
-                        server2Connection = await connectToDB("server2", 30000);
+                      // Usar robustConnect para mejorar la reconexión
+                      const reconnectResult = await robustConnect("server2");
 
-                        if (!server2Connection) {
-                          throw new Error(
-                            "No se pudo restablecer la conexión para continuar con las inserciones"
-                          );
-                        }
-
-                        // Reintentar la inserción
-                        const retryResult =
-                          await SqlService.insertWithExplicitTypes(
-                            server2Connection,
-                            `dbo.[${name}]`,
-                            validatedRecord
-                          );
-
-                        const rowsAffected = retryResult.rowsAffected;
-
-                        if (rowsAffected > 0) {
-                          totalInserted += rowsAffected;
-                          batchInserted += rowsAffected;
-                          logger.info(
-                            `Inserción exitosa después de reconexión`
-                          );
-                        }
-                      } else {
-                        // Otros errores, propagar
-                        logger.error(
-                          "Error al insertar registro:",
-                          insertError
-                        );
+                      if (!reconnectResult.success) {
                         throw new Error(
-                          `Error al insertar registro: ${insertError.message}`
+                          `No se pudo restablecer la conexión para continuar inserciones: ${reconnectResult.error.message}`
                         );
                       }
+
+                      server2Connection = reconnectResult.connection;
+
+                      // Reintentar la inserción
+                      const retryResult =
+                        await SqlService.insertWithExplicitTypes(
+                          server2Connection,
+                          `dbo.[${name}]`,
+                          validatedRecord
+                        );
+
+                      const rowsAffected = retryResult.rowsAffected;
+
+                      if (rowsAffected > 0) {
+                        totalInserted += rowsAffected;
+                        batchInserted += rowsAffected;
+                        logger.info(
+                          `Inserción exitosa después de reconexión en ${task.name}`
+                        );
+                      }
+                    } else {
+                      // Otros errores
+                      logger.error(
+                        `Error al insertar registro en ${task.name}:`,
+                        insertError
+                      );
+                      throw new Error(
+                        `Error al insertar registro: ${insertError.message}`
+                      );
                     }
                   }
                 } catch (recordError) {
+                  // Verificar si el error fue por cancelación
+                  if (signal.aborted)
+                    throw new Error("Tarea cancelada por el usuario");
+
                   // Errores no relacionados con duplicados
                   if (
                     recordError.number !== 2627 &&
@@ -910,11 +1104,30 @@ const executeTransfer = async (taskId) => {
                     throw recordError;
                   }
                 }
+
+                // Monitoreo de memoria ocasional
+                processedCount++;
+                if (processedCount % memoryCheckInterval === 0) {
+                  if (global.gc) {
+                    global.gc();
+                  }
+
+                  const currentMemory = process.memoryUsage();
+                  logger.debug(
+                    `Uso de memoria (${processedCount} registros):`,
+                    {
+                      rss: `${Math.round(currentMemory.rss / 1024 / 1024)} MB`,
+                      heapUsed: `${Math.round(
+                        currentMemory.heapUsed / 1024 / 1024
+                      )} MB`,
+                    }
+                  );
+                }
               }
             }
 
             logger.debug(
-              `Lote ${batchNumber}: ${batchInserted} registros insertados, ${batchSkipped} omitidos por duplicados`
+              `Lote ${batchNumber}/${totalBatches} para ${task.name}: ${batchInserted} registros insertados, ${batchSkipped} omitidos por duplicados`
             );
 
             // Actualizar progreso con throttling
@@ -925,18 +1138,23 @@ const executeTransfer = async (taskId) => {
               lastReportedProgress = progress;
               await TransferTask.findByIdAndUpdate(taskId, { progress });
               sendProgress(taskId, progress);
-              logger.debug(`Progreso actualizado: ${progress}%`);
+              logger.debug(
+                `Progreso actualizado para ${task.name}: ${progress}%`
+              );
             }
           }
 
-          // 12. Actualizar estado a completado
+          // Verificar si la tarea fue cancelada antes de finalizar
+          if (signal.aborted) throw new Error("Tarea cancelada por el usuario");
+
+          // 13. Actualizar estado a completado
           await TransferTask.findByIdAndUpdate(taskId, {
             status: "completed",
             progress: 100,
           });
           sendProgress(taskId, 100);
 
-          // 13. Verificar conteo final
+          // 14. Verificar conteo final
           let finalCount = 0;
           try {
             const countResult = await SqlService.query(
@@ -951,32 +1169,41 @@ const executeTransfer = async (taskId) => {
             );
           } catch (countError) {
             logger.warn(
-              `No se pudo verificar conteo final: ${countError.message}`
+              `No se pudo verificar conteo final para ${task.name}: ${countError.message}`
             );
           }
 
-          // 14. Ejecutar consulta post-actualización
+          // 15. Ejecutar consulta post-actualización si corresponde
           if (postUpdateQuery && affectedRecords.length > 0) {
             try {
+              // Verificar si la tarea fue cancelada antes de finalizar
+              if (signal.aborted)
+                throw new Error("Tarea cancelada por el usuario");
               // Verificar si la conexión a server1 sigue activa
               try {
                 await SqlService.query(server1Connection, "SELECT 1 AS test");
               } catch (testError) {
                 logger.warn(
-                  "Reconectando al servidor 1 para post-actualización"
+                  `Reconectando a server1 para post-actualización de ${task.name}`
                 );
+
                 try {
                   await closeConnection(server1Connection);
                 } catch (e) {}
 
-                server1Connection = await connectToDB("server1", 30000);
-                if (!server1Connection) {
+                // Usar robustConnect para la reconexión
+                const reconnectResult = await robustConnect("server1");
+
+                if (!reconnectResult.success) {
                   throw new Error(
-                    "No se pudo reconectar a server1 para post-actualización"
+                    `No se pudo reconectar a server1 para post-actualización: ${reconnectResult.error.message}`
                   );
                 }
+
+                server1Connection = reconnectResult.connection;
               }
 
+              // Procesar en lotes para la actualización
               const postUpdateBatchSize = 500;
 
               for (
@@ -989,7 +1216,7 @@ const executeTransfer = async (taskId) => {
                   i + postUpdateBatchSize
                 );
 
-                // Procesar claves - quitar prefijo CN
+                // Procesar claves - quitar prefijo CN si es necesario
                 const processedKeys = keyBatch.map((key) =>
                   typeof key === "string" && key.startsWith("CN")
                     ? key.replace(/^CN/, "")
@@ -1015,25 +1242,25 @@ const executeTransfer = async (taskId) => {
                 const dynamicUpdateQuery = `${postUpdateQuery} WHERE ${primaryKeyField} IN (${keyParams})`;
 
                 try {
-                  // Sanitizar los parámetros
                   const sanitizedParams = SqlService.sanitizeParams(params);
-
-                  // Ejecutar la actualización
                   const updateResult = await SqlService.query(
                     server1Connection,
                     dynamicUpdateQuery,
                     sanitizedParams
                   );
                   logger.info(
-                    `Post-actualización: ${updateResult.rowsAffected} filas afectadas`
+                    `Post-actualización para ${task.name}: ${updateResult.rowsAffected} filas afectadas`
                   );
                 } catch (updateError) {
+                  // Verificar si el error fue por cancelación
+                  if (signal.aborted)
+                    throw new Error("Tarea cancelada por el usuario");
                   logger.error(
-                    `Error en consulta post-actualización:`,
+                    `Error en consulta post-actualización para ${task.name}:`,
                     updateError
                   );
 
-                  // Si es un error de conexión, intentar reconectar y reintentar
+                  // Reconectar si es un error de conexión
                   if (
                     updateError.message &&
                     (updateError.message.includes("conexión") ||
@@ -1041,49 +1268,62 @@ const executeTransfer = async (taskId) => {
                       updateError.message.includes("timeout"))
                   ) {
                     logger.info(
-                      "Reintentando post-actualización tras error de conexión"
+                      `Reintentando post-actualización de ${task.name} tras error de conexión`
                     );
 
                     try {
                       await closeConnection(server1Connection);
                     } catch (e) {}
 
-                    server1Connection = await connectToDB("server1", 30000);
-                    if (!server1Connection) {
+                    // Usar robustConnect para la reconexión
+                    const reconnectResult = await robustConnect("server1");
+
+                    if (!reconnectResult.success) {
                       throw new Error(
-                        "No se pudo reconectar para reintentar post-actualización"
+                        `No se pudo reconectar para reintentar post-actualización: ${reconnectResult.error.message}`
                       );
                     }
 
-                    // Sanitizar los parámetros
-                    const sanitizedParams = SqlService.sanitizeParams(params);
+                    server1Connection = reconnectResult.connection;
 
                     // Reintentar la actualización
+                    const sanitizedParams = SqlService.sanitizeParams(params);
                     const retryResult = await SqlService.query(
                       server1Connection,
                       dynamicUpdateQuery,
                       sanitizedParams
                     );
                     logger.info(
-                      `Post-actualización (reintento): ${retryResult.rowsAffected} filas afectadas`
+                      `Post-actualización de ${task.name} (reintento): ${retryResult.rowsAffected} filas afectadas`
                     );
                   }
                 }
               }
 
               logger.info(
-                `✅ Consulta post-transferencia ejecutada correctamente para ${name}`
+                `✅ Consulta post-transferencia ejecutada correctamente para ${task.name}`
               );
             } catch (postUpdateError) {
+              if (signal.aborted) {
+                logger.info(
+                  `Tarea ${taskId} cancelada durante post-actualización`
+                );
+                completeTask(taskId, "cancelled");
+                return {
+                  success: false,
+                  message: "Transferencia cancelada por el usuario",
+                };
+              }
+
               logger.error(
-                `❌ Error en consulta post-transferencia`,
+                `❌ Error en consulta post-transferencia para ${task.name}:`,
                 postUpdateError
               );
-              // No fallamos toda la operación, solo registramos el error de post-actualización
+              // No fallamos toda la operación por un error en post-actualización
             }
           }
 
-          // 15. Preparar resultado final
+          // 16. Preparar resultado final
           const maxDuplicatesToReport = 100;
           const reportedDuplicates = duplicatedRecords.slice(
             0,
@@ -1092,7 +1332,8 @@ const executeTransfer = async (taskId) => {
           const hasMoreDuplicates =
             duplicatedRecords.length > maxDuplicatesToReport;
 
-          return {
+          // Crear una variable result en lugar de retornar directamente
+          const result = {
             success: true,
             message: "Transferencia completada",
             rows: data.length,
@@ -1104,9 +1345,42 @@ const executeTransfer = async (taskId) => {
             initialCount,
             finalCount,
           };
+
+          // Al final de la ejecución exitosa de una tarea:
+          await TransferTask.findByIdAndUpdate(taskId, {
+            lastExecutionDate: new Date(),
+            $inc: { executionCount: 1 },
+            lastExecutionResult: {
+              success: result.success,
+              message: result.message || "Transferencia completada",
+              affectedRecords: result.inserted + result.updated || 0,
+            },
+          });
+
+          return result;
         } catch (processingError) {
+          // Verificar si el error fue por cancelación
+          if (
+            signal.aborted ||
+            processingError.message.includes("cancelada por el usuario")
+          ) {
+            logger.info(
+              `Tarea ${taskId} cancelada por el usuario durante procesamiento`
+            );
+            await TransferTask.findByIdAndUpdate(taskId, {
+              status: "cancelled",
+              progress: -1,
+            });
+            sendProgress(taskId, -1);
+            completeTask(taskId, "cancelled");
+            return {
+              success: false,
+              message: "Transferencia cancelada por el usuario",
+            };
+          }
+
           logger.error(
-            "Error durante el procesamiento de datos",
+            `Error durante el procesamiento de datos para ${task.name}:`,
             processingError
           );
           await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
@@ -1118,8 +1392,29 @@ const executeTransfer = async (taskId) => {
           };
         }
       } catch (outerError) {
+        // Verificar si el error fue por cancelación
+        if (
+          signal.aborted ||
+          outerError.message.includes("cancelada por el usuario")
+        ) {
+          logger.info(`Tarea ${taskId} cancelada por el usuario`);
+          await TransferTask.findByIdAndUpdate(taskId, {
+            status: "cancelled",
+            progress: -1,
+          });
+          sendProgress(taskId, -1);
+          completeTask(taskId, "cancelled");
+          return {
+            success: false,
+            message: "Transferencia cancelada por el usuario",
+          };
+        }
+
         // Manejo de errores generales
-        logger.error("Error general en la transferencia", outerError);
+        logger.error(
+          `Error general en la transferencia de ${taskId}:`,
+          outerError
+        );
         await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
         sendProgress(taskId, -1);
         return {
@@ -1148,8 +1443,8 @@ const executeTransfer = async (taskId) => {
         }
       }
     },
-    3,
-    5000,
+    3, // Número máximo de reintentos
+    5000, // Tiempo inicial entre reintentos
     `Ejecutar Transferencia para tarea ${taskId}`
   );
 };
@@ -1241,26 +1536,24 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
           // Si quieres abortar en caso de error:
           await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
           sendProgress(taskId, -1);
-          throw new Error(`Error al borrar registros existentes: ${clearError.message}`);
+          throw new Error(
+            `Error al borrar registros existentes: ${clearError.message}`
+          );
         }
       }
     }
 
     // 3) Conectarse a la DB de destino con manejo mejorado de conexiones
     try {
-      logger.debug(
-        `Intentando conectar a server2 para inserción en lotes (taskId: ${taskId}, task: ${taskName})...`
-      );
-      server2Connection = await connectToDB("server2", 30000);
-
-      if (!server2Connection) {
+      // Usar conexión robusta
+      const connectionResult = await robustConnect("server2");
+      if (!connectionResult.success) {
         throw new Error(
-          "No se pudo establecer una conexión válida con server2"
+          `No se pudo establecer conexión a server2: ${connectionResult.error.message}`
         );
       }
 
-      // Verificar conexión con una consulta simple
-      await SqlService.query(server2Connection, "SELECT 1 AS test");
+      server2Connection = connectionResult.connection;
       logger.info(
         `Conexión establecida y verificada para inserción en lotes (taskId: ${taskId}, task: ${taskName})`
       );
@@ -1324,7 +1617,7 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
       const totalBatches = Math.ceil(data.length / batchSize);
 
       logger.debug(
-        `Procesando lote ${currentBatchNumber}/${totalBatches} (${batch.length} registros)...`
+        `Procesando lote ${currentBatchNumber}/${totalBatches} (${batch.length} registros) para ${taskName}...`
       );
 
       // Verificar si la conexión sigue activa y reconectar si es necesario
@@ -1339,13 +1632,15 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
           await closeConnection(server2Connection);
         } catch (e) {}
 
-        server2Connection = await connectToDB("server2", 30000);
-        if (!server2Connection) {
-          throw new Error("No se pudo restablecer la conexión con server2");
+        // Usar conexión robusta
+        const reconnectResult = await robustConnect("server2");
+        if (!reconnectResult.success) {
+          throw new Error(
+            `No se pudo restablecer la conexión: ${reconnectResult.error.message}`
+          );
         }
 
-        // Verificar la nueva conexión
-        await SqlService.query(server2Connection, "SELECT 1 AS test");
+        server2Connection = reconnectResult.connection;
         logger.info(
           `Reconexión exitosa a server2 para lote ${currentBatchNumber}`
         );
@@ -1428,12 +1723,15 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
                 await closeConnection(server2Connection);
               } catch (e) {}
 
-              server2Connection = await connectToDB("server2", 30000);
-              if (!server2Connection) {
+              // Usar conexión robusta
+              const reconnectResult = await robustConnect("server2");
+              if (!reconnectResult.success) {
                 throw new Error(
-                  "No se pudo restablecer la conexión para continuar inserciones"
+                  `No se pudo restablecer la conexión: ${reconnectResult.error.message}`
                 );
               }
+
+              server2Connection = reconnectResult.connection;
 
               // Reintentar inserción
               const retryResult = await SqlService.insertWithExplicitTypes(
@@ -1531,9 +1829,8 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
       finalCount,
     };
 
-    // 11. Enviar correo con el resultado usando el nuevo servicio
+    // 11. Enviar correo con el resultado
     try {
-      // Formatear resultado para el correo
       const formattedResult = {
         name: task.name,
         success: result.success,
@@ -1545,7 +1842,6 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
         finalCount: result.finalCount,
       };
 
-      // Enviar usando el nuevo servicio que consulta destinatarios desde BD
       await sendTransferResultsEmail([formattedResult], "batch");
       logger.info(`Correo de notificación enviado para ${taskName}`);
     } catch (emailError) {
@@ -1566,7 +1862,7 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
     await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
     sendProgress(taskId, -1);
 
-    // Enviar correo de error usando el nuevo servicio
+    // Enviar correo de error
     try {
       const errorMessage = `Error en inserción en lotes para ${taskName}: ${error.message}`;
       await sendCriticalErrorEmail(
@@ -1633,4 +1929,6 @@ module.exports = {
   executeTransfer,
   insertInBatchesSSE,
   upsertTransferTask,
+  // Exportar nueva función para diagnóstico
+  robustConnect,
 };

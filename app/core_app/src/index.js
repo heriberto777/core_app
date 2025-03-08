@@ -1,4 +1,5 @@
 export * from './App';
+export { default as TransferSummaryApi } from './api/TransferSummaryApi';
 export * from './api/authApi';
 export * from './api/emailRecipientApi';
 export * from './api/transferApi';
@@ -13,6 +14,7 @@ export * from './components/organismos/Header';
 export * from './components/organismos/Sidebar';
 export * from './components/templates/ControlPlanilla';
 export * from './components/templates/Dashboard';
+export * from './components/templates/LoadsResumen';
 export * from './components/templates/LoadsTasks';
 export * from './components/templates/LoginForm';
 export * from './components/templates/PlanillaBase';

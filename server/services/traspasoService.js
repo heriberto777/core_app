@@ -5,6 +5,7 @@ const logger = require("./logger");
 const { sendTraspasoEmail } = require("./emailService");
 const PDFService = require("./pdfService");
 
+const TransferSummary = require("../models/transferSummaryModel");
 /**
  * Obtiene información adicional de los productos desde la base de datos
  * @param {Connection} connection - Conexión a la base de datos
@@ -81,6 +82,7 @@ async function traspasoBodega({ route, salesData }) {
   let detalleProductos = [];
   let pdfPath = null;
 
+  console.log("Iniciando traspaso de bodega...");
   try {
     // Validar datos de entrada
     if (!salesData || !Array.isArray(salesData) || salesData.length === 0) {
@@ -334,6 +336,44 @@ async function traspasoBodega({ route, salesData }) {
       route,
     };
 
+    // Save transfer summary for tracking and returns
+    try {
+      // Format products for the summary
+      const summaryProducts = productosArray.map((producto) => ({
+        code: producto.codigo,
+        description:
+          detalleProductos.find((p) => p.codigo === producto.codigo)
+            ?.descripcion || "Sin descripción",
+        quantity: producto.cantidad,
+        unit: "UND",
+      }));
+
+      // Create a new summary
+      const summary = new TransferSummary({
+        loadId: loadId || "N/A", // loadId from the parameter
+        route: route, // route from the parameter
+        documentId: nuevoConsecutivo, // The transfer document ID
+        products: summaryProducts,
+        totalProducts: summaryProducts.length,
+        totalQuantity: summaryProducts.reduce((sum, p) => sum + p.quantity, 0),
+        createdBy: "SA", // Default user or get from request if available
+      });
+
+      console.log("Resumen de traspaso:", summary);
+      await summary.save();
+      logger.info(
+        `✅ Resumen de traspaso guardado con éxito para documento ${nuevoConsecutivo}`
+      );
+
+      // Add summary to the result
+      resultado.summaryId = summary._id;
+    } catch (summaryError) {
+      logger.error(
+        `Error al guardar resumen de traspaso: ${summaryError.message}`
+      );
+      // Don't stop the process if summary creation fails
+    }
+
     // Generar PDF del traspaso
     try {
       const pdfResult = await PDFService.generateTraspasoPDF(result);
@@ -425,6 +465,8 @@ async function realizarTraspaso({ route, salesData }) {
   let connection = null;
   let detalleProductos = [];
   let pdfPath = null;
+
+  console.log("Iniciando realizar traspaso de bodega... ");
 
   try {
     // 1. Validar datos de entrada - filtrar productos válidos
@@ -602,6 +644,51 @@ async function realizarTraspaso({ route, salesData }) {
       detalleProductos,
       route,
     };
+    console.log("Resultado final:", resultado);
+
+    // Save transfer summary for tracking and returns
+    try {
+      // Format products for the summary
+      // Obtener el ID de carga de los datos de ventas si existe (buscando en primera venta)
+      let loadIdFromSales = "N/A";
+      if (salesData && salesData.length > 0 && salesData[0].Code_load) {
+        loadIdFromSales = salesData[0].Code_load;
+      }
+
+      // Format products for the summary
+      const summaryProducts = productosArray.map((producto) => ({
+        code: producto.codigo,
+        description:
+          detalleProductos.find((p) => p.codigo === producto.codigo)
+            ?.descripcion || "Sin descripción",
+        quantity: producto.cantidad,
+        unit: "UND",
+      }));
+
+      // Create a new summary
+      const summary = new TransferSummary({
+        loadId: loadIdFromSales,
+        route: route,
+        documentId: nuevoConsecutivo,
+        products: summaryProducts,
+        totalProducts: summaryProducts.length,
+        totalQuantity: summaryProducts.reduce((sum, p) => sum + p.quantity, 0),
+        createdBy: "SA", // Default user or get from request if available
+      });
+
+      await summary.save();
+      logger.info(
+        `✅ Resumen de traspaso guardado con éxito para documento ${nuevoConsecutivo}`
+      );
+
+      // Add summary to the result
+      resultado.summaryId = summary._id;
+    } catch (summaryError) {
+      logger.error(
+        `Error al guardar resumen de traspaso: ${summaryError.message}`
+      );
+      // Don't stop the process if summary creation fails
+    }
 
     // 10. Generar PDF del traspaso
     try {

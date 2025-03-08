@@ -43,6 +43,12 @@ export const LinkArray = [
     to: "/email-recipients",
     roles: ["admin"],
   },
+  {
+    label: "Resumen de Carga",
+    icon: <v.iconoResumen />,
+    to: "/summaries",
+    roles: ["admin"],
+  },
   // {
   //   label: "Usuarios",
   //   icon: <v.iconoUser />,

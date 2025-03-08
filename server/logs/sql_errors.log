@@ -1,0 +1,49 @@
+[2025-03-07T02:40:12.543Z] Error tipo: execution
+Error: Invalid object name 'CATELLI.EXPLT_FAC_DET_PED'.
+SQL: 
+      SELECT 
+        ARTICULO AS Code_Product, 
+        SUM(CANTIDAD_DISPONIBLE) AS available_quantity
+      FROM CATELLI.EXPLT_FAC_DET_PED
+      WHERE ARTICULO IN ('96', '100', '183', '719', '804', '1224', '1291', '2962', '2995', '2998', '2999', '3071', '3110', '3225', '3269', '3764', '3773')
+      GROUP BY ARTICULO
+    
+Parámetros: {}
+Stack: Error: Invalid object name 'CATELLI.EXPLT_FAC_DET_PED'.
+    at RequestTokenHandler.onErrorMessage (D:\proyectos\app\core_app\server\node_modules\tedious\lib\token\handler.js:286:21)
+    at Readable.<anonymous> (D:\proyectos\app\core_app\server\node_modules\tedious\lib\token\token-stream-parser.js:19:33)
+    at Readable.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushObjectMode (node:internal/streams/readable:538:3)
+    at Readable.push (node:internal/streams/readable:393:5)
+    at nextAsync (node:internal/streams/from:194:22)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+
+[2025-03-08T05:41:31.526Z] Error tipo: execution
+Error: Invalid object name 'dbo.IMPLT_conctacts'.
+SQL: SELECT COUNT(*) AS total FROM dbo.[IMPLT_conctacts] WITH (NOLOCK)
+Parámetros: {}
+Stack: Error: Invalid object name 'dbo.IMPLT_conctacts'.
+    at RequestTokenHandler.onErrorMessage (D:\proyectos\app\core_app\server\node_modules\tedious\lib\token\handler.js:286:21)
+    at Readable.<anonymous> (D:\proyectos\app\core_app\server\node_modules\tedious\lib\token\token-stream-parser.js:19:33)
+    at Readable.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushObjectMode (node:internal/streams/readable:538:3)
+    at Readable.push (node:internal/streams/readable:393:5)
+    at nextAsync (node:internal/streams/from:194:22)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+
+[2025-03-08T05:44:01.808Z] Error tipo: execution
+Error: Invalid object name 'dbo.IMPLT_conctacts'.
+SQL: SELECT COUNT(*) AS total FROM dbo.[IMPLT_conctacts] WITH (NOLOCK)
+Parámetros: {}
+Stack: Error: Invalid object name 'dbo.IMPLT_conctacts'.
+    at RequestTokenHandler.onErrorMessage (D:\proyectos\app\core_app\server\node_modules\tedious\lib\token\handler.js:286:21)
+    at Readable.<anonymous> (D:\proyectos\app\core_app\server\node_modules\tedious\lib\token\token-stream-parser.js:19:33)
+    at Readable.emit (node:events:518:28)
+    at addChunk (node:internal/streams/readable:561:12)
+    at readableAddChunkPushObjectMode (node:internal/streams/readable:538:3)
+    at Readable.push (node:internal/streams/readable:393:5)
+    at nextAsync (node:internal/streams/from:194:22)
+    at process.processTicksAndRejections (node:internal/process/task_queues:105:5)
+
