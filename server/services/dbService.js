@@ -14,7 +14,7 @@ const DEFAULT_POOL_CONFIG = {
   evictionRunIntervalMillis: 60000, // Verificación de conexiones inactivas (60s)
   testOnBorrow: false, // DESACTIVADO para evitar timeouts
   testOnReturn: false, // No validar conexiones cuando se devuelven
-  fifo: false, // Utilizar LIFO para mejorar la eficiencia
+  fifo: false, // Utilizar LIFO para mejorar la eficiencia la diferenaica
 };
 
 // Pools de conexiones
