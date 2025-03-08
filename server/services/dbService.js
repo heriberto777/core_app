@@ -1,616 +1,674 @@
-const mongoose = require("mongoose");
+// services/dbService.js
+const { createPool } = require("generic-pool");
 const { Connection } = require("tedious");
-const { SqlService } = require("./tediousService");
-const DBConfig = require("../models/dbConfigModel");
 const logger = require("./logger");
-const ConnectionPool = require("tedious-connection-pool");
+const DBConfig = require("../models/dbConfigModel");
+const MongoDbService = require("./mongoDbService");
 
-// Configuración del pool
-const poolConfig = {
-  min: 2, // Mínimo de conexiones en el pool
-  max: 10, // Máximo de conexiones en el pool
-  log: false, // Desactivar logs internos del pool
-  acquireTimeout: 30000, // Timeout para adquirir conexión (30s)
+// Configuración del pool con timeouts ajustados
+const DEFAULT_POOL_CONFIG = {
+  min: 1, // Reducido a 1 para minimizar fallos iniciales
+  max: 10, // Máximo de conexiones
+  acquireTimeoutMillis: 90000, // Aumentado a 90s
   idleTimeoutMillis: 300000, // Timeout de conexiones inactivas (5min)
-  retryDelay: 5000, // Delay entre reintentos (5s)
+  evictionRunIntervalMillis: 60000, // Verificación de conexiones inactivas (60s)
+  testOnBorrow: false, // DESACTIVADO para evitar timeouts
+  testOnReturn: false, // No validar conexiones cuando se devuelven
+  fifo: false, // Utilizar LIFO para mejorar la eficiencia
 };
 
-// Objeto para almacenar los pools
-const pools = {};
+// Pools de conexiones
+let poolServer1 = null;
+let poolServer2 = null;
 
-/**
- * Obtiene la configuración de la base de datos desde MongoDB
- */
-const getDBConfig = async (serverName) => {
+// Map global para rastrear conexiones
+const connectionPoolMap = new Map();
+
+function convertDbConfigToTediousConfig(dbConfig) {
+  if (!dbConfig) {
+    throw new Error("No se proporcionó configuración de base de datos");
+  }
+
+  if (dbConfig.type !== "mssql") {
+    throw new Error(
+      `Tipo de conexión no soportado: ${dbConfig.type}. Se esperaba 'mssql'`
+    );
+  }
+
+  // Detectar si es una dirección IP para manejar correctamente TLS
+  const isIpAddress = /^(\d{1,3}\.){3}\d{1,3}$/.test(dbConfig.host);
+
+  // Crear configuración para Tedious
+  const tediousConfig = {
+    server: dbConfig.host,
+    authentication: {
+      type: "default",
+      options: {
+        userName: dbConfig.user,
+        password: dbConfig.password,
+      },
+    },
+    options: {
+      // Ajustar encrypt según es IP o nombre de host
+      encrypt: isIpAddress ? false : dbConfig.options?.encrypt || false,
+      trustServerCertificate: true, // Siempre true para evitar problemas de certificados
+      enableArithAbort: true,
+      database: dbConfig.database,
+      connectTimeout: 60000, // Aumentado a 60 segundos (era 30s)
+      requestTimeout: 120000, // Aumentado a 120 segundos (era 60s)
+      rowCollectionOnRequestCompletion: true,
+      useColumnNames: true,
+      validateBulkLoadParameters: false, // Reducir validaciones estrictas
+    },
+  };
+
+  // Si es una dirección IP, establecer explícitamente estas opciones
+  if (isIpAddress) {
+    tediousConfig.options.encrypt = false;
+    tediousConfig.options.trustServerCertificate = true;
+    // Añadir un log para claridad
+    logger.info(
+      `Conexión a IP detectada (${dbConfig.host}), desactivando TLS/encrypt`
+    );
+  }
+
+  // Añadir instance si está definida
+  if (dbConfig.instance) {
+    tediousConfig.options.instanceName = dbConfig.instance;
+  }
+
+  // Añadir port si está definido
+  if (dbConfig.port) {
+    tediousConfig.options.port = dbConfig.port;
+  }
+
+  return tediousConfig;
+}
+
+async function createDefaultConfigs() {
   try {
-    const config = await DBConfig.findOne({ serverName });
-    if (!config)
-      throw new Error(`⚠️ Configuración no encontrada para ${serverName}`);
+    const count = await DBConfig.countDocuments();
+    if (count > 0) {
+      return;
+    }
+
+    if (!process.env.SERVER1_HOST || !process.env.SERVER1_USER) {
+      return;
+    }
+
+    // Configuración server1
+    const server1Config = {
+      serverName: "server1",
+      type: "mssql",
+      user: process.env.SERVER1_USER,
+      password: process.env.SERVER1_PASS || "",
+      host: process.env.SERVER1_HOST,
+      port: parseInt(process.env.SERVER1_PORT || "1433"),
+      database: process.env.SERVER1_DB || "master",
+      instance: process.env.SERVER1_INSTANCE || "",
+      options: {
+        encrypt: process.env.SERVER1_ENCRYPT === "true",
+        trustServerCertificate: true,
+        enableArithAbort: true,
+      },
+    };
+
+    // Configuración server2
+    const server2Config = {
+      serverName: "server2",
+      type: "mssql",
+      user: process.env.SERVER2_USER || process.env.SERVER1_USER,
+      password: process.env.SERVER2_PASS || process.env.SERVER1_PASS || "",
+      host: process.env.SERVER2_HOST || process.env.SERVER1_HOST,
+      port: parseInt(
+        process.env.SERVER2_PORT || process.env.SERVER1_PORT || "1433"
+      ),
+      database: process.env.SERVER2_DB || "master",
+      instance: process.env.SERVER2_INSTANCE || "",
+      options: {
+        encrypt: process.env.SERVER2_ENCRYPT === "true",
+        trustServerCertificate: true,
+        enableArithAbort: true,
+      },
+    };
+
+    await DBConfig.create(server1Config);
+    await DBConfig.create(server2Config);
+  } catch (error) {
+    console.error("Error al crear configuraciones predeterminadas:", error);
+  }
+}
+
+async function loadDbConfigs() {
+  try {
+    if (!MongoDbService.isConnected()) {
+      await MongoDbService.connect();
+      if (!MongoDbService.isConnected()) {
+        throw new Error(
+          "No se pudo conectar a MongoDB para cargar configuraciones"
+        );
+      }
+    }
+
+    await createDefaultConfigs();
+
+    const server1Config = await DBConfig.findOne({
+      serverName: "server1",
+    }).lean();
+    const server2Config = await DBConfig.findOne({
+      serverName: "server2",
+    }).lean();
+
+    if (!server1Config && !server2Config) {
+      logger.error(
+        "No se encontraron configuraciones para los servidores SQL. Ejecute updateDBConfig.js"
+      );
+    } else {
+      if (server1Config) {
+        const configInfo = {
+          host: server1Config.host,
+          database: server1Config.database,
+          user: server1Config.user,
+          port: server1Config.port,
+          instance: server1Config.instance || "default",
+        };
+        logger.info(
+          `Configuración para server1 encontrada: ${JSON.stringify(configInfo)}`
+        );
+      }
+
+      if (server2Config) {
+        const configInfo = {
+          host: server2Config.host,
+          database: server2Config.database,
+          user: server2Config.user,
+          port: server2Config.port,
+          instance: server2Config.instance || "default",
+        };
+        logger.info(
+          `Configuración para server2 encontrada: ${JSON.stringify(configInfo)}`
+        );
+      }
+    }
 
     return {
-      server: config.host,
-      authentication: {
-        type: "default",
-        options: {
-          userName: config.user,
-          password: config.password,
-        },
-      },
-      options: {
-        database: config.database,
-        instanceName: config.instance || undefined,
-        encrypt: config.options?.encrypt || false,
-        trustServerCertificate: config.options?.trustServerCertificate || true,
-        connectionTimeout: config.options?.connectionTimeout || 30000,
-        requestTimeout: config.options?.requestTimeout || 60000,
-        rowCollectionOnRequestCompletion: true,
-      },
+      server1: server1Config
+        ? convertDbConfigToTediousConfig(server1Config)
+        : null,
+      server2: server2Config
+        ? convertDbConfigToTediousConfig(server2Config)
+        : null,
     };
   } catch (error) {
-    logger.error(
-      `⚠️ Error obteniendo configuración para ${serverName}:`,
-      error
-    );
-    return null;
-  }
-};
-
-/**
- * Conecta a MongoDB
- */
-const connectToMongoDB = async () => {
-  try {
-    let MONGO_URI = process.env.MONGO_URI;
-
-    if (!MONGO_URI) {
-      const DB_USER = process.env.DB_USER || "heriberto777";
-      const DB_PASS = process.env.DB_PASS || "eli112910";
-      const DB_HOST = process.env.DB_HOST || "localhost";
-      const DB_PORT = process.env.DB_PORT || "27017";
-      const DB_NAME = process.env.DB_NAME || "core_app";
-
-      if (!DB_HOST || !DB_NAME) {
-        throw new Error(
-          "Faltan variables de entorno para la conexión a MongoDB"
-        );
-      }
-
-      if (DB_USER && DB_PASS) {
-        MONGO_URI = `mongodb://${DB_USER}:${DB_PASS}@${DB_HOST}:${DB_PORT}/${DB_NAME}`;
-      } else {
-        MONGO_URI = `mongodb://${DB_HOST}:${DB_PORT}/${DB_NAME}`;
-      }
-    }
-
-    logger.info(
-      `Intentando conectar a MongoDB con URI: ${MONGO_URI.replace(
-        /:[^:]*@/,
-        ":****@"
-      )}`
-    );
-
-    await mongoose.connect(MONGO_URI, {
-      authSource: "admin",
-      useNewUrlParser: true,
-      useUnifiedTopology: true,
-      serverSelectionTimeoutMS: 5000,
-    });
-
-    logger.info("✅ Conexión a MongoDB establecida.");
-  } catch (error) {
-    logger.error("❌ Error al conectar a MongoDB:", error);
+    logger.error("Error al cargar configuraciones de MongoDB:", error);
     throw error;
   }
-};
-
-/**
- * Inicializa los pools de conexiones
- */
-function initPools() {
-  if (!global.SQL_CONFIG) {
-    logger.warn("SQL_CONFIG no está definido, no se pueden inicializar pools");
-    return false;
-  }
-
-  try {
-    // Crear pool para server1
-    if (global.SQL_CONFIG.server1) {
-      pools.server1 = new ConnectionPool(poolConfig, global.SQL_CONFIG.server1);
-
-      pools.server1.on("error", (err) => {
-        logger.error("Error en pool de server1:", err);
-      });
-    }
-
-    // Crear pool para server2
-    if (global.SQL_CONFIG.server2) {
-      pools.server2 = new ConnectionPool(poolConfig, global.SQL_CONFIG.server2);
-
-      pools.server2.on("error", (err) => {
-        logger.error("Error en pool de server2:", err);
-      });
-    }
-
-    logger.info("✅ Pools de conexiones inicializados correctamente");
-    return true;
-  } catch (error) {
-    logger.error("❌ Error al inicializar pools de conexiones:", error);
-    return false;
-  }
 }
 
-/**
- * Cierra todos los pools de conexiones
- */
-function closePools() {
-  Object.keys(pools).forEach((serverKey) => {
-    if (pools[serverKey]) {
-      try {
-        pools[serverKey].drain();
-        logger.info(`Pool para ${serverKey} cerrado correctamente`);
-      } catch (error) {
-        logger.error(`Error al cerrar pool para ${serverKey}:`, error);
-      }
-    }
-  });
-}
+function createConnectionFactory(config) {
+  // Mostrar detalles de la configuración (sin contraseña)
+  const configInfo = {
+    server: config.server,
+    database: config.options.database,
+    user: config.authentication.options.userName,
+    instanceName: config.options.instanceName,
+    port: config.options.port,
+    encrypt: config.options.encrypt,
+  };
 
-/**
- * Obtiene una conexión del pool
- * @param {string} serverKey - Clave del servidor (server1 o server2)
- * @returns {Promise<Connection>} - Conexión del pool
- */
-async function getPoolConnection(serverKey) {
-  return new Promise((resolve, reject) => {
-    if (!pools[serverKey]) {
-      return reject(new Error(`Pool para ${serverKey} no está inicializado`));
-    }
+  logger.info(`Creando factory de conexión con: ${JSON.stringify(configInfo)}`);
 
-    pools[serverKey].acquire((err, connection) => {
-      if (err) {
-        logger.error(`Error al obtener conexión de ${serverKey}:`, err);
-        return reject(err);
-      }
+  return {
+    create: function () {
+      return new Promise((resolve, reject) => {
+        logger.debug(`Intentando crear nueva conexión a ${config.server}...`);
 
-      // Agregar un manejador de error a la conexión
-      connection.on("error", (err) => {
-        logger.error(`Error en conexión de ${serverKey}:`, err);
-      });
-
-      logger.debug(`Conexión obtenida del pool para ${serverKey}`);
-
-      // Marcar la conexión como proveniente del pool
-      connection._pooled = true;
-
-      resolve(connection);
-    });
-  });
-}
-
-/**
- * Devuelve una conexión al pool
- * @param {string} serverKey - Clave del servidor (server1 o server2)
- * @param {Connection} connection - Conexión a devolver
- */
-function releasePoolConnection(serverKey, connection) {
-  if (!pools[serverKey]) {
-    logger.warn(
-      `Pool para ${serverKey} no está inicializado, no se puede liberar la conexión`
-    );
-    return;
-  }
-
-  if (!connection._pooled) {
-    logger.warn(`La conexión no parece provenir del pool para ${serverKey}`);
-  }
-
-  try {
-    pools[serverKey].release(connection);
-    logger.debug(`Conexión devuelta al pool para ${serverKey}`);
-  } catch (error) {
-    logger.warn(`Error al devolver conexión al pool para ${serverKey}:`, error);
-  }
-}
-
-/**
- * Carga las configuraciones desde MongoDB al inicio
- */
-const loadConfigurations = async () => {
-  try {
-    await connectToMongoDB();
-
-    global.SQL_CONFIG = {
-      server1: await getDBConfig("server1"),
-      server2: await getDBConfig("server2"),
-    };
-
-    if (!global.SQL_CONFIG.server1 || !global.SQL_CONFIG.server2) {
-      throw new Error(
-        "❌ No se pudieron cargar todas las configuraciones de bases de datos."
-      );
-    }
-
-    logger.info("✅ Configuración de bases de datos cargada en memoria.");
-
-    // Inicializar los pools de conexiones
-    initPools();
-
-    // Inicializar las conexiones globales si no existen
-    if (!global.server1Connection) {
-      global.server1Connection = null;
-    }
-    if (!global.server2Connection) {
-      global.server2Connection = null;
-    }
-  } catch (error) {
-    logger.error("❌ Error cargando configuraciones:", error);
-    throw error;
-  }
-};
-
-/**
- * Conecta a una base de datos SQL Server usando Tedious directamente
- */
-const connectToDB = async (serverKey, timeoutMs = 30000) => {
-  return new Promise(async (resolve, reject) => {
-    const timeoutId = setTimeout(() => {
-      reject(
-        new Error(
-          `Timeout al conectar a ${serverKey} después de ${timeoutMs}ms`
-        )
-      );
-    }, timeoutMs);
-
-    try {
-      if (!global.SQL_CONFIG || !global.SQL_CONFIG[serverKey]) {
-        clearTimeout(timeoutId);
-        reject(
-          new Error(
-            `❌ Configuración de ${serverKey} no está cargada en memoria.`
-          )
-        );
-        return;
-      }
-
-      const config = global.SQL_CONFIG[serverKey];
-
-      // Verificar campos críticos
-      if (!config.server) {
-        clearTimeout(timeoutId);
-        reject(
-          new Error(`Configuración de ${serverKey} no tiene server definido`)
-        );
-        return;
-      }
-
-      if (
-        !config.authentication ||
-        !config.authentication.options ||
-        !config.authentication.options.userName ||
-        !config.authentication.options.password
-      ) {
-        clearTimeout(timeoutId);
-        reject(
-          new Error(
-            `Configuración de ${serverKey} no tiene credenciales válidas`
-          )
-        );
-        return;
-      }
-
-      // Imprimir información de diagnóstico
-      logger.debug(`Intentando conectar a ${serverKey}:`, {
-        server: config.server,
-        user: config.authentication.options.userName,
-        database: config.options.database,
-        instanceName: config.options.instanceName || "N/A",
-      });
-
-      // Usar variables de entorno como fallback para server2
-      if (serverKey === "server2" && !config.server) {
-        logger.warn(
-          `⚠️ Usando variables de entorno para server2 como fallback`
-        );
-        config.server = process.env.SERVER2_HOST;
-        config.authentication.options.userName = process.env.SERVER2_USER;
-        config.authentication.options.password = process.env.SERVER2_PASS;
-        config.options.database = process.env.SERVER2_DB;
-        config.options.instanceName = process.env.SERVER2_INSTANCE;
-      }
-
-      try {
-        // Establecer conexión directamente con Tedious
+        // Crear la conexión
         const connection = new Connection(config);
 
-        connection.on("connect", async (err) => {
-          clearTimeout(timeoutId);
+        // Agregar un timeout explícito para crear la conexión
+        const connectionTimeout = setTimeout(() => {
+          logger.error(
+            `Timeout al crear conexión a ${config.server} después de ${
+              config.options.connectTimeout / 1000
+            } segundos`
+          );
+          connection.removeAllListeners();
+
+          try {
+            connection.close();
+          } catch (e) {
+            // Ignorar errores al cerrar una conexión que probablemente nunca se estableció
+          }
+
+          reject(new Error(`Timeout al crear conexión a ${config.server}`));
+        }, config.options.connectTimeout || 60000);
+
+        // Manejar evento de conexión
+        connection.on("connect", (err) => {
+          clearTimeout(connectionTimeout); // Cancelar el timeout
 
           if (err) {
-            logger.error(`Error al conectar a ${serverKey}:`, err);
+            logger.error(`Error conectando a ${config.server}:`, err);
             reject(err);
             return;
           }
 
-          logger.info(
-            `✅ Conexión establecida a ${serverKey} usando Tedious directo`
+          logger.debug(
+            `✅ Conexión establecida correctamente a ${config.server}`
           );
-
-          // Verificar con consulta sencilla
-          try {
-            const testResult = await SqlService.query(
-              connection,
-              "SELECT @@VERSION as version"
-            );
-            logger.debug(`Prueba de conexión a ${serverKey} exitosa:`, {
-              version:
-                testResult.recordset[0]?.version?.substring(0, 50) ||
-                "No version info",
-            });
-          } catch (testError) {
-            logger.warn(
-              `La conexión a ${serverKey} se estableció pero falló la prueba:`,
-              testError
-            );
-          }
-
+          connection._createdAt = Date.now();
           resolve(connection);
         });
 
+        // Manejar errores de conexión
         connection.on("error", (err) => {
-          logger.error(`Error en conexión a ${serverKey}:`, err);
-          if (!timeoutId._destroyed) {
-            clearTimeout(timeoutId);
-            reject(err);
-          }
+          clearTimeout(connectionTimeout); // Cancelar el timeout
+          logger.error(`Error en la conexión a ${config.server}:`, err);
+          reject(err);
         });
 
-        connection.connect();
-      } catch (connErr) {
-        clearTimeout(timeoutId);
-        logger.error(`Error al crear conexión a ${serverKey}:`, connErr);
-        reject(connErr);
+        // Iniciar conexión con manejo de excepciones
+        try {
+          connection.connect();
+        } catch (connectError) {
+          clearTimeout(connectionTimeout); // Cancelar el timeout
+          logger.error(
+            `Excepción al intentar conectar a ${config.server}:`,
+            connectError
+          );
+          reject(connectError);
+        }
+      });
+    },
+    destroy: function (connection) {
+      return new Promise((resolve) => {
+        if (!connection) {
+          resolve();
+          return;
+        }
+
+        // Limpiar listeners de errores para evitar memory leaks
+        connection.removeAllListeners("error");
+
+        // Agregar listener para evento 'end'
+        connection.on("end", () => {
+          logger.debug(`Conexión cerrada correctamente`);
+          resolve();
+        });
+
+        // Cerrar conexión con timeout de seguridad
+        const closeTimeout = setTimeout(() => {
+          logger.warn(`Timeout al cerrar conexión después de 5 segundos`);
+          resolve(); // Resolver de todas formas
+        }, 5000);
+
+        try {
+          connection.on("end", () => {
+            clearTimeout(closeTimeout);
+            resolve();
+          });
+
+          connection.close();
+        } catch (closeError) {
+          clearTimeout(closeTimeout);
+          logger.warn(`Error al cerrar conexión (ignorando):`, closeError);
+          resolve(); // Resolver de todas formas
+        }
+      });
+    },
+    validate: function (connection) {
+      return new Promise((resolve) => {
+        // Si no hay conexión o no está conectada, es inválida
+        if (!connection || !connection.connected) {
+          logger.debug(`Conexión inválida (no conectada), desechando`);
+          resolve(false);
+          return;
+        }
+
+        // Verificar si la conexión lleva demasiado tiempo abierta
+        try {
+          const connectionAge = Date.now() - (connection._createdAt || 0);
+          const maxConnectionAge = 3600000; // 1 hora en ms
+
+          if (connectionAge > maxConnectionAge) {
+            logger.debug(
+              `Descartando conexión que lleva ${connectionAge}ms abierta`
+            );
+            resolve(false);
+          } else {
+            resolve(true);
+          }
+        } catch (error) {
+          logger.error("Error al validar conexión:", error);
+          resolve(false);
+        }
+      });
+    },
+  };
+}
+
+async function initPools(customPoolConfig = {}) {
+  try {
+    logger.info("Iniciando inicialización de pools de conexiones...");
+
+    // Verificar que MongoDB esté conectado
+    if (!MongoDbService.isConnected()) {
+      logger.info("MongoDB no está conectado. Intentando conectar...");
+      const connected = await MongoDbService.connect();
+      if (!connected) {
+        logger.error(
+          "No se pudo conectar a MongoDB. No se pueden inicializar los pools."
+        );
+        return false;
       }
-    } catch (err) {
-      clearTimeout(timeoutId);
-      logger.error(`Error en proceso de conexión a ${serverKey}:`, err);
-      reject(err);
+      logger.info("Conexión a MongoDB establecida correctamente");
     }
-  });
-};
 
-/**
- * Cierra una conexión de forma segura
- */
-const closeConnection = async (connection) => {
-  if (connection) {
-    return new Promise((resolve) => {
+    // Cargar configuraciones desde MongoDB
+    const dbConfigs = await loadDbConfigs();
+
+    if (!dbConfigs.server1 && !dbConfigs.server2) {
+      logger.warn(
+        "No se encontraron configuraciones de bases de datos SQL en MongoDB"
+      );
+      return false;
+    }
+
+    // Combinar configuración predeterminada con la personalizada
+    const poolConfig = { ...DEFAULT_POOL_CONFIG, ...customPoolConfig };
+
+    // MODIFICACIÓN CRÍTICA: Deshabilitar prueba inicial para evitar timeouts
+    const skipPoolTest = process.env.SKIP_POOL_TEST === "true" || true; // Por defecto, omitir prueba
+
+    // Inicializar pool para server1 si hay configuración y el pool no existe
+    if (dbConfigs.server1 && !poolServer1) {
       try {
-        connection.close();
-        logger.info(`Conexión cerrada correctamente`);
-      } catch (error) {
-        logger.error(`Error al cerrar conexión:`, error);
+        logger.info("Creando pool para Server1...");
+
+        // Crear factory para server1
+        const factory = createConnectionFactory(dbConfigs.server1);
+
+        // Crear pool para server1
+        poolServer1 = createPool(factory, poolConfig);
+        logger.info("Pool de conexiones inicializado para Server1");
+
+        // Probar el pool solo si no se está saltando la prueba
+        if (!skipPoolTest) {
+          try {
+            logger.debug(
+              "Probando pool de Server1 con una conexión de prueba..."
+            );
+            const testConnection = await poolServer1.acquire();
+            logger.info(
+              "Conexión de prueba obtenida correctamente de pool Server1"
+            );
+            await poolServer1.release(testConnection);
+            logger.info(
+              "Conexión de prueba devuelta correctamente al pool Server1"
+            );
+          } catch (testError) {
+            logger.warn(
+              `Error en prueba de pool Server1: ${testError.message}`
+            );
+            // No fallamos la inicialización por un error en la prueba, pero marcamos el warning
+          }
+        } else {
+          logger.info("Prueba de pool Server1 omitida por configuración");
+        }
+      } catch (server1Error) {
+        logger.error("Error al inicializar pool para Server1:", server1Error);
+        // Continuamos para intentar inicializar Server2 aunque Server1 falle
       }
-      resolve();
-    });
-  }
-};
+    } else if (!dbConfigs.server1) {
+      logger.warn(
+        "No se encontró configuración para Server1, omitiendo inicialización del pool"
+      );
+    } else if (poolServer1) {
+      logger.debug("Pool para Server1 ya existe, omitiendo inicialización");
+    }
 
-/**
- * Obtiene una conexión del pool o crea una nueva si no hay pool disponible
- * @param {string} serverKey - Clave del servidor (server1 o server2)
- * @param {number} timeoutMs - Timeout en milisegundos
- * @returns {Promise<Connection>} - Conexión
- */
-const getConnection = async (serverKey, timeoutMs = 30000) => {
-  try {
-    // Intentar obtener conexión del pool
-    return await getPoolConnection(serverKey);
-  } catch (poolError) {
-    logger.warn(
-      `No se pudo obtener conexión del pool para ${serverKey}, intentando conexión directa:`,
-      poolError.message
-    );
+    // Inicializar pool para server2 si hay configuración y el pool no existe
+    if (dbConfigs.server2 && !poolServer2) {
+      try {
+        logger.info("Creando pool para Server2...");
 
-    // Fallback a conexión directa (tu método actual)
-    return await connectToDB(serverKey, timeoutMs);
-  }
-};
+        // Crear factory para server2
+        const factory = createConnectionFactory(dbConfigs.server2);
 
-/**
- * Libera o cierra una conexión dependiendo de su origen
- * @param {Connection} connection - Conexión a liberar o cerrar
- * @param {string} serverKey - Clave del servidor
- */
-const releaseConnection = async (connection, serverKey) => {
-  if (!connection) return;
+        // Crear pool para server2
+        poolServer2 = createPool(factory, poolConfig);
+        logger.info("Pool de conexiones inicializado para Server2");
 
-  try {
-    // Verificar si la conexión proviene del pool
-    if (connection._pooled) {
-      // Devolver al pool
-      releasePoolConnection(serverKey, connection);
+        // Probar el pool solo si no se está saltando la prueba
+        if (!skipPoolTest) {
+          try {
+            logger.debug(
+              "Probando pool de Server2 con una conexión de prueba..."
+            );
+            const testConnection = await poolServer2.acquire();
+            logger.info(
+              "Conexión de prueba obtenida correctamente de pool Server2"
+            );
+            await poolServer2.release(testConnection);
+            logger.info(
+              "Conexión de prueba devuelta correctamente al pool Server2"
+            );
+          } catch (testError) {
+            logger.warn(
+              `Error en prueba de pool Server2: ${testError.message}`
+            );
+            // No fallamos la inicialización por un error en la prueba
+          }
+        } else {
+          logger.info("Prueba de pool Server2 omitida por configuración");
+        }
+      } catch (server2Error) {
+        logger.error("Error al inicializar pool para Server2:", server2Error);
+      }
+    } else if (!dbConfigs.server2) {
+      logger.warn(
+        "No se encontró configuración para Server2, omitiendo inicialización del pool"
+      );
+    } else if (poolServer2) {
+      logger.debug("Pool para Server2 ya existe, omitiendo inicialización");
+    }
+
+    // Verificar si al menos un pool se inicializó correctamente
+    if (poolServer1 || poolServer2) {
+      logger.info("Al menos un pool de conexiones inicializado correctamente");
+      return true;
     } else {
-      // Cerrar conexión directa
-      await closeConnection(connection);
+      logger.warn("No se pudo inicializar ningún pool de conexiones");
+      return false;
     }
   } catch (error) {
-    logger.error(`Error al liberar conexión para ${serverKey}:`, error);
+    logger.error("Error al inicializar pools de conexiones:", error);
+    throw error;
   }
-};
+}
 
-/**
- * Obtiene o crea una conexión global para un servidor
- */
-const getGlobalConnection = async (serverKey) => {
+async function connectToDB(serverKey = "server1", timeout = 60000) {
   try {
-    if (!global.SQL_CONFIG || !global.SQL_CONFIG[serverKey]) {
-      throw new Error(
-        `❌ Configuración de ${serverKey} no está cargada en memoria.`
+    // Inicializar pools si es necesario
+    if (!poolServer1 && !poolServer2) {
+      logger.info(
+        `Pools no inicializados. Inicializando antes de obtener conexión para ${serverKey}...`
+      );
+      await initPools({ acquireTimeoutMillis: timeout });
+    }
+
+    const pool = serverKey === "server1" ? poolServer1 : poolServer2;
+
+    if (!pool) {
+      logger.error(`Pool de conexiones no disponible para ${serverKey}`);
+      return null;
+    }
+
+    logger.debug(`Solicitando conexión para ${serverKey}...`);
+
+    // Adquirir conexión del pool con timeout ampliado
+    const connection = await pool.acquire();
+
+    if (!connection) {
+      logger.error(`Se obtuvo una conexión nula para ${serverKey}`);
+      return null;
+    }
+
+    // Adjuntar metadatos para identificar el origen del pool
+    connection._poolOrigin = serverKey;
+    connection._acquiredAt = Date.now();
+
+    // Registrar también en el Map global para redundancia
+    connectionPoolMap.set(connection, serverKey);
+
+    logger.debug(`Conexión obtenida para ${serverKey}`);
+    return connection;
+  } catch (error) {
+    logger.error(`Error al conectar a la base de datos ${serverKey}:`, error);
+    return null;
+  }
+}
+
+async function closeConnection(connection) {
+  if (!connection) {
+    logger.debug("Intento de cerrar una conexión nula, ignorando");
+    return;
+  }
+
+  try {
+    // Usar el metadato para identificar el pool (primera opción)
+    let poolKey = connection._poolOrigin;
+
+    // Si no está disponible, intentar con el Map (segunda opción)
+    if (!poolKey) {
+      poolKey = connectionPoolMap.get(connection);
+      if (!poolKey) {
+        logger.warn(
+          "No se pudo determinar el origen de la conexión, intentando con server1"
+        );
+        poolKey = "server1";
+      }
+    }
+
+    const pool = poolKey === "server1" ? poolServer1 : poolServer2;
+
+    if (pool) {
+      // Calcular y registrar tiempo de uso de la conexión (opcional)
+      if (connection._acquiredAt) {
+        const usageTime = Date.now() - connection._acquiredAt;
+        logger.debug(`Conexión usada durante ${usageTime}ms (${poolKey})`);
+      }
+
+      await pool.release(connection);
+      // Limpiar referencias
+      connectionPoolMap.delete(connection);
+      logger.debug(`Conexión liberada correctamente (${poolKey})`);
+    } else {
+      logger.warn(
+        `No se encontró pool para ${poolKey}, cerrando conexión directamente`
+      );
+      connection.close();
+      connectionPoolMap.delete(connection);
+    }
+  } catch (error) {
+    logger.error(`Error al liberar conexión:`, error);
+
+    // Fallback - intentar con el otro pool si falla
+    try {
+      const otherPoolKey =
+        connection._poolOrigin === "server1" ? "server2" : "server1";
+      const otherPool = otherPoolKey === "server1" ? poolServer1 : poolServer2;
+
+      if (otherPool) {
+        logger.debug(
+          `Intentando liberar conexión en pool alternativo (${otherPoolKey})...`
+        );
+        await otherPool.release(connection);
+        connectionPoolMap.delete(connection);
+        logger.debug(
+          `Conexión liberada correctamente en pool alternativo (${otherPoolKey})`
+        );
+        return;
+      }
+    } catch (fallbackError) {
+      logger.error(
+        "Error al liberar conexión en pool alternativo:",
+        fallbackError
       );
     }
 
-    if (!global[`${serverKey}Connection`]) {
-      global[`${serverKey}Connection`] = await connectToDB(serverKey);
-      logger.info(`✅ Conexión global a ${serverKey} establecida`);
+    // Último recurso - intentar cerrar directamente
+    try {
+      connection.close();
+      connectionPoolMap.delete(connection);
+      logger.debug("Conexión cerrada directamente");
+    } catch (closeError) {
+      logger.error("Error al cerrar conexión directamente:", closeError);
+    }
+  }
+}
+
+async function closePools() {
+  try {
+    if (poolServer1) {
+      logger.info("Cerrando pool Server1...");
+      await poolServer1.drain();
+      await poolServer1.clear();
+      poolServer1 = null;
+      logger.info("Pool de Server1 cerrado correctamente");
     }
 
-    return global[`${serverKey}Connection`];
-  } catch (err) {
-    logger.error(
-      `❌ Error conectando a la conexión global de ${serverKey}:`,
-      err
-    );
-    throw err;
-  }
-};
-
-/**
- * Ejecuta una consulta SQL utilizando una conexión del pool
- * @param {string} serverKey - Clave del servidor
- * @param {string} query - Consulta SQL
- * @param {Object} params - Parámetros
- * @returns {Promise<Object>} - Resultado de la consulta
- */
-const executePoolQuery = async (serverKey, query, params = {}) => {
-  let connection = null;
-
-  try {
-    // Obtener conexión del pool
-    connection = await getConnection(serverKey);
-
-    // Ejecutar la consulta
-    const result = await SqlService.query(connection, query, params);
-
-    // Devolver la conexión al pool o cerrarla
-    await releaseConnection(connection, serverKey);
-
-    return result;
-  } catch (error) {
-    logger.error(`Error en executePoolQuery para ${serverKey}:`, error);
-
-    // En caso de error, asegurarse de liberar la conexión
-    if (connection) {
-      await releaseConnection(connection, serverKey);
+    if (poolServer2) {
+      logger.info("Cerrando pool Server2...");
+      await poolServer2.drain();
+      await poolServer2.clear();
+      poolServer2 = null;
+      logger.info("Pool de Server2 cerrado correctamente");
     }
 
-    throw error;
-  }
-};
+    // Limpiar el Map de conexiones
+    connectionPoolMap.clear();
 
-/**
- * Prueba una conexión directa
- */
-const testDirectConnection = async (serverKey = "server2") => {
-  try {
-    const connection = await connectToDB(serverKey);
-    const result = await SqlService.query(
-      connection,
-      "SELECT @@VERSION as version"
-    );
-
-    logger.info(`✅ Prueba directa exitosa para ${serverKey}`);
-
-    await closeConnection(connection);
-
-    return {
-      success: true,
-      server: serverKey,
-      version: result.recordset[0]?.version || "Unknown",
-    };
+    return true;
   } catch (error) {
-    logger.error(`❌ Prueba directa fallida para ${serverKey}:`, error);
-    throw error;
+    logger.error("Error al cerrar pools de conexiones:", error);
+    return false;
   }
-};
+}
 
-/**
- * Prueba una conexión usando el pool
- */
-const testPoolConnection = async (serverKey = "server2") => {
-  try {
-    const result = await executePoolQuery(
-      serverKey,
-      "SELECT @@VERSION as version"
-    );
-
-    logger.info(`✅ Prueba de pool exitosa para ${serverKey}`);
-
-    return {
-      success: true,
-      server: serverKey,
-      version: result.recordset[0]?.version || "Unknown",
-      fromPool: true,
-    };
-  } catch (error) {
-    logger.error(`❌ Prueba de pool fallida para ${serverKey}:`, error);
-    throw error;
-  }
-};
-
-/**
- * Obtiene el estado de los pools de conexiones
- */
-const getPoolsStatus = () => {
-  if (!pools) {
-    return { error: "Pools no inicializados" };
-  }
-
+function getPoolsStatus() {
   const status = {};
 
-  try {
-    Object.keys(pools).forEach((serverKey) => {
-      if (!pools[serverKey]) {
-        status[serverKey] = { status: "no inicializado" };
-        return;
-      }
+  if (poolServer1) {
+    status.server1 = {
+      size: poolServer1.size,
+      available: poolServer1.available,
+      borrowed: poolServer1.borrowed,
+      pending: poolServer1.pending,
+      max: poolServer1.max,
+      min: poolServer1.min,
+    };
+  }
 
-      // Verificar si los métodos existen antes de llamarlos
-      status[serverKey] = {
-        status: "activo",
-        size:
-          typeof pools[serverKey].getPoolSize === "function"
-            ? pools[serverKey].getPoolSize()
-            : "n/a",
-        // Compatibilidad con diferentes versiones de pool de conexiones
-        available:
-          typeof pools[serverKey].availableObjectsCount === "function"
-            ? pools[serverKey].availableObjectsCount()
-            : pools[serverKey].available || "n/a",
-        used:
-          typeof pools[serverKey].getPoolSize === "function" &&
-          typeof pools[serverKey].availableObjectsCount === "function"
-            ? pools[serverKey].getPoolSize() -
-              pools[serverKey].availableObjectsCount()
-            : pools[serverKey].borrowed || "n/a",
-        pending:
-          typeof pools[serverKey].waitingClientsCount === "function"
-            ? pools[serverKey].waitingClientsCount()
-            : pools[serverKey].pending || "n/a",
-      };
-    });
-  } catch (error) {
-    status.error = `Error obteniendo estado: ${error.message}`;
+  if (poolServer2) {
+    status.server2 = {
+      size: poolServer2.size,
+      available: poolServer2.available,
+      borrowed: poolServer2.borrowed,
+      pending: poolServer2.pending,
+      max: poolServer2.max,
+      min: poolServer2.min,
+    };
   }
 
   return status;
-};
+}
 
 module.exports = {
-  loadConfigurations,
   connectToDB,
-  connectToMongoDB,
   closeConnection,
-  getGlobalConnection,
-  testDirectConnection,
-  getDBConfig,
-  // Funciones del pool
-  initPools,
   closePools,
-  getPoolConnection,
-  releasePoolConnection,
-  getConnection,
-  releaseConnection,
-  executePoolQuery,
-  testPoolConnection,
+  initPools,
   getPoolsStatus,
 };

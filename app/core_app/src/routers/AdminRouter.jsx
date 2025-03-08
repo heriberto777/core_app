@@ -7,6 +7,7 @@ import {
   TransferTasks,
   LoadsTasks,
   ControlPlanilla,
+  LoadsResumen,
 } from "../index";
 
 const LoadLayout = ({ Layout, Page }) => {
@@ -75,6 +76,16 @@ export function AdminRouter() {
         element={
           hasAccess(user, ["admin", "dashboard"]) ? (
             <LoadLayout Layout={AdminLayout} Page={ControlPlanilla} />
+          ) : (
+            <Navigate to="/unauthorized" />
+          )
+        }
+      />
+      <Route
+        path="/summaries"
+        element={
+          hasAccess(user, ["admin", "dashboard"]) ? (
+            <LoadLayout Layout={AdminLayout} Page={LoadsResumen} />
           ) : (
             <Navigate to="/unauthorized" />
           )

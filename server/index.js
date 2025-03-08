@@ -4,16 +4,11 @@ const fs = require("fs");
 const https = require("https");
 const http = require("http");
 const {
-  connectToMongoDB,
-  loadConfigurations,
-  testDirectConnection,
   getPoolsStatus,
-  testPoolConnection,
-  initPools,
   closePools,
+  initPools,
 } = require("./services/dbService");
-const { startCronJob } = require("./services/cronService");
-const Config = require("./models/configModel");
+const { initializeServices } = require("./services/initService");
 const { API_VERSION } = require("./config");
 
 // Configurar manejo global de excepciones no capturadas para evitar reinicios de PM2
@@ -186,104 +181,54 @@ const startServerWithPort = async (serverPort) => {
   try {
     console.log(`Intentando iniciar servidor en puerto ${serverPort}...`);
 
-    console.log("Conectando a MongoDB...");
-    try {
-      await connectToMongoDB();
-      console.log("✅ Conexión a MongoDB establecida.");
-    } catch (mongoError) {
-      console.error("❌ Error al conectar a MongoDB:", mongoError.message);
-      console.log("Continuando de todas formas...");
-    }
+    // Inicializar todos los servicios ANTES de crear el servidor
+    console.log("Inicializando servicios...");
+    const servicesInitialized = await initializeServices();
 
-    console.log("Cargando configuraciones...");
-    try {
-      await loadConfigurations();
-      console.log("✅ Configuraciones cargadas.");
-    } catch (configError) {
-      console.error("❌ Error al cargar configuraciones:", configError.message);
-      console.log("Continuando con configuración por defecto...");
-    }
-
-    console.log("Inicializando pools de conexiones...");
-    try {
-      initPools();
-      console.log("✅ Pools de conexiones inicializados.");
-    } catch (poolError) {
-      console.error("❌ Error al inicializar pools:", poolError.message);
-      console.log("Continuando sin pools de conexiones...");
-    }
-
-    console.log("Probando conexiones a SQL Server...");
-    try {
-      // Ejecutando diagnóstico de conexión directa con tedious
-      try {
-        const directTestResult = await testDirectConnection("server2");
-        console.log(
-          `✅ Prueba directa exitosa. Servidor: ${directTestResult.server}`
-        );
-        console.log(
-          `Versión SQL: ${directTestResult.version.substring(0, 50)}...`
-        );
-      } catch (directErr) {
-        console.error(`❌ Prueba directa fallida: ${directErr.message}`);
-        console.log("Continuando de todas formas...");
-      }
-
-      // Ejecutando diagnóstico usando el pool
-      try {
-        const poolTestResult = await testPoolConnection("server2");
-        console.log(
-          `✅ Prueba de pool exitosa. Servidor: ${poolTestResult.server}`
-        );
-      } catch (poolErr) {
-        console.error(`❌ Prueba de pool fallida: ${poolErr.message}`);
-        console.log("Continuando sin pool de conexiones...");
-      }
-
-      // Mostrar estado de los pools
-      try {
-        console.log("Estado de los pools de conexiones:");
-        const poolStatus = getPoolsStatus();
-        console.log(JSON.stringify(poolStatus, null, 2));
-      } catch (statusErr) {
-        console.error(
-          `❌ Error al obtener estado de pools: ${statusErr.message}`
-        );
-      }
-
-      console.log("✅ Pruebas de conexión a SQL Server completadas");
-    } catch (error) {
-      console.error(
-        "❌ Error inesperado con las conexiones SQL:",
-        error.message
-      );
-      console.log(
-        "Continuando con la inicialización del servidor de todas formas..."
-      );
-    }
-
-    console.log("Configurando cronjob...");
-    let executionHour = "03:00"; // Valor por defecto
-    try {
-      const config = await Config.findOne();
-      if (config && config.hour) {
-        executionHour = config.hour;
-      }
-    } catch (configError) {
+    if (!servicesInitialized) {
       console.warn(
-        "⚠️ Error al obtener configuración, usando hora por defecto:",
-        configError.message
+        "⚠️ Servicios inicializados con advertencias. Revisando pools..."
       );
+    } else {
+      console.log("✅ Servicios inicializados correctamente.");
     }
 
-    console.log(`⏰ Transferencias programadas a las: ${executionHour}`);
-
+    // Log detallado del estado de los pools
     try {
-      startCronJob(executionHour);
-      console.log("✅ Cronjob configurado.");
-    } catch (cronError) {
-      console.error("❌ Error al configurar cronjob:", cronError.message);
-      console.log("Continuando sin cronjob...");
+      console.log("Estado de los pools de conexiones:");
+      const poolStatus = getPoolsStatus();
+      console.log(JSON.stringify(poolStatus, null, 2));
+
+      // Si los pools están vacíos, intentar inicializar manualmente
+      if (Object.keys(poolStatus).length === 0) {
+        console.warn(
+          "⚠️ No se detectaron pools de conexión. Verificando configuraciones..."
+        );
+
+        const MongoDbService = require("./services/mongoDbService");
+        console.log("Verificando conexión a MongoDB...");
+        const mongoConnected = await MongoDbService.isConnected();
+
+        if (!mongoConnected) {
+          console.log("Intentando reconectar a MongoDB...");
+          await MongoDbService.connect();
+        }
+
+        console.log("Intentando inicializar pools manualmente...");
+        const manualInit = await initPools();
+        console.log("Resultado de inicialización manual de pools:", manualInit);
+
+        // Verificar estado nuevamente
+        const newStatus = getPoolsStatus();
+        console.log(
+          "Nuevo estado de pools:",
+          JSON.stringify(newStatus, null, 2)
+        );
+      }
+    } catch (statusErr) {
+      console.error(
+        `❌ Error al obtener estado de pools: ${statusErr.message}`
+      );
     }
 
     // Determinar si podemos usar SSL
@@ -324,7 +269,9 @@ const startServerWithPort = async (serverPort) => {
         console.log("****** API REST CATELLI ******");
         console.log("******************************");
         console.log(
-          `🚀 Servidor HTTP iniciado en puerto ${serverPort}: http://localhost:${serverPort}/api/${API_VERSION}/`
+          `🚀 Servidor HTTP iniciado en puerto ${serverPort}: http://localhost:${serverPort}/api/${
+            API_VERSION || "v1"
+          }/`
         );
       });
     } else {
@@ -384,7 +331,9 @@ const startServerWithPort = async (serverPort) => {
           console.log("****** API REST CATELLI ******");
           console.log("******************************");
           console.log(
-            `🔒 Servidor HTTPS iniciado en puerto ${serverPort}: https://localhost:${serverPort}/api/${API_VERSION}/`
+            `🔒 Servidor HTTPS iniciado en puerto ${serverPort}: https://localhost:${serverPort}/api/${
+              API_VERSION || "v1"
+            }/`
           );
         });
       } catch (error) {
@@ -405,7 +354,9 @@ const startServerWithPort = async (serverPort) => {
           console.log("****** API REST CATELLI ******");
           console.log("******************************");
           console.log(
-            `⚠️ Servidor HTTP (fallback) iniciado en puerto ${serverPort}: http://localhost:${serverPort}/api/${API_VERSION}/`
+            `⚠️ Servidor HTTP (fallback) iniciado en puerto ${serverPort}: http://localhost:${serverPort}/api/${
+              API_VERSION || "v1"
+            }/`
           );
         });
       }
@@ -419,6 +370,7 @@ const startServerWithPort = async (serverPort) => {
     }
   } catch (error) {
     console.error("❌ Error general al iniciar el servidor:", error);
+    console.error(error.stack);
     // No terminamos el proceso para evitar reinicios de PM2
     console.error(
       "El servidor no pudo inicializarse pero seguirá en ejecución para diagnóstico"

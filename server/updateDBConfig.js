@@ -1,42 +1,7 @@
-/**
- * Script para actualizar las configuraciones de conexión SQL en MongoDB al formato correcto
- *
- * Ejecutar con:
- * node updateDBConfig.js
- */
-
 require("dotenv").config();
 const mongoose = require("mongoose");
-const readline = require("readline");
+const DBConfig = require("./models/dbConfigModel");
 
-// Modelo para las configuraciones de BD
-const DBConfigSchema = new mongoose.Schema(
-  {
-    serverName: {
-      type: String,
-      required: true,
-      unique: true,
-    },
-    // Nuevos campos para formato tedious
-    host: String,
-    user: String,
-    password: String,
-    database: String,
-    instance: String,
-    port: Number,
-    options: {
-      encrypt: Boolean,
-      trustServerCertificate: Boolean,
-      connectionTimeout: Number,
-      requestTimeout: Number,
-    },
-  },
-  { timestamps: true }
-);
-
-const DBConfig = mongoose.model("DBConfig", DBConfigSchema);
-
-// Función para conectar a MongoDB
 const connectToMongoDB = async () => {
   let MONGO_URI = process.env.MONGO_URI;
 
@@ -71,129 +36,127 @@ const connectToMongoDB = async () => {
   }
 };
 
-// Función para obtener confirmación del usuario
-const confirm = (question) => {
-  const rl = readline.createInterface({
-    input: process.stdin,
-    output: process.stdout,
-  });
+// Función para determinar si un host es una dirección IP
+function isIpAddress(host) {
+  return /^(\d{1,3}\.){3}\d{1,3}$/.test(host);
+}
 
-  return new Promise((resolve) => {
-    rl.question(question + " (s/n): ", (answer) => {
-      rl.close();
-      resolve(
-        answer.toLowerCase() === "s" ||
-          answer.toLowerCase() === "si" ||
-          answer.toLowerCase() === "yes" ||
-          answer.toLowerCase() === "y"
-      );
-    });
-  });
-};
-
-// Función principal
 const updateConfigurations = async () => {
   try {
     await connectToMongoDB();
 
-    // Mostrar configuraciones actuales
+    // Obtener configuraciones actuales
     const configs = await DBConfig.find();
     console.log("\nConfiguraciones actuales:");
     configs.forEach((config) => {
       console.log(
-        `- ${config.serverName}: ${config.host || "N/A"} (${
-          config.database || "N/A"
-        })`
+        `- ${config.serverName}: ${config.host} (${config.database})`
       );
     });
 
-    // Confirmar actualización
-    const shouldUpdate = await confirm(
-      "\n¿Desea actualizar las configuraciones al nuevo formato?"
-    );
-    if (!shouldUpdate) {
-      console.log("Operación cancelada");
-      return;
+    // Obtener valores desde variables de entorno
+    const server1Host = process.env.SERVER1_HOST || "localhost";
+    const server2Host = process.env.SERVER2_HOST || "localhost";
+
+    // Determinar si los hosts son IPs
+    const server1IsIp = isIpAddress(server1Host);
+    const server2IsIp = isIpAddress(server2Host);
+
+    if (server1IsIp) {
+      console.log(
+        `NOTA: Server1 (${server1Host}) es una dirección IP. Se desactivará encrypt para evitar advertencias TLS.`
+      );
     }
+
+    if (server2IsIp) {
+      console.log(
+        `NOTA: Server2 (${server2Host}) es una dirección IP. Se desactivará encrypt para evitar advertencias TLS.`
+      );
+    }
+
+    // Configuración actualizada para server1
+    const server1Config = {
+      serverName: "server1",
+      type: "mssql",
+      user: process.env.SERVER1_USER || "usuario_server1",
+      password: process.env.SERVER1_PASS || "password_server1",
+      host: server1Host,
+      port: parseInt(process.env.SERVER1_PORT || "1433"),
+      database: process.env.SERVER1_DB || "database_server1",
+      instance: process.env.SERVER1_INSTANCE || "",
+      options: {
+        // Si es IP, desactivar encrypt para evitar advertencias
+        encrypt: server1IsIp ? false : process.env.SERVER1_ENCRYPT === "true",
+        trustServerCertificate: true,
+        enableArithAbort: true,
+        ssl: false,
+        authSource: null,
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+      },
+    };
 
     // Actualizar server1
-    if (process.env.SERVER1_HOST) {
-      const server1Config = {
-        host: process.env.SERVER1_HOST,
-        user: process.env.SERVER1_USER,
-        password: process.env.SERVER1_PASS,
-        database: process.env.SERVER1_DB,
-        options: {
-          encrypt: process.env.SERVER1_ENCRYPT === "true",
-          trustServerCertificate:
-            process.env.SERVER1_TRUST_SERVER_CERT === "true",
-          connectionTimeout: 30000,
-          requestTimeout: 60000,
-        },
-      };
+    const result1 = await DBConfig.findOneAndUpdate(
+      { serverName: "server1" },
+      server1Config,
+      { upsert: true, new: true }
+    );
 
-      // Añadir instance solo si está definido
-      if (process.env.SERVER1_INSTANCE) {
-        server1Config.instance = process.env.SERVER1_INSTANCE;
-      }
+    console.log(`server1 ${result1 ? "actualizado" : "no encontrado"}`);
 
-      const result1 = await DBConfig.updateOne(
-        { serverName: "server1" },
-        { $set: server1Config },
-        { upsert: true }
-      );
-
-      console.log(
-        `server1 ${result1.modifiedCount ? "actualizado" : "creado"}`
-      );
-    }
+    // Configuración actualizada para server2
+    const server2Config = {
+      serverName: "server2",
+      type: "mssql",
+      user: process.env.SERVER2_USER || "usuario_server2",
+      password: process.env.SERVER2_PASS || "password_server2",
+      host: server2Host,
+      port: parseInt(process.env.SERVER2_PORT || "1433"),
+      database: process.env.SERVER2_DB || "database_server2",
+      instance: process.env.SERVER2_INSTANCE || "",
+      options: {
+        // Si es IP, desactivar encrypt para evitar advertencias
+        encrypt: server2IsIp ? false : process.env.SERVER2_ENCRYPT === "true",
+        trustServerCertificate: true,
+        enableArithAbort: true,
+        ssl: false,
+        authSource: null,
+        useNewUrlParser: true,
+        useUnifiedTopology: true,
+      },
+    };
 
     // Actualizar server2
-    if (process.env.SERVER2_HOST) {
-      const server2Config = {
-        host: process.env.SERVER2_HOST,
-        user: process.env.SERVER2_USER,
-        password: process.env.SERVER2_PASS,
-        database: process.env.SERVER2_DB,
-        options: {
-          encrypt: process.env.SERVER2_ENCRYPT === "true",
-          trustServerCertificate:
-            process.env.SERVER2_TRUST_SERVER_CERT === "true",
-          connectionTimeout: 30000,
-          requestTimeout: 60000,
-        },
-      };
+    const result2 = await DBConfig.findOneAndUpdate(
+      { serverName: "server2" },
+      server2Config,
+      { upsert: true, new: true }
+    );
 
-      // Añadir instance solo si está definido
-      if (process.env.SERVER2_INSTANCE) {
-        server2Config.instance = process.env.SERVER2_INSTANCE;
-      }
-
-      const result2 = await DBConfig.updateOne(
-        { serverName: "server2" },
-        { $set: server2Config },
-        { upsert: true }
-      );
-
-      console.log(
-        `server2 ${result2.modifiedCount ? "actualizado" : "creado"}`
-      );
-    }
+    console.log(`server2 ${result2 ? "actualizado" : "no encontrado"}`);
 
     // Mostrar configuraciones actualizadas
     const updatedConfigs = await DBConfig.find();
     console.log("\nConfiguraciones actualizadas:");
     updatedConfigs.forEach((config) => {
       console.log(`- ${config.serverName}:`);
-      console.log(`  Host: ${config.host || "N/A"}`);
-      console.log(`  Database: ${config.database || "N/A"}`);
+      console.log(`  Type: ${config.type}`);
+      console.log(`  Host: ${config.host}`);
+      console.log(`  Port: ${config.port}`);
+      console.log(`  Database: ${config.database}`);
       console.log(`  Instance: ${config.instance || "N/A"}`);
-      console.log(`  User: ${config.user || "N/A"}`);
-      console.log(`  Options: ${JSON.stringify(config.options || {})}`);
+      console.log(`  User: ${config.user}`);
+      console.log(`  Encrypt: ${config.options.encrypt}`);
+      console.log(
+        `  TrustServerCertificate: ${config.options.trustServerCertificate}`
+      );
       console.log();
     });
 
-    console.log("Actualización completada");
+    console.log(
+      "Actualización completada. Revise que la opción 'encrypt' esté en FALSE para servidores con dirección IP."
+    );
   } catch (error) {
     console.error("Error durante la actualización:", error);
   } finally {

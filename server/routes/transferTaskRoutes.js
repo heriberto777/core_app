@@ -15,6 +15,8 @@ const {
   insertLoadsDetail,
   getLoadConsecutiveMongo,
   insertLoadsTrapaso,
+  getTaskExecutionHistory,
+  cancelTransferTask,
 } = require("../controllers/transferTaskController");
 
 const router = express.Router();
@@ -23,19 +25,19 @@ const router = express.Router();
  *  Rutas para tareas
  */
 // Obtener todas las tareas
-router.get("/tasks", getTransferTasks);
+router.get("/", getTransferTasks);
 
 // Obtener una tarea por nombre
-router.get("/task/:name", getTransferTask);
+router.get("/:name", getTransferTask);
 
 // Crear o actualizar una tarea
-router.post("/task/addEdit", upsertTransferTaskController);
+router.post("/addEdit", upsertTransferTaskController);
 
 // Eliminar una tarea por nombre
-router.delete("/task/:name", deleteTransferTask);
+router.delete("/:name", deleteTransferTask);
 
 // Ejecutar una tarea manualmente (por ID)
-router.post("/task/execute/:taskId", executeTransferTask);
+router.post("/execute/:taskId", executeTransferTask);
 
 /**
  *  Rutas de configuración
@@ -50,23 +52,27 @@ router.get("/config/task-status", getTaskStatus);
  *  Rutas para "run-loads"
  */
 // Ejecutar una lógica de "carga" según el nombre de la tarea
-router.post("/task/run-loads/:taskName", runTask);
+router.post("/run-loads/:taskName", runTask);
 
 /**
  *  Rutas para insertar datos (Orders, LoadsDetail, etc.)
  */
 // Insertar Orders
-router.post("/task/transfer/insertOrders", insertOrders);
+router.post("/transfer/insertOrders", insertOrders);
 
 // Insertar LoadsDetail
-router.post("/task/transfer/insertLoads", insertLoadsDetail);
+router.post("/transfer/insertLoads", insertLoadsDetail);
 
 // Insertar Trapaso
-router.post("/task/transfer/insertTrapaso", insertLoadsTrapaso);
+router.post("/transfer/insertTrapaso", insertLoadsTrapaso);
 
 /**
  *  Ruta para obtener el consecutivo de Load
  */
-router.get("/task/load/lastLoad", getLoadConsecutiveMongo);
+router.get("/load/lastLoad", getLoadConsecutiveMongo); //task-history
+
+router.get("/task-history/:taskId", getTaskExecutionHistory); //task-history
+// En routes/transferRoutes.js
+router.post("/cancel/:taskId", cancelTransferTask);
 
 module.exports = router;

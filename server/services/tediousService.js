@@ -1,7 +1,8 @@
-// services/tediousService.js
+// services/tediousService.js - CORREGIDO
 const { Connection, Request, TYPES } = require("tedious");
 const fs = require("fs");
 const path = require("path");
+const logger = require("./logger");
 
 /**
  * Clase para gestionar conexiones y operaciones con Tedious de forma directa
@@ -142,105 +143,130 @@ class SqlService {
   }
 
   /**
-   * Ejecuta una consulta SQL evitando los problemas de validación de parámetros
+   * Ejecuta una consulta SQL con parámetros (versión corregida que no usa validateParameters)
    * @param {Connection} connection - Conexión a SQL Server
    * @param {string} sql - Consulta SQL
    * @param {Object} params - Parámetros para la consulta
-   * @param {Object} paramTypes - Tipos explícitos para los parámetros (opcional)
    * @returns {Promise<Object>} - Resultado de la consulta
    */
-  static async query(connection, sql, params = {}, paramTypes = {}) {
-    // Sanitizar los parámetros
-    const sanitizedParams = this.sanitizeParams(params);
-
+  static async query(connection, sql, params = {}) {
     return new Promise((resolve, reject) => {
       const rows = [];
+      let rowCount = 0;
 
-      // SOLUCIÓN CLAVE: Crear la consulta con manejo especial para evitar validación
+      // SOLUCIÓN: Usar un enfoque directo para la sustitución de parámetros
+      // en lugar de depender de validateParameters
       let modifiedSql = sql;
+      const sanitizedParams = this.sanitizeParams(params);
 
       try {
-        // Reemplazar parámetros en la consulta directamente en lugar de usar la validación
-        // de Tedious que está causando problemas
+        // Reemplazar parámetros en la consulta SQL directamente
         if (Object.keys(sanitizedParams).length > 0) {
-          // Construir los valores de parámetros directamente en la consulta SQL
-          for (const [name, value] of Object.entries(sanitizedParams)) {
-            if (value === null || value === undefined) {
-              // Reemplazar parámetros nulos con NULL literal
-              const regex = new RegExp(`@${name}\\b`, "g");
+          for (const [paramName, paramValue] of Object.entries(
+            sanitizedParams
+          )) {
+            const regex = new RegExp(`@${paramName}\\b`, "g");
+
+            if (paramValue === null || paramValue === undefined) {
               modifiedSql = modifiedSql.replace(regex, "NULL");
-            } else if (typeof value === "string") {
-              // Escapar strings y ponerlos entre comillas
-              const escapedValue = value.replace(/'/g, "''");
-              const regex = new RegExp(`@${name}\\b`, "g");
+            } else if (typeof paramValue === "string") {
+              // Escapar comillas simples en strings
+              const escapedValue = paramValue.replace(/'/g, "''");
               modifiedSql = modifiedSql.replace(regex, `'${escapedValue}'`);
-            } else if (typeof value === "number") {
-              // Números se insertan directamente
-              const regex = new RegExp(`@${name}\\b`, "g");
-              modifiedSql = modifiedSql.replace(regex, value);
-            } else if (typeof value === "boolean") {
-              // Convertir booleanos a 1/0
-              const regex = new RegExp(`@${name}\\b`, "g");
-              modifiedSql = modifiedSql.replace(regex, value ? "1" : "0");
-            } else if (value instanceof Date) {
-              // Formatear fechas a formato SQL Server
-              const isoString = value.toISOString();
+            } else if (typeof paramValue === "number") {
+              modifiedSql = modifiedSql.replace(regex, paramValue);
+            } else if (typeof paramValue === "boolean") {
+              modifiedSql = modifiedSql.replace(regex, paramValue ? "1" : "0");
+            } else if (paramValue instanceof Date) {
+              // Formatear fechas correctamente para SQL Server
+              const isoString = paramValue.toISOString();
               const formattedDate = isoString.slice(0, 19).replace("T", " ");
-              const regex = new RegExp(`@${name}\\b`, "g");
               modifiedSql = modifiedSql.replace(regex, `'${formattedDate}'`);
             } else {
-              // Para cualquier otro tipo, convertir a string seguro
-              const safeValue = String(value).replace(/'/g, "''");
-              const regex = new RegExp(`@${name}\\b`, "g");
-              modifiedSql = modifiedSql.replace(regex, `'${safeValue}'`);
+              // Para cualquier otro tipo, convertir a string
+              const stringValue = String(paramValue).replace(/'/g, "''");
+              modifiedSql = modifiedSql.replace(regex, `'${stringValue}'`);
             }
           }
         }
-      } catch (paramError) {
-        console.error("Error al procesar parámetros:", paramError);
-        this.logQueryError(
-          "param_processing",
-          sql,
-          sanitizedParams,
-          paramError
-        );
-        reject(paramError);
-        return;
-      }
 
-      // Crear la solicitud sin parámetros
-      const request = new Request(modifiedSql, (err, rowCount) => {
-        if (err) {
-          console.error("Error en ejecución SQL:", err);
-          this.logQueryError("execution", modifiedSql, {}, err);
-          reject(err);
-          return;
+        // Log de la consulta si estamos en desarrollo
+        if (process.env.NODE_ENV === "development") {
+          logger.debug(
+            `SQL Query: ${modifiedSql.slice(0, 1000)}${
+              modifiedSql.length > 1000 ? "..." : ""
+            }`
+          );
         }
 
-        resolve({
-          recordset: rows,
-          rowsAffected: rowCount || 0,
+        // Crear la solicitud con la consulta ya preparada
+        const request = new Request(modifiedSql, (err, rowCount) => {
+          if (err) {
+            logger.error(`Error ejecutando consulta SQL: ${err.message}`);
+            this.logQueryError("execution", modifiedSql, sanitizedParams, err);
+            reject(err);
+            return;
+          }
+
+          resolve({
+            recordset: rows,
+            rowsAffected: rowCount || 0,
+          });
         });
-      });
 
-      // Manejar eventos de filas
-      request.on("row", (columns) => {
-        const row = {};
-        columns.forEach((column) => {
-          row[column.metadata.colName] = column.value;
+        // CORRECCIÓN CRÍTICA: Manejar diferentes estructuras de respuesta dependiendo de la versión de Tedious
+        request.on("row", (columns) => {
+          const row = {};
+
+          // Manejar diferentes formatos dependiendo de la versión de Tedious
+          if (Array.isArray(columns)) {
+            // Formato de versiones anteriores (array de columnas)
+            columns.forEach((column) => {
+              row[column.metadata.colName] = column.value;
+            });
+          } else if (columns && typeof columns === "object") {
+            // Formato de versiones más recientes (objeto con propiedades)
+            Object.keys(columns).forEach((key) => {
+              const column = columns[key];
+              if (column && column.metadata && column.metadata.colName) {
+                row[column.metadata.colName] = column.value;
+              } else if (key !== "meta" && column !== undefined) {
+                // Usar el nombre de la propiedad como nombre de columna si no hay metadata
+                row[key] = column;
+              }
+            });
+          }
+
+          // Solo añadir la fila si tiene propiedades
+          if (Object.keys(row).length > 0) {
+            rows.push(row);
+          } else {
+            logger.warn("Recibida fila en formato inesperado - consultar logs");
+            logger.debug(
+              "Estructura de fila recibida: " + JSON.stringify(columns)
+            );
+          }
         });
-        rows.push(row);
-      });
 
-      // Manejar errores durante la ejecución
-      request.on("error", (err) => {
-        console.error("Error en la ejecución de la consulta SQL:", err);
-        this.logQueryError("request_error", modifiedSql, {}, err);
-        reject(err);
-      });
+        // Manejar errores
+        request.on("error", (err) => {
+          logger.error(`Error en request.on('error'): ${err.message}`);
+          this.logQueryError(
+            "request_error",
+            modifiedSql,
+            sanitizedParams,
+            err
+          );
+          reject(err);
+        });
 
-      // Ejecutar la consulta modificada sin parámetros
-      connection.execSql(request);
+        // Ejecutar la consulta
+        connection.execSql(request);
+      } catch (error) {
+        logger.error(`Error en SqlService.query: ${error.message}`);
+        this.logQueryError("general", sql, sanitizedParams, error);
+        reject(error);
+      }
     });
   }
 
@@ -283,126 +309,94 @@ class SqlService {
    * @returns {Promise<Object>} - Objeto con los tipos de columnas
    */
   static async getColumnTypes(connection, tableName) {
-    const query = `
-      SELECT 
-          c.name AS column_name,
-          t.name AS data_type,
-          c.max_length,
-          c.precision,
-          c.scale,
-          c.is_nullable
-      FROM 
-          sys.columns c
-      JOIN 
-          sys.types t ON c.user_type_id = t.user_type_id
-      JOIN 
-          sys.tables tbl ON c.object_id = tbl.object_id
-      WHERE 
-          tbl.name = @tableName
-      ORDER BY 
-          c.column_id;
-    `;
+    try {
+      const cleanTableName = tableName
+        .replace(/[\[\]]/g, "")
+        .split(".")
+        .pop();
 
-    const result = await this.query(connection, query, { tableName });
+      const query = `
+        SELECT 
+            c.name AS column_name,
+            t.name AS data_type,
+            c.max_length,
+            c.precision,
+            c.scale,
+            c.is_nullable
+        FROM 
+            sys.columns c
+        JOIN 
+            sys.types t ON c.user_type_id = t.user_type_id
+        JOIN 
+            sys.tables tbl ON c.object_id = tbl.object_id
+        WHERE 
+            tbl.name = '${cleanTableName}'
+        ORDER BY 
+            c.column_id;
+      `;
 
-    // Convertir resultados en un mapa de tipos
-    const typeMap = {};
-    for (const col of result.recordset) {
-      let sqlType;
+      const result = await this.query(connection, query);
 
-      switch (col.data_type.toLowerCase()) {
-        case "varchar":
-        case "nvarchar":
-        case "char":
-        case "nchar":
-        case "text":
-        case "ntext":
-          sqlType = TYPES.NVarChar;
-          break;
-        case "int":
-        case "smallint":
-        case "tinyint":
-          sqlType = TYPES.Int;
-          break;
-        case "bigint":
-          sqlType = TYPES.BigInt;
-          break;
-        case "decimal":
-        case "numeric":
-        case "money":
-        case "smallmoney":
-          sqlType = TYPES.Decimal;
-          break;
-        case "float":
-        case "real":
-          sqlType = TYPES.Float;
-          break;
-        case "bit":
-          sqlType = TYPES.Bit;
-          break;
-        case "date":
-          sqlType = TYPES.Date;
-          break;
-        case "datetime":
-        case "datetime2":
-        case "smalldatetime":
-          sqlType = TYPES.DateTime;
-          break;
-        case "uniqueidentifier":
-          sqlType = TYPES.UniqueIdentifier;
-          break;
-        default:
-          sqlType = TYPES.NVarChar; // Tipo predeterminado
-      }
+      // Convertir resultados en un mapa de tipos
+      const typeMap = {};
+      for (const col of result.recordset) {
+        let sqlType;
 
-      typeMap[col.column_name] = sqlType;
-    }
-
-    return typeMap;
-  }
-
-  /**
-   * Determina el tipo de datos de Tedious basado en el valor
-   * Versión mejorada con manejo más robusto de tipos
-   * @param {any} value - Valor a evaluar
-   * @returns {Object} - Tipo de datos de Tedious
-   */
-  static determineType(value) {
-    if (value === null || value === undefined || value === "") {
-      return TYPES.Null;
-    } else if (typeof value === "number") {
-      if (Number.isInteger(value)) {
-        return TYPES.Int;
-      } else {
-        return TYPES.Float; // Más seguro que Decimal para valores de punto flotante
-      }
-    } else if (value instanceof Date) {
-      return TYPES.DateTime;
-    } else if (typeof value === "boolean") {
-      return TYPES.Bit;
-    } else if (typeof value === "string") {
-      // Determinar si es una fecha en formato de string
-      if (/^\d{4}-\d{2}-\d{2}/.test(value)) {
-        try {
-          const date = new Date(value);
-          if (!isNaN(date.getTime())) {
-            return TYPES.DateTime;
-          }
-        } catch (e) {
-          // Si no es una fecha válida, tratarlo como string
+        switch (col.data_type.toLowerCase()) {
+          case "varchar":
+          case "nvarchar":
+          case "char":
+          case "nchar":
+          case "text":
+          case "ntext":
+            sqlType = TYPES.NVarChar;
+            break;
+          case "int":
+          case "smallint":
+          case "tinyint":
+            sqlType = TYPES.Int;
+            break;
+          case "bigint":
+            sqlType = TYPES.BigInt;
+            break;
+          case "decimal":
+          case "numeric":
+          case "money":
+          case "smallmoney":
+            sqlType = TYPES.Decimal;
+            break;
+          case "float":
+          case "real":
+            sqlType = TYPES.Float;
+            break;
+          case "bit":
+            sqlType = TYPES.Bit;
+            break;
+          case "date":
+            sqlType = TYPES.Date;
+            break;
+          case "datetime":
+          case "datetime2":
+          case "smalldatetime":
+            sqlType = TYPES.DateTime;
+            break;
+          case "uniqueidentifier":
+            sqlType = TYPES.UniqueIdentifier;
+            break;
+          default:
+            sqlType = TYPES.NVarChar; // Tipo predeterminado
         }
+
+        typeMap[col.column_name] = sqlType;
       }
 
-      // Evitar enviar strings vacíos, mejor enviar NULL
-      if (value.trim() === "") {
-        return TYPES.Null;
-      }
-
-      return TYPES.NVarChar;
+      return typeMap;
+    } catch (error) {
+      logger.warn(
+        `No se pudieron obtener los tipos de columnas: ${error.message}`
+      );
+      return {}; // Devolver un objeto vacío para continuar funcionando
     }
-
-    // Por defecto usar NVarChar
-    return TYPES.NVarChar;
   }
 
   /**
@@ -475,7 +469,7 @@ class SqlService {
   }
 
   /**
-   * Inserta un registro en la base de datos con tipos explícitos
+   * Inserta un registro en la base de datos (versión corregida que no depende de validateParameters)
    * @param {Connection} connection - Conexión a la base de datos
    * @param {string} tableName - Nombre de la tabla
    * @param {Object} record - Datos a insertar
@@ -488,50 +482,18 @@ class SqlService {
       const exists = await this.tableExists(connection, tableNameClean);
 
       if (!exists) {
-        const error = new Error(
+        throw new Error(
           `La tabla ${tableNameClean} no existe en la base de datos`
         );
-        this.logValidationError(
-          tableNameClean,
-          "table_not_found",
-          record,
-          error
-        );
-
-        // Corregir errores comunes de ortografía en nombres de tablas
-        let suggestedName = tableNameClean;
-        if (tableNameClean.includes("conctacts")) {
-          suggestedName = tableNameClean.replace("conctacts", "contacts");
-          console.warn(
-            `⚠️ Posible error ortográfico en nombre de tabla. ¿Querías decir "${suggestedName}"?`
-          );
-        }
-
-        // Si no existe la tabla, no continuar
-        throw error;
       }
 
-      if (process.env.NODE_ENV !== "production") {
-        console.log(
-          "Record antes de sanitizar:",
-          JSON.stringify(record, null, 2)
-        );
-      }
-
-      // Validar y sanitizar el registro con mejor manejo de nulos y undefined
+      // Validar y sanitizar el registro
       const sanitizedRecord = this.validateRecord(record);
 
-      if (process.env.NODE_ENV !== "production") {
-        console.log(
-          "Record después de sanitizar:",
-          JSON.stringify(sanitizedRecord, null, 2)
-        );
-      }
-
-      // Verificar que no haya valores undefined en el registro sanitizado
+      // Verificar que no haya valores undefined
       for (const key in sanitizedRecord) {
         if (sanitizedRecord[key] === undefined) {
-          sanitizedRecord[key] = null; // Convertir undefined a null explícitamente
+          sanitizedRecord[key] = null;
         }
       }
 
@@ -539,14 +501,10 @@ class SqlService {
       const columns = Object.keys(sanitizedRecord)
         .map((k) => `[${k}]`)
         .join(", ");
+
       const paramNames = Object.keys(sanitizedRecord)
         .map((k) => `@${k}`)
         .join(", ");
-
-      if (process.env.NODE_ENV !== "production") {
-        console.log("Columnas:", columns);
-        console.log("Parámetros:", paramNames);
-      }
 
       const sql = `
         INSERT INTO ${tableName} (${columns})
@@ -555,46 +513,14 @@ class SqlService {
         SELECT @@ROWCOUNT AS rowsAffected;
       `;
 
-      // Ejecutar la consulta con la nueva implementación que evita problemas de validación
+      // Ejecutar con el método query
       return await this.query(connection, sql, sanitizedRecord);
     } catch (error) {
-      console.error(
+      logger.error(
         `Error en insertWithExplicitTypes para tabla ${tableName}:`,
         error
       );
-      // Registrar el error para análisis posterior
-      this.logValidationError(tableName, "insert_error", record, error);
       throw error;
-    }
-  }
-
-  /**
-   * Método auxiliar para registrar errores de validación para análisis posterior
-   * @param {string} tableName - Nombre de la tabla
-   * @param {string} paramName - Nombre del parámetro
-   * @param {any} value - Valor original
-   * @param {Error} error - Error ocurrido
-   */
-  static logValidationError(tableName, paramName, value, error) {
-    try {
-      const logDir = path.join(process.cwd(), "logs");
-      const logPath = path.join(logDir, "validation_errors.log");
-
-      // Crear directorio de logs si no existe
-      if (!fs.existsSync(logDir)) {
-        fs.mkdirSync(logDir, { recursive: true });
-      }
-
-      const timestamp = new Date().toISOString();
-      const logEntry = `[${timestamp}] Error en tabla ${tableName}, parámetro ${paramName}: ${
-        error.message
-      }\nValor: ${JSON.stringify(value)}\n\n`;
-
-      fs.appendFile(logPath, logEntry, (err) => {
-        if (err) console.error("Error al escribir log de validación:", err);
-      });
-    } catch (logError) {
-      console.error("Error al registrar error de validación:", logError);
     }
   }
 

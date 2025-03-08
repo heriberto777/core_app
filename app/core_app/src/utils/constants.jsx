@@ -20,6 +20,7 @@ export const ENV = {
     LOAD: "load",
     CONFIG_TASK: "config",
     EMAIL_RECIPIENTS: "email-recipients",
+    SUMMARIES: "summaries",
   },
   JWT: {
     ACCESS: "access",

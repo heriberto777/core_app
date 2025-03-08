@@ -1,4 +1,5 @@
 const TransferTask = require("../models/transferTaks");
+const TransferSummary = require("../models/transferSummaryModel");
 const Consecutivo = require("../models/consecutivoModej");
 const {
   executeTransferManual,
@@ -14,6 +15,12 @@ const {
   traspasoBodega,
   realizarTraspaso,
 } = require("../services/traspasoService");
+const {
+  registerTask,
+  cancelTask,
+  isTaskActive,
+  completeTask,
+} = require("../utils/taskTracker");
 
 /**
  * Obtener todas las tareas de transferencia
@@ -494,6 +501,100 @@ async function getLoadConsecutiveMongo(req, res) {
   }
 }
 
+// En el controlador correspondiente
+const getTaskExecutionHistory = async (req, res) => {
+  console.log("Llegamos", req.params);
+  try {
+    const { taskId } = req.params;
+
+    // Obtener la tarea para tener información básica
+    const task = await TransferTask.findById(taskId);
+    if (!task) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Tarea no encontrada" });
+    }
+
+    // Obtener historial de TransferSummary relacionado con esta tarea
+    // Aquí asumimos que guardas el ID de la tarea en cada resumen
+    // Si no, podrías usar otro criterio como la fecha o el nombre
+    const summaries = await TransferSummary.find({
+      taskName: task.name,
+    })
+      .sort({ date: -1 })
+      .limit(50);
+
+    return res.status(200).json({
+      success: true,
+      task: {
+        name: task.name,
+        lastExecutionDate: task.lastExecutionDate,
+        executionCount: task.executionCount,
+        lastExecutionResult: task.lastExecutionResult,
+      },
+      history: summaries,
+    });
+  } catch (error) {
+    console.error("Error al obtener historial de ejecución:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error al obtener historial",
+      error: error.message,
+    });
+  }
+};
+
+// Endpoint para cancelar una tarea
+const cancelTransferTask = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+
+    // Verificar si la tarea existe
+    const task = await TransferTask.findById(taskId);
+    if (!task) {
+      return res
+        .status(404)
+        .json({ success: false, message: "Tarea no encontrada" });
+    }
+
+    // Verificar si está en ejecución
+    if (!isTaskActive(taskId)) {
+      return res.status(400).json({
+        success: false,
+        message: "La tarea no está en ejecución actualmente",
+      });
+    }
+
+    // Cancelar la tarea
+    const cancelled = cancelTask(taskId);
+
+    if (cancelled) {
+      // Actualizar el estado en la base de datos
+      await TransferTask.findByIdAndUpdate(taskId, {
+        status: "cancelled",
+        progress: -1,
+      });
+
+      return res.status(200).json({
+        success: true,
+        message: "Tarea cancelada correctamente",
+      });
+    } else {
+      return res.status(500).json({
+        success: false,
+        message: "No se pudo cancelar la tarea",
+      });
+    }
+  } catch (error) {
+    console.error("Error al cancelar tarea:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error al cancelar la tarea",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   getTransferTasks,
   getTransferTask,
@@ -508,4 +609,6 @@ module.exports = {
   insertLoadsDetail,
   getLoadConsecutiveMongo,
   insertLoadsTrapaso,
+  getTaskExecutionHistory,
+  cancelTransferTask,
 };

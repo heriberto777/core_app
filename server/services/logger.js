@@ -1,53 +1,62 @@
-const winston = require("winston");
-const MongoDBTransport = require("./mongoDBTransport"); // Transporte personalizado
+const { createLogger, format, transports } = require("winston");
+const { combine, timestamp, printf, colorize } = format;
+const path = require("path");
 
-// Niveles de logs personalizados
-const logLevels = {
-  levels: {
-    error: 0,
-    warn: 1,
-    info: 2,
-    http: 3,
-    verbose: 4,
-    debug: 5,
-    silly: 6,
-  },
-  colors: {
-    error: "red",
-    warn: "yellow",
-    info: "green",
-    http: "magenta",
-    verbose: "cyan",
-    debug: "blue",
-    silly: "gray",
-  },
-};
+// Crear directorio de logs si no existe
+const fs = require("fs");
+const logDir = "logs";
 
-// Configuración del logger
-const logger = winston.createLogger({
-  levels: logLevels.levels,
-  format: winston.format.combine(
-    winston.format.timestamp(),
-    winston.format.json()
-  ),
-  transports: [
-    // mongoDBTransport, // Guardar en MongoDB
-    new winston.transports.File({ filename: "logs/error.log", level: "error" }),
-    new winston.transports.File({ filename: "logs/combined.log" }),
-    new MongoDBTransport(), // Guardar logs en MongoDB
-  ],
+if (!fs.existsSync(logDir)) {
+  fs.mkdirSync(logDir);
+}
+
+// Formato personalizado
+const myFormat = printf(({ level, message, timestamp, ...rest }) => {
+  let restString = "";
+  if (Object.keys(rest).length > 0) {
+    restString = JSON.stringify(rest);
+  }
+  return `${timestamp} [${level}]: ${message} ${restString}`;
 });
 
-// Agregar transporte de consola en desarrollo
-if (process.env.NODE_ENV !== "production") {
-  logger.add(
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize({ all: true }),
-        winston.format.simple()
-      ),
-    })
-  );
-}
+// Crear logger
+const logger = createLogger({
+  level: process.env.LOG_LEVEL || "info",
+  format: combine(timestamp(), myFormat),
+  transports: [
+    // Log a consola
+    new transports.Console({
+      format: combine(colorize(), timestamp(), myFormat),
+    }),
+
+    // Logs de info y niveles superiores
+    new transports.File({
+      filename: path.join(logDir, "combined.log"),
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+    }),
+
+    // Solo errores
+    new transports.File({
+      filename: path.join(logDir, "error.log"),
+      level: "error",
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+    }),
+  ],
+  exitOnError: false,
+});
+
+// Stream para Morgan - CORREGIDO
+logger.stream = {
+  write: function (message) {
+    // Asegurarse de que el mensaje sea una cadena
+    if (typeof message === "string") {
+      logger.info(message.trim());
+    } else {
+      logger.info(String(message).trim());
+    }
+  },
+};
 
 module.exports = logger;
