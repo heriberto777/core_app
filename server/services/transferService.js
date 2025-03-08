@@ -75,7 +75,8 @@ async function getTransferTasks() {
     active: task.active,
     _id: task._id,
     transferType: task.transferType || "standard",
-    execute: (updateProgress) => executeTransfer(task._id, updateProgress),
+    execute: (updateProgress) =>
+      executeTransferWithRetry(task._id, updateProgress),
   }));
 }
 
@@ -108,21 +109,28 @@ async function executeTransferManual(taskId) {
 
     // 2. Ejecutar la transferencia
     logger.info(`📌 Ejecutando transferencia para la tarea: ${transferName}`);
-    // const result = await executeTransfer(taskId);
     const result = await executeTransferWithRetry(taskId);
+
+    // Verificar que result sea un objeto válido para evitar errores
+    if (!result) {
+      logger.error(
+        `❌ No se obtuvo un resultado válido para la tarea: ${transferName}`
+      );
+      return { success: false, message: "No se obtuvo un resultado válido" };
+    }
 
     // 3. Preparar datos para el correo
     const formattedResult = {
       name: transferName,
-      success: result.success,
+      success: result.success || false,
       inserted: result.inserted || 0,
       updated: result.updated || 0,
       duplicates: result.duplicates || 0,
       rows: result.rows || 0,
       message: result.message || "Transferencia completada",
       errorDetail: result.errorDetail || "N/A",
-      initialCount: result.initialCount,
-      finalCount: result.finalCount,
+      initialCount: result.initialCount || 0,
+      finalCount: result.finalCount || 0,
       duplicatedRecords: result.duplicatedRecords || [],
       hasMoreDuplicates: result.hasMoreDuplicates || false,
       totalDuplicates: result.totalDuplicates || 0,
@@ -152,7 +160,7 @@ async function executeTransferManual(taskId) {
         lastExecutionResult: {
           success: result.success,
           message: result.message || "Transferencia completada",
-          affectedRecords: result.inserted + result.updated || 0,
+          affectedRecords: (result.inserted || 0) + (result.updated || 0), // Evitar NaN
         },
       });
 
@@ -380,14 +388,23 @@ const executeTransfer = async (taskId) => {
 
           // 4.3 Obtener los tipos de columnas de la tabla destino
           try {
-            logger.debug(`Obteniendo tipos de columnas para tabla ${name}...`);
-            columnTypes = await SqlService.getColumnTypes(
-              server2Connection,
-              name
-            );
-            logger.debug(
-              `Tipos de columnas obtenidos correctamente para ${name}`
-            );
+            logger.debug(`Obteniendo información de la tabla ${name}...`);
+
+            // Verificar si getColumnTypes existe
+            if (typeof SqlService.getColumnTypes === "function") {
+              columnTypes = await SqlService.getColumnTypes(
+                server2Connection,
+                name
+              );
+              logger.debug(
+                `Tipos de columnas obtenidos correctamente para ${name}`
+              );
+            } else {
+              logger.info(
+                `La función getColumnTypes no está disponible en SqlService. Usando inferencia automática.`
+              );
+              columnTypes = {};
+            }
           } catch (typesError) {
             logger.warn(
               `No se pudieron obtener los tipos de columnas para ${name}: ${typesError.message}. Se utilizará inferencia automática.`
@@ -2152,6 +2169,8 @@ async function executeTransferWithRetry(taskId, maxRetries = 3) {
         logger.info(
           `Tarea ${taskId} completada exitosamente en el intento ${attempts}`
         );
+
+        console.log(result);
 
         try {
           // Calcular registros afectados de manera segura evitando NaN
