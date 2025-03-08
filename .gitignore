@@ -27,3 +27,4 @@ app/core_app/node_modules/ #no carga modules
 app/core_app/build/ #no carga modules 
 app/core_app/dist/ #no carga modules 
 
+server/logs/*.log
