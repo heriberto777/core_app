@@ -64,7 +64,8 @@ const startCronJob = (hour) => {
           } else if (task.transferType === "down") {
             result = await transferService.executeTransferDown(task._id);
           } else {
-            result = await transferService.executeTransfer(task._id);
+            // result = await transferService.executeTransfer(task._id);
+            const result = await executeTransferWithRetry(task._id);
           }
         } catch (error) {
           logger.error(`❌ Error en la transferencia ${task.name}:`, error);
