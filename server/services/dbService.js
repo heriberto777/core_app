@@ -14,7 +14,7 @@ const DEFAULT_POOL_CONFIG = {
   evictionRunIntervalMillis: 60000, // Verificación de conexiones inactivas (60s)
   testOnBorrow: false, // DESACTIVADO para evitar timeouts
   testOnReturn: false, // No validar conexiones cuando se devuelven
-  fifo: false, // Utilizar LIFO para mejorar la eficiencia la diferenaica
+  fifo: false, // Utilizar LIFO para mejorar la eficiencia
 };
 
 // Pools de conexiones
@@ -23,6 +23,32 @@ let poolServer2 = null;
 
 // Map global para rastrear conexiones
 const connectionPoolMap = new Map();
+
+// Variables para gestionar el estado y renovación del pool
+let poolRenewalTimers = {
+  server1: null,
+  server2: null,
+};
+
+const POOL_HEALTH = {
+  lastCheck: {
+    server1: Date.now(),
+    server2: Date.now(),
+  },
+  errorCount: {
+    server1: 0,
+    server2: 0,
+  },
+  maxErrorThreshold: 5, // Después de este número de errores, renovar el pool
+  checkInterval: 5 * 60 * 1000, // Revisar cada 5 minutos
+  renewalTimeout: 2 * 60 * 60 * 1000, // Renovar cada 2 horas
+};
+
+// Sistema de contador de operaciones por conexión
+const CONNECTION_OPERATION_LIMITS = {
+  maxOperations: 500, // Número máximo de operaciones por conexión
+  operationCounter: new Map(), // Mapa para contar operaciones por conexión
+};
 
 function convertDbConfigToTediousConfig(dbConfig) {
   if (!dbConfig) {
@@ -348,6 +374,283 @@ function createConnectionFactory(config) {
   };
 }
 
+// NUEVA IMPLEMENTACIÓN: Sistema de conexión robusta
+async function enhancedRobustConnect(
+  serverKey,
+  maxAttempts = 5,
+  baseDelay = 3000
+) {
+  let attempt = 0;
+  let delay = baseDelay;
+
+  while (attempt < maxAttempts) {
+    attempt++;
+    try {
+      logger.info(
+        `Intento ${attempt}/${maxAttempts} para conectar a ${serverKey}...`
+      );
+
+      const connection = await connectToDB(serverKey, 60000);
+
+      if (!connection) {
+        throw new Error(`No se pudo obtener una conexión a ${serverKey}`);
+      }
+
+      // Verificar la conexión con una consulta simple
+      const SqlService = require("./tediousService").SqlService;
+      await SqlService.query(connection, "SELECT 1 AS test");
+
+      logger.info(
+        `✅ Conexión a ${serverKey} establecida y verificada (intento ${attempt})`
+      );
+      return { success: true, connection };
+    } catch (error) {
+      logger.warn(
+        `⚠️ Error en intento ${attempt} para ${serverKey}: ${error.message}`
+      );
+
+      // Si es el último intento, fallar
+      if (attempt >= maxAttempts) {
+        return {
+          success: false,
+          error: new Error(
+            `No se pudo establecer conexión a ${serverKey} después de ${attempt} intentos: ${error.message}`
+          ),
+        };
+      }
+
+      // Esperar antes del siguiente intento con backoff exponencial
+      await new Promise((resolve) => setTimeout(resolve, delay));
+      delay = Math.min(delay * 1.5, 30000); // Máximo 30 segundos
+    }
+  }
+}
+
+// NUEVO: Sistema de renovación de pools
+function setupPoolRenewalTimer(serverKey) {
+  // Limpiar el timer anterior si existe
+  if (poolRenewalTimers[serverKey]) {
+    clearTimeout(poolRenewalTimers[serverKey]);
+  }
+
+  // Establecer un nuevo timer
+  poolRenewalTimers[serverKey] = setTimeout(async () => {
+    logger.info(
+      `Iniciando renovación programada del pool para ${serverKey}...`
+    );
+
+    try {
+      // Obtener el pool actual
+      const currentPool = serverKey === "server1" ? poolServer1 : poolServer2;
+
+      if (currentPool) {
+        // Crear un nuevo pool manteniendo conexiones existentes
+        const newPool = await createRenewedPool(serverKey);
+
+        if (newPool) {
+          logger.info(
+            `Nuevo pool para ${serverKey} creado, migrando conexiones...`
+          );
+
+          // Reemplazar el pool viejo con el nuevo
+          if (serverKey === "server1") {
+            poolServer1 = newPool;
+          } else {
+            poolServer2 = newPool;
+          }
+
+          // Cerrar el pool viejo gradualmente
+          setTimeout(async () => {
+            try {
+              logger.info(`Cerrando pool antiguo para ${serverKey}...`);
+              await currentPool.drain();
+              await currentPool.clear();
+              logger.info(
+                `Pool antiguo para ${serverKey} cerrado correctamente`
+              );
+            } catch (closeError) {
+              logger.error(
+                `Error al cerrar pool antiguo para ${serverKey}:`,
+                closeError
+              );
+            }
+          }, 60000); // Dar 1 minuto para migrar conexiones
+
+          logger.info(`Pool para ${serverKey} renovado correctamente`);
+        }
+      } else {
+        logger.info(
+          `No hay pool existente para ${serverKey}, creando uno nuevo...`
+        );
+        await initPools({ serverKey });
+      }
+    } catch (error) {
+      logger.error(`Error al renovar pool para ${serverKey}:`, error);
+    } finally {
+      // Reiniciar el temporizador
+      setupPoolRenewalTimer(serverKey);
+    }
+  }, POOL_HEALTH.renewalTimeout);
+}
+
+// NUEVO: Crear un pool renovado
+async function createRenewedPool(serverKey) {
+  try {
+    const dbConfigs = await loadDbConfigs();
+    const config = dbConfigs[serverKey];
+
+    if (!config) {
+      logger.warn(`No se encontró configuración para ${serverKey}`);
+      return null;
+    }
+
+    const factory = createConnectionFactory(config);
+    const poolConfig = { ...DEFAULT_POOL_CONFIG };
+
+    return createPool(factory, poolConfig);
+  } catch (error) {
+    logger.error(`Error al crear pool renovado para ${serverKey}:`, error);
+    return null;
+  }
+}
+
+// NUEVO: Registrar error de conexión
+function registerConnectionError(serverKey, error) {
+  POOL_HEALTH.errorCount[serverKey]++;
+  logger.warn(
+    `Error de conexión en ${serverKey} (${POOL_HEALTH.errorCount[serverKey]}/${POOL_HEALTH.maxErrorThreshold}):`,
+    error
+  );
+
+  // Si superamos el umbral, renovar el pool
+  if (POOL_HEALTH.errorCount[serverKey] >= POOL_HEALTH.maxErrorThreshold) {
+    logger.info(
+      `Umbral de errores alcanzado para ${serverKey}, iniciando renovación de pool...`
+    );
+    renewPoolNow(serverKey);
+    // Reiniciar contador
+    POOL_HEALTH.errorCount[serverKey] = 0;
+  }
+}
+
+// NUEVO: Renovar pool inmediatamente
+async function renewPoolNow(serverKey) {
+  try {
+    logger.info(`Iniciando renovación inmediata del pool para ${serverKey}...`);
+
+    // Crear nuevo pool
+    const newPool = await createRenewedPool(serverKey);
+    if (!newPool) {
+      throw new Error(`No se pudo crear un nuevo pool para ${serverKey}`);
+    }
+
+    // Reemplazar el pool actual
+    const oldPool = serverKey === "server1" ? poolServer1 : poolServer2;
+
+    if (serverKey === "server1") {
+      poolServer1 = newPool;
+    } else {
+      poolServer2 = newPool;
+    }
+
+    // Cerrar el pool viejo gradualmente
+    if (oldPool) {
+      setTimeout(async () => {
+        try {
+          logger.info(`Cerrando pool antiguo para ${serverKey}...`);
+          await oldPool.drain();
+          await oldPool.clear();
+          logger.info(`Pool antiguo para ${serverKey} cerrado correctamente`);
+        } catch (closeError) {
+          logger.error(
+            `Error al cerrar pool antiguo para ${serverKey}:`,
+            closeError
+          );
+        }
+      }, 30000); // Dar 30 segundos para migrar conexiones
+    }
+
+    logger.info(
+      `Pool para ${serverKey} renovado correctamente de forma inmediata`
+    );
+
+    // Reiniciar el temporizador de renovación
+    setupPoolRenewalTimer(serverKey);
+
+    return true;
+  } catch (error) {
+    logger.error(
+      `Error al renovar pool para ${serverKey} inmediatamente:`,
+      error
+    );
+    return false;
+  }
+}
+
+// NUEVO: Incrementar contador de operaciones
+function incrementOperationCount(connection) {
+  if (!CONNECTION_OPERATION_LIMITS.operationCounter.has(connection)) {
+    CONNECTION_OPERATION_LIMITS.operationCounter.set(connection, 0);
+  }
+
+  const currentCount =
+    CONNECTION_OPERATION_LIMITS.operationCounter.get(connection) + 1;
+  CONNECTION_OPERATION_LIMITS.operationCounter.set(connection, currentCount);
+
+  return currentCount;
+}
+
+// NUEVO: Verificar si una conexión debe renovarse
+async function shouldRenewConnection(connection, serverKey) {
+  const count =
+    CONNECTION_OPERATION_LIMITS.operationCounter.get(connection) || 0;
+  if (count >= CONNECTION_OPERATION_LIMITS.maxOperations) {
+    logger.info(
+      `Renovando conexión a ${serverKey} después de ${count} operaciones`
+    );
+    try {
+      await closeConnection(connection);
+    } catch (e) {}
+
+    const newConnection = await enhancedRobustConnect(serverKey);
+    if (newConnection.success) {
+      CONNECTION_OPERATION_LIMITS.operationCounter.set(
+        newConnection.connection,
+        0
+      );
+      return { renewed: true, connection: newConnection.connection };
+    } else {
+      return { renewed: false, connection: null };
+    }
+  }
+
+  return { renewed: false, connection };
+}
+
+// NUEVO: Verificar y renovar conexión
+async function verifyAndRenewConnection(connection, serverKey) {
+  if (!connection || !connection.connected) {
+    logger.warn(`Conexión a ${serverKey} inválida o cerrada, reconectando...`);
+    const newConnection = await enhancedRobustConnect(serverKey);
+    return newConnection.success ? newConnection.connection : null;
+  }
+
+  try {
+    // Verificar si la conexión sigue activa
+    const SqlService = require("./tediousService").SqlService;
+    await SqlService.query(connection, "SELECT 1 AS test");
+    return connection;
+  } catch (error) {
+    logger.warn(`Conexión a ${serverKey} no responde, reconectando...`);
+    try {
+      await closeConnection(connection);
+    } catch (e) {}
+
+    const newConnection = await enhancedRobustConnect(serverKey);
+    return newConnection.success ? newConnection.connection : null;
+  }
+}
+
 async function initPools(customPoolConfig = {}) {
   try {
     logger.info("Iniciando inicialización de pools de conexiones...");
@@ -477,6 +780,16 @@ async function initPools(customPoolConfig = {}) {
     // Verificar si al menos un pool se inicializó correctamente
     if (poolServer1 || poolServer2) {
       logger.info("Al menos un pool de conexiones inicializado correctamente");
+
+      // NUEVO: Configurar temporizadores de renovación para ambos pools
+      if (poolServer1) {
+        setupPoolRenewalTimer("server1");
+      }
+
+      if (poolServer2) {
+        setupPoolRenewalTimer("server2");
+      }
+
       return true;
     } else {
       logger.warn("No se pudo inicializar ningún pool de conexiones");
@@ -526,6 +839,8 @@ async function connectToDB(serverKey = "server1", timeout = 60000) {
     return connection;
   } catch (error) {
     logger.error(`Error al conectar a la base de datos ${serverKey}:`, error);
+    // NUEVO: Registrar error para potencial renovación del pool
+    registerConnectionError(serverKey, error);
     return null;
   }
 }
@@ -563,6 +878,8 @@ async function closeConnection(connection) {
       await pool.release(connection);
       // Limpiar referencias
       connectionPoolMap.delete(connection);
+      // NUEVO: Limpiar contador de operaciones
+      CONNECTION_OPERATION_LIMITS.operationCounter.delete(connection);
       logger.debug(`Conexión liberada correctamente (${poolKey})`);
     } else {
       logger.warn(
@@ -570,6 +887,7 @@ async function closeConnection(connection) {
       );
       connection.close();
       connectionPoolMap.delete(connection);
+      CONNECTION_OPERATION_LIMITS.operationCounter.delete(connection);
     }
   } catch (error) {
     logger.error(`Error al liberar conexión:`, error);
@@ -586,6 +904,7 @@ async function closeConnection(connection) {
         );
         await otherPool.release(connection);
         connectionPoolMap.delete(connection);
+        CONNECTION_OPERATION_LIMITS.operationCounter.delete(connection);
         logger.debug(
           `Conexión liberada correctamente en pool alternativo (${otherPoolKey})`
         );
@@ -602,6 +921,7 @@ async function closeConnection(connection) {
     try {
       connection.close();
       connectionPoolMap.delete(connection);
+      CONNECTION_OPERATION_LIMITS.operationCounter.delete(connection);
       logger.debug("Conexión cerrada directamente");
     } catch (closeError) {
       logger.error("Error al cerrar conexión directamente:", closeError);
@@ -629,6 +949,20 @@ async function closePools() {
 
     // Limpiar el Map de conexiones
     connectionPoolMap.clear();
+
+    // NUEVO: Limpiar mapas y contadores
+    CONNECTION_OPERATION_LIMITS.operationCounter.clear();
+
+    // NUEVO: Limpiar temporizadores de renovación
+    if (poolRenewalTimers.server1) {
+      clearTimeout(poolRenewalTimers.server1);
+      poolRenewalTimers.server1 = null;
+    }
+
+    if (poolRenewalTimers.server2) {
+      clearTimeout(poolRenewalTimers.server2);
+      poolRenewalTimers.server2 = null;
+    }
 
     return true;
   } catch (error) {
@@ -671,4 +1005,11 @@ module.exports = {
   closePools,
   initPools,
   getPoolsStatus,
+  // NUEVO: Exportar nuevas funciones
+  enhancedRobustConnect,
+  incrementOperationCount,
+  shouldRenewConnection,
+  verifyAndRenewConnection,
+  registerConnectionError,
+  renewPoolNow,
 };

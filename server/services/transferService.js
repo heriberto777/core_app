@@ -1,6 +1,10 @@
 // services/transferService.js - CORREGIDO
 const retry = require("./retry");
-const { connectToDB, closeConnection } = require("./dbService");
+const {
+  connectToDB,
+  closeConnection,
+  enhancedRobustConnect,
+} = require("./dbService");
 const { SqlService } = require("./tediousService");
 const TransferTask = require("../models/transferTaks");
 const logger = require("./logger");
@@ -56,127 +60,6 @@ async function getColumnMaxLength(tableName, columnName, connection) {
 }
 
 /**
- * Función robusta para conectar a la base de datos con múltiples reintentos
- * @param {string} serverKey - Servidor al que conectar ("server1" o "server2")
- * @returns {Promise<Object>} - Conexión o error detallado
- */
-async function robustConnect(serverKey) {
-  let connection = null;
-  let lastError = null;
-  let attempt = 0;
-  let delay = CONNECTION_OPTIONS.retryDelay;
-
-  // Registrar intento de conexión inicial
-  logger.info(`🔄 Intentando conectar robustamente a ${serverKey}...`);
-
-  while (attempt < CONNECTION_OPTIONS.maxAttempts) {
-    attempt++;
-
-    try {
-      if (attempt > 1) {
-        logger.info(
-          `Intento ${attempt}/${CONNECTION_OPTIONS.maxAttempts} para conectar a ${serverKey}...`
-        );
-      }
-
-      connection = await connectToDB(serverKey, CONNECTION_OPTIONS.timeout);
-
-      if (!connection) {
-        throw new Error(
-          `No se pudo obtener una conexión a ${serverKey} (devolvió null)`
-        );
-      }
-
-      // Verificar la conexión con una consulta simple
-      try {
-        const testResult = await SqlService.query(
-          connection,
-          "SELECT @@SERVERNAME AS ServerName, @@VERSION AS Version"
-        );
-
-        // Registrar información del servidor para diagnóstico
-        const serverInfo = testResult.recordset[0];
-        logger.info(
-          `✅ Conexión a ${serverKey} establecida y verificada correctamente.`
-        );
-        logger.debug(
-          `Información del servidor ${serverKey}: ${JSON.stringify(serverInfo)}`
-        );
-
-        return { success: true, connection };
-      } catch (testError) {
-        logger.warn(
-          `⚠️ La conexión a ${serverKey} se estableció pero falló la consulta de prueba: ${testError.message}`
-        );
-
-        // Intentar cerrar esta conexión fallida
-        try {
-          await closeConnection(connection);
-        } catch (closeError) {}
-
-        // Guardar el error para devolverlo si todos los intentos fallan
-        lastError = new Error(
-          `Conexión establecida pero falló la consulta de prueba: ${testError.message}`
-        );
-      }
-    } catch (error) {
-      lastError = error;
-      logger.warn(
-        `⚠️ Error al conectar a ${serverKey} (intento ${attempt}/${CONNECTION_OPTIONS.maxAttempts}): ${error.message}`
-      );
-
-      // Verificar si es un error que podemos intentar de nuevo
-      const isRetryableError =
-        error.message.includes("timeout") ||
-        error.message.includes("conexión") ||
-        error.message.includes("network") ||
-        error.message.includes("connect");
-
-      if (!isRetryableError) {
-        logger.error(
-          `Error no recuperable al conectar a ${serverKey}: ${error.message}`
-        );
-        break; // Salir del bucle para errores no recuperables
-      }
-    }
-
-    // Si no es el último intento, esperar antes de reintentar
-    if (attempt < CONNECTION_OPTIONS.maxAttempts) {
-      logger.debug(
-        `Esperando ${delay}ms antes de reintentar conexión a ${serverKey}...`
-      );
-      await new Promise((resolve) => setTimeout(resolve, delay));
-
-      // Aumentar el delay si estamos usando backoff exponencial
-      if (CONNECTION_OPTIONS.useBackoff) {
-        delay = Math.min(delay * 1.5, 30000); // Máximo 30 segundos
-      }
-    }
-  }
-
-  // Si llegamos aquí, todos los intentos fallaron
-  logger.error(
-    `❌ No se pudo establecer conexión a ${serverKey} después de ${CONNECTION_OPTIONS.maxAttempts} intentos.`
-  );
-
-  // Añadir información para diagnóstico
-  const errorDetail = {
-    serverKey,
-    attempts: attempt,
-    lastErrorMessage: lastError?.message || "Error desconocido",
-    lastErrorStack: lastError?.stack,
-  };
-
-  return {
-    success: false,
-    error: new Error(
-      `No se pudo establecer conexión a ${serverKey} después de ${attempt} intentos: ${lastError?.message}`
-    ),
-    details: errorDetail,
-  };
-}
-
-/**
  * Obtiene todas las tareas activas desde MongoDB (type: auto o both).
  */
 async function getTransferTasks() {
@@ -225,7 +108,8 @@ async function executeTransferManual(taskId) {
 
     // 2. Ejecutar la transferencia
     logger.info(`📌 Ejecutando transferencia para la tarea: ${transferName}`);
-    const result = await executeTransfer(taskId);
+    // const result = await executeTransfer(taskId);
+    const result = await executeTransferWithRetry(taskId);
 
     // 3. Preparar datos para el correo
     const formattedResult = {
@@ -451,7 +335,7 @@ const executeTransfer = async (taskId) => {
             `Estableciendo conexión a server1 para tarea ${task.name}...`
           );
 
-          const server1Result = await robustConnect("server1");
+          const server1Result = await enhancedRobustConnect("server1");
 
           if (!server1Result.success) {
             throw new Error(
@@ -472,7 +356,7 @@ const executeTransfer = async (taskId) => {
             `Estableciendo conexión a server2 para tarea ${task.name}...`
           );
 
-          const server2Result = await robustConnect("server2");
+          const server2Result = await enhancedRobustConnect("server2");
 
           if (!server2Result.success) {
             // Cerrar la conexión a server1 antes de lanzar el error
@@ -849,7 +733,7 @@ const executeTransfer = async (taskId) => {
               } catch (e) {}
 
               // Usar robustConnect para mejorar la reconexión
-              const reconnectResult = await robustConnect("server2");
+              const reconnectResult = await enhancedRobustConnect("server2");
 
               if (!reconnectResult.success) {
                 throw new Error(
@@ -1052,7 +936,9 @@ const executeTransfer = async (taskId) => {
                       } catch (e) {}
 
                       // Usar robustConnect para mejorar la reconexión
-                      const reconnectResult = await robustConnect("server2");
+                      const reconnectResult = await enhancedRobustConnect(
+                        "server2"
+                      );
 
                       if (!reconnectResult.success) {
                         throw new Error(
@@ -1192,7 +1078,7 @@ const executeTransfer = async (taskId) => {
                 } catch (e) {}
 
                 // Usar robustConnect para la reconexión
-                const reconnectResult = await robustConnect("server1");
+                const reconnectResult = await enhancedRobustConnect("server1");
 
                 if (!reconnectResult.success) {
                   throw new Error(
@@ -1276,7 +1162,9 @@ const executeTransfer = async (taskId) => {
                     } catch (e) {}
 
                     // Usar robustConnect para la reconexión
-                    const reconnectResult = await robustConnect("server1");
+                    const reconnectResult = await enhancedRobustConnect(
+                      "server1"
+                    );
 
                     if (!reconnectResult.success) {
                       throw new Error(
@@ -1546,7 +1434,7 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
     // 3) Conectarse a la DB de destino con manejo mejorado de conexiones
     try {
       // Usar conexión robusta
-      const connectionResult = await robustConnect("server2");
+      const connectionResult = await enhancedRobustConnect("server2");
       if (!connectionResult.success) {
         throw new Error(
           `No se pudo establecer conexión a server2: ${connectionResult.error.message}`
@@ -1633,7 +1521,7 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
         } catch (e) {}
 
         // Usar conexión robusta
-        const reconnectResult = await robustConnect("server2");
+        const reconnectResult = await enhancedRobustConnect("server2");
         if (!reconnectResult.success) {
           throw new Error(
             `No se pudo restablecer la conexión: ${reconnectResult.error.message}`
@@ -1724,7 +1612,7 @@ async function insertInBatchesSSE(taskId, data, batchSize = 100) {
               } catch (e) {}
 
               // Usar conexión robusta
-              const reconnectResult = await robustConnect("server2");
+              const reconnectResult = await enhancedRobustConnect("server2");
               if (!reconnectResult.success) {
                 throw new Error(
                   `No se pudo restablecer la conexión: ${reconnectResult.error.message}`
@@ -1920,6 +1808,538 @@ async function upsertTransferTask(taskData) {
   }
 }
 
+/**
+ * Ejecuta transferencias en lotes, limitando la cantidad de tareas concurrentes
+ * @param {Array} taskIds - Array de IDs de tareas a ejecutar
+ * @param {Number} concurrency - Número de tareas concurrentes (por defecto 3)
+ * @returns {Promise<Array>} - Resultados de las transferencias
+ */
+async function executeTransferBatch(taskIds, concurrency = 3) {
+  const results = [];
+  const batches = [];
+
+  // Dividir las tareas en lotes
+  for (let i = 0; i < taskIds.length; i += concurrency) {
+    batches.push(taskIds.slice(i, i + concurrency));
+  }
+
+  logger.info(
+    `Ejecutando ${taskIds.length} tareas en ${batches.length} lotes (concurrencia: ${concurrency})`
+  );
+
+  // Procesar cada lote secuencialmente, pero con tareas concurrentes dentro de cada lote
+  for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
+    const batch = batches[batchIndex];
+    logger.info(
+      `Procesando lote ${batchIndex + 1}/${batches.length} con ${
+        batch.length
+      } tareas`
+    );
+
+    // Ejecutar tareas del lote concurrentemente
+    const batchPromises = batch.map((taskId) => {
+      return executeTransfer(taskId)
+        .then((result) => {
+          logger.info(`Tarea ${taskId} completada con éxito`);
+          return { taskId, success: true, ...result };
+        })
+        .catch((error) => {
+          logger.error(`Error en tarea ${taskId}:`, error);
+
+          // Añadir a cola de reintentos si es apropiado
+          if (
+            error.message.includes("conexión") ||
+            error.message.includes("connection") ||
+            error.message.includes("timeout") ||
+            error.message.includes("state")
+          ) {
+            addTaskToRetryQueue(taskId, error.message);
+          }
+
+          return { taskId, success: false, error: error.message };
+        });
+    });
+
+    // Esperar a que todas las tareas del lote actual terminen
+    const batchResults = await Promise.all(batchPromises);
+    results.push(...batchResults);
+
+    // Pausa entre lotes para permitir que el sistema se recupere
+    if (batchIndex < batches.length - 1) {
+      logger.info(`Pausa de 10 segundos entre lotes...`);
+      await new Promise((resolve) => setTimeout(resolve, 10000));
+
+      // Comprobar estado del sistema y renovar pools si es necesario
+      try {
+        const healthMonitorService = require("./healthMonitorService");
+        await healthMonitorService.checkSystemHealth();
+      } catch (healthError) {
+        logger.warn(
+          "Error al verificar salud del sistema entre lotes:",
+          healthError
+        );
+      }
+    }
+  }
+
+  logger.info(
+    `Procesamiento por lotes completado: ${
+      results.filter((r) => r.success).length
+    } exitosas, ${results.filter((r) => !r.success).length} fallidas`
+  );
+  return results;
+}
+
+// Sistema de reintentos para tareas fallidas
+const RETRY_QUEUE = {
+  tasks: [],
+  isProcessing: false,
+  lastProcessTime: null,
+  maxRetries: 3,
+  retryInterval: 5 * 60 * 1000, // 5 minutos entre reintentos
+};
+
+/**
+ * Añade una tarea fallida a la cola de reintentos
+ * @param {String} taskId - ID de la tarea
+ * @param {String} reason - Razón del fallo
+ */
+function addTaskToRetryQueue(taskId, reason) {
+  // Verificar si la tarea ya está en la cola
+  const existingTask = RETRY_QUEUE.tasks.find((task) => task.taskId === taskId);
+
+  if (existingTask) {
+    existingTask.retryCount++;
+    existingTask.lastFailReason = reason;
+    existingTask.lastFailTime = new Date().toISOString();
+    logger.info(
+      `Tarea ${taskId} actualizada en cola de reintentos (intentos: ${existingTask.retryCount})`
+    );
+  } else {
+    RETRY_QUEUE.tasks.push({
+      taskId,
+      initialFailTime: new Date().toISOString(),
+      lastFailTime: new Date().toISOString(),
+      lastFailReason: reason,
+      retryCount: 0,
+    });
+    logger.info(`Tarea ${taskId} añadida a cola de reintentos`);
+  }
+
+  // Programar procesamiento si no está en curso
+  if (!RETRY_QUEUE.isProcessing) {
+    scheduleRetryQueueProcessing();
+  }
+}
+
+/**
+ * Programa el procesamiento de la cola de reintentos
+ */
+function scheduleRetryQueueProcessing() {
+  // Si no hay tareas, no hacer nada
+  if (RETRY_QUEUE.tasks.length === 0) {
+    return;
+  }
+
+  // Si ya estamos procesando, no hacer nada
+  if (RETRY_QUEUE.isProcessing) {
+    return;
+  }
+
+  // Determinar tiempo de espera basado en último procesamiento
+  let waitTime = RETRY_QUEUE.retryInterval;
+
+  if (RETRY_QUEUE.lastProcessTime) {
+    const timeSinceLastProcess =
+      Date.now() - new Date(RETRY_QUEUE.lastProcessTime).getTime();
+    waitTime = Math.max(0, RETRY_QUEUE.retryInterval - timeSinceLastProcess);
+  }
+
+  logger.info(
+    `Programando procesamiento de cola de reintentos en ${
+      waitTime / 1000
+    } segundos`
+  );
+
+  setTimeout(processRetryQueue, waitTime);
+}
+
+/**
+ * Procesa la cola de reintentos
+ */
+async function processRetryQueue() {
+  if (RETRY_QUEUE.isProcessing || RETRY_QUEUE.tasks.length === 0) {
+    return;
+  }
+
+  RETRY_QUEUE.isProcessing = true;
+  RETRY_QUEUE.lastProcessTime = new Date().toISOString();
+
+  logger.info(
+    `Procesando cola de reintentos (${RETRY_QUEUE.tasks.length} tareas)...`
+  );
+
+  try {
+    // Verificar conexiones antes de procesar
+    const healthMonitorService = require("./healthMonitorService");
+    const healthCheck = await healthMonitorService.performFullDiagnostic();
+
+    const connectionsOk =
+      healthCheck.mongodb?.connected &&
+      healthCheck.server1?.connected &&
+      healthCheck.server2?.connected;
+
+    if (!connectionsOk) {
+      logger.warn(
+        "No se puede procesar la cola de reintentos debido a problemas de conexión"
+      );
+      RETRY_QUEUE.isProcessing = false;
+
+      // Programar nuevo intento
+      setTimeout(processRetryQueue, RETRY_QUEUE.retryInterval);
+      return;
+    }
+
+    // Procesar hasta 3 tareas a la vez
+    const tasksToProcess = RETRY_QUEUE.tasks.slice(0, 3);
+    const remainingTasks = RETRY_QUEUE.tasks.slice(3);
+    RETRY_QUEUE.tasks = remainingTasks;
+
+    const results = await Promise.all(
+      tasksToProcess.map(async (task) => {
+        try {
+          logger.info(
+            `Reintentando tarea ${task.taskId} (intento ${
+              task.retryCount + 1
+            }/${RETRY_QUEUE.maxRetries})...`
+          );
+          const result = await executeTransfer(task.taskId);
+          logger.info(`Reintento exitoso para tarea ${task.taskId}`);
+          return {
+            taskId: task.taskId,
+            success: true,
+            ...result,
+          };
+        } catch (error) {
+          logger.error(`Error en reintento de tarea ${task.taskId}:`, error);
+
+          // Si aún no alcanzamos el máximo de reintentos, volver a la cola
+          if (task.retryCount < RETRY_QUEUE.maxRetries - 1) {
+            task.retryCount++;
+            task.lastFailTime = new Date().toISOString();
+            task.lastFailReason = error.message;
+            RETRY_QUEUE.tasks.push(task);
+          } else {
+            logger.warn(
+              `Tarea ${task.taskId} ha alcanzado el máximo de reintentos (${RETRY_QUEUE.maxRetries})`
+            );
+            // Actualizar estado de la tarea en MongoDB
+            try {
+              await TransferTask.findByIdAndUpdate(task.taskId, {
+                status: "failed",
+                lastError: `Fallido después de ${RETRY_QUEUE.maxRetries} reintentos: ${error.message}`,
+              });
+            } catch (dbError) {
+              logger.error(
+                `Error al actualizar estado de tarea ${task.taskId}:`,
+                dbError
+              );
+            }
+          }
+
+          return {
+            taskId: task.taskId,
+            success: false,
+            error: error.message,
+          };
+        }
+      })
+    );
+
+    logger.info(
+      `Procesamiento de cola completado: ${
+        results.filter((r) => r.success).length
+      } exitosas, ${results.filter((r) => !r.success).length} fallidas`
+    );
+
+    // Si aún quedan tareas, programar siguiente procesamiento
+    if (RETRY_QUEUE.tasks.length > 0) {
+      setTimeout(processRetryQueue, RETRY_QUEUE.retryInterval);
+    }
+  } catch (error) {
+    logger.error(
+      "Error general durante procesamiento de cola de reintentos:",
+      error
+    );
+  } finally {
+    RETRY_QUEUE.isProcessing = false;
+  }
+}
+
+/**
+ * Función wrapper que añade reintentos y recuperación automática a executeTransfer
+ * @param {string} taskId - ID de la tarea a ejecutar
+ * @param {number} maxRetries - Número máximo de reintentos (por defecto 3)
+ * @returns {Promise<Object>} - Resultado de la transferencia
+ */
+async function executeTransferWithRetry(taskId, maxRetries = 3) {
+  let attempts = 0;
+  let lastError = null;
+
+  // Crear un AbortController para poder cancelar la operación
+  const abortController = new AbortController();
+  const { signal } = abortController;
+
+  // Registrar la tarea para poder cancelarla posteriormente
+  registerTask(taskId, abortController);
+
+  try {
+    while (attempts < maxRetries) {
+      // Verificar si la tarea fue cancelada
+      if (signal.aborted) {
+        logger.info(
+          `Tarea ${taskId} cancelada por el usuario durante reintentos`
+        );
+        await TransferTask.findByIdAndUpdate(taskId, {
+          status: "cancelled",
+          progress: -1,
+        });
+        completeTask(taskId, "cancelled");
+        return {
+          success: false,
+          message: "Transferencia cancelada por el usuario",
+        };
+      }
+      try {
+        attempts++;
+
+        // Si es un reintento, esperar antes de intentar de nuevo con backoff exponencial
+        if (attempts > 1) {
+          const delay = Math.min(Math.pow(2, attempts) * 2000, 30000); // 4s, 8s, 16s, máx 30s
+          logger.info(
+            `Reintentando tarea ${taskId} (intento ${attempts}/${maxRetries}) después de ${
+              delay / 1000
+            }s...`
+          );
+          // Esperar con soporte para cancelación
+          await new Promise((resolve, reject) => {
+            const timeout = setTimeout(resolve, delay);
+            signal.addEventListener("abort", () => {
+              clearTimeout(timeout);
+              reject(new Error("Tarea cancelada durante espera"));
+            });
+          });
+
+          // Verificar nuevamente si fue cancelado durante la espera
+          if (signal.aborted) throw new Error("Tarea cancelada durante espera");
+        }
+
+        // Verificar conexiones antes de ejecutar si es un reintento
+        if (attempts > 1) {
+          logger.debug(
+            `Verificando conexiones antes de reintento para tarea ${taskId}...`
+          );
+          // Verificar si la tarea sigue activa
+          if (!isTaskActive(taskId)) {
+            throw new Error("Tarea ya no está activa");
+          }
+
+          await verifyAndRefreshConnections(taskId);
+        }
+
+        // Ejecutar la transferencia
+        const result = await executeTransfer(taskId);
+        logger.info(
+          `Tarea ${taskId} completada exitosamente en el intento ${attempts}`
+        );
+
+        // Actualizar estado de éxito en la BD
+        try {
+          await TransferTask.findByIdAndUpdate(taskId, {
+            lastExecutionDate: new Date(),
+            $inc: { executionCount: 1 },
+            lastExecutionResult: {
+              success: true,
+              message: "Transferencia completada con éxito",
+              affectedRecords: result.inserted + (result.updated || 0),
+              attempts: attempts,
+            },
+          });
+        } catch (updateError) {
+          logger.warn(
+            `Error al actualizar estado de éxito para tarea ${taskId}:`,
+            updateError
+          );
+        }
+
+        return result;
+      } catch (error) {
+        // Verificar si el error es por cancelación
+        if (signal.aborted || error.message.includes("cancelada")) {
+          logger.info(`Tarea ${taskId} cancelada durante ejecución`);
+          await TransferTask.findByIdAndUpdate(taskId, {
+            status: "cancelled",
+            progress: -1,
+          });
+          completeTask(taskId, "cancelled");
+          return {
+            success: false,
+            message: "Transferencia cancelada por el usuario",
+          };
+        }
+        lastError = error;
+
+        // Determinar si el error es recuperable
+        const isRecoverable =
+          error.message.includes("conexión") ||
+          error.message.includes("connection") ||
+          error.message.includes("state") ||
+          error.message.includes("timeout") ||
+          error.message.includes("network") ||
+          error.message.includes("LoggedIn state") ||
+          error.message.includes("Final state");
+
+        if (!isRecoverable) {
+          logger.error(`Error no recuperable en tarea ${taskId}:`, error);
+
+          // Actualizar estado en la BD para errores no recuperables
+          try {
+            await TransferTask.findByIdAndUpdate(taskId, {
+              status: "failed",
+              lastExecutionDate: new Date(),
+              lastExecutionResult: {
+                success: false,
+                message: error.message,
+                error: error.stack,
+              },
+            });
+          } catch (updateError) {
+            logger.warn(
+              `Error al actualizar estado de fallo para tarea ${taskId}:`,
+              updateError
+            );
+          }
+
+          completeTask(taskId, "failed");
+          throw error; // No reintentar errores no recuperables
+        }
+
+        logger.warn(
+          `Error recuperable en tarea ${taskId} (intento ${attempts}/${maxRetries}): ${error.message}`
+        );
+
+        // Si alcanzamos el máximo de reintentos, lanzar el error
+        if (attempts >= maxRetries) {
+          logger.error(`Máximo de reintentos alcanzado para tarea ${taskId}`);
+
+          // Actualizar estado en la BD
+          try {
+            await TransferTask.findByIdAndUpdate(taskId, {
+              status: "failed",
+              lastExecutionDate: new Date(),
+              lastExecutionResult: {
+                success: false,
+                message: `Máximo de reintentos alcanzado (${maxRetries})`,
+                error: error.message,
+                attempts: attempts,
+              },
+            });
+          } catch (updateError) {
+            logger.warn(
+              `Error al actualizar estado de fallo después de reintentos para tarea ${taskId}:`,
+              updateError
+            );
+          }
+
+          completeTask(taskId, "failed");
+          throw new Error(
+            `Máximo de reintentos alcanzado (${maxRetries}): ${error.message}`
+          );
+        }
+
+        // Antes del siguiente reintento, intentar renovar los pools
+        try {
+          logger.info(
+            `Intentando renovar pools antes del siguiente reintento para tarea ${taskId}...`
+          );
+          const {
+            registerConnectionError,
+            renewPoolNow,
+          } = require("./dbService");
+          registerConnectionError("server1", error);
+          registerConnectionError("server2", error);
+        } catch (renewError) {
+          logger.warn(`Error al registrar fallo de conexión:`, renewError);
+        }
+      }
+    }
+  } catch (outerError) {
+    // Manejar cualquier error no capturado
+    logger.error(
+      `Error general en executeTransferWithRetry para tarea ${taskId}:`,
+      outerError
+    );
+
+    // Asegurarse de que la tarea se marque como completada en caso de errores no controlados
+    if (isTaskActive(taskId)) {
+      completeTask(taskId, "failed");
+    }
+
+    throw outerError;
+  }
+}
+
+/**
+ * Verifica y refresca conexiones antes de un reintento
+ * @param {string} taskId - ID de la tarea
+ */
+async function verifyAndRefreshConnections(taskId) {
+  try {
+    logger.info(
+      `Verificando estado del sistema antes de reintento para tarea ${taskId}...`
+    );
+
+    // Verificar primero si está disponible el servicio de monitoreo de salud
+    let healthMonitorService;
+    try {
+      healthMonitorService = require("./healthMonitorService");
+    } catch (importError) {
+      logger.debug(
+        `Servicio de monitoreo de salud no disponible, usando verificación básica`
+      );
+    }
+
+    if (healthMonitorService) {
+      // Si existe el servicio, usar su funcionalidad
+      await healthMonitorService.checkSystemHealth();
+    } else {
+      // Verificación básica si no existe el servicio
+      const { closePools, initPools } = require("./dbService");
+      const MongoDbService = require("./mongoDbService");
+
+      // Verificar MongoDB
+      if (!MongoDbService.isConnected()) {
+        logger.warn(`MongoDB no conectado, intentando reconexión...`);
+        await MongoDbService.connect();
+      }
+
+      // Reiniciar pools de conexión si es necesario
+      logger.info(`Reiniciando pools de conexión...`);
+      await closePools();
+      await new Promise((resolve) => setTimeout(resolve, 2000)); // Esperar 2s
+      await initPools();
+    }
+
+    logger.info(`Verificación de conexiones completada para tarea ${taskId}`);
+  } catch (error) {
+    logger.error(
+      `Error al verificar/refrescar conexiones para tarea ${taskId}:`,
+      error
+    );
+    // Continuamos a pesar del error, ya que es solo una verificación preventiva
+  }
+}
+
 // Exportar todas las funciones
 module.exports = {
   getPrimaryKey,
@@ -1929,6 +2349,13 @@ module.exports = {
   executeTransfer,
   insertInBatchesSSE,
   upsertTransferTask,
-  // Exportar nueva función para diagnóstico
-  robustConnect,
+
+  executeTransferBatch,
+  addTaskToRetryQueue,
+  getRetryQueueStatus: () => ({
+    tasks: RETRY_QUEUE.tasks.length,
+    isProcessing: RETRY_QUEUE.isProcessing,
+    lastProcessTime: RETRY_QUEUE.lastProcessTime,
+  }),
+  executeTransferWithRetry,
 };
