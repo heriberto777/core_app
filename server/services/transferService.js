@@ -2153,15 +2153,19 @@ async function executeTransferWithRetry(taskId, maxRetries = 3) {
           `Tarea ${taskId} completada exitosamente en el intento ${attempts}`
         );
 
-        // Actualizar estado de éxito en la BD
         try {
+          // Calcular registros afectados de manera segura evitando NaN
+          const inserted = result.inserted || 0;
+          const updated = result.updated || 0;
+          const affectedRecords = inserted + updated;
+
           await TransferTask.findByIdAndUpdate(taskId, {
             lastExecutionDate: new Date(),
             $inc: { executionCount: 1 },
             lastExecutionResult: {
               success: true,
               message: "Transferencia completada con éxito",
-              affectedRecords: result.inserted + (result.updated || 0),
+              affectedRecords: affectedRecords, // Ahora garantizamos que sea un número válido
               attempts: attempts,
             },
           });
