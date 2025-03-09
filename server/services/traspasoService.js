@@ -1,11 +1,11 @@
 // services/traspasoService.js
-const { connectToDB, closeConnection } = require("./dbService");
-const { SqlService } = require("./tediousService");
+const { withConnection } = require("../utils/dbUtils");
+const { SqlService } = require("./SqlService");
 const logger = require("./logger");
 const { sendTraspasoEmail } = require("./emailService");
 const PDFService = require("./pdfService");
-
 const TransferSummary = require("../models/transferSummaryModel");
+
 /**
  * Obtiene información adicional de los productos desde la base de datos
  * @param {Connection} connection - Conexión a la base de datos
@@ -16,14 +16,27 @@ async function obtenerDetalleProductos(connection, productos) {
   try {
     const detalleCompleto = [];
 
-    // Obtener descripciones en un solo query para mejor rendimiento
-    const codigos = productos
-      .map((p) => `'${(p.codigo || p.Code_Product).replace(/'/g, "''")}'`)
-      .join(",");
+    // Si no hay productos, devolver array vacío
+    if (!productos || !Array.isArray(productos) || productos.length === 0) {
+      return [];
+    }
 
-    if (!codigos) {
+    // Obtener descripciones en un solo query para mejor rendimiento
+    const params = {};
+    const placeholders = productos
+      .map((p, index) => {
+        const codigo = p.codigo || p.Code_Product;
+        if (!codigo) return null;
+
+        const paramName = `p${index}`;
+        params[paramName] = codigo;
+        return `@${paramName}`;
+      })
+      .filter((p) => p !== null);
+
+    if (placeholders.length === 0) {
       return productos.map((p) => ({
-        codigo: p.codigo || p.Code_Product,
+        codigo: p.codigo || p.Code_Product || "DESCONOCIDO",
         descripcion: "Desconocido",
         cantidad: p.cantidad || p.TotalQuantity || 0,
       }));
@@ -32,20 +45,22 @@ async function obtenerDetalleProductos(connection, productos) {
     const query = `
       SELECT ARTICULO, DESCRIPCION 
       FROM CATELLI.ARTICULO 
-      WHERE ARTICULO IN (${codigos})
+      WHERE ARTICULO IN (${placeholders.join(", ")})
     `;
 
-    const result = await SqlService.query(connection, query);
+    const result = await SqlService.query(connection, query, params);
 
     // Crear un mapa para búsqueda rápida
     const descripcionesMap = {};
-    result.recordset.forEach((item) => {
-      descripcionesMap[item.ARTICULO] = item.DESCRIPCION;
-    });
+    if (result && result.recordset) {
+      result.recordset.forEach((item) => {
+        descripcionesMap[item.ARTICULO] = item.DESCRIPCION;
+      });
+    }
 
     // Completar la información
     for (const producto of productos) {
-      const codigo = producto.codigo || producto.Code_Product;
+      const codigo = producto.codigo || producto.Code_Product || "DESCONOCIDO";
       detalleCompleto.push({
         codigo,
         descripcion: descripcionesMap[codigo] || "Descripción no disponible",
@@ -60,7 +75,7 @@ async function obtenerDetalleProductos(connection, productos) {
     );
     // En caso de error, devolver lo que tenemos sin descripción
     return productos.map((p) => ({
-      codigo: p.codigo || p.Code_Product,
+      codigo: p.codigo || p.Code_Product || "DESCONOCIDO",
       descripcion: "No disponible",
       cantidad: p.cantidad || p.TotalQuantity || 0,
     }));
@@ -69,7 +84,7 @@ async function obtenerDetalleProductos(connection, productos) {
 
 /**
  * Realiza el traspaso de bodega basándose en los datos de ventas.
- * Adaptado para usar Tedious directamente con manejo mejorado de nulos y tipos.
+ * Adaptado para usar SqlService optimizado con manejo mejorado de nulos y tipos.
  * Incluye envío de correo con información detallada.
  *
  * @param {Object} params - Objeto con:
@@ -78,11 +93,10 @@ async function obtenerDetalleProductos(connection, productos) {
  * @returns {Object} Resultado con la información del documento generado.
  */
 async function traspasoBodega({ route, salesData }) {
-  let connection = null;
   let detalleProductos = [];
   let pdfPath = null;
 
-  console.log("Iniciando traspaso de bodega...");
+  logger.info("Iniciando traspaso de bodega...");
   try {
     // Validar datos de entrada
     if (!salesData || !Array.isArray(salesData) || salesData.length === 0) {
@@ -126,273 +140,279 @@ async function traspasoBodega({ route, salesData }) {
 
     logger.info(`Procesando traspaso con ${aggregatedSales.length} productos`);
 
-    // 2. Conectar a la base de datos
-    logger.debug(`Intentando conectar a server1 para traspaso de bodega...`);
-    connection = await connectToDB("server1");
-
-    if (!connection) {
-      throw new Error("No se pudo establecer una conexión válida con server1");
-    }
-    logger.info(`Conexión establecida correctamente para traspaso de bodega`);
-
-    // Obtener información detallada de los productos para el correo
-    detalleProductos = await obtenerDetalleProductos(
-      connection,
-      aggregatedSales
-    );
-
-    // 3. Obtener el último consecutivo
-    const queryConse = `
-      SELECT TOP 1 SIGUIENTE_CONSEC 
-      FROM CATELLI.CONSECUTIVO_CI 
-      WITH (UPDLOCK, ROWLOCK)
-      WHERE CONSECUTIVO LIKE @prefix 
-      ORDER BY CONSECUTIVO DESC
-    `;
-
-    const resultConsec = await SqlService.query(connection, queryConse, {
-      prefix: "TR%",
-    });
-
-    let lastConsec = "TRA0000000";
-    if (
-      resultConsec.recordset.length > 0 &&
-      resultConsec.recordset[0].SIGUIENTE_CONSEC
-    ) {
-      lastConsec = resultConsec.recordset[0].SIGUIENTE_CONSEC;
-    }
-    logger.info(`Consecutivo actual: ${lastConsec}`);
-
-    // 4. Incrementar el consecutivo
-    const numPart = parseInt(lastConsec.replace("TRA", ""), 10);
-    const newNum = numPart + 1;
-    const newConsec = "TRA" + newNum.toString().padStart(6, "0");
-    logger.info(`Nuevo consecutivo calculado: ${newConsec}`);
-
-    // 5. Actualizar la tabla Consecutivo_Ci
-    const updateParams = SqlService.sanitizeParams({
-      newConsec: newConsec,
-      lastConsec: lastConsec,
-    });
-
-    const updateResult = await SqlService.query(
-      connection,
-      `UPDATE CATELLI.CONSECUTIVO_CI 
-       SET SIGUIENTE_CONSEC = @newConsec 
-       WHERE SIGUIENTE_CONSEC = @lastConsec`,
-      updateParams
-    );
-
-    // Verificar que la actualización fue exitosa
-    if (updateResult.rowsAffected === 0) {
-      throw new Error(
-        "No se pudo actualizar el consecutivo. El valor puede haber cambiado por otro proceso."
-      );
-    }
-
-    // 6. Preparar el valor para DOCUMENTO_INV
-    const documento_inv = newConsec;
-
-    // 7. Verificar si el documento ya existe (para evitar duplicados)
-    const checkParams = SqlService.sanitizeParams({
-      documento_inv: documento_inv,
-    });
-
-    const checkResult = await SqlService.query(
-      connection,
-      `SELECT COUNT(*) AS doc_count
-       FROM CATELLI.DOCUMENTO_INV
-       WHERE DOCUMENTO_INV = @documento_inv`,
-      checkParams
-    );
-
-    if (checkResult.recordset[0].doc_count > 0) {
-      throw new Error(
-        `El documento ${documento_inv} ya existe en la base de datos.`
-      );
-    }
-
-    // 8. Insertar el encabezado en DOCUMENTO_INV
-    const headerParams = SqlService.sanitizeParams({
-      paquete: "CS",
-      documento_inv: documento_inv,
-      consecutivo: "TR",
-      referencia: `Trapaso de entre bodega del vendedor ${route}`,
-      seleccionado: "N",
-      usuario: "SA",
-    });
-
-    await SqlService.query(
-      connection,
-      `INSERT INTO CATELLI.DOCUMENTO_INV 
-        (PAQUETE_INVENTARIO, DOCUMENTO_INV, CONSECUTIVO, REFERENCIA, FECHA_HOR_CREACION, FECHA_DOCUMENTO, SELECCIONADO, USUARIO)
-       VALUES 
-        (@paquete, @documento_inv, @consecutivo, @referencia, GETDATE(), GETDATE(), @seleccionado, @usuario)`,
-      headerParams
-    );
-
-    // 9. Insertar las líneas en LINEA_DOC_INV una por una
-    const bodega_origen = "01";
-    let successCount = 0;
-    let failedCount = 0;
-
-    // Obtener los tipos de columnas para LINEA_DOC_INV
-    let columnTypes = {};
-    try {
-      columnTypes = await SqlService.getColumnTypes(
-        connection,
-        "CATELLI.LINEA_DOC_INV"
-      );
-      logger.debug(
-        `Tipos de columnas obtenidos correctamente para LINEA_DOC_INV`
-      );
-    } catch (typesError) {
-      logger.warn(
-        `No se pudieron obtener los tipos de columnas para LINEA_DOC_INV: ${typesError.message}. Se utilizará inferencia automática.`
-      );
-    }
-
-    for (let i = 0; i < aggregatedSales.length; i++) {
-      const detail = aggregatedSales[i];
-      const lineNumber = i + 1;
-
+    // Usar el patrón withConnection para el acceso a la base de datos
+    return await withConnection("server1", async (connection) => {
       try {
-        // Validar y sanitizar los datos de la línea
-        const lineParams = SqlService.validateRecord({
-          paquete: "CS",
-          documento_inv: documento_inv,
-          linea: lineNumber,
-          ajuste: "~TT~",
-          articulo: detail.Code_Product,
-          bodega: bodega_origen,
-          bodegaDestino: "02",
-          tipo: "T",
-          subtipo: "D",
-          subsubtipo: "",
-          CostoTotalLocal: 0,
-          CostoTotalDolar: 0,
-          PrecioTotalLocal: 0,
-          PrecioTotalDolar: 0,
-          Localizacion: "ND",
-          LocalizacionTest: "ND",
-          CentroCosto: "00-00-00",
-          Secuencia: "",
-          UnidadDistri: "UND",
-          CuentaContable: "100-01-05-99-00",
-          CostoTotalLocalComp: 0,
-          CostoTotalDolarComp: 0,
-          Cai: "",
-          TipoOperacion: "11",
-          TipoPago: "ND",
-          cantidad: detail.TotalQuantity,
-        });
+        // Obtener información detallada de los productos para el correo
+        detalleProductos = await obtenerDetalleProductos(
+          connection,
+          aggregatedSales
+        );
 
-        // Preparar la consulta SQL con los campos existentes
-        const columns = Object.keys(lineParams)
-          .map((k) => `[${k}]`)
-          .join(", ");
-        const paramPlaceholders = Object.keys(lineParams)
-          .map((k) => `@${k}`)
-          .join(", ");
-
-        const sql = `
-          INSERT INTO CATELLI.LINEA_DOC_INV 
-            (${columns})
-          VALUES 
-            (${paramPlaceholders})
+        // 3. Obtener el último consecutivo
+        const queryConse = `
+          SELECT TOP 1 SIGUIENTE_CONSEC 
+          FROM CATELLI.CONSECUTIVO_CI 
+          WITH (UPDLOCK, ROWLOCK)
+          WHERE CONSECUTIVO LIKE @prefix 
+          ORDER BY CONSECUTIVO DESC
         `;
 
-        // Ejecutar la consulta con tipos explícitos si están disponibles
-        await SqlService.query(connection, sql, lineParams, columnTypes);
+        const resultConsec = await SqlService.query(connection, queryConse, {
+          prefix: "TR%",
+        });
 
-        successCount++;
-        logger.debug(`Línea ${lineNumber} insertada correctamente`);
-      } catch (lineError) {
-        failedCount++;
-        logger.error(`Error al insertar línea ${lineNumber}:`, lineError);
-        logger.debug(
-          `Detalles del registro: ${JSON.stringify(detail, null, 2)}`
+        let lastConsec = "TRA0000000";
+        if (
+          resultConsec.recordset.length > 0 &&
+          resultConsec.recordset[0].SIGUIENTE_CONSEC
+        ) {
+          lastConsec = resultConsec.recordset[0].SIGUIENTE_CONSEC;
+        }
+        logger.info(`Consecutivo actual: ${lastConsec}`);
+
+        // 4. Incrementar el consecutivo
+        const numPart = parseInt(lastConsec.replace("TRA", ""), 10);
+        const newNum = numPart + 1;
+        const newConsec = "TRA" + newNum.toString().padStart(6, "0");
+        logger.info(`Nuevo consecutivo calculado: ${newConsec}`);
+
+        // 5. Actualizar la tabla Consecutivo_Ci
+        const updateParams = SqlService.sanitizeParams({
+          newConsec: newConsec,
+          lastConsec: lastConsec,
+        });
+
+        const updateResult = await SqlService.query(
+          connection,
+          `UPDATE CATELLI.CONSECUTIVO_CI 
+           SET SIGUIENTE_CONSEC = @newConsec 
+           WHERE SIGUIENTE_CONSEC = @lastConsec`,
+          updateParams
         );
-        // Continuar con la siguiente línea
+
+        // Verificar que la actualización fue exitosa
+        if (updateResult.rowsAffected === 0) {
+          throw new Error(
+            "No se pudo actualizar el consecutivo. El valor puede haber cambiado por otro proceso."
+          );
+        }
+
+        // 6. Preparar el valor para DOCUMENTO_INV
+        const documento_inv = newConsec;
+
+        // 7. Verificar si el documento ya existe (para evitar duplicados)
+        const checkParams = SqlService.sanitizeParams({
+          documento_inv: documento_inv,
+        });
+
+        const checkResult = await SqlService.query(
+          connection,
+          `SELECT COUNT(*) AS doc_count
+           FROM CATELLI.DOCUMENTO_INV
+           WHERE DOCUMENTO_INV = @documento_inv`,
+          checkParams
+        );
+
+        if (checkResult.recordset[0].doc_count > 0) {
+          throw new Error(
+            `El documento ${documento_inv} ya existe en la base de datos.`
+          );
+        }
+
+        // 8. Insertar el encabezado en DOCUMENTO_INV
+        const headerParams = SqlService.sanitizeParams({
+          paquete: "CS",
+          documento_inv: documento_inv,
+          consecutivo: "TR",
+          referencia: `Traspaso de bodega del vendedor ${route}`,
+          seleccionado: "N",
+          usuario: "SA",
+        });
+
+        await SqlService.query(
+          connection,
+          `INSERT INTO CATELLI.DOCUMENTO_INV 
+            (PAQUETE_INVENTARIO, DOCUMENTO_INV, CONSECUTIVO, REFERENCIA, FECHA_HOR_CREACION, FECHA_DOCUMENTO, SELECCIONADO, USUARIO)
+           VALUES 
+            (@paquete, @documento_inv, @consecutivo, @referencia, GETDATE(), GETDATE(), @seleccionado, @usuario)`,
+          headerParams
+        );
+
+        // 9. Insertar las líneas en LINEA_DOC_INV una por una
+        const bodega_origen = "01";
+        let successCount = 0;
+        let failedCount = 0;
+
+        // Obtener los tipos de columnas para LINEA_DOC_INV
+        let columnTypes = {};
+        try {
+          columnTypes = await SqlService.getColumnTypes(
+            connection,
+            "CATELLI.LINEA_DOC_INV"
+          );
+          logger.debug(
+            `Tipos de columnas obtenidos correctamente para LINEA_DOC_INV`
+          );
+        } catch (typesError) {
+          logger.warn(
+            `No se pudieron obtener los tipos de columnas para LINEA_DOC_INV: ${typesError.message}. Se utilizará inferencia automática.`
+          );
+        }
+
+        for (let i = 0; i < aggregatedSales.length; i++) {
+          const detail = aggregatedSales[i];
+          const lineNumber = i + 1;
+
+          try {
+            // Validar y sanitizar los datos de la línea
+            const lineParams = SqlService.validateRecord({
+              paquete: "CS",
+              documento_inv: documento_inv,
+              linea: lineNumber,
+              ajuste: "~TT~",
+              articulo: detail.Code_Product,
+              bodega: bodega_origen,
+              bodegaDestino: "02",
+              tipo: "T",
+              subtipo: "D",
+              subsubtipo: "",
+              CostoTotalLocal: 0,
+              CostoTotalDolar: 0,
+              PrecioTotalLocal: 0,
+              PrecioTotalDolar: 0,
+              Localizacion: "ND",
+              LocalizacionTest: "ND",
+              CentroCosto: "00-00-00",
+              Secuencia: "",
+              UnidadDistri: "UND",
+              CuentaContable: "100-01-05-99-00",
+              CostoTotalLocalComp: 0,
+              CostoTotalDolarComp: 0,
+              Cai: "",
+              TipoOperacion: "11",
+              TipoPago: "ND",
+              cantidad: detail.TotalQuantity,
+            });
+
+            // Preparar la consulta SQL con los campos existentes
+            const columns = Object.keys(lineParams)
+              .map((k) => `[${k}]`)
+              .join(", ");
+
+            const paramPlaceholders = Object.keys(lineParams)
+              .map((k) => `@${k}`)
+              .join(", ");
+
+            const sql = `
+              INSERT INTO CATELLI.LINEA_DOC_INV 
+                (${columns})
+              VALUES 
+                (${paramPlaceholders})
+            `;
+
+            // Ejecutar la consulta con tipos explícitos si están disponibles
+            await SqlService.query(connection, sql, lineParams, columnTypes);
+
+            successCount++;
+            logger.debug(`Línea ${lineNumber} insertada correctamente`);
+          } catch (lineError) {
+            failedCount++;
+            logger.error(`Error al insertar línea ${lineNumber}:`, lineError);
+            logger.debug(
+              `Detalles del registro: ${JSON.stringify(detail, null, 2)}`
+            );
+            // Continuar con la siguiente línea
+          }
+        }
+
+        // 10. Verificar resultados
+        if (successCount === 0 && aggregatedSales.length > 0) {
+          throw new Error(
+            "No se pudo insertar ninguna línea de detalle en el documento"
+          );
+        }
+
+        // Preparar el resultado
+        const result = {
+          success: true,
+          documento_inv,
+          newConsec,
+          totalLineas: aggregatedSales.length,
+          lineasExitosas: successCount,
+          lineasFallidas: failedCount,
+          detalleProductos,
+          route,
+        };
+
+        // Save transfer summary for tracking and returns
+        try {
+          // Format products for the summary
+          const summaryProducts = detalleProductos.map((producto) => ({
+            code: producto.codigo,
+            description: producto.descripcion || "Sin descripción",
+            quantity: producto.cantidad,
+            unit: "UND",
+          }));
+
+          // Create a new summary
+          const summary = new TransferSummary({
+            loadId: "N/A", // loadId from the parameter if available
+            route: route, // route from the parameter
+            documentId: documento_inv, // The transfer document ID
+            products: summaryProducts,
+            totalProducts: summaryProducts.length,
+            totalQuantity: summaryProducts.reduce(
+              (sum, p) => sum + p.quantity,
+              0
+            ),
+            createdBy: "SA", // Default user or get from request if available
+          });
+
+          logger.info("Resumen de traspaso:", summary);
+          await summary.save();
+          logger.info(
+            `✅ Resumen de traspaso guardado con éxito para documento ${documento_inv}`
+          );
+
+          // Add summary to the result
+          result.summaryId = summary._id;
+        } catch (summaryError) {
+          logger.error(
+            `Error al guardar resumen de traspaso: ${summaryError.message}`
+          );
+          // Don't stop the process if summary creation fails
+        }
+
+        // Generar PDF del traspaso
+        try {
+          const pdfResult = await PDFService.generateTraspasoPDF(result);
+          pdfPath = pdfResult.path;
+          logger.info(`PDF de traspaso generado: ${pdfPath}`);
+        } catch (pdfError) {
+          logger.error(
+            `Error al generar PDF del traspaso: ${pdfError.message}`
+          );
+          // Continuamos aunque falle la generación del PDF
+        }
+
+        // Enviar correo con el resultado y PDF adjunto si se generó correctamente
+        await sendTraspasoEmail(result, pdfPath);
+        logger.info(
+          `Correo de notificación enviado para el traspaso: ${
+            result.documento_inv || "N/A"
+          }`
+        );
+
+        return result;
+      } catch (operationError) {
+        // Capture errors from DB operations
+        logger.error(
+          `Error en operaciones de base de datos: ${operationError.message}`
+        );
+        throw operationError;
       }
-    }
-
-    // 10. Verificar resultados
-    if (successCount === 0 && aggregatedSales.length > 0) {
-      throw new Error(
-        "No se pudo insertar ninguna línea de detalle en el documento"
-      );
-    }
-
-    // Preparar el resultado
-    const result = {
-      success: true,
-      documento_inv,
-      newConsec,
-      totalLineas: aggregatedSales.length,
-      lineasExitosas: successCount,
-      lineasFallidas: failedCount,
-      detalleProductos,
-      route,
-    };
-
-    // Save transfer summary for tracking and returns
-    try {
-      // Format products for the summary
-      const summaryProducts = productosArray.map((producto) => ({
-        code: producto.codigo,
-        description:
-          detalleProductos.find((p) => p.codigo === producto.codigo)
-            ?.descripcion || "Sin descripción",
-        quantity: producto.cantidad,
-        unit: "UND",
-      }));
-
-      // Create a new summary
-      const summary = new TransferSummary({
-        loadId: loadId || "N/A", // loadId from the parameter
-        route: route, // route from the parameter
-        documentId: nuevoConsecutivo, // The transfer document ID
-        products: summaryProducts,
-        totalProducts: summaryProducts.length,
-        totalQuantity: summaryProducts.reduce((sum, p) => sum + p.quantity, 0),
-        createdBy: "SA", // Default user or get from request if available
-      });
-
-      console.log("Resumen de traspaso:", summary);
-      await summary.save();
-      logger.info(
-        `✅ Resumen de traspaso guardado con éxito para documento ${nuevoConsecutivo}`
-      );
-
-      // Add summary to the result
-      resultado.summaryId = summary._id;
-    } catch (summaryError) {
-      logger.error(
-        `Error al guardar resumen de traspaso: ${summaryError.message}`
-      );
-      // Don't stop the process if summary creation fails
-    }
-
-    // Generar PDF del traspaso
-    try {
-      const pdfResult = await PDFService.generateTraspasoPDF(result);
-      pdfPath = pdfResult.path;
-      logger.info(`PDF de traspaso generado: ${pdfPath}`);
-    } catch (pdfError) {
-      logger.error(`Error al generar PDF del traspaso: ${pdfError.message}`);
-      // Continuamos aunque falle la generación del PDF
-    }
-
-    // Enviar correo con el resultado y PDF adjunto si se generó correctamente
-    await sendTraspasoEmail(result, pdfPath);
-    logger.info(
-      `Correo de notificación enviado para el traspaso: ${
-        result.documento_inv || "N/A"
-      }`
-    );
-
-    return result;
+    });
   } catch (error) {
     // Manejo general de errores
     logger.error("Error en traspasoBodega:", error);
@@ -427,22 +447,7 @@ async function traspasoBodega({ route, salesData }) {
       logger.error(`Error al enviar correo de error: ${emailError.message}`);
     }
 
-    throw error;
-  } finally {
-    // Cerrar la conexión en el bloque finally
-    try {
-      if (connection) {
-        await closeConnection(connection);
-        logger.debug("Conexión cerrada correctamente para traspaso de bodega");
-      }
-    } catch (closeError) {
-      logger.error(
-        "Error al cerrar la conexión para traspaso de bodega:",
-        closeError
-      );
-    }
-
-    // Limpiar archivo PDF temporal tras enviar el correo
+    // Limpiar archivo PDF temporal si existe
     try {
       if (pdfPath) {
         setTimeout(async () => {
@@ -454,6 +459,8 @@ async function traspasoBodega({ route, salesData }) {
         `Error al programar limpieza de PDF temporal: ${cleanupError.message}`
       );
     }
+
+    throw error;
   }
 }
 
@@ -462,11 +469,10 @@ async function traspasoBodega({ route, salesData }) {
  * Usa SQL directo sin parámetros para evitar problemas de validación
  */
 async function realizarTraspaso({ route, salesData }) {
-  let connection = null;
   let detalleProductos = [];
   let pdfPath = null;
 
-  console.log("Iniciando realizar traspaso de bodega... ");
+  logger.info("Iniciando realizar traspaso de bodega... ");
 
   try {
     // 1. Validar datos de entrada - filtrar productos válidos
@@ -517,204 +523,300 @@ async function realizarTraspaso({ route, salesData }) {
       `Iniciando traspaso de bodega para ruta ${route} con ${productosArray.length} productos`
     );
 
-    // 3. Conectar a la base de datos
-    connection = await connectToDB("server1");
-    if (!connection) {
-      throw new Error("No se pudo establecer conexión con server1");
-    }
-
-    // 4. Obtener información de productos para el correo
-    detalleProductos = await obtenerDetalleProductos(
-      connection,
-      productosArray
-    );
-
-    // 5. Obtener el consecutivo actual con SQL directo
-    const consultaConsecutivo = `
-      SELECT TOP 1 SIGUIENTE_CONSEC 
-      FROM CATELLI.CONSECUTIVO_CI 
-      WITH (UPDLOCK, ROWLOCK)
-      WHERE CONSECUTIVO LIKE 'TR%' 
-      ORDER BY CONSECUTIVO DESC
-    `;
-
-    const resultadoConsecutivo = await SqlService.query(
-      connection,
-      consultaConsecutivo
-    );
-
-    if (
-      !resultadoConsecutivo ||
-      !resultadoConsecutivo.recordset ||
-      resultadoConsecutivo.recordset.length === 0
-    ) {
-      throw new Error("No se pudo obtener el consecutivo actual");
-    }
-
-    const ultimoConsecutivo =
-      resultadoConsecutivo.recordset[0].SIGUIENTE_CONSEC || "TRA0000000";
-    const numeroActual =
-      parseInt(ultimoConsecutivo.replace("TRA", ""), 10) || 0;
-    const nuevoConsecutivo =
-      "TRA" + (numeroActual + 1).toString().padStart(6, "0");
-
-    logger.info(
-      `Consecutivo actual: ${ultimoConsecutivo}, Nuevo consecutivo: ${nuevoConsecutivo}`
-    );
-
-    // 6. Actualizar el consecutivo con SQL directo
-    const actualizarConsecutivo = `
-      UPDATE CATELLI.CONSECUTIVO_CI 
-      SET SIGUIENTE_CONSEC = '${nuevoConsecutivo}' 
-      WHERE SIGUIENTE_CONSEC = '${ultimoConsecutivo}'
-    `;
-
-    const resultadoActualizacion = await SqlService.query(
-      connection,
-      actualizarConsecutivo
-    );
-
-    if (!resultadoActualizacion || resultadoActualizacion.rowsAffected === 0) {
-      throw new Error("No se pudo actualizar el consecutivo");
-    }
-
-    // 7. Insertar el documento principal con SQL directo
-    const consultaReferencia =
-      `Traspaso de bodega para vendedor ${route}`.replace(/'/g, "''");
-
-    const insertarDocumento = `
-      INSERT INTO CATELLI.DOCUMENTO_INV 
-        (PAQUETE_INVENTARIO, DOCUMENTO_INV, CONSECUTIVO, REFERENCIA, FECHA_HOR_CREACION, FECHA_DOCUMENTO, SELECCIONADO, USUARIO)
-      VALUES 
-        ('CS', '${nuevoConsecutivo}', 'TR', '${consultaReferencia}', GETDATE(), GETDATE(), 'N', 'SA')
-    `;
-
-    await SqlService.query(connection, insertarDocumento);
-
-    // 8. Insertar líneas una por una con SQL directo
-    let lineasExitosas = 0;
-    let lineasFallidas = 0;
-
-    for (let i = 0; i < productosArray.length; i++) {
-      const producto = productosArray[i];
-      const lineaNumero = i + 1;
-      const codigoProducto = producto.codigo.replace(/'/g, "''"); // Escapar comillas simples
-
+    // Usar el nuevo patrón de conexión
+    return await withConnection("server1", async (connection) => {
       try {
-        const insertarLinea = `
-          INSERT INTO CATELLI.LINEA_DOC_INV 
-            (PAQUETE_INVENTARIO, DOCUMENTO_INV, LINEA_DOC_INV, AJUSTE_CONFIG, ARTICULO, 
-             BODEGA, BODEGA_DESTINO, CANTIDAD, TIPO, SUBTIPO, SUBSUBTIPO, 
-             COSTO_TOTAL_LOCAL, COSTO_TOTAL_DOLAR, PRECIO_TOTAL_LOCAL, PRECIO_TOTAL_DOLAR, 
-             LOCALIZACION_DEST, CENTRO_COSTO, SECUENCIA, UNIDAD_DISTRIBUCIO, CUENTA_CONTABLE, 
-             COSTO_TOTAL_LOCAL_COMP, COSTO_TOTAL_DOLAR_COMP, CAI, TIPO_OPERACION, TIPO_PAGO, LOCALIZACION)
-          VALUES 
-            ('CS', '${nuevoConsecutivo}', ${lineaNumero}, '~TT~', '${codigoProducto}', 
-             '01', '02', ${producto.cantidad}, 'T', 'D', '', 
-             0, 0, 0, 0, 
-             'ND', '00-00-00', '', 'UND', '100-01-05-99-00', 
-             0, 0, '', '11', 'ND', 'ND')
+        // 4. Obtener información de productos para el correo
+        detalleProductos = await obtenerDetalleProductos(
+          connection,
+          productosArray
+        );
+
+        // 5. Obtener el consecutivo actual con SQL directo
+        const consultaConsecutivo = `
+          SELECT TOP 1 SIGUIENTE_CONSEC 
+          FROM CATELLI.CONSECUTIVO_CI 
+          WITH (UPDLOCK, ROWLOCK)
+          WHERE CONSECUTIVO LIKE 'TR%' 
+          ORDER BY CONSECUTIVO DESC
         `;
 
-        await SqlService.query(connection, insertarLinea);
-
-        lineasExitosas++;
-        logger.debug(
-          `Línea ${lineaNumero} insertada correctamente: ${codigoProducto} x ${producto.cantidad}`
+        const resultadoConsecutivo = await SqlService.query(
+          connection,
+          consultaConsecutivo
         );
-      } catch (errorLinea) {
-        lineasFallidas++;
-        logger.error(`Error al insertar línea ${lineaNumero}:`, errorLinea);
+
+        if (
+          !resultadoConsecutivo ||
+          !resultadoConsecutivo.recordset ||
+          resultadoConsecutivo.recordset.length === 0
+        ) {
+          throw new Error("No se pudo obtener el consecutivo actual");
+        }
+
+        const ultimoConsecutivo =
+          resultadoConsecutivo.recordset[0].SIGUIENTE_CONSEC || "TRA0000000";
+        const numeroActual =
+          parseInt(ultimoConsecutivo.replace("TRA", ""), 10) || 0;
+        const nuevoConsecutivo =
+          "TRA" + (numeroActual + 1).toString().padStart(6, "0");
+
+        logger.info(
+          `Consecutivo actual: ${ultimoConsecutivo}, Nuevo consecutivo: ${nuevoConsecutivo}`
+        );
+
+        // 6. Actualizar el consecutivo con parámetros seguros
+        const actualizarConsecutivoParams = {
+          nuevo: nuevoConsecutivo,
+          actual: ultimoConsecutivo,
+        };
+
+        const resultadoActualizacion = await SqlService.query(
+          connection,
+          `UPDATE CATELLI.CONSECUTIVO_CI 
+           SET SIGUIENTE_CONSEC = @nuevo 
+           WHERE SIGUIENTE_CONSEC = @actual`,
+          actualizarConsecutivoParams
+        );
+
+        if (
+          !resultadoActualizacion ||
+          resultadoActualizacion.rowsAffected === 0
+        ) {
+          throw new Error("No se pudo actualizar el consecutivo");
+        }
+
+        // 7. Insertar el documento principal con parámetros
+        const referenciaParams = {
+          referencia: `Traspaso de bodega para vendedor ${route}`,
+          documento: nuevoConsecutivo,
+        };
+
+        const insertarDocumento = `
+          INSERT INTO CATELLI.DOCUMENTO_INV 
+            (PAQUETE_INVENTARIO, DOCUMENTO_INV, CONSECUTIVO, REFERENCIA, FECHA_HOR_CREACION, FECHA_DOCUMENTO, SELECCIONADO, USUARIO)
+          VALUES 
+            ('CS', @documento, 'TR', @referencia, GETDATE(), GETDATE(), 'N', 'SA')
+        `;
+
+        await SqlService.query(connection, insertarDocumento, referenciaParams);
+
+        // 8. Insertar líneas una por una con parámetros
+        let lineasExitosas = 0;
+        let lineasFallidas = 0;
+
+        // Obtener tipos de columnas
+        let columnTypes = {};
+        try {
+          columnTypes = await SqlService.getColumnTypes(
+            connection,
+            "CATELLI.LINEA_DOC_INV"
+          );
+        } catch (typesError) {
+          logger.warn(
+            `No se pudieron obtener tipos de columnas: ${typesError.message}`
+          );
+        }
+
+        for (let i = 0; i < productosArray.length; i++) {
+          const producto = productosArray[i];
+          const lineaNumero = i + 1;
+
+          try {
+            // Usar parámetros con SqlService
+            const lineaParams = {
+              paquete: "CS",
+              documento_inv: nuevoConsecutivo,
+              linea: lineaNumero,
+              ajuste: "~TT~",
+              articulo: producto.codigo,
+              bodega: "01",
+              bodega_destino: "02",
+              cantidad: producto.cantidad,
+              tipo: "T",
+              subtipo: "D",
+              subsubtipo: "",
+              costo_total_local: 0,
+              costo_total_dolar: 0,
+              precio_total_local: 0,
+              precio_total_dolar: 0,
+              localizacion_dest: "ND",
+              centro_costo: "00-00-00",
+              secuencia: "",
+              unidad_distribucio: "UND",
+              cuenta_contable: "100-01-05-99-00",
+              costo_total_local_comp: 0,
+              costo_total_dolar_comp: 0,
+              cai: "",
+              tipo_operacion: "11",
+              tipo_pago: "ND",
+              localizacion: "ND",
+            };
+
+            const insertarLinea = `
+              INSERT INTO CATELLI.LINEA_DOC_INV 
+                (PAQUETE_INVENTARIO, DOCUMENTO_INV, LINEA_DOC_INV, AJUSTE_CONFIG, ARTICULO, 
+                 BODEGA, BODEGA_DESTINO, CANTIDAD, TIPO, SUBTIPO, SUBSUBTIPO, 
+                 COSTO_TOTAL_LOCAL, COSTO_TOTAL_DOLAR, PRECIO_TOTAL_LOCAL, PRECIO_TOTAL_DOLAR, 
+                 LOCALIZACION_DEST, CENTRO_COSTO, SECUENCIA, UNIDAD_DISTRIBUCIO, CUENTA_CONTABLE, 
+                 COSTO_TOTAL_LOCAL_COMP, COSTO_TOTAL_DOLAR_COMP, CAI, TIPO_OPERACION, TIPO_PAGO, LOCALIZACION)
+              VALUES 
+                (@paquete, @documento_inv, @linea, @ajuste, @articulo, 
+                 @bodega, @bodega_destino, @cantidad, @tipo, @subtipo, @subsubtipo, 
+                 @costo_total_local, @costo_total_dolar, @precio_total_local, @precio_total_dolar, 
+                 @localizacion_dest, @centro_costo, @secuencia, @unidad_distribucio, @cuenta_contable, 
+                 @costo_total_local_comp, @costo_total_dolar_comp, @cai, @tipo_operacion, @tipo_pago, @localizacion)
+            `;
+
+            await SqlService.query(
+              connection,
+              insertarLinea,
+              lineaParams,
+              columnTypes
+            );
+
+            lineasExitosas++;
+            logger.debug(
+              `Línea ${lineaNumero} insertada correctamente: ${producto.codigo} x ${producto.cantidad}`
+            );
+          } catch (lineError) {
+            lineasFallidas++;
+            logger.error(`Error al insertar línea ${lineaNumero}:`, lineError);
+
+            // Intentar un fallback directo sin parámetros si la validación falla
+            try {
+              const codigoProducto = producto.codigo.replace(/'/g, "''"); // Escapar comillas simples
+
+              const insertarLineaDirecto = `
+                INSERT INTO CATELLI.LINEA_DOC_INV 
+                  (PAQUETE_INVENTARIO, DOCUMENTO_INV, LINEA_DOC_INV, AJUSTE_CONFIG, ARTICULO, 
+                   BODEGA, BODEGA_DESTINO, CANTIDAD, TIPO, SUBTIPO, SUBSUBTIPO, 
+                   COSTO_TOTAL_LOCAL, COSTO_TOTAL_DOLAR, PRECIO_TOTAL_LOCAL, PRECIO_TOTAL_DOLAR, 
+                   LOCALIZACION_DEST, CENTRO_COSTO, SECUENCIA, UNIDAD_DISTRIBUCIO, CUENTA_CONTABLE, 
+                   COSTO_TOTAL_LOCAL_COMP, COSTO_TOTAL_DOLAR_COMP, CAI, TIPO_OPERACION, TIPO_PAGO, LOCALIZACION)
+                VALUES 
+                  ('CS', '${nuevoConsecutivo}', ${lineaNumero}, '~TT~', '${codigoProducto}', 
+                   '01', '02', ${producto.cantidad}, 'T', 'D', '', 
+                   0, 0, 0, 0, 
+                   'ND', '00-00-00', '', 'UND', '100-01-05-99-00', 
+                   0, 0, '', '11', 'ND', 'ND')
+              `;
+
+              await SqlService.query(connection, insertarLineaDirecto);
+
+              lineasExitosas++;
+              lineasFallidas--; // Corregir el contador porque el intento original falló
+              logger.debug(
+                `Línea ${lineaNumero} insertada correctamente (modo fallback): ${codigoProducto} x ${producto.cantidad}`
+              );
+            } catch (fallbackError) {
+              logger.error(
+                `Fallo también en modo fallback para línea ${lineaNumero}:`,
+                fallbackError
+              );
+            }
+          }
+        }
+
+        if (lineasExitosas === 0 && productosArray.length > 0) {
+          throw new Error(
+            "No se pudo insertar ninguna línea de detalle en el documento"
+          );
+        }
+
+        // 9. Preparar resultado
+        const resultado = {
+          success: true,
+          documento_inv: nuevoConsecutivo,
+          totalLineas: productosArray.length,
+          lineasExitosas,
+          lineasFallidas,
+          detalleProductos,
+          route,
+        };
+        logger.info("Resultado final:", resultado);
+
+        // Save transfer summary for tracking and returns
+        try {
+          // Obtener el ID de carga de los datos de ventas si existe (buscando en primera venta)
+          let loadIdFromSales = "N/A";
+          if (salesData && salesData.length > 0 && salesData[0].Code_load) {
+            loadIdFromSales = salesData[0].Code_load;
+          }
+
+          // Format products for the summary
+          const summaryProducts = productosArray.map((producto) => ({
+            code: producto.codigo,
+            description:
+              detalleProductos.find((p) => p.codigo === producto.codigo)
+                ?.descripcion || "Sin descripción",
+            quantity: producto.cantidad,
+            unit: "UND",
+          }));
+
+          // Create a new summary
+          const summary = new TransferSummary({
+            loadId: loadIdFromSales,
+            route: route,
+            documentId: nuevoConsecutivo,
+            products: summaryProducts,
+            totalProducts: summaryProducts.length,
+            totalQuantity: summaryProducts.reduce(
+              (sum, p) => sum + p.quantity,
+              0
+            ),
+            createdBy: "SA", // Default user or get from request if available
+          });
+
+          await summary.save();
+          logger.info(
+            `✅ Resumen de traspaso guardado con éxito para documento ${nuevoConsecutivo}`
+          );
+
+          // Add summary to the result
+          resultado.summaryId = summary._id;
+        } catch (summaryError) {
+          logger.error(
+            `Error al guardar resumen de traspaso: ${summaryError.message}`
+          );
+          // Don't stop the process if summary creation fails
+        }
+
+        // 10. Generar PDF del traspaso
+        try {
+          const pdfResult = await PDFService.generateTraspasoPDF(resultado);
+          pdfPath = pdfResult.path;
+          logger.info(`PDF de traspaso generado: ${pdfPath}`);
+        } catch (pdfError) {
+          logger.error(
+            `Error al generar PDF del traspaso: ${pdfError.message}`
+          );
+          // Continuamos aunque falle la generación del PDF
+        }
+
+        // 11. Enviar correo con el resultado y PDF adjunto
+        try {
+          await sendTraspasoEmail(resultado, pdfPath);
+          logger.info(
+            `Correo de notificación enviado para el traspaso: ${
+              resultado.documento_inv || "N/A"
+            }`
+          );
+        } catch (errorCorreo) {
+          logger.error(
+            `Error al enviar correo de traspaso: ${errorCorreo.message}`
+          );
+        }
+
+        return resultado;
+      } catch (dbError) {
+        // Manejo de errores específicos de base de datos
+        logger.error(
+          `Error en operaciones de base de datos durante traspaso: ${dbError.message}`
+        );
+        throw dbError;
       }
-    }
-
-    if (lineasExitosas === 0 && productosArray.length > 0) {
-      throw new Error(
-        "No se pudo insertar ninguna línea de detalle en el documento"
-      );
-    }
-
-    // 9. Preparar resultado
-    const resultado = {
-      success: true,
-      documento_inv: nuevoConsecutivo,
-      totalLineas: productosArray.length,
-      lineasExitosas,
-      lineasFallidas,
-      detalleProductos,
-      route,
-    };
-    console.log("Resultado final:", resultado);
-
-    // Save transfer summary for tracking and returns
-    try {
-      // Format products for the summary
-      // Obtener el ID de carga de los datos de ventas si existe (buscando en primera venta)
-      let loadIdFromSales = "N/A";
-      if (salesData && salesData.length > 0 && salesData[0].Code_load) {
-        loadIdFromSales = salesData[0].Code_load;
-      }
-
-      // Format products for the summary
-      const summaryProducts = productosArray.map((producto) => ({
-        code: producto.codigo,
-        description:
-          detalleProductos.find((p) => p.codigo === producto.codigo)
-            ?.descripcion || "Sin descripción",
-        quantity: producto.cantidad,
-        unit: "UND",
-      }));
-
-      // Create a new summary
-      const summary = new TransferSummary({
-        loadId: loadIdFromSales,
-        route: route,
-        documentId: nuevoConsecutivo,
-        products: summaryProducts,
-        totalProducts: summaryProducts.length,
-        totalQuantity: summaryProducts.reduce((sum, p) => sum + p.quantity, 0),
-        createdBy: "SA", // Default user or get from request if available
-      });
-
-      await summary.save();
-      logger.info(
-        `✅ Resumen de traspaso guardado con éxito para documento ${nuevoConsecutivo}`
-      );
-
-      // Add summary to the result
-      resultado.summaryId = summary._id;
-    } catch (summaryError) {
-      logger.error(
-        `Error al guardar resumen de traspaso: ${summaryError.message}`
-      );
-      // Don't stop the process if summary creation fails
-    }
-
-    // 10. Generar PDF del traspaso
-    try {
-      const pdfResult = await PDFService.generateTraspasoPDF(resultado);
-      pdfPath = pdfResult.path;
-      logger.info(`PDF de traspaso generado: ${pdfPath}`);
-    } catch (pdfError) {
-      logger.error(`Error al generar PDF del traspaso: ${pdfError.message}`);
-      // Continuamos aunque falle la generación del PDF
-    }
-
-    // 11. Enviar correo con el resultado y PDF adjunto
-    try {
-      await sendTraspasoEmail(resultado, pdfPath);
-      logger.info(
-        `Correo de notificación enviado para el traspaso: ${
-          resultado.documento_inv || "N/A"
-        }`
-      );
-    } catch (errorCorreo) {
-      logger.error(
-        `Error al enviar correo de traspaso: ${errorCorreo.message}`
-      );
-    }
-
-    return resultado;
+    });
   } catch (error) {
     logger.error("Error en realizarTraspaso:", error);
 
@@ -747,18 +849,6 @@ async function realizarTraspaso({ route, salesData }) {
       logger.error(`Error al enviar correo de error: ${errorCorreo.message}`);
     }
 
-    throw error;
-  } finally {
-    // Cerrar la conexión
-    try {
-      if (connection) {
-        await closeConnection(connection);
-        logger.debug("Conexión cerrada correctamente");
-      }
-    } catch (errorCierre) {
-      logger.error("Error al cerrar la conexión:", errorCierre);
-    }
-
     // Limpiar archivo PDF temporal después de un tiempo
     try {
       if (pdfPath) {
@@ -771,6 +861,8 @@ async function realizarTraspaso({ route, salesData }) {
         `Error al programar limpieza de PDF temporal: ${cleanupError.message}`
       );
     }
+
+    throw error;
   }
 }
 

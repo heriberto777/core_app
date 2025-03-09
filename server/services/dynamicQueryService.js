@@ -1,7 +1,10 @@
 // services/dynamicQueryService-tedious.js
 const TransferTask = require("../models/transferTaks");
-const { connectToDB, closeConnection } = require("./dbService");
-const { SqlService } = require("./tediousService");
+const {
+  getConnection: connectToDB,
+  releaseConnection: closeConnection,
+} = require("./ConnectionManager");
+const { SqlService } = require("./SqlService");
 const logger = require("./logger");
 
 // Funciones de validación para evitar consultas destructivas.

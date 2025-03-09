@@ -1,10 +1,10 @@
 // controllers/transferSummaryController.js
 const TransferSummary = require("../models/transferSummaryModel");
 const logger = require("../services/logger");
-const { connectToDB, closeConnection } = require("../services/dbService");
-const { SqlService } = require("../services/tediousService");
+const { SqlService } = require("../services/SqlService");
 const { realizarTraspaso } = require("../services/traspasoService");
 const { sendTransferReturnEmail } = require("../services/emailService");
+const { withConnection } = require("../utils/dbUtils");
 
 /**
  * Create a new transfer summary after a successful transfer
@@ -205,8 +205,6 @@ const getTransferSummaryByLoadId = async (req, res) => {
  * Process a product return for a transfer
  */
 const processTransferReturn = async (req, res) => {
-  let connection = null;
-
   try {
     const { summaryId, productsToReturn, reason } = req.body;
 
@@ -243,7 +241,7 @@ const processTransferReturn = async (req, res) => {
 
       // Check if return quantity is valid
       const availableToReturn =
-        summaryProduct.quantity - summaryProduct.returnedQuantity;
+        summaryProduct.quantity - (summaryProduct.returnedQuantity || 0);
       if (returnItem.quantity <= 0 || returnItem.quantity > availableToReturn) {
         invalidProducts.push({
           ...returnItem,
@@ -266,17 +264,17 @@ const processTransferReturn = async (req, res) => {
       });
     }
 
-    // Perform the reverse transfer (from route/destination back to origin warehouse)
-    // The destination becomes the origin in the return
-    const returnData = {
-      route: "01", // Origin warehouse (typically "01")
-      salesData: validProducts.map((p) => ({
-        Code_Product: p.code,
-        Quantity: p.quantity,
-      })),
-    };
-
     try {
+      // Perform the reverse transfer (from route/destination back to origin warehouse)
+      // The destination becomes the origin in the return
+      const returnData = {
+        route: "01", // Origin warehouse (typically "01")
+        salesData: validProducts.map((p) => ({
+          Code_Product: p.code,
+          Quantity: p.quantity,
+        })),
+      };
+
       // Execute the return transfer
       const returnResult = await realizarTraspaso(returnData);
 
@@ -291,15 +289,18 @@ const processTransferReturn = async (req, res) => {
         const summaryProduct = summary.products.find(
           (p) => p.code === returnItem.code
         );
-        summaryProduct.returnedQuantity += returnItem.quantity;
+        summaryProduct.returnedQuantity =
+          (summaryProduct.returnedQuantity || 0) + returnItem.quantity;
       }
 
       // Update the overall status
       const allFullyReturned = summary.products.every(
-        (p) => p.returnedQuantity >= p.quantity
+        (p) => (p.returnedQuantity || 0) >= p.quantity
       );
 
-      const someReturned = summary.products.some((p) => p.returnedQuantity > 0);
+      const someReturned = summary.products.some(
+        (p) => (p.returnedQuantity || 0) > 0
+      );
 
       if (allFullyReturned) {
         summary.status = "full_return";
@@ -350,14 +351,6 @@ const processTransferReturn = async (req, res) => {
       message: "Error al procesar la devolución",
       error: error.message,
     });
-  } finally {
-    if (connection) {
-      try {
-        await closeConnection(connection);
-      } catch (closeError) {
-        logger.error("Error al cerrar conexión:", closeError);
-      }
-    }
   }
 };
 
@@ -365,8 +358,6 @@ const processTransferReturn = async (req, res) => {
  * Check inventory levels in EXPLT_FAC_DET_PED for possible returns
  */
 const checkInventoryForReturns = async (req, res) => {
-  let connection = null;
-
   try {
     const { summaryId } = req.params;
 
@@ -379,63 +370,74 @@ const checkInventoryForReturns = async (req, res) => {
       });
     }
 
-    // Connect to the database
-    connection = await connectToDB("server1");
-    if (!connection) {
-      throw new Error("No se pudo conectar a la base de datos");
-    }
-
     // Get product codes from the summary
     const productCodes = summary.products.map((p) => p.code);
 
-    // Build a parameterized query with placeholders
-    let query = `
-      SELECT 
-        ARTICULO AS Code_Product, 
-        SUM(CANTIDAD_DISPONIBLE) AS available_quantity
-      FROM CATELLI.EXPLT_FAC_DET_PED
-      WHERE ARTICULO IN (${productCodes.map((_, idx) => `@p${idx}`).join(", ")})
-      GROUP BY ARTICULO
-    `;
-
-    // Build parameters object
-    const params = {};
-    productCodes.forEach((code, idx) => {
-      params[`p${idx}`] = code;
-    });
-
-    // Execute the query
-    const result = await SqlService.query(connection, query, params);
-
-    if (!result || !result.recordset) {
-      throw new Error("No se pudo obtener información de inventario");
+    if (productCodes.length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "El resumen no contiene productos para verificar",
+      });
     }
 
-    // Create a map for easy lookup
-    const inventoryMap = {};
-    result.recordset.forEach((item) => {
-      inventoryMap[item.Code_Product] = item.available_quantity || 0;
-    });
+    // Usar withConnection para manejar la conexión
+    return await withConnection("server1", async (connection) => {
+      try {
+        // Build a parameterized query with placeholders
+        let query = `
+          SELECT 
+            ARTICULO AS Code_Product, 
+            SUM(CANTIDAD_DISPONIBLE) AS available_quantity
+          FROM CATELLI.EXPLT_FAC_DET_PED
+          WHERE ARTICULO IN (${productCodes
+            .map((_, idx) => `@p${idx}`)
+            .join(", ")})
+          GROUP BY ARTICULO
+        `;
 
-    // Combine summary data with inventory data
-    const productsWithInventory = summary.products.map((product) => {
-      return {
-        ...product.toObject(),
-        availableInInventory: inventoryMap[product.code] || 0,
-        maxReturnableQuantity: Math.min(
-          product.quantity - product.returnedQuantity,
-          inventoryMap[product.code] || 0
-        ),
-      };
-    });
+        // Build parameters object
+        const params = {};
+        productCodes.forEach((code, idx) => {
+          params[`p${idx}`] = code;
+        });
 
-    return res.status(200).json({
-      success: true,
-      data: {
-        summaryId: summary._id,
-        loadId: summary.loadId,
-        productsWithInventory,
-      },
+        // Execute the query
+        const result = await SqlService.query(connection, query, params);
+
+        if (!result || !result.recordset) {
+          throw new Error("No se pudo obtener información de inventario");
+        }
+
+        // Create a map for easy lookup
+        const inventoryMap = {};
+        result.recordset.forEach((item) => {
+          inventoryMap[item.Code_Product] = item.available_quantity || 0;
+        });
+
+        // Combine summary data with inventory data
+        const productsWithInventory = summary.products.map((product) => {
+          return {
+            ...product.toObject(),
+            availableInInventory: inventoryMap[product.code] || 0,
+            maxReturnableQuantity: Math.min(
+              product.quantity - (product.returnedQuantity || 0),
+              inventoryMap[product.code] || 0
+            ),
+          };
+        });
+
+        return res.status(200).json({
+          success: true,
+          data: {
+            summaryId: summary._id,
+            loadId: summary.loadId,
+            productsWithInventory,
+          },
+        });
+      } catch (dbError) {
+        logger.error("Error al consultar inventario:", dbError);
+        throw dbError;
+      }
     });
   } catch (error) {
     logger.error("Error en checkInventoryForReturns:", error);
@@ -444,14 +446,6 @@ const checkInventoryForReturns = async (req, res) => {
       message: "Error al verificar inventario para devoluciones",
       error: error.message,
     });
-  } finally {
-    if (connection) {
-      try {
-        await closeConnection(connection);
-      } catch (closeError) {
-        logger.error("Error al cerrar conexión:", closeError);
-      }
-    }
   }
 };
 
