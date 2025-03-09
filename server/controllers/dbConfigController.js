@@ -1,5 +1,7 @@
 const DBConfig = require("../models/dbConfigModel");
-const { loadConfigurations } = require("../services/dbService");
+const {
+  loadConfig: loadConfigurations,
+} = require("../services/ConnectionManager");
 
 /**
  * 📌 Obtener todas las configuraciones de base de datos

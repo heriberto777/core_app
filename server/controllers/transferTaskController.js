@@ -1,3 +1,4 @@
+// controllers/transferTaskController.js
 const TransferTask = require("../models/transferTaks");
 const TransferSummary = require("../models/transferSummaryModel");
 const Consecutivo = require("../models/consecutivoModej");
@@ -11,26 +12,24 @@ const { startCronJob } = require("../services/cronService");
 const { executeDynamicSelect } = require("../services/dynamicQueryService");
 const { formatDateToYYYYMMDD } = require("../utils/formatDate");
 const obtenerConsecutivo = require("../utils/obtenerConsecutivo");
-const {
-  traspasoBodega,
-  realizarTraspaso,
-} = require("../services/traspasoService");
-const {
-  registerTask,
-  cancelTask,
-  isTaskActive,
-  completeTask,
-} = require("../utils/taskTracker");
+const { realizarTraspaso } = require("../services/traspasoService");
+const { withConnection } = require("../utils/dbUtils");
+const logger = require("../services/logger");
 
 /**
  * Obtener todas las tareas de transferencia
  */
 const getTransferTasks = async (req, res) => {
   try {
-    const tasks = await TransferTask.find();
+    const tasks = await TransferTask.find().sort({ name: 1 });
     res.json(tasks);
   } catch (error) {
-    res.status(500).json({ message: "Error al obtener tareas", error });
+    logger.error("Error al obtener tareas de transferencia:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener tareas",
+      error: error.message,
+    });
   }
 };
 
@@ -38,22 +37,39 @@ const getTransferTasks = async (req, res) => {
  * Obtener una tarea específica por nombre
  */
 const getTransferTask = async (req, res) => {
-  console.log("Llegaria aqui?");
   const { name } = req.params;
   try {
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requiere el nombre de la tarea",
+      });
+    }
+
     const task = await TransferTask.findOne({ name });
-    if (!task) return res.status(404).json({ message: "Tarea no encontrada" });
-    res.json(task);
+
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Tarea no encontrada",
+      });
+    }
+
+    res.json({ success: true, task });
   } catch (error) {
-    res.status(500).json({ message: "Error al obtener tarea", error });
+    logger.error(`Error al obtener tarea ${name}:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener tarea",
+      error: error.message,
+    });
   }
 };
 
 /**
- * 📌 Crear o actualizar una tarea de transferencia en MongoDB
+ * Crear o actualizar una tarea de transferencia en MongoDB
  */
 const upsertTransferTaskController = async (req, res) => {
-  console.log("Recibido -->", req.body);
   try {
     // Asegurarse de que req.body contiene los datos esperados
     const {
@@ -67,13 +83,14 @@ const upsertTransferTaskController = async (req, res) => {
       executionMode,
       postUpdateQuery,
       postUpdateMapping,
-      clearBeforeInsert, // Nueva propiedad
+      clearBeforeInsert,
     } = req.body;
 
     if (!name || !query) {
-      return res
-        .status(400)
-        .json({ message: "El nombre y la consulta SQL son obligatorios." });
+      return res.status(400).json({
+        success: false,
+        message: "El nombre y la consulta SQL son obligatorios.",
+      });
     }
 
     const taskData = {
@@ -87,9 +104,10 @@ const upsertTransferTaskController = async (req, res) => {
       executionMode: executionMode || "normal",
       postUpdateQuery: postUpdateQuery || null,
       postUpdateMapping: postUpdateMapping || {},
-      clearBeforeInsert: clearBeforeInsert || false, // Guardar la nueva propiedad
+      clearBeforeInsert: clearBeforeInsert || false,
     };
-    // Llamas al servicio
+
+    // Llamar al servicio
     const result = await upsertTransferTaskService(taskData);
 
     if (result.success) {
@@ -98,37 +116,54 @@ const upsertTransferTaskController = async (req, res) => {
       return res.status(500).json({ success: false, message: result.message });
     }
   } catch (error) {
-    console.error("Error en upsertTransferTaskController:", error);
-    return res
-      .status(500)
-      .json({ message: "Error al guardar la tarea", error: error.message });
+    logger.error("Error en upsertTransferTaskController:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error al guardar la tarea",
+      error: error.message,
+    });
   }
 };
 
+/**
+ * Ejecuta una tarea de transferencia manualmente
+ */
 const executeTransferTask = async (req, res) => {
-  console.log("Ejecutando tarea manual...");
   try {
     const { taskId } = req.params;
+
+    if (!taskId) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requiere el ID de la tarea",
+      });
+    }
+
     const task = await TransferTask.findById(taskId);
 
     if (!task) {
-      return res.status(404).json({ message: "Tarea no encontrada." });
+      return res.status(404).json({
+        success: false,
+        message: "Tarea no encontrada.",
+      });
     }
 
     if (!task.active) {
-      return res
-        .status(400)
-        .json({ message: "La tarea está inactiva y no puede ejecutarse." });
+      return res.status(400).json({
+        success: false,
+        message: "La tarea está inactiva y no puede ejecutarse.",
+      });
     }
 
     if (task.type !== "manual" && task.type !== "both") {
       return res.status(400).json({
+        success: false,
         message:
           "Solo se pueden ejecutar manualmente las tareas de tipo 'manual' o 'both'.",
       });
     }
 
-    // 🚨 Verificar si hay una tarea automática en progreso
+    // Verificar si hay una tarea automática en progreso
     const taskInProgress = await TransferTask.findOne({
       status: "running",
       type: { $in: ["auto", "both"] },
@@ -136,29 +171,36 @@ const executeTransferTask = async (req, res) => {
 
     if (taskInProgress) {
       return res.status(400).json({
+        success: false,
         message:
           "No se puede ejecutar esta tarea en este momento. Hay otra tarea automática en curso.",
       });
     }
 
-    // 🚀 Ejecutar la transferencia manual
-    console.log("📌 Iniciando ejecución manual para la tarea:", taskId);
+    // Ejecutar la transferencia manual
+    logger.info(`Iniciando ejecución manual para la tarea: ${taskId}`);
     const result = await executeTransferManual(taskId);
 
-    console.log("📌 Resultado de ejecución:", result);
-
     if (result && result.success) {
-      return res.json({ message: "Tarea ejecutada con éxito", result });
+      return res.json({
+        success: true,
+        message: "Tarea ejecutada con éxito",
+        result,
+      });
     } else {
-      return res
-        .status(400)
-        .json({ message: "Error en la ejecución de la tarea.", result });
+      return res.status(400).json({
+        success: false,
+        message: "Error en la ejecución de la tarea.",
+        result,
+      });
     }
   } catch (error) {
-    console.error("❌ Error en la ejecución:", error);
-    return res
-      .status(500)
-      .json({ message: "Error en la ejecución", error: error.message });
+    logger.error("Error en la ejecución de la tarea:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error en la ejecución",
+      error: error.message,
+    });
   }
 };
 
@@ -168,117 +210,199 @@ const executeTransferTask = async (req, res) => {
 const deleteTransferTask = async (req, res) => {
   const { name } = req.params;
   try {
-    await TransferTask.deleteOne({ name });
-    res.json({ message: "Tarea eliminada" });
+    if (!name) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requiere el nombre de la tarea",
+      });
+    }
+
+    const result = await TransferTask.deleteOne({ name });
+
+    if (result.deletedCount === 0) {
+      return res.status(404).json({
+        success: false,
+        message: "Tarea no encontrada",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Tarea eliminada correctamente",
+    });
   } catch (error) {
-    res.status(500).json({ message: "Error al eliminar tarea", error });
+    logger.error(`Error al eliminar tarea ${name}:`, error);
+    res.status(500).json({
+      success: false,
+      message: "Error al eliminar tarea",
+      error: error.message,
+    });
   }
 };
 
+/**
+ * Obtener la configuración de hora para tareas automáticas
+ */
 const getConfigurarHora = async (req, res) => {
-  // console.log("Llegue a donde queria llegar?");
   try {
     const config = await Config.findOne();
     if (!config) {
       return res.json({ hour: "02:00" }); // Hora por defecto: 02:00 AM
     }
     res.json(config);
-    // console.log(config);
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error al obtener la configuración", error });
+    logger.error("Error al obtener configuración de hora:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener la configuración",
+      error: error.message,
+    });
   }
 };
 
+/**
+ * Actualizar la configuración de hora para tareas automáticas
+ */
 const updateConfig = async (req, res) => {
   const { hour } = req.body;
 
-  console.log(hour);
+  if (!hour) {
+    return res.status(400).json({
+      success: false,
+      message: "Se requiere la hora de ejecución",
+    });
+  }
 
   try {
+    // Validar formato de hora (HH:MM)
+    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(hour)) {
+      return res.status(400).json({
+        success: false,
+        message: "Formato de hora inválido. Use formato HH:MM (24 horas)",
+      });
+    }
+
     const config = await Config.findOneAndUpdate(
       {},
       { hour },
       { upsert: true, new: true }
     );
 
-    // Actualiza la tarea programada con la nueva hora
+    // Actualizar la tarea programada con la nueva hora
     startCronJob(config.hour);
 
-    res.json({ message: "Configuración actualizada", config });
+    res.json({
+      success: true,
+      message: "Configuración actualizada correctamente",
+      config,
+    });
   } catch (error) {
-    res
-      .status(500)
-      .json({ message: "Error al actualizar la configuración", error });
+    logger.error("Error al actualizar configuración de hora:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al actualizar la configuración",
+      error: error.message,
+    });
   }
 };
 
+/**
+ * Obtener estado actual de las tareas
+ */
 const getTaskStatus = async (req, res) => {
   try {
     const tasks = await TransferTask.find({}, "name status progress");
-    res.json(tasks);
+    res.json({
+      success: true,
+      data: tasks,
+    });
   } catch (error) {
-    res.status(500).json({ message: "Error obteniendo estado de tareas" });
+    logger.error("Error al obtener estado de tareas:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error obteniendo estado de tareas",
+      error: error.message,
+    });
   }
 };
 
-// Ejemplo: /api/transfer/runTask/LoadSales
+/**
+ * Ejecutar una tarea con parámetros específicos
+ */
 async function runTask(req, res) {
   try {
-    const { taskName } = req.params; // "LoadSales"
-    const { parametros } = req.body || {}; // { Fecha: "...", Vendedor: "..." }
-    const { date, vendors } = parametros;
+    const { taskName } = req.params;
+    const { parametros } = req.body || {};
 
-    // 1) Buscar la tarea en Mongo
-    const task = await TransferTask.findOne({ name: taskName });
-    if (!task) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Tarea no encontrada" });
+    if (!taskName) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requiere el nombre de la tarea",
+      });
     }
+
+    const { date, vendors } = parametros || {};
 
     if (!date || !vendors) {
-      return res
-        .status(400)
-        .json({ message: "Fecha y vendedores son obligatorios." });
+      return res.status(400).json({
+        success: false,
+        message: "Fecha y vendedores son obligatorios.",
+      });
     }
 
-    // Convertir vendedores a arrrau
-    console.log(formatDateToYYYYMMDD(date));
+    // Buscar la tarea en MongoDB
+    const task = await TransferTask.findOne({ name: taskName });
+    if (!task) {
+      return res.status(404).json({
+        success: false,
+        message: "Tarea no encontrada",
+      });
+    }
+
+    const formattedDate = formatDateToYYYYMMDD(date);
+    const vendorsArray = vendors.split(",").map((v) => v.trim());
+
+    // Preparar parámetros
     const overrideParams = {
-      Order_Date: formatDateToYYYYMMDD(date),
-      Code_Seller: vendors.split(",").map((v) => v.trim()),
+      Order_Date: formattedDate,
+      Code_Seller: vendorsArray,
     };
 
-    console.log(overrideParams);
-    // 2) Combinar sus parámetros con overrideParams
-    //    (ejemplo: si la tarea tiene parameters con field="Fecha", operator="=", value="2023-01-01",
-    //     y en overrideParams viene Fecha="2023-02-10", sobreescribes con 2023-02-10)
+    logger.info(`Ejecutando tarea ${taskName} con parámetros:`, overrideParams);
 
-    // Lógica de "dynamicQueryService" o "transferService" (dependiendo de tu setup)
-    const result = await executeDynamicSelect(
-      taskName,
-      overrideParams,
-      "server1"
-    );
+    // Ejecutar consulta dinámica con withConnection
+    return await withConnection("server1", async (connection) => {
+      const result = await executeDynamicSelect(
+        taskName,
+        overrideParams,
+        "server1"
+      );
 
-    return res.json({ success: true, result });
+      return res.json({
+        success: true,
+        result,
+      });
+    });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ success: false, message: error.message });
+    logger.error(`Error al ejecutar tarea:`, error);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 }
 
 /**
  * Inserta en IMPLT_Orders los datos recibidos.
- * Se espera en el body: { salesData: [ ... ] }
  */
 async function insertOrders(req, res) {
   try {
     const { salesData } = req.body;
     if (!salesData || !Array.isArray(salesData) || salesData.length === 0) {
-      return res.status(400).json({ message: "No hay ventas para insertar." });
+      return res.status(400).json({
+        success: false,
+        message: "No hay ventas para insertar.",
+      });
     }
 
     // Validar cada elemento de salesData
@@ -286,7 +410,7 @@ async function insertOrders(req, res) {
       // Crear un nuevo objeto con propiedades validadas
       const validItem = {};
 
-      // Asegúrate de que cada propiedad esté bien definida o sea null
+      // Asegurarse de que cada propiedad esté bien definida o sea null
       Object.keys(item).forEach((key) => {
         validItem[key] = item[key] === undefined ? null : item[key];
       });
@@ -297,23 +421,30 @@ async function insertOrders(req, res) {
     // Buscar la tarea que representa la carga a IMPLT_Orders
     const task = await TransferTask.findOne({ name: "IMPLT_Orders" });
     if (!task) {
-      return res
-        .status(404)
-        .json({ message: "Tarea IMPLT_Orders no encontrada." });
+      return res.status(404).json({
+        success: false,
+        message: "Tarea IMPLT_Orders no encontrada.",
+      });
     }
 
-    // Ejecutar la inserción en lotes con SSE (por ejemplo, con batchSize = 100)
+    // Ejecutar la inserción en lotes con SSE
     const result = await insertInBatchesSSE(task._id, validSalesData, 100);
-    return res.json(result);
+    return res.json({
+      success: true,
+      message: "Datos insertados correctamente",
+      result,
+    });
   } catch (error) {
-    console.error("Error en insertOrders:", error);
-    return res.status(500).json({ message: error.message });
+    logger.error("Error en insertOrders:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 }
 
 /**
  * Inserta los datos en IMPLT_loads_detail.
- * Se espera en el body: { route: "RUTA01", loadId: "load# 0000002", salesData: [ ... ] }
  */
 async function insertLoadsDetail(req, res) {
   try {
@@ -326,44 +457,28 @@ async function insertLoadsDetail(req, res) {
       !Array.isArray(salesData) ||
       salesData.length === 0
     ) {
-      return res
-        .status(400)
-        .json({ message: "Faltan datos para insertar en loads_detail." });
+      return res.status(400).json({
+        success: false,
+        message: "Faltan datos para insertar en loads_detail.",
+      });
     }
 
-    // 1) Buscar la tarea para IMPLT_loads_detail
+    // Buscar la tarea para IMPLT_loads_detail
     const task = await TransferTask.findOne({ name: "IMPLT_loads_detail" });
     if (!task) {
-      return res
-        .status(404)
-        .json({ message: "Tarea IMPLT_loads_detail no encontrada." });
+      return res.status(404).json({
+        success: false,
+        message: "Tarea IMPLT_loads_detail no encontrada.",
+      });
     }
 
-    // 2) Convertir cada registro de salesData al formato IMPLT_loads_detail
-    // Campos requeridos:
-    //  Code               = loadId (o record.Code_load, según tu caso)
-    //  Num_Line           = (un contador o algo)
-    //  Lot_Group          = '9999999999'
-    //  Code_Product       = record.Code_Product
-    //  Date_Load          = record.Order_Date
-    //  Quantity           = record.Quantity
-    //  Unit_Type          = record.Unit_Measure
-    //  Code_Warehouse_Sou = '01'
-    //  Code_Route         = route
-    //  Source_Create      = null (o "")
-    //  Transfer_status    = '1'
-    //  Status_SAP         = null (o "")
-    //  Code_Unit_Org      = 'CATELLI'
-    //  Code_Sales_Org     = 'CATELLI'
-    //
-    // Ajusta los nombres de campo si en 'salesData' se llaman distinto.
-
+    // Convertir cada registro al formato requerido
     const modifiedData = salesData.map((record, index) => ({
       Code: loadId,
-      Num_Line: index + 1, // Ejemplo: numeración 1,2,3... record.Num_line,
+      Num_Line: index + 1,
       Lot_Group: "9999999999",
-      Code_Product: record.Code_Product, // Asumiendo que en salesData se llama Code_Product
-      Date_Load: record.Order_Date, // Si en salesData es record.Order_Date
+      Code_Product: record.Code_Product,
+      Date_Load: record.Order_Date,
       Quantity: record.Quantity,
       Unit_Type: record.Unit_Measure,
       Code_Warehouse_Sou: "01",
@@ -375,40 +490,33 @@ async function insertLoadsDetail(req, res) {
       Code_Sales_Org: "CATELLI",
     }));
 
-    // 3) Llamar a insertInBatchesSSE con el batchSize deseado
+    // Ejecutar la inserción en lotes con SSE
     const result = await insertInBatchesSSE(task._id, modifiedData, 100);
 
+    // Actualizar el consecutivo
     await Consecutivo.findOneAndUpdate({}, { valor: loadId }, { upsert: true });
 
-    return res.json(result);
+    return res.json({
+      success: true,
+      message: "Datos insertados correctamente en loads_detail",
+      result,
+    });
   } catch (error) {
-    console.error("Error en insertLoadsDetail:", error);
-    return res.status(500).json({ message: error.message });
+    logger.error("Error en insertLoadsDetail:", error);
+    return res.status(500).json({
+      success: false,
+      message: error.message,
+    });
   }
 }
 
 /**
- * Controlador para ejecutar el traspaso de bodega.
- * Se espera que el body de la petición tenga:
- *   {
- *     route: <Número de bodega destino>,
- *     loadId: <(opcional) valor que se ignora en este proceso>,
- *     salesData: [ { Code_Product: string, Quantity: number, ... }, ... ]
- *   }
- *
- * La función de traspaso se encarga de:
- *  - Agrupar las ventas por producto.
- *  - Obtener y actualizar el consecutivo en Consecutivo_Ci.
- *  - Insertar el encabezado en DOCUMENTO_INV.
- *  - Insertar las líneas en LINEA_DOC_INV en lotes.
- *
- * @param {Request} req
- * @param {Response} res
+ * Ejecuta el traspaso de bodega basado en los datos recibidos
  */
 async function insertLoadsTrapaso(req, res) {
   try {
     const { route, loadId, salesData } = req.body;
-    console.log("Datos recibidos para traspaso:", {
+    logger.info("Datos recibidos para traspaso:", {
       route,
       salesData: salesData ? `${salesData.length} registros` : "no data",
     });
@@ -453,26 +561,31 @@ async function insertLoadsTrapaso(req, res) {
       });
     }
 
-    console.log(
+    logger.info(
       `Procesando traspaso con ${validSalesData.length} productos válidos`
     );
 
-    // Usar directamente el método alternativo que sabemos que funcionará
+    // Usar realizarTraspaso con manejo mejorado de errores
     try {
       const result = await realizarTraspaso({
         route,
         salesData: validSalesData,
       });
-      return res.json(result);
+
+      return res.json({
+        success: true,
+        message: "Traspaso ejecutado correctamente",
+        ...result,
+      });
     } catch (error) {
-      console.error("Error en realizarTraspaso:", error);
+      logger.error("Error en realizarTraspaso:", error);
       return res.status(500).json({
         success: false,
-        message: error.message,
+        message: `Error al realizar el traspaso: ${error.message}`,
       });
     }
   } catch (error) {
-    console.error("Error en insertLoadsTrapaso:", error);
+    logger.error("Error en insertLoadsTrapaso:", error);
     return res.status(500).json({
       success: false,
       message: error.message,
@@ -480,44 +593,59 @@ async function insertLoadsTrapaso(req, res) {
   }
 }
 
-/* Obtenemos el ultimo consecutivo */
+/**
+ * Obtiene el último consecutivo de carga desde MongoDB
+ */
 async function getLoadConsecutiveMongo(req, res) {
   try {
     const loadId = await obtenerConsecutivo({
       modelo: Consecutivo,
       campoFiltro: "nombre",
-      valorFiltro: "LOAD", // doc con nombre="LOAD"
+      valorFiltro: "LOAD",
       campoConsecutivo: "valor",
       longitudConsecutivo: 7,
-      prefijoBase: "LC", // p.ej. "LOADC"
-      valorInicial: "0".padStart(7, "0"), // "0000000"
+      prefijoBase: "LC",
+      valorInicial: "0".padStart(7, "0"),
     });
 
-    // loadId podría ser algo como "LOADC0000001"
-    res.json({ success: true, loadId });
+    res.json({
+      success: true,
+      loadId,
+    });
   } catch (error) {
-    console.error("Error al obtener consecutivo:", error);
-    res.status(500).json({ message: "Error al obtener loadId", error });
+    logger.error("Error al obtener consecutivo:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener loadId",
+      error: error.message,
+    });
   }
 }
 
-// En el controlador correspondiente
+/**
+ * Obtiene el historial de ejecución de una tarea
+ */
 const getTaskExecutionHistory = async (req, res) => {
-  console.log("Llegamos", req.params);
   try {
     const { taskId } = req.params;
+
+    if (!taskId) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requiere el ID de la tarea",
+      });
+    }
 
     // Obtener la tarea para tener información básica
     const task = await TransferTask.findById(taskId);
     if (!task) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Tarea no encontrada" });
+      return res.status(404).json({
+        success: false,
+        message: "Tarea no encontrada",
+      });
     }
 
     // Obtener historial de TransferSummary relacionado con esta tarea
-    // Aquí asumimos que guardas el ID de la tarea en cada resumen
-    // Si no, podrías usar otro criterio como la fecha o el nombre
     const summaries = await TransferSummary.find({
       taskName: task.name,
     })
@@ -535,7 +663,7 @@ const getTaskExecutionHistory = async (req, res) => {
       history: summaries,
     });
   } catch (error) {
-    console.error("Error al obtener historial de ejecución:", error);
+    logger.error("Error al obtener historial de ejecución:", error);
     return res.status(500).json({
       success: false,
       message: "Error al obtener historial",
@@ -544,21 +672,33 @@ const getTaskExecutionHistory = async (req, res) => {
   }
 };
 
-// Endpoint para cancelar una tarea
+/**
+ * Cancela una tarea en ejecución
+ */
 const cancelTransferTask = async (req, res) => {
   try {
     const { taskId } = req.params;
 
+    if (!taskId) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requiere el ID de la tarea",
+      });
+    }
+
     // Verificar si la tarea existe
     const task = await TransferTask.findById(taskId);
     if (!task) {
-      return res
-        .status(404)
-        .json({ success: false, message: "Tarea no encontrada" });
+      return res.status(404).json({
+        success: false,
+        message: "Tarea no encontrada",
+      });
     }
 
-    // Verificar si está en ejecución
-    if (!isTaskActive(taskId)) {
+    // Verificar si está en ejecución usando el módulo TaskTracker
+    const TaskTracker = require("../services/TaskTracker");
+
+    if (!TaskTracker.isTaskActive(taskId)) {
       return res.status(400).json({
         success: false,
         message: "La tarea no está en ejecución actualmente",
@@ -566,7 +706,7 @@ const cancelTransferTask = async (req, res) => {
     }
 
     // Cancelar la tarea
-    const cancelled = cancelTask(taskId);
+    const cancelled = TaskTracker.cancelTask(taskId);
 
     if (cancelled) {
       // Actualizar el estado en la base de datos
@@ -586,7 +726,7 @@ const cancelTransferTask = async (req, res) => {
       });
     }
   } catch (error) {
-    console.error("Error al cancelar tarea:", error);
+    logger.error("Error al cancelar tarea:", error);
     return res.status(500).json({
       success: false,
       message: "Error al cancelar la tarea",

@@ -1,6 +1,6 @@
 // services/healthMonitorService.js
 const logger = require("./logger");
-const { getPoolsStatus, closePools, initPools } = require("./dbService");
+const ConnectionManager = require("./ConnectionManager");
 const MongoDbService = require("./mongoDbService");
 const ConnectionDiagnostic = require("./connectionDiagnostic");
 
@@ -118,13 +118,29 @@ async function checkSystemHealth() {
     }
 
     // 2. Verificar estado de los pools
-    const poolStatus = getPoolsStatus();
+    let poolStatus = {};
+    try {
+      poolStatus = ConnectionManager.getPoolsStatus();
+    } catch (error) {
+      logger.warn("Error al obtener estado de pools:", error);
+      poolStatus = {};
+    }
 
     if (Object.keys(poolStatus).length === 0) {
       logger.warn(
         "No hay pools de conexión activos, intentando inicializar..."
       );
-      const initialized = await initPools();
+
+      let initialized = false;
+      try {
+        await ConnectionManager.initPool("server1");
+        await ConnectionManager.initPool("server2");
+        initialized = true;
+      } catch (initError) {
+        logger.error("Error al inicializar pools:", initError);
+        initialized = false;
+      }
+
       if (!initialized) {
         logger.error("⚠️ No se pudieron inicializar los pools de conexión");
         HEALTH_CONFIG.errorCounters.connection++;
@@ -226,10 +242,22 @@ async function attemptDatabaseRecovery() {
     logger.info("MongoDB reconectado correctamente");
 
     // 2. Reiniciar pools de conexión
-    await closePools();
-    logger.info("Pools cerrados correctamente");
+    try {
+      await ConnectionManager.closePools();
+      logger.info("Pools cerrados correctamente");
+    } catch (closeError) {
+      logger.error("Error al cerrar pools:", closeError);
+    }
 
-    const poolsInitialized = await initPools();
+    let poolsInitialized = false;
+    try {
+      await ConnectionManager.initPool("server1");
+      await ConnectionManager.initPool("server2");
+      poolsInitialized = true;
+    } catch (initError) {
+      logger.error("Error al inicializar pools:", initError);
+      poolsInitialized = false;
+    }
 
     if (poolsInitialized) {
       logger.info("Pools reinicializados correctamente");
@@ -297,14 +325,26 @@ async function attemptConnectionRecovery() {
 
   try {
     // 1. Cerrar pools existentes
-    await closePools();
-    logger.info("Pools cerrados correctamente");
+    try {
+      await ConnectionManager.closePools();
+      logger.info("Pools cerrados correctamente");
+    } catch (closeError) {
+      logger.error("Error al cerrar pools:", closeError);
+    }
 
     // 2. Esperar un momento para que las conexiones se liberen completamente
     await new Promise((resolve) => setTimeout(resolve, 5000));
 
     // 3. Reinicializar pools
-    const poolsInitialized = await initPools();
+    let poolsInitialized = false;
+    try {
+      await ConnectionManager.initPool("server1");
+      await ConnectionManager.initPool("server2");
+      poolsInitialized = true;
+    } catch (initError) {
+      logger.error("Error al inicializar pools:", initError);
+      poolsInitialized = false;
+    }
 
     if (poolsInitialized) {
       logger.info("Pools reinicializados correctamente");
@@ -384,7 +424,13 @@ async function performFullDiagnostic() {
     }
 
     // 4. Verificar estado de pools
-    const poolStatus = getPoolsStatus();
+    let poolStatus = {};
+    try {
+      poolStatus = ConnectionManager.getPoolsStatus();
+    } catch (poolError) {
+      logger.warn("Error al obtener estado de pools:", poolError);
+      poolStatus = { error: poolError.message };
+    }
 
     // 5. Recopilar diagnóstico completo
     const diagnosticResult = {

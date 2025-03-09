@@ -1,5 +1,3 @@
-// services/progressSse.js
-
 // Almacenaremos las conexiones SSE en memoria, asociando taskId -> response
 const sseConnections = {};
 

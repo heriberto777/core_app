@@ -1,10 +1,9 @@
-// services/connectionDiagnostic.js
-const { Connection } = require("tedious");
+// services/connectionDiagnostic.js - VERSIÓN CORREGIDA
+const { Connection, Request } = require("tedious");
 const mongoose = require("mongoose");
 const logger = require("./logger");
 const DBConfig = require("../models/dbConfigModel");
 const MongoDbService = require("./mongoDbService");
-const { SqlService } = require("./tediousService");
 
 /**
  * Herramienta para diagnosticar problemas de conexión a SQL Server
@@ -152,12 +151,12 @@ class ConnectionDiagnostic {
         const connection = await this.createTestConnection(dbConfig);
 
         // Verificar acceso a la base de datos específica
-        const dbResult = await SqlService.query(
+        const dbResult = await this.simpleQuery(
           connection,
           `SELECT DB_NAME() AS current_database, @@version AS sql_version`
         );
 
-        const dbInfo = dbResult.recordset[0];
+        const dbInfo = dbResult[0];
         results.steps[4].status = "success";
         results.steps[4].details = `Base de datos "${dbInfo.current_database}" accesible correctamente`;
         results.steps[4].dbInfo = dbInfo;
@@ -170,11 +169,13 @@ class ConnectionDiagnostic {
 
         // Medir tiempo de respuesta
         const startTime = Date.now();
-        await SqlService.query(connection, "SELECT TOP 1 * FROM sys.tables");
+        await this.simpleQuery(connection, "SELECT TOP 1 * FROM sys.tables");
         const endTime = Date.now();
         const responseTime = endTime - startTime;
 
-        await SqlService.close(connection);
+        try {
+          connection.close();
+        } catch (e) {}
 
         if (responseTime > 1000) {
           results.steps[5].status = "warning";
@@ -213,6 +214,54 @@ class ConnectionDiagnostic {
   }
 
   /**
+   * Ejecuta una consulta simple sin usar validateParameters
+   * @param {Connection} connection - Conexión a SQL Server
+   * @param {string} queryString - Consulta SQL
+   * @returns {Promise<Array>} - Resultados de la consulta
+   */
+  static simpleQuery(connection, queryString) {
+    return new Promise((resolve, reject) => {
+      const results = [];
+
+      // Crear Request sin parámetros
+      const request = new Request(queryString, (err, rowCount) => {
+        if (err) {
+          reject(err);
+          return;
+        }
+        resolve(results);
+      });
+
+      // Manejar filas
+      request.on("row", (columns) => {
+        const row = {};
+
+        // Manejar diferentes formatos según versión de Tedious
+        if (Array.isArray(columns)) {
+          columns.forEach((column) => {
+            row[column.metadata.colName] = column.value;
+          });
+        } else if (columns && typeof columns === "object") {
+          Object.entries(columns).forEach(([key, column]) => {
+            if (key !== "meta" && column !== undefined) {
+              if (column && column.metadata && column.metadata.colName) {
+                row[column.metadata.colName] = column.value;
+              } else {
+                row[key] = column;
+              }
+            }
+          });
+        }
+
+        results.push(row);
+      });
+
+      // Ejecutar la consulta
+      connection.execSql(request);
+    });
+  }
+
+  /**
    * Prueba una conexión directa a SQL Server
    * @param {Object} dbConfig - Configuración de la base de datos
    * @returns {Promise<Object>} - Información del servidor
@@ -239,33 +288,32 @@ class ConnectionDiagnostic {
         }
 
         // Realizar consulta básica para obtener información del servidor
-        const request = {
-          query:
-            "SELECT @@SERVERNAME AS ServerName, @@VERSION AS Version, SERVERPROPERTY('ProductVersion') AS ProductVersion;",
-          callback: (err, result) => {
+        this.simpleQuery(
+          connection,
+          "SELECT @@SERVERNAME AS ServerName, @@VERSION AS Version, SERVERPROPERTY('ProductVersion') AS ProductVersion;"
+        )
+          .then((results) => {
             try {
               connection.close();
             } catch (e) {}
 
-            if (err) {
-              reject(err);
-              return;
-            }
-
-            if (result.length > 0 && result[0].length > 0) {
+            if (results.length > 0) {
               const serverInfo = {
-                serverName: result[0][0].value,
-                version: result[0][1].value,
-                productVersion: result[0][2].value,
+                serverName: results[0].ServerName,
+                version: results[0].Version,
+                productVersion: results[0].ProductVersion,
               };
               resolve(serverInfo);
             } else {
               reject(new Error("La consulta no devolvió resultados"));
             }
-          },
-        };
-
-        connection.execSql(request);
+          })
+          .catch((error) => {
+            try {
+              connection.close();
+            } catch (e) {}
+            reject(error);
+          });
       });
 
       connection.on("error", (err) => {
