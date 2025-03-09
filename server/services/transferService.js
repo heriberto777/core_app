@@ -1740,6 +1740,576 @@ class TransferService {
     );
     return results;
   }
+
+  /**
+   * Función que inserta TODOS los datos en lotes, reportando progreso SSE y enviando correo al finalizar.
+   * No verifica duplicados, simplemente inserta todos los registros.
+   * Requiere que el frontend esté suscrito a /api/transfer/progress/:taskId
+   * Versión adaptada con soporte para TaskTracker y cancelación.
+   *
+   * @param {String} taskId - ID de la tarea en MongoDB
+   * @param {Array} data - Datos a insertar
+   * @param {Number} batchSize - Tamaño de lote (default: 100)
+   * @param {AbortSignal} signal - Señal para cancelación (opcional)
+   * @returns {Object} - Resultado de la operación
+   */
+  async insertInBatchesSSE(taskId, data, batchSize = 100, signal = null) {
+    let server2Connection = null;
+    let lastReportedProgress = 0;
+    let initialCount = 0;
+    let taskName = "desconocida"; // Inicializar taskName por defecto
+    let columnTypes = null;
+
+    // Crear AbortController si no se proporcionó signal
+    const localAbortController = !signal ? new AbortController() : null;
+    signal = signal || localAbortController.signal;
+
+    // Crear ID único para TaskTracker
+    const cancelTaskId = `batch_insert_${taskId}_${Date.now()}`;
+
+    try {
+      // 1) Obtener la tarea - Inicializar 'task' antes de usarla
+      const task = await TransferTask.findById(taskId);
+      if (!task) {
+        throw new Error(`No se encontró la tarea con ID: ${taskId}`);
+      }
+      if (!task.active) {
+        throw new Error(`La tarea "${task.name}" está inactiva.`);
+      }
+
+      // Guardar el nombre de la tarea para usarlo en logs y mensajes
+      taskName = task.name;
+
+      // Registrar la tarea en el TaskTracker
+      TaskTracker.registerTask(
+        cancelTaskId,
+        localAbortController || { abort: () => {} },
+        {
+          type: "batchInsert",
+          taskName,
+          totalRecords: data.length,
+        }
+      );
+
+      // 2) Marcar status "running", progress=0
+      await TransferTask.findByIdAndUpdate(taskId, {
+        status: "running",
+        progress: 0,
+      });
+      sendProgress(taskId, 0);
+
+      // Verificar cancelación temprana
+      if (signal.aborted) {
+        throw new Error("Tarea cancelada por el usuario");
+      }
+
+      // Si la tarea tiene habilitada la opción de borrar antes de insertar
+      if (task.clearBeforeInsert) {
+        sendProgress(taskId, 5); // Actualizar progreso: iniciando borrado
+
+        try {
+          logger.info(
+            `🧹 Borrando registros existentes de la tabla ${task.name} antes de insertar en lotes`
+          );
+
+          // Usar conexión robusta para el borrado
+          const connectionResult =
+            await ConnectionManager.enhancedRobustConnect("server2");
+          if (!connectionResult.success) {
+            throw new Error(
+              `No se pudo establecer conexión a server2 para borrado: ${
+                connectionResult.error?.message || "Error desconocido"
+              }`
+            );
+          }
+
+          server2Connection = connectionResult.connection;
+
+          // Realizar el borrado
+          const deletedCount = await SqlService.clearTableData(
+            server2Connection,
+            `dbo.[${task.name}]`
+          );
+          logger.info(
+            `✅ Se eliminaron ${deletedCount} registros de la tabla ${task.name}`
+          );
+
+          sendProgress(taskId, 10); // Actualizar progreso: borrado completado
+        } catch (clearError) {
+          logger.error(
+            `❌ Error al borrar registros de la tabla ${task.name}:`,
+            clearError
+          );
+
+          // Decidir si continuar o abortar
+          if (clearError.message && clearError.message.includes("no existe")) {
+            logger.warn(
+              `⚠️ La tabla no existe, continuando con la inserción...`
+            );
+          } else {
+            logger.warn(
+              `⚠️ Error al borrar registros pero continuando con la inserción...`
+            );
+          }
+
+          // Si quieres abortar en caso de error:
+          // await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
+          // sendProgress(taskId, -1);
+          // TaskTracker.completeTask(cancelTaskId, "failed");
+          // throw new Error(`Error al borrar registros existentes: ${clearError.message}`);
+        }
+      }
+
+      // Verificar cancelación después del borrado
+      if (signal.aborted) {
+        throw new Error("Tarea cancelada por el usuario");
+      }
+
+      // 3) Conectarse a la DB de destino si aún no lo estamos
+      if (!server2Connection) {
+        sendProgress(taskId, 15); // Actualizar progreso: conectando a server2
+
+        try {
+          // Usar conexión robusta
+          const connectionResult =
+            await ConnectionManager.enhancedRobustConnect("server2");
+          if (!connectionResult.success) {
+            throw new Error(
+              `No se pudo establecer conexión a server2: ${
+                connectionResult.error?.message || "Error desconocido"
+              }`
+            );
+          }
+
+          server2Connection = connectionResult.connection;
+          logger.info(
+            `Conexión establecida y verificada para inserción en lotes (taskId: ${taskId}, task: ${taskName})`
+          );
+
+          sendProgress(taskId, 20); // Actualizar progreso: conexión establecida
+        } catch (connError) {
+          logger.error(
+            `Error al establecer conexión para inserción en lotes (taskId: ${taskId}, task: ${taskName}):`,
+            connError
+          );
+          await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
+          sendProgress(taskId, -1);
+          TaskTracker.completeTask(cancelTaskId, "failed");
+          throw new Error(
+            `Error al establecer conexión de base de datos: ${connError.message}`
+          );
+        }
+      }
+
+      // Obtener tipos de columnas para una inserción más segura
+      try {
+        logger.debug(`Obteniendo información de tabla ${taskName}...`);
+        // Verificar si getColumnTypes existe
+        if (typeof SqlService.getColumnTypes === "function") {
+          columnTypes = await SqlService.getColumnTypes(
+            server2Connection,
+            taskName
+          );
+          logger.debug(
+            `Tipos de columnas obtenidos correctamente para ${taskName}`
+          );
+        } else {
+          logger.info(
+            `La función getColumnTypes no está disponible en SqlService. Usando inferencia automática.`
+          );
+          columnTypes = {};
+        }
+      } catch (typesError) {
+        logger.warn(
+          `No se pudieron obtener los tipos de columnas para ${taskName}: ${typesError.message}. Se utilizará inferencia automática.`
+        );
+        columnTypes = {};
+      }
+
+      // Verificar cancelación después de obtener tipos
+      if (signal.aborted) {
+        throw new Error("Tarea cancelada por el usuario");
+      }
+
+      // 4) Verificar conteo inicial de registros
+      try {
+        const countResult = await SqlService.query(
+          server2Connection,
+          `SELECT COUNT(*) AS total FROM dbo.[${task.name}] WITH (NOLOCK)`
+        );
+        initialCount = countResult.recordset[0].total;
+        logger.info(
+          `Conteo inicial en tabla ${task.name}: ${initialCount} registros`
+        );
+      } catch (countError) {
+        logger.warn(
+          `No se pudo verificar conteo inicial: ${countError.message}`
+        );
+        initialCount = 0;
+      }
+
+      // 5) Pre-cargar información de longitud de columnas
+      const columnLengthCache = new Map();
+
+      // 6) Contadores para tracking
+      const total = data.length;
+      let totalInserted = 0;
+      let processedCount = 0;
+      let errorCount = 0;
+
+      sendProgress(taskId, 25); // Actualizar progreso: preparación completa, comenzando inserción
+
+      // 7) Procesar data en lotes - SIN TRANSACCIONES PARA MAYOR ESTABILIDAD
+      for (let i = 0; i < data.length; i += batchSize) {
+        // Verificar cancelación al inicio de cada lote
+        if (signal.aborted) {
+          throw new Error("Tarea cancelada por el usuario");
+        }
+
+        const batch = data.slice(i, i + batchSize);
+        const currentBatchNumber = Math.floor(i / batchSize) + 1;
+        const totalBatches = Math.ceil(data.length / batchSize);
+
+        logger.debug(
+          `Procesando lote ${currentBatchNumber}/${totalBatches} (${batch.length} registros) para ${taskName}...`
+        );
+
+        // Verificar si la conexión sigue activa y reconectar si es necesario
+        try {
+          await SqlService.query(server2Connection, "SELECT 1 AS test");
+        } catch (connError) {
+          logger.warn(
+            `Conexión perdida con server2 durante procesamiento, intentando reconectar...`
+          );
+
+          try {
+            await ConnectionManager.releaseConnection(server2Connection);
+          } catch (e) {}
+
+          // Usar conexión robusta
+          const reconnectResult = await ConnectionManager.enhancedRobustConnect(
+            "server2"
+          );
+          if (!reconnectResult.success) {
+            throw new Error(
+              `No se pudo restablecer la conexión: ${
+                reconnectResult.error?.message || "Error desconocido"
+              }`
+            );
+          }
+
+          server2Connection = reconnectResult.connection;
+          logger.info(
+            `Reconexión exitosa a server2 para lote ${currentBatchNumber}`
+          );
+        }
+
+        // Procesar cada registro del lote de forma independiente
+        let batchInserted = 0;
+        let batchErrored = 0;
+
+        for (const record of batch) {
+          // Verificar cancelación durante el procesamiento de cada lote
+          if (signal.aborted) {
+            throw new Error("Tarea cancelada por el usuario");
+          }
+
+          try {
+            // Validar y sanitizar el registro
+            const validatedRecord = SqlService.validateRecord(record);
+
+            // Truncar strings según las longitudes máximas
+            for (const column in validatedRecord) {
+              if (typeof validatedRecord[column] === "string") {
+                // Obtener la longitud máxima (usando cache)
+                let maxLength;
+                if (columnLengthCache.has(column)) {
+                  maxLength = columnLengthCache.get(column);
+                } else {
+                  // Consultar longitud máxima de la columna
+                  const lengthQuery = `
+                  SELECT CHARACTER_MAXIMUM_LENGTH 
+                  FROM INFORMATION_SCHEMA.COLUMNS 
+                  WHERE TABLE_NAME = '${task.name}' 
+                    AND COLUMN_NAME = '${column}'
+                `;
+                  const lengthResult = await SqlService.query(
+                    server2Connection,
+                    lengthQuery
+                  );
+                  maxLength =
+                    lengthResult.recordset[0]?.CHARACTER_MAXIMUM_LENGTH || 0;
+                  columnLengthCache.set(column, maxLength);
+                }
+
+                if (
+                  maxLength > 0 &&
+                  validatedRecord[column]?.length > maxLength
+                ) {
+                  validatedRecord[column] = validatedRecord[column].substring(
+                    0,
+                    maxLength
+                  );
+                }
+              }
+            }
+
+            // Usar el método mejorado para inserción con tipos explícitos
+            try {
+              const insertResult = await SqlService.insertWithExplicitTypes(
+                server2Connection,
+                `dbo.[${task.name}]`,
+                validatedRecord,
+                columnTypes
+              );
+
+              const rowsAffected = insertResult?.rowsAffected || 0;
+
+              if (rowsAffected > 0) {
+                totalInserted += rowsAffected;
+                batchInserted += rowsAffected;
+              }
+            } catch (insertError) {
+              // Verificar si es error de conexión
+              if (
+                insertError.message &&
+                (insertError.message.includes("conexión") ||
+                  insertError.message.includes("connection") ||
+                  insertError.message.includes("timeout") ||
+                  insertError.message.includes("Timeout") ||
+                  insertError.message.includes("state"))
+              ) {
+                // Intentar reconectar y reintentar
+                logger.warn(
+                  `Error de conexión durante inserción, reconectando...`
+                );
+
+                try {
+                  await ConnectionManager.releaseConnection(server2Connection);
+                } catch (e) {}
+
+                // Usar conexión robusta
+                const reconnectResult =
+                  await ConnectionManager.enhancedRobustConnect("server2");
+                if (!reconnectResult.success) {
+                  throw new Error(
+                    `No se pudo restablecer la conexión: ${
+                      reconnectResult.error?.message || "Error desconocido"
+                    }`
+                  );
+                }
+
+                server2Connection = reconnectResult.connection;
+
+                // Reintentar inserción
+                const retryResult = await SqlService.insertWithExplicitTypes(
+                  server2Connection,
+                  `dbo.[${task.name}]`,
+                  validatedRecord,
+                  columnTypes
+                );
+
+                const rowsAffected = retryResult?.rowsAffected || 0;
+
+                if (rowsAffected > 0) {
+                  totalInserted += rowsAffected;
+                  batchInserted += rowsAffected;
+                  logger.info(`Inserción exitosa después de reconexión`);
+                } else {
+                  throw new Error(
+                    "La inserción no afectó ninguna fila después de reconexión"
+                  );
+                }
+              } else {
+                // Otros errores, registrar y continuar
+                logger.error(
+                  `Error específico al insertar registro: ${JSON.stringify(
+                    validatedRecord,
+                    null,
+                    2
+                  )}`
+                );
+                logger.error(`Detalles del error: ${insertError.message}`);
+                throw insertError;
+              }
+            }
+          } catch (recordError) {
+            // Registrar el error pero continuar con el siguiente registro
+            errorCount++;
+            batchErrored++;
+            logger.error(
+              `Error al insertar registro en lote ${currentBatchNumber}:`,
+              recordError
+            );
+            logger.debug(
+              `Registro problemático: ${JSON.stringify(record, null, 2)}`
+            );
+          }
+        }
+
+        logger.info(
+          `Lote ${currentBatchNumber}/${totalBatches}: ${batchInserted} registros insertados, ${batchErrored} errores`
+        );
+
+        // Actualizar progreso después de cada lote
+        processedCount += batch.length;
+        const progress = Math.min(
+          Math.round((processedCount / total) * 100),
+          99 // Máximo 99% hasta completar todo
+        );
+
+        if (progress > lastReportedProgress + 5 || progress >= 99) {
+          lastReportedProgress = progress;
+          await TransferTask.findByIdAndUpdate(taskId, { progress });
+          sendProgress(taskId, progress);
+          logger.debug(`Progreso actualizado: ${progress}%`);
+        }
+
+        // Monitoreo de memoria
+        MemoryManager.trackOperation("batch_insert");
+      }
+
+      // 8. Actualizar estado a completado
+      await TransferTask.findByIdAndUpdate(taskId, {
+        status: "completed",
+        progress: 100,
+        lastExecutionDate: new Date(),
+        $inc: { executionCount: 1 },
+        lastExecutionResult: {
+          success: true,
+          message: "Inserción en lotes completada exitosamente",
+          recordCount: data.length,
+          insertedCount: totalInserted,
+          errorCount,
+        },
+      });
+      sendProgress(taskId, 100);
+      TaskTracker.completeTask(cancelTaskId, "completed");
+
+      // 9. Verificar conteo final
+      let finalCount = 0;
+      try {
+        const countResult = await SqlService.query(
+          server2Connection,
+          `SELECT COUNT(*) AS total FROM dbo.[${task.name}] WITH (NOLOCK)`
+        );
+        finalCount = countResult.recordset[0].total || 0;
+        logger.info(
+          `Conteo final en tabla ${task.name}: ${finalCount} registros (${
+            finalCount - initialCount
+          } nuevos)`
+        );
+      } catch (countError) {
+        logger.warn(`No se pudo verificar conteo final: ${countError.message}`);
+      }
+
+      // 10. Preparar resultado
+      const result = {
+        success: true,
+        message: "Transferencia completada",
+        rows: data.length,
+        inserted: totalInserted,
+        errors: errorCount,
+        initialCount,
+        finalCount,
+      };
+
+      // 11. Enviar correo con el resultado
+      try {
+        const formattedResult = {
+          name: task.name,
+          success: result.success,
+          inserted: result.inserted || 0,
+          rows: result.rows || 0,
+          message: result.message || "Transferencia completada",
+          errorDetail: result.errorDetail || "N/A",
+          initialCount: result.initialCount || 0,
+          finalCount: result.finalCount || 0,
+        };
+
+        await sendTransferResultsEmail([formattedResult], "batch");
+        logger.info(`Correo de notificación enviado para ${taskName}`);
+      } catch (emailError) {
+        logger.error(
+          `Error al enviar correo de notificación: ${emailError.message}`
+        );
+      }
+
+      return result;
+    } catch (error) {
+      // Verificar si fue cancelación
+      if (signal.aborted || error.message?.includes("cancelada")) {
+        logger.info(`Tarea ${taskName} cancelada por el usuario`);
+
+        await TransferTask.findByIdAndUpdate(taskId, {
+          status: "cancelled",
+          progress: -1,
+          lastExecutionDate: new Date(),
+          lastExecutionResult: {
+            success: false,
+            message: "Cancelada por el usuario",
+          },
+        });
+
+        sendProgress(taskId, -1);
+        TaskTracker.completeTask(cancelTaskId, "cancelled");
+
+        throw new Error("Transferencia cancelada por el usuario");
+      }
+
+      // Manejo de errores generales
+      logger.error(
+        `Error en insertInBatchesSSE para ${taskName}: ${error.message}`,
+        error
+      );
+
+      // Actualizar estado de la tarea
+      await TransferTask.findByIdAndUpdate(taskId, {
+        status: "failed",
+        progress: -1,
+        lastExecutionDate: new Date(),
+        lastExecutionResult: {
+          success: false,
+          message: error.message || "Error desconocido",
+          error: error.stack || "No stack trace disponible",
+        },
+      });
+      sendProgress(taskId, -1);
+      TaskTracker.completeTask(cancelTaskId, "failed");
+
+      // Enviar correo de error
+      try {
+        const errorMessage = `Error en inserción en lotes para ${taskName}: ${error.message}`;
+        await sendCriticalErrorEmail(
+          errorMessage,
+          "batch",
+          `ID de tarea: ${taskId}`
+        );
+        logger.info(`Correo de error enviado para ${taskName}`);
+      } catch (emailError) {
+        logger.error(
+          `Error al enviar correo de error para ${taskName}: ${emailError.message}`
+        );
+      }
+
+      throw error;
+    } finally {
+      // Cerrar conexión
+      try {
+        if (server2Connection) {
+          await ConnectionManager.releaseConnection(server2Connection);
+          logger.debug(
+            `Conexión server2 cerrada correctamente para inserción en lotes de ${taskName} (taskId: ${taskId})`
+          );
+        }
+      } catch (closeError) {
+        logger.error(
+          `Error al cerrar conexión server2 para inserción en lotes de ${taskName} (taskId: ${taskId}):`,
+          closeError
+        );
+      }
+    }
+  }
 }
 
 // Exportar instancia singleton

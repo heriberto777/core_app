@@ -15,6 +15,7 @@ const obtenerConsecutivo = require("../utils/obtenerConsecutivo");
 const { realizarTraspaso } = require("../services/traspasoService");
 const { withConnection } = require("../utils/dbUtils");
 const logger = require("../services/logger");
+const TaskTracker = require("../services/TaskTracker");
 
 /**
  * Obtener todas las tareas de transferencia
@@ -327,9 +328,11 @@ const getTaskStatus = async (req, res) => {
 };
 
 /**
- * Ejecutar una tarea con parámetros específicos
+ * Ejecuta una tarea con parámetros específicos
  */
 async function runTask(req, res) {
+  const taskId = Date.now().toString(); // Identificador único para cancelación
+
   try {
     const { taskName } = req.params;
     const { parametros } = req.body || {};
@@ -370,18 +373,61 @@ async function runTask(req, res) {
 
     logger.info(`Ejecutando tarea ${taskName} con parámetros:`, overrideParams);
 
-    // Ejecutar consulta dinámica con withConnection
-    return await withConnection("server1", async (connection) => {
-      const result = await executeDynamicSelect(
-        taskName,
-        overrideParams,
-        "server1"
-      );
+    // Crear AbortController para permitir cancelación
+    const abortController = new AbortController();
 
-      return res.json({
-        success: true,
-        result,
-      });
+    // Registrar la tarea para cancelación (usando un ID compuesto para identificarla)
+    const cancelTaskId = `runTask_${taskName}_${taskId}`;
+    TaskTracker.registerTask(cancelTaskId, abortController, {
+      type: "runTask",
+      taskName,
+      params: overrideParams,
+    });
+
+    // Usar withConnection para obtener una conexión y pasarla a executeDynamicSelect
+    return await withConnection("server1", async (connection) => {
+      try {
+        // Ejecutar la consulta pasando la conexión y la señal de cancelación
+        const result = await executeDynamicSelect(
+          taskName,
+          overrideParams,
+          connection,
+          abortController.signal
+        );
+
+        // Completar la tarea de cancelación
+        TaskTracker.completeTask(cancelTaskId, "completed");
+
+        return res.json({
+          success: true,
+          taskId: cancelTaskId, // Devolver el ID para cancelación desde el frontend
+          result,
+        });
+      } catch (error) {
+        // Verificar si fue cancelada
+        if (error.message && error.message.includes("cancelada")) {
+          logger.info(`Tarea ${taskName} cancelada por el usuario`);
+
+          // Completar la tarea de cancelación
+          TaskTracker.completeTask(cancelTaskId, "cancelled");
+
+          return res.status(499).json({
+            // 499 es "Client Closed Request"
+            success: false,
+            message: "Operación cancelada por el usuario",
+          });
+        }
+
+        logger.error(`Error al ejecutar tarea:`, error);
+
+        // Completar la tarea como fallida
+        TaskTracker.completeTask(cancelTaskId, "failed");
+
+        return res.status(500).json({
+          success: false,
+          message: error.message,
+        });
+      }
     });
   } catch (error) {
     logger.error(`Error al ejecutar tarea:`, error);
