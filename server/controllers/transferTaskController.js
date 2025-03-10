@@ -16,6 +16,7 @@ const { realizarTraspaso } = require("../services/traspasoService");
 const { withConnection } = require("../utils/dbUtils");
 const logger = require("../services/logger");
 const TaskTracker = require("../services/TaskTracker");
+const transferService = require("../services/transferService");
 
 /**
  * Obtener todas las tareas de transferencia
@@ -180,7 +181,9 @@ const executeTransferTask = async (req, res) => {
 
     // Ejecutar la transferencia manual
     logger.info(`Iniciando ejecución manual para la tarea: ${taskId}`);
-    const result = await executeTransferManual(taskId);
+    // const result = await executeTransferManual(taskId);
+    // result = await transferService.executeTransfer(task._id);
+    result = await transferService.executeTransferWithRetry(taskId);
 
     if (result && result.success) {
       return res.json({
