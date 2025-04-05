@@ -17,10 +17,12 @@ export const ENV = {
     USERS: "users",
     TRANSFERS: "tasks",
     TRANSFER: "task",
+    TRANSFER_STAST: "stats",
     LOAD: "load",
     CONFIG_TASK: "config",
     EMAIL_RECIPIENTS: "email-recipients",
     SUMMARIES: "summaries",
+    LOGS: "logs", // Nueva ruta para logs
   },
   JWT: {
     ACCESS: "access",

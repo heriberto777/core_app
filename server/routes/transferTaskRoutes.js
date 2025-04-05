@@ -17,6 +17,10 @@ const {
   insertLoadsTrapaso,
   getTaskExecutionHistory,
   cancelTransferTask,
+  getVendedores,
+  getTransferHistory,
+  checkServerStatus,
+  getTransferSummaries,
 } = require("../controllers/transferTaskController");
 
 const router = express.Router();
@@ -74,5 +78,11 @@ router.get("/load/lastLoad", getLoadConsecutiveMongo); //task-history
 router.get("/task-history/:taskId", getTaskExecutionHistory); //task-history
 // En routes/transferRoutes.js
 router.post("/cancel/:taskId", cancelTransferTask);
+
+// En transferTaskRoutes.js
+router.get("/transfer/vendedores", getVendedores);
+router.get("/history/logs", getTransferHistory);
+router.get("/server-status/server", checkServerStatus);
+router.get("/task-summaries/recent", getTransferSummaries);
 
 module.exports = router;

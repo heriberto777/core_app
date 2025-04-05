@@ -210,6 +210,132 @@ class SqlService {
         }
       });
 
+      // MEJORA: Asegurar que los tipos de datos sean compatibles
+      for (const key in sanitizedRecord) {
+        // Conversiones específicas para tipos problemáticos
+        if (sanitizedRecord[key] === "") {
+          sanitizedRecord[key] = null; // Convertir cadenas vacías a NULL
+        }
+
+        // Si hay tipos específicos definidos para esta columna
+        if (columnTypes[key] && columnTypes[key].type) {
+          const colType = columnTypes[key];
+
+          // Manejo específico por tipo
+          if (
+            colType.type === TYPES.Int ||
+            colType.type === TYPES.SmallInt ||
+            colType.type === TYPES.TinyInt ||
+            colType.type === TYPES.BigInt
+          ) {
+            // Conversión segura a número entero
+            if (
+              sanitizedRecord[key] !== null &&
+              sanitizedRecord[key] !== undefined
+            ) {
+              const numValue = Number(sanitizedRecord[key]);
+              sanitizedRecord[key] = isNaN(numValue)
+                ? null
+                : Math.floor(numValue);
+            }
+          } else if (
+            colType.type === TYPES.Float ||
+            colType.type === TYPES.Decimal ||
+            colType.type === TYPES.Money ||
+            colType.type === TYPES.SmallMoney
+          ) {
+            // Conversión segura a número decimal
+            if (
+              sanitizedRecord[key] !== null &&
+              sanitizedRecord[key] !== undefined
+            ) {
+              const numValue = Number(sanitizedRecord[key]);
+              sanitizedRecord[key] = isNaN(numValue) ? null : numValue;
+            }
+          } else if (
+            colType.type === TYPES.DateTime &&
+            sanitizedRecord[key] !== null &&
+            sanitizedRecord[key] !== undefined
+          ) {
+            // Asegurar que las fechas sean válidas
+            try {
+              if (typeof sanitizedRecord[key] === "string") {
+                const date = new Date(sanitizedRecord[key]);
+                if (isNaN(date.getTime())) {
+                  sanitizedRecord[key] = null; // Fecha inválida
+                  logger.warn(
+                    `Fecha inválida convertida a NULL para campo ${key}: ${sanitizedRecord[key]}`
+                  );
+                }
+              }
+            } catch (e) {
+              sanitizedRecord[key] = null;
+              logger.warn(
+                `Error procesando fecha para campo ${key}: ${e.message}`
+              );
+            }
+          } else if (
+            (colType.type === TYPES.NVarChar ||
+              colType.type === TYPES.VarChar ||
+              colType.type === TYPES.Char ||
+              colType.type === TYPES.NChar) &&
+            sanitizedRecord[key] !== null &&
+            sanitizedRecord[key] !== undefined
+          ) {
+            // Asegurar que los strings tengan la longitud correcta
+            if (typeof sanitizedRecord[key] !== "string") {
+              // Convertir a string si no lo es
+              sanitizedRecord[key] = String(sanitizedRecord[key]);
+            }
+
+            // Truncar según maxLength si está definido
+            if (
+              colType.maxLength &&
+              colType.maxLength > 0 &&
+              sanitizedRecord[key].length > colType.maxLength
+            ) {
+              const originalLength = sanitizedRecord[key].length;
+              sanitizedRecord[key] = sanitizedRecord[key].substring(
+                0,
+                colType.maxLength
+              );
+              logger.warn(
+                `Campo ${key} truncado de ${originalLength} a ${colType.maxLength} caracteres`
+              );
+            }
+          } else if (
+            colType.type === TYPES.Bit &&
+            sanitizedRecord[key] !== null &&
+            sanitizedRecord[key] !== undefined
+          ) {
+            // Conversión a booleano
+            if (typeof sanitizedRecord[key] === "string") {
+              const value = sanitizedRecord[key].toLowerCase();
+              if (
+                value === "true" ||
+                value === "1" ||
+                value === "yes" ||
+                value === "s" ||
+                value === "y"
+              ) {
+                sanitizedRecord[key] = true;
+              } else if (
+                value === "false" ||
+                value === "0" ||
+                value === "no" ||
+                value === "n"
+              ) {
+                sanitizedRecord[key] = false;
+              } else {
+                sanitizedRecord[key] = null;
+              }
+            } else if (typeof sanitizedRecord[key] !== "boolean") {
+              sanitizedRecord[key] = Boolean(sanitizedRecord[key]);
+            }
+          }
+        }
+      }
+
       // Preparar la consulta
       const columns = Object.keys(sanitizedRecord)
         .map((k) => `[${k}]`)
@@ -220,19 +346,36 @@ class SqlService {
         .join(", ");
 
       const sql = `
-        INSERT INTO ${tableName} (${columns})
-        VALUES (${paramNames});
-        
-        SELECT @@ROWCOUNT AS rowsAffected;
-      `;
+      INSERT INTO ${tableName} (${columns})
+      VALUES (${paramNames});
+      
+      SELECT @@ROWCOUNT AS rowsAffected;
+    `;
+
+      // MEJORA: Depuración
+      logger.debug(`Consulta de inserción para ${tableName}:`, sql);
+      logger.debug(
+        `Parámetros para inserción en ${tableName}:`,
+        JSON.stringify(sanitizedRecord)
+      );
 
       // Ejecutar la consulta con tipos explícitos
       return await this.query(connection, sql, sanitizedRecord, columnTypes);
     } catch (error) {
+      // MEJORA: Captura detallada de errores
       logger.error(
         `Error en insertWithExplicitTypes para tabla ${tableName}:`,
         error
       );
+      logger.error(`Detalles del error: ${error.message}`);
+
+      if (error.number) {
+        logger.error(`Código de error SQL: ${error.number}`);
+        logger.error(`Estado SQL: ${error.state || "N/A"}`);
+      }
+
+      logger.error(`Registro problemático: ${JSON.stringify(record, null, 2)}`);
+
       throw error;
     }
   }

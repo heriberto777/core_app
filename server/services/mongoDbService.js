@@ -1,5 +1,6 @@
 const mongoose = require("mongoose");
 const logger = require("./logger");
+const serverMonitorService = require("./serverMonitorService");
 
 class MongoDbService {
   static async connect() {
@@ -34,6 +35,7 @@ class MongoDbService {
       });
 
       logger.info("Conexión a MongoDB establecida");
+      serverMonitorService.start();
       return true;
     } catch (error) {
       logger.error("Error al conectar a MongoDB:", error.message);

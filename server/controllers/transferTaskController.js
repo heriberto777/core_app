@@ -17,6 +17,10 @@ const { withConnection } = require("../utils/dbUtils");
 const logger = require("../services/logger");
 const TaskTracker = require("../services/TaskTracker");
 const transferService = require("../services/transferService");
+const { SqlService } = require("../services/SqlService");
+const ConnectionDiagnostic = require("../services/connectionDiagnostic");
+const DBConfig = require("../models/dbConfigModel");
+const { default: mongoose } = require("mongoose");
 
 /**
  * Obtener todas las tareas de transferencia
@@ -73,7 +77,7 @@ const getTransferTask = async (req, res) => {
  */
 const upsertTransferTaskController = async (req, res) => {
   try {
-    // Asegurarse de que req.body contiene los datos esperados
+    // Extraer todos los campos necesarios del req.body
     const {
       name,
       type,
@@ -86,6 +90,9 @@ const upsertTransferTaskController = async (req, res) => {
       postUpdateQuery,
       postUpdateMapping,
       clearBeforeInsert,
+      fieldMapping, // Añadir estos dos
+      nextTasks, // campos
+      _id, // Para manejar ediciones correctamente
     } = req.body;
 
     if (!name || !query) {
@@ -95,6 +102,7 @@ const upsertTransferTaskController = async (req, res) => {
       });
     }
 
+    // Construir el objeto con todos los campos
     const taskData = {
       name,
       type,
@@ -107,7 +115,14 @@ const upsertTransferTaskController = async (req, res) => {
       postUpdateQuery: postUpdateQuery || null,
       postUpdateMapping: postUpdateMapping || {},
       clearBeforeInsert: clearBeforeInsert || false,
+      fieldMapping: fieldMapping || {}, // Añadir estos dos
+      nextTasks: nextTasks || [], // campos
     };
+
+    // Si es una edición, incluir el ID
+    if (_id) {
+      taskData._id = _id;
+    }
 
     // Llamar al servicio
     const result = await upsertTransferTaskService(taskData);
@@ -497,7 +512,7 @@ async function insertOrders(req, res) {
  */
 async function insertLoadsDetail(req, res) {
   try {
-    const { route, loadId, salesData } = req.body;
+    const { route, loadId, salesData, bodega } = req.body;
 
     if (
       !route ||
@@ -521,6 +536,8 @@ async function insertLoadsDetail(req, res) {
       });
     }
 
+    // console.log("Obtiendo datos de la tarea IMPLT_loads_detail", salesData);
+
     // Convertir cada registro al formato requerido
     const modifiedData = salesData.map((record, index) => ({
       Code: loadId,
@@ -528,9 +545,9 @@ async function insertLoadsDetail(req, res) {
       Lot_Group: "9999999999",
       Code_Product: record.Code_Product,
       Date_Load: record.Order_Date,
-      Quantity: record.Quantity,
+      Quantity: record.Quantity.toString(),
       Unit_Type: record.Unit_Measure,
-      Code_Warehouse_Sou: "01",
+      Code_Warehouse_Sou: bodega,
       Code_Route: route,
       Source_Create: null,
       Transfer_status: "1",
@@ -564,10 +581,12 @@ async function insertLoadsDetail(req, res) {
  */
 async function insertLoadsTrapaso(req, res) {
   try {
-    const { route, loadId, salesData } = req.body;
+    const { route, loadId, salesData, bodega_destino } = req.body;
     logger.info("Datos recibidos para traspaso:", {
       route,
-      salesData: salesData ? `${salesData.length} registros` : "no data",
+      salesData: salesData
+        ? `${salesData.length} registros y la bodega destino -> ${bodega_destino}`
+        : "no data",
     });
 
     // Validación básica
@@ -619,6 +638,7 @@ async function insertLoadsTrapaso(req, res) {
       const result = await realizarTraspaso({
         route,
         salesData: validSalesData,
+        bodega_destino,
       });
 
       return res.json({
@@ -784,6 +804,301 @@ const cancelTransferTask = async (req, res) => {
   }
 };
 
+const getVendedores = async (req, res) => {
+  try {
+    return await withConnection("server1", async (connection) => {
+      // Consulta para obtener los vendedores y sus bodegas asignadas
+      const query = `
+        SELECT VENDEDOR, NOMBRE, U_BODEGA
+        FROM CATELLI.VENDEDOR 
+        WHERE ACTIVO = 'S' and U_ESVENDEDOR = 'Re'
+        ORDER BY VENDEDOR
+      `;
+
+      const result = await SqlService.query(connection, query);
+
+      if (!result || !result.recordset) {
+        return res.status(404).json({
+          success: false,
+          message: "No se encontraron vendedores",
+        });
+      }
+
+      return res.json({
+        success: true,
+        data: result.recordset,
+      });
+    });
+  } catch (error) {
+    logger.error("Error al obtener vendedores:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error al obtener vendedores",
+      error: error.message,
+    });
+  }
+};
+
+/**
+ * Obtiene el historial de transferencias con filtros opcionales
+ */
+const getTransferHistory = async (req, res) => {
+  try {
+    const {
+      dateFrom,
+      dateTo,
+      status,
+      taskName,
+      page = 1,
+      limit = 20,
+    } = req.query;
+
+    // Construir consulta con filtros
+    const query = {};
+
+    // Filtro por fecha
+    if (dateFrom || dateTo) {
+      query.date = {};
+      if (dateFrom) query.date.$gte = new Date(dateFrom);
+      if (dateTo) query.date.$lte = new Date(dateTo);
+    }
+
+    // Filtro por estado
+    if (status) {
+      query.status = status;
+    }
+
+    // Filtro por nombre de tarea
+    if (taskName) {
+      // Si usas una relación por nombre en TransferSummary
+      query.taskName = taskName;
+      // O si tienes una referencia por ID
+      // const task = await TransferTask.findOne({ name: taskName });
+      // if (task) query.task = task._id;
+    }
+
+    // Calcular paginación
+    const skip = (parseInt(page) - 1) * parseInt(limit);
+
+    // Obtener historial de TransferSummary
+    const history = await TransferSummary.find(query)
+      .sort({ date: -1 })
+      .skip(skip)
+      .limit(parseInt(limit));
+
+    // Contar total para la paginación
+    const total = await TransferSummary.countDocuments(query);
+
+    // Calcular estadísticas para "hoy"
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const completedToday = await TransferSummary.countDocuments({
+      date: { $gte: today },
+      status: "completed",
+    });
+
+    const failedToday = await TransferSummary.countDocuments({
+      date: { $gte: today },
+      status: "failed",
+    });
+
+    res.status(200).json({
+      success: true,
+      history,
+      pagination: {
+        total,
+        page: parseInt(page),
+        limit: parseInt(limit),
+        pages: Math.ceil(total / parseInt(limit)),
+      },
+      completedToday,
+      failedToday,
+    });
+  } catch (error) {
+    console.error("Error al obtener historial de transferencias:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener historial de transferencias",
+      error: error.message,
+    });
+  }
+};
+
+const checkServerStatus = async (req, res) => {
+  console.log("Checking server status...");
+  try {
+    // Creamos un objeto para la respuesta
+    const serverStatus = {
+      server1: { status: "checking", responseTime: 0 },
+      server2: { status: "checking", responseTime: 0 },
+      mongodb: { status: "checking" },
+    };
+
+    // Verificar MongoDB
+    const isMongoConnected = mongoose.connection.readyState === 1;
+    serverStatus.mongodb.status = isMongoConnected ? "online" : "offline";
+
+    // Verificar Server1
+    try {
+      const startTime = Date.now();
+      // Usar el servicio ConnectionDiagnostic que veo en tus archivos
+      const server1Result = await ConnectionDiagnostic.testDirectConnection(
+        await DBConfig.findOne({ serverName: "server1" })
+      );
+      const endTime = Date.now();
+
+      serverStatus.server1.status = "online";
+      serverStatus.server1.responseTime = endTime - startTime;
+      serverStatus.server1.info = server1Result;
+    } catch (error) {
+      serverStatus.server1.status = "offline";
+      serverStatus.server1.error = error.message;
+    }
+
+    // Verificar Server2
+    try {
+      const startTime = Date.now();
+      const server2Result = await ConnectionDiagnostic.testDirectConnection(
+        await DBConfig.findOne({ serverName: "server2" })
+      );
+      const endTime = Date.now();
+
+      serverStatus.server2.status = "online";
+      serverStatus.server2.responseTime = endTime - startTime;
+      serverStatus.server2.info = server2Result;
+    } catch (error) {
+      serverStatus.server2.status = "offline";
+      serverStatus.server2.error = error.message;
+    }
+
+    // Enviar respuesta
+    res.status(200).json(serverStatus);
+  } catch (error) {
+    logger.error("Error verificando estado de servidores:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error verificando estado de servidores",
+      error: error.message,
+    });
+  }
+};
+
+const getTransferSummaries = async (req, res) => {
+  try {
+    // Obtener resúmenes recientes usando el nuevo modelo TaskExecution
+    const TaskExecution = require("../models/taskExecutionModel");
+
+    // Obtener historial reciente
+    const summaries = await TaskExecution.find().sort({ date: -1 }).limit(20);
+
+    // Calcular estadísticas para hoy (solo la fecha, sin tener en cuenta la hora)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Obtener ejecuciones de hoy usando un rango de fechas completo
+    const completedToday = await TaskExecution.countDocuments({
+      date: { $gte: today, $lt: tomorrow },
+      status: "completed",
+    });
+
+    const failedToday = await TaskExecution.countDocuments({
+      date: { $gte: today, $lt: tomorrow },
+      status: { $in: ["failed", "cancelled"] },
+    });
+
+    // Mapear a formato compatible con el componente de dashboard
+    const formattedSummaries = summaries.map((summary) => {
+      // Opcionalmente, formatear la fecha aquí si es necesario
+      const date = new Date(summary.date);
+      const formattedDate = `${date.getFullYear()}-${String(
+        date.getMonth() + 1
+      ).padStart(2, "0")}-${String(date.getDate()).padStart(2, "0")}`;
+
+      return {
+        name: summary.taskName,
+        taskName: summary.taskName,
+        date: summary.date,
+        formattedDate: formattedDate, // Añadir la fecha formateada
+        status: summary.status,
+        totalRecords: summary.totalRecords || 0,
+        successfulRecords: summary.successfulRecords || 0,
+        failedRecords: summary.failedRecords || 0,
+        executionTime: summary.executionTime || 0,
+      };
+    });
+
+    res.status(200).json({
+      success: true,
+      history: formattedSummaries,
+      completedToday,
+      failedToday,
+    });
+  } catch (error) {
+    logger.error("Error al obtener resúmenes de transferencias:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener resúmenes de transferencias",
+      error: error.message,
+    });
+  }
+};
+
+const getDailyStats = async (req, res) => {
+  try {
+    const TaskExecution = require("../models/taskExecutionModel");
+
+    // Calcular el rango de hoy (toda la fecha, sin tener en cuenta la hora)
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+    const tomorrow = new Date(today);
+    tomorrow.setDate(tomorrow.getDate() + 1);
+
+    // Buscar todas las ejecuciones de hoy
+    const executions = await TaskExecution.find({
+      date: { $gte: today, $lt: tomorrow },
+    }).sort({ date: -1 });
+
+    // Contar por estado
+    const completedToday = executions.filter(
+      (exec) => exec.status === "completed"
+    ).length;
+    const failedToday = executions.filter((exec) =>
+      ["failed", "cancelled"].includes(exec.status)
+    ).length;
+
+    // Formatear las ejecuciones para mostrar
+    const formattedExecutions = executions.map((exec) => ({
+      taskId: exec.taskId,
+      taskName: exec.taskName,
+      date: exec.date,
+      status: exec.status,
+      totalRecords: exec.totalRecords || 0,
+      executionTime: exec.executionTime || 0,
+    }));
+
+    res.status(200).json({
+      success: true,
+      date: today.toISOString().split("T")[0],
+      executions: formattedExecutions,
+      stats: {
+        total: executions.length,
+        completed: completedToday,
+        failed: failedToday,
+      },
+    });
+  } catch (error) {
+    logger.error("Error al obtener estadísticas diarias:", error);
+    res.status(500).json({
+      success: false,
+      message: "Error al obtener estadísticas diarias",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   getTransferTasks,
   getTransferTask,
@@ -800,4 +1115,8 @@ module.exports = {
   insertLoadsTrapaso,
   getTaskExecutionHistory,
   cancelTransferTask,
+  getVendedores,
+  getTransferHistory,
+  checkServerStatus,
+  getTransferSummaries,
 };
