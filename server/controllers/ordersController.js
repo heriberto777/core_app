@@ -1,10 +1,8 @@
-// controllers/ordersController.js
-const TransferSummary = require("../models/transferSummaryModel");
 const { withConnection } = require("../utils/dbUtils");
 const { SqlService } = require("../services/SqlService");
 const logger = require("../services/logger");
 const TransferTask = require("../models/transferTaks");
-const xlsx = require("xlsx");
+// const xlsx = require("xlsx");
 const transferService = require("../services/transferService");
 const TaskExecution = require("../models/taskExecutionModel");
 
@@ -91,7 +89,7 @@ const getOrders = async (req, res) => {
         data: formattedData,
       });
     } catch (error) {
-      logger.error("Error al obtener pedidos:", error);
+      // logger.error("Error al obtener pedidos:", error);
       res.status(500).json({
         success: false,
         message: "Error al obtener pedidos",
@@ -168,10 +166,10 @@ const getOrderDetails = async (req, res) => {
         },
       });
     } catch (error) {
-      logger.error(
-        `Error al obtener detalles del pedido ${req.params.orderId}:`,
-        error
-      );
+      // logger.error(
+      //   `Error al obtener detalles del pedido ${req.params.orderId}:`,
+      //   error
+      // );
       res.status(500).json({
         success: false,
         message: "Error al obtener detalles del pedido",
@@ -218,169 +216,151 @@ const getWarehouses = async (req, res) => {
  * Exporta pedidos a Excel
  */
 const exportOrders = async (req, res) => {
-  return await withConnection("server2", async (connection) => {
-    try {
-      const { orders, filters } = req.body;
-
-      // Construir consulta con filtros
-      let query = `
-        SELECT
-          ENC.COD_CIA,
-          ENC.NUM_PED,
-          ENC.COD_ZON,
-          ENC.COD_CLT,
-          CLI.NOMBRE AS NOM_CLIENTE,
-          ENC.TIP_DOC,
-          ENC.FEC_PED,
-          ENC.MON_IMP_VT,
-          ENC.MON_IMP_CS,
-          ENC.MON_CIV,
-          ENC.MON_SIV,
-          ENC.MON_DSC,
-          ENC.NUM_ITM,
-          ENC.ESTADO,
-          CASE 
-            WHEN ENC.ESTADO = 'P' THEN 'Pendiente'
-            WHEN ENC.ESTADO = 'F' THEN 'Facturado'
-            WHEN ENC.ESTADO = 'A' THEN 'Anulado'
-            ELSE ENC.ESTADO
-          END AS ESTADO_DESC,
-          ENC.COD_BOD,
-          BOD.NOM_BOD,
-          CASE WHEN PROC.IS_PROCESSED IS NULL THEN 'No' ELSE 'Sí' END AS PROCESADO
-        FROM FAC_ENC_PED ENC
-        LEFT JOIN CLIENTES CLI ON ENC.COD_CLT = CLI.COD_CLT
-        LEFT JOIN INV_BODEGAS BOD ON ENC.COD_BOD = BOD.COD_BOD
-        LEFT JOIN (
-          SELECT DISTINCT NUM_PED, 1 AS IS_PROCESSED
-          FROM dbo.PROCESSED_ORDERS
-        ) PROC ON ENC.NUM_PED = PROC.NUM_PED
-        WHERE 1=1
-      `;
-
-      const params = {};
-
-      // Filtrar por lista de pedidos específicos
-      if (orders && Array.isArray(orders) && orders.length > 0) {
-        // Para manejar listas grandes, usar una tabla temporal o construir la consulta dinámicamente
-        const placeholders = orders.map((_, i) => `@orderId${i}`).join(", ");
-        query += ` AND ENC.NUM_PED IN (${placeholders})`;
-
-        orders.forEach((orderId, i) => {
-          params[`orderId${i}`] = orderId;
-        });
-      }
-      // O aplicar los filtros generales
-      else if (filters) {
-        if (filters.dateFrom) {
-          query += " AND ENC.FEC_PED >= @dateFrom";
-          params.dateFrom = new Date(filters.dateFrom);
-        }
-
-        if (filters.dateTo) {
-          query += " AND ENC.FEC_PED <= @dateTo";
-          const endDate = new Date(filters.dateTo);
-          endDate.setHours(23, 59, 59, 999);
-          params.dateTo = endDate;
-        }
-
-        if (filters.status && filters.status !== "all") {
-          query += " AND ENC.ESTADO = @status";
-          params.status = filters.status;
-        }
-
-        if (filters.warehouse && filters.warehouse !== "all") {
-          query += " AND ENC.COD_BOD = @warehouse";
-          params.warehouse = filters.warehouse;
-        }
-
-        if (!filters.showProcessed) {
-          query += " AND PROC.IS_PROCESSED IS NULL";
-        }
-      }
-
-      // Ordenar por fecha descendente
-      query += " ORDER BY ENC.FEC_PED DESC";
-
-      // Ejecutar consulta
-      const result = await SqlService.query(connection, query, params);
-
-      // Si no hay datos, devolver un error
-      if (result.recordset.length === 0) {
-        return res.status(404).json({
-          success: false,
-          message: "No se encontraron pedidos con los criterios especificados",
-        });
-      }
-
-      // Formatear datos para Excel
-      const data = result.recordset.map((row) => ({
-        Número: row.NUM_PED,
-        Cliente: row.COD_CLT,
-        "Nombre Cliente": row.NOM_CLIENTE,
-        Fecha: row.FEC_PED ? new Date(row.FEC_PED).toLocaleDateString() : "",
-        Bodega: row.COD_BOD,
-        "Nombre Bodega": row.NOM_BOD,
-        Estado: row.ESTADO_DESC,
-        Total: row.MON_IMP_VT || 0,
-        Subtotal: row.MON_SIV || 0,
-        Impuestos: row.MON_CIV || 0,
-        Descuento: row.MON_DSC || 0,
-        Ítems: row.NUM_ITM || 0,
-        Procesado: row.PROCESADO,
-      }));
-
-      // Crear libro Excel
-      const wb = xlsx.utils.book_new();
-      const ws = xlsx.utils.json_to_sheet(data);
-
-      // Establecer ancho de columnas
-      const colWidths = [
-        { wch: 15 }, // Número
-        { wch: 15 }, // Cliente
-        { wch: 30 }, // Nombre Cliente
-        { wch: 12 }, // Fecha
-        { wch: 10 }, // Bodega
-        { wch: 20 }, // Nombre Bodega
-        { wch: 12 }, // Estado
-        { wch: 12 }, // Total
-        { wch: 12 }, // Subtotal
-        { wch: 12 }, // Impuestos
-        { wch: 12 }, // Descuento
-        { wch: 8 }, // Ítems
-        { wch: 10 }, // Procesado
-      ];
-      ws["!cols"] = colWidths;
-
-      // Añadir hoja al libro
-      xlsx.utils.book_append_sheet(wb, ws, "Pedidos");
-
-      // Generar buffer
-      const excelBuffer = xlsx.write(wb, { bookType: "xlsx", type: "buffer" });
-
-      // Configurar encabezados para descarga
-      res.setHeader(
-        "Content-Type",
-        "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
-      );
-      res.setHeader(
-        "Content-Disposition",
-        `attachment; filename=Pedidos_${new Date()
-          .toISOString()
-          .slice(0, 10)}.xlsx`
-      );
-
-      // Enviar el archivo
-      res.send(excelBuffer);
-    } catch (error) {
-      logger.error("Error al exportar pedidos:", error);
-      res.status(500).json({
-        success: false,
-        message: "Error al exportar pedidos",
-        error: error.message,
-      });
-    }
-  });
+  // return await withConnection("server2", async (connection) => {
+  //   try {
+  //     const { orders, filters } = req.body;
+  //     // Construir consulta con filtros
+  //     let query = `
+  //       SELECT
+  //         ENC.COD_CIA,
+  //         ENC.NUM_PED,
+  //         ENC.COD_ZON,
+  //         ENC.COD_CLT,
+  //         CLI.NOMBRE AS NOM_CLIENTE,
+  //         ENC.TIP_DOC,
+  //         ENC.FEC_PED,
+  //         ENC.MON_IMP_VT,
+  //         ENC.MON_IMP_CS,
+  //         ENC.MON_CIV,
+  //         ENC.MON_SIV,
+  //         ENC.MON_DSC,
+  //         ENC.NUM_ITM,
+  //         ENC.ESTADO,
+  //         CASE
+  //           WHEN ENC.ESTADO = 'P' THEN 'Pendiente'
+  //           WHEN ENC.ESTADO = 'F' THEN 'Facturado'
+  //           WHEN ENC.ESTADO = 'A' THEN 'Anulado'
+  //           ELSE ENC.ESTADO
+  //         END AS ESTADO_DESC,
+  //         ENC.COD_BOD,
+  //         BOD.NOM_BOD,
+  //         CASE WHEN PROC.IS_PROCESSED IS NULL THEN 'No' ELSE 'Sí' END AS PROCESADO
+  //       FROM FAC_ENC_PED ENC
+  //       LEFT JOIN CLIENTES CLI ON ENC.COD_CLT = CLI.COD_CLT
+  //       LEFT JOIN INV_BODEGAS BOD ON ENC.COD_BOD = BOD.COD_BOD
+  //       LEFT JOIN (
+  //         SELECT DISTINCT NUM_PED, 1 AS IS_PROCESSED
+  //         FROM dbo.PROCESSED_ORDERS
+  //       ) PROC ON ENC.NUM_PED = PROC.NUM_PED
+  //       WHERE 1=1
+  //     `;
+  //     const params = {};
+  //     // Filtrar por lista de pedidos específicos
+  //     if (orders && Array.isArray(orders) && orders.length > 0) {
+  //       // Para manejar listas grandes, usar una tabla temporal o construir la consulta dinámicamente
+  //       const placeholders = orders.map((_, i) => `@orderId${i}`).join(", ");
+  //       query += ` AND ENC.NUM_PED IN (${placeholders})`;
+  //       orders.forEach((orderId, i) => {
+  //         params[`orderId${i}`] = orderId;
+  //       });
+  //     }
+  //     // O aplicar los filtros generales
+  //     else if (filters) {
+  //       if (filters.dateFrom) {
+  //         query += " AND ENC.FEC_PED >= @dateFrom";
+  //         params.dateFrom = new Date(filters.dateFrom);
+  //       }
+  //       if (filters.dateTo) {
+  //         query += " AND ENC.FEC_PED <= @dateTo";
+  //         const endDate = new Date(filters.dateTo);
+  //         endDate.setHours(23, 59, 59, 999);
+  //         params.dateTo = endDate;
+  //       }
+  //       if (filters.status && filters.status !== "all") {
+  //         query += " AND ENC.ESTADO = @status";
+  //         params.status = filters.status;
+  //       }
+  //       if (filters.warehouse && filters.warehouse !== "all") {
+  //         query += " AND ENC.COD_BOD = @warehouse";
+  //         params.warehouse = filters.warehouse;
+  //       }
+  //       if (!filters.showProcessed) {
+  //         query += " AND PROC.IS_PROCESSED IS NULL";
+  //       }
+  //     }
+  //     // Ordenar por fecha descendente
+  //     query += " ORDER BY ENC.FEC_PED DESC";
+  //     // Ejecutar consulta
+  //     const result = await SqlService.query(connection, query, params);
+  //     // Si no hay datos, devolver un error
+  //     if (result.recordset.length === 0) {
+  //       return res.status(404).json({
+  //         success: false,
+  //         message: "No se encontraron pedidos con los criterios especificados",
+  //       });
+  //     }
+  //     // Formatear datos para Excel
+  //     const data = result.recordset.map((row) => ({
+  //       Número: row.NUM_PED,
+  //       Cliente: row.COD_CLT,
+  //       "Nombre Cliente": row.NOM_CLIENTE,
+  //       Fecha: row.FEC_PED ? new Date(row.FEC_PED).toLocaleDateString() : "",
+  //       Bodega: row.COD_BOD,
+  //       "Nombre Bodega": row.NOM_BOD,
+  //       Estado: row.ESTADO_DESC,
+  //       Total: row.MON_IMP_VT || 0,
+  //       Subtotal: row.MON_SIV || 0,
+  //       Impuestos: row.MON_CIV || 0,
+  //       Descuento: row.MON_DSC || 0,
+  //       Ítems: row.NUM_ITM || 0,
+  //       Procesado: row.PROCESADO,
+  //     }));
+  //     // Crear libro Excel
+  //     const wb = xlsx.utils.book_new();
+  //     const ws = xlsx.utils.json_to_sheet(data);
+  //     // Establecer ancho de columnas
+  //     const colWidths = [
+  //       { wch: 15 }, // Número
+  //       { wch: 15 }, // Cliente
+  //       { wch: 30 }, // Nombre Cliente
+  //       { wch: 12 }, // Fecha
+  //       { wch: 10 }, // Bodega
+  //       { wch: 20 }, // Nombre Bodega
+  //       { wch: 12 }, // Estado
+  //       { wch: 12 }, // Total
+  //       { wch: 12 }, // Subtotal
+  //       { wch: 12 }, // Impuestos
+  //       { wch: 12 }, // Descuento
+  //       { wch: 8 }, // Ítems
+  //       { wch: 10 }, // Procesado
+  //     ];
+  //     ws["!cols"] = colWidths;
+  //     // Añadir hoja al libro
+  //     xlsx.utils.book_append_sheet(wb, ws, "Pedidos");
+  //     // Generar buffer
+  //     const excelBuffer = xlsx.write(wb, { bookType: "xlsx", type: "buffer" });
+  //     // Configurar encabezados para descarga
+  //     res.setHeader(
+  //       "Content-Type",
+  //       "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
+  //     );
+  //     res.setHeader(
+  //       "Content-Disposition",
+  //       `attachment; filename=Pedidos_${new Date()
+  //         .toISOString()
+  //         .slice(0, 10)}.xlsx`
+  //     );
+  //     // Enviar el archivo
+  //     res.send(excelBuffer);
+  //   } catch (error) {
+  //     logger.error("Error al exportar pedidos:", error);
+  //     res.status(500).json({
+  //       success: false,
+  //       message: "Error al exportar pedidos",
+  //       error: error.message,
+  //     });
+  //   }
+  // });
 };
 
 /**
