@@ -18,6 +18,7 @@ export * from './components/templates/LoadsResumen';
 export * from './components/templates/LoadsTasks';
 export * from './components/templates/LoginForm';
 export * from './components/templates/LogsPage';
+export * from './components/templates/OrdersVisualization';
 export * from './components/templates/PlanillaBase';
 export * from './components/templates/Statistics';
 export * from './components/templates/TransferHistory';

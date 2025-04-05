@@ -10,6 +10,7 @@ import {
   LoadsResumen,
   Statistics,
   LogsPage,
+  OrdersVisualization,
 } from "../index";
 
 const LoadLayout = ({ Layout, Page }) => {
@@ -108,6 +109,16 @@ export function AdminRouter() {
         element={
           hasAccess(user, ["admin", "dashboard"]) ? (
             <LoadLayout Layout={AdminLayout} Page={LogsPage} />
+          ) : (
+            <Navigate to="/unauthorized" />
+          )
+        }
+      />
+      <Route
+        path="/task/orders"
+        element={
+          hasAccess(user, ["admin", "dashboard"]) ? (
+            <LoadLayout Layout={AdminLayout} Page={OrdersVisualization} />
           ) : (
             <Navigate to="/unauthorized" />
           )
