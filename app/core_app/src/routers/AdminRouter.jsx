@@ -3,11 +3,13 @@ import {
   AdminLayout,
   Auth,
   useAuth,
-  Dashbaord,
+  Dashboard,
   TransferTasks,
   LoadsTasks,
   ControlPlanilla,
   LoadsResumen,
+  Statistics,
+  LogsPage,
 } from "../index";
 
 const LoadLayout = ({ Layout, Page }) => {
@@ -45,7 +47,7 @@ export function AdminRouter() {
         path="/dashboard"
         element={
           hasAccess(user, ["admin", "dashboard"]) ? (
-            <LoadLayout Layout={AdminLayout} Page={Dashbaord} />
+            <LoadLayout Layout={AdminLayout} Page={Dashboard} />
           ) : (
             <Navigate to="/unauthorized" />
           )
@@ -86,6 +88,26 @@ export function AdminRouter() {
         element={
           hasAccess(user, ["admin", "dashboard"]) ? (
             <LoadLayout Layout={AdminLayout} Page={LoadsResumen} />
+          ) : (
+            <Navigate to="/unauthorized" />
+          )
+        }
+      />
+      <Route
+        path="/task/analytics"
+        element={
+          hasAccess(user, ["admin", "dashboard"]) ? (
+            <LoadLayout Layout={AdminLayout} Page={Statistics} />
+          ) : (
+            <Navigate to="/unauthorized" />
+          )
+        }
+      />
+      <Route
+        path="/task/logs"
+        element={
+          hasAccess(user, ["admin", "dashboard"]) ? (
+            <LoadLayout Layout={AdminLayout} Page={LogsPage} />
           ) : (
             <Navigate to="/unauthorized" />
           )

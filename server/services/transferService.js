@@ -12,6 +12,8 @@ const TaskTracker = require("./TaskTracker");
 const RetryService = require("./RetryService");
 const MemoryManager = require("./MemoryManager");
 const Telemetry = require("./Telemetry");
+const TransferSummary = require("../models/transferSummaryModel");
+const TaskExecution = require("../models/taskExecutionModel");
 
 /**
  * Clase que maneja la transferencia de datos entre servidores
@@ -295,15 +297,41 @@ class TransferService {
   }
 
   /**
-   * Implementación modular de la transferencia de datos (Server1 -> Server2)
+   * Implementación modular de la transferencia de datos
    */
   async executeTransfer(taskId, signal) {
     let server1Connection = null;
     let server2Connection = null;
+    let executionId = null; // Para almacenar el ID de ejecución
+    const startTime = Date.now();
 
     try {
       // 1. Preparar la transferencia (validar tarea y setup inicial)
       const taskInfo = await this.prepareTransfer(taskId, signal);
+
+      // Crear un registro de ejecución para esta tarea
+      const taskExecution = new TaskExecution({
+        taskId: taskId,
+        taskName: taskInfo.name,
+        date: new Date(),
+        status: "running",
+      });
+
+      // Guardar y obtener el ID
+      await taskExecution.save();
+      executionId = taskExecution._id;
+
+      logger.info(`Creado registro de ejecución con ID: ${executionId}`);
+
+      // Identificar el tipo de transferencia para el log
+      const transferDirection =
+        taskInfo.transferType === "down"
+          ? "DOWN (Server2 → Server1)"
+          : "UP (Server1 → Server2)";
+
+      logger.info(
+        `📡 Iniciando transferencia ${transferDirection} para tarea ${taskInfo.name}`
+      );
 
       // 2. Establecer conexiones
       const connections = await this.establishConnections(taskInfo, signal);
@@ -323,18 +351,29 @@ class TransferService {
           status: "completed",
           progress: 100,
         });
+
+        // Actualizar el registro de ejecución para indicar que no hubo datos
+        if (executionId) {
+          await TaskExecution.findByIdAndUpdate(executionId, {
+            status: "completed",
+            executionTime: Date.now() - startTime,
+            totalRecords: 0,
+          });
+        }
+
         sendProgress(taskId, 100);
         TaskTracker.completeTask(taskId, "completed");
         return {
           success: true,
           message: "No hay datos para transferir",
           rows: 0,
+          executionId, // Incluir el ID de ejecución en la respuesta
         };
       }
 
       // 5. Preparar procesamiento (limpiar tabla destino si es necesario)
       const prepResult = await this.prepareDestination(
-        connections.server2,
+        connections,
         taskInfo,
         signal
       );
@@ -352,14 +391,27 @@ class TransferService {
       );
 
       // 7. Ejecutar operaciones post-transferencia si corresponde
-      if (taskInfo.postUpdateQuery && result.affectedRecords.length > 0) {
+      if (
+        taskInfo.postUpdateQuery &&
+        result.affectedRecords &&
+        result.affectedRecords.length > 0
+      ) {
+        // Determinar la conexión correcta para post-transferencia
+        const postUpdateConnection =
+          taskInfo.transferType === "down"
+            ? connections.server1 // Para DOWN, la post-transferencia va en server1
+            : connections.server1; // Para otros, siempre en server1
+
         await this.executePostTransferOperations(
-          connections.server1,
+          postUpdateConnection,
           taskInfo,
           result.affectedRecords,
           signal
         );
       }
+
+      // Al final, antes de retornar:
+      const executionTime = Date.now() - startTime;
 
       // 8. Actualizar estado final
       await TransferTask.findByIdAndUpdate(taskId, {
@@ -373,6 +425,26 @@ class TransferService {
           affectedRecords: (result.inserted || 0) + (result.updated || 0),
         },
       });
+
+      // Actualizar el registro de ejecución con el tiempo y estado final
+      if (executionId) {
+        await TaskExecution.findByIdAndUpdate(executionId, {
+          status: "completed",
+          executionTime,
+          totalRecords: data.length,
+          successfulRecords: (result.inserted || 0) + (result.updated || 0),
+          failedRecords:
+            data.length - ((result.inserted || 0) + (result.updated || 0)),
+          details: {
+            inserted: result.inserted || 0,
+            updated: result.updated || 0,
+            duplicates: result.duplicates || 0,
+            initialCount: initialCount,
+            finalCount: result.finalCount || 0,
+          },
+        });
+      }
+
       sendProgress(taskId, 100);
       TaskTracker.completeTask(taskId, "completed");
 
@@ -388,10 +460,11 @@ class TransferService {
         totalDuplicates: result.totalDuplicatesCount,
         initialCount: result.initialCount,
         finalCount: result.finalCount,
+        executionId, // Incluir el ID de ejecución en la respuesta
       };
     } catch (error) {
       // Verificar si el error es por cancelación
-      if (signal.aborted || error.message?.includes("cancelada")) {
+      if ((signal && signal.aborted) || error.message?.includes("cancelada")) {
         logger.info(
           `Tarea ${taskId} cancelada por el usuario durante procesamiento`
         );
@@ -399,11 +472,22 @@ class TransferService {
           status: "cancelled",
           progress: -1,
         });
+
+        // Actualizar el registro de ejecución si existe
+        if (executionId) {
+          await TaskExecution.findByIdAndUpdate(executionId, {
+            status: "cancelled",
+            executionTime: Date.now() - startTime,
+            errorMessage: "Transferencia cancelada por el usuario",
+          });
+        }
+
         sendProgress(taskId, -1);
         TaskTracker.completeTask(taskId, "cancelled");
         return {
           success: false,
           message: "Transferencia cancelada por el usuario",
+          executionId,
         };
       }
 
@@ -414,6 +498,16 @@ class TransferService {
         status: "failed",
         progress: -1,
       });
+
+      // Actualizar el registro de ejecución con información del error
+      if (executionId) {
+        await TaskExecution.findByIdAndUpdate(executionId, {
+          status: "failed",
+          executionTime: Date.now() - startTime,
+          errorMessage: error.message || "Error desconocido",
+        });
+      }
+
       sendProgress(taskId, -1);
       TaskTracker.completeTask(taskId, "failed");
 
@@ -421,6 +515,7 @@ class TransferService {
         success: false,
         message: error.message || "Error durante la transferencia",
         errorDetail: error.stack,
+        executionId,
       };
     } finally {
       // Cerrar las conexiones
@@ -548,18 +643,26 @@ class TransferService {
       // Obtener tipos de columnas para la tabla destino
       let columnTypes = {};
       try {
+        // Determinar el servidor destino según el tipo de transferencia
+        const targetServer =
+          task.transferType === "down" ? server1Connection : server2Connection;
+        const targetTableName =
+          task.transferType === "down" && task.fieldMapping?.targetTable
+            ? task.fieldMapping.targetTable
+            : task.name;
+
         if (typeof SqlService.getColumnTypes === "function") {
           columnTypes = await SqlService.getColumnTypes(
-            server2Connection,
-            task.name
+            targetServer,
+            targetTableName
           );
           logger.debug(
-            `Tipos de columnas obtenidos correctamente para ${task.name}`
+            `Tipos de columnas obtenidos correctamente para ${targetTableName}`
           );
         }
       } catch (typesError) {
         logger.warn(
-          `No se pudieron obtener tipos de columnas para ${task.name}: ${typesError.message}`
+          `No se pudieron obtener tipos de columnas: ${typesError.message}`
         );
       }
 
@@ -581,14 +684,22 @@ class TransferService {
   }
 
   /**
-   * Obtiene los datos origen desde server1
+   * Obtiene los datos origen desde el servidor correcto según el tipo de transferencia
    */
   async fetchSourceData(connections, task, signal) {
     try {
       // Verificar cancelación
       if (signal.aborted) throw new Error("Tarea cancelada por el usuario");
 
-      const { name, query, parameters } = task;
+      const { name, query, parameters, transferType } = task;
+
+      // IMPORTANTE: Determinar de qué servidor leer según el tipo de transferencia
+      const sourceConnection =
+        transferType === "down"
+          ? connections.server2 // Para "down" leer de server2
+          : connections.server1; // Para otros tipos leer de server1
+
+      const sourceServer = transferType === "down" ? "server2" : "server1";
 
       // Construir consulta final con parámetros
       let finalQuery = query;
@@ -626,7 +737,7 @@ class TransferService {
       }
 
       logger.debug(
-        `Ejecutando consulta en Server1 para ${
+        `Ejecutando consulta en ${sourceServer} para ${
           task.name
         }: ${finalQuery.substring(0, 200)}...`
       );
@@ -636,11 +747,18 @@ class TransferService {
 
       // Sanitizar los parámetros antes de la consulta
       const sanitizedParams = SqlService.sanitizeParams(params);
+
+      // MEJORA: Mostrar los parámetros que se están utilizando
+      logger.info(
+        `Parámetros de consulta para ${task.name}:`,
+        JSON.stringify(sanitizedParams)
+      );
+
       const result = await SqlService.query(
-        connections.server1,
+        sourceConnection, // Usar la conexión correcta según el tipo
         finalQuery,
         sanitizedParams,
-        "server1"
+        sourceServer // Pasar el servidor correcto para telemetría
       );
 
       // Registrar tiempo de consulta
@@ -651,8 +769,56 @@ class TransferService {
       Telemetry.updateAverage("avgQueryTime", queryTime);
       Telemetry.trackTransfer("recordsProcessed", result.recordset.length);
 
+      // MEJORA: Agregar depuración detallada sobre los resultados
       logger.info(
-        `Datos obtenidos correctamente para ${task.name}: ${result.recordset.length} registros`
+        `🔍 DATOS OBTENIDOS DE ORIGEN (${sourceServer}): ${result.recordset.length} registros para la tarea ${task.name}`
+      );
+
+      if (result.recordset.length > 0) {
+        logger.info(`📋 MUESTRA DE LOS PRIMEROS 3 REGISTROS:`);
+        for (let i = 0; i < Math.min(3, result.recordset.length); i++) {
+          logger.info(
+            `Registro ${i + 1}:`,
+            JSON.stringify(result.recordset[i])
+          );
+        }
+
+        // Mostrar los nombres de campo en el primer registro
+        if (result.recordset.length > 0) {
+          logger.info(
+            `📊 Campos disponibles en los registros: ${Object.keys(
+              result.recordset[0]
+            ).join(", ")}`
+          );
+        }
+      } else {
+        logger.warn(`⚠️ LA CONSULTA NO DEVOLVIÓ REGISTROS.`);
+        logger.warn(`🔍 Consulta ejecutada: ${finalQuery}`);
+        logger.warn(`🔍 Parámetros: ${JSON.stringify(sanitizedParams)}`);
+
+        // Intenta una consulta simple para verificar la conexión
+        try {
+          const testQuery =
+            transferType === "down" && task.fieldMapping?.sourceTable
+              ? `SELECT TOP 5 * FROM ${task.fieldMapping.sourceTable}`
+              : "SELECT TOP 5 * FROM INFORMATION_SCHEMA.TABLES";
+
+          const testResult = await SqlService.query(
+            sourceConnection,
+            testQuery
+          );
+          logger.info(
+            `✅ Prueba de conexión exitosa en ${sourceServer}. Número de registros de ejemplo: ${testResult.recordset.length}`
+          );
+        } catch (testError) {
+          logger.error(
+            `❌ Error al ejecutar consulta de prueba en ${sourceServer}: ${testError.message}`
+          );
+        }
+      }
+
+      logger.info(
+        `Datos obtenidos correctamente de ${sourceServer} para ${task.name}: ${result.recordset.length} registros`
       );
 
       return {
@@ -666,53 +832,91 @@ class TransferService {
         throw new Error("Transferencia cancelada por el usuario");
       }
 
-      logger.error(`Error en la consulta en Server1:`, error);
-      throw new Error(`Error en la consulta en Server1: ${error.message}`);
+      // MEJORA: Depuración detallada del error
+      logger.error(`❌ Error en la consulta: `, error);
+      logger.error(`🔍 Consulta que causó el error: ${task.query}`);
+
+      if (error.number) {
+        logger.error(`📊 Código de error SQL: ${error.number}`);
+        logger.error(`📊 Estado SQL: ${error.state || "N/A"}`);
+      }
+
+      const sourceServer = task.transferType === "down" ? "server2" : "server1";
+
+      // Intentar una consulta de diagnóstico sencilla
+      try {
+        logger.info(
+          `🔄 Intentando consulta de diagnóstico en ${sourceServer}...`
+        );
+        const diagConnection =
+          task.transferType === "down"
+            ? connections.server2
+            : connections.server1;
+
+        const diagResult = await SqlService.query(
+          diagConnection,
+          "SELECT 1 AS test"
+        );
+        logger.info(
+          `✅ Consulta de diagnóstico exitosa en ${sourceServer}: ${JSON.stringify(
+            diagResult.recordset[0]
+          )}`
+        );
+      } catch (diagError) {
+        logger.error(
+          `❌ Error en consulta de diagnóstico en ${sourceServer}: ${diagError.message}`
+        );
+      }
+
+      throw new Error(
+        `Error en la consulta en ${sourceServer}: ${error.message}`
+      );
     }
   }
 
   /**
-   * Prepara la tabla destino (limpieza si es necesario)
+   * Prepara la tabla destino según el tipo de transferencia
    */
-  async prepareDestination(connection, task, signal) {
+  async prepareDestination(connections, task, signal) {
     // Verificar si la tarea fue cancelada
     if (signal?.aborted) {
       throw new Error("Tarea cancelada por el usuario");
     }
 
-    // Validar que connection es un objeto de conexión válido
-    if (!connection) {
-      logger.error("La conexión es nula en prepareDestination");
-      return {
-        initialCount: 0,
-        success: false,
-        message: "Conexión inválida: es nula",
-      };
-    }
+    // CORREGIDO: Determinar la conexión correcta para el destino
+    const targetConnection =
+      task.transferType === "down"
+        ? connections.server1 // Para "down" la tabla destino está en server1
+        : connections.server2; // Para otros tipos la tabla destino está en server2
 
-    // Verificar que no estamos recibiendo el objeto connections completo por error
-    if (connection.server1 || connection.server2) {
-      logger.error(
-        "Se pasó un objeto connections completo en lugar de una conexión individual"
-      );
-      return {
-        initialCount: 0,
-        success: false,
-        message: "Error de parámetro: se pasó el objeto connections completo",
-      };
-    }
+    const targetServer = task.transferType === "down" ? "server1" : "server2";
 
-    if (typeof connection.execSql !== "function") {
-      logger.error(
-        `La conexión no tiene la función execSql. Tipo: ${typeof connection}, propiedades: ${Object.keys(
-          connection
-        ).join(", ")}`
+    // CORREGIDO: Determinar nombre de tabla destino
+    let targetTableName = `dbo.[${task.name}]`; // Predeterminado
+
+    // Para transferencias DOWN, usar la tabla destino especificada en fieldMapping
+    if (task.transferType === "down" && task.fieldMapping?.targetTable) {
+      const tableNameFromMapping = task.fieldMapping.targetTable;
+
+      // Asegurar formato correcto (añadir dbo. y corchetes si no están)
+      if (!tableNameFromMapping.includes(".")) {
+        targetTableName = `dbo.[${tableNameFromMapping}]`;
+      } else if (!tableNameFromMapping.includes("[")) {
+        // Si tiene esquema pero no corchetes, dividir y reformatear
+        const [schema, table] = tableNameFromMapping.split(".");
+        targetTableName = `${schema}.[${table}]`;
+      } else {
+        // Si ya tiene el formato completo, usar tal cual
+        targetTableName = tableNameFromMapping;
+      }
+
+      logger.info(
+        `Transferencia DOWN: Usando tabla destino "${targetTableName}" en ${targetServer}`
       );
-      return {
-        initialCount: 0,
-        success: false,
-        message: "Conexión inválida: no tiene método execSql",
-      };
+    } else {
+      logger.info(
+        `Usando tabla destino predeterminada: "${targetTableName}" en ${targetServer}`
+      );
     }
 
     // Inicializar variables
@@ -723,19 +927,20 @@ class TransferService {
     if (task.clearBeforeInsert) {
       try {
         logger.info(
-          `🧹 Borrando registros existentes de la tabla ${task.name} antes de insertar`
+          `🧹 Borrando registros existentes de la tabla ${targetTableName} en ${targetServer} antes de insertar`
         );
 
         // Verificar cancelación
         if (signal.aborted) throw new Error("Tarea cancelada por el usuario");
 
+        // CORREGIDO: Usar la conexión correcta según el tipo
         deletedCount = await SqlService.clearTableData(
-          connection,
-          `dbo.[${task.name}]`
+          targetConnection, // Usar la conexión correcta según el tipo
+          targetTableName
         );
 
         logger.info(
-          `✅ Se eliminaron ${deletedCount} registros de la tabla ${task.name}`
+          `✅ Se eliminaron ${deletedCount} registros de la tabla ${targetTableName}`
         );
       } catch (clearError) {
         // Verificar si el error fue por cancelación
@@ -745,7 +950,7 @@ class TransferService {
         }
 
         logger.error(
-          `❌ Error al borrar registros de la tabla ${task.name}:`,
+          `❌ Error al borrar registros de la tabla ${targetTableName}:`,
           clearError
         );
 
@@ -764,14 +969,15 @@ class TransferService {
     try {
       if (signal.aborted) throw new Error("Tarea cancelada por el usuario");
 
+      // CORREGIDO: Usar la conexión y tabla correctas
       const countResult = await SqlService.query(
-        connection,
-        `SELECT COUNT(*) AS total FROM dbo.[${task.name}] WITH (NOLOCK)`
+        targetConnection, // Conexión correcta según tipo
+        `SELECT COUNT(*) AS total FROM ${targetTableName} WITH (NOLOCK)`
       );
 
       initialCount = countResult.recordset[0].total;
       logger.info(
-        `Conteo inicial en tabla ${task.name}: ${initialCount} registros`
+        `Conteo inicial en tabla ${targetTableName}: ${initialCount} registros`
       );
     } catch (countError) {
       // Si hay error en el conteo, continuamos con 0
@@ -808,6 +1014,44 @@ class TransferService {
       throw new Error("No se especificaron claves para identificar registros");
     }
 
+    // CORREGIDO: Determinar la conexión correcta para el destino según el tipo
+    const targetConnection =
+      task.transferType === "down"
+        ? connections.server1 // Para "down" el destino está en server1
+        : connections.server2; // Para otros tipos el destino está en server2
+
+    const targetServer = task.transferType === "down" ? "server1" : "server2";
+
+    // CORREGIDO: Determinar el nombre correcto de la tabla destino según el tipo de transferencia
+    let targetTableName = `dbo.[${name}]`; // Valor predeterminado
+
+    // Para transferencias DOWN, usar la tabla destino especificada en fieldMapping
+    if (
+      task.transferType === "down" &&
+      task.fieldMapping &&
+      task.fieldMapping.targetTable
+    ) {
+      const tableNameFromMapping = task.fieldMapping.targetTable;
+
+      // Asegurar formato correcto (añadir dbo. y corchetes si no están)
+      if (!tableNameFromMapping.includes(".")) {
+        targetTableName = `dbo.[${tableNameFromMapping}]`;
+      } else if (!tableNameFromMapping.includes("[")) {
+        // Si tiene esquema pero no corchetes, dividir y reformatear
+        const [schema, table] = tableNameFromMapping.split(".");
+        targetTableName = `${schema}.[${table}]`;
+      } else {
+        // Si ya tiene el formato completo, usar tal cual
+        targetTableName = tableNameFromMapping;
+      }
+
+      logger.info(
+        `Transferencia DOWN: Usando tabla destino "${targetTableName}" desde mapeo`
+      );
+    } else {
+      logger.info(`Usando tabla destino predeterminada: "${targetTableName}"`);
+    }
+
     // Cache para longitud de columnas
     const columnLengthCache = new Map();
 
@@ -829,13 +1073,15 @@ class TransferService {
           `Obteniendo claves existentes para verificar duplicados...`
         );
 
+        // CORREGIDO: Usar targetTableName y targetConnection
         const keysQuery = `
-          SELECT DISTINCT ${mergeKeys.map((k) => `[${k}]`).join(", ")} 
-          FROM dbo.[${name}] WITH (NOLOCK)
-        `;
+        SELECT DISTINCT ${mergeKeys.map((k) => `[${k}]`).join(", ")} 
+        FROM ${targetTableName} WITH (NOLOCK)
+      `;
 
+        // CORREGIDO: Usar conexión correcta según tipo de transferencia
         const keysResult = await SqlService.query(
-          connections.server2,
+          targetConnection, // Usar conexión correcta según tipo
           keysQuery
         );
 
@@ -881,13 +1127,15 @@ class TransferService {
 
       // Verificar conexión al inicio de cada lote
       try {
-        await SqlService.query(connections.server2, "SELECT 1 AS test");
+        // CORREGIDO: Verificar la conexión destino correcta según tipo
+        await SqlService.query(targetConnection, "SELECT 1 AS test");
       } catch (connError) {
         // Reconectar si es necesario
         logger.warn(`Conexión perdida durante procesamiento, reconectando...`);
 
+        // CORREGIDO: Reconectar al servidor correcto según tipo
         const reconnectResult = await ConnectionManager.enhancedRobustConnect(
-          "server2"
+          targetServer // Servidor correcto según tipo
         );
         if (!reconnectResult.success) {
           throw new Error(
@@ -895,7 +1143,12 @@ class TransferService {
           );
         }
 
-        connections.server2 = reconnectResult.connection;
+        // CORREGIDO: Asignar la nueva conexión al servidor correcto
+        if (targetServer === "server1") {
+          connections.server1 = reconnectResult.connection;
+        } else {
+          connections.server2 = reconnectResult.connection;
+        }
         logger.info(`✅ Reconexión exitosa durante procesamiento`);
       }
 
@@ -925,14 +1178,21 @@ class TransferService {
                 if (columnLengthCache.has(column)) {
                   maxLength = columnLengthCache.get(column);
                 } else {
+                  // CORREGIDO: Extraer solo el nombre de tabla sin esquema y corchetes para la consulta
+                  const tableNameOnly = targetTableName.replace(
+                    /^.*\.|\[|\]/g,
+                    ""
+                  );
+
+                  // CORREGIDO: Usar conexión correcta
                   const lengthQuery = `
-                    SELECT CHARACTER_MAXIMUM_LENGTH 
-                    FROM INFORMATION_SCHEMA.COLUMNS 
-                    WHERE TABLE_NAME = '${name}' 
-                      AND COLUMN_NAME = '${column}'
-                  `;
+                  SELECT CHARACTER_MAXIMUM_LENGTH 
+                  FROM INFORMATION_SCHEMA.COLUMNS 
+                  WHERE TABLE_NAME = '${tableNameOnly}' 
+                    AND COLUMN_NAME = '${column}'
+                `;
                   const lengthResult = await SqlService.query(
-                    connections.server2,
+                    targetConnection, // Conexión correcta según tipo
                     lengthQuery
                   );
                   maxLength =
@@ -952,36 +1212,6 @@ class TransferService {
                 }
               }
             }
-
-            // // Manejo especial para Credit_Limit
-            // if ("Credit_Limit" in validatedRecord) {
-            //   try {
-            //     if (
-            //       validatedRecord.Credit_Limit === undefined ||
-            //       validatedRecord.Credit_Limit === null
-            //     ) {
-            //       validatedRecord.Credit_Limit = null;
-            //     } else if (typeof validatedRecord.Credit_Limit === "string") {
-            //       const cleaned = validatedRecord.Credit_Limit.trim().replace(
-            //         /,/g,
-            //         ""
-            //       );
-            //       if (cleaned === "" || cleaned.toLowerCase() === "null") {
-            //         validatedRecord.Credit_Limit = null;
-            //       } else {
-            //         const number = parseFloat(cleaned);
-            //         validatedRecord.Credit_Limit = !isNaN(number)
-            //           ? number
-            //           : null;
-            //       }
-            //     }
-            //   } catch (creditLimitError) {
-            //     logger.warn(
-            //       `Error al procesar Credit_Limit: ${creditLimitError.message}. Estableciendo como null.`
-            //     );
-            //     validatedRecord.Credit_Limit = null;
-            //   }
-            // }
 
             // Recolectar IDs para post-actualización
             if (task.postUpdateQuery && primaryKeys.length > 0) {
@@ -1031,9 +1261,10 @@ class TransferService {
 
             // Insertar el registro
             try {
+              // CORREGIDO: Usar conexión y tabla correctas
               const insertResult = await SqlService.insertWithExplicitTypes(
-                connections.server2,
-                `dbo.[${name}]`,
+                targetConnection, // Conexión correcta según tipo
+                targetTableName, // Nombre de tabla correcto
                 validatedRecord,
                 connections.columnTypes
               );
@@ -1067,6 +1298,68 @@ class TransferService {
               if (signal.aborted)
                 throw new Error("Tarea cancelada por el usuario");
 
+              // MEJORA: Manejo específico para AggregateError
+              if (
+                insertError.name === "AggregateError" ||
+                (insertError.stack &&
+                  insertError.stack.includes("AggregateError"))
+              ) {
+                logger.error(`Error de conexión o consulta SQL:`, insertError);
+
+                // Intentar reconexión
+                logger.warn(`Intentando reconexión por error de agregación...`);
+
+                // CORREGIDO: Reconectar al servidor correcto
+                const reconnectResult =
+                  await ConnectionManager.enhancedRobustConnect(targetServer);
+                if (!reconnectResult.success) {
+                  throw new Error(
+                    `No se pudo restablecer la conexión tras error: ${
+                      reconnectResult.error?.message || "Error desconocido"
+                    }`
+                  );
+                }
+
+                // CORREGIDO: Asignar la nueva conexión al servidor correcto
+                if (targetServer === "server1") {
+                  connections.server1 = reconnectResult.connection;
+                } else {
+                  connections.server2 = reconnectResult.connection;
+                }
+                logger.info(`✅ Reconexión exitosa tras AggregateError`);
+
+                // Intentar inserción de nuevo
+                logger.info(`Reintentando inserción...`);
+                try {
+                  // CORREGIDO: Usar conexión y tabla correctas
+                  const retryResult = await SqlService.insertWithExplicitTypes(
+                    targetServer === "server1"
+                      ? connections.server1
+                      : connections.server2,
+                    targetTableName,
+                    validatedRecord,
+                    connections.columnTypes
+                  );
+
+                  const rowsAffected = retryResult?.rowsAffected || 0;
+                  if (rowsAffected > 0) {
+                    totalInserted += rowsAffected;
+                    batchInserted += rowsAffected;
+                    logger.info(`Inserción exitosa después de AggregateError`);
+                  }
+                } catch (retryError) {
+                  // Si falla el reintento, lanzar el error original
+                  throw new Error(
+                    `Error durante inserción (reintento): ${
+                      retryError.message || "Error desconocido"
+                    }`
+                  );
+                }
+
+                // Continuar con el siguiente registro
+                continue;
+              }
+
               // Manejar error por clave duplicada
               if (
                 insertError.number === 2627 ||
@@ -1091,6 +1384,29 @@ class TransferService {
                 duplicatedRecords.push(duplicateRecord);
 
                 Telemetry.trackTransfer("recordsDuplicated");
+              }
+              // Manejo específico de errores SQL comunes
+              else if (insertError.number === 515) {
+                logger.error(`Error de campo NOT NULL: ${insertError.message}`);
+                // Identificar qué campo podría ser el problema
+                for (const key in validatedRecord) {
+                  if (validatedRecord[key] === null) {
+                    logger.error(`Posible campo NOT NULL: ${key}`);
+                  }
+                }
+                throw new Error(
+                  `Error: campo obligatorio no puede ser NULL (${insertError.message})`
+                );
+              } else if (insertError.number === 8152) {
+                logger.error(`Error de truncado: ${insertError.message}`);
+                throw new Error(
+                  `Error: valor demasiado largo para alguna columna (${insertError.message})`
+                );
+              } else if (insertError.number === 547) {
+                logger.error(`Error de restricción: ${insertError.message}`);
+                throw new Error(
+                  `Error: violación de restricción CHECK o FOREIGN KEY (${insertError.message})`
+                );
               } else if (
                 insertError.message &&
                 (insertError.message.includes("conexión") ||
@@ -1104,8 +1420,9 @@ class TransferService {
                   `Error de conexión durante inserción, reconectando...`
                 );
 
+                // CORREGIDO: Reconectar al servidor correcto
                 const reconnectResult =
-                  await ConnectionManager.enhancedRobustConnect("server2");
+                  await ConnectionManager.enhancedRobustConnect(targetServer);
 
                 if (!reconnectResult.success) {
                   throw new Error(
@@ -1113,13 +1430,21 @@ class TransferService {
                   );
                 }
 
-                connections.server2 = reconnectResult.connection;
+                // CORREGIDO: Asignar la nueva conexión al servidor correcto
+                if (targetServer === "server1") {
+                  connections.server1 = reconnectResult.connection;
+                } else {
+                  connections.server2 = reconnectResult.connection;
+                }
 
-                // Reintentar la inserción
+                // Reintentar la inserción con la tabla y conexión correctas
                 const retryResult = await SqlService.insertWithExplicitTypes(
-                  connections.server2,
-                  `dbo.[${name}]`,
-                  validatedRecord
+                  targetServer === "server1"
+                    ? connections.server1
+                    : connections.server2,
+                  targetTableName,
+                  validatedRecord,
+                  connections.columnTypes
                 );
 
                 const rowsAffected = retryResult?.rowsAffected || 0;
@@ -1130,10 +1455,10 @@ class TransferService {
                   logger.info(`Inserción exitosa después de reconexión`);
                 }
               } else {
-                // Otros errores
-                logger.error(`Error al insertar registro:`, insertError);
                 throw new Error(
-                  `Error al insertar registro: ${insertError.message}`
+                  `Error al insertar registro: ${
+                    insertError.message || "Error desconocido"
+                  } (ver logs para más detalles)`
                 );
               }
             }
@@ -1167,7 +1492,7 @@ class TransferService {
       // Actualizar progreso con throttling
       const progress = Math.min(
         Math.round(((i + batch.length) / data.length) * 100),
-        99 // Máximo 99% hasta completar todo
+        99
       );
 
       if (progress > lastReportedProgress + 5 || progress >= 99) {
@@ -1181,12 +1506,15 @@ class TransferService {
     // Verificar conteo final
     let finalCount = 0;
     try {
+      // CORREGIDO: Usar conexión y tabla correctas
       const countResult = await SqlService.query(
-        connections.server2,
-        `SELECT COUNT(*) AS total FROM dbo.[${name}] WITH (NOLOCK)`
+        targetConnection, // Conexión correcta
+        `SELECT COUNT(*) AS total FROM ${targetTableName} WITH (NOLOCK)`
       );
       finalCount = countResult.recordset[0].total;
-      logger.info(`Conteo final en tabla ${name}: ${finalCount} registros`);
+      logger.info(
+        `Conteo final en tabla ${targetTableName}: ${finalCount} registros`
+      );
     } catch (countError) {
       logger.warn(`No se pudo verificar conteo final: ${countError.message}`);
     }
@@ -2309,6 +2637,476 @@ class TransferService {
         );
       }
     }
+  }
+
+  /**
+   * Ejecuta una transferencia desde Server2 a Server1 (Down)
+   * @param {String} taskId - ID de la tarea a ejecutar
+   */
+  async executeTransferDown(taskId) {
+    let server1Connection = null;
+    let server2Connection = null;
+
+    try {
+      // 1. Buscar la tarea en la base de datos
+      const task = await TransferTask.findById(taskId);
+      if (!task) {
+        throw new Error(`No se encontró la tarea con ID: ${taskId}`);
+      }
+
+      const transferName = task.name;
+      logger.info(
+        `📌 Encontrada tarea de transferencia DOWN: ${transferName} (${taskId})`
+      );
+
+      if (!task.active) {
+        logger.warn(`⚠️ La tarea ${transferName} está inactiva.`);
+        return { success: false, message: "Tarea inactiva" };
+      }
+
+      // 2. Actualizar estado a running y progreso 0
+      await TransferTask.findByIdAndUpdate(taskId, {
+        status: "running",
+        progress: 0,
+      });
+      sendProgress(taskId, 0);
+
+      // 3. Establecer conexiones a ambos servidores
+      logger.info(`Conectando a Server2 (origen)...`);
+      const server2Result = await ConnectionManager.enhancedRobustConnect(
+        "server2"
+      );
+      if (!server2Result.success) {
+        throw new Error(
+          `No se pudo conectar a Server2: ${
+            server2Result.error?.message || "Error desconocido"
+          }`
+        );
+      }
+      server2Connection = server2Result.connection;
+      logger.info(`Conexión establecida a Server2`);
+
+      logger.info(`Conectando a Server1 (destino)...`);
+      const server1Result = await ConnectionManager.enhancedRobustConnect(
+        "server1"
+      );
+      if (!server1Result.success) {
+        throw new Error(
+          `No se pudo conectar a Server1: ${
+            server1Result.error?.message || "Error desconocido"
+          }`
+        );
+      }
+      server1Connection = server1Result.connection;
+      logger.info(`Conexión establecida a Server1`);
+
+      // 4. Obtener datos desde Server2
+      logger.info(
+        `Obteniendo datos desde Server2 usando la consulta configurada...`
+      );
+
+      // Construir consulta final con parámetros
+      let finalQuery = task.query;
+      const params = {};
+
+      if (task.parameters?.length > 0) {
+        const conditions = [];
+        for (const param of task.parameters) {
+          params[param.field] = param.value;
+
+          if (
+            param.operator === "BETWEEN" &&
+            param.value &&
+            typeof param.value === "object"
+          ) {
+            params[`${param.field}_from`] = param.value.from;
+            params[`${param.field}_to`] = param.value.to;
+            conditions.push(
+              `${param.field} BETWEEN @${param.field}_from AND @${param.field}_to`
+            );
+          } else if (param.operator === "IN" && Array.isArray(param.value)) {
+            const placeholders = param.value.map((val, idx) => {
+              const paramName = `${param.field}_${idx}`;
+              params[paramName] = val;
+              return `@${paramName}`;
+            });
+            conditions.push(`${param.field} IN (${placeholders.join(", ")})`);
+          } else {
+            conditions.push(`${param.field} ${param.operator} @${param.field}`);
+          }
+        }
+
+        finalQuery += ` WHERE ${conditions.join(" AND ")}`;
+      }
+
+      logger.debug(`Consulta final: ${finalQuery}`);
+
+      // Ejecutar consulta en Server2
+      const sanitizedParams = SqlService.sanitizeParams(params);
+      const sourceResult = await SqlService.query(
+        server2Connection,
+        finalQuery,
+        sanitizedParams,
+        "server2"
+      );
+
+      const sourceData = sourceResult.recordset;
+      logger.info(`Obtenidos ${sourceData.length} registros desde Server2`);
+
+      // Si no hay datos, retornar éxito pero sin registros
+      if (sourceData.length === 0) {
+        await TransferTask.findByIdAndUpdate(taskId, {
+          status: "completed",
+          progress: 100,
+          lastExecutionDate: new Date(),
+        });
+        sendProgress(taskId, 100);
+        return {
+          success: true,
+          message: "No hay datos para transferir",
+          rows: 0,
+        };
+      }
+
+      // 5. Aplicar mapeo de campos si está definido
+      let transformedData = sourceData;
+      if (
+        task.fieldMapping &&
+        task.fieldMapping.sourceFields &&
+        task.fieldMapping.targetFields
+      ) {
+        logger.info(`Aplicando mapeo de campos para transferencia DOWN...`);
+        transformedData = this.mapFields(sourceData, task.fieldMapping);
+        logger.info(
+          `Datos transformados según mapeo: ${transformedData.length} registros`
+        );
+      } else {
+        logger.warn(
+          `No se encontró configuración de mapeo para transferencia DOWN. Se usarán los datos sin transformar.`
+        );
+      }
+
+      // 6. Preparar tabla destino (limpiar si es necesario)
+      if (task.clearBeforeInsert) {
+        logger.info(
+          `🧹 Limpiando tabla destino antes de insertar en Server1: ${task.name}`
+        );
+        const deleteResult = await SqlService.clearTableData(
+          server1Connection,
+          `dbo.[${task.name}]`
+        );
+        logger.info(
+          `Se eliminaron ${deleteResult} registros de la tabla destino`
+        );
+      }
+
+      // 7. Insertar datos en Server1
+      logger.info(
+        `Comenzando inserción de ${transformedData.length} registros en Server1...`
+      );
+
+      // Variables para seguimiento
+      let insertedCount = 0;
+      let errorCount = 0;
+      let duplicateCount = 0;
+      const batchSize = 100;
+
+      // Actualizar progreso al 20%
+      await TransferTask.findByIdAndUpdate(taskId, { progress: 20 });
+      sendProgress(taskId, 20);
+
+      // Procesar por lotes
+      for (let i = 0; i < transformedData.length; i += batchSize) {
+        // Verificar si la tarea fue cancelada
+        const currentTask = await TransferTask.findById(taskId);
+        if (currentTask.status === "pending") {
+          logger.info(`Tarea ${taskId} cancelada durante procesamiento`);
+          throw new Error("Tarea cancelada por el usuario");
+        }
+
+        const batch = transformedData.slice(i, i + batchSize);
+
+        // Calcular progreso: 20% inicial + hasta 80% restante proporcional
+        const progress = Math.min(
+          20 + Math.round((i / transformedData.length) * 80),
+          99
+        );
+        await TransferTask.findByIdAndUpdate(taskId, { progress });
+        sendProgress(taskId, progress);
+
+        logger.info(
+          `Procesando lote ${Math.floor(i / batchSize) + 1}/${Math.ceil(
+            transformedData.length / batchSize
+          )} (${batch.length} registros)`
+        );
+
+        // Procesar registros del lote
+        for (const record of batch) {
+          try {
+            // Insertar en tabla destino
+            const insertResult = await SqlService.insertWithExplicitTypes(
+              server1Connection,
+              `dbo.[${task.name}]`,
+              record
+            );
+
+            if (insertResult && insertResult.rowsAffected) {
+              insertedCount += insertResult.rowsAffected;
+            }
+          } catch (insertError) {
+            // Verificar si es error de duplicado
+            if (
+              insertError.number === 2627 ||
+              insertError.number === 2601 ||
+              (insertError.message &&
+                (insertError.message.includes("PRIMARY KEY") ||
+                  insertError.message.includes("UNIQUE KEY") ||
+                  insertError.message.includes("duplicate key")))
+            ) {
+              duplicateCount++;
+              logger.debug(`Registro duplicado: ${JSON.stringify(record)}`);
+            } else {
+              errorCount++;
+              logger.error(
+                `Error al insertar registro: ${insertError.message}`
+              );
+              // En caso de error crítico que no sea de duplicados, detener el proceso
+              if (
+                insertError.message &&
+                (insertError.message.includes("conexión") ||
+                  insertError.message.includes("connection") ||
+                  insertError.message.includes("timeout"))
+              ) {
+                throw insertError;
+              }
+            }
+          }
+        }
+      }
+
+      // 8. Actualizar estado final
+      await TransferTask.findByIdAndUpdate(taskId, {
+        status: "completed",
+        progress: 100,
+        lastExecutionDate: new Date(),
+        $inc: { executionCount: 1 },
+        lastExecutionResult: {
+          success: true,
+          message: "Transferencia DOWN completada",
+          affectedRecords: insertedCount,
+        },
+      });
+      sendProgress(taskId, 100);
+
+      logger.info(
+        `✅ Transferencia DOWN completada para ${task.name}: ${insertedCount} registros insertados, ${duplicateCount} duplicados, ${errorCount} errores`
+      );
+
+      // 9. Ejecutar tareas encadenadas si existen
+      if (task.nextTasks && task.nextTasks.length > 0) {
+        logger.info(
+          `Iniciando ejecución de ${task.nextTasks.length} tareas encadenadas...`
+        );
+
+        const chainResults = [];
+
+        // Ejecutar cada tarea encadenada en secuencia
+        for (const nextTaskId of task.nextTasks) {
+          try {
+            // Verificar si la tarea está activa
+            const nextTask = await TransferTask.findById(nextTaskId);
+            if (!nextTask) {
+              logger.warn(
+                `La tarea encadenada con ID ${nextTaskId} no existe. Omitiendo.`
+              );
+              chainResults.push({
+                taskId: nextTaskId,
+                success: false,
+                message: "La tarea no existe",
+              });
+              continue;
+            }
+
+            if (!nextTask.active) {
+              logger.warn(
+                `La tarea encadenada ${nextTask.name} (${nextTaskId}) no está activa. Omitiendo.`
+              );
+              chainResults.push({
+                taskId: nextTaskId,
+                taskName: nextTask.name,
+                success: false,
+                message: "La tarea no está activa",
+              });
+              continue;
+            }
+
+            logger.info(
+              `Ejecutando tarea encadenada: ${nextTask.name} (${nextTaskId})`
+            );
+
+            // Ejecutar la tarea encadenada según su tipo
+            let chainResult;
+            if (nextTask.transferType === "down") {
+              chainResult = await this.executeTransferDown(nextTaskId);
+            } else if (nextTask.transferType === "up") {
+              chainResult = await this.executeTransferUp(nextTaskId);
+            } else {
+              chainResult = await this.executeTransfer(nextTaskId);
+            }
+
+            logger.info(
+              `Tarea encadenada ${nextTask.name} completada: ${
+                chainResult.success ? "Éxito" : "Error"
+              }`
+            );
+
+            // Agregar resultado a la lista
+            chainResults.push({
+              taskId: nextTaskId,
+              taskName: nextTask.name,
+              success: chainResult.success,
+              message: chainResult.message,
+              rows: chainResult.rows || 0,
+              inserted: chainResult.inserted || 0,
+            });
+          } catch (chainError) {
+            logger.error(
+              `Error al ejecutar tarea encadenada ${nextTaskId}: ${chainError.message}`
+            );
+
+            // Registrar el error
+            chainResults.push({
+              taskId: nextTaskId,
+              success: false,
+              error: chainError.message,
+            });
+          }
+        }
+
+        logger.info(
+          `Ejecución de tareas encadenadas completada para ${task.name}`
+        );
+
+        // Incluir resultados de las tareas encadenadas en la respuesta
+        return {
+          success: true,
+          message: "Transferencia DOWN y tareas encadenadas completadas",
+          rows: sourceData.length,
+          inserted: insertedCount,
+          duplicates: duplicateCount,
+          errors: errorCount,
+          chainResults: chainResults,
+        };
+      }
+
+      // Respuesta sin tareas encadenadas
+      return {
+        success: true,
+        message: "Transferencia DOWN completada con éxito",
+        rows: sourceData.length,
+        inserted: insertedCount,
+        duplicates: duplicateCount,
+        errors: errorCount,
+      };
+    } catch (error) {
+      logger.error(`❌ Error en transferencia DOWN: ${error.message}`);
+
+      // Actualizar estado a error
+      await TransferTask.findByIdAndUpdate(taskId, {
+        status: "error",
+        progress: -1,
+        lastExecutionResult: {
+          success: false,
+          message: error.message || "Error desconocido",
+        },
+      });
+      sendProgress(taskId, -1);
+
+      return {
+        success: false,
+        message: error.message || "Error en la transferencia DOWN",
+        errorDetail: error.stack,
+      };
+    } finally {
+      // Liberar conexiones
+      if (server1Connection) {
+        try {
+          await ConnectionManager.releaseConnection(server1Connection);
+        } catch (e) {
+          logger.error(`Error al liberar conexión Server1: ${e.message}`);
+        }
+      }
+
+      if (server2Connection) {
+        try {
+          await ConnectionManager.releaseConnection(server2Connection);
+        } catch (e) {
+          logger.error(`Error al liberar conexión Server2: ${e.message}`);
+        }
+      }
+    }
+  }
+
+  /**
+   * Aplica el mapeo de campos configurado
+   * @param {Array} sourceData - Datos originales de server2
+   * @param {Object} fieldMapping - Configuración de mapeo
+   * @returns {Array} - Datos transformados
+   */
+  mapFields(sourceData, fieldMapping) {
+    const { sourceFields, targetFields, defaultValues = [] } = fieldMapping;
+
+    // Verificar que ambos arrays tienen la misma longitud
+    if (
+      !Array.isArray(sourceFields) ||
+      !Array.isArray(targetFields) ||
+      sourceFields.length !== targetFields.length
+    ) {
+      throw new Error(
+        "Configuración de mapeo inválida: los arrays de campos origen y destino deben tener la misma longitud"
+      );
+    }
+
+    // Crear una tabla de correspondencia para fácil acceso
+    const fieldMap = {};
+    for (let i = 0; i < sourceFields.length; i++) {
+      fieldMap[sourceFields[i]] = targetFields[i];
+    }
+
+    // Crear un mapa para valores predeterminados
+    const defaultsMap = {};
+    for (const def of defaultValues) {
+      defaultsMap[def.field] = def.value;
+    }
+
+    return sourceData.map((record) => {
+      // Crear objeto transformado
+      const transformedRecord = {};
+
+      // Aplicar mapeo simple de campos
+      for (const sourceField in fieldMap) {
+        const targetField = fieldMap[sourceField];
+
+        // Si el campo existe en el registro origen, copiarlo
+        if (sourceField in record) {
+          transformedRecord[targetField] = record[sourceField];
+        }
+      }
+
+      // Aplicar valores por defecto
+      for (const field in defaultsMap) {
+        // Aplicar el valor por defecto solo si el campo no tiene valor
+        if (
+          !(field in transformedRecord) ||
+          transformedRecord[field] === null ||
+          transformedRecord[field] === undefined
+        ) {
+          transformedRecord[field] = defaultsMap[field];
+        }
+      }
+
+      return transformedRecord;
+    });
   }
 }
 

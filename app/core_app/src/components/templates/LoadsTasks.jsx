@@ -1,6 +1,6 @@
 import styled from "styled-components";
 import { Header, TransferApi, useAuth, useFetchData } from "../../index";
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import Swal from "sweetalert2";
 import { FaPlay, FaSync, FaList, FaTable, FaHistory } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
@@ -13,6 +13,8 @@ export function LoadsTasks() {
   const { accessToken, user } = useAuth();
   const [viewMode, setViewMode] = useState("cards"); // "cards", "list", "table"
   const [selectedTask, setSelectedTask] = useState(null);
+  const [vendedores, setVendedores] = useState([]);
+  const [loadingVendedores, setLoadingVendedores] = useState(false);
 
   const navigate = useNavigate();
 
@@ -23,6 +25,28 @@ export function LoadsTasks() {
     error,
     refetch: fetchTasks,
   } = useFetchData(() => cnnApi.getTasks(accessToken), [accessToken], false, 0);
+
+  // Función para cargar los vendedores
+  const fetchVendedores = async () => {
+    try {
+      setLoadingVendedores(true);
+      const response = await cnnApi.getVendedores(accessToken);
+      if (response && response.success) {
+        setVendedores(response.data || []);
+      }
+    } catch (error) {
+      console.error("Error al cargar vendedores:", error);
+    } finally {
+      setLoadingVendedores(false);
+    }
+  };
+
+  // Cargar vendedores al iniciar el componente
+  useEffect(() => {
+    if (accessToken) {
+      fetchVendedores();
+    }
+  }, [accessToken]);
 
   // Aquí forzamos que siempre cumplan executionMode = "batchesSSE"
   const filteredTasks = tasks.filter((task) => {
@@ -43,6 +67,7 @@ export function LoadsTasks() {
     let salesData = []; // Aquí guardaremos las ventas obtenidas
     let loadId = ""; // ID del load que obtengamos
     let route = ""; // Route/Repartidor
+    let bodega = ""; // Bodega asignada al vendedor
 
     // ──────────────────────────────────────────────────────────────────────────
     //  PASO 0: Obtener el loadId antes de todo (con loading)
@@ -75,6 +100,26 @@ export function LoadsTasks() {
     }
 
     console.log("loadId obtenido:", loadId);
+
+    // Cargar vendedores si no los hemos cargado ya
+    if (vendedores.length === 0) {
+      try {
+        Swal.fire({
+          title: "Obteniendo vendedores...",
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading();
+          },
+        });
+        await fetchVendedores();
+        Swal.close();
+      } catch (error) {
+        console.error("Error al cargar vendedores:", error);
+        Swal.close();
+        Swal.fire("Error", "No se pudieron cargar los vendedores", "error");
+        // Continuar de todos modos con la lista vacía
+      }
+    }
 
     // ──────────────────────────────────────────────────────────────────────────
     //  PASO 1: Obtener las ventas (fecha, vendedores) en la misma ventana
@@ -139,7 +184,6 @@ export function LoadsTasks() {
                 vendors,
                 taskId
               );
-              // Ej: /api/transfer/runTask/LoadSales con overrideParams {Fecha, Vendedor}, etc.
 
               if (!response.success) {
                 throw new Error("Error al obtener las ventas");
@@ -147,8 +191,6 @@ export function LoadsTasks() {
 
               salesData = response.result; // suponer que 'result' es un array con las ventas
               Swal.hideLoading();
-
-              console.log("Ventas obtenidas:", salesData);
 
               // Mostramos resumen
               salesSummary.innerHTML = `
@@ -254,12 +296,35 @@ export function LoadsTasks() {
     //  PASO 3: Parámetros para cargar el load (route/repartidor)
     // ──────────────────────────────────────────────────────────────────────────
     await new Promise((resolve, reject) => {
+      // Generar las opciones para el select
+      const vendedoresOptions = vendedores
+        .map(
+          (vend) =>
+            `<option value="${vend.VENDEDOR}" data-bodega="${
+              vend.U_BODEGA || "02"
+            }">${vend.VENDEDOR} - ${vend.NOMBRE || "Sin nombre"}</option>`
+        )
+        .join("");
+
       Swal.fire({
         title: "Parámetros para cargar camiones",
         html: `
         <div style="text-align:left;">
-          <label>Repartidor / Code Route:</label>
-          <input id="swal-input-route" class="swal2-input" placeholder="Ej: RUTA01" />
+          <label>Selecciona Repartidor / Code Route:</label>
+          <select id="swal-select-route" class="swal2-select" style="width:100%; margin-bottom:10px;">
+            <option value="">-- Selecciona un vendedor --</option>
+            ${vendedoresOptions}
+          </select>
+          
+          <div>
+            <label>Código de Vendedor:</label>
+            <input id="swal-input-route" class="swal2-input" readonly />
+          </div>
+          
+          <div>
+            <label>Bodega Asignada:</label>
+            <input id="swal-input-bodega" class="swal2-input" readonly />
+          </div>
 
           <div style="margin-top:10px;">
             <button id="btnSiguienteLoad" class="swal2-confirm swal2-styled" style="background-color: #28a745; margin-right:10px;" disabled>
@@ -277,25 +342,40 @@ export function LoadsTasks() {
         allowEscapeKey: false,
 
         didOpen: async () => {
+          const selectRoute = document.getElementById("swal-select-route");
           const inputRoute = document.getElementById("swal-input-route");
+          const inputBodega = document.getElementById("swal-input-bodega");
           const btnSiguienteLoad = document.getElementById("btnSiguienteLoad");
           const btnCancelarLoad = document.getElementById("btnCancelarLoad");
 
-          // (Ya tenemos loadId, no hace falta volver a pedirlo)
+          // Manejar la selección del vendedor
+          selectRoute.addEventListener("change", () => {
+            const selectedOption =
+              selectRoute.options[selectRoute.selectedIndex];
+            if (selectedOption.value) {
+              route = selectedOption.value;
+              bodega = selectedOption.getAttribute("data-bodega") || "02";
 
-          // Habilitar "Siguiente" cuando se ingrese la ruta
-          inputRoute.addEventListener("input", () => {
-            btnSiguienteLoad.disabled = !inputRoute.value.trim();
+              inputRoute.value = route;
+              inputBodega.value = bodega;
+
+              btnSiguienteLoad.disabled = false;
+            } else {
+              route = "";
+              bodega = "";
+              inputRoute.value = "";
+              inputBodega.value = "";
+              btnSiguienteLoad.disabled = true;
+            }
           });
 
           btnSiguienteLoad.addEventListener("click", () => {
-            if (!inputRoute.value.trim()) {
-              Swal.showValidationMessage("Debes ingresar la ruta");
+            if (!route) {
+              Swal.showValidationMessage("Debes seleccionar un vendedor");
               return;
             }
-            route = inputRoute.value.trim();
             Swal.close();
-            resolve(true);
+            resolve({ route, bodega });
           });
 
           btnCancelarLoad.addEventListener("click", () => {
@@ -304,7 +384,15 @@ export function LoadsTasks() {
           });
         },
       });
-    });
+    })
+      .then(({ route, bodega }) => {
+        // Guardar la información seleccionada para usarla después
+        console.log(`Vendedor seleccionado: ${route}, Bodega: ${bodega}`);
+      })
+      .catch((error) => {
+        console.log("Operación cancelada por el usuario:", error);
+        throw new Error("Operación cancelada");
+      });
 
     // ──────────────────────────────────────────────────────────────────────────
     //  PASO 4: Insertar en IMPLT_loads_detail
@@ -324,7 +412,8 @@ export function LoadsTasks() {
           accessToken,
           route,
           loadId,
-          salesData
+          salesData,
+          bodega
         );
         if (!response.success) {
           throw new Error("Error al insertar en IMPLT_loads_detail");
@@ -376,12 +465,16 @@ export function LoadsTasks() {
     });
 
     try {
-      // Enviar salesData, route y loadId (para Code, etc.)
+      console.log(
+        `Seleccionado vendedor y bodega : ${route}, Bodega: ${bodega}`
+      );
+      // Enviar salesData, route, bodega y loadId (para Code, etc.)
       const response = await cnnApi.executeInsertTrapaso(
         accessToken,
         route,
         loadId,
-        salesData
+        salesData,
+        bodega
       );
       if (!response.success) {
         throw new Error("Error al insertar el TRAPASO");

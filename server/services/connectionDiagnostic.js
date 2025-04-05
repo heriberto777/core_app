@@ -34,7 +34,8 @@ class ConnectionDiagnostic {
         status: "running",
       });
 
-      const mongoConnected = MongoDbService.isConnected();
+      // const mongoConnected = MongoDbService.isConnected();
+      const mongoConnected = mongoose.connection.readyState === 1;
 
       if (!mongoConnected) {
         logger.info("MongoDB no está conectado, intentando conectar...");
@@ -417,7 +418,7 @@ class ConnectionDiagnostic {
 
     try {
       // Comprobar MongoDB
-      results.mongodb.connected = MongoDbService.isConnected();
+      results.mongodb.connected = mongoose.connection.readyState === 1;
 
       if (!results.mongodb.connected) {
         const connected = await MongoDbService.connect();

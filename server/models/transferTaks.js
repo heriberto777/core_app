@@ -100,6 +100,39 @@ const transferTaskSchema = new mongoose.Schema(
       message: String,
       affectedRecords: Number,
     },
+    // NUEVO CAMPO: Mapeo de campos para transferencias "down"
+    fieldMapping: {
+      sourceTable: { type: String }, // Tabla origen en server2
+      targetTable: { type: String }, // Tabla destino en server1
+      sourceFields: [String], // Campos en la tabla origen (server2)
+      targetFields: [String], // Campos correspondientes en la tabla destino (server1)
+      defaultValues: [
+        {
+          // Valores por defecto para campos
+          field: String,
+          value: mongoose.Schema.Types.Mixed,
+        },
+      ],
+      // Mantén las transformaciones existentes
+      transformations: [
+        {
+          sourceField: String,
+          targetField: String,
+          transformationType: {
+            type: String,
+            enum: ["split", "join", "default", "custom"],
+            default: "custom",
+          },
+          transformationParams: mongoose.Schema.Types.Mixed,
+        },
+      ],
+    },
+    nextTasks: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "TransferTask",
+      },
+    ],
   },
   {
     timestamps: true,

@@ -92,7 +92,7 @@ async function obtenerDetalleProductos(connection, productos) {
  *    - salesData: (Array) Datos de ventas (cada registro debe tener Code_Product y Quantity).
  * @returns {Object} Resultado con la información del documento generado.
  */
-async function traspasoBodega({ route, salesData }) {
+async function traspasoBodega({ route, salesData, bodega_destino = "02" }) {
   let detalleProductos = [];
   let pdfPath = null;
 
@@ -116,6 +116,13 @@ async function traspasoBodega({ route, salesData }) {
       throw new Error("No hay productos válidos en los datos de ventas");
     }
 
+    // Extraer la bodega origen del primer item
+    const bodegaOrigen = productosValidos[0].bodega || "02"; // Valor por defecto "01" si no viene
+
+    logger.info(
+      `Extraída bodega origen: ${bodegaOrigen} de los datos de ventas`
+    );
+
     // 1. Agrupar salesData por producto
     const aggregated = {};
     for (const sale of productosValidos) {
@@ -138,7 +145,9 @@ async function traspasoBodega({ route, salesData }) {
       );
     }
 
-    logger.info(`Procesando traspaso con ${aggregatedSales.length} productos`);
+    logger.info(
+      `Procesando traspaso con ${aggregatedSales.length} productos, bodega origen: ${bodegaOrigen}, bodega destino: ${bodega_destino}`
+    );
 
     // Usar el patrón withConnection para el acceso a la base de datos
     return await withConnection("server1", async (connection) => {
@@ -240,7 +249,6 @@ async function traspasoBodega({ route, salesData }) {
         );
 
         // 9. Insertar las líneas en LINEA_DOC_INV una por una
-        const bodega_origen = "01";
         let successCount = 0;
         let failedCount = 0;
 
@@ -272,8 +280,8 @@ async function traspasoBodega({ route, salesData }) {
               linea: lineNumber,
               ajuste: "~TT~",
               articulo: detail.Code_Product,
-              bodega: bodega_origen,
-              bodegaDestino: "02",
+              bodega: bodegaOrigen, // Usamos la bodega origen extraída de los datos
+              bodega_destino: bodega_destino, // Usamos la bodega destino pasada como parámetro
               tipo: "T",
               subtipo: "D",
               subsubtipo: "",
@@ -343,6 +351,8 @@ async function traspasoBodega({ route, salesData }) {
           lineasFallidas: failedCount,
           detalleProductos,
           route,
+          bodegaOrigen, // Incluir la bodega origen en el resultado
+          bodega_destino, // Incluir la bodega destino en el resultado
         };
 
         // Save transfer summary for tracking and returns
@@ -367,6 +377,8 @@ async function traspasoBodega({ route, salesData }) {
               0
             ),
             createdBy: "SA", // Default user or get from request if available
+            bodegaOrigen, // Incluir la bodega origen
+            bodega_destino, // Incluir la bodega destino
           });
 
           logger.info("Resumen de traspaso:", summary);
@@ -427,6 +439,8 @@ async function traspasoBodega({ route, salesData }) {
       lineasFallidas: detalleProductos.length,
       detalleProductos,
       route,
+      bodegaOrigen: bodegaOrigen || "01", // Incluir la bodega origen
+      bodega_destino, // Incluir la bodega destino
     };
 
     // Intentar generar PDF del error
@@ -468,11 +482,12 @@ async function traspasoBodega({ route, salesData }) {
  * Método alternativo para realizar traspasos
  * Usa SQL directo sin parámetros para evitar problemas de validación
  */
-async function realizarTraspaso({ route, salesData }) {
+
+async function realizarTraspaso({ route, salesData, bodega_destino }) {
   let detalleProductos = [];
   let pdfPath = null;
 
-  logger.info("Iniciando realizar traspaso de bodega... ");
+  logger.info(`Iniciando realizar traspaso de bodega ${bodega_destino} `);
 
   try {
     // 1. Validar datos de entrada - filtrar productos válidos
@@ -496,6 +511,9 @@ async function realizarTraspaso({ route, salesData }) {
 
     // 2. Agrupar productos
     const productos = {};
+    // Extraer la bodega origen del primer item (asumiendo que todos tienen la misma)
+    const bodegaOrigen = productosValidos[0].bodega || "02"; // Valor por defecto "01" si no viene
+
     for (const item of productosValidos) {
       const codigo = item.Code_Product.trim();
       const cantidad = Math.max(0, Number(item.Quantity) || 0);
@@ -520,7 +538,7 @@ async function realizarTraspaso({ route, salesData }) {
     }
 
     logger.info(
-      `Iniciando traspaso de bodega para ruta ${route} con ${productosArray.length} productos`
+      `Iniciando traspaso de bodega para ruta ${route} con ${productosArray.length} productos. Bodega origen: ${bodegaOrigen}, Bodega destino: ${bodega_destino}`
     );
 
     // Usar el nuevo patrón de conexión
@@ -530,6 +548,10 @@ async function realizarTraspaso({ route, salesData }) {
         detalleProductos = await obtenerDetalleProductos(
           connection,
           productosArray
+        );
+
+        logger.info(
+          `Dentro del traspaso de bodega para ruta ${route} con ${productosArray.length} productos. Bodega origen: ${bodegaOrigen}, Bodega destino: ${bodega_destino}`
         );
 
         // 5. Obtener el consecutivo actual con SQL directo
@@ -630,8 +652,8 @@ async function realizarTraspaso({ route, salesData }) {
               linea: lineaNumero,
               ajuste: "~TT~",
               articulo: producto.codigo,
-              bodega: "01",
-              bodega_destino: "02",
+              bodega: bodegaOrigen, // Bodega origen desde los datos
+              bodega_destino: bodega_destino, // Bodega destino parametrizada
               cantidad: producto.cantidad,
               tipo: "T",
               subtipo: "D",
@@ -696,7 +718,7 @@ async function realizarTraspaso({ route, salesData }) {
                    COSTO_TOTAL_LOCAL_COMP, COSTO_TOTAL_DOLAR_COMP, CAI, TIPO_OPERACION, TIPO_PAGO, LOCALIZACION)
                 VALUES 
                   ('CS', '${nuevoConsecutivo}', ${lineaNumero}, '~TT~', '${codigoProducto}', 
-                   '01', '02', ${producto.cantidad}, 'T', 'D', '', 
+                   '${bodegaOrigen}', '${bodega_destino}', ${producto.cantidad}, 'T', 'D', '', 
                    0, 0, 0, 0, 
                    'ND', '00-00-00', '', 'UND', '100-01-05-99-00', 
                    0, 0, '', '11', 'ND', 'ND')
@@ -733,6 +755,8 @@ async function realizarTraspaso({ route, salesData }) {
           lineasFallidas,
           detalleProductos,
           route,
+          bodegaOrigen,
+          bodega_destino,
         };
         logger.info("Resultado final:", resultado);
 
@@ -766,6 +790,8 @@ async function realizarTraspaso({ route, salesData }) {
               0
             ),
             createdBy: "SA", // Default user or get from request if available
+            bodegaOrigen,
+            bodega_destino,
           });
 
           await summary.save();
@@ -830,6 +856,8 @@ async function realizarTraspaso({ route, salesData }) {
       lineasFallidas: detalleProductos.length,
       detalleProductos,
       route,
+      bodegaOrigen: bodegaOrigen || "01",
+      bodegaDebodega_destinotino,
     };
 
     // Intentar generar PDF del error
