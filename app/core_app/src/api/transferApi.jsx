@@ -826,4 +826,161 @@ export class TransferApi {
       throw error;
     }
   }
+
+  /**
+   * Obtiene los pedidos según los filtros especificados
+   * @param {string} accessToken - Token de autenticación
+   * @param {Object} filters - Filtros para la consulta
+   * @returns {Promise<Array>} - Lista de pedidos
+   */
+  async getOrders(accessToken, filters = {}) {
+    try {
+      // Construir URL con parámetros de consulta
+      let url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/orders`;
+      const queryParams = [];
+
+      if (filters.dateFrom) queryParams.push(`dateFrom=${filters.dateFrom}`);
+      if (filters.dateTo) queryParams.push(`dateTo=${filters.dateTo}`);
+      if (filters.status && filters.status !== "all")
+        queryParams.push(`status=${filters.status}`);
+      if (filters.warehouse && filters.warehouse !== "all")
+        queryParams.push(`warehouse=${filters.warehouse}`);
+      if (filters.showProcessed) queryParams.push(`showProcessed=true`);
+
+      if (queryParams.length > 0) {
+        url += `?${queryParams.join("&")}`;
+      }
+
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+
+      return result.data || [];
+    } catch (error) {
+      console.error("Error al obtener pedidos:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene los detalles de un pedido específico
+   * @param {string} accessToken - Token de autenticación
+   * @param {string} orderId - ID del pedido
+   * @returns {Promise<Object>} - Detalles del pedido
+   */
+  async getOrderDetails(accessToken, orderId) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/orders/${orderId}`;
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+
+      return result.data || { items: [] };
+    } catch (error) {
+      console.error(`Error al obtener detalles del pedido ${orderId}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Procesa los pedidos seleccionados
+   * @param {string} accessToken - Token de autenticación
+   * @param {Object} data - Datos con lista de pedidos e información de la tarea
+   * @returns {Promise<Object>} - Resultado de la operación
+   */
+  async processOrders(accessToken, data) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/orders/process`;
+      const params = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(data),
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+
+      return result;
+    } catch (error) {
+      console.error("Error al procesar pedidos:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene las bodegas disponibles para filtrar
+   * @param {string} accessToken - Token de autenticación
+   * @returns {Promise<Array>} - Lista de bodegas
+   */
+  async getWarehouses(accessToken) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/warehouses`;
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+
+      return result.data || [];
+    } catch (error) {
+      console.error("Error al obtener bodegas:", error);
+      return []; // Retornar array vacío en lugar de propagar el error
+    }
+  }
+
+  /**
+   * Exporta los pedidos a Excel
+   * @param {string} accessToken - Token de autenticación
+   * @param {Object} data - Configuración de exportación
+   * @returns {Promise<Blob>} - Datos del Excel
+   */
+  async exportOrders(accessToken, data) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/orders/export`;
+      const params = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(data),
+      };
+
+      const response = await fetch(url, params);
+
+      if (!response.ok) {
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Error al exportar los pedidos");
+      }
+
+      return await response.blob();
+    } catch (error) {
+      console.error("Error al exportar pedidos:", error);
+      throw error;
+    }
+  }
 }
