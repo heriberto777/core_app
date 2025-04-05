@@ -1,4 +1,3 @@
-// services/mongoDBTransport.js
 const Transport = require("winston-transport");
 const Log = require("../models/loggerModel");
 
@@ -16,7 +15,8 @@ class MongoDBTransport extends Transport {
     // Flags para manejo de errores
     this.connected = false;
     this.errorCount = 0;
-    this.maxRetries = 3;
+    this.maxRetries = 5;
+    this.retryDelay = 2000; // Tiempo entre reintentos (milisegundos)
 
     console.log("Transporte MongoDB para logs inicializado");
   }
