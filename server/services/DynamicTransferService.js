@@ -321,6 +321,9 @@ class DynamicTransferService {
     targetConnection
   ) {
     try {
+      // Crear un cache para las longitudes de columnas
+      const columnLengthCache = new Map();
+
       // 1. Identificar las tablas principales (no de detalle)
       const mainTables = mapping.tableConfigs.filter((tc) => !tc.isDetailTable);
 
@@ -465,6 +468,24 @@ class DynamicTransferService {
             }
           }
 
+          // Si el valor es un string, verificar y ajustar longitud
+          if (typeof value === "string") {
+            const maxLength = await this.getColumnMaxLength(
+              targetConnection,
+              tableConfig.targetTable,
+              fieldMapping.targetField,
+              columnLengthCache
+            );
+
+            // Si hay un límite de longitud y se excede, truncar
+            if (maxLength > 0 && value.length > maxLength) {
+              logger.warn(
+                `Truncando valor para campo ${fieldMapping.targetField} de longitud ${value.length} a ${maxLength} caracteres en documento ${documentId}`
+              );
+              value = value.substring(0, maxLength);
+            }
+          }
+
           targetData[fieldMapping.targetField] = value;
           targetFields.push(fieldMapping.targetField);
           targetValues.push(`@${fieldMapping.targetField}`);
@@ -562,6 +583,24 @@ class DynamicTransferService {
                 }
               }
 
+              // Si el valor es un string, verificar y ajustar longitud
+              if (typeof value === "string") {
+                const maxLength = await this.getColumnMaxLength(
+                  targetConnection,
+                  detailConfig.targetTable,
+                  fieldMapping.targetField,
+                  columnLengthCache
+                );
+
+                // Si hay un límite de longitud y se excede, truncar
+                if (maxLength > 0 && value.length > maxLength) {
+                  logger.warn(
+                    `Truncando valor para campo ${fieldMapping.targetField} de longitud ${value.length} a ${maxLength} caracteres en detalle de documento ${documentId}`
+                  );
+                  value = value.substring(0, maxLength);
+                }
+              }
+
               detailTargetData[fieldMapping.targetField] = value;
               detailFields.push(fieldMapping.targetField);
               detailValues.push(`@${fieldMapping.targetField}`);
@@ -600,6 +639,54 @@ class DynamicTransferService {
         processedTables,
       };
     } catch (error) {
+      // Verificar si es un error de truncado
+      if (
+        error.message &&
+        error.message.includes("String or binary data would be truncated")
+      ) {
+        // Intentar extraer información más específica
+        const match = error.message.match(/column '([^']+)'/);
+        const columnName = match ? match[1] : "desconocida";
+
+        const detailedMessage = `Error de truncado: El valor es demasiado largo para la columna '${columnName}'. Verifique la longitud máxima permitida.`;
+
+        logger.error(
+          `Error de truncado en documento ${documentId}: ${detailedMessage}`
+        );
+
+        return {
+          success: false,
+          message: detailedMessage,
+          documentType: "unknown",
+          errorDetails: error.stack,
+          errorCode: "TRUNCATION_ERROR",
+        };
+      }
+
+      // Manejar errores de valores NULL en columnas que no lo permiten
+      if (
+        error.message &&
+        error.message.includes("Cannot insert the value NULL into column")
+      ) {
+        // Extraer información específica
+        const match = error.message.match(/column '([^']+)'/);
+        const columnName = match ? match[1] : "desconocida";
+
+        const detailedMessage = `No se puede insertar un valor NULL en la columna '${columnName}' que no permite valores nulos. Configure un valor por defecto válido.`;
+
+        logger.error(
+          `Error de valor NULL en documento ${documentId}: ${detailedMessage}`
+        );
+
+        return {
+          success: false,
+          message: detailedMessage,
+          documentType: "unknown",
+          errorDetails: error.stack,
+          errorCode: "NULL_VALUE_ERROR",
+        };
+      }
+
       logger.error(
         `Error procesando documento ${documentId}: ${error.message}`,
         {
@@ -640,6 +727,57 @@ class DynamicTransferService {
 
     // Si no se encuentra, usar targetPrimaryKey o el valor predeterminado
     return tableConfig.targetPrimaryKey || "ID";
+  }
+
+  /**
+   * Obtiene la longitud máxima de una columna
+   * @param {Connection} connection - Conexión a la base de datos
+   * @param {string} tableName - Nombre de la tabla
+   * @param {string} columnName - Nombre de la columna
+   * @param {Map} cache - Cache de longitudes (opcional)
+   * @returns {Promise<number>} - Longitud máxima o 0 si no hay límite/información
+   */
+  async getColumnMaxLength(connection, tableName, columnName, cache = null) {
+    // Si se proporciona un cache, verificar si ya tenemos la información
+    if (cache && cache instanceof Map) {
+      const cacheKey = `${tableName}:${columnName}`;
+      if (cache.has(cacheKey)) {
+        return cache.get(cacheKey);
+      }
+    }
+
+    try {
+      // Extraer nombre de tabla sin esquema
+      const tableNameOnly = tableName.replace(/^.*\.|\[|\]/g, "");
+
+      // Consultar metadata de la columna
+      const query = `
+      SELECT CHARACTER_MAXIMUM_LENGTH 
+      FROM INFORMATION_SCHEMA.COLUMNS 
+      WHERE TABLE_NAME = '${tableNameOnly}' 
+      AND COLUMN_NAME = '${columnName}'
+    `;
+
+      const result = await SqlService.query(connection, query);
+
+      let maxLength = 0;
+      if (result.recordset && result.recordset.length > 0) {
+        maxLength = result.recordset[0].CHARACTER_MAXIMUM_LENGTH || 0;
+      }
+
+      // Guardar en cache si está disponible
+      if (cache && cache instanceof Map) {
+        const cacheKey = `${tableName}:${columnName}`;
+        cache.set(cacheKey, maxLength);
+      }
+
+      return maxLength;
+    } catch (error) {
+      logger.warn(
+        `Error al obtener longitud máxima para ${columnName}: ${error.message}`
+      );
+      return 0; // En caso de error, retornar 0 (no truncar)
+    }
   }
 
   /**
