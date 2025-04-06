@@ -191,13 +191,15 @@ class SqlService {
    * @param {string} tableName - Nombre de la tabla
    * @param {Object} record - Datos a insertar
    * @param {Object} columnTypes - Tipos de columnas (opcional)
+   * @param {Object} transaction - Transacción SQL (opcional)
    * @returns {Promise<Object>} - Resultado de la operación
    */
   async insertWithExplicitTypes(
     connection,
     tableName,
     record,
-    columnTypes = {}
+    columnTypes = {},
+    transaction = null
   ) {
     try {
       // Validar y sanitizar el registro
@@ -360,7 +362,13 @@ class SqlService {
       );
 
       // Ejecutar la consulta con tipos explícitos
-      return await this.query(connection, sql, sanitizedRecord, columnTypes);
+      return await this.query(
+        connection,
+        sql,
+        sanitizedRecord,
+        columnTypes,
+        transaction
+      );
     } catch (error) {
       // MEJORA: Captura detallada de errores
       logger.error(
@@ -384,9 +392,10 @@ class SqlService {
    * Borra todos los registros de una tabla
    * @param {Connection} connection - Conexión a SQL Server
    * @param {string} tableName - Nombre de la tabla
+   * @param {Object} transaction - Transacción SQL (opcional)
    * @returns {Promise<number>} - Número de registros eliminados
    */
-  async clearTableData(connection, tableName) {
+  async clearTableData(connection, tableName, transaction = null) {
     try {
       // Limpiar el nombre de la tabla
       const cleanTableName = tableName.replace(/[\[\]]/g, "");
@@ -399,7 +408,13 @@ class SqlService {
 
       // Obtener conteo antes del borrado
       const countSql = `SELECT COUNT(*) AS record_count FROM ${tableName} WITH (NOLOCK)`;
-      const countResult = await this.query(connection, countSql);
+      const countResult = await this.query(
+        connection,
+        countSql,
+        {},
+        null,
+        transaction
+      );
       const recordCount = countResult.recordset[0]?.record_count || 0;
 
       // Si no hay registros, no es necesario borrar
@@ -412,7 +427,13 @@ class SqlService {
 
       // Ejecutar borrado
       const deleteSql = `DELETE FROM ${tableName}`;
-      const result = await this.query(connection, deleteSql);
+      const result = await this.query(
+        connection,
+        deleteSql,
+        {},
+        null,
+        transaction
+      );
       const deletedCount = result.rowsAffected || 0;
 
       logger.info(
@@ -469,9 +490,16 @@ class SqlService {
    * @param {string} sql - Consulta SQL
    * @param {Object} params - Parámetros para la consulta (opcional)
    * @param {Object|string} columnTypesOrServerKey - Tipos de columnas o clave de servidor
+   * @param {Object} transaction - Transacción SQL (opcional)
    * @returns {Promise<Object>} - Resultado de la consulta
    */
-  async query(connection, sql, params = {}, columnTypesOrServerKey = null) {
+  async query(
+    connection,
+    sql,
+    params = {},
+    columnTypesOrServerKey = null,
+    transaction = null
+  ) {
     let serverKey = null;
     let columnTypes = null;
 
@@ -505,7 +533,8 @@ class SqlService {
         connection,
         sql,
         sanitizedParams,
-        columnTypes
+        columnTypes,
+        transaction
       );
     } catch (error) {
       // Registrar error en métricas
@@ -531,17 +560,18 @@ class SqlService {
    * @param {string} sql - Consulta SQL
    * @param {Object} params - Parámetros sanitizados
    * @param {Object} columnTypes - Tipos de columnas (opcional)
+   * @param {Object} transaction - Transacción SQL (opcional)
    * @returns {Promise<Object>} - Resultado de la consulta
    */
-  executeQuery(connection, sql, params, columnTypes) {
+  executeQuery(connection, sql, params, columnTypes, transaction = null) {
     return new Promise((resolve, reject) => {
       try {
         // Validar la conexión
-        if (!connection) {
-          return reject(new Error("La conexión es nula"));
+        if (!connection && !transaction) {
+          return reject(new Error("La conexión es nula y no hay transacción"));
         }
 
-        if (typeof connection.execSql !== "function") {
+        if (!transaction && typeof connection.execSql !== "function") {
           // Proporcionar información detallada para diagnóstico
           const connType = typeof connection;
           const connKeys = Object.keys(connection || {}).join(", ");
@@ -624,8 +654,14 @@ class SqlService {
             rows.push(row);
           }
         });
+
         try {
-          connection.execSql(request);
+          // Usar la transacción si está disponible, de lo contrario la conexión
+          if (transaction) {
+            transaction.execSql(request);
+          } else {
+            connection.execSql(request);
+          }
         } catch (execError) {
           reject(
             new Error(`Error al ejecutar SQL (execSql): ${execError.message}`)
@@ -634,6 +670,63 @@ class SqlService {
       } catch (error) {
         reject(error);
       }
+    });
+  }
+
+  /**
+   * Inicia una nueva transacción en la conexión dada
+   * @param {Connection} connection - Conexión a SQL Server
+   * @returns {Promise<Transaction>} - Objeto de transacción
+   */
+  async beginTransaction(connection) {
+    return new Promise((resolve, reject) => {
+      connection.transaction((err, transaction) => {
+        if (err) {
+          logger.error(`Error al iniciar transacción: ${err.message}`);
+          reject(err);
+        } else {
+          logger.debug("Transacción iniciada correctamente");
+          resolve(transaction);
+        }
+      });
+    });
+  }
+
+  /**
+   * Confirma una transacción
+   * @param {Transaction} transaction - Objeto de transacción
+   * @returns {Promise<void>}
+   */
+  async commitTransaction(transaction) {
+    return new Promise((resolve, reject) => {
+      transaction.commit((err) => {
+        if (err) {
+          logger.error(`Error al confirmar transacción: ${err.message}`);
+          reject(err);
+        } else {
+          logger.debug("Transacción confirmada correctamente");
+          resolve();
+        }
+      });
+    });
+  }
+
+  /**
+   * Revierte una transacción
+   * @param {Transaction} transaction - Objeto de transacción
+   * @returns {Promise<void>}
+   */
+  async rollbackTransaction(transaction) {
+    return new Promise((resolve, reject) => {
+      transaction.rollback((err) => {
+        if (err) {
+          logger.error(`Error al revertir transacción: ${err.message}`);
+          reject(err);
+        } else {
+          logger.debug("Transacción revertida correctamente");
+          resolve();
+        }
+      });
     });
   }
 
