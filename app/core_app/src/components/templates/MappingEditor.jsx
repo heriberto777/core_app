@@ -170,35 +170,46 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     Swal.fire({
       title: "Nueva Configuración de Tabla",
       html: `
-      <div class="form-group">
-        <label for="tableName">Nombre</label>
-        <input id="tableName" class="swal2-input" placeholder="Ej: pedidosHeader">
-      </div>
-      <div class="form-group">
-        <label for="sourceTable">Tabla origen</label>
-        <input id="sourceTable" class="swal2-input" placeholder="Ej: FAC_ENC_PED">
-      </div>
-      <div class="form-group">
-        <label for="targetTable">Tabla destino</label>
-        <input id="targetTable" class="swal2-input" placeholder="Ej: PEDIDO">
-      </div>
-      <div class="form-group">
-        <label for="primaryKey">Clave primaria en tabla origen</label>
-        <input id="primaryKey" class="swal2-input" placeholder="Ej: NUM_PED">
-      </div>
-      <div class="form-group">
-        <label for="targetPrimaryKey">Clave primaria en tabla destino</label>
-        <input id="targetPrimaryKey" class="swal2-input" placeholder="Ej: PEDIDO">
-      </div>
-      <div class="form-check">
-        <input type="checkbox" id="isDetailTable" class="swal2-checkbox">
-        <label for="isDetailTable">¿Es tabla de detalle?</label>
-      </div>
-      <div class="form-group">
-        <label for="parentTableRef">Referencia a tabla padre (si es detalle)</label>
-        <input id="parentTableRef" class="swal2-input" placeholder="Ej: pedidosHeader">
-      </div>
-    `,
+    <div class="form-group">
+      <label for="tableName">Nombre</label>
+      <input id="tableName" class="swal2-input" placeholder="Ej: pedidosHeader">
+    </div>
+    <div class="form-group">
+      <label for="sourceTable">Tabla origen</label>
+      <input id="sourceTable" class="swal2-input" placeholder="Ej: FAC_ENC_PED">
+    </div>
+    <div class="form-group">
+      <label for="targetTable">Tabla destino</label>
+      <input id="targetTable" class="swal2-input" placeholder="Ej: PEDIDO">
+    </div>
+    <div class="form-group">
+      <label for="primaryKey">Clave primaria en tabla origen</label>
+      <input id="primaryKey" class="swal2-input" placeholder="Ej: NUM_PED">
+    </div>
+    <div class="form-group">
+      <label for="targetPrimaryKey">Clave primaria en tabla destino</label>
+      <input id="targetPrimaryKey" class="swal2-input" placeholder="Ej: PEDIDO">
+    </div>
+    <div class="form-check">
+      <input type="checkbox" id="isDetailTable" class="swal2-checkbox">
+      <label for="isDetailTable">¿Es tabla de detalle?</label>
+    </div>
+    <div class="form-group">
+      <label for="parentTableRef">Referencia a tabla padre (si es detalle)</label>
+      <input id="parentTableRef" class="swal2-input" placeholder="Ej: pedidosHeader">
+    </div>
+    <div class="form-group">
+      <label for="orderByColumn">Columna de ordenamiento (opcional)</label>
+      <input id="orderByColumn" class="swal2-input" placeholder="Ej: SECUENCIA">
+      <small style="display:block;margin-top:4px;color:#666;">
+        Solo para tablas de detalle. Ej: SECUENCIA, LINEA, etc.
+      </small>
+    </div>
+    <div class="form-group">
+      <label for="filterCondition">Condición de filtro adicional (opcional)</label>
+      <input id="filterCondition" class="swal2-input" placeholder="Ej: ESTADO = 'A'">
+    </div>
+  `,
       showCancelButton: true,
       confirmButtonText: "Añadir",
       cancelButtonText: "Cancelar",
@@ -211,6 +222,9 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           document.getElementById("targetPrimaryKey").value;
         const isDetailTable = document.getElementById("isDetailTable").checked;
         const parentTableRef = document.getElementById("parentTableRef").value;
+        const orderByColumn = document.getElementById("orderByColumn").value;
+        const filterCondition =
+          document.getElementById("filterCondition").value;
 
         if (!name || !sourceTable || !targetTable) {
           Swal.showValidationMessage(
@@ -227,6 +241,8 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           targetPrimaryKey,
           isDetailTable,
           parentTableRef: isDetailTable ? parentTableRef : null,
+          orderByColumn: orderByColumn || null,
+          filterCondition: filterCondition || null,
           fieldMappings: [],
         };
       },
@@ -514,6 +530,15 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       }" placeholder="Ej: pedidosHeader">
     </div>
     <div class="form-group">
+      <label for="orderByColumn">Columna de ordenamiento (opcional)</label>
+      <input id="orderByColumn" class="swal2-input" value="${
+        tableConfig.orderByColumn || ""
+      }" placeholder="Ej: SECUENCIA">
+      <small style="display:block;margin-top:4px;color:#666;">
+        Solo para tablas de detalle. Ej: SECUENCIA, LINEA, etc.
+      </small>
+    </div>
+    <div class="form-group">
       <label for="filterCondition">Condición de filtro adicional (opcional)</label>
       <input id="filterCondition" class="swal2-input" value="${
         tableConfig.filterCondition || ""
@@ -532,6 +557,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           document.getElementById("targetPrimaryKey").value;
         const isDetailTable = document.getElementById("isDetailTable").checked;
         const parentTableRef = document.getElementById("parentTableRef").value;
+        const orderByColumn = document.getElementById("orderByColumn").value;
         const filterCondition =
           document.getElementById("filterCondition").value;
 
@@ -550,6 +576,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           targetPrimaryKey,
           isDetailTable,
           parentTableRef: isDetailTable ? parentTableRef : null,
+          orderByColumn: orderByColumn || null,
           filterCondition: filterCondition || null,
           fieldMappings: tableConfig.fieldMappings,
         };

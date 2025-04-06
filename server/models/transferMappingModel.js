@@ -30,6 +30,7 @@ const TableConfigSchema = new Schema({
   fieldMappings: [FieldMappingSchema],
   filterCondition: { type: String }, // Condición SQL para filtrar registros (WHERE clause)
   customQuery: { type: String }, // Consulta personalizada para casos especiales
+  orderByColumn: { type: String }, // Columna para ordenamiento de detalles
 });
 
 // Schema para la regla de tipo de documento
