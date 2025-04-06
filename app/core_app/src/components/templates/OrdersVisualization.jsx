@@ -1,32 +1,43 @@
+// pages/OrdersVisualization.jsx
 import styled from "styled-components";
-import { Header, TransferApi, useAuth, useFetchData } from "../../index";
-import { useEffect, useState } from "react";
+import { useState, useEffect } from "react";
+import {
+  Header,
+  TransferApi,
+  useAuth,
+  useFetchData,
+  MappingsList,
+  MappingEditor,
+} from "../../index";
+
 import Swal from "sweetalert2";
 import {
   FaSync,
   FaFilter,
-  FaFileDownload,
   FaPlay,
   FaSearch,
-  FaCalendarAlt,
   FaTable,
   FaListAlt,
   FaSpinner,
-  FaTrash,
   FaEye,
+  FaArrowLeft,
+  FaEdit,
+  FaPlus,
 } from "react-icons/fa";
 
-const orderApi = new TransferApi();
+const api = new TransferApi();
 
 export function OrdersVisualization() {
   const [search, setSearch] = useState("");
-  const [openstate, setOpenState] = useState(false);
-  const [viewMode, setViewMode] = useState("table"); // "cards", "table"
-  const { accessToken, user } = useAuth();
-  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
+  const [viewMode, setViewMode] = useState("table");
+  const { accessToken } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
   const [selectedOrders, setSelectedOrders] = useState([]);
+  const [openstate, setOpenState] = useState(false);
   const [selectAll, setSelectAll] = useState(false);
+  const [activeView, setActiveView] = useState("mappingsList"); // mappingsList, mappingEditor, documents
+  const [activeMappingId, setActiveMappingId] = useState(null);
+  const [editingMappingId, setEditingMappingId] = useState(null);
 
   // Filters
   const [filters, setFilters] = useState({
@@ -39,7 +50,7 @@ export function OrdersVisualization() {
     showProcessed: false,
   });
 
-  // Fetch orders data
+  // Fetch orders data when a mapping is selected
   const {
     data: orders,
     setData: setOrders,
@@ -47,39 +58,27 @@ export function OrdersVisualization() {
     error,
     refetch: fetchOrders,
   } = useFetchData(
-    () => orderApi.getOrders(accessToken, filters),
-    [accessToken, filters],
-    true,
+    () =>
+      activeMappingId
+        ? api.getDocumentsByMapping(accessToken, activeMappingId, filters)
+        : [],
+    [accessToken, activeMappingId, filters],
+    !!activeMappingId,
     30000 // Refresh every 30 seconds
   );
 
-  // Fetch warehouses for filter
-  const { data: warehouses, loading: loadingWarehouses } = useFetchData(
-    () => orderApi.getWarehouses(accessToken),
-    [accessToken],
-    true
-  );
-
-  // Handle filter changes
-  const handleFilterChange = (filterType, value) => {
-    setFilters((prevFilters) => ({
-      ...prevFilters,
-      [filterType]: value,
-    }));
-  };
-
   // Filter orders
   const filteredOrders = orders.filter((order) => {
-    // Search filter
-    const matchesSearch =
-      order.NUM_PED.toLowerCase().includes(search.toLowerCase()) ||
-      order.COD_CLT.toLowerCase().includes(search.toLowerCase()) ||
-      (order.COD_BOD &&
-        order.COD_BOD.toLowerCase().includes(search.toLowerCase()));
+    // Simple search filter for any field
+    if (!search) return true;
 
-    // Other filters are applied server-side through the API call
-
-    return matchesSearch;
+    const searchLower = search.toLowerCase();
+    return Object.values(order).some(
+      (value) =>
+        value &&
+        typeof value === "string" &&
+        value.toLowerCase().includes(searchLower)
+    );
   });
 
   // Handle selection of orders
@@ -97,17 +96,32 @@ export function OrdersVisualization() {
       setSelectedOrders([]);
       setSelectAll(false);
     } else {
-      setSelectedOrders(filteredOrders.map((order) => order.NUM_PED));
-      setSelectAll(true);
+      // Identifying field may vary by mapping - assuming it's the first key
+      const idField =
+        filteredOrders.length > 0 ? Object.keys(filteredOrders[0])[0] : null;
+
+      if (idField) {
+        setSelectedOrders(filteredOrders.map((order) => order[idField]));
+        setSelectAll(true);
+      }
     }
   };
 
-  // Process selected orders
+  // Process selected orders using dynamic mapping
   const processOrders = async () => {
+    if (!activeMappingId) {
+      Swal.fire({
+        title: "Error",
+        text: "No hay configuración de mapeo seleccionada",
+        icon: "error",
+      });
+      return;
+    }
+
     if (selectedOrders.length === 0) {
       Swal.fire({
-        title: "Ningún pedido seleccionado",
-        text: "Por favor, seleccione al menos un pedido para procesar",
+        title: "Ningún documento seleccionado",
+        text: "Por favor, seleccione al menos un documento para procesar",
         icon: "warning",
       });
       return;
@@ -116,8 +130,8 @@ export function OrdersVisualization() {
     try {
       // Ask for confirmation
       const confirmResult = await Swal.fire({
-        title: "¿Procesar pedidos?",
-        text: `¿Está seguro de procesar ${selectedOrders.length} pedidos?`,
+        title: "¿Procesar documentos?",
+        text: `¿Está seguro de procesar ${selectedOrders.length} documentos?`,
         icon: "question",
         showCancelButton: true,
         confirmButtonText: "Sí, procesar",
@@ -129,7 +143,7 @@ export function OrdersVisualization() {
       // Show loading
       setIsLoading(true);
       Swal.fire({
-        title: "Procesando pedidos...",
+        title: "Procesando documentos...",
         text: "Esto puede tomar un momento",
         allowOutsideClick: false,
         didOpen: () => {
@@ -137,20 +151,29 @@ export function OrdersVisualization() {
         },
       });
 
-      // Execute transfer task with selected order IDs
-      const result = await orderApi.processOrders(accessToken, {
-        orders: selectedOrders,
-        taskName: "STDB_FAC_ENC_PED",
-      });
+      // Execute process with selected document IDs
+      const result = await api.processDocumentsByMapping(
+        accessToken,
+        activeMappingId,
+        selectedOrders
+      );
 
       setIsLoading(false);
 
       if (result.success) {
+        // Show detailed summary
         Swal.fire({
-          title: "Éxito",
-          text: `Se procesaron ${
-            result.processed || selectedOrders.length
-          } pedidos correctamente`,
+          title: "Procesamiento completado",
+          html: `
+            <div class="result-summary">
+              <p><strong>Resumen:</strong></p>
+              <ul>
+                <li>Procesados correctamente: ${result.data.processed}</li>
+                <li>Fallidos: ${result.data.failed}</li>
+                <li>Omitidos: ${result.data.skipped || 0}</li>
+              </ul>
+            </div>
+          `,
           icon: "success",
         });
 
@@ -159,27 +182,41 @@ export function OrdersVisualization() {
         setSelectedOrders([]);
         setSelectAll(false);
       } else {
-        throw new Error(result.message || "Error al procesar los pedidos");
+        throw new Error(result.message || "Error al procesar los documentos");
       }
     } catch (error) {
       setIsLoading(false);
       Swal.fire({
         title: "Error",
-        text: error.message || "Ocurrió un error al procesar los pedidos",
+        text: error.message || "Ocurrió un error al procesar los documentos",
         icon: "error",
       });
     }
   };
 
-  // View order details
+  // View order details using dynamic mapping
   const viewOrderDetails = async (order) => {
     try {
+      if (!activeMappingId) {
+        Swal.fire({
+          title: "Error",
+          text: "No hay configuración de mapeo seleccionada",
+          icon: "error",
+        });
+        return;
+      }
+
       setIsLoading(true);
 
-      // Get order details including items
-      const details = await orderApi.getOrderDetails(
+      // Determine the ID field (first property as default)
+      const idField = Object.keys(order)[0];
+      const documentId = order[idField];
+
+      // Get order details including items using the mapping config
+      const details = await api.getDocumentDetailsByMapping(
         accessToken,
-        order.NUM_PED
+        activeMappingId,
+        documentId
       );
 
       setIsLoading(false);
@@ -192,75 +229,66 @@ export function OrdersVisualization() {
         }).format(amount || 0);
       };
 
+      // Get all detail items across all detail tables
+      const allDetails = [];
+
+      if (details.data && details.data.details) {
+        // Merge all detail items from all detail tables
+        Object.values(details.data.details).forEach((tableItems) => {
+          if (Array.isArray(tableItems)) {
+            allDetails.push(...tableItems);
+          }
+        });
+      }
+
       // Show order details modal
       Swal.fire({
-        title: `Pedido: ${order.NUM_PED}`,
+        title: `Documento: ${documentId}`,
         width: 800,
         html: `
           <div class="order-details">
             <div class="order-header">
-              <div class="order-header-item">
-                <strong>Cliente:</strong> ${order.COD_CLT}
-              </div>
-              <div class="order-header-item">
-                <strong>Fecha:</strong> ${new Date(
-                  order.FEC_PED
-                ).toLocaleDateString()}
-              </div>
-              <div class="order-header-item">
-                <strong>Estado:</strong> ${order.ESTADO}
-              </div>
-              <div class="order-header-item">
-                <strong>Bodega:</strong> ${order.COD_BOD || "N/A"}
-              </div>
-              <div class="order-header-item">
-                <strong>Total:</strong> ${formatCurrency(order.MON_IMP_VT)}
-              </div>
+              ${Object.entries(order)
+                .filter(([key]) => key !== idField) // Skip ID field
+                .map(
+                  ([key, value]) =>
+                    `<div class="order-header-item">
+                    <strong>${key}:</strong> ${value !== null ? value : "N/A"}
+                  </div>`
+                )
+                .join("")}
             </div>
             
-            <h4>Productos</h4>
+            <h4>Detalle</h4>
             <div class="items-table-container">
               <table class="items-table">
                 <thead>
                   <tr>
-                    <th>Código</th>
-                    <th>Descripción</th>
-                    <th>Cantidad</th>
-                    <th>Precio</th>
-                    <th>Subtotal</th>
+                    ${
+                      allDetails.length > 0
+                        ? Object.keys(allDetails[0])
+                            .map((key) => `<th>${key}</th>`)
+                            .join("")
+                        : "<th>No hay detalles disponibles</th>"
+                    }
                   </tr>
                 </thead>
                 <tbody>
-                  ${details.items
+                  ${allDetails
                     .map(
-                      (item) => `
-                    <tr>
-                      <td>${item.COD_PRO}</td>
-                      <td>${item.DES_PRO || "N/A"}</td>
-                      <td>${item.CANTIDAD}</td>
-                      <td>${formatCurrency(item.PRECIO)}</td>
-                      <td>${formatCurrency(item.SUBTOTAL)}</td>
-                    </tr>
-                  `
+                      (item) =>
+                        `<tr>
+                      ${Object.values(item)
+                        .map(
+                          (value) =>
+                            `<td>${value !== null ? value : "N/A"}</td>`
+                        )
+                        .join("")}
+                    </tr>`
                     )
                     .join("")}
                 </tbody>
               </table>
-            </div>
-            
-            <div class="order-summary">
-              <div class="summary-item"><strong>Subtotal:</strong> ${formatCurrency(
-                order.MON_SIV
-              )}</div>
-              <div class="summary-item"><strong>Impuestos:</strong> ${formatCurrency(
-                order.MON_CIV
-              )}</div>
-              <div class="summary-item"><strong>Descuento:</strong> ${formatCurrency(
-                order.MON_DSC
-              )}</div>
-              <div class="summary-item total"><strong>Total:</strong> ${formatCurrency(
-                order.MON_IMP_VT
-              )}</div>
             </div>
           </div>
         `,
@@ -312,64 +340,389 @@ export function OrdersVisualization() {
           position: sticky;
           top: 0;
         }
-        .order-summary {
-          display: flex;
-          flex-direction: column;
-          align-items: flex-end;
-          gap: 5px;
-          padding: 10px;
-          background-color: #f8f9fa;
-          border-radius: 5px;
-        }
-        .summary-item.total {
-          font-size: 1.2em;
-          margin-top: 5px;
-          padding-top: 5px;
-          border-top: 1px solid #ddd;
-        }
       `;
       document.head.appendChild(style);
     } catch (error) {
       setIsLoading(false);
       Swal.fire({
         title: "Error",
-        text: error.message || "No se pudieron cargar los detalles del pedido",
+        text:
+          error.message || "No se pudieron cargar los detalles del documento",
         icon: "error",
       });
     }
   };
 
-  // Export orders to Excel
-  const exportToExcel = async () => {
-    try {
-      setIsLoading(true);
+  // Handle mapping selection from list
+  const handleSelectMapping = (mappingId) => {
+    setActiveMappingId(mappingId);
+    setActiveView("documents");
+    setSelectedOrders([]);
+    setSelectAll(false);
+  };
 
-      const exportResult = await orderApi.exportOrders(accessToken, {
-        orders: selectedOrders.length > 0 ? selectedOrders : null,
-        filters: filters,
-      });
+  // Handle editing mapping
+  const handleEditMapping = (mappingId) => {
+    setEditingMappingId(mappingId);
+    setActiveView("mappingEditor");
+  };
 
-      setIsLoading(false);
+  // Handle creating new mapping
+  const handleCreateMapping = () => {
+    setEditingMappingId(null);
+    setActiveView("mappingEditor");
+  };
 
-      // Create blob and download
-      const blob = new Blob([exportResult], {
-        type: "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
-      });
-      const url = window.URL.createObjectURL(blob);
-      const a = document.createElement("a");
-      a.href = url;
-      a.download = `Pedidos_${new Date().toISOString().slice(0, 10)}.xlsx`;
-      document.body.appendChild(a);
-      a.click();
-      window.URL.revokeObjectURL(url);
-      document.body.removeChild(a);
-    } catch (error) {
-      setIsLoading(false);
-      Swal.fire({
-        title: "Error",
-        text: error.message || "Error al exportar los pedidos",
-        icon: "error",
-      });
+  // Handle save mapping
+  const handleSaveMapping = (result) => {
+    if (result._id) {
+      // If we're editing and this is also the active mapping, refresh data
+      if (activeMappingId === result._id) {
+        fetchOrders();
+      }
+    }
+    setActiveView("mappingsList");
+  };
+
+  // Render the appropriate view based on active state
+  const renderView = () => {
+    switch (activeView) {
+      case "mappingsList":
+        return (
+          <MappingsList
+            onSelectMapping={handleSelectMapping}
+            onEditMapping={handleEditMapping}
+            onCreateMapping={handleCreateMapping}
+          />
+        );
+
+      case "mappingEditor":
+        return (
+          <MappingEditor
+            mappingId={editingMappingId}
+            onSave={handleSaveMapping}
+            onCancel={() => setActiveView("mappingsList")}
+          />
+        );
+
+      case "documents":
+        return (
+          <>
+            {/* Back button to return to mappings list */}
+            <BackButton onClick={() => setActiveView("mappingsList")}>
+              <FaArrowLeft /> Volver a configuraciones
+            </BackButton>
+
+            <ActionsContainer>
+              <SearchInputContainer>
+                <SearchInput
+                  type="text"
+                  placeholder="Buscar documento..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                />
+              </SearchInputContainer>
+
+              {/* Filters Container */}
+              <FiltersContainer>
+                <FilterGroup>
+                  <FilterLabel>Desde:</FilterLabel>
+                  <DateInput
+                    type="date"
+                    value={filters.dateFrom}
+                    onChange={(e) =>
+                      setFilters({ ...filters, dateFrom: e.target.value })
+                    }
+                  />
+                </FilterGroup>
+
+                <FilterGroup>
+                  <FilterLabel>Hasta:</FilterLabel>
+                  <DateInput
+                    type="date"
+                    value={filters.dateTo}
+                    onChange={(e) =>
+                      setFilters({ ...filters, dateTo: e.target.value })
+                    }
+                  />
+                </FilterGroup>
+
+                <FilterGroup>
+                  <FilterLabel>Estado:</FilterLabel>
+                  <FilterSelect
+                    value={filters.status}
+                    onChange={(e) =>
+                      setFilters({ ...filters, status: e.target.value })
+                    }
+                  >
+                    <option value="all">Todos</option>
+                    <option value="P">Pendientes</option>
+                    <option value="F">Facturados</option>
+                    <option value="A">Anulados</option>
+                  </FilterSelect>
+                </FilterGroup>
+
+                <CheckboxContainer>
+                  <CheckboxInput
+                    type="checkbox"
+                    id="showProcessed"
+                    checked={filters.showProcessed}
+                    onChange={(e) =>
+                      setFilters({
+                        ...filters,
+                        showProcessed: e.target.checked,
+                      })
+                    }
+                  />
+                  <CheckboxLabel htmlFor="showProcessed">
+                    Mostrar procesados
+                  </CheckboxLabel>
+                </CheckboxContainer>
+
+                <ResetFiltersButton
+                  onClick={() =>
+                    setFilters({
+                      dateFrom: new Date(
+                        new Date().setDate(new Date().getDate() - 30)
+                      )
+                        .toISOString()
+                        .split("T")[0],
+                      dateTo: new Date().toISOString().split("T")[0],
+                      status: "all",
+                      warehouse: "all",
+                      showProcessed: false,
+                    })
+                  }
+                >
+                  Limpiar Filtros
+                </ResetFiltersButton>
+              </FiltersContainer>
+
+              <ButtonsRow>
+                <ActionButton onClick={fetchOrders} title="Refrescar datos">
+                  <FaSync /> Refrescar
+                </ActionButton>
+
+                <ActionButton
+                  onClick={processOrders}
+                  title="Procesar documentos seleccionados"
+                  disabled={isLoading || selectedOrders.length === 0}
+                >
+                  <FaPlay /> Procesar Seleccionados
+                </ActionButton>
+
+                <ViewButtonsGroup>
+                  <ViewButton
+                    $active={viewMode === "table"}
+                    onClick={() => setViewMode("table")}
+                    title="Ver como tabla"
+                  >
+                    <FaTable /> Tabla
+                  </ViewButton>
+                  <ViewButton
+                    $active={viewMode === "cards"}
+                    onClick={() => setViewMode("cards")}
+                    title="Ver como tarjetas"
+                  >
+                    <FaListAlt /> Tarjetas
+                  </ViewButton>
+                </ViewButtonsGroup>
+              </ButtonsRow>
+
+              <OrdersCountLabel>
+                Mostrando {filteredOrders.length} de {orders.length} documentos
+                {selectedOrders.length > 0 &&
+                  ` | ${selectedOrders.length} seleccionados`}
+              </OrdersCountLabel>
+            </ActionsContainer>
+
+            {/* Loading state */}
+            {loading && (
+              <LoadingContainer>
+                <LoadingSpinner />
+                <LoadingMessage>Cargando documentos...</LoadingMessage>
+              </LoadingContainer>
+            )}
+
+            {/* Error state */}
+            {error && <ErrorMessage>{error}</ErrorMessage>}
+
+            {/* No results state */}
+            {!loading && filteredOrders.length === 0 && (
+              <EmptyMessage>
+                No se encontraron documentos con los filtros seleccionados.
+              </EmptyMessage>
+            )}
+
+            {/* Loading overlay */}
+            {isLoading && (
+              <OverlayLoading>
+                <LoadingSpinner size="large" />
+              </OverlayLoading>
+            )}
+
+            {/* Table view */}
+            {!loading && filteredOrders.length > 0 && viewMode === "table" && (
+              <TableContainer>
+                <StyledTable>
+                  <thead>
+                    <tr>
+                      <th className="checkbox-column">
+                        <CheckboxInput
+                          type="checkbox"
+                          checked={
+                            selectAll ||
+                            (selectedOrders.length > 0 &&
+                              selectedOrders.length === filteredOrders.length)
+                          }
+                          onChange={handleSelectAll}
+                        />
+                      </th>
+                      {/* Dynamic headers based on first document */}
+                      {Object.keys(filteredOrders[0]).map((key) => (
+                        <th key={key}>{key}</th>
+                      ))}
+                      <th className="actions-column">Acciones</th>
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {filteredOrders.map((order, index) => {
+                      // Get document ID (assuming it's the first field)
+                      const documentId = order[Object.keys(order)[0]];
+
+                      return (
+                        <tr key={index}>
+                          <td className="checkbox-column">
+                            <CheckboxInput
+                              type="checkbox"
+                              checked={selectedOrders.includes(documentId)}
+                              onChange={() => handleSelectOrder(documentId)}
+                            />
+                          </td>
+                          {/* Dynamic cells */}
+                          {Object.entries(order).map(([key, value]) => (
+                            <td key={key}>{value !== null ? value : "N/A"}</td>
+                          ))}
+                          <td className="actions-column">
+                            <ActionButtons>
+                              <TableActionButton
+                                title="Ver detalles"
+                                $color="#007bff"
+                                onClick={() => viewOrderDetails(order)}
+                              >
+                                <FaEye />
+                              </TableActionButton>
+
+                              <TableActionButton
+                                title="Procesar documento"
+                                $color="#28a745"
+                                onClick={() => {
+                                  setSelectedOrders([documentId]);
+                                  processOrders();
+                                }}
+                              >
+                                <FaPlay />
+                              </TableActionButton>
+                            </ActionButtons>
+                          </td>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </StyledTable>
+              </TableContainer>
+            )}
+
+            {/* Cards view */}
+            {!loading && filteredOrders.length > 0 && viewMode === "cards" && (
+              <CardsContainer>
+                {filteredOrders.map((order, index) => {
+                  // Get document ID (assuming it's the first field)
+                  const documentId = order[Object.keys(order)[0]];
+                  // Get type/status field if exists (for styling)
+                  const statusField = Object.keys(order).find(
+                    (key) =>
+                      key.toLowerCase().includes("estado") ||
+                      key.toLowerCase().includes("status") ||
+                      key.toLowerCase().includes("type")
+                  );
+                  const status = statusField ? order[statusField] : null;
+
+                  return (
+                    <OrderCard
+                      key={index}
+                      $selected={selectedOrders.includes(documentId)}
+                      $status={status}
+                    >
+                      <CardHeader>
+                        <CardTitle>{documentId}</CardTitle>
+                        {status && (
+                          <StatusBadge status={status}>{status}</StatusBadge>
+                        )}
+                      </CardHeader>
+
+                      <CardContent>
+                        <CardInfo>
+                          {Object.entries(order)
+                            .filter(
+                              ([key]) =>
+                                key !== Object.keys(order)[0] &&
+                                key !== statusField
+                            )
+                            .map(([key, value]) => (
+                              <InfoItem key={key}>
+                                <InfoLabel>{key}:</InfoLabel>
+                                <InfoValue>
+                                  {value !== null ? value : "N/A"}
+                                </InfoValue>
+                              </InfoItem>
+                            ))}
+                        </CardInfo>
+                      </CardContent>
+
+                      <CardActions>
+                        <CardCheckbox>
+                          <CheckboxInput
+                            type="checkbox"
+                            checked={selectedOrders.includes(documentId)}
+                            onChange={() => handleSelectOrder(documentId)}
+                          />
+                          <span>Seleccionar</span>
+                        </CardCheckbox>
+
+                        <ActionButtonsContainer>
+                          <ActionRow>
+                            <CardActionButton
+                              $color="#007bff"
+                              onClick={() => viewOrderDetails(order)}
+                              title="Ver detalles"
+                            >
+                              <FaEye />
+                            </CardActionButton>
+
+                            <CardActionButton
+                              $color="#28a745"
+                              onClick={() => {
+                                setSelectedOrders([documentId]);
+                                processOrders();
+                              }}
+                              title="Procesar documento"
+                            >
+                              <FaPlay />
+                            </CardActionButton>
+                          </ActionRow>
+                        </ActionButtonsContainer>
+                      </CardActions>
+                    </OrderCard>
+                  );
+                })}
+              </CardsContainer>
+            )}
+          </>
+        );
+
+      default:
+        return <div>Vista no encontrada</div>;
     }
   };
 
@@ -387,355 +740,25 @@ export function OrdersVisualization() {
       <section className="area1">
         <ToolbarContainer>
           <InfoSection>
-            <h2>Gestión de Pedidos</h2>
-            <p>Visualice y procese los pedidos pendientes del sistema</p>
+            <h2>Gestión de Documentos</h2>
+            <p>
+              {activeView === "mappingsList" &&
+                "Seleccione una configuración de mapeo para comenzar"}
+              {activeView === "mappingEditor" &&
+                "Configure los parámetros de mapeo entre servidores"}
+              {activeView === "documents" &&
+                "Visualice y procese los documentos según la configuración seleccionada"}
+            </p>
           </InfoSection>
         </ToolbarContainer>
       </section>
 
-      <section className="area2">
-        <ActionsContainer>
-          <SearchInputContainer>
-            <SearchInput
-              type="text"
-              placeholder="Buscar pedido o cliente..."
-              value={search}
-              onChange={(e) => setSearch(e.target.value)}
-            />
-          </SearchInputContainer>
-
-          {/* Filters Container */}
-          <FiltersContainer>
-            <FilterGroup>
-              <FilterLabel>Desde:</FilterLabel>
-              <DateInput
-                type="date"
-                value={filters.dateFrom}
-                onChange={(e) => handleFilterChange("dateFrom", e.target.value)}
-              />
-            </FilterGroup>
-
-            <FilterGroup>
-              <FilterLabel>Hasta:</FilterLabel>
-              <DateInput
-                type="date"
-                value={filters.dateTo}
-                onChange={(e) => handleFilterChange("dateTo", e.target.value)}
-              />
-            </FilterGroup>
-
-            <FilterGroup>
-              <FilterLabel>Estado:</FilterLabel>
-              <FilterSelect
-                value={filters.status}
-                onChange={(e) => handleFilterChange("status", e.target.value)}
-              >
-                <option value="all">Todos</option>
-                <option value="P">Pendientes</option>
-                <option value="F">Facturados</option>
-                <option value="A">Anulados</option>
-              </FilterSelect>
-            </FilterGroup>
-
-            <FilterGroup>
-              <FilterLabel>Bodega:</FilterLabel>
-              <FilterSelect
-                value={filters.warehouse}
-                onChange={(e) =>
-                  handleFilterChange("warehouse", e.target.value)
-                }
-                disabled={loadingWarehouses}
-              >
-                <option value="all">Todas</option>
-                {warehouses.map((warehouse) => (
-                  <option key={warehouse.COD_BOD} value={warehouse.COD_BOD}>
-                    {warehouse.COD_BOD} - {warehouse.NOM_BOD}
-                  </option>
-                ))}
-              </FilterSelect>
-            </FilterGroup>
-
-            <FilterGroup>
-              <CheckboxContainer>
-                <CheckboxInput
-                  type="checkbox"
-                  id="showProcessed"
-                  checked={filters.showProcessed}
-                  onChange={(e) =>
-                    handleFilterChange("showProcessed", e.target.checked)
-                  }
-                />
-                <CheckboxLabel htmlFor="showProcessed">
-                  Mostrar procesados
-                </CheckboxLabel>
-              </CheckboxContainer>
-            </FilterGroup>
-
-            <ResetFiltersButton
-              onClick={() =>
-                setFilters({
-                  dateFrom: new Date(
-                    new Date().setDate(new Date().getDate() - 30)
-                  )
-                    .toISOString()
-                    .split("T")[0],
-                  dateTo: new Date().toISOString().split("T")[0],
-                  status: "all",
-                  warehouse: "all",
-                  showProcessed: false,
-                })
-              }
-            >
-              Limpiar Filtros
-            </ResetFiltersButton>
-          </FiltersContainer>
-
-          <ButtonsRow>
-            <ActionButton onClick={fetchOrders} title="Refrescar datos">
-              <FaSync /> Refrescar
-            </ActionButton>
-
-            <ActionButton
-              onClick={processOrders}
-              title="Procesar pedidos seleccionados"
-              disabled={isLoading || selectedOrders.length === 0}
-            >
-              <FaPlay /> Procesar Seleccionados
-            </ActionButton>
-
-            <ActionButton
-              onClick={exportToExcel}
-              title="Exportar a Excel"
-              disabled={isLoading || filteredOrders.length === 0}
-            >
-              <FaFileDownload /> Exportar
-            </ActionButton>
-
-            <ViewButtonsGroup>
-              <ViewButton
-                $active={viewMode === "table"}
-                onClick={() => setViewMode("table")}
-                title="Ver como tabla"
-              >
-                <FaTable /> Tabla
-              </ViewButton>
-              <ViewButton
-                $active={viewMode === "cards"}
-                onClick={() => setViewMode("cards")}
-                title="Ver como tarjetas"
-              >
-                <FaListAlt /> Tarjetas
-              </ViewButton>
-            </ViewButtonsGroup>
-          </ButtonsRow>
-
-          <OrdersCountLabel>
-            Mostrando {filteredOrders.length} de {orders.length} pedidos
-            {selectedOrders.length > 0 &&
-              ` | ${selectedOrders.length} seleccionados`}
-          </OrdersCountLabel>
-        </ActionsContainer>
-      </section>
-
-      <section className="main">
-        {loading && (
-          <LoadingContainer>
-            <LoadingSpinner />
-            <LoadingMessage>Cargando pedidos...</LoadingMessage>
-          </LoadingContainer>
-        )}
-
-        {error && <ErrorMessage>{error}</ErrorMessage>}
-
-        {!loading && filteredOrders.length === 0 && (
-          <EmptyMessage>
-            No se encontraron pedidos con los filtros seleccionados.
-          </EmptyMessage>
-        )}
-
-        {isLoading && (
-          <OverlayLoading>
-            <LoadingSpinner size="large" />
-          </OverlayLoading>
-        )}
-
-        {!loading && filteredOrders.length > 0 && viewMode === "table" && (
-          <TableContainer>
-            <StyledTable>
-              <thead>
-                <tr>
-                  <th className="checkbox-column">
-                    <CheckboxInput
-                      type="checkbox"
-                      checked={
-                        selectAll ||
-                        (selectedOrders.length > 0 &&
-                          selectedOrders.length === filteredOrders.length)
-                      }
-                      onChange={handleSelectAll}
-                    />
-                  </th>
-                  <th>Número</th>
-                  <th>Cliente</th>
-                  <th>Fecha</th>
-                  <th>Bodega</th>
-                  <th>Estado</th>
-                  <th>Total</th>
-                  <th className="actions-column">Acciones</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredOrders.map((order) => (
-                  <tr key={order.NUM_PED}>
-                    <td className="checkbox-column">
-                      <CheckboxInput
-                        type="checkbox"
-                        checked={selectedOrders.includes(order.NUM_PED)}
-                        onChange={() => handleSelectOrder(order.NUM_PED)}
-                      />
-                    </td>
-                    <td>{order.NUM_PED}</td>
-                    <td>{order.COD_CLT}</td>
-                    <td>{new Date(order.FEC_PED).toLocaleDateString()}</td>
-                    <td>{order.COD_BOD || "N/A"}</td>
-                    <td>
-                      <StatusBadge status={order.ESTADO}>
-                        {order.ESTADO === "P" && "Pendiente"}
-                        {order.ESTADO === "F" && "Facturado"}
-                        {order.ESTADO === "A" && "Anulado"}
-                        {!["P", "F", "A"].includes(order.ESTADO) &&
-                          order.ESTADO}
-                      </StatusBadge>
-                    </td>
-                    <td className="amount-column">
-                      {new Intl.NumberFormat("es-DO", {
-                        style: "currency",
-                        currency: "DOP",
-                      }).format(order.MON_IMP_VT || 0)}
-                    </td>
-                    <td className="actions-column">
-                      <ActionButtons>
-                        <TableActionButton
-                          title="Ver detalles"
-                          $color="#007bff"
-                          onClick={() => viewOrderDetails(order)}
-                        >
-                          <FaEye />
-                        </TableActionButton>
-
-                        <TableActionButton
-                          title="Procesar pedido"
-                          $color="#28a745"
-                          onClick={() => {
-                            setSelectedOrders([order.NUM_PED]);
-                            processOrders();
-                          }}
-                          disabled={order.ESTADO !== "P" || order.IS_PROCESSED}
-                        >
-                          <FaPlay />
-                        </TableActionButton>
-                      </ActionButtons>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </StyledTable>
-          </TableContainer>
-        )}
-
-        {!loading && filteredOrders.length > 0 && viewMode === "cards" && (
-          <CardsContainer>
-            {filteredOrders.map((order) => (
-              <OrderCard
-                key={order.NUM_PED}
-                $selected={selectedOrders.includes(order.NUM_PED)}
-                $status={order.ESTADO}
-              >
-                <CardHeader>
-                  <CardTitle>Pedido: {order.NUM_PED}</CardTitle>
-                  <StatusBadge status={order.ESTADO}>
-                    {order.ESTADO === "P" && "Pendiente"}
-                    {order.ESTADO === "F" && "Facturado"}
-                    {order.ESTADO === "A" && "Anulado"}
-                    {!["P", "F", "A"].includes(order.ESTADO) && order.ESTADO}
-                  </StatusBadge>
-                </CardHeader>
-
-                <CardContent>
-                  <CardInfo>
-                    <InfoItem>
-                      <InfoLabel>Cliente:</InfoLabel>
-                      <InfoValue>{order.COD_CLT}</InfoValue>
-                    </InfoItem>
-
-                    <InfoItem>
-                      <InfoLabel>Fecha:</InfoLabel>
-                      <InfoValue>
-                        {new Date(order.FEC_PED).toLocaleDateString()}
-                      </InfoValue>
-                    </InfoItem>
-
-                    <InfoItem>
-                      <InfoLabel>Bodega:</InfoLabel>
-                      <InfoValue>{order.COD_BOD || "N/A"}</InfoValue>
-                    </InfoItem>
-
-                    <InfoItem>
-                      <InfoLabel>Total:</InfoLabel>
-                      <InfoValue>
-                        {new Intl.NumberFormat("es-DO", {
-                          style: "currency",
-                          currency: "DOP",
-                        }).format(order.MON_IMP_VT || 0)}
-                      </InfoValue>
-                    </InfoItem>
-                  </CardInfo>
-                </CardContent>
-
-                <CardActions>
-                  <CardCheckbox>
-                    <CheckboxInput
-                      type="checkbox"
-                      checked={selectedOrders.includes(order.NUM_PED)}
-                      onChange={() => handleSelectOrder(order.NUM_PED)}
-                    />
-                    <span>Seleccionar</span>
-                  </CardCheckbox>
-
-                  <ActionButtonsContainer>
-                    <ActionRow>
-                      <CardActionButton
-                        $color="#007bff"
-                        onClick={() => viewOrderDetails(order)}
-                        title="Ver detalles"
-                      >
-                        <FaEye />
-                      </CardActionButton>
-
-                      <CardActionButton
-                        $color="#28a745"
-                        onClick={() => {
-                          setSelectedOrders([order.NUM_PED]);
-                          processOrders();
-                        }}
-                        disabled={order.ESTADO !== "P" || order.IS_PROCESSED}
-                        title="Procesar pedido"
-                      >
-                        <FaPlay />
-                      </CardActionButton>
-                    </ActionRow>
-                  </ActionButtonsContainer>
-                </CardActions>
-              </OrderCard>
-            ))}
-          </CardsContainer>
-        )}
-      </section>
+      <section className="main">{renderView()}</section>
     </Container>
   );
 }
 
-// Styled Components
+// Styles for the component
 const Container = styled.div`
   min-height: 100vh;
   padding: 15px;
@@ -746,25 +769,14 @@ const Container = styled.div`
   grid-template:
     "header" 90px
     "area1" auto
-    "area2" auto
     "main" 1fr;
 
   @media (max-width: 768px) {
     grid-template:
       "header" 70px
       "area1" auto
-      "area2" auto
       "main" 1fr;
     padding: 10px;
-  }
-
-  @media (max-width: 480px) {
-    grid-template:
-      "header" 60px
-      "area1" auto
-      "area2" auto
-      "main" 1fr;
-    padding: 5px;
   }
 
   .header {
@@ -779,38 +791,11 @@ const Container = styled.div`
     margin-bottom: 10px;
   }
 
-  .area2 {
-    grid-area: area2;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    margin-bottom: 20px;
-
-    @media (max-width: 768px) {
-      margin-top: 15px;
-      margin-bottom: 10px;
-    }
-
-    @media (max-width: 480px) {
-      margin-top: 10px;
-      margin-bottom: 5px;
-      flex-direction: column;
-    }
-  }
-
   .main {
     grid-area: main;
     margin-top: 10px;
     overflow-x: auto;
     position: relative;
-
-    @media (max-width: 768px) {
-      padding: 10px;
-    }
-
-    @media (max-width: 480px) {
-      padding: 5px;
-    }
   }
 `;
 
@@ -837,6 +822,25 @@ const InfoSection = styled.div`
   p {
     margin: 0;
     color: ${({ theme }) => theme.textSecondary || "#666"};
+  }
+`;
+
+// Back button
+const BackButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 15px;
+  background-color: ${(props) => props.theme.secondary};
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  margin-bottom: 20px;
+
+  &:hover {
+    background-color: ${(props) => props.theme.secondaryHover};
   }
 `;
 
@@ -1144,10 +1148,6 @@ const StyledTable = styled.table`
   tr {
     border-bottom: 1px solid ${({ theme }) => theme.border || "#ddd"};
 
-    &:last-child {
-      border-bottom: none;
-    }
-
     &:hover {
       background-color: ${({ theme }) => theme.tableHover || "#f8f9fa"};
     }
@@ -1162,10 +1162,6 @@ const StyledTable = styled.table`
     width: 100px;
     text-align: center;
   }
-
-  .amount-column {
-    text-align: right;
-  }
 `;
 
 const StatusBadge = styled.span`
@@ -1176,16 +1172,13 @@ const StatusBadge = styled.span`
   font-weight: 500;
   text-align: center;
   background-color: ${(props) => {
-    switch (props.status) {
-      case "P":
-        return "#17a2b8"; // Pending
-      case "F":
-        return "#28a745"; // Facturado
-      case "A":
-        return "#dc3545"; // Anulado
-      default:
-        return "#6c757d"; // Other
+    if (typeof props.status === "string") {
+      const status = props.status.toUpperCase();
+      if (status === "P" || status.includes("PEND")) return "#17a2b8";
+      if (status === "F" || status.includes("FACT")) return "#28a745";
+      if (status === "A" || status.includes("ANUL")) return "#dc3545";
     }
+    return "#6c757d"; // Default
   }};
   color: white;
 `;
@@ -1240,16 +1233,13 @@ const OrderCard = styled.div`
   border-left: 4px solid
     ${(props) => {
       if (props.$selected) return "#007bff";
-      switch (props.$status) {
-        case "P":
-          return "#17a2b8"; // Pending
-        case "F":
-          return "#28a745"; // Facturado
-        case "A":
-          return "#dc3545"; // Anulado
-        default:
-          return "#6c757d"; // Other
+      if (typeof props.$status === "string") {
+        const status = props.$status.toUpperCase();
+        if (status === "P" || status.includes("PEND")) return "#17a2b8";
+        if (status === "F" || status.includes("FACT")) return "#28a745";
+        if (status === "A" || status.includes("ANUL")) return "#dc3545";
       }
+      return "#6c757d"; // Default
     }};
   transition: all 0.2s;
 
