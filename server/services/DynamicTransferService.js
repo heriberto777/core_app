@@ -4,6 +4,7 @@ const { SqlService } = require("./SqlService");
 const TransferMapping = require("../models/transferMappingModel");
 const TaskExecution = require("../models/taskExecutionModel");
 const TaskTracker = require("./TaskTracker");
+const TransferTask = require("../models/transferTaks");
 
 class DynamicTransferService {
   /**
@@ -17,8 +18,6 @@ class DynamicTransferService {
     // Crear AbortController local si no se proporcionó signal
     const localAbortController = !signal ? new AbortController() : null;
     signal = signal || localAbortController.signal;
-
-    console.log("Documentos", documentIds);
 
     let sourceConnection = null;
     let targetConnection = null;
@@ -99,6 +98,8 @@ class DynamicTransferService {
         details: [],
       };
 
+      let hasErrors = false; // Variable para rastrear si hubo errores
+
       for (let i = 0; i < documentIds.length; i++) {
         // Verificar si se ha cancelado la tarea
         if (signal.aborted) {
@@ -132,6 +133,7 @@ class DynamicTransferService {
               await this.markAsProcessed(documentId, mapping, sourceConnection);
             }
           } else {
+            hasErrors = true; // Marcar que hubo errores
             results.failed++;
             if (docResult.documentType) {
               if (!results.byType[docResult.documentType]) {
@@ -160,6 +162,7 @@ class DynamicTransferService {
             throw new Error("Tarea cancelada por el usuario");
           }
 
+          hasErrors = true; // Marcar que hubo errores
           logger.error(
             `Error procesando documento ${documentId}: ${docError.message}`
           );
@@ -168,14 +171,25 @@ class DynamicTransferService {
             documentId,
             success: false,
             error: docError.message,
+            errorDetails: docError.stack,
           });
         }
       }
 
-      // 6. Actualizar registro de ejecución
+      // 6. Actualizar registro de ejecución y tarea
       const executionTime = Date.now() - startTime;
+
+      // Determinar el estado correcto basado en los resultados
+      let finalStatus = "completed";
+      if (results.processed === 0 && results.failed > 0) {
+        finalStatus = "failed"; // Si todos fallaron
+      } else if (results.failed > 0) {
+        finalStatus = "partial"; // Si algunos fallaron y otros tuvieron éxito
+      }
+
+      // Actualizar el registro de ejecución
       await TaskExecution.findByIdAndUpdate(executionId, {
-        status: "completed",
+        status: finalStatus,
         executionTime,
         totalRecords: documentIds.length,
         successfulRecords: results.processed,
@@ -183,11 +197,37 @@ class DynamicTransferService {
         details: results,
       });
 
-      TaskTracker.completeTask(cancelTaskId, "completed");
+      // Actualizar la tarea principal con el resultado
+      await TransferTask.findByIdAndUpdate(mapping.taskId, {
+        status: finalStatus,
+        progress: 100,
+        lastExecutionDate: new Date(),
+        lastExecutionResult: {
+          success: !hasErrors, // Solo es éxito total si no hubo errores
+          message: hasErrors
+            ? `Procesamiento completado con errores: ${results.processed} éxitos, ${results.failed} fallos`
+            : "Procesamiento completado con éxito",
+          affectedRecords: results.processed,
+          errorDetails: hasErrors
+            ? results.details
+                .filter((d) => !d.success)
+                .map(
+                  (d) =>
+                    `Documento ${d.documentId}: ${
+                      d.message || d.error || "Error no especificado"
+                    }`
+                )
+                .join("\n")
+            : null,
+        },
+      });
+
+      TaskTracker.completeTask(cancelTaskId, finalStatus);
 
       return {
-        success: true,
+        success: true, // La operación en sí fue exitosa aunque algunos documentos fallaron
         executionId,
+        status: finalStatus, // Añadimos el status para que el frontend pueda mostrarlo correctamente
         ...results,
       };
     } catch (error) {
@@ -200,6 +240,17 @@ class DynamicTransferService {
             status: "cancelled",
             executionTime: Date.now() - startTime,
             errorMessage: "Cancelada por el usuario",
+          });
+        }
+
+        if (mapping?.taskId) {
+          await TransferTask.findByIdAndUpdate(mapping.taskId, {
+            status: "cancelled",
+            progress: -1,
+            lastExecutionResult: {
+              success: false,
+              message: "Tarea cancelada por el usuario",
+            },
           });
         }
 
@@ -218,6 +269,19 @@ class DynamicTransferService {
           status: "failed",
           executionTime: Date.now() - startTime,
           errorMessage: error.message,
+        });
+      }
+
+      // Actualizar la tarea principal con el error
+      if (mapping?.taskId) {
+        await TransferTask.findByIdAndUpdate(mapping.taskId, {
+          status: "failed",
+          progress: -1,
+          lastExecutionResult: {
+            success: false,
+            message: `Error: ${error.message}`,
+            errorDetails: error.stack,
+          },
         });
       }
 
@@ -284,16 +348,16 @@ class DynamicTransferService {
           const result = await SqlService.query(sourceConnection, query);
           sourceData = result.recordset[0];
         } else {
-          // Construir consulta básica
+          // Construir consulta básica - Usar primaryKey para la tabla origen
           const query = `
-            SELECT * FROM ${tableConfig.sourceTable} 
-            WHERE ${tableConfig.primaryKey || "NUM_PED"} = @documentId
-            ${
-              tableConfig.filterCondition
-                ? ` AND ${tableConfig.filterCondition}`
-                : ""
-            }
-          `;
+          SELECT * FROM ${tableConfig.sourceTable} 
+          WHERE ${tableConfig.primaryKey || "NUM_PED"} = @documentId
+          ${
+            tableConfig.filterCondition
+              ? ` AND ${tableConfig.filterCondition}`
+              : ""
+          }
+        `;
 
           const result = await SqlService.query(sourceConnection, query, {
             documentId,
@@ -318,11 +382,14 @@ class DynamicTransferService {
           }
         }
 
+        // Determinar la clave en la tabla destino correspondiente a primaryKey
+        const targetPrimaryKey = this.getTargetPrimaryKeyField(tableConfig);
+
         // 4. Verificar si el documento ya existe en destino
         const checkQuery = `
-          SELECT TOP 1 1 FROM ${tableConfig.targetTable}
-          WHERE ${tableConfig.primaryKey || "NUM_PEDIDO"} = @documentId
-        `;
+        SELECT TOP 1 1 FROM ${tableConfig.targetTable}
+        WHERE ${targetPrimaryKey} = @documentId
+      `;
 
         const checkResult = await SqlService.query(
           targetConnection,
@@ -405,9 +472,9 @@ class DynamicTransferService {
 
         // 6. Insertar en tabla principal
         const insertQuery = `
-          INSERT INTO ${tableConfig.targetTable} (${targetFields.join(", ")})
-          VALUES (${targetValues.join(", ")})
-        `;
+        INSERT INTO ${tableConfig.targetTable} (${targetFields.join(", ")})
+        VALUES (${targetValues.join(", ")})
+      `;
 
         await SqlService.query(targetConnection, insertQuery, targetData);
         processedTables.push(tableConfig.name);
@@ -432,15 +499,15 @@ class DynamicTransferService {
           } else {
             // Construir consulta básica
             const query = `
-              SELECT * FROM ${detailConfig.sourceTable} 
-              WHERE ${detailConfig.primaryKey || "NUM_PED"} = @documentId
-              ${
-                detailConfig.filterCondition
-                  ? ` AND ${detailConfig.filterCondition}`
-                  : ""
-              }
-              ORDER BY SECUENCIA
-            `;
+            SELECT * FROM ${detailConfig.sourceTable} 
+            WHERE ${detailConfig.primaryKey || "NUM_PED"} = @documentId
+            ${
+              detailConfig.filterCondition
+                ? ` AND ${detailConfig.filterCondition}`
+                : ""
+            }
+            ORDER BY SECUENCIA
+          `;
 
             const result = await SqlService.query(sourceConnection, query, {
               documentId,
@@ -501,11 +568,9 @@ class DynamicTransferService {
             }
 
             const insertDetailQuery = `
-              INSERT INTO ${detailConfig.targetTable} (${detailFields.join(
-              ", "
-            )})
-              VALUES (${detailValues.join(", ")})
-            `;
+            INSERT INTO ${detailConfig.targetTable} (${detailFields.join(", ")})
+            VALUES (${detailValues.join(", ")})
+          `;
 
             await SqlService.query(
               targetConnection,
@@ -540,7 +605,7 @@ class DynamicTransferService {
         {
           documentId,
           errorStack: error.stack,
-          errorDetails: error.details || error.code || "",
+          errorDetails: error.code || error.number || "",
         }
       );
       return {
@@ -548,9 +613,33 @@ class DynamicTransferService {
         message: `Error: ${error.message}`,
         documentType: "unknown",
         errorDetails: error.stack,
-        errorCode: error.code || null,
       };
     }
+  }
+
+  /**
+   * Obtiene el nombre del campo clave en la tabla destino
+   * @param {Object} tableConfig - Configuración de la tabla
+   * @returns {string} - Nombre del campo clave en la tabla destino
+   */
+  getTargetPrimaryKeyField(tableConfig) {
+    // Si hay targetPrimaryKey definido, usarlo
+    if (tableConfig.targetPrimaryKey) {
+      return tableConfig.targetPrimaryKey;
+    }
+
+    // Buscar el fieldMapping que corresponde a la clave primaria en origen
+    const primaryKeyMapping = tableConfig.fieldMappings.find(
+      (fm) => fm.sourceField === tableConfig.primaryKey
+    );
+
+    // Si existe un mapeo para la clave primaria, usar targetField
+    if (primaryKeyMapping) {
+      return primaryKeyMapping.targetField;
+    }
+
+    // Si no se encuentra, usar targetPrimaryKey o el valor predeterminado
+    return tableConfig.targetPrimaryKey || "ID";
   }
 
   /**
@@ -569,11 +658,11 @@ class DynamicTransferService {
       if (!mainTable) return false;
 
       const query = `
-        UPDATE ${mainTable.sourceTable} 
-        SET ${mapping.markProcessedField} = @processedValue,
-            PROCESSED_DATE = GETDATE()
-        WHERE ${mainTable.primaryKey || "NUM_PED"} = @documentId
-      `;
+      UPDATE ${mainTable.sourceTable} 
+      SET ${mapping.markProcessedField} = @processedValue,
+          PROCESSED_DATE = GETDATE()
+      WHERE ${mainTable.primaryKey || "NUM_PED"} = @documentId
+    `;
 
       const params = {
         documentId,
@@ -931,8 +1020,6 @@ class DynamicTransferService {
     try {
       // Si no hay taskId, crear una tarea por defecto
       if (!mappingData.taskId) {
-        const TransferTask = require("../models/transferTaks");
-
         // Crear tarea básica basada en la configuración del mapeo
         let defaultQuery = "SELECT 1";
 

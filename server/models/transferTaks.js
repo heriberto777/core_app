@@ -99,6 +99,7 @@ const transferTaskSchema = new mongoose.Schema(
       success: Boolean,
       message: String,
       affectedRecords: Number,
+      errorDetails: String,
     },
     // NUEVO CAMPO: Mapeo de campos para transferencias "down"
     fieldMapping: {

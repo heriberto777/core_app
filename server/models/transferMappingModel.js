@@ -21,7 +21,8 @@ const TableConfigSchema = new Schema({
   name: { type: String, required: true },
   sourceTable: { type: String, required: true },
   targetTable: { type: String, required: true },
-  primaryKey: { type: String },
+  primaryKey: { type: String }, // Clave primaria en tabla origen
+  targetPrimaryKey: { type: String }, // Clave primaria en tabla destino
   isDetailTable: { type: Boolean, default: false },
   parentTableRef: { type: String }, // Para tablas de detalle, referencia a la tabla padre
   fieldMappings: [FieldMappingSchema],
