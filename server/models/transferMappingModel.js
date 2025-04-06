@@ -13,6 +13,7 @@ const FieldMappingSchema = new Schema({
   targetField: { type: String, required: true },
   defaultValue: { type: Schema.Types.Mixed },
   isSqlFunction: { type: Boolean, default: false },
+  isRequired: { type: Boolean, default: false },
   valueMappings: [ValueMapSchema],
 });
 
