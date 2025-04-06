@@ -536,12 +536,19 @@ class DynamicTransferService {
       };
     } catch (error) {
       logger.error(
-        `Error procesando documento ${documentId}: ${error.message}`
+        `Error procesando documento ${documentId}: ${error.message}`,
+        {
+          documentId,
+          errorStack: error.stack,
+          errorDetails: error.details || error.code || "",
+        }
       );
       return {
         success: false,
         message: `Error: ${error.message}`,
         documentType: "unknown",
+        errorDetails: error.stack,
+        errorCode: error.code || null,
       };
     }
   }

@@ -23,6 +23,7 @@ import {
   FaArrowLeft,
   FaEdit,
   FaPlus,
+  FaInfoCircle,
 } from "react-icons/fa";
 
 const api = new TransferApi();
@@ -38,6 +39,9 @@ export function OrdersVisualization() {
   const [activeView, setActiveView] = useState("mappingsList"); // mappingsList, mappingEditor, documents
   const [activeMappingId, setActiveMappingId] = useState(null);
   const [editingMappingId, setEditingMappingId] = useState(null);
+  const [showConfigInfo, setShowConfigInfo] = useState(false);
+  const [activeConfig, setActiveConfig] = useState(null);
+  const [activeMappingName, setActiveMappingName] = useState("");
 
   // Filters
   const [filters, setFilters] = useState({
@@ -66,6 +70,32 @@ export function OrdersVisualization() {
     !!activeMappingId,
     30000 // Refresh every 30 seconds
   );
+
+  // Load mapping configuration when activeMappingId changes
+  useEffect(() => {
+    if (activeMappingId) {
+      loadMappingConfig(activeMappingId);
+    }
+  }, [activeMappingId]);
+
+  // Load mapping configuration details
+  const loadMappingConfig = async (mappingId) => {
+    try {
+      setIsLoading(true);
+      const config = await api.getMappingById(accessToken, mappingId);
+      setActiveConfig(config);
+      setActiveMappingName(config.name || "Configuración sin nombre");
+      setIsLoading(false);
+    } catch (error) {
+      console.error("Error al cargar configuración:", error);
+      setIsLoading(false);
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: "No se pudo cargar los detalles de la configuración",
+      });
+    }
+  };
 
   // Filter orders
   const filteredOrders = orders.filter((order) => {
@@ -161,20 +191,46 @@ export function OrdersVisualization() {
       setIsLoading(false);
 
       if (result.success) {
-        // Show detailed summary
+        // Show detailed summary with error information if available
         Swal.fire({
           title: "Procesamiento completado",
           html: `
             <div class="result-summary">
               <p><strong>Resumen:</strong></p>
               <ul>
-                <li>Procesados correctamente: ${result.data.processed}</li>
-                <li>Fallidos: ${result.data.failed}</li>
-                <li>Omitidos: ${result.data.skipped || 0}</li>
+                <li>Procesados correctamente: ${result.processed || 0}</li>
+                <li>Fallidos: ${result.failed || 0}</li>
+                <li>Omitidos: ${result.skipped || 0}</li>
               </ul>
+              ${
+                result.failed > 0 ||
+                (result.details &&
+                  result.details.filter((d) => !d.success).length > 0)
+                  ? `<p><strong>Detalles de errores:</strong></p>
+                <div class="error-details" style="max-height:200px;overflow-y:auto;text-align:left;background:#f8f8f8;padding:10px;border-radius:4px;margin-top:10px;">
+                  ${
+                    result.details
+                      ? result.details
+                          .filter((detail) => !detail.success)
+                          .map(
+                            (
+                              detail
+                            ) => `<p style="margin:5px 0;border-bottom:1px solid #eee;padding-bottom:5px;">
+                        <strong>Documento ${detail.documentId}:</strong> ${
+                              detail.message || "Error no especificado"
+                            }
+                      </p>`
+                          )
+                          .join("")
+                      : "<p>No hay detalles específicos del error disponibles.</p>"
+                  }
+                </div>`
+                  : ""
+              }
             </div>
           `,
           icon: "success",
+          width: 600,
         });
 
         // Refresh orders and reset selection
@@ -379,6 +435,7 @@ export function OrdersVisualization() {
       // If we're editing and this is also the active mapping, refresh data
       if (activeMappingId === result._id) {
         fetchOrders();
+        loadMappingConfig(result._id); // Reload config
       }
     }
     setActiveView("mappingsList");
@@ -412,6 +469,79 @@ export function OrdersVisualization() {
             <BackButton onClick={() => setActiveView("mappingsList")}>
               <FaArrowLeft /> Volver a configuraciones
             </BackButton>
+
+            {/* Configuration info panel */}
+            <ConfigInfoButton
+              onClick={() => setShowConfigInfo(!showConfigInfo)}
+            >
+              <FaInfoCircle /> {showConfigInfo ? "Ocultar" : "Mostrar"} Detalles
+              de Configuración
+            </ConfigInfoButton>
+
+            {showConfigInfo && (
+              <ConfigInfoPanel>
+                <h3>Configuración activa: {activeMappingName}</h3>
+                <ConfigInfoSection>
+                  <h4>Información General</h4>
+                  <InfoItem>
+                    <InfoLabel>Tipo de transferencia:</InfoLabel>
+                    <InfoValue>{activeConfig?.transferType || "N/A"}</InfoValue>
+                  </InfoItem>
+                  <InfoItem>
+                    <InfoLabel>Servidor origen:</InfoLabel>
+                    <InfoValue>{activeConfig?.sourceServer || "N/A"}</InfoValue>
+                  </InfoItem>
+                  <InfoItem>
+                    <InfoLabel>Servidor destino:</InfoLabel>
+                    <InfoValue>{activeConfig?.targetServer || "N/A"}</InfoValue>
+                  </InfoItem>
+                </ConfigInfoSection>
+
+                <ConfigInfoSection>
+                  <h4>Tipos de Documento</h4>
+                  {activeConfig?.documentTypeRules?.length ? (
+                    activeConfig.documentTypeRules.map((rule, index) => (
+                      <RuleItem key={index}>
+                        <div>
+                          <strong>{rule.name}</strong>: {rule.sourceField} ={" "}
+                          {rule.sourceValues.join(", ")}
+                        </div>
+                        {rule.description && <div>{rule.description}</div>}
+                      </RuleItem>
+                    ))
+                  ) : (
+                    <div>No hay reglas de tipo de documento definidas</div>
+                  )}
+                </ConfigInfoSection>
+
+                <ConfigInfoSection>
+                  <h4>Tablas</h4>
+                  {activeConfig?.tableConfigs?.length ? (
+                    activeConfig.tableConfigs.map((table, index) => (
+                      <TableInfoItem key={index}>
+                        <div>
+                          <strong>{table.name}</strong> (
+                          {table.isDetailTable ? "Detalle" : "Principal"})
+                        </div>
+                        <div>
+                          Origen: {table.sourceTable} → Destino:{" "}
+                          {table.targetTable}
+                        </div>
+                        <div>Clave: {table.primaryKey || "N/A"}</div>
+                        {table.isDetailTable && (
+                          <div>Padre: {table.parentTableRef || "N/A"}</div>
+                        )}
+                        <div>
+                          {table.fieldMappings?.length || 0} campos mapeados
+                        </div>
+                      </TableInfoItem>
+                    ))
+                  ) : (
+                    <div>No hay tablas configuradas</div>
+                  )}
+                </ConfigInfoSection>
+              </ConfigInfoPanel>
+            )}
 
             <ActionsContainer>
               <SearchInputContainer>
@@ -758,7 +888,7 @@ export function OrdersVisualization() {
   );
 }
 
-// Styles for the component
+// Aquí todos los estilos que ya existían
 const Container = styled.div`
   min-height: 100vh;
   padding: 15px;
@@ -842,6 +972,70 @@ const BackButton = styled.button`
   &:hover {
     background-color: ${(props) => props.theme.secondaryHover};
   }
+`;
+
+// Config Info Button y Panel
+const ConfigInfoButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 15px;
+  background-color: ${(props) => props.theme.secondary};
+  color: white;
+  border: none;
+  border-radius: 4px;
+  font-size: 14px;
+  cursor: pointer;
+  margin-bottom: 10px;
+  &:hover {
+    background-color: ${(props) => props.theme.secondaryHover};
+  }
+`;
+
+const ConfigInfoPanel = styled.div`
+  background-color: ${({ theme }) => theme.cardBg || "#fff"};
+  border-radius: 8px;
+  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+  padding: 15px;
+  margin-bottom: 20px;
+`;
+
+const ConfigInfoSection = styled.div`
+  margin-bottom: 15px;
+
+  h4 {
+    margin-top: 10px;
+    margin-bottom: 8px;
+    color: ${({ theme }) => theme.primary};
+    border-bottom: 1px solid ${({ theme }) => theme.border};
+    padding-bottom: 4px;
+  }
+`;
+
+const InfoItem = styled.div`
+  display: flex;
+  margin-bottom: 5px;
+`;
+
+const InfoLabel = styled.div`
+  width: 150px;
+  font-weight: 500;
+`;
+
+const InfoValue = styled.div`
+  flex: 1;
+`;
+
+const RuleItem = styled.div`
+  padding: 5px 0;
+  border-bottom: 1px dashed ${({ theme }) => theme.border};
+`;
+
+const TableInfoItem = styled.div`
+  padding: 8px;
+  margin-bottom: 8px;
+  background-color: ${({ theme }) => theme.tableHeader};
+  border-radius: 4px;
 `;
 
 // Actions Container
@@ -1277,26 +1471,6 @@ const CardContent = styled.div`
 
 const CardInfo = styled.div`
   margin-bottom: 15px;
-`;
-
-const InfoItem = styled.div`
-  display: flex;
-  margin-bottom: 8px;
-  font-size: 14px;
-
-  &:last-child {
-    margin-bottom: 0;
-  }
-`;
-
-const InfoLabel = styled.span`
-  font-weight: 500;
-  width: 80px;
-  color: ${({ theme }) => theme.textSecondary || "#666"};
-`;
-
-const InfoValue = styled.span`
-  flex: 1;
 `;
 
 const CardActions = styled.div`
