@@ -210,6 +210,22 @@ export function OrdersVisualization() {
         resultTitle = "Procesamiento parcial";
       }
 
+      // Parse common error types for more readable messages
+      const formatErrorMessage = (errMsg) => {
+        if (errMsg.includes("Cannot insert the value NULL into column")) {
+          const colMatch = errMsg.match(/column '([^']+)'/);
+          const colName = colMatch ? colMatch[1] : "desconocida";
+          return `No se puede insertar NULL en columna '${colName}'. Configure un valor por defecto.`;
+        } else if (
+          errMsg.includes("String or binary data would be truncated")
+        ) {
+          const colMatch = errMsg.match(/column '([^']+)'/);
+          const colName = colMatch ? colMatch[1] : "desconocida";
+          return `Texto demasiado largo para columna '${colName}'. Verifique la longitud máxima.`;
+        }
+        return errMsg;
+      };
+
       // Show detailed summary
       Swal.fire({
         title: resultTitle,
@@ -233,9 +249,11 @@ export function OrdersVisualization() {
                         (
                           detail
                         ) => `<p style="margin:5px 0;border-bottom:1px solid #eee;padding-bottom:5px;">
-                    <strong>Documento ${detail.documentId}:</strong> ${
+                    <strong>Documento ${
+                      detail.documentId
+                    }:</strong> ${formatErrorMessage(
                           detail.error || "Error no especificado"
-                        }
+                        )}
                   </p>`
                       )
                       .join("")
@@ -246,11 +264,13 @@ export function OrdersVisualization() {
                         (
                           detail
                         ) => `<p style="margin:5px 0;border-bottom:1px solid #eee;padding-bottom:5px;">
-                    <strong>Documento ${detail.documentId}:</strong> ${
+                    <strong>Documento ${
+                      detail.documentId
+                    }:</strong> ${formatErrorMessage(
                           detail.message ||
-                          detail.error ||
-                          "Error no especificado"
-                        }
+                            detail.error ||
+                            "Error no especificado"
+                        )}
                   </p>`
                       )
                       .join("")
@@ -278,7 +298,6 @@ export function OrdersVisualization() {
       });
     }
   };
-
   // View order details using dynamic mapping
   const viewOrderDetails = async (order) => {
     try {
@@ -565,6 +584,31 @@ export function OrdersVisualization() {
                         )}
                         <div>
                           {table.fieldMappings?.length || 0} campos mapeados
+                          <FieldsList>
+                            {table.fieldMappings?.map((field, idx) => (
+                              <FieldItem key={idx}>
+                                {field.sourceField || "(sin origen)"} →{" "}
+                                <strong>{field.targetField}</strong>
+                                {field.removePrefix && (
+                                  <span
+                                    style={{
+                                      color: "#e74c3c",
+                                      marginLeft: "5px",
+                                      fontSize: "11px",
+                                    }}
+                                  >
+                                    (quitar prefijo: {field.removePrefix})
+                                  </span>
+                                )}
+                                {field.defaultValue !== undefined && (
+                                  <DefaultValue>
+                                    {field.isRequired ? "* " : ""}
+                                    {field.defaultValue}
+                                  </DefaultValue>
+                                )}
+                              </FieldItem>
+                            ))}
+                          </FieldsList>
                         </div>
                       </TableInfoItem>
                     ))
@@ -1554,5 +1598,29 @@ const CardActionButton = styled.button`
     background-color: #adb5bd;
     cursor: not-allowed;
     opacity: 0.7;
+  }
+`;
+
+const FieldsList = styled.ul`
+  margin-top: 8px;
+  padding-left: 20px;
+  list-style-type: none;
+`;
+
+const FieldItem = styled.li`
+  margin-bottom: 4px;
+  font-size: 13px;
+`;
+
+const DefaultValue = styled.span`
+  margin-left: 5px;
+  color: ${({ theme }) => theme.textSecondary || "#666"};
+  font-style: italic;
+  font-size: 12px;
+  &:before {
+    content: "(default: ";
+  }
+  &:after {
+    content: ")";
   }
 `;

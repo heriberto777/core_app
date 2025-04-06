@@ -254,27 +254,40 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     Swal.fire({
       title: "Nuevo Mapeo de Campo",
       html: `
-      <div class="form-group">
-        <label for="sourceField">Campo origen (opcional)</label>
-        <input id="sourceField" class="swal2-input" placeholder="Ej: NUM_PED">
-      </div>
-      <div class="form-group">
-        <label for="targetField">Campo destino (obligatorio)</label>
-        <input id="targetField" class="swal2-input" placeholder="Ej: NUM_PEDIDO">
-      </div>
-      <div class="form-group">
-        <label for="defaultValue">Valor por defecto</label>
-        <input id="defaultValue" class="swal2-input" placeholder="Ej: 'N/A'">
-      </div>
-      <div class="form-check">
-        <input type="checkbox" id="isSqlFunction" class="swal2-checkbox">
-        <label for="isSqlFunction">¿Es función SQL?</label>
-      </div>
-      <div class="form-check">
-        <input type="checkbox" id="isRequired" class="swal2-checkbox">
-        <label for="isRequired">¿Campo obligatorio en destino?</label>
-      </div>
-    `,
+    <div class="form-group">
+      <label for="sourceField">Campo origen (opcional)</label>
+      <input id="sourceField" class="swal2-input" placeholder="Ej: NUM_PED">
+    </div>
+    <div class="form-group">
+      <label for="targetField">Campo destino (obligatorio)</label>
+      <input id="targetField" class="swal2-input" placeholder="Ej: NUM_PEDIDO">
+    </div>
+    <div class="form-group">
+      <label for="defaultValue">Valor por defecto</label>
+      <input id="defaultValue" class="swal2-input" placeholder="Ej: 'N/A'">
+    </div>
+    <div class="form-group">
+      <label for="removePrefix">Eliminar prefijo específico</label>
+      <input id="removePrefix" class="swal2-input" placeholder="Ej: CN">
+      <small style="display:block;margin-top:4px;color:#666;">
+        Si se especifica, se eliminará automáticamente este prefijo del valor. Ej: 'CN10133' → '10133'
+      </small>
+    </div>
+    <div class="form-check">
+      <input type="checkbox" id="isSqlFunction" class="swal2-checkbox">
+      <label for="isSqlFunction">¿Es función SQL?</label>
+    </div>
+    <div class="form-check">
+      <input type="checkbox" id="isRequired" class="swal2-checkbox">
+      <label for="isRequired">¿Campo obligatorio en destino?</label>
+    </div>
+    <div class="form-info">
+      <small style="display:block;margin-top:10px;color:#666;">
+        <b>Nota:</b> Para campos obligatorios en la tabla destino, 
+        asegúrese de proporcionar un valor por defecto si no hay campo origen.
+      </small>
+    </div>
+  `,
       showCancelButton: true,
       confirmButtonText: "Añadir",
       cancelButtonText: "Cancelar",
@@ -282,6 +295,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         const sourceField = document.getElementById("sourceField").value;
         const targetField = document.getElementById("targetField").value;
         const defaultValue = document.getElementById("defaultValue").value;
+        const removePrefix = document.getElementById("removePrefix").value;
         const isSqlFunction = document.getElementById("isSqlFunction").checked;
         const isRequired = document.getElementById("isRequired").checked;
 
@@ -302,6 +316,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           sourceField: sourceField || null,
           targetField,
           defaultValue: defaultValue ? defaultValue : undefined,
+          removePrefix: removePrefix || null,
           isSqlFunction,
           isRequired,
           valueMappings: [],
@@ -558,36 +573,57 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     Swal.fire({
       title: "Editar Mapeo de Campo",
       html: `
-      <div class="form-group">
-        <label for="sourceField">Campo origen (opcional)</label>
-        <input id="sourceField" class="swal2-input" value="${
-          field.sourceField || ""
-        }" placeholder="Ej: NUM_PED">
-      </div>
-      <div class="form-group">
-        <label for="targetField">Campo destino (obligatorio)</label>
-        <input id="targetField" class="swal2-input" value="${
-          field.targetField
-        }" placeholder="Ej: NUM_PEDIDO">
-      </div>
-      <div class="form-group">
-        <label for="defaultValue">Valor por defecto</label>
-        <input id="defaultValue" class="swal2-input" value="${
-          field.defaultValue !== undefined ? field.defaultValue : ""
-        }" placeholder="Ej: 'N/A'">
-      </div>
-      <div class="form-check">
-        <input type="checkbox" id="isSqlFunction" class="swal2-checkbox" ${
-          field.isSqlFunction ? "checked" : ""
-        }>
-        <label for="isSqlFunction">¿Es función SQL?</label>
-      </div>
-      <div class="form-check">
-        <input type="checkbox" id="isRequired" class="swal2-checkbox" ${
-          field.isRequired ? "checked" : ""
-        }>
-        <label for="isRequired">¿Campo obligatorio en destino?</label>
-      </div>
+    <div class="form-group">
+      <label for="sourceField">Campo origen (opcional)</label>
+      <input id="sourceField" class="swal2-input" value="${
+        field.sourceField || ""
+      }" placeholder="Ej: NUM_PED">
+    </div>
+    <div class="form-group">
+      <label for="targetField">Campo destino (obligatorio)</label>
+      <input id="targetField" class="swal2-input" value="${
+        field.targetField
+      }" placeholder="Ej: NUM_PEDIDO">
+    </div>
+    <div class="form-group">
+      <label for="defaultValue">Valor por defecto</label>
+      <input id="defaultValue" class="swal2-input" value="${
+        field.defaultValue !== undefined ? field.defaultValue : ""
+      }" placeholder="Ej: 'N/A'">
+    </div>
+    <div class="form-group">
+      <label for="removePrefix">Eliminar prefijo específico</label>
+      <input id="removePrefix" class="swal2-input" value="${
+        field.removePrefix || ""
+      }" placeholder="Ej: CN">
+      <small style="display:block;margin-top:4px;color:#666;">
+        Si se especifica, se eliminará automáticamente este prefijo del valor. Ej: 'CN10133' → '10133'
+      </small>
+    </div>
+    <div class="form-check">
+      <input type="checkbox" id="isSqlFunction" class="swal2-checkbox" ${
+        field.isSqlFunction ? "checked" : ""
+      }>
+      <label for="isSqlFunction">¿Es función SQL?</label>
+    </div>
+    <div class="form-check">
+      <input type="checkbox" id="isRequired" class="swal2-checkbox" ${
+        field.isRequired ? "checked" : ""
+      }>
+      <label for="isRequired">¿Campo obligatorio en destino?</label>
+    </div>
+    <div class="form-info">
+      <small style="display:block;margin-top:10px;color:#666;">
+        <b>Nota:</b> Para campos obligatorios en la tabla destino, 
+        asegúrese de proporcionar un valor por defecto si no hay campo origen.
+        <br><br>
+        Utilice comillas para valores de texto: 'texto'
+        <br>
+        Valor numérico sin comillas: 0
+        <br>
+        Para valor NULL escriba la palabra: NULL
+      </small>
+    </div>
     `,
       showCancelButton: true,
       confirmButtonText: "Guardar",
@@ -596,6 +632,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         const sourceField = document.getElementById("sourceField").value;
         const targetField = document.getElementById("targetField").value;
         const defaultValue = document.getElementById("defaultValue").value;
+        const removePrefix = document.getElementById("removePrefix").value;
         const isSqlFunction = document.getElementById("isSqlFunction").checked;
         const isRequired = document.getElementById("isRequired").checked;
 
@@ -616,6 +653,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           sourceField: sourceField || null,
           targetField,
           defaultValue: defaultValue ? defaultValue : undefined,
+          removePrefix: removePrefix || null,
           isSqlFunction,
           isRequired,
           valueMappings: field.valueMappings || [],
