@@ -14,6 +14,7 @@ const FieldMappingSchema = new Schema({
   defaultValue: { type: Schema.Types.Mixed },
   isSqlFunction: { type: Boolean, default: false },
   isRequired: { type: Boolean, default: false },
+  removePrefix: { type: String }, // Prefijo a eliminar (ej: "CN")
   valueMappings: [ValueMapSchema],
 });
 

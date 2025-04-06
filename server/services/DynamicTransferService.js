@@ -353,14 +353,14 @@ class DynamicTransferService {
         } else {
           // Construir consulta básica - Usar primaryKey para la tabla origen
           const query = `
-          SELECT * FROM ${tableConfig.sourceTable} 
-          WHERE ${tableConfig.primaryKey || "NUM_PED"} = @documentId
-          ${
-            tableConfig.filterCondition
-              ? ` AND ${tableConfig.filterCondition}`
-              : ""
-          }
-        `;
+        SELECT * FROM ${tableConfig.sourceTable} 
+        WHERE ${tableConfig.primaryKey || "NUM_PED"} = @documentId
+        ${
+          tableConfig.filterCondition
+            ? ` AND ${tableConfig.filterCondition}`
+            : ""
+        }
+      `;
 
           const result = await SqlService.query(sourceConnection, query, {
             documentId,
@@ -390,9 +390,9 @@ class DynamicTransferService {
 
         // 4. Verificar si el documento ya existe en destino
         const checkQuery = `
-        SELECT TOP 1 1 FROM ${tableConfig.targetTable}
-        WHERE ${targetPrimaryKey} = @documentId
-      `;
+      SELECT TOP 1 1 FROM ${tableConfig.targetTable}
+      WHERE ${targetPrimaryKey} = @documentId
+    `;
 
         const checkResult = await SqlService.query(
           targetConnection,
@@ -431,6 +431,19 @@ class DynamicTransferService {
           // Obtener valor del origen o usar valor por defecto
           if (fieldMapping.sourceField) {
             value = sourceData[fieldMapping.sourceField];
+
+            // Aplicar eliminación de prefijo específico si está configurado
+            if (
+              fieldMapping.removePrefix &&
+              typeof value === "string" &&
+              value.startsWith(fieldMapping.removePrefix)
+            ) {
+              const originalValue = value;
+              value = value.substring(fieldMapping.removePrefix.length);
+              logger.debug(
+                `Prefijo '${fieldMapping.removePrefix}' eliminado del campo ${fieldMapping.sourceField}: '${originalValue}' → '${value}'`
+              );
+            }
           } else {
             // No hay campo origen, usar valor por defecto
             value = fieldMapping.defaultValue;
@@ -493,9 +506,9 @@ class DynamicTransferService {
 
         // 6. Insertar en tabla principal
         const insertQuery = `
-        INSERT INTO ${tableConfig.targetTable} (${targetFields.join(", ")})
-        VALUES (${targetValues.join(", ")})
-      `;
+      INSERT INTO ${tableConfig.targetTable} (${targetFields.join(", ")})
+      VALUES (${targetValues.join(", ")})
+    `;
 
         await SqlService.query(targetConnection, insertQuery, targetData);
         processedTables.push(tableConfig.name);
@@ -520,15 +533,15 @@ class DynamicTransferService {
           } else {
             // Construir consulta básica
             const query = `
-            SELECT * FROM ${detailConfig.sourceTable} 
-            WHERE ${detailConfig.primaryKey || "NUM_PED"} = @documentId
-            ${
-              detailConfig.filterCondition
-                ? ` AND ${detailConfig.filterCondition}`
-                : ""
-            }
-            ORDER BY SECUENCIA
-          `;
+          SELECT * FROM ${detailConfig.sourceTable} 
+          WHERE ${detailConfig.primaryKey || "NUM_PED"} = @documentId
+          ${
+            detailConfig.filterCondition
+              ? ` AND ${detailConfig.filterCondition}`
+              : ""
+          }
+          ORDER BY SECUENCIA
+        `;
 
             const result = await SqlService.query(sourceConnection, query, {
               documentId,
@@ -562,6 +575,20 @@ class DynamicTransferService {
 
               // Obtener valor del origen o usar valor por defecto
               value = detailRow[fieldMapping.sourceField];
+
+              // Aplicar eliminación de prefijo específico si está configurado
+              if (
+                fieldMapping.removePrefix &&
+                typeof value === "string" &&
+                value.startsWith(fieldMapping.removePrefix)
+              ) {
+                const originalValue = value;
+                value = value.substring(fieldMapping.removePrefix.length);
+                logger.debug(
+                  `Prefijo '${fieldMapping.removePrefix}' eliminado del campo ${fieldMapping.sourceField}: '${originalValue}' → '${value}'`
+                );
+              }
+
               if (
                 (value === undefined || value === null) &&
                 fieldMapping.defaultValue !== undefined
@@ -607,9 +634,9 @@ class DynamicTransferService {
             }
 
             const insertDetailQuery = `
-            INSERT INTO ${detailConfig.targetTable} (${detailFields.join(", ")})
-            VALUES (${detailValues.join(", ")})
-          `;
+          INSERT INTO ${detailConfig.targetTable} (${detailFields.join(", ")})
+          VALUES (${detailValues.join(", ")})
+        `;
 
             await SqlService.query(
               targetConnection,
