@@ -983,4 +983,199 @@ export class TransferApi {
       throw error;
     }
   }
+
+  // Métodos para gestión de configuraciones de mapeo
+  async getMappings(accessToken) {
+    try {
+      const url = `${this.baseApi}/mappings`;
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+
+      return result.data;
+    } catch (error) {
+      console.error("Error al obtener configuraciones de mapeo:", error);
+      throw error;
+    }
+  }
+
+  async getMappingById(accessToken, mappingId) {
+    try {
+      const url = `${this.baseApi}/mappings/${mappingId}`;
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+
+      return result.data;
+    } catch (error) {
+      console.error("Error al obtener configuración de mapeo:", error);
+      throw error;
+    }
+  }
+
+  async createMapping(accessToken, mappingData) {
+    try {
+      const url = `${this.baseApi}/mappings`;
+      const params = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(mappingData),
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 201) throw result;
+
+      return result.data;
+    } catch (error) {
+      console.error("Error al crear configuración de mapeo:", error);
+      throw error;
+    }
+  }
+
+  async updateMapping(accessToken, mappingId, mappingData) {
+    try {
+      const url = `${this.baseApi}/mappings/${mappingId}`;
+      const params = {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(mappingData),
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+
+      return result.data;
+    } catch (error) {
+      console.error("Error al actualizar configuración de mapeo:", error);
+      throw error;
+    }
+  }
+
+  async deleteMapping(accessToken, mappingId) {
+    try {
+      const url = `${this.baseApi}/mappings/${mappingId}`;
+      const params = {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+
+      return result;
+    } catch (error) {
+      console.error("Error al eliminar configuración de mapeo:", error);
+      throw error;
+    }
+  }
+
+  // Métodos para trabajar con documentos según el mapeo
+  async getDocumentsByMapping(accessToken, mappingId, filters = {}) {
+    try {
+      // Construir URL con parámetros de consulta
+      let url = `${this.baseApi}/mappings/${mappingId}/documents`;
+      const queryParams = [];
+
+      if (filters.dateFrom) queryParams.push(`dateFrom=${filters.dateFrom}`);
+      if (filters.dateTo) queryParams.push(`dateTo=${filters.dateTo}`);
+      if (filters.status && filters.status !== "all")
+        queryParams.push(`status=${filters.status}`);
+      if (filters.warehouse && filters.warehouse !== "all")
+        queryParams.push(`warehouse=${filters.warehouse}`);
+      if (filters.showProcessed) queryParams.push(`showProcessed=true`);
+
+      if (queryParams.length > 0) {
+        url += `?${queryParams.join("&")}`;
+      }
+
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+
+      return result.data || [];
+    } catch (error) {
+      console.error("Error al obtener documentos por mapeo:", error);
+      throw error;
+    }
+  }
+
+  async getDocumentDetailsByMapping(accessToken, mappingId, documentId) {
+    try {
+      const url = `${this.baseApi}/mappings/${mappingId}/documents/${documentId}`;
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+
+      return result.data || { details: {} };
+    } catch (error) {
+      console.error("Error al obtener detalles del documento:", error);
+      throw error;
+    }
+  }
+
+  async processDocumentsByMapping(accessToken, mappingId, documentIds) {
+    try {
+      const url = `${this.baseApi}/mappings/${mappingId}/process`;
+      const params = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ documentIds }),
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+
+      return result;
+    } catch (error) {
+      console.error("Error al procesar documentos:", error);
+      throw error;
+    }
+  }
 }

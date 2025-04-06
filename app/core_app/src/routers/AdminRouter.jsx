@@ -95,7 +95,7 @@ export function AdminRouter() {
         }
       />
       <Route
-        path="/task/analytics"
+        path="/analytics"
         element={
           hasAccess(user, ["admin", "dashboard"]) ? (
             <LoadLayout Layout={AdminLayout} Page={Statistics} />
@@ -105,10 +105,21 @@ export function AdminRouter() {
         }
       />
       <Route
-        path="/task/logs"
+        path="/logs"
         element={
           hasAccess(user, ["admin", "dashboard"]) ? (
             <LoadLayout Layout={AdminLayout} Page={LogsPage} />
+          ) : (
+            <Navigate to="/unauthorized" />
+          )
+        }
+      />
+
+      <Route
+        path="/documents"
+        element={
+          hasAccess(user, ["admin", "dashboard"]) ? (
+            <LoadLayout Layout={AdminLayout} Page={OrdersVisualization} />
           ) : (
             <Navigate to="/unauthorized" />
           )

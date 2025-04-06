@@ -22,6 +22,7 @@ import {
   FaEnvelope,
   FaTruckLoading,
   FaCheckSquare,
+  FaFileAlt,
 } from "react-icons/fa";
 import { BsArrowDown, BsArrowUpShort } from "react-icons/bs";
 import { FaBalanceScale } from "react-icons/fa";
@@ -96,6 +97,7 @@ export const v = {
   iconoCorreo: FaEnvelope,
   iconoGestion: FaUserFriends,
   iconoResumen: FaCheckSquare,
+  iconoDocument: FaFileAlt,
   flechaabajolarga: BsArrowDown,
   flechaarribalarga: BsArrowUpShort,
   balance: FaBalanceScale,
