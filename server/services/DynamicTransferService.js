@@ -320,7 +320,14 @@ class DynamicTransferService {
     sourceConnection,
     targetConnection
   ) {
+    // Iniciar transacción
+    let transaction = null;
+
     try {
+      // Iniciar una transacción en el servidor destino
+      transaction = await SqlService.beginTransaction(targetConnection);
+      logger.info(`Iniciando transacción para documento ${documentId}`);
+
       // Crear un cache para las longitudes de columnas
       const columnLengthCache = new Map();
 
@@ -397,11 +404,20 @@ class DynamicTransferService {
         const checkResult = await SqlService.query(
           targetConnection,
           checkQuery,
-          { documentId }
+          { documentId },
+          transaction
         );
         const exists = checkResult.recordset?.length > 0;
 
         if (exists) {
+          // Revertir la transacción si el documento ya existe
+          if (transaction) {
+            await SqlService.rollbackTransaction(transaction);
+            logger.info(
+              `Transacción revertida: documento ${documentId} ya existe`
+            );
+          }
+
           logger.warn(
             `Documento ${documentId} ya existe en tabla ${tableConfig.targetTable}`
           );
@@ -504,13 +520,21 @@ class DynamicTransferService {
           targetValues.push(`@${fieldMapping.targetField}`);
         }
 
-        // 6. Insertar en tabla principal
+        // 6. Insertar en tabla principal (usando la transacción)
         const insertQuery = `
       INSERT INTO ${tableConfig.targetTable} (${targetFields.join(", ")})
       VALUES (${targetValues.join(", ")})
     `;
 
-        await SqlService.query(targetConnection, insertQuery, targetData);
+        await SqlService.query(
+          targetConnection,
+          insertQuery,
+          targetData,
+          transaction
+        );
+        logger.info(
+          `Insertado encabezado en ${tableConfig.name} con transacción`
+        );
         processedTables.push(tableConfig.name);
 
         // 7. Procesar tablas de detalle relacionadas
@@ -640,23 +664,44 @@ class DynamicTransferService {
           VALUES (${detailValues.join(", ")})
         `;
 
+            // Insertar detalle usando la transacción
             await SqlService.query(
               targetConnection,
               insertDetailQuery,
-              detailTargetData
+              detailTargetData,
+              transaction
             );
           }
 
+          logger.info(
+            `Insertados detalles en ${detailConfig.name} con transacción`
+          );
           processedTables.push(detailConfig.name);
         }
       }
 
       if (processedTables.length === 0) {
+        // Revertir la transacción si no se procesó ninguna tabla
+        if (transaction) {
+          await SqlService.rollbackTransaction(transaction);
+          logger.info(
+            `Transacción revertida: no se procesó ninguna tabla para documento ${documentId}`
+          );
+        }
+
         return {
           success: false,
           message: "No se procesó ninguna tabla para este documento",
           documentType,
         };
+      }
+
+      // Si todo fue exitoso, confirmar la transacción
+      if (transaction) {
+        await SqlService.commitTransaction(transaction);
+        logger.info(
+          `Transacción confirmada exitosamente para documento ${documentId}`
+        );
       }
 
       return {
@@ -668,6 +713,20 @@ class DynamicTransferService {
         processedTables,
       };
     } catch (error) {
+      // Si ocurrió algún error, hacer rollback de la transacción
+      if (transaction) {
+        try {
+          await SqlService.rollbackTransaction(transaction);
+          logger.info(
+            `Transacción revertida para documento ${documentId} debido a error: ${error.message}`
+          );
+        } catch (rollbackError) {
+          logger.error(
+            `Error al revertir transacción: ${rollbackError.message}`
+          );
+        }
+      }
+
       // Verificar si es un error de truncado
       if (
         error.message &&
