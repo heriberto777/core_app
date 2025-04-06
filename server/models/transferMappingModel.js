@@ -9,7 +9,7 @@ const ValueMapSchema = new Schema({
 
 // Schema para el mapeo de campos
 const FieldMappingSchema = new Schema({
-  sourceField: { type: String, required: true },
+  sourceField: { type: String },
   targetField: { type: String, required: true },
   defaultValue: { type: Schema.Types.Mixed },
   isSqlFunction: { type: Boolean, default: false },
@@ -32,7 +32,7 @@ const TableConfigSchema = new Schema({
 // Schema para la regla de tipo de documento
 const DocumentTypeRuleSchema = new Schema({
   name: { type: String, required: true },
-  sourceField: { type: String, required: true },
+  sourceField: { type: String },
   sourceValues: [String], // Valores que debe tener el campo para aplicar esta regla
   description: { type: String },
 });
