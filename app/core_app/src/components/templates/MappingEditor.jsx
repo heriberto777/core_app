@@ -170,31 +170,35 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     Swal.fire({
       title: "Nueva Configuración de Tabla",
       html: `
-        <div class="form-group">
-          <label for="tableName">Nombre</label>
-          <input id="tableName" class="swal2-input" placeholder="Ej: pedidosHeader">
-        </div>
-        <div class="form-group">
-          <label for="sourceTable">Tabla origen</label>
-          <input id="sourceTable" class="swal2-input" placeholder="Ej: FAC_ENC_PED">
-        </div>
-        <div class="form-group">
-          <label for="targetTable">Tabla destino</label>
-          <input id="targetTable" class="swal2-input" placeholder="Ej: PEDIDO">
-        </div>
-        <div class="form-group">
-          <label for="primaryKey">Clave primaria</label>
-          <input id="primaryKey" class="swal2-input" placeholder="Ej: NUM_PED">
-        </div>
-        <div class="form-check">
-          <input type="checkbox" id="isDetailTable" class="swal2-checkbox">
-          <label for="isDetailTable">¿Es tabla de detalle?</label>
-        </div>
-        <div class="form-group">
-          <label for="parentTableRef">Referencia a tabla padre (si es detalle)</label>
-          <input id="parentTableRef" class="swal2-input" placeholder="Ej: pedidosHeader">
-        </div>
-      `,
+      <div class="form-group">
+        <label for="tableName">Nombre</label>
+        <input id="tableName" class="swal2-input" placeholder="Ej: pedidosHeader">
+      </div>
+      <div class="form-group">
+        <label for="sourceTable">Tabla origen</label>
+        <input id="sourceTable" class="swal2-input" placeholder="Ej: FAC_ENC_PED">
+      </div>
+      <div class="form-group">
+        <label for="targetTable">Tabla destino</label>
+        <input id="targetTable" class="swal2-input" placeholder="Ej: PEDIDO">
+      </div>
+      <div class="form-group">
+        <label for="primaryKey">Clave primaria en tabla origen</label>
+        <input id="primaryKey" class="swal2-input" placeholder="Ej: NUM_PED">
+      </div>
+      <div class="form-group">
+        <label for="targetPrimaryKey">Clave primaria en tabla destino</label>
+        <input id="targetPrimaryKey" class="swal2-input" placeholder="Ej: PEDIDO">
+      </div>
+      <div class="form-check">
+        <input type="checkbox" id="isDetailTable" class="swal2-checkbox">
+        <label for="isDetailTable">¿Es tabla de detalle?</label>
+      </div>
+      <div class="form-group">
+        <label for="parentTableRef">Referencia a tabla padre (si es detalle)</label>
+        <input id="parentTableRef" class="swal2-input" placeholder="Ej: pedidosHeader">
+      </div>
+    `,
       showCancelButton: true,
       confirmButtonText: "Añadir",
       cancelButtonText: "Cancelar",
@@ -203,6 +207,8 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         const sourceTable = document.getElementById("sourceTable").value;
         const targetTable = document.getElementById("targetTable").value;
         const primaryKey = document.getElementById("primaryKey").value;
+        const targetPrimaryKey =
+          document.getElementById("targetPrimaryKey").value;
         const isDetailTable = document.getElementById("isDetailTable").checked;
         const parentTableRef = document.getElementById("parentTableRef").value;
 
@@ -218,6 +224,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           sourceTable,
           targetTable,
           primaryKey,
+          targetPrimaryKey,
           isDetailTable,
           parentTableRef: isDetailTable ? parentTableRef : null,
           fieldMappings: [],
@@ -449,48 +456,54 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     Swal.fire({
       title: "Editar Configuración de Tabla",
       html: `
-      <div class="form-group">
-        <label for="tableName">Nombre</label>
-        <input id="tableName" class="swal2-input" value="${
-          tableConfig.name
-        }" placeholder="Ej: pedidosHeader">
-      </div>
-      <div class="form-group">
-        <label for="sourceTable">Tabla origen</label>
-        <input id="sourceTable" class="swal2-input" value="${
-          tableConfig.sourceTable
-        }" placeholder="Ej: FAC_ENC_PED">
-      </div>
-      <div class="form-group">
-        <label for="targetTable">Tabla destino</label>
-        <input id="targetTable" class="swal2-input" value="${
-          tableConfig.targetTable
-        }" placeholder="Ej: PEDIDO">
-      </div>
-      <div class="form-group">
-        <label for="primaryKey">Clave primaria</label>
-        <input id="primaryKey" class="swal2-input" value="${
-          tableConfig.primaryKey || ""
-        }" placeholder="Ej: NUM_PED">
-      </div>
-      <div class="form-check">
-        <input type="checkbox" id="isDetailTable" class="swal2-checkbox" ${
-          tableConfig.isDetailTable ? "checked" : ""
-        }>
-        <label for="isDetailTable">¿Es tabla de detalle?</label>
-      </div>
-      <div class="form-group">
-        <label for="parentTableRef">Referencia a tabla padre (si es detalle)</label>
-        <input id="parentTableRef" class="swal2-input" value="${
-          tableConfig.parentTableRef || ""
-        }" placeholder="Ej: pedidosHeader">
-      </div>
-      <div class="form-group">
-        <label for="filterCondition">Condición de filtro adicional (opcional)</label>
-        <input id="filterCondition" class="swal2-input" value="${
-          tableConfig.filterCondition || ""
-        }" placeholder="Ej: ESTADO = 'A'">
-      </div>
+    <div class="form-group">
+      <label for="tableName">Nombre</label>
+      <input id="tableName" class="swal2-input" value="${
+        tableConfig.name
+      }" placeholder="Ej: pedidosHeader">
+    </div>
+    <div class="form-group">
+      <label for="sourceTable">Tabla origen</label>
+      <input id="sourceTable" class="swal2-input" value="${
+        tableConfig.sourceTable
+      }" placeholder="Ej: FAC_ENC_PED">
+    </div>
+    <div class="form-group">
+      <label for="targetTable">Tabla destino</label>
+      <input id="targetTable" class="swal2-input" value="${
+        tableConfig.targetTable
+      }" placeholder="Ej: PEDIDO">
+    </div>
+    <div class="form-group">
+      <label for="primaryKey">Clave primaria en tabla origen</label>
+      <input id="primaryKey" class="swal2-input" value="${
+        tableConfig.primaryKey || ""
+      }" placeholder="Ej: NUM_PED">
+    </div>
+    <div class="form-group">
+      <label for="targetPrimaryKey">Clave primaria en tabla destino</label>
+      <input id="targetPrimaryKey" class="swal2-input" value="${
+        tableConfig.targetPrimaryKey || ""
+      }" placeholder="Ej: PEDIDO">
+    </div>
+    <div class="form-check">
+      <input type="checkbox" id="isDetailTable" class="swal2-checkbox" ${
+        tableConfig.isDetailTable ? "checked" : ""
+      }>
+      <label for="isDetailTable">¿Es tabla de detalle?</label>
+    </div>
+    <div class="form-group">
+      <label for="parentTableRef">Referencia a tabla padre (si es detalle)</label>
+      <input id="parentTableRef" class="swal2-input" value="${
+        tableConfig.parentTableRef || ""
+      }" placeholder="Ej: pedidosHeader">
+    </div>
+    <div class="form-group">
+      <label for="filterCondition">Condición de filtro adicional (opcional)</label>
+      <input id="filterCondition" class="swal2-input" value="${
+        tableConfig.filterCondition || ""
+      }" placeholder="Ej: ESTADO = 'A'">
+    </div>
     `,
       showCancelButton: true,
       confirmButtonText: "Guardar",
@@ -500,6 +513,8 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         const sourceTable = document.getElementById("sourceTable").value;
         const targetTable = document.getElementById("targetTable").value;
         const primaryKey = document.getElementById("primaryKey").value;
+        const targetPrimaryKey =
+          document.getElementById("targetPrimaryKey").value;
         const isDetailTable = document.getElementById("isDetailTable").checked;
         const parentTableRef = document.getElementById("parentTableRef").value;
         const filterCondition =
@@ -517,6 +532,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           sourceTable,
           targetTable,
           primaryKey,
+          targetPrimaryKey,
           isDetailTable,
           parentTableRef: isDetailTable ? parentTableRef : null,
           filterCondition: filterCondition || null,

@@ -190,56 +190,85 @@ export function OrdersVisualization() {
 
       setIsLoading(false);
 
-      if (result.success) {
-        // Show detailed summary with error information if available
-        Swal.fire({
-          title: "Procesamiento completado",
-          html: `
-            <div class="result-summary">
-              <p><strong>Resumen:</strong></p>
-              <ul>
-                <li>Procesados correctamente: ${result.processed || 0}</li>
-                <li>Fallidos: ${result.failed || 0}</li>
-                <li>Omitidos: ${result.skipped || 0}</li>
-              </ul>
-              ${
-                result.failed > 0 ||
-                (result.details &&
-                  result.details.filter((d) => !d.success).length > 0)
-                  ? `<p><strong>Detalles de errores:</strong></p>
-                <div class="error-details" style="max-height:200px;overflow-y:auto;text-align:left;background:#f8f8f8;padding:10px;border-radius:4px;margin-top:10px;">
-                  ${
-                    result.details
-                      ? result.details
-                          .filter((detail) => !detail.success)
-                          .map(
-                            (
-                              detail
-                            ) => `<p style="margin:5px 0;border-bottom:1px solid #eee;padding-bottom:5px;">
-                        <strong>Documento ${detail.documentId}:</strong> ${
-                              detail.message || "Error no especificado"
-                            }
-                      </p>`
-                          )
-                          .join("")
-                      : "<p>No hay detalles específicos del error disponibles.</p>"
-                  }
-                </div>`
-                  : ""
-              }
-            </div>
-          `,
-          icon: "success",
-          width: 600,
-        });
-
-        // Refresh orders and reset selection
-        fetchOrders();
-        setSelectedOrders([]);
-        setSelectAll(false);
-      } else {
-        throw new Error(result.message || "Error al procesar los documentos");
+      // Determine icon based on results
+      let resultIcon = "success";
+      if (
+        result.data &&
+        result.data.processed === 0 &&
+        result.data.failed > 0
+      ) {
+        resultIcon = "error";
+      } else if (result.data && result.data.failed > 0) {
+        resultIcon = "warning";
       }
+
+      // Determine title based on results
+      let resultTitle = "Procesamiento completado";
+      if (resultIcon === "error") {
+        resultTitle = "Procesamiento fallido";
+      } else if (resultIcon === "warning") {
+        resultTitle = "Procesamiento parcial";
+      }
+
+      // Show detailed summary
+      Swal.fire({
+        title: resultTitle,
+        html: `
+        <div class="result-summary">
+          <p><strong>Resumen:</strong></p>
+          <ul>
+            <li>Procesados correctamente: ${result.data?.processed || 0}</li>
+            <li>Fallidos: ${result.data?.failed || 0}</li>
+            <li>Omitidos: ${result.data?.skipped || 0}</li>
+          </ul>
+          ${
+            result.data?.failed > 0 ||
+            (result.data?.errorDetails && result.data.errorDetails.length > 0)
+              ? `<p><strong>Detalles de errores:</strong></p>
+            <div class="error-details" style="max-height:200px;overflow-y:auto;text-align:left;background:#f8f8f8;padding:10px;border-radius:4px;margin-top:10px;">
+              ${
+                result.data?.errorDetails
+                  ? result.data.errorDetails
+                      .map(
+                        (
+                          detail
+                        ) => `<p style="margin:5px 0;border-bottom:1px solid #eee;padding-bottom:5px;">
+                    <strong>Documento ${detail.documentId}:</strong> ${
+                          detail.error || "Error no especificado"
+                        }
+                  </p>`
+                      )
+                      .join("")
+                  : result.data?.details
+                  ? result.data.details
+                      .filter((detail) => !detail.success)
+                      .map(
+                        (
+                          detail
+                        ) => `<p style="margin:5px 0;border-bottom:1px solid #eee;padding-bottom:5px;">
+                    <strong>Documento ${detail.documentId}:</strong> ${
+                          detail.message ||
+                          detail.error ||
+                          "Error no especificado"
+                        }
+                  </p>`
+                      )
+                      .join("")
+                  : "<p>No hay detalles específicos del error disponibles.</p>"
+              }
+            </div>`
+              : ""
+          }
+        </div>
+      `,
+        icon: resultIcon,
+        width: 600,
+      });
+
+      // Refresh orders and reset selection
+      fetchOrders();
+      setSelectedOrders([]);
+      setSelectAll(false);
     } catch (error) {
       setIsLoading(false);
       Swal.fire({
@@ -527,7 +556,10 @@ export function OrdersVisualization() {
                           Origen: {table.sourceTable} → Destino:{" "}
                           {table.targetTable}
                         </div>
-                        <div>Clave: {table.primaryKey || "N/A"}</div>
+                        <div>
+                          Clave origen: {table.primaryKey || "N/A"} → Clave
+                          destino: {table.targetPrimaryKey || "Auto-detectada"}
+                        </div>
                         {table.isDetailTable && (
                           <div>Padre: {table.parentTableRef || "N/A"}</div>
                         )}

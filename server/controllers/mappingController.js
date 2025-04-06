@@ -482,11 +482,26 @@ const processDocumentsByMapping = async (req, res) => {
       `Procesamiento completado: ${result.processed} éxitos, ${result.failed} fallos`
     );
 
+    // Incluir información detallada de errores si hay algún fallo
+    if (result.failed > 0) {
+      const errorDetails = result.details
+        .filter((detail) => !detail.success)
+        .map((detail) => ({
+          documentId: detail.documentId,
+          error: detail.message || detail.error || "Error desconocido",
+          details: detail.errorDetails || null,
+        }));
+
+      result.errorDetails = errorDetails;
+    }
+
     return res.json({
       success: true,
-      message: `Se procesaron ${result.processed} documentos correctamente`,
+      message:
+        result.failed > 0
+          ? `Se procesaron ${result.processed} documentos correctamente y fallaron ${result.failed}`
+          : `Se procesaron ${result.processed} documentos correctamente`,
       data: result,
-      details: result.details,
     });
   } catch (error) {
     logger.error(`Error al procesar documentos: ${error.message}`, {
