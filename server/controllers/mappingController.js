@@ -486,12 +486,18 @@ const processDocumentsByMapping = async (req, res) => {
       success: true,
       message: `Se procesaron ${result.processed} documentos correctamente`,
       data: result,
+      details: result.details,
     });
   } catch (error) {
-    logger.error(`Error al procesar documentos: ${error.message}`);
+    logger.error(`Error al procesar documentos: ${error.message}`, {
+      stack: error.stack,
+      requestParams: req.params,
+      requestBody: req.body,
+    });
     return res.status(500).json({
       success: false,
       message: error.message || "Error al procesar documentos",
+      errorDetails: error.stack,
     });
   }
 };
