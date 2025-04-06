@@ -532,6 +532,8 @@ class DynamicTransferService {
             detailsData = result.recordset;
           } else {
             // Construir consulta básica
+            // Usar el campo de ordenamiento si está configurado, o nada si no existe
+            const orderByColumn = detailConfig.orderByColumn || "";
             const query = `
           SELECT * FROM ${detailConfig.sourceTable} 
           WHERE ${detailConfig.primaryKey || "NUM_PED"} = @documentId
@@ -540,7 +542,7 @@ class DynamicTransferService {
               ? ` AND ${detailConfig.filterCondition}`
               : ""
           }
-          ORDER BY SECUENCIA
+          ${orderByColumn ? ` ORDER BY ${orderByColumn}` : ""}
         `;
 
             const result = await SqlService.query(sourceConnection, query, {
@@ -711,6 +713,26 @@ class DynamicTransferService {
           documentType: "unknown",
           errorDetails: error.stack,
           errorCode: "NULL_VALUE_ERROR",
+        };
+      }
+
+      // Manejar errores de columna inválida
+      if (error.message && error.message.includes("Invalid column name")) {
+        const match = error.message.match(/Invalid column name '([^']+)'/);
+        const columnName = match ? match[1] : "desconocida";
+
+        const detailedMessage = `Columna '${columnName}' no válida o no existente en la tabla. Verifique la configuración del mapeo.`;
+
+        logger.error(
+          `Error de columna inválida en documento ${documentId}: ${detailedMessage}`
+        );
+
+        return {
+          success: false,
+          message: detailedMessage,
+          documentType: "unknown",
+          errorDetails: error.stack,
+          errorCode: "INVALID_COLUMN_ERROR",
         };
       }
 

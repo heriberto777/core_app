@@ -355,6 +355,8 @@ const getDocumentDetailsByMapping = async (req, res) => {
       if (detailConfig.customQuery) {
         query = detailConfig.customQuery.replace(/@documentId/g, documentId);
       } else {
+        // Usar el campo de ordenamiento si está configurado, o nada si no existe
+        const orderByColumn = detailConfig.orderByColumn || "";
         query = `
           SELECT * FROM ${detailConfig.sourceTable} 
           WHERE ${detailConfig.primaryKey || "NUM_PED"} = @documentId
@@ -363,7 +365,7 @@ const getDocumentDetailsByMapping = async (req, res) => {
               ? ` AND ${detailConfig.filterCondition}`
               : ""
           }
-          ORDER BY SECUENCIA
+          ${orderByColumn ? ` ORDER BY ${orderByColumn}` : ""}
         `;
       }
 
