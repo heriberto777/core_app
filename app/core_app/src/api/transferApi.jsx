@@ -1178,4 +1178,61 @@ export class TransferApi {
       throw error;
     }
   }
+  async getCustomerData(accessToken, filters = {}) {
+    try {
+      // Construir URL con parámetros de consulta
+      let url = `${this.baseApi}/customers`;
+      const queryParams = [];
+
+      if (filters.dateFrom) queryParams.push(`dateFrom=${filters.dateFrom}`);
+      if (filters.dateTo) queryParams.push(`dateTo=${filters.dateTo}`);
+      if (filters.status && filters.status !== "all")
+        queryParams.push(`status=${filters.status}`);
+      if (filters.search) queryParams.push(`search=${filters.search}`);
+
+      if (queryParams.length > 0) {
+        url += `?${queryParams.join("&")}`;
+      }
+
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+
+      return result.data || [];
+    } catch (error) {
+      console.error("Error al obtener datos de clientes:", error);
+      throw error;
+    }
+  }
+
+  async updateCustomerData(accessToken, customerData) {
+    try {
+      const url = `${this.baseApi}/customers/update`;
+      const params = {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(customerData),
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+
+      return result;
+    } catch (error) {
+      console.error("Error al actualizar cliente:", error);
+      throw error;
+    }
+  }
 }

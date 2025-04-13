@@ -387,29 +387,18 @@ export function ControlPlanilla() {
   };
 
   return (
-    <Container>
-      <header className="header">
-        <Header
-          stateConfig={{
-            openstate: openstate,
-            setOpenState: () => setOpenState(!openstate),
-          }}
-        />
-      </header>
+    <>
+      <ToolbarContainer>
+        <InfoSection>
+          <h2>Control de Destinatarios de Correo</h2>
+          <p>
+            Configura qué usuarios recibirán notificaciones por correo
+            electrónico del sistema.
+          </p>
+        </InfoSection>
+      </ToolbarContainer>
 
-      <section className="area1">
-        <ToolbarContainer>
-          <InfoSection>
-            <h2>Control de Destinatarios de Correo</h2>
-            <p>
-              Configura qué usuarios recibirán notificaciones por correo
-              electrónico del sistema.
-            </p>
-          </InfoSection>
-        </ToolbarContainer>
-      </section>
-
-      <section className="area2">
+      <section className="main-content">
         <ActionsContainer>
           <AddButton onClick={handleAdd}>
             <FaPlus /> Agregar Destinatario
@@ -423,7 +412,7 @@ export function ControlPlanilla() {
         </ActionsContainer>
       </section>
 
-      <section className="main">
+      <section className="main-content">
         {loading && (
           <LoadingContainer>
             <LoadingMessage>Cargando destinatarios...</LoadingMessage>
@@ -536,7 +525,7 @@ export function ControlPlanilla() {
           </TableContainer>
         )}
       </section>
-    </Container>
+    </>
   );
 }
 
@@ -628,6 +617,8 @@ const ToolbarContainer = styled.div`
 const InfoSection = styled.div`
   display: flex;
   flex-direction: column;
+  justify-content: center;
+  align-items: center;
   gap: 5px;
 
   h2 {
@@ -644,6 +635,8 @@ const InfoSection = styled.div`
 
 const ActionsContainer = styled.div`
   display: flex;
+  align-items: center;
+  justify-content: center;
   gap: 10px;
   flex-wrap: wrap;
 
@@ -722,9 +715,22 @@ const DefaultsButton = styled.button`
 
 const TableContainer = styled.div`
   width: 100%;
-  overflow-x: auto;
+  max-width: 1200px;
+  margin: 0 auto;
+  overflow-x: auto; // Ya tienes esto, correcto
   border-radius: 8px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+
+  /* Añadir esto */
+  -webkit-overflow-scrolling: touch; /* Para mejor scroll en iOS */
+
+  @media (max-width: 576px) {
+    /* Mejora la visualización en móviles pequeños */
+    margin-left: -10px;
+    margin-right: -10px;
+    width: calc(100% + 20px);
+    border-radius: 0;
+  }
 `;
 
 const StyledTable = styled.table`

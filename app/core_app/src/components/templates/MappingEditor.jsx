@@ -16,6 +16,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     active: true,
     sourceServer: "server2",
     targetServer: "server1",
+    entityType: "orders", // Añadido: tipo de entidad por defecto
     documentTypeRules: [],
     tableConfigs: [],
     markProcessedField: "IS_PROCESSED",
@@ -763,6 +764,21 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
               />
             </FormGroup>
 
+            {/* Nuevo campo: Tipo de Entidad */}
+            <FormGroup>
+              <Label>Tipo de Entidad</Label>
+              <Select
+                name="entityType"
+                value={mapping.entityType || "orders"}
+                onChange={handleChange}
+              >
+                <option value="orders">Pedidos</option>
+                <option value="customers">Clientes</option>
+                <option value="invoices">Facturas</option>
+                {/* <option value="other">Otros</option> */}
+              </Select>
+            </FormGroup>
+
             <FormRow>
               <FormGroup>
                 <Label>Tipo de Transferencia</Label>
@@ -858,18 +874,20 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                 <Card key={index}>
                   <CardHeader>
                     <h4>{rule.name}</h4>
-                    <SmallButton
-                      onClick={() => editDocumentTypeRule(index)}
-                      title="Editar regla"
-                    >
-                      <FaEdit />
-                    </SmallButton>
-                    <SmallButton
-                      $danger
-                      onClick={() => removeDocumentTypeRule(index)}
-                    >
-                      <FaTrash />
-                    </SmallButton>
+                    <div className="button_container">
+                      <SmallButton
+                        onClick={() => editDocumentTypeRule(index)}
+                        title="Editar regla"
+                      >
+                        <FaEdit />
+                      </SmallButton>
+                      <SmallButton
+                        $danger
+                        onClick={() => removeDocumentTypeRule(index)}
+                      >
+                        <FaTrash />
+                      </SmallButton>
+                    </div>
                   </CardHeader>
 
                   <CardBody>
@@ -917,7 +935,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                 <Card key={tableIndex} $isDetail={tableConfig.isDetailTable}>
                   <CardHeader>
                     <h4>{tableConfig.name}</h4>
-                    <div>
+                    <div className="button_container">
                       <SmallButton
                         onClick={() => editTableConfig(tableIndex)}
                         title="Editar tabla"

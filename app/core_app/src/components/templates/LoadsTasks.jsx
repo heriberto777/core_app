@@ -499,17 +499,8 @@ export function LoadsTasks() {
   };
 
   return (
-    <Container>
-      <header className="header">
-        <Header
-          stateConfig={{
-            openstate: openstate,
-            setOpenState: () => setOpenState(!openstate),
-          }}
-        />
-      </header>
-
-      <section className="area1">
+    <>
+      <section className="main">
         <ToolbarContainer>
           <InfoSection>
             <h2>Gestor de Tareas de Carga</h2>
@@ -520,8 +511,7 @@ export function LoadsTasks() {
           </InfoSection>
         </ToolbarContainer>
       </section>
-
-      <section className="area2">
+      <section className="main">
         <ActionsContainer>
           <SearchInputContainer>
             <SearchInput
@@ -555,9 +545,7 @@ export function LoadsTasks() {
             </ViewButtonsGroup>
           </ButtonsRow>
         </ActionsContainer>
-      </section>
 
-      <section className="main">
         {loading && (
           <LoadingContainer>
             <LoadingMessage>Cargando tareas...</LoadingMessage>
@@ -706,7 +694,7 @@ export function LoadsTasks() {
           </TableContainer>
         )}
       </section>
-    </Container>
+    </>
   );
 }
 // Estilos del Contenedor Principal
@@ -1152,9 +1140,20 @@ const TableContainer = styled.div`
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
-  overflow-x: auto;
+  overflow-x: auto; // Ya tienes esto, correcto
   border-radius: 8px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+
+  /* Añadir esto */
+  -webkit-overflow-scrolling: touch; /* Para mejor scroll en iOS */
+
+  @media (max-width: 576px) {
+    /* Mejora la visualización en móviles pequeños */
+    margin-left: -10px;
+    margin-right: -10px;
+    width: calc(100% + 20px);
+    border-radius: 0;
+  }
 `;
 
 const StyledTable = styled.table`

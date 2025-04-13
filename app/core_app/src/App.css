@@ -18,6 +18,10 @@
   --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   --transition: all 0.3s ease;
 
+  --font-size-base: 14px;
+  --font-size-tablet: 15px;
+  --font-size-desktop: 16px;
+
   /* Tipografía */
   font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
   line-height: 1.5;
@@ -37,6 +41,28 @@ body {
   color: #333;
 }
 
+html {
+  font-size: var(--font-size-base);
+}
+
+@media (min-width: 768px) {
+  html {
+    font-size: var(--font-size-tablet);
+  }
+}
+
+@media (min-width: 992px) {
+  html {
+    font-size: var(--font-size-desktop);
+  }
+}
+
+/* Línea 27-33: Mejorar responsive images */
+img {
+  max-width: 100%;
+  height: auto;
+}
+
 /* Contenedor principal */
 .container {
   width: 90%;
@@ -46,6 +72,63 @@ body {
   display: flex;
   flex-direction: column;
   align-items: center;
+}
+
+.main-content {
+  margin: 10px;
+  padding: 15px;
+  width: 90%;
+  max-width: 1200px;
+  margin-left: auto;
+  margin-right: auto;
+
+  /* Mejoras de scroll */
+  overflow-y: auto;
+  overflow-x: hidden;
+  -webkit-overflow-scrolling: touch; /* Para scroll suave en iOS */
+  scroll-behavior: smooth; /* Scroll suave al navegar entre secciones */
+
+  /* Altura máxima con scroll interno */
+  max-height: calc(100vh - 150px); /* Restar altura de header y otras áreas */
+
+  /* Estilo personalizado para la barra de scroll */
+  scrollbar-width: thin; /* Firefox */
+  scrollbar-color: rgba(0, 123, 255, 0.5) transparent; /* Firefox */
+}
+
+/* Estilo para la barra de scroll en Chrome, Edge y Safari */
+.main-content::-webkit-scrollbar {
+  width: 8px;
+}
+
+.main-content::-webkit-scrollbar-track {
+  background: transparent;
+}
+
+.main-content::-webkit-scrollbar-thumb {
+  background-color: rgba(0, 123, 255, 0.5);
+  border-radius: 4px;
+}
+
+.main-content::-webkit-scrollbar-thumb:hover {
+  background-color: rgba(0, 123, 255, 0.7);
+}
+
+@media (max-width: 768px) {
+  .main-content {
+    max-height: calc(
+      100vh - 120px
+    ); /* Ajustar para headers más pequeños en móviles */
+    padding: 10px;
+  }
+}
+
+@media (max-width: 480px) {
+  .main-content {
+    max-height: calc(100vh - 100px);
+    padding: 8px;
+    margin: 5px;
+  }
 }
 
 /* Títulos */
@@ -92,6 +175,12 @@ h2 {
 }
 
 /* ===== BOTONES ===== */
+.button_container {
+  display: flex;
+  justify-content: space-around;
+  align-items: center;
+  gap: 5px;
+}
 .button {
   padding: 10px 16px;
   cursor: pointer;
@@ -682,3 +771,7 @@ table tr.disabled {
   visibility: visible;
   bottom: calc(100% + 5px);
 }
+
+/* .swal-confirm-button { */
+/* background-color: ${({ theme }) => theme.primary} !important */
+/* } */

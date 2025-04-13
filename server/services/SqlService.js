@@ -717,19 +717,41 @@ class SqlService {
    * @returns {Promise<void>}
    */
   async rollbackTransaction(transaction) {
+    if (!transaction) return;
+
     return new Promise((resolve, reject) => {
-      transaction.rollback((err) => {
-        if (err) {
-          logger.error(`Error al revertir transacción: ${err.message}`);
-          reject(err);
+      try {
+        if (typeof transaction.rollback === "function") {
+          transaction.rollback((err) => {
+            if (err) {
+              logger.error(`Error en rollback: ${err.message}`);
+              reject(err);
+            } else {
+              resolve();
+            }
+          });
+        } else if (typeof transaction.rollbackTransaction === "function") {
+          transaction.rollbackTransaction((err) => {
+            if (err) {
+              logger.error(`Error en rollbackTransaction: ${err.message}`);
+              reject(err);
+            } else {
+              resolve();
+            }
+          });
         } else {
-          logger.debug("Transacción revertida correctamente");
+          logger.warn(
+            "No se encontró método de rollback en el objeto de transacción"
+          );
+          // Intenta completar normalmente ya que no podemos hacer rollback
           resolve();
         }
-      });
+      } catch (error) {
+        logger.error(`Error general en rollback: ${error.message}`);
+        reject(error);
+      }
     });
   }
-
   /**
    * Registra errores de consulta SQL para análisis posterior
    * @param {string} errorType - Tipo de error

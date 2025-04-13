@@ -196,17 +196,8 @@ export function Dashboard() {
   };
 
   return (
-    <Container>
-      <header className="header">
-        <Header
-          stateConfig={{
-            openstate: openstate,
-            setOpenState: () => setOpenState(!openstate),
-          }}
-        />
-      </header>
-
-      <section className="area1">
+    <>
+      <section className="main-content">
         <WelcomeSection>
           <WelcomeTitle>Panel de Control</WelcomeTitle>
           <WelcomeSubtitle>Sistema de Transferencia de Datos</WelcomeSubtitle>
@@ -216,7 +207,7 @@ export function Dashboard() {
         </WelcomeSection>
       </section>
 
-      <section className="area2">
+      <section className="main-content">
         <StatsContainer>
           <StatCard>
             <StatIcon>
@@ -270,9 +261,7 @@ export function Dashboard() {
             </StatContent>
           </StatCard>
         </StatsContainer>
-      </section>
 
-      <section className="main">
         {loading && !refreshing ? (
           <LoadingContainer>
             <LoadingSpinner />
@@ -319,7 +308,7 @@ export function Dashboard() {
                     <ServerStatusIcon
                       status={serverStatus.server2?.status || "unknown"}
                     />
-                    <ServerStatusName>Server 1</ServerStatusName>
+                    <ServerStatusName>Server 2</ServerStatusName>
                     <ServerStatusDetails>
                       {serverStatus.server2?.status === "online"
                         ? `Conectado (${
@@ -461,7 +450,7 @@ export function Dashboard() {
                     <QuickActionText>Gestionar Tareas</QuickActionText>
                   </QuickActionItem>
 
-                  <QuickActionItem to="/task/logs">
+                  <QuickActionItem to="/logs">
                     <QuickActionIcon>
                       <FaDatabase />
                     </QuickActionIcon>
@@ -475,7 +464,7 @@ export function Dashboard() {
                     <QuickActionText>Historial</QuickActionText>
                   </QuickActionItem>
 
-                  <QuickActionItem to="/task/analytics">
+                  <QuickActionItem to="/analytics">
                     <QuickActionIcon>
                       <FaChartLine />
                     </QuickActionIcon>
@@ -526,55 +515,9 @@ export function Dashboard() {
           </DashboardGrid>
         )}
       </section>
-    </Container>
+    </>
   );
 }
-
-const Container = styled.div`
-  min-height: 100vh;
-  padding: 15px;
-  width: 100%;
-  background-color: ${(props) => props.theme.bg};
-  color: ${({ theme }) => theme.text};
-  display: grid;
-
-  grid-template:
-    "header" 90px
-    "area1" auto
-    "area2" auto
-    "main" 1fr;
-
-  @media (max-width: 768px) {
-    grid-template:
-      "header" 70px
-      "area1" auto
-      "area2" auto
-      "main" 1fr;
-    padding: 10px;
-  }
-
-  .header {
-    grid-area: header;
-    display: flex;
-    align-items: center;
-    margin-bottom: 10px;
-  }
-
-  .area1 {
-    grid-area: area1;
-    margin-bottom: 20px;
-  }
-
-  .area2 {
-    grid-area: area2;
-    margin-bottom: 20px;
-  }
-
-  .main {
-    grid-area: main;
-    margin-top: 10px;
-  }
-`;
 
 const WelcomeSection = styled.div`
   text-align: center;
@@ -662,9 +605,14 @@ const DashboardGrid = styled.div`
   display: grid;
   grid-template-columns: repeat(2, 1fr);
   gap: 20px;
+  margin-top: 20px;
 
   @media (max-width: 992px) {
     grid-template-columns: 1fr;
+  }
+
+  @media (max-width: 576px) {
+    gap: 15px; /* Gap más pequeño en móviles */
   }
 `;
 
@@ -699,6 +647,10 @@ const CardTitle = styled.h2`
 const CardContent = styled.div`
   padding: 15px;
   flex: 1;
+
+  @media (max-width: 480px) {
+    padding: 12px 10px; /* Menos padding en móviles pequeños */
+  }
 `;
 
 const CardFooter = styled.div`
@@ -966,25 +918,39 @@ const RefreshButton = styled.button`
 const LoadingContainer = styled.div`
   display: flex;
   flex-direction: column;
-  align-items: center;
   justify-content: center;
-  min-height: 200px;
+  align-items: center;
+  height: 200px;
+  gap: 15px;
 `;
 
 const LoadingSpinner = styled.div`
-  border: 4px solid ${({ theme }) => theme.border || "#eee"};
-  border-top: 4px solid ${({ theme }) => theme.primary || "#007bff"};
+  display: inline-block;
+  width: ${(props) => (props.size === "large" ? "60px" : "40px")};
+  height: ${(props) => (props.size === "large" ? "60px" : "40px")};
+  border: 4px solid rgba(23, 162, 184, 0.2);
   border-radius: 50%;
-  width: 40px;
-  height: 40px;
-  animation: spin 1s linear infinite;
-  margin-bottom: 20px;
+  border-top-color: #17a2b8;
+  animation: spinner-rotate 1s linear infinite;
 
-  @keyframes spin {
-    0% {
+  &::after {
+    content: "";
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    right: 4px;
+    bottom: 4px;
+    border: 3px solid transparent;
+    border-top-color: #17a2b8;
+    border-radius: 50%;
+    animation: spinner-rotate 0.8s linear infinite reverse;
+  }
+
+  @keyframes spinner-rotate {
+    from {
       transform: rotate(0deg);
     }
-    100% {
+    to {
       transform: rotate(360deg);
     }
   }

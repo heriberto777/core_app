@@ -1177,282 +1177,379 @@ export function TransferTasks() {
   };
 
   return (
-    <Container>
-      <header className="header">
-        <Header
-          stateConfig={{
-            openstate: openstate,
-            setOpenState: () => setOpenState(!openstate),
-          }}
-        />
-      </header>
+    <>
+      <ToolbarContainer>
+        <InfoSection>
+          <h2>Gestor de Tareas de Transferencia</h2>
+          <p>
+            Configure y administre las tareas de transferencia de datos entre
+            sistemas.
+          </p>
+        </InfoSection>
+      </ToolbarContainer>
 
-      <section className="area1">
-        <ToolbarContainer>
-          <InfoSection>
-            <h2>Gestor de Tareas de Transferencia</h2>
-            <p>
-              Configure y administre las tareas de transferencia de datos entre
-              sistemas.
-            </p>
-          </InfoSection>
-        </ToolbarContainer>
-      </section>
+      <ActionsContainer>
+        <SearchInputContainer>
+          <SearchInput
+            type="text"
+            placeholder="Buscar tarea..."
+            value={search}
+            onChange={handleSearch}
+          />
+        </SearchInputContainer>
 
-      <section className="area2">
-        <ActionsContainer>
-          <SearchInputContainer>
-            <SearchInput
-              type="text"
-              placeholder="Buscar tarea..."
-              value={search}
-              onChange={handleSearch}
-            />
-          </SearchInputContainer>
+        {/* Contenedor de Filtros */}
+        <FiltersContainer>
+          <FilterGroup>
+            <FilterLabel>Tipo:</FilterLabel>
+            <FilterSelect
+              value={filters.type}
+              onChange={(e) => handleFilterChange("type", e.target.value)}
+            >
+              <option value="all">Todos</option>
+              <option value="manual">Manual</option>
+              <option value="auto">Automática</option>
+              <option value="both">Ambas</option>
+            </FilterSelect>
+          </FilterGroup>
 
-          {/* Contenedor de Filtros */}
-          <FiltersContainer>
-            <FilterGroup>
-              <FilterLabel>Tipo:</FilterLabel>
-              <FilterSelect
-                value={filters.type}
-                onChange={(e) => handleFilterChange("type", e.target.value)}
-              >
-                <option value="all">Todos</option>
-                <option value="manual">Manual</option>
-                <option value="auto">Automática</option>
-                <option value="both">Ambas</option>
-              </FilterSelect>
-            </FilterGroup>
-
-            <FilterGroup>
-              <FilterLabel>Modo:</FilterLabel>
-              <FilterSelect
-                value={filters.executionMode}
-                onChange={(e) =>
-                  handleFilterChange("executionMode", e.target.value)
-                }
-              >
-                <option value="all">Todos</option>
-                <option value="normal">Normal</option>
-                <option value="batchesSSE">Batches SSE</option>
-              </FilterSelect>
-            </FilterGroup>
-
-            <FilterGroup>
-              <FilterLabel>Dirección:</FilterLabel>
-              <FilterSelect
-                value={filters.transferType}
-                onChange={(e) =>
-                  handleFilterChange("transferType", e.target.value)
-                }
-              >
-                <option value="all">Todas</option>
-                <option value="general">General</option>
-                <option value="up">Transfer Up</option>
-                <option value="down">Transfer Down</option>
-                <option value="internal">Transfer Interno</option>
-              </FilterSelect>
-            </FilterGroup>
-
-            <FilterGroup>
-              <FilterLabel>Estado:</FilterLabel>
-              <FilterSelect
-                value={filters.status}
-                onChange={(e) => handleFilterChange("status", e.target.value)}
-              >
-                <option value="all">Todos</option>
-                <option value="active">Activas</option>
-                <option value="inactive">Inactivas</option>
-              </FilterSelect>
-            </FilterGroup>
-
-            <ResetFiltersButton
-              onClick={() =>
-                setFilters({
-                  type: "all",
-                  executionMode: "all",
-                  transferType: "all",
-                  status: "all",
-                })
+          <FilterGroup>
+            <FilterLabel>Modo:</FilterLabel>
+            <FilterSelect
+              value={filters.executionMode}
+              onChange={(e) =>
+                handleFilterChange("executionMode", e.target.value)
               }
             >
-              Limpiar Filtros
-            </ResetFiltersButton>
-          </FiltersContainer>
-          <TaskCounter>
-            Mostrando {filteredTasks.length} de {tasks.length} tareas
-          </TaskCounter>
+              <option value="all">Todos</option>
+              <option value="normal">Normal</option>
+              <option value="batchesSSE">Batches SSE</option>
+            </FilterSelect>
+          </FilterGroup>
 
-          <ButtonsRow>
-            <AddButton onClick={() => addOrEditTask()}>
-              <FaPlus /> Nueva Tarea
-            </AddButton>
+          <FilterGroup>
+            <FilterLabel>Dirección:</FilterLabel>
+            <FilterSelect
+              value={filters.transferType}
+              onChange={(e) =>
+                handleFilterChange("transferType", e.target.value)
+              }
+            >
+              <option value="all">Todas</option>
+              <option value="general">General</option>
+              <option value="up">Transfer Up</option>
+              <option value="down">Transfer Down</option>
+              <option value="internal">Transfer Interno</option>
+            </FilterSelect>
+          </FilterGroup>
 
-            <RefreshButton onClick={fetchTasks}>
-              <FaSync /> Refrescar
-            </RefreshButton>
+          <FilterGroup>
+            <FilterLabel>Estado:</FilterLabel>
+            <FilterSelect
+              value={filters.status}
+              onChange={(e) => handleFilterChange("status", e.target.value)}
+            >
+              <option value="all">Todos</option>
+              <option value="active">Activas</option>
+              <option value="inactive">Inactivas</option>
+            </FilterSelect>
+          </FilterGroup>
 
-            <ViewButtonsGroup>
-              <ViewButton
-                $active={viewMode === "cards"}
-                onClick={() => setViewMode("cards")}
-                title="Ver como tarjetas"
-              >
-                <FaList /> Cards
-              </ViewButton>
-              <ViewButton
-                $active={viewMode === "table"}
-                onClick={() => setViewMode("table")}
-                title="Ver como tabla"
-              >
-                <FaTable /> Tabla
-              </ViewButton>
-            </ViewButtonsGroup>
-          </ButtonsRow>
+          <ResetFiltersButton
+            onClick={() =>
+              setFilters({
+                type: "all",
+                executionMode: "all",
+                transferType: "all",
+                status: "all",
+              })
+            }
+          >
+            Limpiar Filtros
+          </ResetFiltersButton>
+        </FiltersContainer>
+        <TaskCounter>
+          Mostrando {filteredTasks.length} de {tasks.length} tareas
+        </TaskCounter>
 
-          <ScheduleRow>
-            <ScheduleText>Programar tareas para las:</ScheduleText>
-            <TimeInput
-              type="time"
-              value={executionTime}
-              onChange={(e) => setExecutionTime(e.target.value)}
-            />
-            <ScheduleButton onClick={handleTimeChange}>
-              Guardar horario
-            </ScheduleButton>
-          </ScheduleRow>
-        </ActionsContainer>
-      </section>
+        <ButtonsRow>
+          <AddButton onClick={() => addOrEditTask()}>
+            <FaPlus /> Nueva Tarea
+          </AddButton>
 
-      <section className="main">
-        {loading && (
-          <LoadingContainer>
-            <LoadingMessage>Cargando tareas...</LoadingMessage>
-          </LoadingContainer>
-        )}
+          <RefreshButton onClick={fetchTasks}>
+            <FaSync /> Refrescar
+          </RefreshButton>
 
-        {error && <ErrorMessage>{error}</ErrorMessage>}
+          <ViewButtonsGroup>
+            <ViewButton
+              $active={viewMode === "cards"}
+              onClick={() => setViewMode("cards")}
+              title="Ver como tarjetas"
+            >
+              <FaList /> Cards
+            </ViewButton>
+            <ViewButton
+              $active={viewMode === "table"}
+              onClick={() => setViewMode("table")}
+              title="Ver como tabla"
+            >
+              <FaTable /> Tabla
+            </ViewButton>
+          </ViewButtonsGroup>
+        </ButtonsRow>
 
-        {!loading && !error && filteredTasks.length === 0 && (
-          <EmptyMessage>
-            No hay tareas disponibles. Haga clic en "Nueva Tarea" para crear
-            una.
-          </EmptyMessage>
-        )}
+        <ScheduleRow>
+          <ScheduleText>Programar tareas para las:</ScheduleText>
+          <TimeInput
+            type="time"
+            value={executionTime}
+            onChange={(e) => setExecutionTime(e.target.value)}
+          />
+          <ScheduleButton onClick={handleTimeChange}>
+            Guardar horario
+          </ScheduleButton>
+        </ScheduleRow>
+      </ActionsContainer>
 
-        {!loading && filteredTasks.length > 0 && viewMode === "cards" && (
-          <CardsContainer>
-            {filteredTasks.map((task) => (
-              <Card
-                key={task._id}
-                $selected={selectedTask && selectedTask._id === task._id}
-                $active={task.active}
-                $transferType={task.transferType}
-              >
-                <CardHeader>
-                  <CardTitle>{task.name}</CardTitle>
-                  <StatusBadge $status={task.status} $active={task.active}>
-                    {task.status === "completed" && "✅ Completada"}
-                    {task.status === "running" && "🔄 En Progreso"}
-                    {task.status === "error" && "⚠️ Error"}
-                    {!task.status && (task.active ? "Activa" : "Inactiva")}
-                  </StatusBadge>
-                </CardHeader>
+      {loading && (
+        <LoadingContainer>
+          <LoadingMessage>Cargando tareas...</LoadingMessage>
+        </LoadingContainer>
+      )}
 
-                <CardContent>
-                  <CardInfo>
+      {error && <ErrorMessage>{error}</ErrorMessage>}
+
+      {!loading && !error && filteredTasks.length === 0 && (
+        <EmptyMessage>
+          No hay tareas disponibles. Haga clic en "Nueva Tarea" para crear una.
+        </EmptyMessage>
+      )}
+
+      {!loading && filteredTasks.length > 0 && viewMode === "cards" && (
+        <CardsContainer>
+          {filteredTasks.map((task) => (
+            <Card
+              key={task._id}
+              $selected={selectedTask && selectedTask._id === task._id}
+              $active={task.active}
+              $transferType={task.transferType}
+            >
+              <CardHeader>
+                <CardTitle>{task.name}</CardTitle>
+                <StatusBadge $status={task.status} $active={task.active}>
+                  {task.status === "completed" && "✅ Completada"}
+                  {task.status === "running" && "🔄 En Progreso"}
+                  {task.status === "error" && "⚠️ Error"}
+                  {!task.status && (task.active ? "Activa" : "Inactiva")}
+                </StatusBadge>
+              </CardHeader>
+
+              <CardContent>
+                <CardInfo>
+                  <InfoItem>
+                    <InfoLabel>Tipo:</InfoLabel>
+                    <InfoValue>{task.type}</InfoValue>
+                  </InfoItem>
+
+                  <InfoItem>
+                    <InfoLabel>Modo de ejecución:</InfoLabel>
+                    <InfoValue>{task.executionMode}</InfoValue>
+                  </InfoItem>
+
+                  {task.lastExecutionDate && (
                     <InfoItem>
-                      <InfoLabel>Tipo:</InfoLabel>
-                      <InfoValue>{task.type}</InfoValue>
+                      <InfoLabel>Última ejecución:</InfoLabel>
+                      <InfoValue>
+                        {new Date(task.lastExecutionDate).toLocaleString()}
+                        {task.lastExecutionResult?.success ? (
+                          <StatusBadge $status="completed" $small>
+                            Éxito
+                          </StatusBadge>
+                        ) : (
+                          <StatusBadge $status="error" $small>
+                            Error
+                          </StatusBadge>
+                        )}
+                      </InfoValue>
                     </InfoItem>
-
-                    <InfoItem>
-                      <InfoLabel>Modo de ejecución:</InfoLabel>
-                      <InfoValue>{task.executionMode}</InfoValue>
-                    </InfoItem>
-
-                    {task.lastExecutionDate && (
-                      <InfoItem>
-                        <InfoLabel>Última ejecución:</InfoLabel>
-                        <InfoValue>
-                          {new Date(task.lastExecutionDate).toLocaleString()}
-                          {task.lastExecutionResult?.success ? (
-                            <StatusBadge $status="completed" $small>
-                              Éxito
-                            </StatusBadge>
-                          ) : (
-                            <StatusBadge $status="error" $small>
-                              Error
-                            </StatusBadge>
-                          )}
-                        </InfoValue>
-                      </InfoItem>
-                    )}
-
-                    {task.transferType && (
-                      <InfoItem>
-                        <InfoLabel>Dirección:</InfoLabel>
-                        <InfoValue>
-                          {task.transferType === "up" && "Transfer Up ↑"}
-                          {task.transferType === "down" && "Transfer Down ↓"}
-                          {task.transferType === "internal" && (
-                            <span
-                              style={{ color: "#dc3545", fontWeight: "bold" }}
-                            >
-                              Interno (Server1→Server1)
-                            </span>
-                          )}
-                          {task.transferType === "general" && "General"}
-                        </InfoValue>
-                      </InfoItem>
-                    )}
-
-                    {task.transferType === "internal" && task.targetTable && (
-                      <InfoItem>
-                        <InfoLabel>Tabla destino:</InfoLabel>
-                        <InfoValue>{task.targetTable}</InfoValue>
-                      </InfoItem>
-                    )}
-                  </CardInfo>
-
-                  <CardQuerySection>
-                    <QueryLabel>Consulta SQL:</QueryLabel>
-                    <QueryBox readOnly value={task.query} />
-                  </CardQuerySection>
-
-                  {/* Barra de progreso para tareas en ejecución */}
-                  {task.status === "running" && (
-                    <ProgressBar>
-                      <ProgressFill style={{ width: `${task.progress}%` }}>
-                        {task.progress}%
-                      </ProgressFill>
-                    </ProgressBar>
                   )}
-                </CardContent>
 
-                <CardActions>
-                  <ActionButtonsContainer>
-                    <ActionRow>
+                  {task.transferType && (
+                    <InfoItem>
+                      <InfoLabel>Dirección:</InfoLabel>
+                      <InfoValue>
+                        {task.transferType === "up" && "Transfer Up ↑"}
+                        {task.transferType === "down" && "Transfer Down ↓"}
+                        {task.transferType === "internal" && (
+                          <span
+                            style={{ color: "#dc3545", fontWeight: "bold" }}
+                          >
+                            Interno (Server1→Server1)
+                          </span>
+                        )}
+                        {task.transferType === "general" && "General"}
+                      </InfoValue>
+                    </InfoItem>
+                  )}
+
+                  {task.transferType === "internal" && task.targetTable && (
+                    <InfoItem>
+                      <InfoLabel>Tabla destino:</InfoLabel>
+                      <InfoValue>{task.targetTable}</InfoValue>
+                    </InfoItem>
+                  )}
+                </CardInfo>
+
+                <CardQuerySection>
+                  <QueryLabel>Consulta SQL:</QueryLabel>
+                  <QueryBox readOnly value={task.query} />
+                </CardQuerySection>
+
+                {/* Barra de progreso para tareas en ejecución */}
+                {task.status === "running" && (
+                  <ProgressBar>
+                    <ProgressFill style={{ width: `${task.progress}%` }}>
+                      {task.progress}%
+                    </ProgressFill>
+                  </ProgressBar>
+                )}
+              </CardContent>
+
+              <CardActions>
+                <ActionButtonsContainer>
+                  <ActionRow>
+                    <ActionButton
+                      $color="#007bff"
+                      onClick={() => addOrEditTask(task)}
+                      disabled={task.status === "running"}
+                      title="Editar tarea"
+                    >
+                      <FaEdit />
+                    </ActionButton>
+
+                    <ActionButton
+                      $color="#dc3545"
+                      onClick={() => deleteTask(task._id)}
+                      disabled={task.status === "running"}
+                      title="Eliminar tarea"
+                    >
+                      <FaTrash />
+                    </ActionButton>
+
+                    <ActionButton
+                      $color="#17a2b8"
+                      onClick={() => executeTask(task._id)}
+                      disabled={
+                        task.status === "running" ||
+                        !task.active ||
+                        (task.type !== "manual" && task.type !== "both") ||
+                        tasks.some(
+                          (t) =>
+                            t.status === "running" &&
+                            ["auto", "both"].includes(t.type)
+                        )
+                      }
+                      title="Ejecutar tarea manualmente"
+                    >
+                      <FaPlay />
+                    </ActionButton>
+
+                    <ActionButton
+                      $color="#6f42c1"
+                      onClick={() => viewTaskHistory(task._id)}
+                      title="Ver historial de ejecuciones"
+                    >
+                      <FaHistory />
+                    </ActionButton>
+
+                    {task.status === "running" && (
                       <ActionButton
+                        $color="#dc3545"
+                        onClick={() => handleCancelTask(task._id)}
+                        disabled={cancelling}
+                        title="Detener tarea en ejecución"
+                      >
+                        <FaStop />
+                      </ActionButton>
+                    )}
+                  </ActionRow>
+                </ActionButtonsContainer>
+              </CardActions>
+            </Card>
+          ))}
+        </CardsContainer>
+      )}
+
+      {!loading && filteredTasks.length > 0 && viewMode === "table" && (
+        <TableContainer>
+          <StyledTable>
+            <thead>
+              <tr>
+                <th>Nombre</th>
+                <th>Estado</th>
+                <th>Tipo</th>
+                <th>Modo</th>
+                <th>Acciones</th>
+              </tr>
+            </thead>
+            <tbody>
+              {filteredTasks.map((task) => (
+                <tr
+                  key={task._id}
+                  className={`${!task.active ? "disabled" : ""} ${
+                    task.transferType === "internal" ? "internal-transfer" : ""
+                  }`}
+                >
+                  <td>{task.name}</td>
+                  <td>
+                    <StatusBadge
+                      $status={task.status}
+                      $active={task.active}
+                      $small
+                    >
+                      {task.status === "completed" && "✅ Completada"}
+                      {task.status === "running" && "🔄 En Progreso"}
+                      {task.status === "error" && "⚠️ Error"}
+                      {!task.status && (task.active ? "Activa" : "Inactiva")}
+                    </StatusBadge>
+                  </td>
+                  <td>
+                    {task.transferType === "internal" ? (
+                      <span style={{ color: "#dc3545", fontWeight: "bold" }}>
+                        Interno (Server1→Server1)
+                      </span>
+                    ) : task.transferType === "up" ? (
+                      "Transfer Up (Server1→Server2)"
+                    ) : task.transferType === "down" ? (
+                      "Transfer Down (Server2→Server1)"
+                    ) : (
+                      "General"
+                    )}
+                  </td>
+                  <td>{task.executionMode}</td>
+                  <td>
+                    <ActionButtons>
+                      <TableActionButton
+                        title="Editar"
                         $color="#007bff"
                         onClick={() => addOrEditTask(task)}
                         disabled={task.status === "running"}
-                        title="Editar tarea"
                       >
                         <FaEdit />
-                      </ActionButton>
+                      </TableActionButton>
 
-                      <ActionButton
+                      <TableActionButton
+                        title="Eliminar"
                         $color="#dc3545"
                         onClick={() => deleteTask(task._id)}
                         disabled={task.status === "running"}
-                        title="Eliminar tarea"
                       >
                         <FaTrash />
-                      </ActionButton>
+                      </TableActionButton>
 
-                      <ActionButton
+                      <TableActionButton
+                        title="Ejecutar tarea"
                         $color="#17a2b8"
                         onClick={() => executeTask(task._id)}
                         disabled={
@@ -1465,152 +1562,37 @@ export function TransferTasks() {
                               ["auto", "both"].includes(t.type)
                           )
                         }
-                        title="Ejecutar tarea manualmente"
                       >
                         <FaPlay />
-                      </ActionButton>
+                      </TableActionButton>
 
-                      <ActionButton
+                      <TableActionButton
+                        title="Ver historial"
                         $color="#6f42c1"
                         onClick={() => viewTaskHistory(task._id)}
-                        title="Ver historial de ejecuciones"
                       >
                         <FaHistory />
-                      </ActionButton>
+                      </TableActionButton>
 
                       {task.status === "running" && (
-                        <ActionButton
+                        <TableActionButton
+                          title="Detener tarea"
                           $color="#dc3545"
                           onClick={() => handleCancelTask(task._id)}
                           disabled={cancelling}
-                          title="Detener tarea en ejecución"
                         >
                           <FaStop />
-                        </ActionButton>
+                        </TableActionButton>
                       )}
-                    </ActionRow>
-                  </ActionButtonsContainer>
-                </CardActions>
-              </Card>
-            ))}
-          </CardsContainer>
-        )}
-
-        {!loading && filteredTasks.length > 0 && viewMode === "table" && (
-          <TableContainer>
-            <StyledTable>
-              <thead>
-                <tr>
-                  <th>Nombre</th>
-                  <th>Estado</th>
-                  <th>Tipo</th>
-                  <th>Modo</th>
-                  <th>Acciones</th>
+                    </ActionButtons>
+                  </td>
                 </tr>
-              </thead>
-              <tbody>
-                {filteredTasks.map((task) => (
-                  <tr
-                    key={task._id}
-                    className={`${!task.active ? "disabled" : ""} ${
-                      task.transferType === "internal"
-                        ? "internal-transfer"
-                        : ""
-                    }`}
-                  >
-                    <td>{task.name}</td>
-                    <td>
-                      <StatusBadge
-                        $status={task.status}
-                        $active={task.active}
-                        $small
-                      >
-                        {task.status === "completed" && "✅ Completada"}
-                        {task.status === "running" && "🔄 En Progreso"}
-                        {task.status === "error" && "⚠️ Error"}
-                        {!task.status && (task.active ? "Activa" : "Inactiva")}
-                      </StatusBadge>
-                    </td>
-                    <td>
-                      {task.transferType === "internal" ? (
-                        <span style={{ color: "#dc3545", fontWeight: "bold" }}>
-                          Interno (Server1→Server1)
-                        </span>
-                      ) : task.transferType === "up" ? (
-                        "Transfer Up (Server1→Server2)"
-                      ) : task.transferType === "down" ? (
-                        "Transfer Down (Server2→Server1)"
-                      ) : (
-                        "General"
-                      )}
-                    </td>
-                    <td>{task.executionMode}</td>
-                    <td>
-                      <ActionButtons>
-                        <TableActionButton
-                          title="Editar"
-                          $color="#007bff"
-                          onClick={() => addOrEditTask(task)}
-                          disabled={task.status === "running"}
-                        >
-                          <FaEdit />
-                        </TableActionButton>
-
-                        <TableActionButton
-                          title="Eliminar"
-                          $color="#dc3545"
-                          onClick={() => deleteTask(task._id)}
-                          disabled={task.status === "running"}
-                        >
-                          <FaTrash />
-                        </TableActionButton>
-
-                        <TableActionButton
-                          title="Ejecutar tarea"
-                          $color="#17a2b8"
-                          onClick={() => executeTask(task._id)}
-                          disabled={
-                            task.status === "running" ||
-                            !task.active ||
-                            (task.type !== "manual" && task.type !== "both") ||
-                            tasks.some(
-                              (t) =>
-                                t.status === "running" &&
-                                ["auto", "both"].includes(t.type)
-                            )
-                          }
-                        >
-                          <FaPlay />
-                        </TableActionButton>
-
-                        <TableActionButton
-                          title="Ver historial"
-                          $color="#6f42c1"
-                          onClick={() => viewTaskHistory(task._id)}
-                        >
-                          <FaHistory />
-                        </TableActionButton>
-
-                        {task.status === "running" && (
-                          <TableActionButton
-                            title="Detener tarea"
-                            $color="#dc3545"
-                            onClick={() => handleCancelTask(task._id)}
-                            disabled={cancelling}
-                          >
-                            <FaStop />
-                          </TableActionButton>
-                        )}
-                      </ActionButtons>
-                    </td>
-                  </tr>
-                ))}
-              </tbody>
-            </StyledTable>
-          </TableContainer>
-        )}
-      </section>
-    </Container>
+              ))}
+            </tbody>
+          </StyledTable>
+        </TableContainer>
+      )}
+    </>
   );
 }
 
@@ -2147,9 +2129,20 @@ const TableContainer = styled.div`
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
-  overflow-x: auto;
+  overflow-x: auto; // Ya tienes esto, correcto
   border-radius: 8px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+
+  /* Añadir esto */
+  -webkit-overflow-scrolling: touch; /* Para mejor scroll en iOS */
+
+  @media (max-width: 576px) {
+    /* Mejora la visualización en móviles pequeños */
+    margin-left: -10px;
+    margin-right: -10px;
+    width: calc(100% + 20px);
+    border-radius: 0;
+  }
 `;
 
 const StyledTable = styled.table`

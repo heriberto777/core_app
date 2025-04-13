@@ -123,4 +123,18 @@ const Container = styled.div`
     text-overflow: ellipsis;
     word-wrap: break-word;
   }
+
+  @media (max-width: 480px) {
+    width: 160px; /* Reducir ancho en móviles muy pequeños */
+    margin: 10px;
+
+    .nombre {
+      font-size: 0.85rem; /* Texto más pequeño */
+      max-width: 80px; /* Limitar ancho del texto */
+    }
+
+    .imgContainer {
+      margin-right: 10px; /* Menos espacio entre imagen y texto */
+    }
+  }
 `;

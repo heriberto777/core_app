@@ -57,6 +57,7 @@ const getMappingById = async (req, res) => {
  * Crea una nueva configuración de mapeo
  */
 const createMapping = async (req, res) => {
+  console.log("createMapping", req.body);
   try {
     const mappingData = req.body;
 
@@ -87,6 +88,7 @@ const createMapping = async (req, res) => {
  * Actualiza una configuración de mapeo existente
  */
 const updateMapping = async (req, res) => {
+  console.log("updateMapping", req.params, req.body);
   try {
     const { mappingId } = req.params;
     const mappingData = req.body;
