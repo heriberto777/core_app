@@ -1,3 +1,4 @@
+// AdminRouter.jsx (Optimizado)
 import { Routes, Route, Navigate } from "react-router-dom";
 import {
   AdminLayout,
@@ -11,25 +12,41 @@ import {
   Statistics,
   LogsPage,
   OrdersVisualization,
+  DocumentsVisualization,
 } from "../index";
 
-const LoadLayout = ({ Layout, Page }) => {
-  return (
-    <Layout>
-      <Page />
-    </Layout>
-  );
-};
+// Componente de envoltura para aplicar el AdminLayout a todas las rutas
+const ProtectedRoute = ({ component: Component }) => {
+  const { user } = useAuth();
 
-// Validar que el usuario tiene acceso
-const hasAccess = (user, requiredRoles) => {
-  if (!user || !user.role) return false;
-  return requiredRoles.some((role) => user.role.includes(role));
+  // Verificar si el usuario está autenticado
+  if (!user) {
+    return <Navigate to="/" replace />;
+  }
+
+  // Verificar acceso a la ruta (puedes personalizarlo según tus necesidades)
+  const hasAccess = (requiredRoles) => {
+    if (!user || !user.role) return false;
+    return requiredRoles.some((role) => user.role.includes(role));
+  };
+
+  // Si el usuario no tiene acceso, redirigir a unauthorized
+  if (!hasAccess(["admin", "dashboard"])) {
+    return <Navigate to="/unauthorized" replace />;
+  }
+
+  // Aplicar el AdminLayout y renderizar el componente
+  return (
+    <AdminLayout>
+      <Component />
+    </AdminLayout>
+  );
 };
 
 export function AdminRouter() {
   const { user } = useAuth();
 
+  // Si no hay usuario autenticado, mostrar la pantalla de autenticación
   if (!user) {
     return (
       <Routes>
@@ -43,98 +60,43 @@ export function AdminRouter() {
       {/* Redirigir automáticamente al Dashboard después del login */}
       <Route path="/" element={<Navigate to="/dashboard" replace />} />
 
-      {/* Asegurar que Dashboard tiene un componente válido */}
+      {/* Aplicar AdminLayout a todas las rutas protegidas */}
       <Route
         path="/dashboard"
-        element={
-          hasAccess(user, ["admin", "dashboard"]) ? (
-            <LoadLayout Layout={AdminLayout} Page={Dashboard} />
-          ) : (
-            <Navigate to="/unauthorized" />
-          )
-        }
+        element={<ProtectedRoute component={Dashboard} />}
       />
       <Route
         path="/tasks"
-        element={
-          hasAccess(user, ["admin", "dashboard"]) ? (
-            <LoadLayout Layout={AdminLayout} Page={TransferTasks} />
-          ) : (
-            <Navigate to="/unauthorized" />
-          )
-        }
+        element={<ProtectedRoute component={TransferTasks} />}
       />
       <Route
         path="/loads"
-        element={
-          hasAccess(user, ["admin", "dashboard"]) ? (
-            <LoadLayout Layout={AdminLayout} Page={LoadsTasks} />
-          ) : (
-            <Navigate to="/unauthorized" />
-          )
-        }
+        element={<ProtectedRoute component={LoadsTasks} />}
       />
       <Route
         path="/email-recipients"
-        element={
-          hasAccess(user, ["admin", "dashboard"]) ? (
-            <LoadLayout Layout={AdminLayout} Page={ControlPlanilla} />
-          ) : (
-            <Navigate to="/unauthorized" />
-          )
-        }
+        element={<ProtectedRoute component={ControlPlanilla} />}
       />
       <Route
         path="/summaries"
-        element={
-          hasAccess(user, ["admin", "dashboard"]) ? (
-            <LoadLayout Layout={AdminLayout} Page={LoadsResumen} />
-          ) : (
-            <Navigate to="/unauthorized" />
-          )
-        }
+        element={<ProtectedRoute component={LoadsResumen} />}
       />
       <Route
         path="/analytics"
-        element={
-          hasAccess(user, ["admin", "dashboard"]) ? (
-            <LoadLayout Layout={AdminLayout} Page={Statistics} />
-          ) : (
-            <Navigate to="/unauthorized" />
-          )
-        }
+        element={<ProtectedRoute component={Statistics} />}
       />
-      <Route
-        path="/logs"
-        element={
-          hasAccess(user, ["admin", "dashboard"]) ? (
-            <LoadLayout Layout={AdminLayout} Page={LogsPage} />
-          ) : (
-            <Navigate to="/unauthorized" />
-          )
-        }
-      />
-
+      <Route path="/logs" element={<ProtectedRoute component={LogsPage} />} />
       <Route
         path="/documents"
-        element={
-          hasAccess(user, ["admin", "dashboard"]) ? (
-            <LoadLayout Layout={AdminLayout} Page={OrdersVisualization} />
-          ) : (
-            <Navigate to="/unauthorized" />
-          )
-        }
+        element={<ProtectedRoute component={DocumentsVisualization} />}
       />
+
+      {/* Opcionalmente, puedes tener rutas secundarias o que no requieran el AdminLayout */}
       <Route
-        path="/task/orders"
-        element={
-          hasAccess(user, ["admin", "dashboard"]) ? (
-            <LoadLayout Layout={AdminLayout} Page={OrdersVisualization} />
-          ) : (
-            <Navigate to="/unauthorized" />
-          )
-        }
+        path="/unauthorized"
+        element={<div>No tienes permisos para acceder a esta página</div>}
       />
+      <Route path="*" element={<div>Página no encontrada</div>} />
     </Routes>
   );
 }

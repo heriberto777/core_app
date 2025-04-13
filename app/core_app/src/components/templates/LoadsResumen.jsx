@@ -459,32 +459,21 @@ export function LoadsResumen() {
   };
 
   return (
-    <Container>
-      <header className="header">
-        <Header
-          stateConfig={{
-            openstate: openstate,
-            setOpenState: () => setOpenState(!openstate),
-          }}
-        />
-      </header>
+    <>
+      <ToolbarContainer>
+        <InfoSection>
+          <BackButton onClick={goBack}>
+            <FaArrowLeft /> Volver a cargas
+          </BackButton>
+          <h2>Resumen de Traspasos de Productos</h2>
+          <p>
+            Visualice y gestione los traspasos realizados, incluyendo opciones
+            de devolución.
+          </p>
+        </InfoSection>
+      </ToolbarContainer>
 
-      <section className="area1">
-        <ToolbarContainer>
-          <InfoSection>
-            <BackButton onClick={goBack}>
-              <FaArrowLeft /> Volver a cargas
-            </BackButton>
-            <h2>Resumen de Traspasos de Productos</h2>
-            <p>
-              Visualice y gestione los traspasos realizados, incluyendo opciones
-              de devolución.
-            </p>
-          </InfoSection>
-        </ToolbarContainer>
-      </section>
-
-      <section className="area2">
+      <section className="main-content">
         <FiltersContainer>
           <FilterField>
             <FilterLabel>
@@ -569,9 +558,7 @@ export function LoadsResumen() {
             </RefreshButton>
           </ButtonsContainer>
         </FiltersContainer>
-      </section>
 
-      <section className="main">
         {loading && (
           <LoadingContainer>
             <LoadingMessage>Cargando resúmenes...</LoadingMessage>
@@ -699,7 +686,7 @@ export function LoadsResumen() {
           </>
         )}
       </section>
-    </Container>
+    </>
   );
 }
 
@@ -839,6 +826,7 @@ const FiltersContainer = styled.div`
   padding: 15px;
   border-radius: 8px;
   box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  margin-bottom: 10px;
 
   @media (max-width: 768px) {
     flex-direction: column;
@@ -978,10 +966,22 @@ const RefreshButton = styled.button`
 
 const TableContainer = styled.div`
   width: 100%;
-  overflow-x: auto;
+  max-width: 1200px;
+  margin: 0 auto;
+  overflow-x: auto; // Ya tienes esto, correcto
   border-radius: 8px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  background-color: ${({ theme }) => theme.cardBg || "#fff"};
+
+  /* Añadir esto */
+  -webkit-overflow-scrolling: touch; /* Para mejor scroll en iOS */
+
+  @media (max-width: 576px) {
+    /* Mejora la visualización en móviles pequeños */
+    margin-left: -10px;
+    margin-right: -10px;
+    width: calc(100% + 20px);
+    border-radius: 0;
+  }
 `;
 
 const StyledTable = styled.table`

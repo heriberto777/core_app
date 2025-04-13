@@ -292,52 +292,40 @@ export function LogsPage() {
   };
 
   return (
-    <Container>
-      <header className="header">
-        <Header
-          stateConfig={{
-            openstate: openstate,
-            setOpenState: () => setOpenState(!openstate),
-          }}
-        />
-      </header>
+    <>
+      <ToolbarContainer>
+        <InfoSection>
+          <h2>Registro de Actividad del Sistema</h2>
+          <p>Visualiza y analiza los logs de actividad del sistema</p>
+        </InfoSection>
 
-      <section className="area1">
-        <ToolbarContainer>
-          <InfoSection>
-            <h2>Registro de Actividad del Sistema</h2>
-            <p>Visualiza y analiza los logs de actividad del sistema</p>
-          </InfoSection>
-
-          {/* Stats Summary */}
-          {summary && (
-            <StatsSummary>
-              <StatItem>
-                <StatValue color="#dc3545">{stats.errorCount}</StatValue>
-                <StatLabel>Errores</StatLabel>
-              </StatItem>
-              <StatItem>
-                <StatValue color="#ffc107">{stats.warnCount}</StatValue>
-                <StatLabel>Advertencias</StatLabel>
-              </StatItem>
-              <StatItem>
-                <StatValue color="#17a2b8">{stats.infoCount}</StatValue>
-                <StatLabel>Info</StatLabel>
-              </StatItem>
-              <StatItem>
-                <StatValue color="#6c757d">{stats.debugCount}</StatValue>
-                <StatLabel>Debug</StatLabel>
-              </StatItem>
-              <StatItem>
-                <StatValue>{stats.totalLogs}</StatValue>
-                <StatLabel>Total</StatLabel>
-              </StatItem>
-            </StatsSummary>
-          )}
-        </ToolbarContainer>
-      </section>
-
-      <section className="area2">
+        {/* Stats Summary */}
+        {summary && (
+          <StatsSummary>
+            <StatItem>
+              <StatValue color="#dc3545">{stats.errorCount}</StatValue>
+              <StatLabel>Errores</StatLabel>
+            </StatItem>
+            <StatItem>
+              <StatValue color="#ffc107">{stats.warnCount}</StatValue>
+              <StatLabel>Advertencias</StatLabel>
+            </StatItem>
+            <StatItem>
+              <StatValue color="#17a2b8">{stats.infoCount}</StatValue>
+              <StatLabel>Info</StatLabel>
+            </StatItem>
+            <StatItem>
+              <StatValue color="#6c757d">{stats.debugCount}</StatValue>
+              <StatLabel>Debug</StatLabel>
+            </StatItem>
+            <StatItem>
+              <StatValue>{stats.totalLogs}</StatValue>
+              <StatLabel>Total</StatLabel>
+            </StatItem>
+          </StatsSummary>
+        )}
+      </ToolbarContainer>
+      <section className="main-content">
         <ActionsContainer>
           <SearchInputContainer>
             <SearchInput
@@ -444,9 +432,7 @@ export function LogsPage() {
             </ButtonsGroup>
           </FiltersContainer>
         </ActionsContainer>
-      </section>
 
-      <section className="main">
         {loading && !refreshing ? (
           <LoadingContainer>
             <LoadingMessage>Cargando logs...</LoadingMessage>
@@ -523,110 +509,115 @@ export function LogsPage() {
             </PaginationContainer>
           </LogsContainer>
         )}
+
+        {/* Modal para detalle de log */}
+        {showLogDetail && selectedLog && (
+          <ModalOverlay onClick={handleCloseLogDetail}>
+            <ModalContent onClick={(e) => e.stopPropagation()}>
+              <ModalHeader>
+                <ModalTitle>
+                  {getLevelIcon(selectedLog.level)} Detalle del Log
+                </ModalTitle>
+                <CloseButton onClick={handleCloseLogDetail}>
+                  &times;
+                </CloseButton>
+              </ModalHeader>
+              <ModalBody>
+                <DetailItem>
+                  <DetailLabel>Nivel:</DetailLabel>
+                  <DetailValue level={selectedLog.level?.toLowerCase()}>
+                    {selectedLog.level}
+                  </DetailValue>
+                </DetailItem>
+                <DetailItem>
+                  <DetailLabel>Fecha:</DetailLabel>
+                  <DetailValue>
+                    {new Date(selectedLog.timestamp).toLocaleString()}
+                  </DetailValue>
+                </DetailItem>
+                <DetailItem>
+                  <DetailLabel>Fuente:</DetailLabel>
+                  <DetailValue>
+                    {selectedLog.source || "No especificada"}
+                  </DetailValue>
+                </DetailItem>
+                <DetailItem>
+                  <DetailLabel>Mensaje:</DetailLabel>
+                  <DetailValue>{selectedLog.message}</DetailValue>
+                </DetailItem>
+                {selectedLog.metadata && (
+                  <DetailItem>
+                    <DetailLabel>Metadata:</DetailLabel>
+                    <DetailValue>
+                      <pre>
+                        {typeof selectedLog.metadata === "object"
+                          ? JSON.stringify(selectedLog.metadata, null, 2)
+                          : selectedLog.metadata}
+                      </pre>
+                    </DetailValue>
+                  </DetailItem>
+                )}
+                {selectedLog.stack && (
+                  <DetailItem>
+                    <DetailLabel>Stack Trace:</DetailLabel>
+                    <DetailValue>
+                      <pre>{selectedLog.stack}</pre>
+                    </DetailValue>
+                  </DetailItem>
+                )}
+              </ModalBody>
+            </ModalContent>
+          </ModalOverlay>
+        )}
+
+        {/* Modal para confirmar eliminación */}
+        {showDeleteConfirm && (
+          <ModalOverlay onClick={() => setShowDeleteConfirm(false)}>
+            <ModalContent onClick={(e) => e.stopPropagation()}>
+              <ModalHeader>
+                <ModalTitle>
+                  <FaTrashAlt style={{ marginRight: "10px" }} /> Limpiar Logs
+                  Antiguos
+                </ModalTitle>
+                <CloseButton onClick={() => setShowDeleteConfirm(false)}>
+                  &times;
+                </CloseButton>
+              </ModalHeader>
+              <ModalBody>
+                <p>
+                  Esta acción eliminará todos los logs más antiguos que el
+                  número de días especificado. Esta operación no se puede
+                  deshacer.
+                </p>
+                <DeleteOptionsContainer>
+                  <FilterLabel>Eliminar logs más antiguos que:</FilterLabel>
+                  <FilterSelect
+                    value={deleteOlderThan}
+                    onChange={(e) =>
+                      setDeleteOlderThan(parseInt(e.target.value))
+                    }
+                  >
+                    <option value="7">7 días</option>
+                    <option value="15">15 días</option>
+                    <option value="30">30 días</option>
+                    <option value="60">60 días</option>
+                    <option value="90">90 días</option>
+                  </FilterSelect>
+                </DeleteOptionsContainer>
+                <ButtonsContainer>
+                  <CancelButton onClick={() => setShowDeleteConfirm(false)}>
+                    Cancelar
+                  </CancelButton>
+                  <DeleteButton onClick={handleCleanLogs} disabled={isDeleting}>
+                    {isDeleting ? "Eliminando..." : "Eliminar Logs"}
+                  </DeleteButton>
+                </ButtonsContainer>
+              </ModalBody>
+            </ModalContent>
+          </ModalOverlay>
+        )}
       </section>
-
-      {/* Modal para detalle de log */}
-      {showLogDetail && selectedLog && (
-        <ModalOverlay onClick={handleCloseLogDetail}>
-          <ModalContent onClick={(e) => e.stopPropagation()}>
-            <ModalHeader>
-              <ModalTitle>
-                {getLevelIcon(selectedLog.level)} Detalle del Log
-              </ModalTitle>
-              <CloseButton onClick={handleCloseLogDetail}>&times;</CloseButton>
-            </ModalHeader>
-            <ModalBody>
-              <DetailItem>
-                <DetailLabel>Nivel:</DetailLabel>
-                <DetailValue level={selectedLog.level?.toLowerCase()}>
-                  {selectedLog.level}
-                </DetailValue>
-              </DetailItem>
-              <DetailItem>
-                <DetailLabel>Fecha:</DetailLabel>
-                <DetailValue>
-                  {new Date(selectedLog.timestamp).toLocaleString()}
-                </DetailValue>
-              </DetailItem>
-              <DetailItem>
-                <DetailLabel>Fuente:</DetailLabel>
-                <DetailValue>
-                  {selectedLog.source || "No especificada"}
-                </DetailValue>
-              </DetailItem>
-              <DetailItem>
-                <DetailLabel>Mensaje:</DetailLabel>
-                <DetailValue>{selectedLog.message}</DetailValue>
-              </DetailItem>
-              {selectedLog.metadata && (
-                <DetailItem>
-                  <DetailLabel>Metadata:</DetailLabel>
-                  <DetailValue>
-                    <pre>
-                      {typeof selectedLog.metadata === "object"
-                        ? JSON.stringify(selectedLog.metadata, null, 2)
-                        : selectedLog.metadata}
-                    </pre>
-                  </DetailValue>
-                </DetailItem>
-              )}
-              {selectedLog.stack && (
-                <DetailItem>
-                  <DetailLabel>Stack Trace:</DetailLabel>
-                  <DetailValue>
-                    <pre>{selectedLog.stack}</pre>
-                  </DetailValue>
-                </DetailItem>
-              )}
-            </ModalBody>
-          </ModalContent>
-        </ModalOverlay>
-      )}
-
-      {/* Modal para confirmar eliminación */}
-      {showDeleteConfirm && (
-        <ModalOverlay onClick={() => setShowDeleteConfirm(false)}>
-          <ModalContent onClick={(e) => e.stopPropagation()}>
-            <ModalHeader>
-              <ModalTitle>
-                <FaTrashAlt style={{ marginRight: "10px" }} /> Limpiar Logs
-                Antiguos
-              </ModalTitle>
-              <CloseButton onClick={() => setShowDeleteConfirm(false)}>
-                &times;
-              </CloseButton>
-            </ModalHeader>
-            <ModalBody>
-              <p>
-                Esta acción eliminará todos los logs más antiguos que el número
-                de días especificado. Esta operación no se puede deshacer.
-              </p>
-              <DeleteOptionsContainer>
-                <FilterLabel>Eliminar logs más antiguos que:</FilterLabel>
-                <FilterSelect
-                  value={deleteOlderThan}
-                  onChange={(e) => setDeleteOlderThan(parseInt(e.target.value))}
-                >
-                  <option value="7">7 días</option>
-                  <option value="15">15 días</option>
-                  <option value="30">30 días</option>
-                  <option value="60">60 días</option>
-                  <option value="90">90 días</option>
-                </FilterSelect>
-              </DeleteOptionsContainer>
-              <ButtonsContainer>
-                <CancelButton onClick={() => setShowDeleteConfirm(false)}>
-                  Cancelar
-                </CancelButton>
-                <DeleteButton onClick={handleCleanLogs} disabled={isDeleting}>
-                  {isDeleting ? "Eliminando..." : "Eliminar Logs"}
-                </DeleteButton>
-              </ButtonsContainer>
-            </ModalBody>
-          </ModalContent>
-        </ModalOverlay>
-      )}
-    </Container>
+    </>
   );
 }
 

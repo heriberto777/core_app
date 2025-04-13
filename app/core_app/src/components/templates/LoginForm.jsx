@@ -135,6 +135,11 @@ const Input = styled.input`
   border-radius: 5px;
   font-size: 16px;
   width: 100%;
+
+  @media (max-width: 480px) {
+    padding: 12px; /* Inputs más grandes en móviles pequeños */
+    margin: 4px 0 12px;
+  }
 `;
 
 const Button = styled.button`
@@ -154,6 +159,11 @@ const Button = styled.button`
   &:disabled {
     background: #ccc;
     cursor: not-allowed;
+  }
+
+  @media (max-width: 480px) {
+    padding: 12px; /* Botones más grandes en móviles */
+    font-size: 16px; /* Texto más grande para mejor tap target */
   }
 `;
 

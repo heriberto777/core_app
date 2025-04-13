@@ -1,13 +1,12 @@
-// pages/OrdersVisualization.jsx
 import styled from "styled-components";
 import { useState, useEffect } from "react";
 import {
-  Header,
   TransferApi,
   useAuth,
   useFetchData,
   MappingsList,
   MappingEditor,
+  CustomerEditor,
 } from "../../index";
 
 import Swal from "sweetalert2";
@@ -24,17 +23,17 @@ import {
   FaEdit,
   FaPlus,
   FaInfoCircle,
+  FaPencilAlt,
 } from "react-icons/fa";
 
 const api = new TransferApi();
 
-export function OrdersVisualization() {
+export function DocumentsVisualization() {
   const [search, setSearch] = useState("");
   const [viewMode, setViewMode] = useState("table");
   const { accessToken } = useAuth();
   const [isLoading, setIsLoading] = useState(false);
-  const [selectedOrders, setSelectedOrders] = useState([]);
-  const [openstate, setOpenState] = useState(false);
+  const [selectedDocuments, setSelectedDocuments] = useState([]);
   const [selectAll, setSelectAll] = useState(false);
   const [activeView, setActiveView] = useState("mappingsList"); // mappingsList, mappingEditor, documents
   const [activeMappingId, setActiveMappingId] = useState(null);
@@ -42,6 +41,8 @@ export function OrdersVisualization() {
   const [showConfigInfo, setShowConfigInfo] = useState(false);
   const [activeConfig, setActiveConfig] = useState(null);
   const [activeMappingName, setActiveMappingName] = useState("");
+  const [showEntityEditor, setShowEntityEditor] = useState(false);
+  const [selectedEntity, setSelectedEntity] = useState(null);
 
   // Filters
   const [filters, setFilters] = useState({
@@ -54,13 +55,13 @@ export function OrdersVisualization() {
     showProcessed: false,
   });
 
-  // Fetch orders data when a mapping is selected
+  // Fetch documents data when a mapping is selected
   const {
-    data: orders,
-    setData: setOrders,
+    data: documents,
+    setData: setDocuments,
     loading,
     error,
-    refetch: fetchOrders,
+    refetch: fetchDocuments,
   } = useFetchData(
     () =>
       activeMappingId
@@ -97,13 +98,16 @@ export function OrdersVisualization() {
     }
   };
 
-  // Filter orders
-  const filteredOrders = orders.filter((order) => {
+  // Determinar el tipo de entidad basado en la configuración activa
+  const entityType = activeConfig?.entityType || "orders";
+
+  // Filter documents
+  const filteredDocuments = documents.filter((document) => {
     // Simple search filter for any field
     if (!search) return true;
 
     const searchLower = search.toLowerCase();
-    return Object.values(order).some(
+    return Object.values(document).some(
       (value) =>
         value &&
         typeof value === "string" &&
@@ -111,34 +115,102 @@ export function OrdersVisualization() {
     );
   });
 
-  // Handle selection of orders
-  const handleSelectOrder = (orderId) => {
-    if (selectedOrders.includes(orderId)) {
-      setSelectedOrders(selectedOrders.filter((id) => id !== orderId));
+  // Handle selection of documents
+  const handleSelectDocument = (documentId) => {
+    if (selectedDocuments.includes(documentId)) {
+      setSelectedDocuments(selectedDocuments.filter((id) => id !== documentId));
     } else {
-      setSelectedOrders([...selectedOrders, orderId]);
+      setSelectedDocuments([...selectedDocuments, documentId]);
     }
   };
 
-  // Handle select all orders
+  // Handle select all documents
   const handleSelectAll = () => {
-    if (selectAll || selectedOrders.length === filteredOrders.length) {
-      setSelectedOrders([]);
+    if (selectAll || selectedDocuments.length === filteredDocuments.length) {
+      setSelectedDocuments([]);
       setSelectAll(false);
     } else {
       // Identifying field may vary by mapping - assuming it's the first key
       const idField =
-        filteredOrders.length > 0 ? Object.keys(filteredOrders[0])[0] : null;
+        filteredDocuments.length > 0
+          ? Object.keys(filteredDocuments[0])[0]
+          : null;
 
       if (idField) {
-        setSelectedOrders(filteredOrders.map((order) => order[idField]));
+        setSelectedDocuments(filteredDocuments.map((doc) => doc[idField]));
         setSelectAll(true);
       }
     }
   };
 
-  // Process selected orders using dynamic mapping
-  const processOrders = async () => {
+  // Función para editar entidades según su tipo
+  const handleEditEntity = (entity) => {
+    if (entityType === "customers") {
+      // Mostrar editor de clientes
+      setSelectedEntity(entity);
+      setShowEntityEditor(true);
+    } else if (entityType === "orders") {
+      // Comportamiento existente para pedidos
+      viewDocumentDetails(entity);
+    }
+    // Agregar más tipos según sea necesario
+  };
+
+  // Renderizado condicional del editor
+  const renderEntityEditor = () => {
+    if (!showEntityEditor || !selectedEntity) return null;
+
+    switch (entityType) {
+      case "customers":
+        return (
+          <EditorOverlay>
+            <EditorContainer>
+              <CustomerEditor
+                customer={selectedEntity}
+                onSave={handleSaveCustomer}
+                onCancel={() => setShowEntityEditor(false)}
+              />
+            </EditorContainer>
+          </EditorOverlay>
+        );
+      // Agregar más casos según se necesite
+      default:
+        return null;
+    }
+  };
+
+  // Función para guardar cliente editado
+  const handleSaveCustomer = async (editedCustomer) => {
+    try {
+      setIsLoading(true);
+
+      // Llamada a la API para actualizar el cliente
+      await api.updateCustomerData(accessToken, editedCustomer);
+
+      // Cerrar editor
+      setShowEntityEditor(false);
+
+      // Actualizar lista
+      fetchDocuments();
+
+      Swal.fire({
+        icon: "success",
+        title: "Cliente actualizado",
+        text: "Los datos del cliente han sido actualizados correctamente",
+      });
+    } catch (error) {
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: error.message || "No se pudo actualizar el cliente",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
+  // Process selected documents using dynamic mapping
+  const processDocuments = async () => {
     if (!activeMappingId) {
       Swal.fire({
         title: "Error",
@@ -148,7 +220,7 @@ export function OrdersVisualization() {
       return;
     }
 
-    if (selectedOrders.length === 0) {
+    if (selectedDocuments.length === 0) {
       Swal.fire({
         title: "Ningún documento seleccionado",
         text: "Por favor, seleccione al menos un documento para procesar",
@@ -161,7 +233,7 @@ export function OrdersVisualization() {
       // Ask for confirmation
       const confirmResult = await Swal.fire({
         title: "¿Procesar documentos?",
-        text: `¿Está seguro de procesar ${selectedOrders.length} documentos?`,
+        text: `¿Está seguro de procesar ${selectedDocuments.length} documentos?`,
         icon: "question",
         showCancelButton: true,
         confirmButtonText: "Sí, procesar",
@@ -185,7 +257,7 @@ export function OrdersVisualization() {
       const result = await api.processDocumentsByMapping(
         accessToken,
         activeMappingId,
-        selectedOrders
+        selectedDocuments
       );
 
       setIsLoading(false);
@@ -285,9 +357,9 @@ export function OrdersVisualization() {
         width: 600,
       });
 
-      // Refresh orders and reset selection
-      fetchOrders();
-      setSelectedOrders([]);
+      // Refresh documents and reset selection
+      fetchDocuments();
+      setSelectedDocuments([]);
       setSelectAll(false);
     } catch (error) {
       setIsLoading(false);
@@ -298,8 +370,9 @@ export function OrdersVisualization() {
       });
     }
   };
-  // View order details using dynamic mapping
-  const viewOrderDetails = async (order) => {
+
+  // View document details using dynamic mapping
+  const viewDocumentDetails = async (document) => {
     try {
       if (!activeMappingId) {
         Swal.fire({
@@ -313,10 +386,10 @@ export function OrdersVisualization() {
       setIsLoading(true);
 
       // Determine the ID field (first property as default)
-      const idField = Object.keys(order)[0];
-      const documentId = order[idField];
+      const idField = Object.keys(document)[0];
+      const documentId = document[idField];
 
-      // Get order details including items using the mapping config
+      // Get document details including items using the mapping config
       const details = await api.getDocumentDetailsByMapping(
         accessToken,
         activeMappingId,
@@ -345,18 +418,18 @@ export function OrdersVisualization() {
         });
       }
 
-      // Show order details modal
+      // Show document details modal
       Swal.fire({
         title: `Documento: ${documentId}`,
         width: 800,
         html: `
-          <div class="order-details">
-            <div class="order-header">
-              ${Object.entries(order)
+          <div class="document-details">
+            <div class="document-header">
+              ${Object.entries(document)
                 .filter(([key]) => key !== idField) // Skip ID field
                 .map(
                   ([key, value]) =>
-                    `<div class="order-header-item">
+                    `<div class="document-header-item">
                     <strong>${key}:</strong> ${value !== null ? value : "N/A"}
                   </div>`
                 )
@@ -399,20 +472,20 @@ export function OrdersVisualization() {
         showConfirmButton: true,
         confirmButtonText: "Cerrar",
         customClass: {
-          container: "order-details-container",
+          container: "document-details-container",
         },
       });
 
       // Add styles for the modal
       const style = document.createElement("style");
       style.textContent = `
-        .order-details-container {
+        .document-details-container {
           z-index: 9999;
         }
-        .order-details {
+        .document-details {
           text-align: left;
         }
-        .order-header {
+        .document-header {
           display: flex;
           flex-wrap: wrap;
           gap: 10px;
@@ -421,7 +494,7 @@ export function OrdersVisualization() {
           background-color: #f8f9fa;
           border-radius: 5px;
         }
-        .order-header-item {
+        .document-header-item {
           flex: 1 1 30%;
           min-width: 150px;
         }
@@ -461,7 +534,7 @@ export function OrdersVisualization() {
   const handleSelectMapping = (mappingId) => {
     setActiveMappingId(mappingId);
     setActiveView("documents");
-    setSelectedOrders([]);
+    setSelectedDocuments([]);
     setSelectAll(false);
   };
 
@@ -482,7 +555,7 @@ export function OrdersVisualization() {
     if (result._id) {
       // If we're editing and this is also the active mapping, refresh data
       if (activeMappingId === result._id) {
-        fetchOrders();
+        fetchDocuments();
         loadMappingConfig(result._id); // Reload config
       }
     }
@@ -513,24 +586,32 @@ export function OrdersVisualization() {
       case "documents":
         return (
           <>
-            {/* Back button to return to mappings list */}
-            <BackButton onClick={() => setActiveView("mappingsList")}>
-              <FaArrowLeft /> Volver a configuraciones
-            </BackButton>
+            <NavigationContainer>
+              {/* Back button to return to mappings list */}
+              <BackButton onClick={() => setActiveView("mappingsList")}>
+                <FaArrowLeft /> Volver a configuraciones
+              </BackButton>
 
-            {/* Configuration info panel */}
-            <ConfigInfoButton
-              onClick={() => setShowConfigInfo(!showConfigInfo)}
-            >
-              <FaInfoCircle /> {showConfigInfo ? "Ocultar" : "Mostrar"} Detalles
-              de Configuración
-            </ConfigInfoButton>
+              {/* Configuration info panel */}
+              <ConfigInfoButton
+                onClick={() => setShowConfigInfo(!showConfigInfo)}
+              >
+                <FaInfoCircle /> {showConfigInfo ? "Ocultar" : "Mostrar"}{" "}
+                Detalles de Configuración
+              </ConfigInfoButton>
+            </NavigationContainer>
 
             {showConfigInfo && (
               <ConfigInfoPanel>
                 <h3>Configuración activa: {activeMappingName}</h3>
                 <ConfigInfoSection>
                   <h4>Información General</h4>
+                  <InfoItem>
+                    <InfoLabel>Tipo de entidad:</InfoLabel>
+                    <InfoValue>
+                      {activeConfig?.entityType || "orders"}
+                    </InfoValue>
+                  </InfoItem>
                   <InfoItem>
                     <InfoLabel>Tipo de transferencia:</InfoLabel>
                     <InfoValue>{activeConfig?.transferType || "N/A"}</InfoValue>
@@ -705,14 +786,14 @@ export function OrdersVisualization() {
               </FiltersContainer>
 
               <ButtonsRow>
-                <ActionButton onClick={fetchOrders} title="Refrescar datos">
+                <ActionButton onClick={fetchDocuments} title="Refrescar datos">
                   <FaSync /> Refrescar
                 </ActionButton>
 
                 <ActionButton
-                  onClick={processOrders}
+                  onClick={processDocuments}
                   title="Procesar documentos seleccionados"
-                  disabled={isLoading || selectedOrders.length === 0}
+                  disabled={isLoading || selectedDocuments.length === 0}
                 >
                   <FaPlay /> Procesar Seleccionados
                 </ActionButton>
@@ -736,9 +817,10 @@ export function OrdersVisualization() {
               </ButtonsRow>
 
               <OrdersCountLabel>
-                Mostrando {filteredOrders.length} de {orders.length} documentos
-                {selectedOrders.length > 0 &&
-                  ` | ${selectedOrders.length} seleccionados`}
+                Mostrando {filteredDocuments.length} de {documents.length}{" "}
+                documentos
+                {selectedDocuments.length > 0 &&
+                  ` | ${selectedDocuments.length} seleccionados`}
               </OrdersCountLabel>
             </ActionsContainer>
 
@@ -754,7 +836,7 @@ export function OrdersVisualization() {
             {error && <ErrorMessage>{error}</ErrorMessage>}
 
             {/* No results state */}
-            {!loading && filteredOrders.length === 0 && (
+            {!loading && filteredDocuments.length === 0 && (
               <EmptyMessage>
                 No se encontraron documentos con los filtros seleccionados.
               </EmptyMessage>
@@ -768,162 +850,195 @@ export function OrdersVisualization() {
             )}
 
             {/* Table view */}
-            {!loading && filteredOrders.length > 0 && viewMode === "table" && (
-              <TableContainer>
-                <StyledTable>
-                  <thead>
-                    <tr>
-                      <th className="checkbox-column">
-                        <CheckboxInput
-                          type="checkbox"
-                          checked={
-                            selectAll ||
-                            (selectedOrders.length > 0 &&
-                              selectedOrders.length === filteredOrders.length)
-                          }
-                          onChange={handleSelectAll}
-                        />
-                      </th>
-                      {/* Dynamic headers based on first document */}
-                      {Object.keys(filteredOrders[0]).map((key) => (
-                        <th key={key}>{key}</th>
-                      ))}
-                      <th className="actions-column">Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filteredOrders.map((order, index) => {
-                      // Get document ID (assuming it's the first field)
-                      const documentId = order[Object.keys(order)[0]];
-
-                      return (
-                        <tr key={index}>
-                          <td className="checkbox-column">
-                            <CheckboxInput
-                              type="checkbox"
-                              checked={selectedOrders.includes(documentId)}
-                              onChange={() => handleSelectOrder(documentId)}
-                            />
-                          </td>
-                          {/* Dynamic cells */}
-                          {Object.entries(order).map(([key, value]) => (
-                            <td key={key}>{value !== null ? value : "N/A"}</td>
-                          ))}
-                          <td className="actions-column">
-                            <ActionButtons>
-                              <TableActionButton
-                                title="Ver detalles"
-                                $color="#007bff"
-                                onClick={() => viewOrderDetails(order)}
-                              >
-                                <FaEye />
-                              </TableActionButton>
-
-                              <TableActionButton
-                                title="Procesar documento"
-                                $color="#28a745"
-                                onClick={() => {
-                                  setSelectedOrders([documentId]);
-                                  processOrders();
-                                }}
-                              >
-                                <FaPlay />
-                              </TableActionButton>
-                            </ActionButtons>
-                          </td>
-                        </tr>
-                      );
-                    })}
-                  </tbody>
-                </StyledTable>
-              </TableContainer>
-            )}
-
-            {/* Cards view */}
-            {!loading && filteredOrders.length > 0 && viewMode === "cards" && (
-              <CardsContainer>
-                {filteredOrders.map((order, index) => {
-                  // Get document ID (assuming it's the first field)
-                  const documentId = order[Object.keys(order)[0]];
-                  // Get type/status field if exists (for styling)
-                  const statusField = Object.keys(order).find(
-                    (key) =>
-                      key.toLowerCase().includes("estado") ||
-                      key.toLowerCase().includes("status") ||
-                      key.toLowerCase().includes("type")
-                  );
-                  const status = statusField ? order[statusField] : null;
-
-                  return (
-                    <OrderCard
-                      key={index}
-                      $selected={selectedOrders.includes(documentId)}
-                      $status={status}
-                    >
-                      <CardHeader>
-                        <CardTitle>{documentId}</CardTitle>
-                        {status && (
-                          <StatusBadge status={status}>{status}</StatusBadge>
-                        )}
-                      </CardHeader>
-
-                      <CardContent>
-                        <CardInfo>
-                          {Object.entries(order)
-                            .filter(
-                              ([key]) =>
-                                key !== Object.keys(order)[0] &&
-                                key !== statusField
-                            )
-                            .map(([key, value]) => (
-                              <InfoItem key={key}>
-                                <InfoLabel>{key}:</InfoLabel>
-                                <InfoValue>
-                                  {value !== null ? value : "N/A"}
-                                </InfoValue>
-                              </InfoItem>
-                            ))}
-                        </CardInfo>
-                      </CardContent>
-
-                      <CardActions>
-                        <CardCheckbox>
+            {!loading &&
+              filteredDocuments.length > 0 &&
+              viewMode === "table" && (
+                <TableContainer>
+                  <StyledTable>
+                    <thead>
+                      <tr>
+                        <th className="checkbox-column">
                           <CheckboxInput
                             type="checkbox"
-                            checked={selectedOrders.includes(documentId)}
-                            onChange={() => handleSelectOrder(documentId)}
+                            checked={
+                              selectAll ||
+                              (selectedDocuments.length > 0 &&
+                                selectedDocuments.length ===
+                                  filteredDocuments.length)
+                            }
+                            onChange={handleSelectAll}
                           />
-                          <span>Seleccionar</span>
-                        </CardCheckbox>
+                        </th>
+                        {/* Dynamic headers based on first document */}
+                        {Object.keys(filteredDocuments[0]).map((key) => (
+                          <th key={key}>{key}</th>
+                        ))}
+                        <th className="actions-column">Acciones</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredDocuments.map((document, index) => {
+                        // Get document ID (assuming it's the first field)
+                        const documentId = document[Object.keys(document)[0]];
 
-                        <ActionButtonsContainer>
-                          <ActionRow>
-                            <CardActionButton
-                              $color="#007bff"
-                              onClick={() => viewOrderDetails(order)}
-                              title="Ver detalles"
-                            >
-                              <FaEye />
-                            </CardActionButton>
+                        return (
+                          <tr key={index}>
+                            <td className="checkbox-column">
+                              <CheckboxInput
+                                type="checkbox"
+                                checked={selectedDocuments.includes(documentId)}
+                                onChange={() =>
+                                  handleSelectDocument(documentId)
+                                }
+                              />
+                            </td>
+                            {/* Dynamic cells */}
+                            {Object.entries(document).map(([key, value]) => (
+                              <td key={key}>
+                                {value !== null ? value : "N/A"}
+                              </td>
+                            ))}
+                            <td className="actions-column">
+                              <ActionButtons>
+                                {entityType === "customers" && (
+                                  <TableActionButton
+                                    title="Editar cliente"
+                                    $color="#ffc107"
+                                    onClick={() => handleEditEntity(document)}
+                                  >
+                                    <FaPencilAlt />
+                                  </TableActionButton>
+                                )}
 
-                            <CardActionButton
-                              $color="#28a745"
-                              onClick={() => {
-                                setSelectedOrders([documentId]);
-                                processOrders();
-                              }}
-                              title="Procesar documento"
-                            >
-                              <FaPlay />
-                            </CardActionButton>
-                          </ActionRow>
-                        </ActionButtonsContainer>
-                      </CardActions>
-                    </OrderCard>
-                  );
-                })}
-              </CardsContainer>
-            )}
+                                <TableActionButton
+                                  title="Ver detalles"
+                                  $color="#007bff"
+                                  onClick={() => viewDocumentDetails(document)}
+                                >
+                                  <FaEye />
+                                </TableActionButton>
+
+                                <TableActionButton
+                                  title="Procesar documento"
+                                  $color="#28a745"
+                                  onClick={() => {
+                                    setSelectedDocuments([documentId]);
+                                    processDocuments();
+                                  }}
+                                >
+                                  <FaPlay />
+                                </TableActionButton>
+                              </ActionButtons>
+                            </td>
+                          </tr>
+                        );
+                      })}
+                    </tbody>
+                  </StyledTable>
+                </TableContainer>
+              )}
+
+            {/* Cards view */}
+            {!loading &&
+              filteredDocuments.length > 0 &&
+              viewMode === "cards" && (
+                <CardsContainer>
+                  {filteredDocuments.map((document, index) => {
+                    // Get document ID (assuming it's the first field)
+                    // Get document ID (assuming it's the first field)
+                    const documentId = document[Object.keys(document)[0]];
+                    // Get type/status field if exists (for styling)
+                    const statusField = Object.keys(document).find(
+                      (key) =>
+                        key.toLowerCase().includes("estado") ||
+                        key.toLowerCase().includes("status") ||
+                        key.toLowerCase().includes("type")
+                    );
+                    const status = statusField ? document[statusField] : null;
+
+                    return (
+                      <OrderCard
+                        key={index}
+                        $selected={selectedDocuments.includes(documentId)}
+                        $status={status}
+                      >
+                        <CardHeader>
+                          <CardTitle>{documentId}</CardTitle>
+                          {status && (
+                            <StatusBadge status={status}>{status}</StatusBadge>
+                          )}
+                        </CardHeader>
+
+                        <CardContent>
+                          <CardInfo>
+                            {Object.entries(document)
+                              .filter(
+                                ([key]) =>
+                                  key !== Object.keys(document)[0] &&
+                                  key !== statusField
+                              )
+                              .map(([key, value]) => (
+                                <InfoItem key={key}>
+                                  <InfoLabel>{key}:</InfoLabel>
+                                  <InfoValue>
+                                    {value !== null ? value : "N/A"}
+                                  </InfoValue>
+                                </InfoItem>
+                              ))}
+                          </CardInfo>
+                        </CardContent>
+
+                        <CardActions>
+                          <CardCheckbox>
+                            <CheckboxInput
+                              type="checkbox"
+                              checked={selectedDocuments.includes(documentId)}
+                              onChange={() => handleSelectDocument(documentId)}
+                            />
+                            <span>Seleccionar</span>
+                          </CardCheckbox>
+
+                          <ActionButtonsContainer>
+                            <ActionRow>
+                              {entityType === "customers" && (
+                                <CardActionButton
+                                  $color="#ffc107"
+                                  onClick={() => handleEditEntity(document)}
+                                  title="Editar cliente"
+                                >
+                                  <FaPencilAlt />
+                                </CardActionButton>
+                              )}
+
+                              <CardActionButton
+                                $color="#007bff"
+                                onClick={() => viewDocumentDetails(document)}
+                                title="Ver detalles"
+                              >
+                                <FaEye />
+                              </CardActionButton>
+
+                              <CardActionButton
+                                $color="#28a745"
+                                onClick={() => {
+                                  setSelectedDocuments([documentId]);
+                                  processDocuments();
+                                }}
+                                title="Procesar documento"
+                              >
+                                <FaPlay />
+                              </CardActionButton>
+                            </ActionRow>
+                          </ActionButtonsContainer>
+                        </CardActions>
+                      </OrderCard>
+                    );
+                  })}
+                </CardsContainer>
+              )}
+
+            {/* Entity Editor Modal */}
+            {showEntityEditor && renderEntityEditor()}
           </>
         );
 
@@ -933,79 +1048,27 @@ export function OrdersVisualization() {
   };
 
   return (
-    <Container>
-      <header className="header">
-        <Header
-          stateConfig={{
-            openstate: openstate,
-            setOpenState: () => setOpenState(!openstate),
-          }}
-        />
-      </header>
-
-      <section className="area1">
-        <ToolbarContainer>
-          <InfoSection>
-            <h2>Gestión de Documentos</h2>
-            <p>
-              {activeView === "mappingsList" &&
-                "Seleccione una configuración de mapeo para comenzar"}
-              {activeView === "mappingEditor" &&
-                "Configure los parámetros de mapeo entre servidores"}
-              {activeView === "documents" &&
-                "Visualice y procese los documentos según la configuración seleccionada"}
-            </p>
-          </InfoSection>
-        </ToolbarContainer>
-      </section>
+    <>
+      <ToolbarContainer>
+        <InfoSection>
+          <h2>Gestión de Documentos</h2>
+          <p>
+            {activeView === "mappingsList" &&
+              "Seleccione una configuración de mapeo para comenzar"}
+            {activeView === "mappingEditor" &&
+              "Configure los parámetros de mapeo entre servidores"}
+            {activeView === "documents" &&
+              "Visualice y procese los documentos según la configuración seleccionada"}
+          </p>
+        </InfoSection>
+      </ToolbarContainer>
 
       <section className="main">{renderView()}</section>
-    </Container>
+    </>
   );
 }
 
-// Aquí todos los estilos que ya existían
-const Container = styled.div`
-  min-height: 100vh;
-  padding: 15px;
-  width: 100%;
-  background-color: ${(props) => props.theme.bg};
-  color: ${(props) => props.theme.text};
-  display: grid;
-  grid-template:
-    "header" 90px
-    "area1" auto
-    "main" 1fr;
-
-  @media (max-width: 768px) {
-    grid-template:
-      "header" 70px
-      "area1" auto
-      "main" 1fr;
-    padding: 10px;
-  }
-
-  .header {
-    grid-area: header;
-    display: flex;
-    align-items: center;
-    margin-bottom: 20px;
-  }
-
-  .area1 {
-    grid-area: area1;
-    margin-bottom: 10px;
-  }
-
-  .main {
-    grid-area: main;
-    margin-top: 10px;
-    overflow-x: auto;
-    position: relative;
-  }
-`;
-
-// Toolbar & Info Section
+// Estilos para el componente
 const ToolbarContainer = styled.div`
   display: flex;
   flex-direction: column;
@@ -1031,6 +1094,20 @@ const InfoSection = styled.div`
   }
 `;
 
+const NavigationContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 100%;
+  margin-bottom: 15px;
+  position: relative;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    gap: 10px;
+  }
+`;
+
 // Back button
 const BackButton = styled.button`
   display: flex;
@@ -1043,10 +1120,17 @@ const BackButton = styled.button`
   border-radius: 4px;
   font-size: 14px;
   cursor: pointer;
-  margin-bottom: 20px;
+  margin: 5px;
+  /* margin-bottom: 20px; */
+  transition: background-color 0.3s, transform 0.2s;
 
   &:hover {
     background-color: ${(props) => props.theme.secondaryHover};
+  }
+
+  @media (max-width: 768px) {
+    width: 100%;
+    justify-content: center;
   }
 `;
 
@@ -1062,9 +1146,15 @@ const ConfigInfoButton = styled.button`
   border-radius: 4px;
   font-size: 14px;
   cursor: pointer;
-  margin-bottom: 10px;
+  /* margin-bottom: 10px; */
+  margin: 5px;
+  transition: background-color 0.3s, transform 0.2s;
   &:hover {
     background-color: ${(props) => props.theme.secondaryHover};
+  }
+  @media (max-width: 768px) {
+    width: 100%;
+    justify-content: center;
   }
 `;
 
@@ -1112,6 +1202,30 @@ const TableInfoItem = styled.div`
   margin-bottom: 8px;
   background-color: ${({ theme }) => theme.tableHeader};
   border-radius: 4px;
+`;
+
+const FieldsList = styled.ul`
+  margin-top: 8px;
+  padding-left: 20px;
+  list-style-type: none;
+`;
+
+const FieldItem = styled.li`
+  margin-bottom: 4px;
+  font-size: 13px;
+`;
+
+const DefaultValue = styled.span`
+  margin-left: 5px;
+  color: ${({ theme }) => theme.textSecondary || "#666"};
+  font-style: italic;
+  font-size: 12px;
+  &:before {
+    content: "(default: ";
+  }
+  &:after {
+    content: ")";
+  }
 `;
 
 // Actions Container
@@ -1330,15 +1444,32 @@ const LoadingContainer = styled.div`
   justify-content: center;
   align-items: center;
   height: 200px;
-  gap: 20px;
+  gap: 15px;
 `;
 
-const LoadingSpinner = styled(FaSpinner)`
-  font-size: ${(props) => (props.size === "large" ? "4rem" : "2rem")};
-  color: #17a2b8;
-  animation: spin 1s linear infinite;
+const LoadingSpinner = styled.div`
+  display: inline-block;
+  width: ${(props) => (props.size === "large" ? "60px" : "40px")};
+  height: ${(props) => (props.size === "large" ? "60px" : "40px")};
+  border: 4px solid rgba(23, 162, 184, 0.2);
+  border-radius: 50%;
+  border-top-color: #17a2b8;
+  animation: spinner-rotate 1s linear infinite;
 
-  @keyframes spin {
+  &::after {
+    content: "";
+    position: absolute;
+    top: 4px;
+    left: 4px;
+    right: 4px;
+    bottom: 4px;
+    border: 3px solid transparent;
+    border-top-color: #17a2b8;
+    border-radius: 50%;
+    animation: spinner-rotate 0.8s linear infinite reverse;
+  }
+
+  @keyframes spinner-rotate {
     from {
       transform: rotate(0deg);
     }
@@ -1360,11 +1491,23 @@ const OverlayLoading = styled.div`
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(255, 255, 255, 0.7);
+  background-color: rgba(255, 255, 255, 0.8);
   display: flex;
   justify-content: center;
   align-items: center;
   z-index: 1000;
+
+  /* Agregar una animación sutil de fade-in */
+  animation: fadeIn 0.3s ease;
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
 `;
 
 const ErrorMessage = styled.div`
@@ -1407,6 +1550,7 @@ const TableContainer = styled.div`
 
 const StyledTable = styled.table`
   width: 100%;
+  margin: 10px;
   border-collapse: collapse;
   background-color: ${({ theme }) => theme.cardBg || "#fff"};
   color: ${({ theme }) => theme.text};
@@ -1612,26 +1756,27 @@ const CardActionButton = styled.button`
   }
 `;
 
-const FieldsList = styled.ul`
-  margin-top: 8px;
-  padding-left: 20px;
-  list-style-type: none;
+// Editor overlay
+const EditorOverlay = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(0, 0, 0, 0.5);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 1100;
 `;
 
-const FieldItem = styled.li`
-  margin-bottom: 4px;
-  font-size: 13px;
-`;
-
-const DefaultValue = styled.span`
-  margin-left: 5px;
-  color: ${({ theme }) => theme.textSecondary || "#666"};
-  font-style: italic;
-  font-size: 12px;
-  &:before {
-    content: "(default: ";
-  }
-  &:after {
-    content: ")";
-  }
+const EditorContainer = styled.div`
+  background-color: ${({ theme }) => theme.cardBg || "#fff"};
+  border-radius: 8px;
+  box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+  padding: 20px;
+  width: 90%;
+  max-width: 800px;
+  max-height: 90vh;
+  overflow-y: auto;
 `;

@@ -1,3 +1,4 @@
+// Sidebar.jsx (Optimizado)
 import React, { useContext } from "react";
 import styled from "styled-components";
 import SwitchMode from "react-switch";
@@ -7,14 +8,22 @@ import {
   ThemeContext,
   SecondarylinksArray,
   useAuth,
+  AdminLayout,
 } from "../../index";
-import { NavLink } from "react-router-dom";
+import { NavLink, useLocation } from "react-router-dom";
 import { Device } from "../../styles/breakpoints";
 import { FaMoon, FaSun } from "react-icons/fa";
+import { LayoutContext } from "../../layouts/AdminLayout/AdminLayout"; // Importar el contexto
 
 export function Sidebar({ state, setState }) {
   const { theme, toggleTheme } = useContext(ThemeContext);
   const { logout, user } = useAuth();
+  const location = useLocation();
+  const layoutContext = useContext(LayoutContext);
+
+  // Usar el contexto si está disponible, de lo contrario usar props
+  const isOpen = layoutContext?.sidebarOpen || state;
+  const toggleSidebar = layoutContext?.toggleSidebar || setState;
 
   const hasRole = (roles) => roles?.some((role) => user.role?.includes(role));
   const filteredLinkArray = LinkArray?.filter(({ roles }) => hasRole(roles));
@@ -23,38 +32,26 @@ export function Sidebar({ state, setState }) {
   );
 
   return (
-    <Main $isOpen={state}>
-      <span className="Sidebarbutton" onClick={() => setState(!state)}>
-        {<v.iconoflechaderecha />}
-      </span>
-      <Container $isOpen={state} className={state ? "active" : ""}>
-        <div className="Logocontent">
-          <div className="imgcontent">
-            <img src={v.logoLetra} alt="Logo" />
-          </div>
-        </div>
+    <SidebarContainer $isOpen={isOpen}>
+      <LinksContainer>
         {filteredLinkArray.map(({ icon, label, to }) => (
-          <div
-            key={label}
-            className={state ? "LinkContainer active" : "LinkContainer"}
-          >
+          <LinkItem key={label} className={isOpen ? "active" : ""}>
             <NavLink
               to={`${to}`}
               className={({ isActive }) => `Links${isActive ? ` active` : ``}`}
             >
               <div className="linkicon">{icon}</div>
-              <span className={state ? "label_ver" : "label_oculto"}>
+              <span className={isOpen ? "label_ver" : "label_oculto"}>
                 {label}
               </span>
             </NavLink>
-          </div>
+          </LinkItem>
         ))}
+
         <Divider />
+
         {filteredSecondarylinksArray.map(({ icon, label, to }) => (
-          <div
-            key={label}
-            className={state ? "LinkContainer active" : "LinkContainer"}
-          >
+          <LinkItem key={label} className={isOpen ? "active" : ""}>
             {to ? (
               <NavLink
                 to={to}
@@ -63,177 +60,141 @@ export function Sidebar({ state, setState }) {
                 }
               >
                 <div className="linkicon">{icon}</div>
-                <span className={state ? "label_ver" : "label_oculto"}>
+                <span className={isOpen ? "label_ver" : "label_oculto"}>
                   {label}
                 </span>
               </NavLink>
             ) : (
               <button className="Links" onClick={logout}>
                 <div className="linkicon">{icon}</div>
-                <span className={state ? "label_ver" : "label_oculto"}>
+                <span className={isOpen ? "label_ver" : "label_oculto"}>
                   {label}
                 </span>
               </button>
             )}
-          </div>
+          </LinkItem>
         ))}
-        <div className="controles">
-          <SwitchMode
-            onChange={toggleTheme}
-            checked={theme === "dark"}
-            uncheckedIcon={<FaMoon style={customIconStyles} />}
-            checkedIcon={<FaSun style={customIconStyles} />}
-            height={24}
-            width={48}
-            handleDiameter={20}
-          />
-        </div>
-      </Container>
-    </Main>
+      </LinksContainer>
+
+      <ThemeToggleContainer>
+        <SwitchMode
+          onChange={toggleTheme}
+          checked={theme === "dark"}
+          uncheckedIcon={<FaMoon style={customIconStyles} />}
+          checkedIcon={<FaSun style={customIconStyles} />}
+          height={24}
+          width={48}
+          handleDiameter={20}
+        />
+      </ThemeToggleContainer>
+    </SidebarContainer>
   );
 }
 
-const Container = styled.div`
-  color: ${(props) => props.theme.text};
-  background: ${(props) => props.theme.bg};
+const SidebarContainer = styled.div`
   position: fixed;
-  padding-top: 20px;
-  z-index: 1;
-  height: 100%;
-  width: 65px;
-  transition: 0.1s ease-in-out;
+  top: 90px; /* Altura del Header */
+  left: 0;
+  height: calc(100% - 90px);
+  width: ${(props) => (props.$isOpen ? "220px" : "65px")};
+  background-color: ${({ theme }) => theme.bg};
+  color: ${({ theme }) => theme.text};
+  transition: width 0.3s ease-in-out;
   overflow-y: auto;
   overflow-x: hidden;
+  z-index: 100;
+  box-shadow: 2px 0 5px rgba(0, 0, 0, 0.1);
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+
+  /* Añadir para mejorar el scroll */
+  -webkit-overflow-scrolling: touch;
+
+  /* Estilos de la barra de desplazamiento */
   &::-webkit-scrollbar {
     width: 6px;
     border-radius: 10px;
   }
+
   &::-webkit-scrollbar-thumb {
     background-color: ${(props) => props.theme.colorScroll};
     border-radius: 10px;
   }
-  &.active {
-    width: 220px;
-  }
-  .Logocontent {
-    display: flex;
-    justify-content: center;
-    align-items: center;
-    padding-bottom: 60px;
-    .imgcontent {
-      display: flex;
-      justify-content: center;
-      align-items: center;
-      width: ${({ $isOpen }) => ($isOpen ? `100%` : `30px`)};
-      cursor: pointer;
-      transition: 0.3s ease;
-      transform: ${({ $isOpen }) => ($isOpen ? `scale(0.7)` : `scale(1.5)`)}
-        rotate(${({ theme }) => theme.logorotate});
-      img {
-        width: 100%;
-        animation: flotar 1.7s ease-in-out infinite alternate;
-      }
-    }
-    h2 {
-      display: ${({ $isOpen }) => ($isOpen ? `block` : `none`)};
-    }
-    @keyframes flotar {
-      0% {
-        transform: translate(0, 0px);
-      }
-      50% {
-        transform: translate(0, 4px);
-      }
-      100% {
-        transform: translate(0, -0px);
-      }
-    }
-  }
-  .LinkContainer {
-    margin: 5px 0;
-    transition: all 0.3s ease-in-out;
-    padding: 0 5%;
-    position: relative;
-    &:hover {
-      background: ${(props) => props.theme.bgAlpha};
-    }
-    .Links {
-      display: flex;
-      align-items: center;
-      text-decoration: none;
-      padding: calc(${() => v.smSpacing} - 2px) 0;
-      color: ${(props) => props.theme.text};
-      height: 60px;
-      .linkicon {
-        padding: ${() => v.smSpacing} ${() => v.mdSpacing};
-        display: flex;
-        svg {
-          font-size: 25px;
-        }
-      }
-      .label_ver {
-        transition: 0.3s ease-in-out;
-        opacity: 1;
-      }
-      .label_oculto {
-        opacity: 0;
-      }
-      &.active {
-        color: ${(props) => props.theme.bg5};
-        font-weight: 600;
-        &::before {
-          content: "";
-          position: absolute;
-          height: 100%;
-          background: ${(props) => props.theme.bg5};
-          width: 4px;
-          border-radius: 10px;
-          left: 0;
-        }
-      }
-    }
-    &.active {
-      padding: 0;
-    }
-  }
-  .controles {
-    display: flex;
-    flex-direction: column;
-    justify-content: center;
-    align-items: center;
-    ${(props) => props.theme.text};
-    @media ${Device.tablet} {
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      padding: 10px;
-      margin-bottom: 10px;
-      gap: 10px;
-      color: ${(props) => props.theme.text};
-    }
+
+  /* Responsividad para móviles */
+  @media (max-width: 768px) {
+    width: 220px; /* Tamaño fijo para móviles */
+    transform: ${(props) =>
+      props.$isOpen ? "translateX(0)" : "translateX(-100%)"};
+    box-shadow: ${(props) =>
+      props.$isOpen ? "2px 0 5px rgba(0, 0, 0, 0.1)" : "none"};
   }
 `;
 
-const Main = styled.div`
-  .Sidebarbutton {
-    position: fixed;
-    top: 70px;
-    left: 42px;
-    width: 32px;
-    height: 32px;
-    border-radius: 50%;
-    background: ${(props) => props.theme.bgtgderecha};
-    box-shadow: 0 0 4px ${(props) => props.theme.bg3},
-      0 0 7px ${(props) => props.theme.bg};
+const LinksContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  padding: 15px 5px;
+`;
+
+const LinkItem = styled.div`
+  margin: 5px 0;
+  transition: all 0.3s ease-in-out;
+  position: relative;
+
+  &:hover {
+    background: ${(props) => props.theme.bgAlpha};
+  }
+
+  .Links {
     display: flex;
     align-items: center;
-    justify-content: center;
-    cursor: pointer;
-    transition: all 0.2s;
-    z-index: 2;
-    transform: ${({ $isOpen }) =>
-      $isOpen ? `translateX(162px) rotate(3.142rad)` : `initial`};
+    text-decoration: none;
+    padding: calc(${() => v.smSpacing} - 2px) 0;
     color: ${(props) => props.theme.text};
+    height: 60px;
+    width: 100%;
+    background: none;
+    border: none;
+    cursor: pointer;
+
+    .linkicon {
+      padding: ${() => v.smSpacing} ${() => v.mdSpacing};
+      display: flex;
+
+      svg {
+        font-size: 25px;
+      }
+    }
+
+    .label_ver {
+      transition: 0.3s ease-in-out;
+      opacity: 1;
+    }
+
+    .label_oculto {
+      opacity: 0;
+    }
+
+    &.active {
+      color: ${(props) => props.theme.bg5};
+      font-weight: 600;
+
+      &::before {
+        content: "";
+        position: absolute;
+        height: 100%;
+        background: ${(props) => props.theme.bg5};
+        width: 4px;
+        border-radius: 10px;
+        left: 0;
+      }
+    }
+  }
+
+  &.active {
+    padding: 0;
   }
 `;
 
@@ -244,14 +205,12 @@ const Divider = styled.div`
   margin: ${() => v.lgSpacing} 0;
 `;
 
-// const customIconStyles = {
-//   display: "flex",
-//   justifyContent: "center",
-//   align-items: "center",
-//   height: "100%",
-//   width: "100%",
-//   fontSize: "1.5rem",
-// };
+const ThemeToggleContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  padding: 20px 0;
+  border-top: 1px solid ${(props) => props.theme.border || "#eee"};
+`;
 
 const customIconStyles = {
   display: "flex",
@@ -259,5 +218,7 @@ const customIconStyles = {
   alignItems: "center",
   height: "100%",
   width: "100%",
-  fontSize: "1.5rem", // Ajusta el tamaño del icono aquí
+  fontSize: "1.5rem",
 };
+
+export default Sidebar;

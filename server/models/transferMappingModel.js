@@ -57,6 +57,11 @@ const TransferMappingSchema = new Schema({
   createdBy: { type: String },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
+  entityType: {
+    type: String,
+    enum: ["orders", "customers", "invoices", "other"],
+    default: "orders",
+  },
 });
 
 // Pre-save hook para actualizar fecha
