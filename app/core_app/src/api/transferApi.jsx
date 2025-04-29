@@ -1044,7 +1044,7 @@ export class TransferApi {
 
       if (response.status !== 201) throw result;
 
-      return result.data;
+      return result;
     } catch (error) {
       console.error("Error al crear configuración de mapeo:", error);
       throw error;
@@ -1068,7 +1068,7 @@ export class TransferApi {
 
       if (response.status !== 200) throw result;
 
-      return result.data;
+      return result;
     } catch (error) {
       console.error("Error al actualizar configuración de mapeo:", error);
       throw error;

@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
-import { TransferApi, useAuth } from "../../index";
+import { ConsecutiveConfigSection, TransferApi, useAuth } from "../../index";
 import { FaSave, FaPlus, FaTrash, FaTimes, FaEdit } from "react-icons/fa";
 import Swal from "sweetalert2";
 
@@ -21,8 +21,13 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     tableConfigs: [],
     markProcessedField: "IS_PROCESSED",
     markProcessedValue: 1,
+    consecutiveConfig: { enabled: false },
   });
+  const [isEditing, setIsEditing] = useState(!!mappingId);
   const [activeTab, setActiveTab] = useState("general");
+  // const [consecutiveConfig, setConsecutiveConfig] = useState(
+  //   mapping?.consecutiveConfig || { enabled: false }
+  // );
 
   useEffect(() => {
     if (mappingId) {
@@ -33,11 +38,13 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
   }, [mappingId]);
 
   const loadMapping = async () => {
+    setLoading(true);
     try {
-      setLoading(true);
       const data = await api.getMappingById(accessToken, mappingId);
-      setMapping(data);
-      setLoading(false);
+
+      if (data) {
+        setMapping(data);
+      }
     } catch (error) {
       console.error("Error al cargar la configuración:", error);
       Swal.fire({
@@ -46,61 +53,86 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         text: "No se pudo cargar la configuración",
       });
       onCancel();
+    } finally {
+      setLoading(false);
     }
   };
 
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
-    setMapping({
-      ...mapping,
-      [name]: type === "checkbox" ? checked : value,
-    });
+
+    if (name.includes(".")) {
+      const [parent, child] = name.split(".");
+      setMapping((prevState) => ({
+        ...prevState,
+        [parent]: {
+          ...(prevState[parent] || {}),
+          [child]: type === "checkbox" ? checked : value,
+        },
+      }));
+    } else {
+      // Manejo normal para campos no anidados
+      setMapping((prevState) => ({
+        ...prevState,
+        [name]: type === "checkbox" ? checked : value,
+      }));
+    }
   };
 
   const handleSave = async () => {
+    // Validaciones
+    if (!mapping.name) {
+      Swal.fire({
+        icon: "warning",
+        title: "Datos incompletos",
+        text: "Por favor, ingrese un nombre para la configuración",
+      });
+      return;
+    }
+
+    if (mapping.tableConfigs.length === 0) {
+      Swal.fire({
+        icon: "warning",
+        title: "Configuración incompleta",
+        text: "Debe configurar al menos una tabla",
+      });
+      return;
+    }
+
+    setLoading(true);
     try {
-      // Validaciones básicas
-      if (!mapping.name.trim()) {
-        Swal.fire({
-          icon: "error",
-          title: "Error",
-          text: "El nombre es obligatorio",
-        });
-        return;
-      }
-
-      if (mapping.tableConfigs.length === 0) {
-        Swal.fire({
-          icon: "error",
-          title: "Error",
-          text: "Debe configurar al menos una tabla",
-        });
-        return;
-      }
-
-      setLoading(true);
-
       let result;
-      if (mappingId) {
+      if (isEditing) {
         result = await api.updateMapping(accessToken, mappingId, mapping);
       } else {
         result = await api.createMapping(accessToken, mapping);
       }
 
-      Swal.fire({
-        icon: "success",
-        title: "Guardado",
-        text: "Configuración guardada correctamente",
-      });
+      if (result.success) {
+        Swal.fire({
+          icon: "success",
+          title: isEditing
+            ? "Configuración actualizada"
+            : "Configuración creada",
+          text: "Los cambios han sido guardados correctamente",
+        });
 
-      onSave(result);
+        if (onSave) {
+          onSave(result);
+        }
+      } else {
+        console.log(result);
+        throw new Error(
+          result.message || "No se pudo guardar la configuración"
+        );
+      }
     } catch (error) {
-      console.error("Error al guardar:", error);
       Swal.fire({
         icon: "error",
         title: "Error",
-        text: "No se pudo guardar la configuración",
+        text: error.message || "Error al guardar los datos",
       });
+    } finally {
       setLoading(false);
     }
   };
@@ -854,6 +886,12 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                 />
               </FormGroup>
             </FormRow>
+            <FormGroup>
+              <ConsecutiveConfigSection
+                mapping={mapping}
+                handleChange={handleChange}
+              />
+            </FormGroup>
           </Section>
         )}
 

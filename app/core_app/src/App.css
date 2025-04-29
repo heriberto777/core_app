@@ -775,3 +775,83 @@ table tr.disabled {
 /* .swal-confirm-button { */
 /* background-color: ${({ theme }) => theme.primary} !important */
 /* } */
+
+/* Estilos para documentos y detalles de documentos */
+.document-details-container {
+  z-index: 9999;
+}
+
+.document-details {
+  text-align: left;
+}
+
+.document-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-bottom: 20px;
+  padding: 10px;
+  background-color: #f8f9fa;
+  border-radius: 5px;
+}
+
+.document-header-item {
+  flex: 1 1 30%;
+  min-width: 150px;
+}
+
+.items-table-container {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: 20px;
+}
+
+.items-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.items-table th,
+.items-table td {
+  padding: 8px;
+  border: 1px solid #ddd;
+  text-align: left;
+}
+
+.items-table th {
+  background-color: #f0f0f0;
+  position: sticky;
+  top: 0;
+}
+
+/* Estilos para resultados de procesamiento */
+.document-processing-result {
+  max-width: 100%;
+  overflow-x: hidden;
+}
+
+.result-summary {
+  text-align: left;
+}
+
+.error-details {
+  max-height: 200px;
+  overflow-y: auto;
+  text-align: left;
+  background: #f8f8f8;
+  padding: 10px;
+  border-radius: 4px;
+  margin-top: 10px;
+}
+
+.error-detail-item {
+  margin: 5px 0;
+  border-bottom: 1px solid #eee;
+  padding-bottom: 5px;
+}
+
+/* Estilos para modales y overlays específicos */
+.document-details-wrapper {
+  max-height: 70vh;
+  overflow-y: auto;
+}

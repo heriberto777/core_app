@@ -313,14 +313,12 @@ export function DocumentsVisualization() {
             result.data?.failed > 0 ||
             (result.data?.errorDetails && result.data.errorDetails.length > 0)
               ? `<p><strong>Detalles de errores:</strong></p>
-            <div class="error-details" style="max-height:200px;overflow-y:auto;text-align:left;background:#f8f8f8;padding:10px;border-radius:4px;margin-top:10px;">
+            <div class="error-details">
               ${
                 result.data?.errorDetails
                   ? result.data.errorDetails
                       .map(
-                        (
-                          detail
-                        ) => `<p style="margin:5px 0;border-bottom:1px solid #eee;padding-bottom:5px;">
+                        (detail) => `<p class="error-detail-item">
                     <strong>Documento ${
                       detail.documentId
                     }:</strong> ${formatErrorMessage(
@@ -333,9 +331,7 @@ export function DocumentsVisualization() {
                   ? result.data.details
                       .filter((detail) => !detail.success)
                       .map(
-                        (
-                          detail
-                        ) => `<p style="margin:5px 0;border-bottom:1px solid #eee;padding-bottom:5px;">
+                        (detail) => `<p class="error-detail-item">
                     <strong>Documento ${
                       detail.documentId
                     }:</strong> ${formatErrorMessage(
@@ -355,6 +351,9 @@ export function DocumentsVisualization() {
       `,
         icon: resultIcon,
         width: 600,
+        customClass: {
+          htmlContainer: "document-processing-result",
+        },
       });
 
       // Refresh documents and reset selection
@@ -371,7 +370,6 @@ export function DocumentsVisualization() {
     }
   };
 
-  // View document details using dynamic mapping
   const viewDocumentDetails = async (document) => {
     try {
       if (!activeMappingId) {
@@ -398,127 +396,177 @@ export function DocumentsVisualization() {
 
       setIsLoading(false);
 
-      // Format currency
-      const formatCurrency = (amount) => {
-        return new Intl.NumberFormat("es-DO", {
-          style: "currency",
-          currency: "DOP",
-        }).format(amount || 0);
-      };
-
       // Get all detail items across all detail tables
-      const allDetails = [];
+      let allDetails = [];
 
-      if (details.data && details.data.details) {
-        // Merge all detail items from all detail tables
-        Object.values(details.data.details).forEach((tableItems) => {
-          if (Array.isArray(tableItems)) {
-            allDetails.push(...tableItems);
+      // Verificar si hay datos de detalle y extraer los detalles según la estructura
+      if (details && details.details) {
+        if (details.details.details && Array.isArray(details.details.details)) {
+          // Estructura tipo 1: details.details.details[]
+          allDetails = details.details.details;
+        } else {
+          // Estructura tipo 2: details.details.NOMBRE_TABLA[]
+          const detailsObj = details.details;
+          // Buscar la primera propiedad que sea un array
+          for (const key in detailsObj) {
+            if (Array.isArray(detailsObj[key])) {
+              allDetails = detailsObj[key];
+              break;
+            }
           }
-        });
+        }
       }
 
-      // Show document details modal
+      if (allDetails.length === 0) {
+        Swal.fire({
+          title: `Documento: ${documentId}`,
+          html: `
+          <div class="document-details">
+            <div class="document-header">
+              ${Object.entries(document)
+                .filter(([key]) => key !== idField)
+                .map(
+                  ([key, value]) => `
+                  <div class="document-header-item">
+                    <strong>${key}:</strong> ${value !== null ? value : "N/A"}
+                  </div>
+                `
+                )
+                .join("")}
+            </div>
+            <h4>Detalle</h4>
+            <p>No se encontraron detalles para este documento.</p>
+          </div>
+        `,
+          showConfirmButton: true,
+          confirmButtonText: "Cerrar",
+          customClass: {
+            container: "document-details-container",
+            htmlContainer: "document-details-wrapper",
+          },
+        });
+        return;
+      }
+
+      // Obtener todos los campos disponibles
+      const allFields = Object.keys(allDetails[0]);
+
+      // Inicialmente mostrar solo 5 campos
+      const initialFields = allFields.slice(0, 5);
+
+      // Show document details modal with simplified UI
       Swal.fire({
         title: `Documento: ${documentId}`,
         width: 800,
         html: `
-          <div class="document-details">
-            <div class="document-header">
-              ${Object.entries(document)
-                .filter(([key]) => key !== idField) // Skip ID field
-                .map(
-                  ([key, value]) =>
-                    `<div class="document-header-item">
-                    <strong>${key}:</strong> ${value !== null ? value : "N/A"}
-                  </div>`
-                )
-                .join("")}
-            </div>
-            
-            <h4>Detalle</h4>
-            <div class="items-table-container">
-              <table class="items-table">
-                <thead>
-                  <tr>
-                    ${
-                      allDetails.length > 0
-                        ? Object.keys(allDetails[0])
-                            .map((key) => `<th>${key}</th>`)
-                            .join("")
-                        : "<th>No hay detalles disponibles</th>"
-                    }
-                  </tr>
-                </thead>
-                <tbody>
-                  ${allDetails
-                    .map(
-                      (item) =>
-                        `<tr>
-                      ${Object.values(item)
-                        .map(
-                          (value) =>
-                            `<td>${value !== null ? value : "N/A"}</td>`
-                        )
-                        .join("")}
-                    </tr>`
-                    )
-                    .join("")}
-                </tbody>
-              </table>
-            </div>
+        <div class="document-details">
+          <div class="document-header">
+            ${Object.entries(document)
+              .filter(([key]) => key !== idField) // Skip ID field
+              .map(
+                ([key, value]) => `
+                <div class="document-header-item">
+                  <strong>${key}:</strong> ${value !== null ? value : "N/A"}
+                </div>
+              `
+              )
+              .join("")}
           </div>
-        `,
+          
+          <h4>Detalle</h4>
+          
+          <div class="items-table-container">
+            <table class="items-table">
+              <thead>
+                <tr>
+                  ${initialFields.map((key) => `<th>${key}</th>`).join("")}
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${allDetails
+                  .map(
+                    (item, idx) => `
+                  <tr>
+                    ${initialFields
+                      .map(
+                        (key) => `
+                      <td>${
+                        item[key] !== null && item[key] !== undefined
+                          ? item[key]
+                          : "N/A"
+                      }</td>
+                    `
+                      )
+                      .join("")}
+                    <td>
+                      <button type="button" class="view-item-btn" data-item-index="${idx}"
+                              style="background: #007bff; color: white; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer;">
+                        Ver más
+                      </button>
+                    </td>
+                  </tr>
+                `
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `,
         showConfirmButton: true,
         confirmButtonText: "Cerrar",
         customClass: {
           container: "document-details-container",
+          htmlContainer: "document-details-wrapper",
+        },
+        didOpen: () => {
+          // Guardar los datos para usarlos en eventos
+          const detailItemsData = allDetails;
+
+          // Usar funciones que no dependan de document
+          const modal = Swal.getPopup();
+
+          // Agregar event listeners a los botones de "Ver más"
+          modal.querySelectorAll(".view-item-btn").forEach((button) => {
+            button.addEventListener("click", (e) => {
+              const index = parseInt(
+                e.target.getAttribute("data-item-index"),
+                10
+              );
+              const item = detailItemsData[index];
+
+              if (item) {
+                let detailHtml =
+                  '<div style="text-align: left; max-height: 60vh; overflow-y: auto;">';
+                detailHtml +=
+                  '<table style="width: 100%; border-collapse: collapse;">';
+
+                Object.entries(item).forEach(([key, value]) => {
+                  detailHtml += `
+                  <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 8px; font-weight: bold; width: 40%;">${key}</td>
+                    <td style="padding: 8px;">${
+                      value !== null && value !== undefined ? value : "N/A"
+                    }</td>
+                  </tr>
+                `;
+                });
+
+                detailHtml += "</table></div>";
+
+                Swal.fire({
+                  title: "Detalle completo",
+                  html: detailHtml,
+                  width: 600,
+                  showConfirmButton: true,
+                  confirmButtonText: "Cerrar",
+                });
+              }
+            });
+          });
         },
       });
-
-      // Add styles for the modal
-      const style = document.createElement("style");
-      style.textContent = `
-        .document-details-container {
-          z-index: 9999;
-        }
-        .document-details {
-          text-align: left;
-        }
-        .document-header {
-          display: flex;
-          flex-wrap: wrap;
-          gap: 10px;
-          margin-bottom: 20px;
-          padding: 10px;
-          background-color: #f8f9fa;
-          border-radius: 5px;
-        }
-        .document-header-item {
-          flex: 1 1 30%;
-          min-width: 150px;
-        }
-        .items-table-container {
-          max-height: 300px;
-          overflow-y: auto;
-          margin-bottom: 20px;
-        }
-        .items-table {
-          width: 100%;
-          border-collapse: collapse;
-        }
-        .items-table th, .items-table td {
-          padding: 8px;
-          border: 1px solid #ddd;
-          text-align: left;
-        }
-        .items-table th {
-          background-color: #f0f0f0;
-          position: sticky;
-          top: 0;
-        }
-      `;
-      document.head.appendChild(style);
     } catch (error) {
       setIsLoading(false);
       Swal.fire({
@@ -1550,7 +1598,6 @@ const TableContainer = styled.div`
 
 const StyledTable = styled.table`
   width: 100%;
-  margin: 10px;
   border-collapse: collapse;
   background-color: ${({ theme }) => theme.cardBg || "#fff"};
   color: ${({ theme }) => theme.text};
@@ -1639,8 +1686,8 @@ const TableActionButton = styled.button`
 const CardsContainer = styled.div`
   display: flex;
   flex-wrap: wrap;
-  gap: 20px;
   justify-content: center;
+  gap: 20px;
   padding: 10px;
   width: 100%;
   max-width: 1200px;
