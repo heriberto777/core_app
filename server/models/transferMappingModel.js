@@ -41,6 +41,16 @@ const DocumentTypeRuleSchema = new Schema({
   description: { type: String },
 });
 
+const ConsecutiveConfigSchema = new Schema({
+  enabled: { type: Boolean, default: false },
+  fieldName: { type: String }, // Campo donde se guardará el consecutivo
+  detailFieldName: { type: String }, // Campo en la tabla de detalle
+  lastValue: { type: Number, default: 0 }, // Último valor usado
+  prefix: { type: String, default: "" }, // Prefijo opcional (ej: "INV-")
+  pattern: { type: String }, // Patrón de formato (ej: "{PREFIX}{YEAR}{VALUE:6}")
+  updateAfterTransfer: { type: Boolean, default: true }, // Si se actualiza después de la transferencia
+});
+
 // Schema principal para el mapeo
 const TransferMappingSchema = new Schema({
   name: { type: String, required: true, unique: true },
@@ -62,6 +72,7 @@ const TransferMappingSchema = new Schema({
     enum: ["orders", "customers", "invoices", "other"],
     default: "orders",
   },
+  consecutiveConfig: ConsecutiveConfigSchema,
 });
 
 // Pre-save hook para actualizar fecha

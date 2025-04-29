@@ -1451,6 +1451,104 @@ class DynamicTransferService {
       throw error;
     }
   }
+
+  /**
+   * Genera un consecutivo según la configuración
+   * @param {Object} mapping - Configuración de mapeo
+   * @returns {Object} - { value: number, formatted: string }
+   */
+  async generateConsecutive(mapping) {
+    try {
+      if (!mapping.consecutiveConfig || !mapping.consecutiveConfig.enabled) {
+        return null;
+      }
+
+      // Generar número consecutivo
+      const lastValue = mapping.consecutiveConfig.lastValue || 0;
+      const newValue = lastValue + 1;
+
+      // Formatear según el patrón si existe
+      let formattedValue = String(newValue);
+
+      if (mapping.consecutiveConfig.pattern) {
+        formattedValue = this.formatConsecutive(
+          mapping.consecutiveConfig.pattern,
+          {
+            PREFIX: mapping.consecutiveConfig.prefix || "",
+            VALUE: newValue,
+            YEAR: new Date().getFullYear(),
+            MONTH: String(new Date().getMonth() + 1).padStart(2, "0"),
+            DAY: String(new Date().getDate()).padStart(2, "0"),
+          }
+        );
+      } else if (mapping.consecutiveConfig.prefix) {
+        // Si no hay patrón pero sí prefijo
+        formattedValue = `${mapping.consecutiveConfig.prefix}${newValue}`;
+      }
+
+      return {
+        value: newValue,
+        formatted: formattedValue,
+      };
+    } catch (error) {
+      logger.error(`Error al generar consecutivo: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Formatea un consecutivo según el patrón
+   * @param {string} pattern - Patrón de formato
+   * @param {Object} values - Valores a reemplazar
+   * @returns {string} - Consecutivo formateado
+   */
+  formatConsecutive(pattern, values) {
+    let result = pattern;
+
+    // Reemplazar variables simples
+    for (const [key, value] of Object.entries(values)) {
+      result = result.replace(new RegExp(`{${key}}`, "g"), value);
+    }
+
+    // Reemplazar variables con formato (ej: {VALUE:6} -> "000123")
+    const formatRegex = /{([A-Z]+):(\d+)}/g;
+    const matches = [...pattern.matchAll(formatRegex)];
+
+    for (const match of matches) {
+      const [fullMatch, key, digits] = match;
+      if (values[key] !== undefined) {
+        const paddedValue = String(values[key]).padStart(
+          parseInt(digits, 10),
+          "0"
+        );
+        result = result.replace(fullMatch, paddedValue);
+      }
+    }
+
+    return result;
+  }
+
+  /**
+   * Actualiza el último valor consecutivo en la configuración
+   * @param {string} mappingId - ID de la configuración
+   * @param {number} lastValue - Último valor usado
+   * @returns {Promise<boolean>} - true si se actualizó correctamente
+   */
+  async updateLastConsecutive(mappingId, lastValue) {
+    try {
+      await TransferMapping.findByIdAndUpdate(mappingId, {
+        "consecutiveConfig.lastValue": lastValue,
+      });
+
+      logger.info(
+        `Último consecutivo actualizado para ${mappingId}: ${lastValue}`
+      );
+      return true;
+    } catch (error) {
+      logger.error(`Error al actualizar último consecutivo: ${error.message}`);
+      return false;
+    }
+  }
 }
 
 module.exports = new DynamicTransferService();
