@@ -43,12 +43,19 @@ const DocumentTypeRuleSchema = new Schema({
 
 const ConsecutiveConfigSchema = new Schema({
   enabled: { type: Boolean, default: false },
-  fieldName: { type: String }, // Campo donde se guardará el consecutivo
-  detailFieldName: { type: String }, // Campo en la tabla de detalle
+  fieldName: { type: String }, // Campo en la tabla principal donde se guardará el consecutivo
+  detailFieldName: { type: String }, // Campo en las tablas de detalle
   lastValue: { type: Number, default: 0 }, // Último valor usado
   prefix: { type: String, default: "" }, // Prefijo opcional (ej: "INV-")
   pattern: { type: String }, // Patrón de formato (ej: "{PREFIX}{YEAR}{VALUE:6}")
   updateAfterTransfer: { type: Boolean, default: true }, // Si se actualiza después de la transferencia
+  startValue: { type: Number, default: 1 }, // Valor inicial si no hay último valor
+  applyToTables: [
+    {
+      tableName: { type: String, required: true }, // Nombre de la tabla
+      fieldName: { type: String, required: true }, // Nombre del campo en esa tabla
+    },
+  ],
 });
 
 // Schema principal para el mapeo

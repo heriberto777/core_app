@@ -96,6 +96,7 @@ class DynamicTransferService {
         skipped: 0,
         byType: {},
         details: [],
+        consecutivesUsed: [], // NUEVO: Registrar consecutivos usados
       };
 
       let hasErrors = false; // Variable para rastrear si hubo errores
@@ -127,6 +128,26 @@ class DynamicTransferService {
               };
             }
             results.byType[docResult.documentType].processed++;
+
+            // NUEVO: Registrar consecutivo si se utilizó
+            if (docResult.consecutiveUsed) {
+              results.consecutivesUsed.push({
+                documentId,
+                consecutive: docResult.consecutiveUsed,
+              });
+
+              // Actualizar el valor consecutivo más alto (para actualización al final)
+              const numericValue = parseInt(
+                docResult.consecutiveValue || "0",
+                10
+              );
+              if (
+                !isNaN(numericValue) &&
+                numericValue > highestConsecutiveValue
+              ) {
+                highestConsecutiveValue = numericValue;
+              }
+            }
 
             // Marcar como procesado si está configurado
             if (mapping.markProcessedField) {
@@ -173,6 +194,27 @@ class DynamicTransferService {
             error: docError.message,
             errorDetails: docError.stack,
           });
+        }
+      }
+
+      // NUEVO: Actualizar el último consecutivo con el valor más alto después de procesar todos
+      if (
+        highestConsecutiveValue > 0 &&
+        mapping.consecutiveConfig &&
+        mapping.consecutiveConfig.enabled
+      ) {
+        try {
+          await this.updateLastConsecutive(mappingId, highestConsecutiveValue);
+          logger.info(
+            `Consecutivo final actualizado a ${highestConsecutiveValue} para mapeo ${mappingId}`
+          );
+
+          // Agregar info de consecutivo al resultado
+          results.lastConsecutiveValue = highestConsecutiveValue;
+        } catch (updateError) {
+          logger.warn(
+            `Error al actualizar último consecutivo al finalizar: ${updateError.message}`
+          );
         }
       }
 
@@ -229,6 +271,8 @@ class DynamicTransferService {
         executionId,
         status: finalStatus, // Añadimos el status para que el frontend pueda mostrarlo correctamente
         ...results,
+        lastConsecutiveValue:
+          highestConsecutiveValue > 0 ? highestConsecutiveValue : undefined,
       };
     } catch (error) {
       // Verificar si fue cancelado
@@ -330,6 +374,23 @@ class DynamicTransferService {
 
       // Crear un cache para las longitudes de columnas
       const columnLengthCache = new Map();
+
+      // Generar consecutivo si está configurado y habilitado
+      if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
+        try {
+          // Generar un nuevo consecutivo
+          const consecutiveResult = await this.generateConsecutive(mapping);
+          if (consecutiveResult) {
+            currentConsecutive = consecutiveResult;
+            logger.info(
+              `Consecutivo generado para documento ${documentId}: ${consecutiveResult.formatted}`
+            );
+          }
+        } catch (consecError) {
+          logger.error(`Error al generar consecutivo: ${consecError.message}`);
+          throw consecError;
+        }
+      }
 
       // 1. Identificar las tablas principales (no de detalle)
       const mainTables = mapping.tableConfigs.filter((tc) => !tc.isDetailTable);
@@ -471,6 +532,31 @@ class DynamicTransferService {
             fieldMapping.defaultValue !== undefined
           ) {
             value = fieldMapping.defaultValue;
+          }
+
+          // NUEVO: Aplicar consecutivo si corresponde a esta tabla y campo
+          if (
+            currentConsecutive &&
+            mapping.consecutiveConfig &&
+            mapping.consecutiveConfig.enabled
+          ) {
+            // Verificar si este campo debe recibir el consecutivo (en tabla principal)
+            if (
+              mapping.consecutiveConfig.fieldName ===
+                fieldMapping.targetField ||
+              (mapping.consecutiveConfig.applyToTables &&
+                mapping.consecutiveConfig.applyToTables.some(
+                  (t) =>
+                    t.tableName === tableConfig.name &&
+                    t.fieldName === fieldMapping.targetField
+                ))
+            ) {
+              // Asignar el consecutivo al campo correspondiente
+              value = currentConsecutive.formatted;
+              logger.debug(
+                `Asignando consecutivo ${currentConsecutive.formatted} a campo ${fieldMapping.targetField} en tabla ${tableConfig.name}`
+              );
+            }
           }
 
           // Si es un campo obligatorio y aún no tiene valor, lanzar error
@@ -622,6 +708,31 @@ class DynamicTransferService {
                 value = fieldMapping.defaultValue;
               }
 
+              // NUEVO: Aplicar consecutivo en detalles si corresponde
+              if (
+                currentConsecutive &&
+                mapping.consecutiveConfig &&
+                mapping.consecutiveConfig.enabled
+              ) {
+                // Verificar si este campo debe recibir el consecutivo (en tabla de detalle)
+                if (
+                  mapping.consecutiveConfig.detailFieldName ===
+                    fieldMapping.targetField ||
+                  (mapping.consecutiveConfig.applyToTables &&
+                    mapping.consecutiveConfig.applyToTables.some(
+                      (t) =>
+                        t.tableName === detailConfig.name &&
+                        t.fieldName === fieldMapping.targetField
+                    ))
+                ) {
+                  // Asignar el consecutivo al campo correspondiente en el detalle
+                  value = currentConsecutive.formatted;
+                  logger.debug(
+                    `Asignando consecutivo ${currentConsecutive.formatted} a campo ${fieldMapping.targetField} en tabla de detalle ${detailConfig.name}`
+                  );
+                }
+              }
+
               // Aplicar mapeo de valores si existe
               if (
                 value !== null &&
@@ -696,6 +807,29 @@ class DynamicTransferService {
         };
       }
 
+      // NUEVO: Actualizar el último valor del consecutivo si se configuró así
+      if (
+        currentConsecutive &&
+        mapping.consecutiveConfig &&
+        mapping.consecutiveConfig.enabled &&
+        mapping.consecutiveConfig.updateAfterTransfer
+      ) {
+        try {
+          await this.updateLastConsecutive(
+            mapping._id,
+            currentConsecutive.value
+          );
+          logger.info(
+            `Consecutivo actualizado a ${currentConsecutive.value} para mapeo ${mapping._id}`
+          );
+        } catch (updateError) {
+          logger.warn(
+            `Error al actualizar último consecutivo: ${updateError.message}`
+          );
+          // No fallamos la transacción por esto, solo lo registramos
+        }
+      }
+
       // Si todo fue exitoso, confirmar la transacción
       if (transaction) {
         await SqlService.commitTransaction(transaction);
@@ -711,6 +845,9 @@ class DynamicTransferService {
         )}`,
         documentType,
         processedTables,
+        consecutiveUsed: currentConsecutive
+          ? currentConsecutive.formatted
+          : null,
       };
     } catch (error) {
       // Si ocurrió algún error, hacer rollback de la transacción

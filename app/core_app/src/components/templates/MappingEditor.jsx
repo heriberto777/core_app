@@ -61,6 +61,15 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
 
+    if (type === "custom" && name === "consecutiveConfig") {
+      // Caso especial para el objeto completo de configuración de consecutivos
+      setMapping((prevState) => ({
+        ...prevState,
+        consecutiveConfig: value,
+      }));
+      return;
+    }
+
     if (name.includes(".")) {
       const [parent, child] = name.split(".");
       setMapping((prevState) => ({
