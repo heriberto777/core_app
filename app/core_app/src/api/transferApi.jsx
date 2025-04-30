@@ -1110,27 +1110,27 @@ export class TransferApi {
     }
   }
 
-  async resetConsecutive(accessToken, mappingId, value = 0) {
-    try {
-      const url = `${this.baseApi}/mappings/${mappingId}/reset-consecutive?value=${value}`;
-      const params = {
-        method: "GET", // O POST si prefieres
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      };
+  // async resetConsecutive(accessToken, mappingId, value = 0) {
+  //   try {
+  //     const url = `${this.baseApi}/mappings/${mappingId}/reset-consecutive?value=${value}`;
+  //     const params = {
+  //       method: "GET", // O POST si prefieres
+  //       headers: {
+  //         Authorization: `Bearer ${accessToken}`,
+  //       },
+  //     };
 
-      const response = await fetch(url, params);
-      const result = await response.json();
+  //     const response = await fetch(url, params);
+  //     const result = await response.json();
 
-      if (response.status !== 200) throw result;
+  //     if (response.status !== 200) throw result;
 
-      return result;
-    } catch (error) {
-      console.error("Error al resetear consecutivo:", error);
-      throw error;
-    }
-  }
+  //     return result;
+  //   } catch (error) {
+  //     console.error("Error al resetear consecutivo:", error);
+  //     throw error;
+  //   }
+  // }
 
   async deleteMapping(accessToken, mappingId) {
     try {
