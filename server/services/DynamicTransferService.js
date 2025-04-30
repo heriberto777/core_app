@@ -369,6 +369,7 @@ class DynamicTransferService {
   ) {
     // Iniciar transacción
     let transaction = null;
+    let currentConsecutive = null; // Asegurar que está inicializada
 
     try {
       // Iniciar una transacción en el servidor destino
