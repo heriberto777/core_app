@@ -869,6 +869,64 @@ class DynamicTransferService {
         }
       }
 
+      // Mejorar el manejo de errores para AggregateError
+      if (
+        error.name === "AggregateError" ||
+        error.stack?.includes("AggregateError")
+      ) {
+        logger.error(
+          `Error de conexión (AggregateError) para documento ${documentId}`,
+          error
+        );
+
+        // Intentar reconexión o regenerar la transacción
+        try {
+          logger.info(`Intentando reconexión para documento ${documentId}...`);
+
+          // Determinar si necesitamos reconectar al servidor origen o destino
+          // Primero, vamos a intentar con el destino
+          const targetServer = mapping.targetServer; // server1 o server2
+          const reconnectResult = await ConnectionManager.enhancedRobustConnect(
+            targetServer
+          );
+
+          if (!reconnectResult.success) {
+            throw new Error(
+              `No se pudo restablecer conexión a ${targetServer}`
+            );
+          }
+
+          logger.info(`Reconexión exitosa a ${targetServer}`);
+
+          // Devolver un error específico que indique problema de conexión
+          return {
+            success: false,
+            message: `Error de conexión: Se perdió la conexión con la base de datos. Se ha restablecido la conexión pero este documento debe procesarse nuevamente.`,
+            documentType: "unknown",
+            errorDetails: "CONNECTION_ERROR",
+            consecutiveUsed: null,
+            consecutiveValue: null,
+            errorCode: "CONNECTION_ERROR",
+          };
+        } catch (reconnectError) {
+          logger.error(
+            `Error al intentar reconexión: ${reconnectError.message}`
+          );
+
+          return {
+            success: false,
+            message: `Error grave de conexión: ${
+              error.message || "Error en comunicación con la base de datos"
+            }. Por favor, intente nuevamente más tarde.`,
+            documentType: "unknown",
+            errorDetails: error.stack || "No hay detalles adicionales",
+            consecutiveUsed: null,
+            consecutiveValue: null,
+            errorCode: "SEVERE_CONNECTION_ERROR",
+          };
+        }
+      }
+
       // Verificar si es un error de truncado
       if (
         error.message &&
@@ -890,6 +948,8 @@ class DynamicTransferService {
           documentType: "unknown",
           errorDetails: error.stack,
           errorCode: "TRUNCATION_ERROR",
+          consecutiveUsed: null,
+          consecutiveValue: null,
         };
       }
 
@@ -914,29 +974,12 @@ class DynamicTransferService {
           documentType: "unknown",
           errorDetails: error.stack,
           errorCode: "NULL_VALUE_ERROR",
+          consecutiveUsed: null,
+          consecutiveValue: null,
         };
       }
 
-      // Manejar errores de columna inválida
-      if (error.message && error.message.includes("Invalid column name")) {
-        const match = error.message.match(/Invalid column name '([^']+)'/);
-        const columnName = match ? match[1] : "desconocida";
-
-        const detailedMessage = `Columna '${columnName}' no válida o no existente en la tabla. Verifique la configuración del mapeo.`;
-
-        logger.error(
-          `Error de columna inválida en documento ${documentId}: ${detailedMessage}`
-        );
-
-        return {
-          success: false,
-          message: detailedMessage,
-          documentType: "unknown",
-          errorDetails: error.stack,
-          errorCode: "INVALID_COLUMN_ERROR",
-        };
-      }
-
+      // Manejo estándar para otros errores
       logger.error(
         `Error procesando documento ${documentId}: ${error.message}`,
         {
@@ -947,9 +990,14 @@ class DynamicTransferService {
       );
       return {
         success: false,
-        message: `Error: ${error.message}`,
+        message: `Error: ${
+          error.message || "Error desconocido durante el procesamiento"
+        }`,
         documentType: "unknown",
-        errorDetails: error.stack,
+        errorDetails: error.stack || "No hay detalles del error disponibles",
+        errorCode: error.code || error.number || "UNKNOWN_ERROR",
+        consecutiveUsed: null,
+        consecutiveValue: null,
       };
     }
   }

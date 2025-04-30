@@ -12,16 +12,11 @@ import {
 import Swal from "sweetalert2";
 import {
   FaSync,
-  FaFilter,
   FaPlay,
-  FaSearch,
   FaTable,
   FaListAlt,
-  FaSpinner,
   FaEye,
   FaArrowLeft,
-  FaEdit,
-  FaPlus,
   FaInfoCircle,
   FaPencilAlt,
 } from "react-icons/fa";
@@ -276,14 +271,45 @@ export function DocumentsVisualization() {
 
       // Determine title based on results
       let resultTitle = "Procesamiento completado";
+      let resultMessage = "";
       if (resultIcon === "error") {
         resultTitle = "Procesamiento fallido";
+        // Agregar mensajes específicos para ciertos códigos de error
+        if (result.data?.details) {
+          const connectionErrors = result.data.details.filter(
+            (d) =>
+              !d.success &&
+              (d.errorCode === "CONNECTION_ERROR" ||
+                d.errorCode === "SEVERE_CONNECTION_ERROR")
+          );
+
+          if (connectionErrors.length > 0) {
+            resultMessage =
+              "Hubo problemas de conexión con la base de datos durante el procesamiento. ";
+            if (connectionErrors.length < result.data.details.length) {
+              resultMessage +=
+                "Algunos documentos fueron procesados correctamente.";
+            }
+          }
+        }
       } else if (resultIcon === "warning") {
         resultTitle = "Procesamiento parcial";
+        resultMessage =
+          "Algunos documentos fueron procesados correctamente, pero otros fallaron.";
       }
 
       // Parse common error types for more readable messages
-      const formatErrorMessage = (errMsg) => {
+      const formatErrorMessage = (errMsg, errorCode) => {
+        if (errorCode === "NULL_VALUE_ERROR") {
+          return errMsg; // Ya está formateado correctamente
+        } else if (errorCode === "TRUNCATION_ERROR") {
+          return errMsg; // Ya está formateado correctamente
+        } else if (errorCode === "CONNECTION_ERROR") {
+          return "Error de conexión a la base de datos. Intente nuevamente.";
+        } else if (errorCode === "SEVERE_CONNECTION_ERROR") {
+          return "Error grave de conexión. Contacte al administrador del sistema.";
+        }
+        
         if (errMsg.includes("Cannot insert the value NULL into column")) {
           const colMatch = errMsg.match(/column '([^']+)'/);
           const colName = colMatch ? colMatch[1] : "desconocida";
