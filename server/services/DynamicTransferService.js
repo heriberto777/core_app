@@ -89,6 +89,9 @@ class DynamicTransferService {
       }
       targetConnection = targetResult.connection;
 
+      // Inicializar el valor consecutivo más alto
+      let highestConsecutiveValue = 0;
+
       // 5. Procesar documentos
       const results = {
         processed: 0,
@@ -848,6 +851,7 @@ class DynamicTransferService {
         consecutiveUsed: currentConsecutive
           ? currentConsecutive.formatted
           : null,
+        consecutiveValue: currentConsecutive ? currentConsecutive.value : null,
       };
     } catch (error) {
       // Si ocurrió algún error, hacer rollback de la transacción
