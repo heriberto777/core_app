@@ -1029,6 +1029,23 @@ export class TransferApi {
 
   async createMapping(accessToken, mappingData) {
     try {
+      // Asegurarnos de que la configuración consecutiva tenga todas las propiedades necesarias
+      if (
+        mappingData.consecutiveConfig &&
+        mappingData.consecutiveConfig.enabled
+      ) {
+        mappingData.consecutiveConfig = {
+          enabled: mappingData.consecutiveConfig.enabled || false,
+          fieldName: mappingData.consecutiveConfig.fieldName || "",
+          detailFieldName: mappingData.consecutiveConfig.detailFieldName || "",
+          lastValue: Number(mappingData.consecutiveConfig.lastValue || 0),
+          prefix: mappingData.consecutiveConfig.prefix || "",
+          pattern: mappingData.consecutiveConfig.pattern || "",
+          updateAfterTransfer:
+            mappingData.consecutiveConfig.updateAfterTransfer !== false,
+          applyToTables: mappingData.consecutiveConfig.applyToTables || [],
+        };
+      }
       const url = `${this.baseApi}/mappings`;
       const params = {
         method: "POST",
@@ -1053,6 +1070,24 @@ export class TransferApi {
 
   async updateMapping(accessToken, mappingId, mappingData) {
     try {
+      //validación
+      if (
+        mappingData.consecutiveConfig &&
+        mappingData.consecutiveConfig.enabled
+      ) {
+        mappingData.consecutiveConfig = {
+          enabled: mappingData.consecutiveConfig.enabled || false,
+          fieldName: mappingData.consecutiveConfig.fieldName || "",
+          detailFieldName: mappingData.consecutiveConfig.detailFieldName || "",
+          lastValue: Number(mappingData.consecutiveConfig.lastValue || 0),
+          prefix: mappingData.consecutiveConfig.prefix || "",
+          pattern: mappingData.consecutiveConfig.pattern || "",
+          updateAfterTransfer:
+            mappingData.consecutiveConfig.updateAfterTransfer !== false,
+          applyToTables: mappingData.consecutiveConfig.applyToTables || [],
+        };
+      }
+
       const url = `${this.baseApi}/mappings/${mappingId}`;
       const params = {
         method: "PUT",
@@ -1071,6 +1106,28 @@ export class TransferApi {
       return result;
     } catch (error) {
       console.error("Error al actualizar configuración de mapeo:", error);
+      throw error;
+    }
+  }
+
+  async resetConsecutive(accessToken, mappingId, value = 0) {
+    try {
+      const url = `${this.baseApi}/mappings/${mappingId}/reset-consecutive?value=${value}`;
+      const params = {
+        method: "GET", // O POST si prefieres
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+
+      return result;
+    } catch (error) {
+      console.error("Error al resetear consecutivo:", error);
       throw error;
     }
   }
@@ -1232,6 +1289,60 @@ export class TransferApi {
       return result;
     } catch (error) {
       console.error("Error al actualizar cliente:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Actualiza solo la configuración de consecutivos para un mapeo específico
+   */
+  async updateConsecutiveConfig(accessToken, mappingId, consecutiveConfig) {
+    try {
+      const url = `${this.baseApi}/mappings/${mappingId}/consecutive`;
+      const params = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(consecutiveConfig),
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+
+      return result;
+    } catch (error) {
+      console.error(
+        "Error al actualizar configuración de consecutivos:",
+        error
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Reinicia el consecutivo a un valor específico
+   */
+  async resetConsecutive(accessToken, mappingId, value = 0) {
+    try {
+      const url = `${this.baseApi}/mappings/${mappingId}/reset-consecutive?value=${value}`;
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+
+      return result;
+    } catch (error) {
+      console.error("Error al resetear consecutivo:", error);
       throw error;
     }
   }

@@ -745,6 +745,68 @@ export function DocumentsVisualization() {
                     <div>No hay tablas configuradas</div>
                   )}
                 </ConfigInfoSection>
+                {activeConfig?.consecutiveConfig?.enabled && (
+                  <ConfigInfoSection>
+                    <h4>Configuración de Consecutivos</h4>
+                    <InfoItem>
+                      <InfoLabel>Último valor:</InfoLabel>
+                      <InfoValue>
+                        {activeConfig.consecutiveConfig.lastValue || 0}
+                      </InfoValue>
+                    </InfoItem>
+                    <InfoItem>
+                      <InfoLabel>Campo en encabezado:</InfoLabel>
+                      <InfoValue>
+                        {activeConfig.consecutiveConfig.fieldName ||
+                          "No definido"}
+                      </InfoValue>
+                    </InfoItem>
+                    <InfoItem>
+                      <InfoLabel>Campo en detalle:</InfoLabel>
+                      <InfoValue>
+                        {activeConfig.consecutiveConfig.detailFieldName ||
+                          "No definido"}
+                      </InfoValue>
+                    </InfoItem>
+                    {activeConfig.consecutiveConfig.applyToTables &&
+                      activeConfig.consecutiveConfig.applyToTables.length >
+                        0 && (
+                        <>
+                          <InfoLabel>Asignaciones específicas:</InfoLabel>
+                          {activeConfig.consecutiveConfig.applyToTables.map(
+                            (mapping, index) => (
+                              <div
+                                key={index}
+                                style={{
+                                  marginLeft: "20px",
+                                  marginBottom: "5px",
+                                }}
+                              >
+                                <strong>{mapping.tableName}</strong>:{" "}
+                                {mapping.fieldName}
+                              </div>
+                            )
+                          )}
+                        </>
+                      )}
+                    {activeConfig.consecutiveConfig.prefix && (
+                      <InfoItem>
+                        <InfoLabel>Prefijo:</InfoLabel>
+                        <InfoValue>
+                          {activeConfig.consecutiveConfig.prefix}
+                        </InfoValue>
+                      </InfoItem>
+                    )}
+                    {activeConfig.consecutiveConfig.pattern && (
+                      <InfoItem>
+                        <InfoLabel>Formato:</InfoLabel>
+                        <InfoValue>
+                          {activeConfig.consecutiveConfig.pattern}
+                        </InfoValue>
+                      </InfoItem>
+                    )}
+                  </ConfigInfoSection>
+                )}
               </ConfigInfoPanel>
             )}
 

@@ -518,6 +518,90 @@ const processDocumentsByMapping = async (req, res) => {
   }
 };
 
+/**
+ * Actualiza la configuración de consecutivos de un mapeo
+ */
+const updateConsecutiveConfig = async (req, res) => {
+  try {
+    const { mappingId } = req.params;
+    const consecutiveConfig = req.body;
+
+    if (!mappingId) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requiere el ID de la configuración",
+      });
+    }
+
+    // Actualizar solo la configuración de consecutivos
+    const mapping = await TransferMapping.findByIdAndUpdate(
+      mappingId,
+      { consecutiveConfig: consecutiveConfig },
+      { new: true }
+    );
+
+    if (!mapping) {
+      return res.status(404).json({
+        success: false,
+        message: "Configuración de mapeo no encontrada",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: "Configuración de consecutivos actualizada correctamente",
+      data: mapping.consecutiveConfig,
+    });
+  } catch (error) {
+    logger.error(
+      `Error al actualizar configuración de consecutivos: ${error.message}`
+    );
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * Reinicia el consecutivo de un mapeo a un valor específico
+ */
+const resetConsecutive = async (req, res) => {
+  try {
+    const { mappingId } = req.params;
+    const { value } = req.query;
+
+    const initialValue = parseInt(value || "0", 10);
+
+    const mapping = await TransferMapping.findByIdAndUpdate(
+      mappingId,
+      { "consecutiveConfig.lastValue": initialValue },
+      { new: true }
+    );
+
+    if (!mapping) {
+      return res.status(404).json({
+        success: false,
+        message: "Configuración de mapeo no encontrada",
+      });
+    }
+
+    res.json({
+      success: true,
+      message: `Consecutivo reiniciado a ${initialValue}`,
+      data: {
+        lastValue: mapping.consecutiveConfig?.lastValue || initialValue,
+      },
+    });
+  } catch (error) {
+    logger.error(`Error al reiniciar consecutivo: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 module.exports = {
   getMappings,
   getMappingById,
@@ -527,4 +611,6 @@ module.exports = {
   getDocumentsByMapping,
   getDocumentDetailsByMapping,
   processDocumentsByMapping,
+  updateConsecutiveConfig,
+  resetConsecutive,
 };

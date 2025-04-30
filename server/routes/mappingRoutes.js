@@ -42,4 +42,10 @@ router.post(
   errorHandler(mappingController.processDocumentsByMapping)
 );
 
+router.post(
+  "/:mappingId/consecutive",
+  mappingController.updateConsecutiveConfig
+);
+router.get("/:mappingId/reset-consecutive", mappingController.resetConsecutive);
+
 module.exports = router;
