@@ -1,5 +1,6 @@
 const Consecutive = require("../models/consecutiveModel");
 const logger = require("./logger");
+const mongoose = require("mongoose");
 
 class ConsecutiveService {
   /**

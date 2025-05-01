@@ -204,7 +204,6 @@ export function DocumentsVisualization() {
     }
   };
 
-  // Process selected documents using dynamic mapping
   const processDocuments = async () => {
     if (!activeMappingId) {
       Swal.fire({
@@ -239,12 +238,18 @@ export function DocumentsVisualization() {
 
       // Show loading
       setIsLoading(true);
-      Swal.fire({
+
+      // Crear un loading modal que no se cierre automáticamente
+      const loadingModal = Swal.fire({
         title: "Procesando documentos...",
         text: "Esto puede tomar un momento",
         allowOutsideClick: false,
         didOpen: () => {
           Swal.showLoading();
+        },
+        willClose: () => {
+          // Esto se ejecutará cuando el modal se cierre
+          console.log("Modal de carga cerrado");
         },
       });
 
@@ -254,6 +259,9 @@ export function DocumentsVisualization() {
         activeMappingId,
         selectedDocuments
       );
+
+      // Cerrar explícitamente el modal de carga
+      loadingModal.close();
 
       setIsLoading(false);
 
@@ -272,9 +280,9 @@ export function DocumentsVisualization() {
       // Determine title based on results
       let resultTitle = "Procesamiento completado";
       let resultMessage = "";
+
       if (resultIcon === "error") {
         resultTitle = "Procesamiento fallido";
-        // Agregar mensajes específicos para ciertos códigos de error
         if (result.data?.details) {
           const connectionErrors = result.data.details.filter(
             (d) =>
@@ -298,34 +306,8 @@ export function DocumentsVisualization() {
           "Algunos documentos fueron procesados correctamente, pero otros fallaron.";
       }
 
-      // Parse common error types for more readable messages
-      const formatErrorMessage = (errMsg, errorCode) => {
-        if (errorCode === "NULL_VALUE_ERROR") {
-          return errMsg; // Ya está formateado correctamente
-        } else if (errorCode === "TRUNCATION_ERROR") {
-          return errMsg; // Ya está formateado correctamente
-        } else if (errorCode === "CONNECTION_ERROR") {
-          return "Error de conexión a la base de datos. Intente nuevamente.";
-        } else if (errorCode === "SEVERE_CONNECTION_ERROR") {
-          return "Error grave de conexión. Contacte al administrador del sistema.";
-        }
-        
-        if (errMsg.includes("Cannot insert the value NULL into column")) {
-          const colMatch = errMsg.match(/column '([^']+)'/);
-          const colName = colMatch ? colMatch[1] : "desconocida";
-          return `No se puede insertar NULL en columna '${colName}'. Configure un valor por defecto.`;
-        } else if (
-          errMsg.includes("String or binary data would be truncated")
-        ) {
-          const colMatch = errMsg.match(/column '([^']+)'/);
-          const colName = colMatch ? colMatch[1] : "desconocida";
-          return `Texto demasiado largo para columna '${colName}'. Verifique la longitud máxima.`;
-        }
-        return errMsg;
-      };
-
-      // Show detailed summary
-      Swal.fire({
+      // Mostrar un nuevo modal con los resultados
+      await Swal.fire({
         title: resultTitle,
         html: `
         <div class="result-summary">
@@ -339,7 +321,7 @@ export function DocumentsVisualization() {
             result.data?.failed > 0 ||
             (result.data?.errorDetails && result.data.errorDetails.length > 0)
               ? `<p><strong>Detalles de errores:</strong></p>
-            <div class="error-details">
+            <div class="error-details" style="max-height: 200px; overflow-y: auto; text-align: left;">
               ${
                 result.data?.errorDetails
                   ? result.data.errorDetails
@@ -348,7 +330,8 @@ export function DocumentsVisualization() {
                     <strong>Documento ${
                       detail.documentId
                     }:</strong> ${formatErrorMessage(
-                          detail.error || "Error no especificado"
+                          detail.error || "Error no especificado",
+                          detail.errorCode
                         )}
                   </p>`
                       )
@@ -363,7 +346,8 @@ export function DocumentsVisualization() {
                     }:</strong> ${formatErrorMessage(
                           detail.message ||
                             detail.error ||
-                            "Error no especificado"
+                            "Error no especificado",
+                          detail.errorCode
                         )}
                   </p>`
                       )
@@ -388,6 +372,9 @@ export function DocumentsVisualization() {
       setSelectAll(false);
     } catch (error) {
       setIsLoading(false);
+      // Asegurarse de cerrar el modal de carga si hay un error
+      Swal.close();
+
       Swal.fire({
         title: "Error",
         text: error.message || "Ocurrió un error al procesar los documentos",
