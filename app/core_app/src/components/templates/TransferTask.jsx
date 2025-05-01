@@ -24,7 +24,7 @@ export function TransferTasks() {
   const [viewMode, setViewMode] = useState("cards"); // "cards", "list", "table"
   const [executionTime, setExecutionTime] = useState("20:30");
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
-
+  const [cancellationStatus, setCancellationStatus] = useState({});
   const [cancelling, setCancelling] = useState(false);
 
   // En el componente TransferTasks, añade estos estados
@@ -1149,16 +1149,26 @@ export function TransferTasks() {
     });
 
     try {
-      const response = await cnnApi.cancelTask(accessToken, taskId);
-
-      // Mostrar notificación de éxito
-      Swal.fire({
-        title: "Tarea detenida",
-        text: "La solicitud de cancelación se ha enviado correctamente. La tarea se detendrá en breve.",
-        icon: "success",
-        timer: 3000,
-        timerProgressBar: true,
+      // const response = await cnnApi.cancelTask(accessToken, taskId);
+      const result = await cnnApi.cancelTask(accessToken, taskId, {
+        onStatusChange: (status) => {
+          setCancellationStatus((prev) => ({
+            ...prev,
+            [taskId]: status.data,
+          }));
+        },
       });
+
+      if (result.succes) {
+        // Mostrar notificación de éxito
+        Swal.fire({
+          title: "Tarea detenida",
+          text: "La solicitud de cancelación se ha enviado correctamente. La tarea se detendrá en breve.",
+          icon: "success",
+          timer: 3000,
+          timerProgressBar: true,
+        });
+      }
 
       // Actualizar la lista de tareas después de un breve retraso
       setTimeout(() => {

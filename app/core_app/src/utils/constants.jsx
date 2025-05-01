@@ -17,6 +17,7 @@ export const ENV = {
     USERS: "users",
     TRANSFERS: "tasks",
     TRANSFER: "task",
+    CANCELLATION: "cancellation",
     TRANSFER_STAST: "stats",
     LOAD: "load",
     CONFIG_TASK: "config",

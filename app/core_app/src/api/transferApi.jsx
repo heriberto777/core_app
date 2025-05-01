@@ -2,6 +2,11 @@ import { ENV } from "../index";
 
 export class TransferApi {
   baseApi = ENV.BASE_API;
+  constructor() {
+    // Mapas para seguimiento de cancelaciones en progreso
+    this.cancellationInProgress = new Map();
+    this.statusCheckIntervals = new Map();
+  }
 
   async getTasks(accessToken) {
     try {
@@ -464,25 +469,179 @@ export class TransferApi {
     }
   }
 
-  // En tu cliente de API (TransferApi.js o similar)
-  async cancelTask(accessToken, taskId) {
+  // Método mejorado para cancelar tareas
+  async cancelTask(accessToken, taskId, options = {}) {
     try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/cancel/${taskId}`;
+      // Verificar si ya está en proceso de cancelación
+      if (this.cancellationInProgress.has(taskId)) {
+        return {
+          success: false,
+          message: "La tarea ya está siendo cancelada",
+        };
+      }
+
+      // Marcar como en proceso de cancelación
+      this.cancellationInProgress.set(taskId, true);
+
+      // Nueva ruta para cancelación
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.CANCELLATION}/tasks/${taskId}/cancel`;
+
       const params = {
         method: "POST",
         headers: {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({
+          force: options.force || false,
+          reason: options.reason || "Cancelado por el usuario",
+        }),
       };
+
       const response = await fetch(url, params);
       const result = await response.json();
-      if (response.status !== 200) throw result;
+
+      if (response.status !== 200) {
+        this.cancellationInProgress.delete(taskId);
+        throw result;
+      }
+
+      // Iniciar monitoreo del estado de cancelación
+      if (options.onStatusChange) {
+        this.startCancellationMonitoring(
+          accessToken,
+          taskId,
+          options.onStatusChange
+        );
+      }
+
       return result;
     } catch (error) {
+      this.cancellationInProgress.delete(taskId);
       console.error("Error al cancelar tarea:", error);
       throw error;
     }
+  }
+
+  // Método para verificar el estado de cancelación
+  async getCancellationStatus(accessToken, taskId) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.CANCELLATION}/tasks/${taskId}/status`;
+
+      const params = {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al obtener estado de cancelación:", error);
+      throw error;
+    }
+  }
+
+  // Método para obtener todas las tareas activas cancelables
+  async getActiveCancelableTasks(accessToken) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.CANCELLATION}/active`;
+
+      const params = {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al obtener tareas activas:", error);
+      throw error;
+    }
+  }
+
+  // Método para cancelar todas las tareas activas
+  async cancelAllTasks(accessToken, options = {}) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.CANCELLATION}/cancel-all`;
+
+      const params = {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({
+          force: options.force || false,
+          reason: options.reason || "Cancelación masiva",
+        }),
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al cancelar todas las tareas:", error);
+      throw error;
+    }
+  }
+
+  // Método privado para monitorear el estado de cancelación
+  startCancellationMonitoring(accessToken, taskId, onStatusChange) {
+    // Limpiar cualquier monitoreo anterior para esta tarea
+    if (this.statusCheckIntervals.has(taskId)) {
+      clearInterval(this.statusCheckIntervals.get(taskId));
+    }
+
+    // Verificar estado cada 2 segundos
+    const intervalId = setInterval(async () => {
+      try {
+        const status = await this.getCancellationStatus(accessToken, taskId);
+
+        // Si la tarea ya no está activa, detener monitoreo
+        if (!status.data.isActiveProcess) {
+          clearInterval(intervalId);
+          this.statusCheckIntervals.delete(taskId);
+          this.cancellationInProgress.delete(taskId);
+        }
+
+        // Notificar cambio de estado
+        onStatusChange(status);
+      } catch (error) {
+        console.error(`Error al monitorear estado de tarea ${taskId}:`, error);
+        // Mantener el monitoreo a pesar del error, a menos que sea crítico
+        if (error.response?.status === 404) {
+          clearInterval(intervalId);
+          this.statusCheckIntervals.delete(taskId);
+          this.cancellationInProgress.delete(taskId);
+        }
+      }
+    }, 2000);
+
+    this.statusCheckIntervals.set(taskId, intervalId);
+  }
+
+  // Método para limpiar recursos
+  cleanup() {
+    // Limpiar todos los intervalos
+    for (const intervalId of this.statusCheckIntervals.values()) {
+      clearInterval(intervalId);
+    }
+    this.statusCheckIntervals.clear();
+    this.cancellationInProgress.clear();
   }
 
   // Agregar este método en TransferApi.jsx

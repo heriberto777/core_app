@@ -1,9 +1,9 @@
+// services/mongoDBTransport.js - Versión refactorizada
 const Transport = require("winston-transport");
 const Log = require("../models/loggerModel");
 
 /**
- * Transporte simplificado de Winston para MongoDB
- * Diseñado para evitar completamente el error "Callback called multiple times"
+ * Transporte optimizado de Winston para MongoDB
  */
 class MongoDBTransport extends Transport {
   constructor(opts) {
@@ -12,46 +12,67 @@ class MongoDBTransport extends Transport {
     this.level = opts.level || "info";
     this.silent = opts.silent || false;
 
-    // Flags para manejo de errores
-    this.connected = false;
-    this.errorCount = 0;
-    this.maxRetries = 5;
-    this.retryDelay = 2000; // Tiempo entre reintentos (milisegundos)
+    // Control de errores mejorado
+    this.errorThresholds = {
+      connectionErrors: 0,
+      savingErrors: 0,
+      maxErrors: 5,
+      cooldownPeriod: 30000, // 30 segundos
+    };
+
+    // Estado de conexión
+    this.connectionStatus = {
+      isHealthy: true,
+      lastErrorTime: 0,
+      consecutiveErrors: 0,
+    };
 
     console.log("Transporte MongoDB para logs inicializado");
   }
 
   /**
-   * Método simplificado para procesar logs sin usar callbacks múltiples
+   * Procesa logs con mejor manejo de errores y reconexión automática
    */
   log(info, callback) {
-    // IMPORTANTE: Llamar al callback INMEDIATAMENTE y SOLO UNA VEZ
-    callback(null, true);
+    // Siempre llamar al callback primero para evitar múltiples llamadas
+    setImmediate(() => {
+      callback();
+    });
 
     // Si está en modo silencioso, no hacer nada más
     if (this.silent) return;
 
-    // Procesar el log de forma asíncrona sin afectar a Winston
-    this._processLogAsync(info).catch((err) => {
-      console.error(
-        "Error al guardar log en MongoDB (modo silencioso):",
-        err.message
-      );
+    // Verificar si estamos en modo de enfriamiento
+    if (this.isInCooldown()) {
+      return;
+    }
+
+    // Procesar el log de forma asíncrona
+    this._processLogAsync(info).catch((error) => {
+      this._handleError(error);
     });
   }
 
   /**
-   * Procesa el log de forma asíncrona, completamente separado del flujo de Winston
-   * @private
+   * Verifica si estamos en período de enfriamiento
+   */
+  isInCooldown() {
+    const now = Date.now();
+    const lastError = this.connectionStatus.lastErrorTime;
+    return now - lastError < this.errorThresholds.cooldownPeriod;
+  }
+
+  /**
+   * Procesa el log de forma asíncrona con mejor manejo de errores
    */
   async _processLogAsync(info) {
+    // Verificar conexión antes de intentar guardar
+    if (!this._isMongoConnected()) {
+      throw new Error("MongoDB no está conectado");
+    }
+
     try {
       const { level, message, timestamp, ...rest } = info;
-
-      // Si hemos tenido muchos errores consecutivos, no intentar más
-      if (this.errorCount > this.maxRetries) {
-        return;
-      }
 
       // Crear objeto de log
       const log = new Log({
@@ -63,37 +84,76 @@ class MongoDBTransport extends Transport {
         metadata: rest.metadata || rest,
       });
 
-      // Guardar en MongoDB
-      await log.save();
+      // Guardar en MongoDB con timeout
+      await Promise.race([
+        log.save(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Timeout guardando log")), 5000)
+        ),
+      ]);
 
-      // Éxito - resetear contador de errores
-      this.errorCount = 0;
-      this.connected = true;
+      // Éxito - resetear contadores de errores
+      this.connectionStatus.consecutiveErrors = 0;
+      this.connectionStatus.isHealthy = true;
 
-      // Emitir evento logged para estadísticas internas de Winston
+      // Emitir evento logged
       this.emit("logged", info);
     } catch (error) {
-      // Incrementar contador de errores
-      this.errorCount++;
-
-      // Solo emitir error si no estamos en modo silencioso para errors
-      this.emit("error", error);
-
-      // Si supera el máximo de reintentos, desactivar temporalmente
-      if (this.errorCount > this.maxRetries) {
-        console.error(
-          `MongoDB transport disabled after ${this.errorCount} consecutive errors`
-        );
-        this.silent = true;
-
-        // Re-habilitar después de un tiempo (5 minutos)
-        setTimeout(() => {
-          this.silent = false;
-          this.errorCount = 0;
-          console.log("MongoDB transport re-enabled after cooling period");
-        }, 5 * 60 * 1000);
-      }
+      throw error;
     }
+  }
+
+  /**
+   * Maneja errores con estrategia de reconexión
+   */
+  _handleError(error) {
+    this.connectionStatus.consecutiveErrors++;
+    this.connectionStatus.lastErrorTime = Date.now();
+
+    // Incrementar contador según tipo de error
+    if (error.message?.includes("no está conectado")) {
+      this.errorThresholds.connectionErrors++;
+    } else {
+      this.errorThresholds.savingErrors++;
+    }
+
+    // Emitir error para logging interno
+    this.emit("error", error);
+
+    // Si superamos el umbral, poner en modo silencioso temporal
+    if (
+      this.connectionStatus.consecutiveErrors >= this.errorThresholds.maxErrors
+    ) {
+      this.connectionStatus.isHealthy = false;
+
+      // Programar reactivación
+      setTimeout(() => {
+        this.connectionStatus.consecutiveErrors = 0;
+        this.connectionStatus.isHealthy = true;
+        console.log("MongoDB transport re-enabled after error threshold");
+      }, this.errorThresholds.cooldownPeriod);
+    }
+  }
+
+  /**
+   * Verifica si MongoDB está conectado
+   */
+  _isMongoConnected() {
+    // Importar dinámicamente para evitar dependencias circulares
+    const mongoose = require("mongoose");
+    return mongoose.connection.readyState === 1;
+  }
+
+  /**
+   * Obtiene estadísticas del transporte
+   */
+  getStats() {
+    return {
+      connectionStatus: this.connectionStatus,
+      errorThresholds: this.errorThresholds,
+      isHealthy: this.connectionStatus.isHealthy,
+      lastError: this.connectionStatus.lastErrorTime,
+    };
   }
 }
 

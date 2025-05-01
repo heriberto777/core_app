@@ -84,6 +84,10 @@ app.use(`/api/${API_VERSION}/stats`, require("./routes/statsRoutes"));
 app.use(`/api/${API_VERSION}/logs`, require("./routes/logRoutes"));
 app.use(`/api/${API_VERSION}/orders`, require("./routes/ordersRoutes"));
 app.use(`/api/${API_VERSION}/mappings`, require("./routes/mappingRoutes"));
+app.use(
+  `/api/${API_VERSION}/cancellation`,
+  require("./routes/cancelationRoutes")
+);
 
 // Ruta para health check mejorada
 app.get("/health", async (req, res) => {

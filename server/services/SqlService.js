@@ -1,4 +1,3 @@
-// services/SqlService.js
 const { Request, TYPES } = require("tedious");
 const logger = require("./logger");
 const fs = require("fs");
@@ -679,60 +678,16 @@ class SqlService {
    * @returns {Promise<Transaction>} - Objeto de transacción
    */
   async beginTransaction(connection) {
-    if (!connection) {
-      throw new Error("No se puede iniciar transacción: La conexión es nula");
-    }
-
-    if (typeof connection.transaction !== "function") {
-      throw new Error("La conexión no tiene el método transaction necesario");
-    }
-
     return new Promise((resolve, reject) => {
-      // Usar un timeout para evitar bloqueos indefinidos
-      const timeoutId = setTimeout(() => {
-        reject(new Error("Timeout al intentar iniciar transacción"));
-      }, 30000); // 30 segundos
-
-      try {
-        connection.transaction((err, transaction) => {
-          clearTimeout(timeoutId); // Limpiar timeout
-
-          if (err) {
-            logger.error(`Error al iniciar transacción: ${err.message}`);
-            reject(err);
-            return;
-          }
-
-          if (!transaction) {
-            reject(new Error("Se creó una transacción nula"));
-            return;
-          }
-
-          // Verificar que la transacción tiene los métodos necesarios
-          if (typeof transaction.commit !== "function") {
-            logger.warn("La transacción creada no tiene método commit");
-          }
-
-          if (
-            typeof transaction.rollback !== "function" &&
-            typeof transaction.rollbackTransaction !== "function"
-          ) {
-            logger.warn("La transacción creada no tiene método rollback");
-          }
-
-          // Agregar una propiedad de tiempo para diagnóstico
-          transaction._createdAt = Date.now();
-
+      connection.transaction((err, transaction) => {
+        if (err) {
+          logger.error(`Error al iniciar transacción: ${err.message}`);
+          reject(err);
+        } else {
           logger.debug("Transacción iniciada correctamente");
           resolve(transaction);
-        });
-      } catch (error) {
-        clearTimeout(timeoutId); // Limpiar timeout
-        logger.error(
-          `Excepción al intentar iniciar transacción: ${error.message}`
-        );
-        reject(error);
-      }
+        }
+      });
     });
   }
 
@@ -761,96 +716,38 @@ class SqlService {
    * @returns {Promise<void>}
    */
   async rollbackTransaction(transaction) {
-    if (!transaction) {
-      logger.debug("Se intentó hacer rollback en una transacción nula");
-      return;
-    }
+    if (!transaction) return;
 
-    return new Promise((resolve) => {
+    return new Promise((resolve, reject) => {
       try {
-        // Verificar si la transacción tiene algún método de rollback
         if (typeof transaction.rollback === "function") {
           transaction.rollback((err) => {
             if (err) {
               logger.error(`Error en rollback: ${err.message}`);
+              reject(err);
             } else {
-              logger.info("Transacción revertida con éxito usando rollback()");
+              resolve();
             }
-            resolve(); // Siempre resolvemos, incluso con error
           });
         } else if (typeof transaction.rollbackTransaction === "function") {
           transaction.rollbackTransaction((err) => {
             if (err) {
               logger.error(`Error en rollbackTransaction: ${err.message}`);
+              reject(err);
             } else {
-              logger.info(
-                "Transacción revertida con éxito usando rollbackTransaction()"
-              );
+              resolve();
             }
-            resolve(); // Siempre resolvemos, incluso con error
           });
         } else {
-          // Probar otros posibles métodos en caso de que cambien en versiones futuras de Tedious
-          const potentialMethods = ["abort", "cancel", "revert", "undo"];
-          let methodFound = false;
-
-          for (const method of potentialMethods) {
-            if (typeof transaction[method] === "function") {
-              logger.info(
-                `Intentando revertir transacción con método alternativo: ${method}`
-              );
-              try {
-                transaction[method]((err) => {
-                  if (err) {
-                    logger.error(`Error al usar ${method}: ${err.message}`);
-                  } else {
-                    logger.info(
-                      `Transacción revertida con éxito usando ${method}()`
-                    );
-                    methodFound = true;
-                  }
-                  resolve();
-                });
-                return; // Salir si encontramos un método
-              } catch (methodErr) {
-                logger.warn(
-                  `Error al intentar ${method}(): ${methodErr.message}`
-                );
-              }
-            }
-          }
-
-          if (!methodFound) {
-            logger.warn(
-              "No se encontró método de rollback en el objeto de transacción. Inspección del objeto:"
-            );
-
-            // Intentar inspeccionar el objeto para diagnóstico
-            try {
-              const properties = Object.getOwnPropertyNames(transaction);
-              logger.debug(
-                `Propiedades de la transacción: ${properties.join(", ")}`
-              );
-
-              // Verificar si hay algún método en general
-              const methods = properties.filter(
-                (p) => typeof transaction[p] === "function"
-              );
-              if (methods.length > 0) {
-                logger.debug(`Métodos disponibles: ${methods.join(", ")}`);
-              }
-            } catch (inspectErr) {
-              logger.debug(
-                `Error al inspeccionar transacción: ${inspectErr.message}`
-              );
-            }
-
-            resolve(); // Intentamos continuar a pesar del error
-          }
+          logger.warn(
+            "No se encontró método de rollback en el objeto de transacción"
+          );
+          // Intenta completar normalmente ya que no podemos hacer rollback
+          resolve();
         }
       } catch (error) {
-        logger.error(`Error general al intentar rollback: ${error.message}`);
-        resolve(); // Continuamos a pesar del error para evitar bloqueos
+        logger.error(`Error general en rollback: ${error.message}`);
+        reject(error);
       }
     });
   }
