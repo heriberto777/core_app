@@ -236,148 +236,223 @@ export function DocumentsVisualization() {
 
       if (!confirmResult.isConfirmed) return;
 
-      // Show loading
+      // Show loading with a reference que podemos cerrar siempre
       setIsLoading(true);
+      let loadingSwal = null;
 
-      // Crear un loading modal que no se cierre automáticamente
-      const loadingModal = Swal.fire({
-        title: "Procesando documentos...",
-        text: "Esto puede tomar un momento",
-        allowOutsideClick: false,
-        didOpen: () => {
-          Swal.showLoading();
-        },
-        willClose: () => {
-          // Esto se ejecutará cuando el modal se cierre
-          console.log("Modal de carga cerrado");
-        },
-      });
+      try {
+        loadingSwal = Swal.fire({
+          title: "Procesando documentos...",
+          text: "Esto puede tomar un momento",
+          allowOutsideClick: false,
+          didOpen: () => {
+            Swal.showLoading();
+          },
+        });
 
-      // Execute process with selected document IDs
-      const result = await api.processDocumentsByMapping(
-        accessToken,
-        activeMappingId,
-        selectedDocuments
-      );
+        // Ejecutar el procesamiento
+        const result = await api.processDocumentsByMapping(
+          accessToken,
+          activeMappingId,
+          selectedDocuments
+        );
 
-      // Cerrar explícitamente el modal de carga
-      loadingModal.close();
+        // Cerrar modal de carga explícitamente
+        if (loadingSwal) {
+          loadingSwal.close();
+        }
 
-      setIsLoading(false);
+        setIsLoading(false);
 
-      // Determine icon based on results
-      let resultIcon = "success";
-      if (
-        result.data &&
-        result.data.processed === 0 &&
-        result.data.failed > 0
-      ) {
-        resultIcon = "error";
-      } else if (result.data && result.data.failed > 0) {
-        resultIcon = "warning";
-      }
+        // Determinar icono basado en resultados
+        let resultIcon = "success";
+        if (
+          result.data &&
+          result.data.processed === 0 &&
+          result.data.failed > 0
+        ) {
+          resultIcon = "error";
+        } else if (result.data && result.data.failed > 0) {
+          resultIcon = "warning";
+        }
 
-      // Determine title based on results
-      let resultTitle = "Procesamiento completado";
-      let resultMessage = "";
+        // Determinar título basado en resultados
+        let resultTitle = "Procesamiento completado";
+        let resultMessage = "";
 
-      if (resultIcon === "error") {
-        resultTitle = "Procesamiento fallido";
-        if (result.data?.details) {
-          const connectionErrors = result.data.details.filter(
-            (d) =>
-              !d.success &&
-              (d.errorCode === "CONNECTION_ERROR" ||
-                d.errorCode === "SEVERE_CONNECTION_ERROR")
-          );
+        if (resultIcon === "error") {
+          resultTitle = "Procesamiento fallido";
+          // Agregar mensajes específicos para ciertos códigos de error
+          if (result.data?.details) {
+            const connectionErrors = result.data.details.filter(
+              (d) =>
+                !d.success &&
+                (d.errorCode === "CONNECTION_ERROR" ||
+                  d.errorCode === "SEVERE_CONNECTION_ERROR")
+            );
 
-          if (connectionErrors.length > 0) {
-            resultMessage =
-              "Hubo problemas de conexión con la base de datos durante el procesamiento. ";
-            if (connectionErrors.length < result.data.details.length) {
-              resultMessage +=
-                "Algunos documentos fueron procesados correctamente.";
+            if (connectionErrors.length > 0) {
+              resultMessage =
+                "Hubo problemas de conexión con la base de datos durante el procesamiento. ";
+              if (connectionErrors.length < result.data.details.length) {
+                resultMessage +=
+                  "Algunos documentos fueron procesados correctamente.";
+              }
             }
           }
+        } else if (resultIcon === "warning") {
+          resultTitle = "Procesamiento parcial";
+          resultMessage =
+            "Algunos documentos fueron procesados correctamente, pero otros fallaron.";
         }
-      } else if (resultIcon === "warning") {
-        resultTitle = "Procesamiento parcial";
-        resultMessage =
-          "Algunos documentos fueron procesados correctamente, pero otros fallaron.";
-      }
 
-      // Mostrar un nuevo modal con los resultados
-      await Swal.fire({
-        title: resultTitle,
-        html: `
-        <div class="result-summary">
-          <p><strong>Resumen:</strong></p>
-          <ul>
-            <li>Procesados correctamente: ${result.data?.processed || 0}</li>
-            <li>Fallidos: ${result.data?.failed || 0}</li>
-            <li>Omitidos: ${result.data?.skipped || 0}</li>
-          </ul>
-          ${
-            result.data?.failed > 0 ||
-            (result.data?.errorDetails && result.data.errorDetails.length > 0)
-              ? `<p><strong>Detalles de errores:</strong></p>
-            <div class="error-details" style="max-height: 200px; overflow-y: auto; text-align: left;">
-              ${
-                result.data?.errorDetails
-                  ? result.data.errorDetails
-                      .map(
-                        (detail) => `<p class="error-detail-item">
-                    <strong>Documento ${
-                      detail.documentId
-                    }:</strong> ${formatErrorMessage(
-                          detail.error || "Error no especificado",
-                          detail.errorCode
-                        )}
-                  </p>`
-                      )
-                      .join("")
-                  : result.data?.details
-                  ? result.data.details
-                      .filter((detail) => !detail.success)
-                      .map(
-                        (detail) => `<p class="error-detail-item">
-                    <strong>Documento ${
-                      detail.documentId
-                    }:</strong> ${formatErrorMessage(
-                          detail.message ||
-                            detail.error ||
-                            "Error no especificado",
-                          detail.errorCode
-                        )}
-                  </p>`
-                      )
-                      .join("")
-                  : "<p>No hay detalles específicos del error disponibles.</p>"
-              }
-            </div>`
-              : ""
+        // Parse common error types for more readable messages
+        const formatErrorMessage = (errMsg, errorCode) => {
+          if (errorCode === "NULL_VALUE_ERROR") {
+            return errMsg; // Ya está formateado correctamente
+          } else if (errorCode === "TRUNCATION_ERROR") {
+            return errMsg; // Ya está formateado correctamente
+          } else if (errorCode === "CONNECTION_ERROR") {
+            return "Error de conexión a la base de datos. Intente nuevamente.";
+          } else if (errorCode === "SEVERE_CONNECTION_ERROR") {
+            return "Error grave de conexión. Contacte al administrador del sistema.";
           }
-        </div>
-      `,
-        icon: resultIcon,
-        width: 600,
-        customClass: {
-          htmlContainer: "document-processing-result",
-        },
-      });
 
-      // Refresh documents and reset selection
-      fetchDocuments();
-      setSelectedDocuments([]);
-      setSelectAll(false);
-    } catch (error) {
+          if (errMsg.includes("Cannot insert the value NULL into column")) {
+            const colMatch = errMsg.match(/column '([^']+)'/);
+            const colName = colMatch ? colMatch[1] : "desconocida";
+            return `No se puede insertar NULL en columna '${colName}'. Configure un valor por defecto.`;
+          } else if (
+            errMsg.includes("String or binary data would be truncated")
+          ) {
+            const colMatch = errMsg.match(/column '([^']+)'/);
+            const colName = colMatch ? colMatch[1] : "desconocida";
+            return `Texto demasiado largo para columna '${colName}'. Verifique la longitud máxima.`;
+          }
+          return errMsg;
+        };
+
+        // Mostrar resumen detallado en un nuevo modal
+        await Swal.fire({
+          title: resultTitle,
+          html: `
+          <div class="result-summary">
+            <p><strong>Resumen:</strong></p>
+            <ul>
+              <li>Procesados correctamente: ${result.data?.processed || 0}</li>
+              <li>Fallidos: ${result.data?.failed || 0}</li>
+              <li>Omitidos: ${result.data?.skipped || 0}</li>
+            </ul>
+            ${
+              result.data?.failed > 0 ||
+              (result.data?.errorDetails && result.data.errorDetails.length > 0)
+                ? `<p><strong>Detalles de errores:</strong></p>
+              <div class="error-details" style="max-height: 200px; overflow-y: auto; text-align: left;">
+                ${
+                  result.data?.errorDetails
+                    ? result.data.errorDetails
+                        .map(
+                          (detail) => `<p class="error-detail-item">
+                      <strong>Documento ${
+                        detail.documentId
+                      }:</strong> ${formatErrorMessage(
+                            detail.error || "Error no especificado",
+                            detail.errorCode
+                          )}
+                    </p>`
+                        )
+                        .join("")
+                    : result.data?.details
+                    ? result.data.details
+                        .filter((detail) => !detail.success)
+                        .map(
+                          (detail) => `<p class="error-detail-item">
+                      <strong>Documento ${
+                        detail.documentId
+                      }:</strong> ${formatErrorMessage(
+                            detail.message ||
+                              detail.error ||
+                              "Error no especificado",
+                            detail.errorCode
+                          )}
+                    </p>`
+                        )
+                        .join("")
+                    : "<p>No hay detalles específicos del error disponibles.</p>"
+                }
+              </div>`
+                : ""
+            }
+            ${resultMessage ? `<p>${resultMessage}</p>` : ""}
+          </div>
+        `,
+          icon: resultIcon,
+          width: 600,
+          customClass: {
+            htmlContainer: "document-processing-result",
+          },
+        });
+
+        // Refresh documents and reset selection
+        fetchDocuments();
+        setSelectedDocuments([]);
+        setSelectAll(false);
+      } catch (error) {
+        // Asegurarse de cerrar el modal si hay un error
+        if (loadingSwal) {
+          loadingSwal.close();
+        }
+
+        setIsLoading(false);
+
+        console.error("Error completo del procesamiento:", error);
+
+        let errorMessage = "Ocurrió un error al procesar los documentos";
+        let errorDetails = "";
+
+        // Intentar extraer información detallada del error
+        if (error.response && error.response.data) {
+          errorMessage = error.response.data.message || errorMessage;
+          errorDetails = error.response.data.errorDetails || "";
+        } else if (error.message) {
+          errorMessage = error.message;
+        }
+
+        // Mostrar el error
+        Swal.fire({
+          title: "Error en el procesamiento",
+          html: `
+          <div>
+            <p>${errorMessage}</p>
+            ${
+              errorDetails
+                ? `
+              <div style="text-align: left; margin-top: 10px; padding: 10px; background: #f8f8f8; border-radius: 5px; max-height: 200px; overflow-y: auto;">
+                <strong>Detalles técnicos:</strong><br>
+                <pre style="white-space: pre-wrap; font-size: 12px;">${errorDetails}</pre>
+              </div>
+            `
+                : ""
+            }
+          </div>
+        `,
+          icon: "error",
+          width: 600,
+        });
+      } finally {
+        // Asegurarse de que la bandera de carga se desactive
+        setIsLoading(false);
+        // Refrescar la lista de documentos para mostrar el estado actual
+        fetchDocuments();
+      }
+    } catch (outerError) {
+      // Manejar errores externos (problemas con confirmaciones, etc.)
       setIsLoading(false);
-      // Asegurarse de cerrar el modal de carga si hay un error
-      Swal.close();
+      console.error("Error externo en el proceso:", outerError);
 
       Swal.fire({
         title: "Error",
-        text: error.message || "Ocurrió un error al procesar los documentos",
+        text: outerError.message || "Ocurrió un error inesperado",
         icon: "error",
       });
     }
