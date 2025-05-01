@@ -430,90 +430,57 @@ const processDocumentsByMapping = async (req, res) => {
       });
     }
 
-    // Verificar que el mapeo exista y tenga un taskId asociado
-    const mapping = await TransferMapping.findById(mappingId);
-
-    if (!mapping) {
-      return res.status(404).json({
-        success: false,
-        message: `No se encontró la configuración de mapeo con ID ${mappingId}`,
-      });
-    }
-
-    // Si no tiene taskId, crear una tarea temporal para el procesamiento
-    if (!mapping.taskId) {
-      logger.warn(
-        `El mapeo ${mappingId} no tiene taskId asociado, creando una tarea temporal para procesamiento`
+    try {
+      // Procesar documentos
+      const result = await DynamicTransferService.processDocuments(
+        documentIds,
+        mappingId
       );
 
-      const TransferTask = require("../models/transferTaks");
+      logger.info(
+        `Procesamiento completado: ${result.processed} éxitos, ${result.failed} fallos`
+      );
 
-      // Determinar tabla principal para consulta por defecto
-      const mainTable = mapping.tableConfigs?.find((tc) => !tc.isDetailTable);
-      let defaultQuery = "SELECT 1";
+      // Incluir información detallada de errores si hay algún fallo
+      if (result.failed > 0) {
+        const errorDetails = result.details
+          .filter((detail) => !detail.success)
+          .map((detail) => ({
+            documentId: detail.documentId,
+            error: detail.message || detail.error || "Error desconocido",
+            details: detail.errorDetails || null,
+          }));
 
-      if (mainTable && mainTable.sourceTable) {
-        defaultQuery = `SELECT * FROM ${mainTable.sourceTable}`;
+        result.errorDetails = errorDetails;
       }
 
-      const taskData = {
-        name: `ProcessTask_${mapping.name}_${Date.now()}`,
-        type: "manual",
-        active: true,
-        transferType: mapping.transferType || "down",
-        query: defaultQuery,
-        parameters: [],
-        status: "pending",
-      };
-
-      // Crear tarea temporal
-      const tempTask = new TransferTask(taskData);
-      await tempTask.save();
-
-      // Actualizar el mapeo con la tarea creada
-      mapping.taskId = tempTask._id;
-      await mapping.save();
-
-      logger.info(`Tarea temporal creada y asociada al mapeo: ${tempTask._id}`);
+      return res.json({
+        success: true,
+        message:
+          result.failed > 0
+            ? `Se procesaron ${result.processed} documentos correctamente y fallaron ${result.failed}`
+            : `Se procesaron ${result.processed} documentos correctamente`,
+        data: result,
+      });
+    } catch (processingError) {
+      // Capturar explícitamente errores durante el procesamiento
+      logger.error(
+        `Error durante el procesamiento de documentos: ${processingError.message}`
+      );
+      return res.status(500).json({
+        success: false,
+        message: processingError.message || "Error al procesar documentos",
+        errorDetails: processingError.stack,
+      });
     }
-
-    // Procesar documentos
-    const result = await DynamicTransferService.processDocuments(
-      documentIds,
-      mappingId
-    );
-
-    logger.info(
-      `Procesamiento completado: ${result.processed} éxitos, ${result.failed} fallos`
-    );
-
-    // Incluir información detallada de errores si hay algún fallo
-    if (result.failed > 0) {
-      const errorDetails = result.details
-        .filter((detail) => !detail.success)
-        .map((detail) => ({
-          documentId: detail.documentId,
-          error: detail.message || detail.error || "Error desconocido",
-          details: detail.errorDetails || null,
-        }));
-
-      result.errorDetails = errorDetails;
-    }
-
-    return res.json({
-      success: true,
-      message:
-        result.failed > 0
-          ? `Se procesaron ${result.processed} documentos correctamente y fallaron ${result.failed}`
-          : `Se procesaron ${result.processed} documentos correctamente`,
-      data: result,
-    });
   } catch (error) {
-    logger.error(`Error al procesar documentos: ${error.message}`);
+    logger.error(
+      `Error general en processDocumentsByMapping: ${error.message}`
+    );
     return res.status(500).json({
       success: false,
-      message: error.message || "Error al procesar documentos",
-      errorDetails: error.stack, // Incluir detalles del error
+      message: error.message || "Error interno del servidor",
+      errorDetails: error.stack,
     });
   }
 };
