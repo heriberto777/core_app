@@ -2384,7 +2384,7 @@ class DynamicTransferService {
   /**
    * Genera un consecutivo según la configuración
    * @param {Object} mapping - Configuración de mapeo
-   * @returns {Object} - { value: number, formatted: string }
+   * @returns {Promise<Object>} - { value: number, formatted: string }
    */
   async generateConsecutive(mapping) {
     try {
@@ -2395,6 +2395,13 @@ class DynamicTransferService {
       // Generar número consecutivo
       const lastValue = mapping.consecutiveConfig.lastValue || 0;
       const newValue = lastValue + 1;
+
+      // IMPORTANTE: Actualizar inmediatamente el último valor usado en la configuración
+      // Esto evita que dos documentos obtengan el mismo valor consecutivo
+      await this.updateLastConsecutive(mapping._id, newValue);
+      logger.info(
+        `Consecutivo reservado: ${newValue} para mapeo ${mapping._id}`
+      );
 
       // Formatear según el patrón si existe
       let formattedValue = String(newValue);
@@ -2465,14 +2472,26 @@ class DynamicTransferService {
    */
   async updateLastConsecutive(mappingId, lastValue) {
     try {
-      await TransferMapping.findByIdAndUpdate(mappingId, {
-        "consecutiveConfig.lastValue": lastValue,
-      });
-
-      logger.info(
-        `Último consecutivo actualizado para ${mappingId}: ${lastValue}`
+      // Usar findOneAndUpdate para actualizar de manera atómica
+      // Esto evita condiciones de carrera con múltiples procesos
+      const result = await TransferMapping.findOneAndUpdate(
+        { _id: mappingId, "consecutiveConfig.lastValue": { $lt: lastValue } },
+        { "consecutiveConfig.lastValue": lastValue },
+        { new: true }
       );
-      return true;
+
+      if (result) {
+        logger.info(
+          `Último consecutivo actualizado para ${mappingId}: ${lastValue}`
+        );
+        return true;
+      } else {
+        // No se actualizó porque ya hay un valor mayor (posiblemente actualizado por otro proceso)
+        logger.debug(
+          `No se actualizó el consecutivo para ${mappingId} porque ya existe un valor igual o mayor`
+        );
+        return false;
+      }
     } catch (error) {
       logger.error(`Error al actualizar último consecutivo: ${error.message}`);
       return false;

@@ -1,4 +1,3 @@
-// services/Telemetry.js
 const logger = require("./logger");
 
 /**

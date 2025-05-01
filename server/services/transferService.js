@@ -1,8 +1,9 @@
-// services/TransferService.js
 const logger = require("./logger");
 const ConnectionManager = require("./ConnectionManager");
 const { SqlService } = require("./SqlService");
 const TransferTask = require("../models/transferTaks");
+const withCancellation = require("../decorators/withCancellation");
+const UnifiedCancellationService = require("./UnifiedCancellationService");
 const { sendProgress } = require("./progressSse");
 const {
   sendTransferResultsEmail,
@@ -12,7 +13,6 @@ const TaskTracker = require("./TaskTracker");
 const RetryService = require("./RetryService");
 const MemoryManager = require("./MemoryManager");
 const Telemetry = require("./Telemetry");
-const TransferSummary = require("../models/transferSummaryModel");
 const TaskExecution = require("../models/taskExecutionModel");
 
 /**
@@ -35,6 +35,15 @@ class TransferService {
       maxRetries: 3,
       retryInterval: 5 * 60 * 1000, // 5 minutos entre reintentos
     };
+    try {
+      if (UnifiedCancellationService.initialize) {
+        UnifiedCancellationService.initialize();
+      }
+    } catch (error) {
+      logger.warn(
+        `Error al inicializar servicio de cancelación: ${error.message}`
+      );
+    }
   }
 
   /**
@@ -229,25 +238,67 @@ class TransferService {
     const { signal } = abortController;
 
     // Registrar la tarea para poder cancelarla posteriormente
-    TaskTracker.registerTask(taskId, abortController);
+    TaskTracker.registerTask(taskId, abortController, {
+      type: "transfer",
+      metadata: {
+        taskId,
+        startTime: Date.now(),
+      },
+    });
 
     try {
-      // Usar RetryService para reintentos con backoff exponencial
-      return await this.retryService.execute(
-        async (attempt) => {
+      let attempt = 0;
+      let lastError = null;
+
+      while (attempt < maxRetries) {
+        try {
+          // Verificar si la tarea fue cancelada
+          if (signal.aborted) {
+            throw new Error("Tarea cancelada por el usuario");
+          }
+
           // Si es un reintento, verificar conexiones antes
           if (attempt > 0) {
             await this.verifyAndRefreshConnections(taskId);
+            logger.info(
+              `Reintentando transferencia ${taskId} (intento ${
+                attempt + 1
+              }/${maxRetries})...`
+            );
           }
 
           // Ejecutar la transferencia
           return await this.executeTransfer(taskId, signal);
-        },
-        {
-          name: `transferencia ${taskId}`,
-          signal,
+        } catch (error) {
+          lastError = error;
+
+          // Verificar si el error es por cancelación
+          if (signal.aborted || error.message?.includes("cancelada")) {
+            throw error; // Propagar error de cancelación inmediatamente
+          }
+
+          // Determinar si el error es recuperable
+          const isRecoverable = this.isConnectionError(error);
+
+          if (!isRecoverable || attempt >= maxRetries - 1) {
+            throw error; // Propagar error no recuperable o último intento
+          }
+
+          // Esperar antes de reintentar con backoff exponencial
+          const delay = Math.min(2000 * Math.pow(2, attempt), 30000);
+          logger.warn(
+            `Error recuperable en transferencia ${taskId}, reintentando en ${
+              delay / 1000
+            } segundos...`
+          );
+          await new Promise((resolve) => setTimeout(resolve, delay));
+
+          attempt++;
         }
-      );
+      }
+
+      // No debería llegar aquí, pero por seguridad
+      throw lastError || new Error("Error desconocido en transferencia");
     } catch (error) {
       // Verificar si el error es por cancelación
       if (signal.aborted || error.message?.includes("cancelada")) {
@@ -306,6 +357,7 @@ class TransferService {
     const startTime = Date.now();
 
     try {
+      this.checkCancellation(signal);
       // 1. Preparar la transferencia (validar tarea y setup inicial)
       const taskInfo = await this.prepareTransfer(taskId, signal);
 
@@ -337,6 +389,8 @@ class TransferService {
       const connections = await this.establishConnections(taskInfo, signal);
       server1Connection = connections.server1;
       server2Connection = connections.server2;
+
+      this.checkCancellation(signal);
 
       // 3. Obtener datos origen
       const { data, params } = await this.fetchSourceData(
@@ -389,6 +443,8 @@ class TransferService {
         signal,
         initialCount // Pasar initialCount como parámetro
       );
+
+      this.checkCancellation(signal);
 
       // 7. Ejecutar operaciones post-transferencia si corresponde
       if (
@@ -464,16 +520,14 @@ class TransferService {
       };
     } catch (error) {
       // Verificar si el error es por cancelación
-      if ((signal && signal.aborted) || error.message?.includes("cancelada")) {
-        logger.info(
-          `Tarea ${taskId} cancelada por el usuario durante procesamiento`
-        );
+      if (this.isCancellationError(error) || signal?.aborted) {
+        logger.info(`Tarea ${taskId} cancelada por el usuario`);
+
         await TransferTask.findByIdAndUpdate(taskId, {
           status: "cancelled",
           progress: -1,
         });
 
-        // Actualizar el registro de ejecución si existe
         if (executionId) {
           await TaskExecution.findByIdAndUpdate(executionId, {
             status: "cancelled",
@@ -483,7 +537,7 @@ class TransferService {
         }
 
         sendProgress(taskId, -1);
-        TaskTracker.completeTask(taskId, "cancelled");
+
         return {
           success: false,
           message: "Transferencia cancelada por el usuario",
@@ -3107,6 +3161,26 @@ class TransferService {
 
       return transformedRecord;
     });
+  }
+
+  /**
+   * Verifica si hay cancelación
+   */
+  checkCancellation(signal) {
+    if (signal && signal.aborted) {
+      throw new Error("Operacion cancelada por el usuario.");
+    }
+  }
+
+  /**
+   * Verifica si un error es de cancelación
+   */
+  isCancellationError(error) {
+    return (
+      error.message?.includes("cancel") ||
+      error.message?.includes("abort") ||
+      (error.signal && error.signal.aborted)
+    );
   }
 }
 

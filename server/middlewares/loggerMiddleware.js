@@ -1,57 +1,99 @@
-const morgan = require("morgan");
-const logger = require("../services/logger");
+// services/logger.js - Con soporte para Morgan
+const winston = require("winston");
+const path = require("path");
+const fs = require("fs");
 
-// Crear un formato de logging personalizado para Morgan
-morgan.token("body", (req) => {
-  if (req.method === "POST" || req.method === "PUT") {
-    if (!req.body) return "";
-
-    try {
-      // Ocultar información sensible
-      const body = { ...req.body };
-      if (body.password) body.password = "******";
-      if (body.token) body.token = "******";
-
-      return JSON.stringify(body);
-    } catch (err) {
-      return "";
-    }
-  }
-  return "";
-});
-
-// Middleware de logging con Morgan que usa Winston
-// Manejo de errores mejorado
-function loggerMiddleware(req, res, next) {
-  try {
-    // Verificar que logger.stream.write sea una función
-    if (!logger.stream || typeof logger.stream.write !== "function") {
-      console.warn(
-        "⚠️ Logger stream no está configurado correctamente, usando configuración alternativa"
-      );
-      // Backup: configurar un stream alternativo si el principal no está disponible
-      const alternativeStream = {
-        write: (message) => {
-          console.log(message.trim());
-        },
-      };
-
-      return morgan(
-        ":method :url :status :response-time ms - :res[content-length]",
-        { stream: alternativeStream }
-      )(req, res, next);
-    }
-
-    // Si todo está bien, usar el stream del logger
-    return morgan(
-      ":method :url :status :response-time ms - :res[content-length] :body",
-      { stream: logger.stream }
-    )(req, res, next);
-  } catch (error) {
-    console.error("Error en middleware de logging:", error);
-    // No interrumpir la cadena de middleware
-    next();
-  }
+// Asegurar que existe el directorio de logs
+const logDir = path.join(process.cwd(), "logs");
+if (!fs.existsSync(logDir)) {
+  fs.mkdirSync(logDir, { recursive: true });
 }
 
-module.exports = loggerMiddleware;
+// Formato personalizado para consola
+const consoleFormat = winston.format.printf(({ level, message, timestamp }) => {
+  return `${timestamp} ${level.toUpperCase()}: ${message}`;
+});
+
+// Crear logger con configuración simple y robusta
+const logger = winston.createLogger({
+  level: process.env.LOG_LEVEL || "info",
+  format: winston.format.combine(
+    winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+    winston.format.json()
+  ),
+  transports: [
+    // Transporte de consola con colores y formato legible
+    new winston.transports.Console({
+      format: winston.format.combine(
+        winston.format.colorize(),
+        winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
+        consoleFormat
+      ),
+      handleExceptions: true,
+    }),
+    // Archivo para todos los logs
+    new winston.transports.File({
+      filename: path.join(logDir, "combined.log"),
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+      handleExceptions: true,
+    }),
+    // Archivo solo para errores
+    new winston.transports.File({
+      filename: path.join(logDir, "error.log"),
+      level: "error",
+      maxsize: 5242880, // 5MB
+      maxFiles: 5,
+      handleExceptions: true,
+    }),
+  ],
+  exitOnError: false, // No cerrar en errores no manejados
+});
+
+// IMPORTANTE: Añadir stream para Morgan
+logger.stream = {
+  write: function (message) {
+    // Remover salto de línea que Morgan añade al final
+    logger.info(message.trim());
+  },
+};
+
+// Métodos auxiliares
+logger.logError = function (error, context = {}) {
+  this.error({
+    message: error.message,
+    stack: error.stack,
+    ...context,
+  });
+};
+
+// Opcional: Intenta configurar transporte MongoDB si está disponible
+try {
+  // Importamos estos módulos solo si los necesitamos
+  const mongoose = require("mongoose");
+  const { MongoDBTransport } = require("./mongoDBTransport");
+
+  // Verificar si MongoDB está conectado
+  if (
+    mongoose.connection.readyState === 1 &&
+    process.env.DISABLE_MONGO_LOGS !== "true"
+  ) {
+    // Agregar transporte MongoDB
+    const mongoTransport = new MongoDBTransport({
+      level: "info",
+      handleExceptions: true,
+    });
+
+    // Manejo de errores
+    mongoTransport.on("error", (error) => {
+      console.error("Error en transporte MongoDB (no fatal):", error.message);
+    });
+
+    logger.add(mongoTransport);
+    logger.info("Transporte MongoDB agregado al logger");
+  }
+} catch (error) {
+  console.warn("No se pudo configurar transporte MongoDB:", error.message);
+}
+
+module.exports = logger;
