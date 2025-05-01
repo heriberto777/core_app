@@ -1740,8 +1740,17 @@ class DynamicTransferService {
         error.stack?.includes("AggregateError")
       ) {
         logger.error(
-          `Error de conexión (AggregateError) para documento ${documentId}`,
-          error
+          `Error de conexión (AggregateError) para documento ${documentId}:`,
+          {
+            documentId,
+            errorMessage: error.message,
+            errorName: error.name,
+            errorStack: error.stack,
+            // Intentar extraer errores internos si existen
+            innerErrors: error.errors
+              ? JSON.stringify(error.errors)
+              : "No inner errors available",
+          }
         );
 
         // Intentar reconexión
@@ -1764,14 +1773,28 @@ class DynamicTransferService {
             success: false,
             message: `Error de conexión: Se perdió la conexión con la base de datos. Se ha restablecido la conexión pero este documento debe procesarse nuevamente.`,
             documentType: "unknown",
-            errorDetails: "CONNECTION_ERROR",
-            consecutiveUsed: null,
-            consecutiveValue: null,
+            errorDetails: JSON.stringify({
+              name: error.name,
+              message: error.message,
+              stack: error.stack,
+              innerErrors: error.errors,
+            }),
+            consecutiveUsed: currentConsecutive
+              ? currentConsecutive.formatted
+              : null,
+            consecutiveValue: currentConsecutive
+              ? currentConsecutive.value
+              : null,
             errorCode: "CONNECTION_ERROR",
           };
         } catch (reconnectError) {
           logger.error(
-            `Error al intentar reconexión: ${reconnectError.message}`
+            `Error al intentar reconexión para documento ${documentId}: ${reconnectError.message}`,
+            {
+              originalError: error.message,
+              reconnectError: reconnectError.message,
+              reconnectStack: reconnectError.stack,
+            }
           );
           return {
             success: false,
@@ -1779,9 +1802,23 @@ class DynamicTransferService {
               error.message || "Error en comunicación con la base de datos"
             }. Por favor, intente nuevamente más tarde.`,
             documentType: "unknown",
-            errorDetails: error.stack || "No hay detalles adicionales",
-            consecutiveUsed: null,
-            consecutiveValue: null,
+            errorDetails: JSON.stringify({
+              originalError: {
+                name: error.name,
+                message: error.message,
+                stack: error.stack,
+              },
+              reconnectError: {
+                message: reconnectError.message,
+                stack: reconnectError.stack,
+              },
+            }),
+            consecutiveUsed: currentConsecutive
+              ? currentConsecutive.formatted
+              : null,
+            consecutiveValue: currentConsecutive
+              ? currentConsecutive.value
+              : null,
             errorCode: "SEVERE_CONNECTION_ERROR",
           };
         }
