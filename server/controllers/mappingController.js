@@ -602,6 +602,97 @@ const resetConsecutive = async (req, res) => {
   }
 };
 
+/**
+ * Obtiene el siguiente valor del consecutivo para un mapeo específico
+ */
+const getNextConsecutiveValue = async (req, res) => {
+  try {
+    const { mappingId } = req.params;
+    const { segment } = req.query;
+
+    if (!mappingId) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requiere el ID de la configuración",
+      });
+    }
+
+    // Buscar el mapping
+    const mapping = await TransferMapping.findById(mappingId);
+    if (!mapping) {
+      return res.status(404).json({
+        success: false,
+        message: "Configuración no encontrada",
+      });
+    }
+
+    // Verificar si está configurado para usar consecutivos
+    if (!mapping.consecutiveConfig || !mapping.consecutiveConfig.enabled) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Esta configuración no tiene habilitada la numeración consecutiva",
+      });
+    }
+
+    let consecutiveValue;
+
+    // Intentar obtener desde el sistema centralizado primero
+    try {
+      // Comprobar si existe un consecutivo asignado a este mapeo
+      const assignedConsecutives =
+        await ConsecutiveService.getConsecutivesByEntity("mapping", mappingId);
+
+      if (assignedConsecutives.length > 0) {
+        // Usar el primer consecutivo asignado
+        const consecutive = assignedConsecutives[0];
+
+        // Obtener el siguiente valor
+        const result = await ConsecutiveService.getNextConsecutiveValue(
+          consecutive._id,
+          { segment: segment || null }
+        );
+
+        consecutiveValue = result.data.value;
+      } else {
+        // Usar el sistema anterior
+        consecutiveValue = this.formatConsecutiveValue(
+          mapping.consecutiveConfig.lastValue + 1,
+          mapping.consecutiveConfig
+        );
+
+        // Actualizar el último valor en la configuración
+        mapping.consecutiveConfig.lastValue += 1;
+        await mapping.save();
+      }
+    } catch (error) {
+      // Si falla el sistema centralizado, usar el anterior
+      logger.warn(
+        `Error al obtener consecutivo centralizado: ${error.message}. Usando sistema anterior.`
+      );
+
+      consecutiveValue = await DynamicTransferService.getNextConsecutiveValue(
+        mappingId,
+        segment
+      );
+    }
+
+    res.json({
+      success: true,
+      data: {
+        value: consecutiveValue,
+        mapping: mapping.name,
+      },
+    });
+  } catch (error) {
+    logger.error(`Error al obtener siguiente consecutivo: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 module.exports = {
   getMappings,
   getMappingById,
@@ -612,5 +703,6 @@ module.exports = {
   getDocumentDetailsByMapping,
   processDocumentsByMapping,
   updateConsecutiveConfig,
+  getNextConsecutiveValue,
   resetConsecutive,
 };
