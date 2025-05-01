@@ -1482,29 +1482,29 @@ export class TransferApi {
     }
   }
 
-  /**
-   * Reinicia el consecutivo a un valor específico
-   */
-  async resetConsecutive(accessToken, mappingId, value = 0) {
-    try {
-      const url = `${this.baseApi}/mappings/${mappingId}/reset-consecutive?value=${value}`;
-      const params = {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      };
+  // /**
+  //  * Reinicia el consecutivo a un valor específico
+  //  */
+  // async resetConsecutive(accessToken, mappingId, value = 0) {
+  //   try {
+  //     const url = `${this.baseApi}/mappings/${mappingId}/reset-consecutive?value=${value}`;
+  //     const params = {
+  //       headers: {
+  //         Authorization: `Bearer ${accessToken}`,
+  //       },
+  //     };
 
-      const response = await fetch(url, params);
-      const result = await response.json();
+  //     const response = await fetch(url, params);
+  //     const result = await response.json();
 
-      if (response.status !== 200) throw result;
+  //     if (response.status !== 200) throw result;
 
-      return result;
-    } catch (error) {
-      console.error("Error al resetear consecutivo:", error);
-      throw error;
-    }
-  }
+  //     return result;
+  //   } catch (error) {
+  //     console.error("Error al resetear consecutivo:", error);
+  //     throw error;
+  //   }
+  // }
 
   /**
    * Obtiene todos los consecutivos
