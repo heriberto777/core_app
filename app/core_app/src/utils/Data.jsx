@@ -55,6 +55,12 @@ export const LinkArray = [
     to: "/documents",
     roles: ["admin"],
   },
+  {
+    label: "Consecutivos",
+    icon: <v.iconoDocument />, // Necesitarás añadir este icono en variables
+    to: "/consecutives",
+    roles: ["admin"],
+  },
   // {
   //   label: "Usuarios",
   //   icon: <v.iconoUser />,

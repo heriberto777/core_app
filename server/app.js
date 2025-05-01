@@ -88,6 +88,10 @@ app.use(
   `/api/${API_VERSION}/cancellation`,
   require("./routes/cancelationRoutes")
 );
+app.use(
+  `/api/${API_VERSION}/consecutives`,
+  require("./routes/consecutiveRoutes")
+);
 
 // Ruta para health check mejorada
 app.get("/health", async (req, res) => {

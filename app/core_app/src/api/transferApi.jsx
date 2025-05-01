@@ -1505,4 +1505,290 @@ export class TransferApi {
       throw error;
     }
   }
+
+  /**
+   * Obtiene todos los consecutivos
+   * @param {string} accessToken - Token de acceso
+   * @param {Object} filters - Filtros opcionales
+   * @returns {Promise<Object>} Resultado con lista de consecutivos
+   */
+  async getConsecutives(accessToken, filters = {}) {
+    try {
+      // Construir queryParams
+      const queryParams = new URLSearchParams();
+      if (filters.active !== undefined) {
+        queryParams.append("active", filters.active);
+      }
+      if (filters.entityType && filters.entityId) {
+        queryParams.append("entityType", filters.entityType);
+        queryParams.append("entityId", filters.entityId);
+      }
+
+      const url = `${this.baseApi}/consecutives${
+        queryParams.toString() ? `?${queryParams.toString()}` : ""
+      }`;
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al obtener consecutivos:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene un consecutivo por ID
+   * @param {string} accessToken - Token de acceso
+   * @param {string} id - ID del consecutivo
+   * @returns {Promise<Object>} Resultado con datos del consecutivo
+   */
+  async getConsecutiveById(accessToken, id) {
+    try {
+      const url = `${this.baseApi}/consecutives/${id}`;
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al obtener consecutivo:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Crea un nuevo consecutivo
+   * @param {string} accessToken - Token de acceso
+   * @param {Object} consecutiveData - Datos del consecutivo
+   * @returns {Promise<Object>} Resultado de la operación
+   */
+  async createConsecutive(accessToken, consecutiveData) {
+    try {
+      const url = `${this.baseApi}/consecutives`;
+      const params = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(consecutiveData),
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al crear consecutivo:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Actualiza un consecutivo existente
+   * @param {string} accessToken - Token de acceso
+   * @param {string} id - ID del consecutivo
+   * @param {Object} consecutiveData - Datos a actualizar
+   * @returns {Promise<Object>} Resultado de la operación
+   */
+  async updateConsecutive(accessToken, id, consecutiveData) {
+    try {
+      const url = `${this.baseApi}/consecutives/${id}`;
+      const params = {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(consecutiveData),
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al actualizar consecutivo:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Elimina un consecutivo
+   * @param {string} accessToken - Token de acceso
+   * @param {string} id - ID del consecutivo
+   * @returns {Promise<Object>} Resultado de la operación
+   */
+  async deleteConsecutive(accessToken, id) {
+    try {
+      const url = `${this.baseApi}/consecutives/${id}`;
+      const params = {
+        method: "DELETE",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al eliminar consecutivo:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene el siguiente valor de un consecutivo
+   * @param {string} accessToken - Token de acceso
+   * @param {string} id - ID del consecutivo
+   * @param {Object} options - Opciones adicionales (segment, companyId)
+   * @returns {Promise<Object>} Resultado con el siguiente valor
+   */
+  async getNextConsecutiveValue(accessToken, id, options = {}) {
+    try {
+      // Construir queryParams
+      const queryParams = new URLSearchParams();
+      if (options.segment) {
+        queryParams.append("segment", options.segment);
+      }
+      if (options.companyId) {
+        queryParams.append("companyId", options.companyId);
+      }
+
+      const url = `${this.baseApi}/consecutives/${id}/next${
+        queryParams.toString() ? `?${queryParams.toString()}` : ""
+      }`;
+      const params = {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al obtener siguiente valor consecutivo:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Reinicia un consecutivo a un valor específico
+   * @param {string} accessToken - Token de acceso
+   * @param {string} id - ID del consecutivo
+   * @param {number} value - Valor inicial
+   * @param {string} segment - Segmento opcional
+   * @returns {Promise<Object>} Resultado de la operación
+   */
+  async resetConsecutive(accessToken, id, value = 0, segment = null) {
+    try {
+      // Construir queryParams
+      const queryParams = new URLSearchParams();
+      queryParams.append("value", value);
+      if (segment) {
+        queryParams.append("segment", segment);
+      }
+
+      const url = `${
+        this.baseApi
+      }/consecutives/${id}/reset?${queryParams.toString()}`;
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al reiniciar consecutivo:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Asigna un consecutivo a una entidad
+   * @param {string} accessToken - Token de acceso
+   * @param {string} id - ID del consecutivo
+   * @param {Object} assignment - Datos de asignación
+   * @returns {Promise<Object>} Resultado de la operación
+   */
+  async assignConsecutive(accessToken, id, assignment) {
+    try {
+      const url = `${this.baseApi}/consecutives/${id}/assign`;
+      const params = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(assignment),
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al asignar consecutivo:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene los consecutivos asignados a una entidad específica
+   * @param {string} accessToken - Token de acceso
+   * @param {string} entityType - Tipo de entidad (mapping, user, company, etc.)
+   * @param {string} entityId - ID de la entidad
+   * @returns {Promise<Object>} Resultado con lista de consecutivos asignados
+   */
+  async getConsecutivesByEntity(accessToken, entityType, entityId) {
+    try {
+      const url = `${this.baseApi}/consecutives/entity/${entityType}/${entityId}`;
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error(
+        `Error al obtener consecutivos para entidad (${entityType}/${entityId}):`,
+        error
+      );
+      throw error;
+    }
+  }
 }

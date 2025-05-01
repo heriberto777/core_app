@@ -6,6 +6,8 @@ const TaskExecution = require("../models/taskExecutionModel");
 const TaskTracker = require("./TaskTracker");
 const TransferTask = require("../models/transferTaks");
 
+const ConsecutiveService = require("./ConsecutiveService");
+
 class DynamicTransferService {
   /**
    * Procesa documentos según una configuración de mapeo
@@ -36,6 +38,10 @@ class DynamicTransferService {
     // Inicializar el valor consecutivo más alto
     let highestConsecutiveValue = 0;
 
+    // Variable para almacenar la referencia al consecutivo centralizado
+    let centralizedConsecutiveId = null;
+    let useCentralizedConsecutives = false;
+
     try {
       // 1. Cargar configuración de mapeo
       mapping = await TransferMapping.findById(mappingId);
@@ -44,7 +50,36 @@ class DynamicTransferService {
         throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
       }
 
-      // 2. Registrar en TaskTracker para permitir cancelación
+      // 2. Verificar si se debe usar consecutivos centralizados
+      if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
+        try {
+          // Buscar consecutivos asignados a este mapeo específico
+          const assignedConsecutives =
+            await ConsecutiveService.getConsecutivesByEntity(
+              "mapping",
+              mappingId
+            );
+
+          if (assignedConsecutives && assignedConsecutives.length > 0) {
+            useCentralizedConsecutives = true;
+            centralizedConsecutiveId = assignedConsecutives[0]._id;
+            logger.info(
+              `Usando sistema centralizado de consecutivos para mapeo ${mappingId}. ID: ${centralizedConsecutiveId}`
+            );
+          } else {
+            logger.info(
+              `No se encontraron consecutivos centralizados asignados a ${mappingId}. Se usará el sistema local.`
+            );
+          }
+        } catch (consecError) {
+          logger.warn(
+            `Error al verificar consecutivos centralizados: ${consecError.message}. Usando sistema local.`
+          );
+          // Continuar con el sistema local si hay error al verificar el centralizado
+        }
+      }
+
+      // 3. Registrar en TaskTracker para permitir cancelación
       const cancelTaskId = `dynamic_process_${mappingId}_${Date.now()}`;
       TaskTracker.registerTask(
         cancelTaskId,
@@ -56,7 +91,7 @@ class DynamicTransferService {
         }
       );
 
-      // 3. Crear registro de ejecución
+      // 4. Crear registro de ejecución
       const taskExecution = new TaskExecution({
         taskId: mapping.taskId,
         taskName: mapping.name,
@@ -71,7 +106,7 @@ class DynamicTransferService {
       await taskExecution.save();
       executionId = taskExecution._id;
 
-      // 4. Establecer conexiones con mejor manejo de errores
+      // 5. Establecer conexiones con mejor manejo de errores
       const sourceServerName = mapping.sourceServer;
       const targetServerName = mapping.targetServer;
 
@@ -152,10 +187,10 @@ class DynamicTransferService {
         );
       }
 
-      // 5. Configuración para usar o no transacciones
+      // 6. Configuración para usar o no transacciones
       const useTransactions = false; // Cambiamos a false para evitar problemas con transacciones
 
-      // 6. Procesar documentos
+      // 7. Procesar documentos
       const results = {
         processed: 0,
         failed: 0,
@@ -167,6 +202,7 @@ class DynamicTransferService {
 
       let hasErrors = false;
 
+      // Procesar cada documento
       for (let i = 0; i < documentIds.length; i++) {
         // Verificar si se ha cancelado la tarea
         if (signal.aborted) {
@@ -177,19 +213,86 @@ class DynamicTransferService {
         const documentId = documentIds[i];
 
         try {
-          // Procesar documento con o sin transacciones
+          // Generar consecutivo para este documento específico
+          let currentConsecutive = null;
+
+          if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
+            try {
+              if (useCentralizedConsecutives) {
+                // USAR SISTEMA CENTRALIZADO PARA ESTE DOCUMENTO
+                // Determinar si necesitamos un segmento específico
+                let segmentValue = null;
+
+                // Obtener información del consecutivo centralizado para ver si usa segmentos
+                const consecutive = await ConsecutiveService.getConsecutiveById(
+                  centralizedConsecutiveId
+                );
+
+                if (consecutive.segments && consecutive.segments.enabled) {
+                  if (consecutive.segments.type === "year") {
+                    segmentValue = new Date().getFullYear().toString();
+                  } else if (consecutive.segments.type === "month") {
+                    const date = new Date();
+                    segmentValue = `${date.getFullYear()}${(date.getMonth() + 1)
+                      .toString()
+                      .padStart(2, "0")}`;
+                  }
+                  // Otros tipos de segmentos pueden añadirse según necesidad
+                }
+
+                // Obtener el siguiente valor del consecutivo centralizado
+                const result = await ConsecutiveService.getNextConsecutiveValue(
+                  centralizedConsecutiveId,
+                  { segment: segmentValue }
+                );
+
+                if (result && result.data && result.data.value) {
+                  currentConsecutive = {
+                    value:
+                      parseInt(result.data.value.replace(/\D/g, ""), 10) || 0,
+                    formatted: result.data.value,
+                  };
+
+                  logger.info(
+                    `Consecutivo centralizado generado para documento ${documentId}: ${currentConsecutive.formatted}`
+                  );
+                } else {
+                  throw new Error(
+                    "No se pudo obtener un consecutivo centralizado válido"
+                  );
+                }
+              } else {
+                // USAR SISTEMA LOCAL
+                currentConsecutive = await this.generateConsecutive(mapping);
+                if (currentConsecutive) {
+                  logger.info(
+                    `Consecutivo local generado para documento ${documentId}: ${currentConsecutive.formatted}`
+                  );
+                }
+              }
+            } catch (consecError) {
+              logger.error(
+                `Error al generar consecutivo para documento ${documentId}: ${consecError.message}`
+              );
+              // Continuar sin consecutivo, pero registrar el error
+            }
+          }
+
+          // Procesar documento con el consecutivo generado
           const docResult = useTransactions
             ? await this.processSingleDocument(
                 documentId,
                 mapping,
                 sourceConnection,
-                targetConnection
+                targetConnection,
+                currentConsecutive
               )
             : await this.processSingleDocumentSimple(
                 documentId,
                 mapping,
                 sourceConnection,
-                targetConnection
+                targetConnection,
+                currentConsecutive
               );
 
           // Actualizar estadísticas
@@ -203,16 +306,16 @@ class DynamicTransferService {
             }
             results.byType[docResult.documentType].processed++;
 
-            // NUEVO: Registrar consecutivo si se utilizó
+            // Registrar consecutivo si se utilizó
             if (docResult.consecutiveUsed) {
               results.consecutivesUsed.push({
                 documentId,
                 consecutive: docResult.consecutiveUsed,
               });
 
-              // Actualizar el valor consecutivo más alto (para actualización al final)
-              if (docResult.consecutiveValue) {
-                // Intenta extraer valor numérico del consecutivo
+              // Actualizar el valor consecutivo más alto (para actualización al final solo si usamos sistema local)
+              if (!useCentralizedConsecutives && docResult.consecutiveValue) {
+                // Extraer valor numérico del consecutivo si es posible
                 const numericValue = parseInt(docResult.consecutiveValue, 10);
                 if (
                   !isNaN(numericValue) &&
@@ -272,11 +375,14 @@ class DynamicTransferService {
         }
       }
 
-      // NUEVO: Actualizar el último consecutivo con el valor más alto después de procesar todos
+      // Actualizar el último consecutivo con el valor más alto después de procesar todos
+      // Esto solo aplica para el sistema local y si no se actualiza después de cada transferencia
       if (
+        !useCentralizedConsecutives &&
         highestConsecutiveValue > 0 &&
         mapping.consecutiveConfig &&
-        mapping.consecutiveConfig.enabled
+        mapping.consecutiveConfig.enabled &&
+        !mapping.consecutiveConfig.updateAfterTransfer
       ) {
         try {
           await this.updateLastConsecutive(mappingId, highestConsecutiveValue);
@@ -293,7 +399,7 @@ class DynamicTransferService {
         }
       }
 
-      // 7. Actualizar registro de ejecución y tarea
+      // Actualizar registro de ejecución y tarea
       const executionTime = Date.now() - startTime;
 
       // Determinar el estado correcto basado en los resultados
@@ -457,17 +563,18 @@ class DynamicTransferService {
    * @param {Object} mapping - Configuración de mapeo
    * @param {Object} sourceConnection - Conexión a servidor origen
    * @param {Object} targetConnection - Conexión a servidor destino
+   * @param {Object} currentConsecutive - Consecutivo generado previamente (opcional)
    * @returns {Promise<Object>} - Resultado del procesamiento
    */
   async processSingleDocument(
     documentId,
     mapping,
     sourceConnection,
-    targetConnection
+    targetConnection,
+    currentConsecutive = null
   ) {
     // Iniciar transacción
     let transaction = null;
-    let currentConsecutive = null; // Asegurar que está inicializada
     let transactionStarted = false;
 
     try {
@@ -489,8 +596,12 @@ class DynamicTransferService {
       // Crear un cache para las longitudes de columnas
       const columnLengthCache = new Map();
 
-      // Generar consecutivo si está configurado y habilitado
-      if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
+      // Generar consecutivo si no se proporcionó y está habilitado
+      if (
+        !currentConsecutive &&
+        mapping.consecutiveConfig &&
+        mapping.consecutiveConfig.enabled
+      ) {
         try {
           // Generar un nuevo consecutivo
           const consecutiveResult = await this.generateConsecutive(mapping);
@@ -648,7 +759,7 @@ class DynamicTransferService {
             value = fieldMapping.defaultValue;
           }
 
-          // NUEVO: Aplicar consecutivo si corresponde a esta tabla y campo
+          // Aplicar consecutivo si corresponde a esta tabla y campo
           if (
             currentConsecutive &&
             mapping.consecutiveConfig &&
@@ -822,7 +933,8 @@ class DynamicTransferService {
                 value = fieldMapping.defaultValue;
               }
 
-              // NUEVO: Aplicar consecutivo en detalles si corresponde
+              // IMPORTANTE: Aplicar consecutivo en detalles si corresponde
+              // Esto es clave para mantener el mismo consecutivo en encabezado y detalle
               if (
                 currentConsecutive &&
                 mapping.consecutiveConfig &&
@@ -922,11 +1034,13 @@ class DynamicTransferService {
       }
 
       // NUEVO: Actualizar el último valor del consecutivo si se configuró así
+      // Solo para sistema local, el centralizado se actualiza automáticamente
       if (
         currentConsecutive &&
         mapping.consecutiveConfig &&
         mapping.consecutiveConfig.enabled &&
-        mapping.consecutiveConfig.updateAfterTransfer
+        mapping.consecutiveConfig.updateAfterTransfer &&
+        !currentConsecutive.isCentralized // Solo actualizar si es local
       ) {
         try {
           await this.updateLastConsecutive(
@@ -998,7 +1112,7 @@ class DynamicTransferService {
         }
       }
 
-      // Mejorar el manejo de errores para AggregateError
+      // Manejo de errores específicos
       if (
         error.name === "AggregateError" ||
         error.stack?.includes("AggregateError")
@@ -1008,13 +1122,10 @@ class DynamicTransferService {
           error
         );
 
-        // Intentar reconexión o regenerar la transacción
+        // Intentar reconexión
         try {
           logger.info(`Intentando reconexión para documento ${documentId}...`);
-
-          // Determinar si necesitamos reconectar al servidor origen o destino
-          // Primero, vamos a intentar con el destino
-          const targetServer = mapping.targetServer; // server1 o server2
+          const targetServer = mapping.targetServer;
           const reconnectResult = await ConnectionManager.enhancedRobustConnect(
             targetServer
           );
@@ -1027,7 +1138,6 @@ class DynamicTransferService {
 
           logger.info(`Reconexión exitosa a ${targetServer}`);
 
-          // Devolver un error específico que indique problema de conexión
           return {
             success: false,
             message: `Error de conexión: Se perdió la conexión con la base de datos. Se ha restablecido la conexión pero este documento debe procesarse nuevamente.`,
@@ -1041,7 +1151,6 @@ class DynamicTransferService {
           logger.error(
             `Error al intentar reconexión: ${reconnectError.message}`
           );
-
           return {
             success: false,
             message: `Error grave de conexión: ${
@@ -1056,17 +1165,14 @@ class DynamicTransferService {
         }
       }
 
-      // Verificar si es un error de truncado
+      // Error de truncado
       if (
         error.message &&
         error.message.includes("String or binary data would be truncated")
       ) {
-        // Intentar extraer información más específica
         const match = error.message.match(/column '([^']+)'/);
         const columnName = match ? match[1] : "desconocida";
-
         const detailedMessage = `Error de truncado: El valor es demasiado largo para la columna '${columnName}'. Verifique la longitud máxima permitida.`;
-
         logger.error(
           `Error de truncado en documento ${documentId}: ${detailedMessage}`
         );
@@ -1082,17 +1188,14 @@ class DynamicTransferService {
         };
       }
 
-      // Manejar errores de valores NULL en columnas que no lo permiten
+      // Error de valor NULL
       if (
         error.message &&
         error.message.includes("Cannot insert the value NULL into column")
       ) {
-        // Extraer información específica
         const match = error.message.match(/column '([^']+)'/);
         const columnName = match ? match[1] : "desconocida";
-
         const detailedMessage = `No se puede insertar un valor NULL en la columna '${columnName}' que no permite valores nulos. Configure un valor por defecto válido.`;
-
         logger.error(
           `Error de valor NULL en documento ${documentId}: ${detailedMessage}`
         );
@@ -1108,7 +1211,7 @@ class DynamicTransferService {
         };
       }
 
-      // Manejo estándar para otros errores
+      // Error general
       logger.error(
         `Error procesando documento ${documentId}: ${error.message}`,
         {
@@ -1117,6 +1220,7 @@ class DynamicTransferService {
           errorDetails: error.code || error.number || "",
         }
       );
+
       return {
         success: false,
         message: `Error: ${
@@ -1130,25 +1234,26 @@ class DynamicTransferService {
       };
     }
   }
-
   /**
    * Procesa un único documento según la configuración (sin transacciones)
    * @param {string} documentId - ID del documento
    * @param {Object} mapping - Configuración de mapeo
    * @param {Object} sourceConnection - Conexión a servidor origen
    * @param {Object} targetConnection - Conexión a servidor destino
+   * @param {Object} currentConsecutive - Consecutivo generado previamente (opcional)
    * @returns {Promise<Object>} - Resultado del procesamiento
    */
   async processSingleDocumentSimple(
     documentId,
     mapping,
     sourceConnection,
-    targetConnection
+    targetConnection,
+    currentConsecutive = null
   ) {
-    let currentConsecutive = null;
     let processedTables = [];
     let documentType = "unknown";
-
+    let transactionStarted = false;
+    let transaction = null;
     try {
       logger.info(
         `Procesando documento ${documentId} (modo sin transacciones)`
@@ -1157,8 +1262,12 @@ class DynamicTransferService {
       // Crear un cache para las longitudes de columnas
       const columnLengthCache = new Map();
 
-      // Generar consecutivo si está configurado y habilitado
-      if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
+      // Generar consecutivo si no se proporcionó y está habilitado
+      if (
+        !currentConsecutive &&
+        mapping.consecutiveConfig &&
+        mapping.consecutiveConfig.enabled
+      ) {
         try {
           // Generar un nuevo consecutivo
           const consecutiveResult = await this.generateConsecutive(mapping);
@@ -1311,7 +1420,7 @@ class DynamicTransferService {
             value = fieldMapping.defaultValue;
           }
 
-          // NUEVO: Aplicar consecutivo si corresponde a esta tabla y campo
+          // IMPORTANTE: Aplicar consecutivo si corresponde a esta tabla y campo
           if (
             currentConsecutive &&
             mapping.consecutiveConfig &&
@@ -1440,7 +1549,7 @@ class DynamicTransferService {
             continue;
           }
 
-          // Insertar detalles
+          // Insertar detalles - usar el mismo consecutivo que el encabezado
           for (const detailRow of detailsData) {
             const detailTargetData = {};
             const detailFields = [];
@@ -1480,7 +1589,8 @@ class DynamicTransferService {
                 value = fieldMapping.defaultValue;
               }
 
-              // NUEVO: Aplicar consecutivo en detalles si corresponde
+              // IMPORTANTE: Aplicar consecutivo en detalles si corresponde
+              // Esto mantiene el mismo consecutivo para encabezado y detalles
               if (
                 currentConsecutive &&
                 mapping.consecutiveConfig &&
@@ -1573,11 +1683,13 @@ class DynamicTransferService {
       }
 
       // Actualizar el consecutivo si está configurado así
+      // Solo para sistema local, el centralizado se actualiza automáticamente
       if (
         currentConsecutive &&
         mapping.consecutiveConfig &&
         mapping.consecutiveConfig.enabled &&
-        mapping.consecutiveConfig.updateAfterTransfer
+        mapping.consecutiveConfig.updateAfterTransfer &&
+        !currentConsecutive.isCentralized // Solo actualizar si es local
       ) {
         try {
           await this.updateLastConsecutive(
@@ -1608,7 +1720,21 @@ class DynamicTransferService {
         consecutiveValue: currentConsecutive ? currentConsecutive.value : null,
       };
     } catch (error) {
-      // Mejorar el manejo de errores para AggregateError
+      // Si ocurrió algún error, hacer rollback de la transacción
+      if (transactionStarted && transaction) {
+        try {
+          await SqlService.rollbackTransaction(transaction);
+          logger.info(
+            `Transacción revertida para documento ${documentId} debido a error: ${error.message}`
+          );
+        } catch (rollbackError) {
+          logger.error(
+            `Error al revertir transacción: ${rollbackError.message}`
+          );
+        }
+      }
+
+      // Manejo de errores específicos
       if (
         error.name === "AggregateError" ||
         error.stack?.includes("AggregateError")
@@ -1618,13 +1744,10 @@ class DynamicTransferService {
           error
         );
 
-        // Intentar reconexión o regenerar la transacción
+        // Intentar reconexión
         try {
           logger.info(`Intentando reconexión para documento ${documentId}...`);
-
-          // Determinar si necesitamos reconectar al servidor origen o destino
-          // Primero, vamos a intentar con el destino
-          const targetServer = mapping.targetServer; // server1 o server2
+          const targetServer = mapping.targetServer;
           const reconnectResult = await ConnectionManager.enhancedRobustConnect(
             targetServer
           );
@@ -1637,7 +1760,6 @@ class DynamicTransferService {
 
           logger.info(`Reconexión exitosa a ${targetServer}`);
 
-          // Devolver un error específico que indique problema de conexión
           return {
             success: false,
             message: `Error de conexión: Se perdió la conexión con la base de datos. Se ha restablecido la conexión pero este documento debe procesarse nuevamente.`,
@@ -1651,7 +1773,6 @@ class DynamicTransferService {
           logger.error(
             `Error al intentar reconexión: ${reconnectError.message}`
           );
-
           return {
             success: false,
             message: `Error grave de conexión: ${
@@ -1666,17 +1787,14 @@ class DynamicTransferService {
         }
       }
 
-      // Verificar si es un error de truncado
+      // Error de truncado
       if (
         error.message &&
         error.message.includes("String or binary data would be truncated")
       ) {
-        // Intentar extraer información más específica
         const match = error.message.match(/column '([^']+)'/);
         const columnName = match ? match[1] : "desconocida";
-
         const detailedMessage = `Error de truncado: El valor es demasiado largo para la columna '${columnName}'. Verifique la longitud máxima permitida.`;
-
         logger.error(
           `Error de truncado en documento ${documentId}: ${detailedMessage}`
         );
@@ -1692,17 +1810,14 @@ class DynamicTransferService {
         };
       }
 
-      // Manejar errores de valores NULL en columnas que no lo permiten
+      // Error de valor NULL
       if (
         error.message &&
         error.message.includes("Cannot insert the value NULL into column")
       ) {
-        // Extraer información específica
         const match = error.message.match(/column '([^']+)'/);
         const columnName = match ? match[1] : "desconocida";
-
         const detailedMessage = `No se puede insertar un valor NULL en la columna '${columnName}' que no permite valores nulos. Configure un valor por defecto válido.`;
-
         logger.error(
           `Error de valor NULL en documento ${documentId}: ${detailedMessage}`
         );
@@ -1718,7 +1833,7 @@ class DynamicTransferService {
         };
       }
 
-      // Manejo estándar para otros errores
+      // Error general
       logger.error(
         `Error procesando documento ${documentId}: ${error.message}`,
         {
@@ -1734,10 +1849,92 @@ class DynamicTransferService {
         }`,
         documentType: "unknown",
         errorDetails: error.stack || "No hay detalles del error disponibles",
-        errorCode: error.code || error.number || "UNKNOWN_ERROR",
+        errorCode: this.determineErrorCode(error),
         consecutiveUsed: null,
         consecutiveValue: null,
       };
+    }
+  }
+
+  /**
+   * Determina el código de error para facilitar manejo en cliente
+   * @private
+   */
+  determineErrorCode(error) {
+    const message = error.message.toLowerCase();
+
+    if (message.includes("cannot insert the value null into column")) {
+      return "NULL_VALUE_ERROR";
+    } else if (message.includes("string or binary data would be truncated")) {
+      return "TRUNCATION_ERROR";
+    } else if (message.includes("connection") || message.includes("timeout")) {
+      return "CONNECTION_ERROR";
+    } else if (
+      message.includes("deadlock") ||
+      message.includes("lock request")
+    ) {
+      return "DEADLOCK_ERROR";
+    } else if (message.includes("duplicate key")) {
+      return "DUPLICATE_KEY_ERROR";
+    } else if (
+      message.includes("permission") ||
+      message.includes("access denied")
+    ) {
+      return "PERMISSION_ERROR";
+    }
+
+    return "GENERAL_ERROR";
+  }
+
+  /**
+   * Genera un consecutivo según la configuración (local)
+   * @param {Object} mapping - Configuración de mapeo
+   * @returns {Promise<Object>} - { value: number, formatted: string }
+   */
+  async generateConsecutive(mapping) {
+    try {
+      if (!mapping.consecutiveConfig || !mapping.consecutiveConfig.enabled) {
+        return null;
+      }
+
+      // Generar número consecutivo
+      const lastValue = mapping.consecutiveConfig.lastValue || 0;
+      const newValue = lastValue + 1;
+
+      // IMPORTANTE: Actualizar inmediatamente el último valor usado en la configuración
+      // Esto evita que dos documentos obtengan el mismo valor consecutivo
+      await this.updateLastConsecutive(mapping._id, newValue);
+      logger.info(
+        `Consecutivo reservado: ${newValue} para mapeo ${mapping._id}`
+      );
+
+      // Formatear según el patrón si existe
+      let formattedValue = String(newValue);
+
+      if (mapping.consecutiveConfig.pattern) {
+        formattedValue = this.formatConsecutive(
+          mapping.consecutiveConfig.pattern,
+          {
+            PREFIX: mapping.consecutiveConfig.prefix || "",
+            VALUE: newValue,
+            YEAR: new Date().getFullYear(),
+            MONTH: String(new Date().getMonth() + 1).padStart(2, "0"),
+            DAY: String(new Date().getDate()).padStart(2, "0"),
+          }
+        );
+      } else if (mapping.consecutiveConfig.prefix) {
+        // Si no hay patrón pero sí prefijo
+        formattedValue = `${mapping.consecutiveConfig.prefix}${newValue}`;
+      }
+
+      return {
+        value: newValue,
+        formatted: formattedValue,
+        isCentralized: false, // Marcar que es un consecutivo local
+      };
+    } catch (error) {
+      logger.error(`Error al generar consecutivo: ${error.message}`);
+      throw error;
     }
   }
 
