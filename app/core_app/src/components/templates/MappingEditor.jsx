@@ -370,10 +370,21 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           return false;
         }
 
+        let processedDefaultValue;
+        if (defaultValue === "NULL") {
+          processedDefaultValue = null; // Convertir a null real de JavaScript
+        } else if (defaultValue === "") {
+          processedDefaultValue = undefined; // Dejar undefined si está vacío
+        } else {
+          processedDefaultValue = defaultValue;
+        }
+
         return {
           sourceField: sourceField || null,
           targetField,
-          defaultValue: defaultValue ? defaultValue : undefined,
+          defaultValue: processedDefaultValue
+            ? processedDefaultValue
+            : undefined,
           removePrefix: removePrefix || null,
           isSqlFunction,
           isRequired,
@@ -718,10 +729,21 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           return false;
         }
 
+        let processedDefaultValue;
+        if (defaultValue === "NULL") {
+          processedDefaultValue = null; // Convertir a null real de JavaScript
+        } else if (defaultValue === "") {
+          processedDefaultValue = undefined; // Dejar undefined si está vacío
+        } else {
+          processedDefaultValue = defaultValue;
+        }
+
         return {
           sourceField: sourceField || null,
           targetField,
-          defaultValue: defaultValue ? defaultValue : undefined,
+          defaultValue: processedDefaultValue
+            ? processedDefaultValue
+            : undefined,
           removePrefix: removePrefix || null,
           isSqlFunction,
           isRequired,
