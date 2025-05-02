@@ -1287,8 +1287,7 @@ class DynamicTransferService {
         mapping.consecutiveConfig &&
         mapping.consecutiveConfig.enabled &&
         mapping.consecutiveConfig.updateAfterTransfer &&
-        !currentConsecutive.isCentralized && // Solo actualizar si es local
-       
+        !currentConsecutive.isCentralized // Solo actualizar si es local
       ) {
         try {
           await this.updateLastConsecutive(
@@ -1945,7 +1944,7 @@ class DynamicTransferService {
         mapping.consecutiveConfig &&
         mapping.consecutiveConfig.enabled &&
         mapping.consecutiveConfig.updateAfterTransfer &&
-        !currentConsecutive.isCentralized // Solo actualizar si es local      
+        !currentConsecutive.isCentralized // Solo actualizar si es local
       ) {
         try {
           await this.updateLastConsecutive(
