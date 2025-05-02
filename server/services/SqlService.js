@@ -621,8 +621,38 @@ class SqlService {
             }
           }
 
-          // Añadir el parámetro directamente
-          request.addParameter(key, paramType, paramValue);
+          // Manejo especial para valores null
+          if (paramValue === null) {
+            try {
+              request.addParameter(key, TYPES.Null, null);
+            } catch (paramError) {
+              // Si hay un error al agregar null, intentar con un tipo específico
+              logger.warn(
+                `Error al agregar parámetro null para ${key}, intentando con NVarChar: ${paramError.message}`
+              );
+              request.addParameter(key, TYPES.NVarChar, null);
+            }
+          } else {
+            // Añadir el parámetro directamente para valores no nulos
+            try {
+              request.addParameter(key, paramType, paramValue);
+            } catch (paramError) {
+              logger.error(
+                `Error al agregar parámetro ${key}: ${paramError.message}`
+              );
+              // Intento de recuperación - usar NVarChar como tipo de respaldo
+              try {
+                request.addParameter(
+                  key,
+                  TYPES.NVarChar,
+                  String(paramValue || "")
+                );
+              } catch (fallbackError) {
+                // Si incluso el respaldo falla, reenviar el error original
+                throw paramError;
+              }
+            }
+          }
         }
 
         // Manejar filas
