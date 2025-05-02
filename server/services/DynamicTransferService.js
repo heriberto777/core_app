@@ -10,6 +10,125 @@ const mongoose = require("mongoose");
 
 class DynamicTransferService {
   /**
+   * Verifica si un documento puede ser procesado
+   * @param {string} documentId - ID del documento
+   * @param {Object} mapping - Configuración de mapeo
+   * @param {Object} sourceConnection - Conexión a servidor origen
+   * @param {Object} targetConnection - Conexión a servidor destino
+   * @returns {Promise<Object>} - Resultado de la verificación {valid, reason, documentType, data}
+   */
+  async verifyDocument(
+    documentId,
+    mapping,
+    sourceConnection,
+    targetConnection
+  ) {
+    try {
+      // 1. Identificar las tablas principales (no de detalle)
+      const mainTables = mapping.tableConfigs.filter((tc) => !tc.isDetailTable);
+
+      if (mainTables.length === 0) {
+        return {
+          valid: false,
+          reason: "No se encontraron configuraciones de tablas principales",
+          documentType: "unknown",
+        };
+      }
+
+      // 2. Verificar cada tabla principal
+      let documentType = "unknown";
+      let validData = null;
+
+      for (const tableConfig of mainTables) {
+        // Obtener datos de la tabla de origen
+        let sourceData;
+
+        if (tableConfig.customQuery) {
+          // Usar consulta personalizada si existe
+          const query = tableConfig.customQuery.replace(
+            /@documentId/g,
+            documentId
+          );
+          const result = await SqlService.query(sourceConnection, query);
+          sourceData = result.recordset[0];
+        } else {
+          // Consulta básica
+          const query = `
+          SELECT * FROM ${tableConfig.sourceTable} 
+          WHERE ${tableConfig.primaryKey || "NUM_PED"} = @documentId
+          ${
+            tableConfig.filterCondition
+              ? ` AND ${tableConfig.filterCondition}`
+              : ""
+          }
+        `;
+
+          const result = await SqlService.query(sourceConnection, query, {
+            documentId,
+          });
+          sourceData = result.recordset[0];
+        }
+
+        if (!sourceData) {
+          return {
+            valid: false,
+            reason: `No se encontraron datos en ${tableConfig.sourceTable} para documento ${documentId}`,
+            documentType,
+          };
+        }
+
+        // Determinar el tipo de documento basado en las reglas
+        for (const rule of mapping.documentTypeRules) {
+          const fieldValue = sourceData[rule.sourceField];
+
+          if (rule.sourceValues.includes(fieldValue)) {
+            documentType = rule.name;
+            break;
+          }
+        }
+
+        // Determinar clave en destino
+        const targetPrimaryKey = this.getTargetPrimaryKeyField(tableConfig);
+
+        // Verificar si ya existe en destino
+        const checkQuery = `
+        SELECT TOP 1 1 FROM ${tableConfig.targetTable}
+        WHERE ${targetPrimaryKey} = @documentId
+      `;
+
+        const checkResult = await SqlService.query(
+          targetConnection,
+          checkQuery,
+          { documentId }
+        );
+
+        if (checkResult.recordset?.length > 0) {
+          return {
+            valid: false,
+            reason: `El documento ya existe en la tabla ${tableConfig.targetTable}`,
+            documentType,
+          };
+        }
+
+        // Si llegamos aquí, el documento es válido para esta tabla
+        validData = sourceData;
+      }
+
+      // Si llegamos aquí, el documento es válido para todas las tablas
+      return {
+        valid: true,
+        documentType,
+        data: validData,
+      };
+    } catch (error) {
+      return {
+        valid: false,
+        reason: `Error al verificar documento: ${error.message}`,
+        error,
+      };
+    }
+  }
+  /**
    * Procesa documentos según una configuración de mapeo
    * @param {Array} documentIds - IDs de los documentos a procesar
    * @param {string} mappingId - ID de la configuración de mapeo
