@@ -10,6 +10,126 @@ const ConsecutiveService = require("./ConsecutiveService");
 
 class DynamicTransferService {
   /**
+   * Verifica si un documento puede ser procesado
+   * @param {string} documentId - ID del documento
+   * @param {Object} mapping - Configuración de mapeo
+   * @param {Object} sourceConnection - Conexión a servidor origen
+   * @param {Object} targetConnection - Conexión a servidor destino
+   * @returns {Promise<Object>} - Resultado de la verificación {valid, reason, documentType, data}
+   */
+  async verifyDocument(
+    documentId,
+    mapping,
+    sourceConnection,
+    targetConnection
+  ) {
+    try {
+      // 1. Identificar las tablas principales (no de detalle)
+      const mainTables = mapping.tableConfigs.filter((tc) => !tc.isDetailTable);
+
+      if (mainTables.length === 0) {
+        return {
+          valid: false,
+          reason: "No se encontraron configuraciones de tablas principales",
+          documentType: "unknown",
+        };
+      }
+
+      // 2. Verificar cada tabla principal
+      let documentType = "unknown";
+      let validData = null;
+
+      for (const tableConfig of mainTables) {
+        // Obtener datos de la tabla de origen
+        let sourceData;
+
+        if (tableConfig.customQuery) {
+          // Usar consulta personalizada si existe
+          const query = tableConfig.customQuery.replace(
+            /@documentId/g,
+            documentId
+          );
+          const result = await SqlService.query(sourceConnection, query);
+          sourceData = result.recordset[0];
+        } else {
+          // Consulta básica
+          const query = `
+          SELECT * FROM ${tableConfig.sourceTable} 
+          WHERE ${tableConfig.primaryKey || "NUM_PED"} = @documentId
+          ${
+            tableConfig.filterCondition
+              ? ` AND ${tableConfig.filterCondition}`
+              : ""
+          }
+        `;
+
+          const result = await SqlService.query(sourceConnection, query, {
+            documentId,
+          });
+          sourceData = result.recordset[0];
+        }
+
+        if (!sourceData) {
+          return {
+            valid: false,
+            reason: `No se encontraron datos en ${tableConfig.sourceTable} para documento ${documentId}`,
+            documentType,
+          };
+        }
+
+        // Determinar el tipo de documento basado en las reglas
+        for (const rule of mapping.documentTypeRules) {
+          const fieldValue = sourceData[rule.sourceField];
+
+          if (rule.sourceValues.includes(fieldValue)) {
+            documentType = rule.name;
+            break;
+          }
+        }
+
+        // Determinar clave en destino
+        const targetPrimaryKey = this.getTargetPrimaryKeyField(tableConfig);
+
+        // Verificar si ya existe en destino
+        const checkQuery = `
+        SELECT TOP 1 1 FROM ${tableConfig.targetTable}
+        WHERE ${targetPrimaryKey} = @documentId
+      `;
+
+        const checkResult = await SqlService.query(
+          targetConnection,
+          checkQuery,
+          { documentId }
+        );
+
+        if (checkResult.recordset?.length > 0) {
+          return {
+            valid: false,
+            reason: `El documento ya existe en la tabla ${tableConfig.targetTable}`,
+            documentType,
+          };
+        }
+
+        // Si llegamos aquí, el documento es válido para esta tabla
+        validData = sourceData;
+      }
+
+      // Si llegamos aquí, el documento es válido para todas las tablas
+      return {
+        valid: true,
+        documentType,
+        data: validData,
+      };
+    } catch (error) {
+      return {
+        valid: false,
+        reason: `Error al verificar documento: ${error.message}`,
+        error,
+      };
+    }
+  }
+
+  /**
    * Procesa documentos según una configuración de mapeo
    * @param {Array} documentIds - IDs de los documentos a procesar
    * @param {string} mappingId - ID de la configuración de mapeo
@@ -190,63 +310,24 @@ class DynamicTransferService {
       // 6. Configuración para usar o no transacciones
       const useTransactions = false; // Cambiamos a false para evitar problemas con transacciones
 
-      // NUEVO: Pre-reservar consecutivos si están habilitados
-      let consecutiveMap = new Map(); // Mapa para almacenar consecutivos por documentId
-
-      if (
-        mapping.consecutiveConfig &&
-        mapping.consecutiveConfig.enabled &&
-        !useCentralizedConsecutives
-      ) {
-        logger.info(
-          `Pre-reservando consecutivos para ${documentIds.length} documentos`
-        );
-
-        // Reservar consecutivos para todos los documentos de una vez
-        try {
-          for (const docId of documentIds) {
-            // Generar un consecutivo único para cada documento usando una operación atómica
-            const consecutiveResult = await this.generateConsecutive(mapping);
-
-            if (consecutiveResult) {
-              // Guardar en el mapa
-              consecutiveMap.set(docId, {
-                ...consecutiveResult,
-                skipUpdate: true, // Marcar para que no se actualice nuevamente
-              });
-
-              logger.info(
-                `Consecutivo ${consecutiveResult.formatted} reservado para documento ${docId}`
-              );
-            }
-          }
-
-          logger.info(
-            `${consecutiveMap.size} consecutivos reservados correctamente`
-          );
-        } catch (reserveError) {
-          logger.error(
-            `Error al reservar consecutivos: ${reserveError.message}`
-          );
-          // Continuar el proceso aunque falle la pre-reserva
-        }
-      }
-
-      // 7. Procesar documentos
+      // 7. FASE 1: VERIFICACIÓN - Verificar qué documentos son válidos para insertar
+      const validDocuments = [];
+      const invalidDocuments = [];
       const results = {
         processed: 0,
         failed: 0,
         skipped: 0,
         byType: {},
         details: [],
-        consecutivesUsed: [], // Registrar consecutivos usados
+        consecutivesUsed: [],
       };
 
-      let hasErrors = false;
+      logger.info(
+        `Iniciando fase de verificación para ${documentIds.length} documentos`
+      );
 
-      // Procesar cada documento
+      // Para cada documento, verificar si ya existe o si puede ser procesado
       for (let i = 0; i < documentIds.length; i++) {
-        // Verificar si se ha cancelado la tarea
         if (signal.aborted) {
           clearTimeout(timeoutId);
           throw new Error("Tarea cancelada por el usuario");
@@ -255,100 +336,228 @@ class DynamicTransferService {
         const documentId = documentIds[i];
 
         try {
-          // NUEVO: Obtener el consecutivo pre-reservado para este documento
-          let currentConsecutive = null;
-          if (consecutiveMap.has(documentId)) {
-            currentConsecutive = consecutiveMap.get(documentId);
-            logger.info(
-              `Usando consecutivo pre-reservado ${currentConsecutive.formatted} para documento ${documentId}`
+          // Verificar si el documento puede ser procesado (existe en origen y no en destino)
+          const canProcess = await this.verifyDocument(
+            documentId,
+            mapping,
+            sourceConnection,
+            targetConnection
+          );
+
+          if (canProcess.valid) {
+            validDocuments.push({
+              id: documentId,
+              data: canProcess.data,
+              type: canProcess.documentType,
+            });
+            logger.info(`Documento ${documentId} válido para procesamiento`);
+          } else {
+            invalidDocuments.push({
+              id: documentId,
+              reason: canProcess.reason,
+              type: canProcess.documentType || "unknown",
+            });
+
+            // Registrar el fallo
+            results.failed++;
+            if (!results.byType[canProcess.documentType]) {
+              results.byType[canProcess.documentType] = {
+                processed: 0,
+                failed: 0,
+              };
+            }
+            results.byType[canProcess.documentType].failed++;
+
+            results.details.push({
+              documentId,
+              success: false,
+              message: canProcess.reason,
+              documentType: canProcess.documentType || "unknown",
+            });
+
+            logger.warn(
+              `Documento ${documentId} no válido: ${canProcess.reason}`
             );
           }
+        } catch (verifyError) {
+          invalidDocuments.push({
+            id: documentId,
+            reason: verifyError.message,
+            type: "unknown",
+          });
 
-          // El código existente para generar un consecutivo solo se ejecutará
-          // si no hay uno pre-reservado
-          if (
-            !currentConsecutive &&
-            mapping.consecutiveConfig &&
-            mapping.consecutiveConfig.enabled
-          ) {
+          results.failed++;
+          results.details.push({
+            documentId,
+            success: false,
+            error: verifyError.message,
+            errorDetails: verifyError.stack,
+          });
+
+          logger.error(
+            `Error verificando documento ${documentId}: ${verifyError.message}`
+          );
+        }
+      }
+
+      logger.info(
+        `Fase de verificación completada: ${validDocuments.length} documentos válidos, ${invalidDocuments.length} inválidos`
+      );
+
+      // 8. FASE 2: GENERACIÓN DE CONSECUTIVOS - Solo si hay documentos válidos y se necesitan consecutivos
+      if (
+        validDocuments.length > 0 &&
+        mapping.consecutiveConfig &&
+        mapping.consecutiveConfig.enabled
+      ) {
+        logger.info(
+          `Generando consecutivos para ${validDocuments.length} documentos válidos`
+        );
+
+        if (useCentralizedConsecutives) {
+          // Para sistema centralizado, generar todos los consecutivos necesarios
+          for (let i = 0; i < validDocuments.length; i++) {
+            const docInfo = validDocuments[i];
             try {
-              if (useCentralizedConsecutives) {
-                // USAR SISTEMA CENTRALIZADO PARA ESTE DOCUMENTO
-                // Determinar si necesitamos un segmento específico
-                let segmentValue = null;
+              // Código para generar consecutivo centralizado
+              let segmentValue = null;
+              const consecutive = await ConsecutiveService.getConsecutiveById(
+                centralizedConsecutiveId
+              );
 
-                // Obtener información del consecutivo centralizado para ver si usa segmentos
-                const consecutive = await ConsecutiveService.getConsecutiveById(
-                  centralizedConsecutiveId
-                );
-
-                if (consecutive.segments && consecutive.segments.enabled) {
-                  if (consecutive.segments.type === "year") {
-                    segmentValue = new Date().getFullYear().toString();
-                  } else if (consecutive.segments.type === "month") {
-                    const date = new Date();
-                    segmentValue = `${date.getFullYear()}${(date.getMonth() + 1)
-                      .toString()
-                      .padStart(2, "0")}`;
-                  }
-                  // Otros tipos de segmentos pueden añadirse según necesidad
-                }
-
-                // Obtener el siguiente valor del consecutivo centralizado
-                const result = await ConsecutiveService.getNextConsecutiveValue(
-                  centralizedConsecutiveId,
-                  { segment: segmentValue }
-                );
-
-                if (result && result.data && result.data.value) {
-                  currentConsecutive = {
-                    value:
-                      parseInt(result.data.value.replace(/\D/g, ""), 10) || 0,
-                    formatted: result.data.value,
-                  };
-
-                  logger.info(
-                    `Consecutivo centralizado generado para documento ${documentId}: ${currentConsecutive.formatted}`
-                  );
-                } else {
-                  throw new Error(
-                    "No se pudo obtener un consecutivo centralizado válido"
-                  );
-                }
-              } else {
-                // SOLO GENERAR SI NO HAY PRE-RESERVADO
-                if (!consecutiveMap.has(documentId)) {
-                  currentConsecutive = await this.generateConsecutive(mapping);
-                  if (currentConsecutive) {
-                    logger.info(
-                      `Consecutivo local generado para documento ${documentId}: ${currentConsecutive.formatted}`
-                    );
-                  }
+              if (consecutive.segments && consecutive.segments.enabled) {
+                if (consecutive.segments.type === "year") {
+                  segmentValue = new Date().getFullYear().toString();
+                } else if (consecutive.segments.type === "month") {
+                  const date = new Date();
+                  segmentValue = `${date.getFullYear()}${(date.getMonth() + 1)
+                    .toString()
+                    .padStart(2, "0")}`;
                 }
               }
-            } catch (consecError) {
-              logger.error(
-                `Error al generar consecutivo para documento ${documentId}: ${consecError.message}`
+
+              // Obtener el siguiente valor
+              const result = await ConsecutiveService.getNextConsecutiveValue(
+                centralizedConsecutiveId,
+                { segment: segmentValue }
               );
-              // Continuar sin consecutivo, pero registrar el error
+
+              if (result && result.data && result.data.value) {
+                // Agregar el consecutivo a la información del documento
+                docInfo.consecutive = {
+                  value:
+                    parseInt(result.data.value.replace(/\D/g, ""), 10) || 0,
+                  formatted: result.data.value,
+                  isCentralized: true,
+                };
+
+                logger.info(
+                  `Asignado consecutivo centralizado ${docInfo.consecutive.formatted} a documento ${docInfo.id}`
+                );
+              }
+            } catch (error) {
+              logger.error(
+                `Error al generar consecutivo centralizado para documento ${docInfo.id}: ${error.message}`
+              );
+              // No fallamos todo el proceso, sólo marcamos este documento como inválido
+              docInfo.error = `Error al generar consecutivo: ${error.message}`;
             }
           }
+        } else {
+          // Para sistema local, calculamos el número de valores necesarios
+          // y asignamos secuencialmente
+          try {
+            const initialValue = mapping.consecutiveConfig.lastValue || 0;
+            const valuesToReserve = validDocuments.length;
+            const finalValue = initialValue + valuesToReserve;
 
-          // Procesar documento con el consecutivo generado
+            // Asignar valores secuencialmente a cada documento ANTES de actualizar
+            for (let i = 0; i < validDocuments.length; i++) {
+              const docInfo = validDocuments[i];
+              const consecValue = initialValue + i + 1;
+
+              // Formatear
+              let formattedValue = String(consecValue);
+              if (mapping.consecutiveConfig.pattern) {
+                formattedValue = this.formatConsecutive(
+                  mapping.consecutiveConfig.pattern,
+                  {
+                    PREFIX: mapping.consecutiveConfig.prefix || "",
+                    VALUE: consecValue,
+                    YEAR: new Date().getFullYear(),
+                    MONTH: String(new Date().getMonth() + 1).padStart(2, "0"),
+                    DAY: String(new Date().getDate()).padStart(2, "0"),
+                  }
+                );
+              } else if (mapping.consecutiveConfig.prefix) {
+                formattedValue = `${mapping.consecutiveConfig.prefix}${consecValue}`;
+              }
+
+              // Asignar al documento
+              docInfo.consecutive = {
+                value: consecValue,
+                formatted: formattedValue,
+                isCentralized: false,
+                skipUpdate: true, // Para que no se actualice en cada documento
+              };
+
+              logger.info(
+                `Asignado consecutivo local ${formattedValue} a documento ${docInfo.id}`
+              );
+            }
+
+            // Solo guardamos el último valor para actualizar al final
+            highestConsecutiveValue = finalValue;
+          } catch (error) {
+            logger.error(
+              `Error al asignar consecutivos locales: ${error.message}`
+            );
+            // Continuamos sin consecutivos
+          }
+        }
+      }
+
+      // 9. FASE 3: PROCESAMIENTO - Procesar documentos con consecutivos asignados
+      logger.info(
+        `Iniciando fase de procesamiento para ${validDocuments.length} documentos válidos`
+      );
+
+      for (let i = 0; i < validDocuments.length; i++) {
+        if (signal.aborted) {
+          clearTimeout(timeoutId);
+          throw new Error("Tarea cancelada por el usuario");
+        }
+
+        const docInfo = validDocuments[i];
+
+        try {
+          // Si el documento tiene error, lo saltamos
+          if (docInfo.error) {
+            results.failed++;
+            results.details.push({
+              documentId: docInfo.id,
+              success: false,
+              error: docInfo.error,
+              documentType: docInfo.type,
+            });
+            continue;
+          }
+
+          // Procesar el documento con el consecutivo ya asignado
           const docResult = useTransactions
             ? await this.processSingleDocument(
-                documentId,
+                docInfo.id,
                 mapping,
                 sourceConnection,
                 targetConnection,
-                currentConsecutive
+                docInfo.consecutive
               )
             : await this.processSingleDocumentSimple(
-                documentId,
+                docInfo.id,
                 mapping,
                 sourceConnection,
                 targetConnection,
-                currentConsecutive
+                docInfo.consecutive
               );
 
           // Actualizar estadísticas
@@ -362,100 +571,76 @@ class DynamicTransferService {
             }
             results.byType[docResult.documentType].processed++;
 
-            // Registrar consecutivo si se utilizó
+            // Registrar el consecutivo
             if (docResult.consecutiveUsed) {
               results.consecutivesUsed.push({
-                documentId,
+                documentId: docInfo.id,
                 consecutive: docResult.consecutiveUsed,
               });
-
-              // Actualizar el valor consecutivo más alto (para actualización al final solo si usamos sistema local)
-              if (!useCentralizedConsecutives && docResult.consecutiveValue) {
-                // Extraer valor numérico del consecutivo si es posible
-                const numericValue = parseInt(docResult.consecutiveValue, 10);
-                if (
-                  !isNaN(numericValue) &&
-                  numericValue > highestConsecutiveValue
-                ) {
-                  highestConsecutiveValue = numericValue;
-                }
-              }
             }
 
             // Marcar como procesado si está configurado
             if (mapping.markProcessedField) {
-              await this.markAsProcessed(documentId, mapping, sourceConnection);
+              await this.markAsProcessed(docInfo.id, mapping, sourceConnection);
             }
           } else {
-            hasErrors = true; // Marcar que hubo errores
             results.failed++;
-            if (docResult.documentType) {
-              if (!results.byType[docResult.documentType]) {
-                results.byType[docResult.documentType] = {
-                  processed: 0,
-                  failed: 0,
-                };
-              }
-              results.byType[docResult.documentType].failed++;
+            if (!results.byType[docResult.documentType]) {
+              results.byType[docResult.documentType] = {
+                processed: 0,
+                failed: 0,
+              };
             }
+            results.byType[docResult.documentType].failed++;
           }
 
           results.details.push({
-            documentId,
+            documentId: docInfo.id,
             ...docResult,
           });
 
           logger.info(
-            `Documento ${documentId} procesado: ${
+            `Documento ${docInfo.id} procesado: ${
               docResult.success ? "Éxito" : "Error"
             }`
           );
-        } catch (docError) {
-          // Verificar si fue cancelado
-          if (signal.aborted) {
-            clearTimeout(timeoutId);
-            throw new Error("Tarea cancelada por el usuario");
-          }
-
-          hasErrors = true; // Marcar que hubo errores
-          logger.error(
-            `Error procesando documento ${documentId}: ${docError.message}`
-          );
+        } catch (processError) {
           results.failed++;
           results.details.push({
-            documentId,
+            documentId: docInfo.id,
             success: false,
-            error: docError.message,
-            errorDetails: docError.stack,
+            error: processError.message,
+            errorDetails: processError.stack,
+            documentType: docInfo.type,
           });
+
+          logger.error(
+            `Error procesando documento ${docInfo.id}: ${processError.message}`
+          );
         }
       }
 
-      // Actualizar el último consecutivo con el valor más alto después de procesar todos
-      // Esto solo aplica para el sistema local y si no se actualiza después de cada transferencia
+      // 10. FASE 4: ACTUALIZACIÓN DEL CONSECUTIVO - Solo al final y una sola vez
       if (
         !useCentralizedConsecutives &&
         highestConsecutiveValue > 0 &&
         mapping.consecutiveConfig &&
-        mapping.consecutiveConfig.enabled &&
-        !mapping.consecutiveConfig.updateAfterTransfer
+        mapping.consecutiveConfig.enabled
       ) {
         try {
           await this.updateLastConsecutive(mappingId, highestConsecutiveValue);
           logger.info(
             `Consecutivo final actualizado a ${highestConsecutiveValue} para mapeo ${mappingId}`
           );
-
-          // Agregar info de consecutivo al resultado
           results.lastConsecutiveValue = highestConsecutiveValue;
         } catch (updateError) {
-          logger.warn(
-            `Error al actualizar último consecutivo al finalizar: ${updateError.message}`
+          logger.error(
+            `Error al actualizar último consecutivo: ${updateError.message}`
           );
         }
       }
 
-      // Actualizar registro de ejecución y tarea
+      // 11. Actualizar registro de ejecución y tarea
       const executionTime = Date.now() - startTime;
 
       // Determinar el estado correcto basado en los resultados
@@ -482,22 +667,24 @@ class DynamicTransferService {
         progress: 100,
         lastExecutionDate: new Date(),
         lastExecutionResult: {
-          success: !hasErrors, // Solo es éxito total si no hubo errores
-          message: hasErrors
-            ? `Procesamiento completado con errores: ${results.processed} éxitos, ${results.failed} fallos`
-            : "Procesamiento completado con éxito",
+          success: results.failed === 0, // Solo es éxito total si no hubo errores
+          message:
+            results.failed > 0
+              ? `Procesamiento completado con errores: ${results.processed} éxitos, ${results.failed} fallos`
+              : "Procesamiento completado con éxito",
           affectedRecords: results.processed,
-          errorDetails: hasErrors
-            ? results.details
-                .filter((d) => !d.success)
-                .map(
-                  (d) =>
-                    `Documento ${d.documentId}: ${
-                      d.message || d.error || "Error no especificado"
-                    }`
-                )
-                .join("\n")
-            : null,
+          errorDetails:
+            results.failed > 0
+              ? results.details
+                  .filter((d) => !d.success)
+                  .map(
+                    (d) =>
+                      `Documento ${d.documentId}: ${
+                        d.message || d.error || "Error no especificado"
+                      }`
+                  )
+                  .join("\n")
+              : null,
         },
       });
 
@@ -507,9 +694,9 @@ class DynamicTransferService {
       TaskTracker.completeTask(cancelTaskId, finalStatus);
 
       return {
-        success: true, // La operación en sí fue exitosa aunque algunos documentos fallaron
+        success: true,
         executionId,
-        status: finalStatus, // Añadimos el status para que el frontend pueda mostrarlo correctamente
+        status: finalStatus,
         ...results,
         lastConsecutiveValue:
           highestConsecutiveValue > 0 ? highestConsecutiveValue : undefined,
