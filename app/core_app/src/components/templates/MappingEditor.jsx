@@ -382,9 +382,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         return {
           sourceField: sourceField || null,
           targetField,
-          defaultValue: processedDefaultValue
-            ? processedDefaultValue
-            : undefined,
+          defaultValue: processedDefaultValue,
           removePrefix: removePrefix || null,
           isSqlFunction,
           isRequired,
@@ -741,9 +739,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         return {
           sourceField: sourceField || null,
           targetField,
-          defaultValue: processedDefaultValue
-            ? processedDefaultValue
-            : undefined,
+          defaultValue: processedDefaultValue,
           removePrefix: removePrefix || null,
           isSqlFunction,
           isRequired,
