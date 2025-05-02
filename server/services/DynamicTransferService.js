@@ -132,7 +132,10 @@ class DynamicTransferService {
       );
     } finally {
       // Liberar conexiones
-      await this.releaseConnections(sourceConnection, targetConnection);
+      await ConnectionManager.releaseConnection(
+        sourceConnection,
+        targetConnection
+      );
     }
   }
 
