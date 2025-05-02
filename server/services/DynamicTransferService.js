@@ -190,6 +190,48 @@ class DynamicTransferService {
       // 6. Configuración para usar o no transacciones
       const useTransactions = false; // Cambiamos a false para evitar problemas con transacciones
 
+      // NUEVO: Pre-reservar consecutivos si están habilitados
+      let consecutiveMap = new Map(); // Mapa para almacenar consecutivos por documentId
+
+      if (
+        mapping.consecutiveConfig &&
+        mapping.consecutiveConfig.enabled &&
+        !useCentralizedConsecutives
+      ) {
+        logger.info(
+          `Pre-reservando consecutivos para ${documentIds.length} documentos`
+        );
+
+        // Reservar consecutivos para todos los documentos de una vez
+        try {
+          for (const docId of documentIds) {
+            // Generar un consecutivo único para cada documento usando una operación atómica
+            const consecutiveResult = await this.generateConsecutive(mapping);
+
+            if (consecutiveResult) {
+              // Guardar en el mapa
+              consecutiveMap.set(docId, {
+                ...consecutiveResult,
+                skipUpdate: true, // Marcar para que no se actualice nuevamente
+              });
+
+              logger.info(
+                `Consecutivo ${consecutiveResult.formatted} reservado para documento ${docId}`
+              );
+            }
+          }
+
+          logger.info(
+            `${consecutiveMap.size} consecutivos reservados correctamente`
+          );
+        } catch (reserveError) {
+          logger.error(
+            `Error al reservar consecutivos: ${reserveError.message}`
+          );
+          // Continuar el proceso aunque falle la pre-reserva
+        }
+      }
+
       // 7. Procesar documentos
       const results = {
         processed: 0,
@@ -213,10 +255,22 @@ class DynamicTransferService {
         const documentId = documentIds[i];
 
         try {
-          // Generar consecutivo para este documento específico
+          // NUEVO: Obtener el consecutivo pre-reservado para este documento
           let currentConsecutive = null;
+          if (consecutiveMap.has(documentId)) {
+            currentConsecutive = consecutiveMap.get(documentId);
+            logger.info(
+              `Usando consecutivo pre-reservado ${currentConsecutive.formatted} para documento ${documentId}`
+            );
+          }
 
-          if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
+          // El código existente para generar un consecutivo solo se ejecutará
+          // si no hay uno pre-reservado
+          if (
+            !currentConsecutive &&
+            mapping.consecutiveConfig &&
+            mapping.consecutiveConfig.enabled
+          ) {
             try {
               if (useCentralizedConsecutives) {
                 // USAR SISTEMA CENTRALIZADO PARA ESTE DOCUMENTO
@@ -262,12 +316,14 @@ class DynamicTransferService {
                   );
                 }
               } else {
-                // USAR SISTEMA LOCAL
-                currentConsecutive = await this.generateConsecutive(mapping);
-                if (currentConsecutive) {
-                  logger.info(
-                    `Consecutivo local generado para documento ${documentId}: ${currentConsecutive.formatted}`
-                  );
+                // SOLO GENERAR SI NO HAY PRE-RESERVADO
+                if (!consecutiveMap.has(documentId)) {
+                  currentConsecutive = await this.generateConsecutive(mapping);
+                  if (currentConsecutive) {
+                    logger.info(
+                      `Consecutivo local generado para documento ${documentId}: ${currentConsecutive.formatted}`
+                    );
+                  }
                 }
               }
             } catch (consecError) {
@@ -1044,7 +1100,8 @@ class DynamicTransferService {
         mapping.consecutiveConfig &&
         mapping.consecutiveConfig.enabled &&
         mapping.consecutiveConfig.updateAfterTransfer &&
-        !currentConsecutive.isCentralized // Solo actualizar si es local
+        !currentConsecutive.isCentralized && // Solo actualizar si es local
+        !currentConsecutive.skipUpdate // NUEVO: No actualizar si ya se incrementó antes
       ) {
         try {
           await this.updateLastConsecutive(
@@ -1058,9 +1115,9 @@ class DynamicTransferService {
           logger.warn(
             `Error al actualizar último consecutivo: ${updateError.message}`
           );
+          // No fallamos la transacción por esto, solo lo registramos
         }
       }
-
       // Si todo fue exitoso, confirmar la transacción
       if (transactionStarted && transaction) {
         try {
@@ -1701,7 +1758,8 @@ class DynamicTransferService {
         mapping.consecutiveConfig &&
         mapping.consecutiveConfig.enabled &&
         mapping.consecutiveConfig.updateAfterTransfer &&
-        !currentConsecutive.isCentralized // Solo actualizar si es local
+        !currentConsecutive.isCentralized && // Solo actualizar si es local
+        !currentConsecutive.skipUpdate // NUEVO: No actualizar si ya se incrementó antes
       ) {
         try {
           await this.updateLastConsecutive(
@@ -1715,7 +1773,7 @@ class DynamicTransferService {
           logger.warn(
             `Error al actualizar último consecutivo: ${updateError.message}`
           );
-          // No fallamos el proceso por esto, solo lo registramos
+          // No fallamos la transacción por esto, solo lo registramos
         }
       }
 
