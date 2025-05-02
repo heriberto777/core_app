@@ -1058,7 +1058,6 @@ class DynamicTransferService {
           logger.warn(
             `Error al actualizar último consecutivo: ${updateError.message}`
           );
-          // No fallamos la transacción por esto, solo lo registramos
         }
       }
 
@@ -1947,13 +1946,22 @@ class DynamicTransferService {
         return null;
       }
 
-      // Generar número consecutivo
-      const lastValue = mapping.consecutiveConfig.lastValue || 0;
-      const newValue = lastValue + 1;
+      // Implementación más segura usando findOneAndUpdate (operación atómica)
+      const updatedMapping = await TransferMapping.findOneAndUpdate(
+        { _id: mapping._id },
+        { $inc: { "consecutiveConfig.lastValue": 1 } },
+        { new: true }
+      );
 
-      // IMPORTANTE: Actualizar inmediatamente el último valor usado en la configuración
-      // Esto evita que dos documentos obtengan el mismo valor consecutivo
-      await this.updateLastConsecutive(mapping._id, newValue);
+      if (!updatedMapping) {
+        throw new Error(
+          `No se pudo actualizar el consecutivo para mapeo ${mapping._id}`
+        );
+      }
+
+      // Obtener el nuevo valor incrementado
+      const newValue = updatedMapping.consecutiveConfig.lastValue;
+
       logger.info(
         `Consecutivo reservado: ${newValue} para mapeo ${mapping._id}`
       );
@@ -1961,20 +1969,20 @@ class DynamicTransferService {
       // Formatear según el patrón si existe
       let formattedValue = String(newValue);
 
-      if (mapping.consecutiveConfig.pattern) {
+      if (updatedMapping.consecutiveConfig.pattern) {
         formattedValue = this.formatConsecutive(
-          mapping.consecutiveConfig.pattern,
+          updatedMapping.consecutiveConfig.pattern,
           {
-            PREFIX: mapping.consecutiveConfig.prefix || "",
+            PREFIX: updatedMapping.consecutiveConfig.prefix || "",
             VALUE: newValue,
             YEAR: new Date().getFullYear(),
             MONTH: String(new Date().getMonth() + 1).padStart(2, "0"),
             DAY: String(new Date().getDate()).padStart(2, "0"),
           }
         );
-      } else if (mapping.consecutiveConfig.prefix) {
+      } else if (updatedMapping.consecutiveConfig.prefix) {
         // Si no hay patrón pero sí prefijo
-        formattedValue = `${mapping.consecutiveConfig.prefix}${newValue}`;
+        formattedValue = `${updatedMapping.consecutiveConfig.prefix}${newValue}`;
       }
 
       return {
