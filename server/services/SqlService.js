@@ -598,63 +598,67 @@ class SqlService {
 
         // Configurar parámetros manualmente sin llamar a validateParameters
         for (const [key, value] of Object.entries(params)) {
-          // Determinar tipo
-          let paramType = this.determineType(value);
-          let paramValue = value;
+          try {
+            // Determinar tipo
+            let paramType = this.determineType(value);
+            let paramValue = value;
 
-          // Si tenemos tipos de columnas explícitos, usarlos
-          if (columnTypes && columnTypes[key]) {
-            const colType = columnTypes[key];
-            paramType = typeof colType === "object" ? colType.type : colType;
+            // Si tenemos tipos de columnas explícitos, usarlos
+            if (columnTypes && columnTypes[key]) {
+              const colType = columnTypes[key];
+              paramType = typeof colType === "object" ? colType.type : colType;
 
-            // Sanitizar según el tipo
-            if (paramValue !== null && paramValue !== undefined) {
-              // Truncar strings si exceden maxLength
-              if (
-                paramType === TYPES.NVarChar &&
-                typeof paramValue === "string" &&
-                colType.maxLength &&
-                paramValue.length > colType.maxLength
-              ) {
-                paramValue = paramValue.substring(0, colType.maxLength);
+              // Sanitizar según el tipo
+              if (paramValue !== null && paramValue !== undefined) {
+                // Truncar strings si exceden maxLength
+                if (
+                  paramType === TYPES.NVarChar &&
+                  typeof paramValue === "string" &&
+                  colType.maxLength &&
+                  paramValue.length > colType.maxLength
+                ) {
+                  paramValue = paramValue.substring(0, colType.maxLength);
+                }
               }
             }
-          }
 
-          // Manejo especial para valores null
-          if (paramValue === null) {
-            try {
-              request.addParameter(key, TYPES.Null, null);
-            } catch (paramError) {
-              // Si hay un error al agregar null, intentar con un tipo específico
-              logger.warn(
-                `Error al agregar parámetro null para ${key}, intentando con NVarChar: ${paramError.message}`
-              );
-              request.addParameter(key, TYPES.NVarChar, null);
+            // Manejo específico para el literal "NULL"
+            if (paramValue === "NULL") {
+              paramValue = null;
             }
-          } else {
-            // Añadir el parámetro directamente para valores no nulos
-            try {
+
+            // Manejo específico para valores null
+            if (paramValue === null) {
+              // Para los valores null, usar un tipo específico en lugar de Null general
+              // Esto es clave - algunos controladores no manejan bien TYPES.Null
+
+              // Si tenemos el tipo de columna, usar ese tipo para el null
+              if (columnTypes && columnTypes[key] && columnTypes[key].type) {
+                request.addParameter(key, columnTypes[key].type, null);
+              } else {
+                // De lo contrario, usar NVarChar como tipo seguro para null
+                request.addParameter(key, TYPES.NVarChar, null);
+              }
+            } else {
+              // Para valores no nulos, añadir normalmente
               request.addParameter(key, paramType, paramValue);
-            } catch (paramError) {
-              logger.error(
-                `Error al agregar parámetro ${key}: ${paramError.message}`
-              );
-              // Intento de recuperación - usar NVarChar como tipo de respaldo
-              try {
-                request.addParameter(
-                  key,
-                  TYPES.NVarChar,
-                  String(paramValue || "")
-                );
-              } catch (fallbackError) {
-                // Si incluso el respaldo falla, reenviar el error original
-                throw paramError;
-              }
+            }
+          } catch (paramError) {
+            logger.error(
+              `Error al añadir parámetro ${key}: ${paramError.message}`
+            );
+            // Intentar una última alternativa segura
+            try {
+              // Convertir cualquier valor a string como último recurso
+              const safeValue =
+                value === null || value === undefined ? null : String(value);
+              request.addParameter(key, TYPES.NVarChar, safeValue);
+            } catch (finalError) {
+              // Si incluso esto falla, propagar el error original
+              throw paramError;
             }
           }
         }
-
         // Manejar filas
         request.on("row", (columns) => {
           const row = {};
