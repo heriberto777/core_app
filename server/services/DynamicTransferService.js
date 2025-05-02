@@ -930,7 +930,11 @@ class DynamicTransferService {
                 (value === undefined || value === null) &&
                 fieldMapping.defaultValue !== undefined
               ) {
-                value = fieldMapping.defaultValue;
+                if (fieldMapping.defaultValue === "NULL") {
+                  value = null; // Convertir la cadena "NULL" a null real
+                } else {
+                  value = fieldMapping.defaultValue;
+                }
               }
 
               // IMPORTANTE: Aplicar consecutivo en detalles si corresponde
@@ -1409,7 +1413,11 @@ class DynamicTransferService {
             }
           } else {
             // No hay campo origen, usar valor por defecto
-            value = fieldMapping.defaultValue;
+            if (fieldMapping.defaultValue === "NULL") {
+              value = null; // Convertir la cadena "NULL" a null real
+            } else {
+              value = fieldMapping.defaultValue;
+            }
           }
 
           // Si el valor es undefined/null pero hay un valor por defecto
@@ -1417,7 +1425,12 @@ class DynamicTransferService {
             (value === undefined || value === null) &&
             fieldMapping.defaultValue !== undefined
           ) {
-            value = fieldMapping.defaultValue;
+            //Validacion de los campos NULL
+            if (fieldMapping.defaultValue === "NULL") {
+              value = null; // Convertir la cadena "NULL" a null real
+            } else {
+              value = fieldMapping.defaultValue;
+            }
           }
 
           // IMPORTANTE: Aplicar consecutivo si corresponde a esta tabla y campo
