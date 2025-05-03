@@ -13,6 +13,8 @@ class DynamicTransferService {
     const localAbortController = !signal ? new AbortController() : null;
     signal = signal || localAbortController.signal;
 
+    const cancelTaskId = `dynamic_process_${mappingId}_${Date.now()}`;
+
     const timeoutId = setTimeout(() => {
       if (localAbortController) {
         logger.warn(`Timeout interno activado para tarea ${mappingId}`);
@@ -40,7 +42,7 @@ class DynamicTransferService {
       );
 
       // 3. Registrar tarea para cancelación
-      const cancelTaskId = `dynamic_process_${mappingId}_${Date.now()}`;
+
       TaskTracker.registerTask(
         cancelTaskId,
         localAbortController || { abort: () => {} },
