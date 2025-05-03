@@ -9,6 +9,125 @@ const TransferTask = require("../models/transferTaks");
 const ConsecutiveService = require("./ConsecutiveService");
 
 class DynamicTransferService {
+  /**
+   * Maneja errores durante la verificación de documentos
+   * @param {Error} error - El error ocurrido
+   * @param {Array} invalidDocuments - Array de documentos inválidos
+   * @param {Object} results - Objeto de resultados
+   * @param {string} documentId - ID del documento fallido
+   */
+  async handleVerificationError(error, invalidDocuments, results, documentId) {
+    const errorEntry = {
+      id: documentId,
+      reason: error.message,
+      type: "unknown",
+      errorDetails: {
+        message: error.message,
+        stack: error.stack,
+        code: error.code || "NO_CODE",
+      },
+    };
+
+    // Agregar a documentos inválidos
+    invalidDocuments.push(errorEntry);
+
+    // Actualizar resultados
+    results.failed++;
+    results.details.push({
+      documentId,
+      success: false,
+      error: error.message,
+      errorDetails: error.stack,
+    });
+
+    // Actualizar estadísticas por tipo
+    if (!results.byType["unknown"]) {
+      results.byType["unknown"] = { processed: 0, failed: 0 };
+    }
+    results.byType["unknown"].failed++;
+
+    logger.error(
+      `Error en verificación de documento ${documentId}: ${error.message}`,
+      {
+        documentId,
+        error: error.message,
+        stack: error.stack,
+      }
+    );
+  }
+  /**
+   * Maneja errores durante el procesamiento de documentos
+   */
+  async handleProcessError(
+    error,
+    signal,
+    executionId,
+    mapping,
+    startTime,
+    cancelTaskId,
+    mappingId
+  ) {
+    // Verificar si fue cancelado
+    if (signal?.aborted) {
+      logger.info("Tarea cancelada por el usuario");
+
+      if (executionId) {
+        await TaskExecution.findByIdAndUpdate(executionId, {
+          status: "cancelled",
+          executionTime: Date.now() - startTime,
+          errorMessage: "Cancelada por el usuario",
+        });
+      }
+
+      if (mapping?.taskId) {
+        await TransferTask.findByIdAndUpdate(mapping.taskId, {
+          status: "cancelled",
+          progress: -1,
+          lastExecutionResult: {
+            success: false,
+            message: "Tarea cancelada por el usuario",
+          },
+        });
+      }
+
+      TaskTracker.completeTask(cancelTaskId, "cancelled");
+
+      return {
+        success: false,
+        message: "Tarea cancelada por el usuario",
+        executionId,
+      };
+    }
+
+    logger.error(`Error al procesar documentos: ${error.message}`);
+
+    // Actualizar el registro de ejecución en caso de error
+    if (executionId) {
+      await TaskExecution.findByIdAndUpdate(executionId, {
+        status: "failed",
+        executionTime: Date.now() - startTime,
+        errorMessage: error.message,
+      });
+    }
+
+    // Actualizar la tarea principal con el error
+    if (mapping?.taskId) {
+      await TransferTask.findByIdAndUpdate(mapping.taskId, {
+        status: "failed",
+        progress: -1,
+        lastExecutionResult: {
+          success: false,
+          message: `Error: ${error.message}`,
+          errorDetails: error.stack,
+        },
+      });
+    }
+
+    TaskTracker.completeTask(cancelTaskId, "failed");
+
+    throw error;
+  }
+
   async processDocuments(documentIds, mappingId, signal = null) {
     const localAbortController = !signal ? new AbortController() : null;
     signal = signal || localAbortController.signal;
@@ -2673,79 +2792,6 @@ class DynamicTransferService {
       logger.error(`Error al actualizar último consecutivo: ${error.message}`);
       return false;
     }
-  }
-
-  /**
-   * Maneja errores durante el procesamiento de documentos
-   */
-  async handleProcessError(
-    error,
-    signal,
-    executionId,
-    mapping,
-    startTime,
-    cancelTaskId,
-    mappingId
-  ) {
-    // Verificar si fue cancelado
-    if (signal?.aborted) {
-      logger.info("Tarea cancelada por el usuario");
-
-      if (executionId) {
-        await TaskExecution.findByIdAndUpdate(executionId, {
-          status: "cancelled",
-          executionTime: Date.now() - startTime,
-          errorMessage: "Cancelada por el usuario",
-        });
-      }
-
-      if (mapping?.taskId) {
-        await TransferTask.findByIdAndUpdate(mapping.taskId, {
-          status: "cancelled",
-          progress: -1,
-          lastExecutionResult: {
-            success: false,
-            message: "Tarea cancelada por el usuario",
-          },
-        });
-      }
-
-      TaskTracker.completeTask(cancelTaskId, "cancelled");
-
-      return {
-        success: false,
-        message: "Tarea cancelada por el usuario",
-        executionId,
-      };
-    }
-
-    logger.error(`Error al procesar documentos: ${error.message}`);
-
-    // Actualizar el registro de ejecución en caso de error
-    if (executionId) {
-      await TaskExecution.findByIdAndUpdate(executionId, {
-        status: "failed",
-        executionTime: Date.now() - startTime,
-        errorMessage: error.message,
-      });
-    }
-
-    // Actualizar la tarea principal con el error
-    if (mapping?.taskId) {
-      await TransferTask.findByIdAndUpdate(mapping.taskId, {
-        status: "failed",
-        progress: -1,
-        lastExecutionResult: {
-          success: false,
-          message: `Error: ${error.message}`,
-          errorDetails: error.stack,
-        },
-      });
-    }
-
-    TaskTracker.completeTask(cancelTaskId, "failed");
-
-    throw error;
   }
 }
 
