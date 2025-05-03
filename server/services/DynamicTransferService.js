@@ -474,10 +474,10 @@ class DynamicTransferService {
                 docInfo.consecutive = {
                   value: consecutiveResult.value,
                   formatted: consecutiveResult.formatted,
-                  isCentralized: false
+                  isCentralized: false,
                   // Eliminamos el flag skipUpdate
                 };
-                
+
                 logger.info(
                   `Asignado consecutivo local ${consecutiveResult.formatted} a documento ${docInfo.id}`
                 );
@@ -950,7 +950,8 @@ class DynamicTransferService {
           // Si el valor es undefined/null pero hay un valor por defecto
           if (
             (value === undefined || value === null) &&
-            fieldMapping.defaultValue !== undefined) {
+            fieldMapping.defaultValue !== undefined
+          ) {
             // Si es un campo obligatorio y aún no tiene valor, lanzar error
             if (
               fieldMapping.isRequired &&
@@ -1201,243 +1202,243 @@ class DynamicTransferService {
                 detailFields.push(fieldMapping.targetField);
                 detailValues.push(`@${fieldMapping.targetField}`);
               }
+            }
 
-              const insertDetailQuery = `
+            const insertDetailQuery = `
             INSERT INTO ${detailConfig.targetTable} (${detailFields.join(", ")})
             VALUES (${detailValues.join(", ")})
           `;
 
-              // Insertar detalle usando la transacción
-              await SqlService.query(
-                targetConnection,
-                insertDetailQuery,
-                detailTargetData,
-                transaction
-              );
-            }
-
-            logger.info(
-              `Insertados detalles en ${detailConfig.name} con transacción`
+            // Insertar detalle usando la transacción
+            await SqlService.query(
+              targetConnection,
+              insertDetailQuery,
+              detailTargetData,
+              transaction
             );
-            processedTables.push(detailConfig.name);
           }
+
+          logger.info(
+            `Insertados detalles en ${detailConfig.name} con transacción`
+          );
+          processedTables.push(detailConfig.name);
         }
+      }
 
-        if (processedTables.length === 0) {
-          // Revertir la transacción si no se procesó ninguna tabla
-          if (transaction) {
-            await SqlService.rollbackTransaction(transaction);
-            logger.info(
-              `Transacción revertida: no se procesó ninguna tabla para documento ${documentId}`
-            );
-          }
-
-          return {
-            success: false,
-            message: "No se procesó ninguna tabla para este documento",
-            documentType,
-          };
-        }
-
-        // NUEVO: Actualizar el último valor del consecutivo si se configuró así
-        // Solo para sistema local, el centralizado se actualiza automáticamente
-        if (
-          currentConsecutive &&
-          mapping.consecutiveConfig &&
-          mapping.consecutiveConfig.enabled &&
-          mapping.consecutiveConfig.updateAfterTransfer &&
-          !currentConsecutive.isCentralized // Solo actualizar si es local
-        ) {
-          try {
-            await this.updateLastConsecutive(
-              mapping._id,
-              currentConsecutive.value
-            );
-            logger.info(
-              `Consecutivo actualizado a ${currentConsecutive.value} para mapeo ${mapping._id}`
-            );
-          } catch (updateError) {
-            logger.warn(
-              `Error al actualizar último consecutivo: ${updateError.message}`
-            );
-            // No fallamos la transacción por esto, solo lo registramos
-          }
-        }
-        // Si todo fue exitoso, confirmar la transacción
-        if (transactionStarted && transaction) {
-          try {
-            await SqlService.commitTransaction(transaction);
-            logger.info(
-              `Transacción confirmada exitosamente para documento ${documentId}`
-            );
-          } catch (commitError) {
-            logger.error(
-              `Error al confirmar transacción para documento ${documentId}: ${commitError.message}`
-            );
-            // Si no podemos confirmar, intentamos revertir
-            try {
-              await SqlService.rollbackTransaction(transaction);
-              logger.info(
-                `Transacción revertida después de error en commit para documento ${documentId}`
-              );
-            } catch (rollbackError) {
-              logger.error(
-                `Error tanto en commit como en rollback para documento ${documentId}`
-              );
-            }
-            // Lanzar error original de commit
-            throw commitError;
-          }
+      if (processedTables.length === 0) {
+        // Revertir la transacción si no se procesó ninguna tabla
+        if (transaction) {
+          await SqlService.rollbackTransaction(transaction);
+          logger.info(
+            `Transacción revertida: no se procesó ninguna tabla para documento ${documentId}`
+          );
         }
 
         return {
-          success: true,
-          message: `Documento procesado correctamente en ${processedTables.join(
-            ", "
-          )}`,
+          success: false,
+          message: "No se procesó ninguna tabla para este documento",
           documentType,
-          processedTables,
-          consecutiveUsed: currentConsecutive
-            ? currentConsecutive.formatted
-            : null,
-          consecutiveValue: currentConsecutive ? currentConsecutive.value : null,
         };
-      } catch (error) {
-        // Si ocurrió algún error, hacer rollback de la transacción
-        if (transactionStarted && transaction) {
+      }
+
+      // NUEVO: Actualizar el último valor del consecutivo si se configuró así
+      // Solo para sistema local, el centralizado se actualiza automáticamente
+      if (
+        currentConsecutive &&
+        mapping.consecutiveConfig &&
+        mapping.consecutiveConfig.enabled &&
+        mapping.consecutiveConfig.updateAfterTransfer &&
+        !currentConsecutive.isCentralized // Solo actualizar si es local
+      ) {
+        try {
+          await this.updateLastConsecutive(
+            mapping._id,
+            currentConsecutive.value
+          );
+          logger.info(
+            `Consecutivo actualizado a ${currentConsecutive.value} para mapeo ${mapping._id}`
+          );
+        } catch (updateError) {
+          logger.warn(
+            `Error al actualizar último consecutivo: ${updateError.message}`
+          );
+          // No fallamos la transacción por esto, solo lo registramos
+        }
+      }
+      // Si todo fue exitoso, confirmar la transacción
+      if (transactionStarted && transaction) {
+        try {
+          await SqlService.commitTransaction(transaction);
+          logger.info(
+            `Transacción confirmada exitosamente para documento ${documentId}`
+          );
+        } catch (commitError) {
+          logger.error(
+            `Error al confirmar transacción para documento ${documentId}: ${commitError.message}`
+          );
+          // Si no podemos confirmar, intentamos revertir
           try {
             await SqlService.rollbackTransaction(transaction);
             logger.info(
-              `Transacción revertida para documento ${documentId} debido a error: ${error.message}`
+              `Transacción revertida después de error en commit para documento ${documentId}`
             );
           } catch (rollbackError) {
             logger.error(
-              `Error al revertir transacción: ${rollbackError.message}`
+              `Error tanto en commit como en rollback para documento ${documentId}`
             );
           }
+          // Lanzar error original de commit
+          throw commitError;
         }
+      }
 
-        // Manejo de errores específicos
-        if (
-          error.name === "AggregateError" ||
-          error.stack?.includes("AggregateError")
-        ) {
-          logger.error(
-            `Error de conexión (AggregateError) para documento ${documentId}`,
-            error
+      return {
+        success: true,
+        message: `Documento procesado correctamente en ${processedTables.join(
+          ", "
+        )}`,
+        documentType,
+        processedTables,
+        consecutiveUsed: currentConsecutive
+          ? currentConsecutive.formatted
+          : null,
+        consecutiveValue: currentConsecutive ? currentConsecutive.value : null,
+      };
+    } catch (error) {
+      // Si ocurrió algún error, hacer rollback de la transacción
+      if (transactionStarted && transaction) {
+        try {
+          await SqlService.rollbackTransaction(transaction);
+          logger.info(
+            `Transacción revertida para documento ${documentId} debido a error: ${error.message}`
           );
-
-          // Intentar reconexión
-          try {
-            logger.info(`Intentando reconexión para documento ${documentId}...`);
-            const targetServer = mapping.targetServer;
-            const reconnectResult = await ConnectionManager.enhancedRobustConnect(
-              targetServer
-            );
-
-            if (!reconnectResult.success) {
-              throw new Error(
-                `No se pudo restablecer conexión a ${targetServer}`
-              );
-            }
-
-            logger.info(`Reconexión exitosa a ${targetServer}`);
-
-            return {
-              success: false,
-              message: `Error de conexión: Se perdió la conexión con la base de datos. Se ha restablecido la conexión pero este documento debe procesarse nuevamente.`,
-              documentType: "unknown",
-              errorDetails: "CONNECTION_ERROR",
-              consecutiveUsed: null,
-              consecutiveValue: null,
-              errorCode: "CONNECTION_ERROR",
-            };
-          } catch (reconnectError) {
-            logger.error(
-              `Error al intentar reconexión: ${reconnectError.message}`
-            );
-            return {
-              success: false,
-              message: `Error grave de conexión: ${
-                error.message || "Error en comunicación con la base de datos"
-              }. Por favor, intente nuevamente más tarde.`,
-              documentType: "unknown",
-              errorDetails: error.stack || "No hay detalles adicionales",
-              consecutiveUsed: null,
-              consecutiveValue: null,
-              errorCode: "SEVERE_CONNECTION_ERROR",
-            };
-          }
-        }
-
-        // Error de truncado
-        if (
-          error.message &&
-          error.message.includes("String or binary data would be truncated")
-        ) {
-          const match = error.message.match(/column '([^']+)'/);
-          const columnName = match ? match[1] : "desconocida";
-          const detailedMessage = `Error de truncado: El valor es demasiado largo para la columna '${columnName}'. Verifique la longitud máxima permitida.`;
+        } catch (rollbackError) {
           logger.error(
-            `Error de truncado en documento ${documentId}: ${detailedMessage}`
+            `Error al revertir transacción: ${rollbackError.message}`
           );
-
-          return {
-            success: false,
-            message: detailedMessage,
-            documentType: "unknown",
-            errorDetails: error.stack,
-            errorCode: "TRUNCATION_ERROR",
-            consecutiveUsed: null,
-            consecutiveValue: null,
-          };
         }
+      }
 
-        // Error de valor NULL
-        if (
-          error.message &&
-          error.message.includes("Cannot insert the value NULL into column")
-        ) {
-          const match = error.message.match(/column '([^']+)'/);
-          const columnName = match ? match[1] : "desconocida";
-          const detailedMessage = `No se puede insertar un valor NULL en la columna '${columnName}' que no permite valores nulos. Configure un valor por defecto válido.`;
-          logger.error(
-            `Error de valor NULL en documento ${documentId}: ${detailedMessage}`
-          );
-
-          return {
-            success: false,
-            message: detailedMessage,
-            documentType: "unknown",
-            errorDetails: error.stack,
-            errorCode: "NULL_VALUE_ERROR",
-            consecutiveUsed: null,
-            consecutiveValue: null,
-          };
-        }
-
-        // Error general
+      // Manejo de errores específicos
+      if (
+        error.name === "AggregateError" ||
+        error.stack?.includes("AggregateError")
+      ) {
         logger.error(
-          `Error procesando documento ${documentId}: ${error.message}`,
-          {
-            documentId,
-            errorStack: error.stack,
-            errorDetails: error.code || error.number || "",
+          `Error de conexión (AggregateError) para documento ${documentId}`,
+          error
+        );
+
+        // Intentar reconexión
+        try {
+          logger.info(`Intentando reconexión para documento ${documentId}...`);
+          const targetServer = mapping.targetServer;
+          const reconnectResult = await ConnectionManager.enhancedRobustConnect(
+            targetServer
+          );
+
+          if (!reconnectResult.success) {
+            throw new Error(
+              `No se pudo restablecer conexión a ${targetServer}`
+            );
           }
+
+          logger.info(`Reconexión exitosa a ${targetServer}`);
+
+          return {
+            success: false,
+            message: `Error de conexión: Se perdió la conexión con la base de datos. Se ha restablecido la conexión pero este documento debe procesarse nuevamente.`,
+            documentType: "unknown",
+            errorDetails: "CONNECTION_ERROR",
+            consecutiveUsed: null,
+            consecutiveValue: null,
+            errorCode: "CONNECTION_ERROR",
+          };
+        } catch (reconnectError) {
+          logger.error(
+            `Error al intentar reconexión: ${reconnectError.message}`
+          );
+          return {
+            success: false,
+            message: `Error grave de conexión: ${
+              error.message || "Error en comunicación con la base de datos"
+            }. Por favor, intente nuevamente más tarde.`,
+            documentType: "unknown",
+            errorDetails: error.stack || "No hay detalles adicionales",
+            consecutiveUsed: null,
+            consecutiveValue: null,
+            errorCode: "SEVERE_CONNECTION_ERROR",
+          };
+        }
+      }
+
+      // Error de truncado
+      if (
+        error.message &&
+        error.message.includes("String or binary data would be truncated")
+      ) {
+        const match = error.message.match(/column '([^']+)'/);
+        const columnName = match ? match[1] : "desconocida";
+        const detailedMessage = `Error de truncado: El valor es demasiado largo para la columna '${columnName}'. Verifique la longitud máxima permitida.`;
+        logger.error(
+          `Error de truncado en documento ${documentId}: ${detailedMessage}`
         );
 
         return {
           success: false,
-          message: `Error: ${
-            error.message || "Error desconocido durante el procesamiento"
-          }`,
+          message: detailedMessage,
           documentType: "unknown",
-          errorDetails: error.stack || "No hay detalles del error disponibles",
-          errorCode: error.code || error.number || "UNKNOWN_ERROR",
+          errorDetails: error.stack,
+          errorCode: "TRUNCATION_ERROR",
           consecutiveUsed: null,
           consecutiveValue: null,
         };
       }
+
+      // Error de valor NULL
+      if (
+        error.message &&
+        error.message.includes("Cannot insert the value NULL into column")
+      ) {
+        const match = error.message.match(/column '([^']+)'/);
+        const columnName = match ? match[1] : "desconocida";
+        const detailedMessage = `No se puede insertar un valor NULL en la columna '${columnName}' que no permite valores nulos. Configure un valor por defecto válido.`;
+        logger.error(
+          `Error de valor NULL en documento ${documentId}: ${detailedMessage}`
+        );
+
+        return {
+          success: false,
+          message: detailedMessage,
+          documentType: "unknown",
+          errorDetails: error.stack,
+          errorCode: "NULL_VALUE_ERROR",
+          consecutiveUsed: null,
+          consecutiveValue: null,
+        };
+      }
+
+      // Error general
+      logger.error(
+        `Error procesando documento ${documentId}: ${error.message}`,
+        {
+          documentId,
+          errorStack: error.stack,
+          errorDetails: error.code || error.number || "",
+        }
+      );
+
+      return {
+        success: false,
+        message: `Error: ${
+          error.message || "Error desconocido durante el procesamiento"
+        }`,
+        documentType: "unknown",
+        errorDetails: error.stack || "No hay detalles del error disponibles",
+        errorCode: error.code || error.number || "UNKNOWN_ERROR",
+        consecutiveUsed: null,
+        consecutiveValue: null,
+      };
     }
   }
 
@@ -2191,7 +2192,7 @@ class DynamicTransferService {
       return {
         value: newValue,
         formatted: formattedValue,
-        isCentralized: false
+        isCentralized: false,
       };
     } catch (error) {
       logger.error(`Error al generar consecutivo: ${error.message}`);
@@ -2380,4 +2381,3 @@ class DynamicTransferService {
 }
 
 module.exports = new DynamicTransferService();
-            
