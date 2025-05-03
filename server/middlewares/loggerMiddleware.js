@@ -71,7 +71,7 @@ logger.logError = function (error, context = {}) {
 try {
   // Importamos estos módulos solo si los necesitamos
   const mongoose = require("mongoose");
-  const { MongoDBTransport } = require("./mongoDBTransport");
+  const { MongoDBTransport } = require("../services/mongoDBTransport");
 
   // Verificar si MongoDB está conectado
   if (
