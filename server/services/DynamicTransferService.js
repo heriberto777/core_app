@@ -28,10 +28,7 @@ class DynamicTransferService {
       },
     };
 
-    // Agregar a documentos inválidos
     invalidDocuments.push(errorEntry);
-
-    // Actualizar resultados
     results.failed++;
     results.details.push({
       documentId,
@@ -40,7 +37,6 @@ class DynamicTransferService {
       errorDetails: error.stack,
     });
 
-    // Actualizar estadísticas por tipo
     if (!results.byType["unknown"]) {
       results.byType["unknown"] = { processed: 0, failed: 0 };
     }
@@ -55,6 +51,7 @@ class DynamicTransferService {
       }
     );
   }
+
   /**
    * Maneja errores durante el procesamiento de documentos
    */
@@ -67,7 +64,6 @@ class DynamicTransferService {
     cancelTaskId,
     mappingId
   ) {
-    // Verificar si fue cancelado
     if (signal?.aborted) {
       logger.info("Tarea cancelada por el usuario");
 
@@ -101,7 +97,6 @@ class DynamicTransferService {
 
     logger.error(`Error al procesar documentos: ${error.message}`);
 
-    // Actualizar el registro de ejecución en caso de error
     if (executionId) {
       await TaskExecution.findByIdAndUpdate(executionId, {
         status: "failed",
@@ -110,7 +105,6 @@ class DynamicTransferService {
       });
     }
 
-    // Actualizar la tarea principal con el error
     if (mapping?.taskId) {
       await TransferTask.findByIdAndUpdate(mapping.taskId, {
         status: "failed",
@@ -124,8 +118,180 @@ class DynamicTransferService {
     }
 
     TaskTracker.completeTask(cancelTaskId, "failed");
-
     throw error;
+  }
+
+  /**
+   * Determina el estado final basado en los resultados del procesamiento
+   */
+  determineFinalStatus(results) {
+    if (results.failed === 0 && results.skipped === 0) {
+      return "completed";
+    } else if (results.failed > 0 && results.processed === 0) {
+      return "failed";
+    } else {
+      return "partial";
+    }
+  }
+
+  /**
+   * Finaliza la ejecución registrando los resultados
+   */
+  async finalizeExecution(
+    executionId,
+    mapping,
+    startTime,
+    totalDocuments,
+    results,
+    finalStatus
+  ) {
+    const executionUpdate = {
+      status: finalStatus,
+      executionTime: Date.now() - startTime,
+      documentsProcessed: results.processed,
+      documentsFailed: results.failed,
+      documentsSkipped: results.skipped,
+      details: results.details,
+    };
+
+    await TaskExecution.findByIdAndUpdate(executionId, executionUpdate);
+
+    if (mapping?.taskId) {
+      await TransferTask.findByIdAndUpdate(mapping.taskId, {
+        status: finalStatus === "completed" ? "success" : finalStatus,
+        lastExecution: new Date(),
+        lastExecutionResult: {
+          success: finalStatus === "completed",
+          processed: results.processed,
+          failed: results.failed,
+          skipped: results.skipped,
+        },
+      });
+    }
+  }
+
+  /**
+   * Verifica un documento individual
+   */
+  async verifyDocument(
+    documentId,
+    mapping,
+    sourceConnection,
+    targetConnection
+  ) {
+    try {
+      // Implementación básica de verificación
+      const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
+      if (!mainTable) {
+        return { valid: false, reason: "No hay tabla principal configurada" };
+      }
+
+      const query = `SELECT TOP 1 1 FROM ${mainTable.sourceTable} WHERE ${mainTable.primaryKey} = @documentId`;
+      const result = await SqlService.query(sourceConnection, query, {
+        documentId,
+      });
+
+      if (!result.recordset || result.recordset.length === 0) {
+        return { valid: false, reason: "Documento no encontrado en origen" };
+      }
+
+      // Verificar si ya existe en destino
+      const targetQuery = `SELECT TOP 1 1 FROM ${
+        mainTable.targetTable
+      } WHERE ${this.getTargetPrimaryKeyField(mainTable)} = @documentId`;
+      const targetResult = await SqlService.query(
+        targetConnection,
+        targetQuery,
+        { documentId }
+      );
+
+      if (targetResult.recordset && targetResult.recordset.length > 0) {
+        return { valid: false, reason: "Documento ya existe en destino" };
+      }
+
+      return { valid: true, documentType: "default" };
+    } catch (error) {
+      return { valid: false, reason: error.message };
+    }
+  }
+
+  /**
+   * Actualiza resultados para documento inválido
+   */
+  updateResultsForInvalidDocument(results, canProcess, documentId) {
+    results.failed++;
+    results.details.push({
+      documentId,
+      success: false,
+      error: canProcess.reason,
+    });
+
+    const docType = canProcess.documentType || "unknown";
+    if (!results.byType[docType]) {
+      results.byType[docType] = { processed: 0, failed: 0 };
+    }
+    results.byType[docType].failed++;
+  }
+
+  /**
+   * Actualiza resultados para documento procesado
+   */
+  updateResultsForProcessedDocument(results, docResult, docInfo) {
+    results.processed++;
+    results.details.push({
+      documentId: docInfo.id,
+      success: true,
+      documentType: docResult.documentType,
+      consecutive: docResult.consecutiveUsed,
+    });
+
+    if (!results.byType[docResult.documentType]) {
+      results.byType[docResult.documentType] = { processed: 0, failed: 0 };
+    }
+    results.byType[docResult.documentType].processed++;
+
+    if (docResult.consecutiveUsed) {
+      results.consecutivesUsed.push(docResult.consecutiveUsed);
+    }
+  }
+
+  /**
+   * Actualiza resultados para documento fallido
+   */
+  updateResultsForFailedDocument(results, docInfo) {
+    results.failed++;
+    results.details.push({
+      documentId: docInfo.id,
+      success: false,
+      error: docInfo.error,
+    });
+
+    if (!results.byType[docInfo.type]) {
+      results.byType[docInfo.type] = { processed: 0, failed: 0 };
+    }
+    results.byType[docInfo.type].failed++;
+  }
+
+  /**
+   * Maneja errores de procesamiento
+   */
+  handleProcessingError(error, results, docInfo) {
+    results.failed++;
+    results.details.push({
+      documentId: docInfo.id,
+      success: false,
+      error: error.message,
+      errorDetails: error.stack,
+    });
+
+    if (!results.byType[docInfo.type]) {
+      results.byType[docInfo.type] = { processed: 0, failed: 0 };
+    }
+    results.byType[docInfo.type].failed++;
+
+    logger.error(`Error procesando documento ${docInfo.id}: ${error.message}`, {
+      errorStack: error.stack,
+    });
   }
 
   async processDocuments(documentIds, mappingId, signal = null) {
@@ -148,19 +314,15 @@ class DynamicTransferService {
     const startTime = Date.now();
 
     try {
-      // 1. Cargar configuración de mapeo
       mapping = await TransferMapping.findById(mappingId);
       if (!mapping) {
         clearTimeout(timeoutId);
         throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
       }
 
-      // 2. Configurar sistema de consecutivos
       const useCentralizedConsecutives = await this.setupConsecutiveSystem(
         mapping
       );
-
-      // 3. Registrar tarea para cancelación
 
       TaskTracker.registerTask(
         cancelTaskId,
@@ -172,7 +334,6 @@ class DynamicTransferService {
         }
       );
 
-      // 4. Crear registro de ejecución
       const taskExecution = new TaskExecution({
         taskId: mapping.taskId,
         taskName: mapping.name,
@@ -186,12 +347,10 @@ class DynamicTransferService {
       await taskExecution.save();
       executionId = taskExecution._id;
 
-      // 5. Establecer conexiones
       [sourceConnection, targetConnection] = await this.establishConnections(
         mapping
       );
 
-      // 6. FASE 1: VERIFICACIÓN
       const { validDocuments, invalidDocuments, results } =
         await this.verifyDocuments(
           documentIds,
@@ -200,7 +359,6 @@ class DynamicTransferService {
           targetConnection
         );
 
-      // 7. FASE 2: GENERACIÓN DE CONSECUTIVOS
       if (validDocuments.length > 0 && mapping.consecutiveConfig?.enabled) {
         await this.generateConsecutivesForDocuments(
           validDocuments,
@@ -209,7 +367,6 @@ class DynamicTransferService {
         );
       }
 
-      // 8. FASE 3: PROCESAMIENTO
       await this.processValidDocuments(
         validDocuments,
         mapping,
@@ -218,7 +375,6 @@ class DynamicTransferService {
         results
       );
 
-      // 9. Finalizar ejecución
       clearTimeout(timeoutId);
       const finalStatus = this.determineFinalStatus(results);
 
@@ -240,7 +396,6 @@ class DynamicTransferService {
         ...results,
       };
     } catch (error) {
-      // Manejo de errores
       clearTimeout(timeoutId);
       return await this.handleProcessError(
         error,
@@ -252,7 +407,6 @@ class DynamicTransferService {
         mappingId
       );
     } finally {
-      // Liberar conexiones
       await ConnectionManager.releaseConnection(
         sourceConnection,
         targetConnection
