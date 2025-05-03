@@ -1333,6 +1333,25 @@ class DynamicTransferService {
       throw error;
     }
   }
+
+  async establishConnections(mapping) {
+    logger.info(
+      `Estableciendo conexiones a ${mapping.sourceServer} y ${mapping.targetServer}...`
+    );
+
+    try {
+      const connections = await Promise.all([
+        this.getConnectionWithRetry(mapping.sourceServer),
+        this.getConnectionWithRetry(mapping.targetServer),
+      ]);
+
+      logger.info("Conexiones establecidas exitosamente");
+      return connections;
+    } catch (error) {
+      logger.error("Error estableciendo conexiones:", error);
+      throw new Error(`No se pudo establecer conexiones: ${error.message}`);
+    }
+  }
 }
 
 module.exports = new DynamicTransferService();
