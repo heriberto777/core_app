@@ -2674,6 +2674,79 @@ class DynamicTransferService {
       return false;
     }
   }
+
+  /**
+   * Maneja errores durante el procesamiento de documentos
+   */
+  async handleProcessError(
+    error,
+    signal,
+    executionId,
+    mapping,
+    startTime,
+    cancelTaskId,
+    mappingId
+  ) {
+    // Verificar si fue cancelado
+    if (signal?.aborted) {
+      logger.info("Tarea cancelada por el usuario");
+
+      if (executionId) {
+        await TaskExecution.findByIdAndUpdate(executionId, {
+          status: "cancelled",
+          executionTime: Date.now() - startTime,
+          errorMessage: "Cancelada por el usuario",
+        });
+      }
+
+      if (mapping?.taskId) {
+        await TransferTask.findByIdAndUpdate(mapping.taskId, {
+          status: "cancelled",
+          progress: -1,
+          lastExecutionResult: {
+            success: false,
+            message: "Tarea cancelada por el usuario",
+          },
+        });
+      }
+
+      TaskTracker.completeTask(cancelTaskId, "cancelled");
+
+      return {
+        success: false,
+        message: "Tarea cancelada por el usuario",
+        executionId,
+      };
+    }
+
+    logger.error(`Error al procesar documentos: ${error.message}`);
+
+    // Actualizar el registro de ejecución en caso de error
+    if (executionId) {
+      await TaskExecution.findByIdAndUpdate(executionId, {
+        status: "failed",
+        executionTime: Date.now() - startTime,
+        errorMessage: error.message,
+      });
+    }
+
+    // Actualizar la tarea principal con el error
+    if (mapping?.taskId) {
+      await TransferTask.findByIdAndUpdate(mapping.taskId, {
+        status: "failed",
+        progress: -1,
+        lastExecutionResult: {
+          success: false,
+          message: `Error: ${error.message}`,
+          errorDetails: error.stack,
+        },
+      });
+    }
+
+    TaskTracker.completeTask(cancelTaskId, "failed");
+
+    throw error;
+  }
 }
 
 module.exports = new DynamicTransferService();
