@@ -2312,6 +2312,583 @@ class DynamicTransferService {
       return false;
     }
   }
+  /**
+   * Obtiene los documentos según los filtros especificados
+   * @param {Object} mapping - Configuración de mapeo
+   * @param {Object} filters - Filtros para la consulta
+   * @param {Object} connection - Conexión a la base de datos
+   * @returns {Promise<Array>} - Documentos encontrados
+   */
+  async getDocuments(mapping, filters, connection) {
+    try {
+      // Listar tablas disponibles en la base de datos para depuración
+      try {
+        logger.info("Listando tablas disponibles en la base de datos...");
+        const listTablesQuery = `
+        SELECT TOP 50 TABLE_SCHEMA, TABLE_NAME 
+        FROM INFORMATION_SCHEMA.TABLES 
+        ORDER BY TABLE_SCHEMA, TABLE_NAME
+      `;
+
+        const tablesResult = await SqlService.query(
+          connection,
+          listTablesQuery
+        );
+
+        if (tablesResult.recordset && tablesResult.recordset.length > 0) {
+          const tables = tablesResult.recordset;
+          logger.info(
+            `Tablas disponibles: ${tables
+              .map((t) => `${t.TABLE_SCHEMA}.${t.TABLE_NAME}`)
+              .join(", ")}`
+          );
+        } else {
+          logger.warn("No se encontraron tablas en la base de datos");
+        }
+      } catch (listError) {
+        logger.warn(`Error al listar tablas: ${listError.message}`);
+      }
+
+      // Validar que el mapeo sea válido
+      if (!mapping) {
+        throw new Error("La configuración de mapeo es nula o indefinida");
+      }
+
+      if (
+        !mapping.tableConfigs ||
+        !Array.isArray(mapping.tableConfigs) ||
+        mapping.tableConfigs.length === 0
+      ) {
+        throw new Error(
+          "La configuración de mapeo no tiene tablas configuradas"
+        );
+      }
+
+      // Determinar tabla principal
+      const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
+      if (!mainTable) {
+        throw new Error("No se encontró configuración de tabla principal");
+      }
+
+      if (!mainTable.sourceTable) {
+        throw new Error(
+          "La tabla principal no tiene definido el campo sourceTable"
+        );
+      }
+
+      logger.info(
+        `Obteniendo documentos de ${mainTable.sourceTable} en ${mapping.sourceServer}`
+      );
+
+      // Verificar si la tabla existe, manejando correctamente esquemas
+      try {
+        // Separar esquema y nombre de tabla
+        let schema = "dbo"; // Esquema por defecto
+        let tableName = mainTable.sourceTable;
+
+        if (tableName.includes(".")) {
+          const parts = tableName.split(".");
+          schema = parts[0];
+          tableName = parts[1];
+        }
+
+        logger.info(
+          `Verificando existencia de tabla: Esquema=${schema}, Tabla=${tableName}`
+        );
+
+        const checkTableQuery = `
+        SELECT COUNT(*) AS table_exists 
+        FROM INFORMATION_SCHEMA.TABLES 
+        WHERE TABLE_SCHEMA = '${schema}' AND TABLE_NAME = '${tableName}'
+      `;
+
+        const tableCheck = await SqlService.query(connection, checkTableQuery);
+
+        if (
+          !tableCheck.recordset ||
+          tableCheck.recordset[0].table_exists === 0
+        ) {
+          // Si no se encuentra, intentar buscar sin distinguir mayúsculas/minúsculas
+          const searchTableQuery = `
+          SELECT TOP 5 TABLE_SCHEMA, TABLE_NAME 
+          FROM INFORMATION_SCHEMA.TABLES 
+          WHERE TABLE_NAME LIKE '%${tableName}%'
+        `;
+
+          const searchResult = await SqlService.query(
+            connection,
+            searchTableQuery
+          );
+
+          if (searchResult.recordset && searchResult.recordset.length > 0) {
+            logger.warn(
+              `Tabla '${schema}.${tableName}' no encontrada, pero se encontraron similares: ${searchResult.recordset
+                .map((t) => `${t.TABLE_SCHEMA}.${t.TABLE_NAME}`)
+                .join(", ")}`
+            );
+          }
+
+          throw new Error(
+            `La tabla '${schema}.${tableName}' no existe en el servidor ${mapping.sourceServer}`
+          );
+        }
+
+        logger.info(`Tabla ${schema}.${tableName} verificada correctamente`);
+
+        // Obtener todas las columnas de la tabla para validar los campos
+        const columnsQuery = `
+        SELECT COLUMN_NAME, DATA_TYPE 
+        FROM INFORMATION_SCHEMA.COLUMNS 
+        WHERE TABLE_SCHEMA = '${schema}' AND TABLE_NAME = '${tableName}'
+      `;
+
+        const columnsResult = await SqlService.query(connection, columnsQuery);
+
+        if (!columnsResult.recordset || columnsResult.recordset.length === 0) {
+          logger.warn(
+            `No se pudieron obtener las columnas de ${schema}.${tableName}`
+          );
+          throw new Error(
+            `No se pudieron obtener las columnas de la tabla ${schema}.${tableName}`
+          );
+        }
+
+        const availableColumns = columnsResult.recordset.map(
+          (c) => c.COLUMN_NAME
+        );
+        logger.info(
+          `Columnas disponibles en ${schema}.${tableName}: ${availableColumns.join(
+            ", "
+          )}`
+        );
+
+        // Guardar el nombre completo de la tabla con esquema para usarlo en la consulta
+        const fullTableName = `${schema}.${tableName}`;
+
+        // Construir campos a seleccionar basados en la configuración, validando que existan
+        let selectFields = [];
+
+        if (mainTable.fieldMappings && mainTable.fieldMappings.length > 0) {
+          for (const mapping of mainTable.fieldMappings) {
+            if (mapping.sourceField) {
+              // Verificar si la columna existe
+              if (availableColumns.includes(mapping.sourceField)) {
+                selectFields.push(mapping.sourceField);
+              } else {
+                logger.warn(
+                  `Columna ${mapping.sourceField} no existe en ${fullTableName} y será omitida`
+                );
+              }
+            }
+          }
+        }
+
+        // Si no hay campos válidos, seleccionar todas las columnas disponibles
+        if (selectFields.length === 0) {
+          logger.warn(
+            `No se encontraron campos válidos para seleccionar, se usarán todas las columnas`
+          );
+          selectFields = availableColumns;
+        }
+
+        const selectFieldsStr = selectFields.join(", ");
+        logger.debug(`Campos a seleccionar: ${selectFieldsStr}`);
+
+        // Construir consulta basada en filtros, usando el nombre completo de la tabla
+        let query = `
+        SELECT ${selectFieldsStr}
+        FROM ${fullTableName}
+        WHERE 1=1
+      `;
+
+        const params = {};
+
+        // Verificar si los campos utilizados en filtros existen
+        let dateFieldExists = false;
+        let dateField = filters.dateField || "FEC_PED";
+        if (availableColumns.includes(dateField)) {
+          dateFieldExists = true;
+        } else {
+          // Buscar campos de fecha alternativos
+          const possibleDateFields = [
+            "FECHA",
+            "DATE",
+            "CREATED_DATE",
+            "FECHA_CREACION",
+            "FECHA_PEDIDO",
+          ];
+          for (const field of possibleDateFields) {
+            if (availableColumns.includes(field)) {
+              dateField = field;
+              dateFieldExists = true;
+              logger.info(
+                `Campo de fecha '${
+                  filters.dateField || "FEC_PED"
+                }' no encontrado, usando '${dateField}' en su lugar`
+              );
+              break;
+            }
+          }
+        }
+
+        // Aplicar filtros solo si los campos existen
+        if (filters.dateFrom && dateFieldExists) {
+          query += ` AND ${dateField} >= @dateFrom`;
+          params.dateFrom = new Date(filters.dateFrom);
+        } else if (filters.dateFrom) {
+          logger.warn(
+            `No se aplicará filtro de fecha inicial porque no existe un campo de fecha válido`
+          );
+        }
+
+        if (filters.dateTo && dateFieldExists) {
+          query += ` AND ${dateField} <= @dateTo`;
+          params.dateTo = new Date(filters.dateTo);
+        } else if (filters.dateTo) {
+          logger.warn(
+            `No se aplicará filtro de fecha final porque no existe un campo de fecha válido`
+          );
+        }
+
+        // Verificar campo de estado
+        if (filters.status && filters.status !== "all") {
+          const statusField = filters.statusField || "ESTADO";
+          if (availableColumns.includes(statusField)) {
+            query += ` AND ${statusField} = @status`;
+            params.status = filters.status;
+          } else {
+            logger.warn(
+              `Campo de estado '${statusField}' no existe, filtro de estado no aplicado`
+            );
+          }
+        }
+
+        // Verificar campo de bodega
+        if (filters.warehouse && filters.warehouse !== "all") {
+          const warehouseField = filters.warehouseField || "COD_BOD";
+          if (availableColumns.includes(warehouseField)) {
+            query += ` AND ${warehouseField} = @warehouse`;
+            params.warehouse = filters.warehouse;
+          } else {
+            logger.warn(
+              `Campo de bodega '${warehouseField}' no existe, filtro de bodega no aplicado`
+            );
+          }
+        }
+
+        // Filtrar documentos procesados solo si el campo existe
+        if (!filters.showProcessed && mapping.markProcessedField) {
+          if (availableColumns.includes(mapping.markProcessedField)) {
+            query += ` AND (${mapping.markProcessedField} IS NULL)`;
+          } else {
+            logger.warn(
+              `Campo de procesado '${mapping.markProcessedField}' no existe, filtro de procesado no aplicado`
+            );
+          }
+        }
+
+        // Aplicar condición adicional si existe
+        if (mainTable.filterCondition) {
+          // Verificar primero si la condición contiene campos válidos
+          // (Esto es más complejo, simplemente advertimos)
+          logger.warn(
+            `Aplicando condición adicional: ${mainTable.filterCondition} (no se validó si los campos existen)`
+          );
+          query += ` AND ${mainTable.filterCondition}`;
+        }
+
+        // Ordenar por fecha descendente si existe el campo
+        if (dateFieldExists) {
+          query += ` ORDER BY ${dateField} DESC`;
+        } else {
+          // Ordenar por la primera columna si no hay campo de fecha
+          query += ` ORDER BY ${selectFields[0]} DESC`;
+        }
+
+        logger.debug(`Consulta final: ${query}`);
+        logger.debug(`Parámetros: ${JSON.stringify(params)}`);
+
+        // Ejecutar consulta con un límite de registros para no sobrecargar
+        query = `SELECT TOP 500 ${query.substring(
+          query.indexOf("SELECT ") + 7
+        )}`;
+
+        try {
+          const result = await SqlService.query(connection, query, params);
+
+          logger.info(
+            `Documentos obtenidos: ${
+              result.recordset ? result.recordset.length : 0
+            }`
+          );
+
+          return result.recordset || [];
+        } catch (queryError) {
+          logger.error(`Error al ejecutar consulta SQL: ${queryError.message}`);
+          throw new Error(
+            `Error en consulta SQL (${fullTableName}): ${queryError.message}`
+          );
+        }
+      } catch (checkError) {
+        logger.error(
+          `Error al verificar existencia de tabla ${mainTable.sourceTable}:`,
+          checkError
+        );
+        throw new Error(
+          `Error al verificar tabla ${mainTable.sourceTable}: ${checkError.message}`
+        );
+      }
+    } catch (error) {
+      logger.error(`Error al obtener documentos: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Crea una nueva configuración de mapeo
+   * @param {Object} mappingData - Datos de la configuración
+   * @returns {Promise<Object>} - Configuración creada
+   */
+  async createMapping(mappingData) {
+    try {
+      // Si no hay taskId, crear una tarea por defecto
+      if (!mappingData.taskId) {
+        // Crear tarea básica basada en la configuración del mapeo
+        let defaultQuery = "SELECT 1";
+
+        // Intentar construir una consulta basada en la primera tabla principal
+        if (mappingData.tableConfigs && mappingData.tableConfigs.length > 0) {
+          const mainTable = mappingData.tableConfigs.find(
+            (tc) => !tc.isDetailTable
+          );
+          if (mainTable && mainTable.sourceTable) {
+            defaultQuery = `SELECT * FROM ${mainTable.sourceTable}`;
+          }
+        }
+
+        const taskData = {
+          name: `Task_${mappingData.name}`,
+          type: "manual",
+          active: true,
+          transferType: mappingData.transferType || "down",
+          query: defaultQuery,
+          parameters: [],
+          status: "pending",
+        };
+
+        // Guardar la tarea
+        const task = new TransferTask(taskData);
+        await task.save();
+
+        logger.info(`Tarea por defecto creada para mapeo: ${task._id}`);
+
+        // Asignar el ID de la tarea al mapeo
+        mappingData.taskId = task._id;
+      }
+
+      const mapping = new TransferMapping(mappingData);
+      await mapping.save();
+      return mapping;
+    } catch (error) {
+      logger.error(`Error al crear configuración de mapeo: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Actualiza una configuración de mapeo existente
+   * @param {string} mappingId - ID de la configuración
+   * @param {Object} mappingData - Datos actualizados
+   * @returns {Promise<Object>} - Configuración actualizada
+   */
+  async updateMapping(mappingId, mappingData) {
+    try {
+      // Verificar si existe el mapeo
+      const existingMapping = await TransferMapping.findById(mappingId);
+      if (!existingMapping) {
+        throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
+      }
+
+      // Si hay cambios en las tablas y ya existe un taskId, actualizar la consulta de la tarea
+      if (mappingData.tableConfigs && existingMapping.taskId) {
+        try {
+          const TransferTask = require("../models/transferTaks");
+          const task = await TransferTask.findById(existingMapping.taskId);
+
+          if (task) {
+            // Actualizar la consulta si cambió la tabla principal
+            const mainTable = mappingData.tableConfigs.find(
+              (tc) => !tc.isDetailTable
+            );
+            if (mainTable && mainTable.sourceTable) {
+              task.query = `SELECT * FROM ${mainTable.sourceTable}`;
+              await task.save();
+              logger.info(
+                `Tarea ${task._id} actualizada automáticamente con nueva consulta`
+              );
+            }
+          }
+        } catch (taskError) {
+          logger.warn(
+            `Error al actualizar tarea asociada: ${taskError.message}`
+          );
+          // No detener la operación si falla la actualización de la tarea
+        }
+      }
+
+      // Si no tiene taskId, crear uno
+      if (!existingMapping.taskId && !mappingData.taskId) {
+        const TransferTask = require("../models/transferTaks");
+
+        let defaultQuery = "SELECT 1";
+        if (mappingData.tableConfigs && mappingData.tableConfigs.length > 0) {
+          const mainTable = mappingData.tableConfigs.find(
+            (tc) => !tc.isDetailTable
+          );
+          if (mainTable && mainTable.sourceTable) {
+            defaultQuery = `SELECT * FROM ${mainTable.sourceTable}`;
+          }
+        }
+
+        const taskData = {
+          name: `Task_${mappingData.name || existingMapping.name}`,
+          type: "manual",
+          active: true,
+          transferType:
+            mappingData.transferType || existingMapping.transferType || "down",
+          query: defaultQuery,
+          parameters: [],
+          status: "pending",
+        };
+
+        const task = new TransferTask(taskData);
+        await task.save();
+
+        logger.info(
+          `Tarea por defecto creada para mapeo existente: ${task._id}`
+        );
+
+        // Asignar el ID de la tarea al mapeo
+        mappingData.taskId = task._id;
+      }
+
+      const mapping = await TransferMapping.findByIdAndUpdate(
+        mappingId,
+        mappingData,
+        { new: true }
+      );
+
+      return mapping;
+    } catch (error) {
+      logger.error(
+        `Error al actualizar configuración de mapeo: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene todas las configuraciones de mapeo
+   * @returns {Promise<Array>} - Lista de configuraciones
+   */
+  async getMappings() {
+    try {
+      return await TransferMapping.find().sort({ name: 1 });
+    } catch (error) {
+      logger.error(
+        `Error al obtener configuraciones de mapeo: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene una configuración de mapeo por ID
+   * @param {string} mappingId - ID de la configuración
+   * @returns {Promise<Object>} - Configuración de mapeo
+   */
+  async getMappingById(mappingId) {
+    try {
+      const mapping = await TransferMapping.findById(mappingId);
+
+      if (!mapping) {
+        throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
+      }
+
+      return mapping;
+    } catch (error) {
+      logger.error(`Error al obtener configuración de mapeo: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Elimina una configuración de mapeo
+   * @param {string} mappingId - ID de la configuración
+   * @returns {Promise<boolean>} - true si se eliminó correctamente
+   */
+  async deleteMapping(mappingId) {
+    try {
+      const result = await TransferMapping.findByIdAndDelete(mappingId);
+      return !!result;
+    } catch (error) {
+      logger.error(
+        `Error al eliminar configuración de mapeo: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Genera un consecutivo según la configuración
+   * @param {Object} mapping - Configuración de mapeo
+   * @returns {Promise<Object>} - { value: number, formatted: string }
+   */
+  async generateConsecutive(mapping) {
+    try {
+      if (!mapping.consecutiveConfig || !mapping.consecutiveConfig.enabled) {
+        return null;
+      }
+
+      // Generar número consecutivo
+      const lastValue = mapping.consecutiveConfig.lastValue || 0;
+      const newValue = lastValue + 1;
+
+      // IMPORTANTE: Actualizar inmediatamente el último valor usado en la configuración
+      // Esto evita que dos documentos obtengan el mismo valor consecutivo
+      await this.updateLastConsecutive(mapping._id, newValue);
+      logger.info(
+        `Consecutivo reservado: ${newValue} para mapeo ${mapping._id}`
+      );
+
+      // Formatear según el patrón si existe
+      let formattedValue = String(newValue);
+
+      if (mapping.consecutiveConfig.pattern) {
+        formattedValue = this.formatConsecutive(
+          mapping.consecutiveConfig.pattern,
+          {
+            PREFIX: mapping.consecutiveConfig.prefix || "",
+            VALUE: newValue,
+            YEAR: new Date().getFullYear(),
+            MONTH: String(new Date().getMonth() + 1).padStart(2, "0"),
+            DAY: String(new Date().getDate()).padStart(2, "0"),
+          }
+        );
+      } else if (mapping.consecutiveConfig.prefix) {
+        // Si no hay patrón pero sí prefijo
+        formattedValue = `${mapping.consecutiveConfig.prefix}${newValue}`;
+      }
+
+      return {
+        value: newValue,
+        formatted: formattedValue,
+      };
+    } catch (error) {
+      logger.error(`Error al generar consecutivo: ${error.message}`);
+      throw error;
+    }
+  }
 
   /**
    * Formatea un consecutivo según el patrón
