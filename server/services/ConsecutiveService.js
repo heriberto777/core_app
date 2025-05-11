@@ -39,8 +39,10 @@ class ConsecutiveService {
       if (consecutive.assignedTo.length > 0 && user && user.id) {
         const hasPermission = consecutive.assignedTo.some(
           (assignment) =>
-            assignment.entityType === "user" &&
-            assignment.entityId.equals(user.id) &&
+            ((assignment.entityType === "user" &&
+              assignment.entityId.equals(user.id)) ||
+              (assignment.entityType === "mapping" &&
+                assignment.entityId.equals(user.id))) &&
             (assignment.allowedOperations.includes("increment") ||
               assignment.allowedOperations.includes("all"))
         );
