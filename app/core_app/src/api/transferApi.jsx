@@ -1791,4 +1791,220 @@ export class TransferApi {
       throw error;
     }
   }
+
+  // Agregar métodos para manejar reservas en transferApi.jsx
+  async reserveConsecutiveValues(
+    accessToken,
+    consecutiveId,
+    quantity,
+    options = {}
+  ) {
+    try {
+      const url = `${this.baseApi}/consecutives/reserve-batch`;
+      const params = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          consecutiveId,
+          quantity,
+          segment: options.segment,
+          reservedBy: options.reservedBy || "web_client",
+        }),
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al reservar valores consecutivos:", error);
+      throw error;
+    }
+  }
+
+  async commitConsecutiveReservation(
+    accessToken,
+    consecutiveId,
+    reservationId,
+    values
+  ) {
+    try {
+      const url = `${this.baseApi}/consecutives/commit-reservation`;
+      const params = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          consecutiveId,
+          reservationId,
+          values,
+        }),
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al confirmar reserva:", error);
+      throw error;
+    }
+  }
+
+  async cancelConsecutiveReservation(
+    accessToken,
+    consecutiveId,
+    reservationId
+  ) {
+    try {
+      const url = `${this.baseApi}/consecutives/cancel-reservation`;
+      const params = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          consecutiveId,
+          reservationId,
+        }),
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al cancelar reserva:", error);
+      throw error;
+    }
+  }
+
+  async cleanupExpiredReservations(accessToken) {
+    try {
+      const url = `${this.baseApi}/consecutives/cleanup-expired-reservations`;
+      const params = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al limpiar reservas expiradas:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene el dashboard de consecutivos
+   */
+  async getConsecutiveDashboard(accessToken) {
+    try {
+      const url = `${this.baseApi}/consecutives/dashboard`;
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al obtener dashboard de consecutivos:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene métricas de un consecutivo específico
+   */
+  async getConsecutiveMetrics(accessToken, consecutiveId, timeRange = "24h") {
+    try {
+      const url = `${this.baseApi}/consecutives/metrics/${consecutiveId}?timeRange=${timeRange}`;
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al obtener métricas de consecutivo:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Hacer una petición GET genérica (método auxiliar)
+   */
+  async get(endpoint, accessToken) {
+    try {
+      const url = `${this.baseApi}${endpoint}`;
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error(`Error en petición GET a ${endpoint}:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Hacer una petición POST genérica (método auxiliar)
+   */
+  async post(endpoint, accessToken, data = null) {
+    try {
+      const url = `${this.baseApi}${endpoint}`;
+      const params = {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      };
+
+      if (data) {
+        params.body = JSON.stringify(data);
+      }
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error(`Error en petición POST a ${endpoint}:`, error);
+      throw error;
+    }
+  }
 }

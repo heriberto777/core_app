@@ -15,7 +15,7 @@ const FormatRuleSchema = new Schema({
 
 // Schema principal para consecutivos
 const ConsecutiveSchema = new Schema({
-  name: { type: String, required: true },
+  name: { type: String, required: true, unique: true },
   description: { type: String },
   currentValue: { type: Number, default: 0 },
   incrementBy: { type: Number, default: 1 },
@@ -58,13 +58,25 @@ const ConsecutiveSchema = new Schema({
     values: { type: Map, of: Number, default: new Map() }, // Mapa de valores actuales por segmento
   },
 
+  // Bloqueo para evitar concurrencia
+  locked: { type: Boolean, default: false },
+  lockedAt: { type: Date },
+  lockedBy: { type: String },
+
   // Historico y auditoría
   history: [
     {
       date: { type: Date, default: Date.now },
       action: {
         type: String,
-        enum: ["created", "incremented", "reset", "updated"],
+        enum: [
+          "created",
+          "incremented",
+          "reset",
+          "updated",
+          "reserved",
+          "commited",
+        ],
         required: true,
       },
       value: { type: Number },
@@ -73,6 +85,22 @@ const ConsecutiveSchema = new Schema({
         userId: { type: Schema.Types.ObjectId },
         userName: { type: String },
       },
+      details: { type: Map, of: String },
+    },
+  ],
+
+  // Reservas temporales para evitar duplicados
+  reservations: [
+    {
+      value: { type: Number },
+      reservedBy: { type: String },
+      expiresAt: { type: Date },
+      status: {
+        type: String,
+        enum: ["reserved", "committed", "expired"],
+        default: "reserved",
+      },
+      createdAt: { type: Date, default: Date.now },
     },
   ],
 
@@ -88,6 +116,8 @@ ConsecutiveSchema.index({
   "assignedTo.entityType": 1,
   "assignedTo.entityId": 1,
 });
+ConsecutiveSchema.index({ "reservations.expiresAt": 1 }); // Para limpiar reservas expiradas
+ConsecutiveSchema.index({ "reservations.value": 1, "reservations.status": 1 });
 
 // Middleware para actualizar fecha de modificación
 ConsecutiveSchema.pre("save", function (next) {
@@ -127,36 +157,212 @@ ConsecutiveSchema.methods.formatValue = function (value, segmentValue = null) {
   return `${this.prefix}${paddedValue}${this.suffix}`;
 };
 
-// Método para obtener el siguiente valor
-ConsecutiveSchema.methods.getNextValue = function (segmentValue = null) {
-  if (this.segments && this.segments.enabled && segmentValue) {
-    // Si usa segmentos y se proporcionó un valor de segmento
-    let currentSegmentValue = this.segments.values.get(segmentValue) || 0;
-    currentSegmentValue += this.incrementBy;
-    this.segments.values.set(segmentValue, currentSegmentValue);
+// Método para obtener el siguiente valor con bloqueo atómico
+ConsecutiveSchema.methods.getNextValue = async function (
+  segmentValue = null,
+  quantity = 1,
+  reservedBy = "system"
+) {
+  const session = await mongoose.startSession();
+  session.startTransaction();
 
-    // Registrar en historial
-    this.history.push({
-      date: new Date(),
-      action: "incremented",
-      value: currentSegmentValue,
-      segment: segmentValue,
+  try {
+    // Bloqueo pesimista para evitar concurrencia
+    const consecutiveLocked = await mongoose
+      .model("Consecutive")
+      .findOneAndUpdate(
+        {
+          _id: this._id,
+          $or: [
+            { locked: false },
+            { locked: true, lockedAt: { $lt: new Date(Date.now() - 5000) } }, // Auto-unlock después de 5s
+          ],
+        },
+        {
+          locked: true,
+          lockedAt: new Date(),
+          lockedBy: reservedBy,
+        },
+        { session, new: true }
+      );
+
+    if (!consecutiveLocked) {
+      throw new Error("No se pudo obtener bloqueo del consecutivo");
+    }
+
+    let values = [];
+    let currentValue;
+
+    if (this.segments && this.segments.enabled && segmentValue) {
+      // Si usa segmentos y se proporcionó un valor de segmento
+      currentValue = this.segments.values.get(segmentValue) || 0;
+
+      for (let i = 0; i < quantity; i++) {
+        currentValue += this.incrementBy;
+        this.segments.values.set(segmentValue, currentValue);
+
+        const formattedValue = this.formatValue(currentValue, segmentValue);
+        values.push({
+          numeric: currentValue,
+          formatted: formattedValue,
+          segment: segmentValue,
+        });
+
+        // Crear reserva temporal
+        const reservation = {
+          value: currentValue,
+          reservedBy: reservedBy,
+          expiresAt: new Date(Date.now() + 60000), // Expira en 1 minuto
+          status: "reserved",
+        };
+
+        this.reservations.push(reservation);
+      }
+
+      // Registrar en historial
+      this.history.push({
+        date: new Date(),
+        action: "reserved",
+        value: currentValue,
+        segment: segmentValue,
+        details: new Map([
+          ["quantity", String(quantity)],
+          ["reservedBy", reservedBy],
+        ]),
+      });
+    } else {
+      // Incremento normal sin segmentos
+      currentValue = this.currentValue;
+
+      for (let i = 0; i < quantity; i++) {
+        currentValue += this.incrementBy;
+
+        const formattedValue = this.formatValue(currentValue);
+        values.push({
+          numeric: currentValue,
+          formatted: formattedValue,
+          segment: null,
+        });
+
+        // Crear reserva temporal
+        const reservation = {
+          value: currentValue,
+          reservedBy: reservedBy,
+          expiresAt: new Date(Date.now() + 60000), // Expira en 1 minuto
+          status: "reserved",
+        };
+
+        this.reservations.push(reservation);
+      }
+
+      this.currentValue = currentValue;
+
+      // Registrar en historial
+      this.history.push({
+        date: new Date(),
+        action: "reserved",
+        value: currentValue,
+        details: new Map([
+          ["quantity", String(quantity)],
+          ["reservedBy", reservedBy],
+        ]),
+      });
+    }
+
+    // Guardar los cambios
+    await this.save({ session });
+
+    // Liberar bloqueo
+    await mongoose
+      .model("Consecutive")
+      .findByIdAndUpdate(
+        this._id,
+        { locked: false, lockedBy: null, lockedAt: null },
+        { session }
+      );
+
+    await session.commitTransaction();
+    return values;
+  } catch (error) {
+    await session.abortTransaction();
+
+    // Intentar liberar bloqueo en caso de error
+    await mongoose.model("Consecutive").findByIdAndUpdate(this._id, {
+      locked: false,
+      lockedBy: null,
+      lockedAt: null,
     });
 
-    return this.formatValue(currentSegmentValue, segmentValue);
-  } else {
-    // Incremento normal sin segmentos
-    this.currentValue += this.incrementBy;
-
-    // Registrar en historial
-    this.history.push({
-      date: new Date(),
-      action: "incremented",
-      value: this.currentValue,
-    });
-
-    return this.formatValue(this.currentValue);
+    throw error;
+  } finally {
+    session.endSession();
   }
+};
+
+// Método para confirmar reservas
+ConsecutiveSchema.methods.commitReservations = async function (
+  values,
+  reservedBy = "system"
+) {
+  const session = await mongoose.startSession();
+  session.startTransaction();
+
+  try {
+    for (const value of values) {
+      const reservation = this.reservations.find(
+        (r) =>
+          r.value === value.numeric &&
+          r.reservedBy === reservedBy &&
+          r.status === "reserved"
+      );
+
+      if (reservation) {
+        reservation.status = "committed";
+      } else {
+        throw new Error(`Reserva no encontrada para valor ${value.numeric}`);
+      }
+    }
+
+    // Limpiar reservas confirmadas antiguas (mantener solo últimas 100)
+    const committedReservations = this.reservations
+      .filter((r) => r.status === "committed")
+      .sort((a, b) => b.createdAt - a.createdAt);
+
+    if (committedReservations.length > 100) {
+      const toRemove = committedReservations.slice(100);
+      this.reservations = this.reservations.filter(
+        (r) => !toRemove.some((tr) => tr._id.toString() === r._id.toString())
+      );
+    }
+
+    // Registrar en historial
+    this.history.push({
+      date: new Date(),
+      action: "committed",
+      value: values[values.length - 1].numeric,
+      details: new Map([
+        ["committedCount", String(values.length)],
+        ["reservedBy", reservedBy],
+      ]),
+    });
+
+    await this.save({ session });
+    await session.commitTransaction();
+  } catch (error) {
+    await session.abortTransaction();
+    throw error;
+  } finally {
+    session.endSession();
+  }
+};
+
+// Limpiar reservas expiradas
+ConsecutiveSchema.methods.cleanExpiredReservations = async function () {
+  const now = new Date();
+  this.reservations = this.reservations.filter(
+    (r) => r.status === "committed" || r.expiresAt > now
+  );
+  await this.save();
 };
 
 module.exports = mongoose.model("Consecutive", ConsecutiveSchema);

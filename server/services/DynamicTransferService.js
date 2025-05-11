@@ -5,7 +5,6 @@ const TransferMapping = require("../models/transferMappingModel");
 const TaskExecution = require("../models/taskExecutionModel");
 const TaskTracker = require("./TaskTracker");
 const TransferTask = require("../models/transferTaks");
-
 const ConsecutiveService = require("./ConsecutiveService");
 
 class DynamicTransferService {
@@ -35,12 +34,11 @@ class DynamicTransferService {
     let mapping = null;
     const startTime = Date.now();
 
-    // Inicializar el valor consecutivo más alto
-    let highestConsecutiveValue = 0;
-
-    // Variable para almacenar la referencia al consecutivo centralizado
-    let centralizedConsecutiveId = null;
+    // Variables para manejar reservas de consecutivos
+    let consecutiveReservation = null;
+    let consecutiveValues = [];
     let useCentralizedConsecutives = false;
+    let centralizedConsecutiveId = null;
 
     try {
       // 1. Cargar configuración de mapeo
@@ -63,8 +61,32 @@ class DynamicTransferService {
           if (assignedConsecutives && assignedConsecutives.length > 0) {
             useCentralizedConsecutives = true;
             centralizedConsecutiveId = assignedConsecutives[0]._id;
+
+            // Reservar valores para todos los documentos por lotes
+            const batchSize = Math.min(documentIds.length, 100); // Máximo 100 por lote
+
+            for (let i = 0; i < documentIds.length; i += batchSize) {
+              const batch = documentIds.slice(i, i + batchSize);
+              const reservation =
+                await ConsecutiveService.reserveConsecutiveValues(
+                  centralizedConsecutiveId,
+                  batch.length,
+                  { segment: null }, // Configurar según necesidad
+                  { id: "system", name: "System" }
+                );
+
+              if (!consecutiveReservation) {
+                consecutiveReservation = reservation;
+                consecutiveValues = reservation.values;
+              } else {
+                consecutiveValues = consecutiveValues.concat(
+                  reservation.values
+                );
+              }
+            }
+
             logger.info(
-              `Usando sistema centralizado de consecutivos para mapeo ${mappingId}. ID: ${centralizedConsecutiveId}`
+              `Pre-reservados ${consecutiveValues.length} consecutivos para mapeo ${mappingId}`
             );
           } else {
             logger.info(
@@ -190,14 +212,14 @@ class DynamicTransferService {
       // 6. Configuración para usar o no transacciones
       const useTransactions = false; // Cambiamos a false para evitar problemas con transacciones
 
-      // 7. Procesar documentos
+      // 7. Procesar documentos con consecutivos pre-reservados
       const results = {
         processed: 0,
         failed: 0,
         skipped: 0,
         byType: {},
         details: [],
-        consecutivesUsed: [], // Registrar consecutivos usados
+        consecutivesUsed: [],
       };
 
       let hasErrors = false;
@@ -211,89 +233,42 @@ class DynamicTransferService {
         }
 
         const documentId = documentIds[i];
+        let currentConsecutive = null;
 
         try {
-          // Generar consecutivo para este documento específico
-          let currentConsecutive = null;
-
+          // Obtener consecutivo para este documento específico
           if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
-            try {
-              if (useCentralizedConsecutives) {
-                // USAR SISTEMA CENTRALIZADO PARA ESTE DOCUMENTO
-                // Determinar si necesitamos un segmento específico
-                let segmentValue = null;
+            if (useCentralizedConsecutives && consecutiveValues[i]) {
+              // Usar el consecutivo pre-reservado
+              currentConsecutive = {
+                value: consecutiveValues[i].numeric,
+                formatted: consecutiveValues[i].formatted,
+                isCentralized: true,
+                reservationId: consecutiveReservation.reservationId,
+              };
 
-                // Obtener información del consecutivo centralizado para ver si usa segmentos
-                const consecutive = await ConsecutiveService.getConsecutiveById(
-                  centralizedConsecutiveId
-                );
-
-                if (consecutive.segments && consecutive.segments.enabled) {
-                  if (consecutive.segments.type === "year") {
-                    segmentValue = new Date().getFullYear().toString();
-                  } else if (consecutive.segments.type === "month") {
-                    const date = new Date();
-                    segmentValue = `${date.getFullYear()}${(date.getMonth() + 1)
-                      .toString()
-                      .padStart(2, "0")}`;
-                  }
-                  // Otros tipos de segmentos pueden añadirse según necesidad
-                }
-
-                // Obtener el siguiente valor del consecutivo centralizado
-                const result = await ConsecutiveService.getNextConsecutiveValue(
-                  centralizedConsecutiveId,
-                  { segment: segmentValue }
-                );
-
-                if (result && result.data && result.data.value) {
-                  currentConsecutive = {
-                    value:
-                      parseInt(result.data.value.replace(/\D/g, ""), 10) || 0,
-                    formatted: result.data.value,
-                  };
-
-                  logger.info(
-                    `Consecutivo centralizado generado para documento ${documentId}: ${currentConsecutive.formatted}`
-                  );
-                } else {
-                  throw new Error(
-                    "No se pudo obtener un consecutivo centralizado válido"
-                  );
-                }
-              } else {
-                // USAR SISTEMA LOCAL
-                currentConsecutive = await this.generateConsecutive(mapping);
-                if (currentConsecutive) {
-                  logger.info(
-                    `Consecutivo local generado para documento ${documentId}: ${currentConsecutive.formatted}`
-                  );
-                }
-              }
-            } catch (consecError) {
-              logger.error(
-                `Error al generar consecutivo para documento ${documentId}: ${consecError.message}`
+              logger.info(
+                `Usando consecutivo pre-reservado para documento ${documentId}: ${currentConsecutive.formatted}`
               );
-              // Continuar sin consecutivo, pero registrar el error
+            } else {
+              // Usar sistema local
+              currentConsecutive = await this.generateConsecutive(mapping);
+              if (currentConsecutive) {
+                logger.info(
+                  `Consecutivo local generado para documento ${documentId}: ${currentConsecutive.formatted}`
+                );
+              }
             }
           }
 
-          // Procesar documento con el consecutivo generado
-          const docResult = useTransactions
-            ? await this.processSingleDocument(
-                documentId,
-                mapping,
-                sourceConnection,
-                targetConnection,
-                currentConsecutive
-              )
-            : await this.processSingleDocumentSimple(
-                documentId,
-                mapping,
-                sourceConnection,
-                targetConnection,
-                currentConsecutive
-              );
+          // Procesar documento con el consecutivo asignado
+          const docResult = await this.processSingleDocumentSimple(
+            documentId,
+            mapping,
+            sourceConnection,
+            targetConnection,
+            currentConsecutive
+          );
 
           // Actualizar estadísticas
           if (docResult.success) {
@@ -312,18 +287,6 @@ class DynamicTransferService {
                 documentId,
                 consecutive: docResult.consecutiveUsed,
               });
-
-              // Actualizar el valor consecutivo más alto (para actualización al final solo si usamos sistema local)
-              if (!useCentralizedConsecutives && docResult.consecutiveValue) {
-                // Extraer valor numérico del consecutivo si es posible
-                const numericValue = parseInt(docResult.consecutiveValue, 10);
-                if (
-                  !isNaN(numericValue) &&
-                  numericValue > highestConsecutiveValue
-                ) {
-                  highestConsecutiveValue = numericValue;
-                }
-              }
             }
 
             // Marcar como procesado si está configurado
@@ -375,27 +338,84 @@ class DynamicTransferService {
         }
       }
 
-      // Actualizar el último consecutivo con el valor más alto después de procesar todos
-      // Esto solo aplica para el sistema local y si no se actualiza después de cada transferencia
+      // Confirmar reservas exitosas y cancelar fallidas
+      if (useCentralizedConsecutives && consecutiveReservation) {
+        try {
+          // Filtrar solo los consecutivos usados exitosamente
+          const usedValues = results.consecutivesUsed
+            .filter((used) =>
+              consecutiveValues.some((cv) => cv.formatted === used.consecutive)
+            )
+            .map((used) =>
+              consecutiveValues.find((cv) => cv.formatted === used.consecutive)
+            );
+
+          if (usedValues.length > 0) {
+            await ConsecutiveService.commitReservation(
+              centralizedConsecutiveId,
+              consecutiveReservation.reservationId,
+              usedValues
+            );
+
+            logger.info(
+              `Confirmadas ${usedValues.length} reservas de consecutivos para mapeo ${mappingId}`
+            );
+          }
+
+          // Cancelar reservas no utilizadas
+          const unusedCount = consecutiveValues.length - usedValues.length;
+          if (unusedCount > 0) {
+            await ConsecutiveService.cancelReservation(
+              centralizedConsecutiveId,
+              consecutiveReservation.reservationId
+            );
+
+            logger.info(
+              `Canceladas ${unusedCount} reservas no utilizadas para mapeo ${mappingId}`
+            );
+          }
+        } catch (commitError) {
+          logger.error(
+            `Error al confirmar/cancelar reservas: ${commitError.message}`
+          );
+          // No falla el proceso principal, pero se registra el error
+        }
+      }
+
+      // Actualizar último consecutivo para sistema local si no se actualiza después de cada transferencia
       if (
         !useCentralizedConsecutives &&
-        highestConsecutiveValue > 0 &&
         mapping.consecutiveConfig &&
         mapping.consecutiveConfig.enabled &&
         !mapping.consecutiveConfig.updateAfterTransfer
       ) {
-        try {
-          await this.updateLastConsecutive(mappingId, highestConsecutiveValue);
-          logger.info(
-            `Consecutivo final actualizado a ${highestConsecutiveValue} para mapeo ${mappingId}`
+        // Encontrar el valor más alto usado
+        let highestConsecutiveValue = 0;
+        for (const used of results.consecutivesUsed) {
+          const numericValue = parseInt(
+            used.consecutive.replace(/\D/g, ""),
+            10
           );
+          if (!isNaN(numericValue) && numericValue > highestConsecutiveValue) {
+            highestConsecutiveValue = numericValue;
+          }
+        }
 
-          // Agregar info de consecutivo al resultado
-          results.lastConsecutiveValue = highestConsecutiveValue;
-        } catch (updateError) {
-          logger.warn(
-            `Error al actualizar último consecutivo al finalizar: ${updateError.message}`
-          );
+        if (highestConsecutiveValue > 0) {
+          try {
+            await this.updateLastConsecutive(
+              mappingId,
+              highestConsecutiveValue
+            );
+            logger.info(
+              `Consecutivo final actualizado a ${highestConsecutiveValue} para mapeo ${mappingId}`
+            );
+            results.lastConsecutiveValue = highestConsecutiveValue;
+          } catch (updateError) {
+            logger.warn(
+              `Error al actualizar último consecutivo al finalizar: ${updateError.message}`
+            );
+          }
         }
       }
 
@@ -456,11 +476,26 @@ class DynamicTransferService {
         status: finalStatus, // Añadimos el status para que el frontend pueda mostrarlo correctamente
         ...results,
         lastConsecutiveValue:
-          highestConsecutiveValue > 0 ? highestConsecutiveValue : undefined,
+          results.lastConsecutiveValue > 0
+            ? results.lastConsecutiveValue
+            : undefined,
       };
     } catch (error) {
       // Limpiar timeout
       clearTimeout(timeoutId);
+
+      // Manejar cancelación de reservas en caso de error
+      if (useCentralizedConsecutives && consecutiveReservation) {
+        try {
+          await ConsecutiveService.cancelReservation(
+            centralizedConsecutiveId,
+            consecutiveReservation.reservationId
+          );
+          logger.info(`Reservas canceladas debido a error en procesamiento`);
+        } catch (cancelError) {
+          logger.error(`Error al cancelar reservas: ${cancelError.message}`);
+        }
+      }
 
       // Verificar si fue cancelado
       if (signal?.aborted) {
@@ -557,687 +592,6 @@ class DynamicTransferService {
     }
   }
 
-  /**
-   * Procesa un único documento según la configuración
-   * @param {string} documentId - ID del documento
-   * @param {Object} mapping - Configuración de mapeo
-   * @param {Object} sourceConnection - Conexión a servidor origen
-   * @param {Object} targetConnection - Conexión a servidor destino
-   * @param {Object} currentConsecutive - Consecutivo generado previamente (opcional)
-   * @returns {Promise<Object>} - Resultado del procesamiento
-   */
-  async processSingleDocument(
-    documentId,
-    mapping,
-    sourceConnection,
-    targetConnection,
-    currentConsecutive = null
-  ) {
-    // Iniciar transacción
-    let transaction = null;
-    let transactionStarted = false;
-
-    try {
-      // Iniciar una transacción en el servidor destino
-      try {
-        transaction = await SqlService.beginTransaction(targetConnection);
-        transactionStarted = true;
-        logger.info(
-          `Transacción iniciada correctamente para documento ${documentId}`
-        );
-      } catch (transError) {
-        logger.error(
-          `Error al iniciar transacción para documento ${documentId}: ${transError.message}`
-        );
-        // Continuamos sin transacción en este caso
-        transactionStarted = false;
-      }
-
-      // Crear un cache para las longitudes de columnas
-      const columnLengthCache = new Map();
-
-      // Generar consecutivo si no se proporcionó y está habilitado
-      if (
-        !currentConsecutive &&
-        mapping.consecutiveConfig &&
-        mapping.consecutiveConfig.enabled
-      ) {
-        try {
-          // Generar un nuevo consecutivo
-          const consecutiveResult = await this.generateConsecutive(mapping);
-          if (consecutiveResult) {
-            currentConsecutive = consecutiveResult;
-            logger.info(
-              `Consecutivo generado para documento ${documentId}: ${consecutiveResult.formatted}`
-            );
-          }
-        } catch (consecError) {
-          logger.error(`Error al generar consecutivo: ${consecError.message}`);
-          throw consecError;
-        }
-      }
-
-      // 1. Identificar las tablas principales (no de detalle)
-      const mainTables = mapping.tableConfigs.filter((tc) => !tc.isDetailTable);
-
-      if (mainTables.length === 0) {
-        return {
-          success: false,
-          message: "No se encontraron configuraciones de tablas principales",
-        };
-      }
-
-      // 2. Procesar cada tabla principal
-      const processedTables = [];
-      let documentType = "unknown";
-
-      for (const tableConfig of mainTables) {
-        // Obtener datos de la tabla de origen
-        let sourceData;
-
-        if (tableConfig.customQuery) {
-          // Usar consulta personalizada si existe
-          const query = tableConfig.customQuery.replace(
-            /@documentId/g,
-            documentId
-          );
-          const result = await SqlService.query(sourceConnection, query);
-          sourceData = result.recordset[0];
-        } else {
-          // Construir consulta básica - Usar primaryKey para la tabla origen
-          const query = `
-        SELECT * FROM ${tableConfig.sourceTable} 
-        WHERE ${tableConfig.primaryKey || "NUM_PED"} = @documentId
-        ${
-          tableConfig.filterCondition
-            ? ` AND ${tableConfig.filterCondition}`
-            : ""
-        }
-      `;
-
-          const result = await SqlService.query(sourceConnection, query, {
-            documentId,
-          });
-          sourceData = result.recordset[0];
-        }
-
-        if (!sourceData) {
-          logger.warn(
-            `No se encontraron datos en ${tableConfig.sourceTable} para documento ${documentId}`
-          );
-          continue; // Pasar a la siguiente tabla principal
-        }
-
-        // 3. Determinar el tipo de documento basado en las reglas
-        for (const rule of mapping.documentTypeRules) {
-          const fieldValue = sourceData[rule.sourceField];
-
-          if (rule.sourceValues.includes(fieldValue)) {
-            documentType = rule.name;
-            break;
-          }
-        }
-
-        // Determinar la clave en la tabla destino correspondiente a primaryKey
-        const targetPrimaryKey = this.getTargetPrimaryKeyField(tableConfig);
-
-        // 4. Verificar si el documento ya existe en destino
-        const checkQuery = `
-      SELECT TOP 1 1 FROM ${tableConfig.targetTable}
-      WHERE ${targetPrimaryKey} = @documentId
-    `;
-
-        const checkResult = await SqlService.query(
-          targetConnection,
-          checkQuery,
-          { documentId },
-          transaction
-        );
-        const exists = checkResult.recordset?.length > 0;
-
-        if (exists) {
-          // Revertir la transacción si el documento ya existe
-          if (transaction) {
-            await SqlService.rollbackTransaction(transaction);
-            logger.info(
-              `Transacción revertida: documento ${documentId} ya existe`
-            );
-          }
-
-          logger.warn(
-            `Documento ${documentId} ya existe en tabla ${tableConfig.targetTable}`
-          );
-          return {
-            success: false,
-            message: `El documento ya existe en la tabla ${tableConfig.targetTable}`,
-            documentType,
-          };
-        }
-
-        // 5. Preparar datos para inserción en tabla principal
-        const targetData = {};
-        const targetFields = [];
-        const targetValues = [];
-
-        for (const fieldMapping of tableConfig.fieldMappings) {
-          let value;
-
-          if (fieldMapping.isSqlFunction) {
-            // Valor es una función SQL
-            value = fieldMapping.defaultValue;
-            targetFields.push(fieldMapping.targetField);
-            targetValues.push(value);
-            continue;
-          }
-
-          // Obtener valor del origen o usar valor por defecto
-          if (fieldMapping.sourceField) {
-            value = sourceData[fieldMapping.sourceField];
-
-            // Aplicar eliminación de prefijo específico si está configurado
-            if (
-              fieldMapping.removePrefix &&
-              typeof value === "string" &&
-              value.startsWith(fieldMapping.removePrefix)
-            ) {
-              const originalValue = value;
-              value = value.substring(fieldMapping.removePrefix.length);
-              logger.debug(
-                `Prefijo '${fieldMapping.removePrefix}' eliminado del campo ${fieldMapping.sourceField}: '${originalValue}' → '${value}'`
-              );
-            }
-          } else {
-            // No hay campo origen, usar valor por defecto
-            value = fieldMapping.defaultValue;
-          }
-
-          // Si el valor es undefined/null pero hay un valor por defecto
-          if (
-            (value === undefined || value === null) &&
-            fieldMapping.defaultValue !== undefined
-          ) {
-            value = fieldMapping.defaultValue;
-          }
-
-          // Aplicar consecutivo si corresponde a esta tabla y campo
-          if (
-            currentConsecutive &&
-            mapping.consecutiveConfig &&
-            mapping.consecutiveConfig.enabled
-          ) {
-            // Verificar si este campo debe recibir el consecutivo (en tabla principal)
-            if (
-              mapping.consecutiveConfig.fieldName ===
-                fieldMapping.targetField ||
-              (mapping.consecutiveConfig.applyToTables &&
-                mapping.consecutiveConfig.applyToTables.some(
-                  (t) =>
-                    t.tableName === tableConfig.name &&
-                    t.fieldName === fieldMapping.targetField
-                ))
-            ) {
-              // Asignar el consecutivo al campo correspondiente
-              value = currentConsecutive.formatted;
-              logger.debug(
-                `Asignando consecutivo ${currentConsecutive.formatted} a campo ${fieldMapping.targetField} en tabla ${tableConfig.name}`
-              );
-            }
-          }
-
-          // Si es un campo obligatorio y aún no tiene valor, lanzar error
-          if (
-            fieldMapping.isRequired &&
-            (value === undefined || value === null)
-          ) {
-            throw new Error(
-              `El campo obligatorio '${fieldMapping.targetField}' no tiene valor de origen ni valor por defecto`
-            );
-          }
-
-          // Aplicar mapeo de valores si existe
-          if (
-            value !== null &&
-            value !== undefined &&
-            fieldMapping.valueMappings?.length > 0
-          ) {
-            const mapping = fieldMapping.valueMappings.find(
-              (vm) => vm.sourceValue === value
-            );
-            if (mapping) {
-              value = mapping.targetValue;
-            }
-          }
-
-          // Si el valor es un string, verificar y ajustar longitud
-          if (typeof value === "string") {
-            const maxLength = await this.getColumnMaxLength(
-              targetConnection,
-              tableConfig.targetTable,
-              fieldMapping.targetField,
-              columnLengthCache
-            );
-
-            // Si hay un límite de longitud y se excede, truncar
-            if (maxLength > 0 && value.length > maxLength) {
-              logger.warn(
-                `Truncando valor para campo ${fieldMapping.targetField} de longitud ${value.length} a ${maxLength} caracteres en documento ${documentId}`
-              );
-              value = value.substring(0, maxLength);
-            }
-          }
-
-          targetData[fieldMapping.targetField] = value;
-          targetFields.push(fieldMapping.targetField);
-          targetValues.push(`@${fieldMapping.targetField}`);
-        }
-
-        // 6. Insertar en tabla principal (usando la transacción)
-        const insertQuery = `
-      INSERT INTO ${tableConfig.targetTable} (${targetFields.join(", ")})
-      VALUES (${targetValues.join(", ")})
-    `;
-
-        await SqlService.query(
-          targetConnection,
-          insertQuery,
-          targetData,
-          transaction
-        );
-        logger.info(
-          `Insertado encabezado en ${tableConfig.name} con transacción`
-        );
-        processedTables.push(tableConfig.name);
-
-        // 7. Procesar tablas de detalle relacionadas
-        const detailTables = mapping.tableConfigs.filter(
-          (tc) => tc.isDetailTable && tc.parentTableRef === tableConfig.name
-        );
-
-        for (const detailConfig of detailTables) {
-          // Obtener detalles
-          let detailsData;
-
-          if (detailConfig.customQuery) {
-            // Usar consulta personalizada
-            const query = detailConfig.customQuery.replace(
-              /@documentId/g,
-              documentId
-            );
-            const result = await SqlService.query(sourceConnection, query);
-            detailsData = result.recordset;
-          } else {
-            // Construir consulta básica
-            // Usar el campo de ordenamiento si está configurado, o nada si no existe
-            const orderByColumn = detailConfig.orderByColumn || "";
-            const query = `
-          SELECT * FROM ${detailConfig.sourceTable} 
-          WHERE ${detailConfig.primaryKey || "NUM_PED"} = @documentId
-          ${
-            detailConfig.filterCondition
-              ? ` AND ${detailConfig.filterCondition}`
-              : ""
-          }
-          ${orderByColumn ? ` ORDER BY ${orderByColumn}` : ""}
-        `;
-
-            const result = await SqlService.query(sourceConnection, query, {
-              documentId,
-            });
-            detailsData = result.recordset;
-          }
-
-          if (!detailsData || detailsData.length === 0) {
-            logger.warn(
-              `No se encontraron detalles en ${detailConfig.sourceTable} para documento ${documentId}`
-            );
-            continue;
-          }
-
-          // Insertar detalles
-          for (const detailRow of detailsData) {
-            const detailTargetData = {};
-            const detailFields = [];
-            const detailValues = [];
-
-            for (const fieldMapping of detailConfig.fieldMappings) {
-              let value;
-
-              if (fieldMapping.isSqlFunction) {
-                // Valor es una función SQL
-                value = fieldMapping.defaultValue;
-                detailFields.push(fieldMapping.targetField);
-                detailValues.push(value);
-                continue;
-              }
-
-              // Obtener valor del origen o usar valor por defecto
-              value = detailRow[fieldMapping.sourceField];
-
-              // Aplicar eliminación de prefijo específico si está configurado
-              if (
-                fieldMapping.removePrefix &&
-                typeof value === "string" &&
-                value.startsWith(fieldMapping.removePrefix)
-              ) {
-                const originalValue = value;
-                value = value.substring(fieldMapping.removePrefix.length);
-                logger.debug(
-                  `Prefijo '${fieldMapping.removePrefix}' eliminado del campo ${fieldMapping.sourceField}: '${originalValue}' → '${value}'`
-                );
-              }
-
-              if (
-                (value === undefined || value === null) &&
-                fieldMapping.defaultValue !== undefined
-              ) {
-                if (fieldMapping.defaultValue === "NULL") {
-                  value = null; // Convertir la cadena "NULL" a null real
-                } else {
-                  value = fieldMapping.defaultValue;
-                }
-              }
-
-              // IMPORTANTE: Aplicar consecutivo en detalles si corresponde
-              // Esto es clave para mantener el mismo consecutivo en encabezado y detalle
-              if (
-                currentConsecutive &&
-                mapping.consecutiveConfig &&
-                mapping.consecutiveConfig.enabled
-              ) {
-                // Verificar si este campo debe recibir el consecutivo (en tabla de detalle)
-                if (
-                  mapping.consecutiveConfig.detailFieldName ===
-                    fieldMapping.targetField ||
-                  (mapping.consecutiveConfig.applyToTables &&
-                    mapping.consecutiveConfig.applyToTables.some(
-                      (t) =>
-                        t.tableName === detailConfig.name &&
-                        t.fieldName === fieldMapping.targetField
-                    ))
-                ) {
-                  // Asignar el consecutivo al campo correspondiente en el detalle
-                  value = currentConsecutive.formatted;
-                  logger.debug(
-                    `Asignando consecutivo ${currentConsecutive.formatted} a campo ${fieldMapping.targetField} en tabla de detalle ${detailConfig.name}`
-                  );
-                }
-              }
-
-              // Aplicar mapeo de valores si existe
-              if (
-                value !== null &&
-                value !== undefined &&
-                fieldMapping.valueMappings?.length > 0
-              ) {
-                const mapping = fieldMapping.valueMappings.find(
-                  (vm) => vm.sourceValue === value
-                );
-                if (mapping) {
-                  value = mapping.targetValue;
-                }
-              }
-
-              // Si el valor es un string, verificar y ajustar longitud
-              if (typeof value === "string") {
-                const maxLength = await this.getColumnMaxLength(
-                  targetConnection,
-                  detailConfig.targetTable,
-                  fieldMapping.targetField,
-                  columnLengthCache
-                );
-
-                // Si hay un límite de longitud y se excede, truncar
-                if (maxLength > 0 && value.length > maxLength) {
-                  logger.warn(
-                    `Truncando valor para campo ${fieldMapping.targetField} de longitud ${value.length} a ${maxLength} caracteres en detalle de documento ${documentId}`
-                  );
-                  value = value.substring(0, maxLength);
-                }
-              }
-
-              detailTargetData[fieldMapping.targetField] = value;
-              detailFields.push(fieldMapping.targetField);
-              detailValues.push(`@${fieldMapping.targetField}`);
-            }
-
-            const insertDetailQuery = `
-          INSERT INTO ${detailConfig.targetTable} (${detailFields.join(", ")})
-          VALUES (${detailValues.join(", ")})
-        `;
-
-            // Insertar detalle usando la transacción
-            await SqlService.query(
-              targetConnection,
-              insertDetailQuery,
-              detailTargetData,
-              transaction
-            );
-          }
-
-          logger.info(
-            `Insertados detalles en ${detailConfig.name} con transacción`
-          );
-          processedTables.push(detailConfig.name);
-        }
-      }
-
-      if (processedTables.length === 0) {
-        // Revertir la transacción si no se procesó ninguna tabla
-        if (transaction) {
-          await SqlService.rollbackTransaction(transaction);
-          logger.info(
-            `Transacción revertida: no se procesó ninguna tabla para documento ${documentId}`
-          );
-        }
-
-        return {
-          success: false,
-          message: "No se procesó ninguna tabla para este documento",
-          documentType,
-        };
-      }
-
-      // NUEVO: Actualizar el último valor del consecutivo si se configuró así
-      // Solo para sistema local, el centralizado se actualiza automáticamente
-      if (
-        currentConsecutive &&
-        mapping.consecutiveConfig &&
-        mapping.consecutiveConfig.enabled &&
-        mapping.consecutiveConfig.updateAfterTransfer &&
-        !currentConsecutive.isCentralized // Solo actualizar si es local
-      ) {
-        try {
-          await this.updateLastConsecutive(
-            mapping._id,
-            currentConsecutive.value
-          );
-          logger.info(
-            `Consecutivo actualizado a ${currentConsecutive.value} para mapeo ${mapping._id}`
-          );
-        } catch (updateError) {
-          logger.warn(
-            `Error al actualizar último consecutivo: ${updateError.message}`
-          );
-          // No fallamos la transacción por esto, solo lo registramos
-        }
-      }
-
-      // Si todo fue exitoso, confirmar la transacción
-      if (transactionStarted && transaction) {
-        try {
-          await SqlService.commitTransaction(transaction);
-          logger.info(
-            `Transacción confirmada exitosamente para documento ${documentId}`
-          );
-        } catch (commitError) {
-          logger.error(
-            `Error al confirmar transacción para documento ${documentId}: ${commitError.message}`
-          );
-          // Si no podemos confirmar, intentamos revertir
-          try {
-            await SqlService.rollbackTransaction(transaction);
-            logger.info(
-              `Transacción revertida después de error en commit para documento ${documentId}`
-            );
-          } catch (rollbackError) {
-            logger.error(
-              `Error tanto en commit como en rollback para documento ${documentId}`
-            );
-          }
-          // Lanzar error original de commit
-          throw commitError;
-        }
-      }
-
-      return {
-        success: true,
-        message: `Documento procesado correctamente en ${processedTables.join(
-          ", "
-        )}`,
-        documentType,
-        processedTables,
-        consecutiveUsed: currentConsecutive
-          ? currentConsecutive.formatted
-          : null,
-        consecutiveValue: currentConsecutive ? currentConsecutive.value : null,
-      };
-    } catch (error) {
-      // Si ocurrió algún error, hacer rollback de la transacción
-      if (transactionStarted && transaction) {
-        try {
-          await SqlService.rollbackTransaction(transaction);
-          logger.info(
-            `Transacción revertida para documento ${documentId} debido a error: ${error.message}`
-          );
-        } catch (rollbackError) {
-          logger.error(
-            `Error al revertir transacción: ${rollbackError.message}`
-          );
-        }
-      }
-
-      // Manejo de errores específicos
-      if (
-        error.name === "AggregateError" ||
-        error.stack?.includes("AggregateError")
-      ) {
-        logger.error(
-          `Error de conexión (AggregateError) para documento ${documentId}`,
-          error
-        );
-
-        // Intentar reconexión
-        try {
-          logger.info(`Intentando reconexión para documento ${documentId}...`);
-          const targetServer = mapping.targetServer;
-          const reconnectResult = await ConnectionManager.enhancedRobustConnect(
-            targetServer
-          );
-
-          if (!reconnectResult.success) {
-            throw new Error(
-              `No se pudo restablecer conexión a ${targetServer}`
-            );
-          }
-
-          logger.info(`Reconexión exitosa a ${targetServer}`);
-
-          return {
-            success: false,
-            message: `Error de conexión: Se perdió la conexión con la base de datos. Se ha restablecido la conexión pero este documento debe procesarse nuevamente.`,
-            documentType: "unknown",
-            errorDetails: "CONNECTION_ERROR",
-            consecutiveUsed: null,
-            consecutiveValue: null,
-            errorCode: "CONNECTION_ERROR",
-          };
-        } catch (reconnectError) {
-          logger.error(
-            `Error al intentar reconexión: ${reconnectError.message}`
-          );
-          return {
-            success: false,
-            message: `Error grave de conexión: ${
-              error.message || "Error en comunicación con la base de datos"
-            }. Por favor, intente nuevamente más tarde.`,
-            documentType: "unknown",
-            errorDetails: error.stack || "No hay detalles adicionales",
-            consecutiveUsed: null,
-            consecutiveValue: null,
-            errorCode: "SEVERE_CONNECTION_ERROR",
-          };
-        }
-      }
-
-      // Error de truncado
-      if (
-        error.message &&
-        error.message.includes("String or binary data would be truncated")
-      ) {
-        const match = error.message.match(/column '([^']+)'/);
-        const columnName = match ? match[1] : "desconocida";
-        const detailedMessage = `Error de truncado: El valor es demasiado largo para la columna '${columnName}'. Verifique la longitud máxima permitida.`;
-        logger.error(
-          `Error de truncado en documento ${documentId}: ${detailedMessage}`
-        );
-
-        return {
-          success: false,
-          message: detailedMessage,
-          documentType: "unknown",
-          errorDetails: error.stack,
-          errorCode: "TRUNCATION_ERROR",
-          consecutiveUsed: null,
-          consecutiveValue: null,
-        };
-      }
-
-      // Error de valor NULL
-      if (
-        error.message &&
-        error.message.includes("Cannot insert the value NULL into column")
-      ) {
-        const match = error.message.match(/column '([^']+)'/);
-        const columnName = match ? match[1] : "desconocida";
-        const detailedMessage = `No se puede insertar un valor NULL en la columna '${columnName}' que no permite valores nulos. Configure un valor por defecto válido.`;
-        logger.error(
-          `Error de valor NULL en documento ${documentId}: ${detailedMessage}`
-        );
-
-        return {
-          success: false,
-          message: detailedMessage,
-          documentType: "unknown",
-          errorDetails: error.stack,
-          errorCode: "NULL_VALUE_ERROR",
-          consecutiveUsed: null,
-          consecutiveValue: null,
-        };
-      }
-
-      // Error general
-      logger.error(
-        `Error procesando documento ${documentId}: ${error.message}`,
-        {
-          documentId,
-          errorStack: error.stack,
-          errorDetails: error.code || error.number || "",
-        }
-      );
-
-      return {
-        success: false,
-        message: `Error: ${
-          error.message || "Error desconocido durante el procesamiento"
-        }`,
-        documentType: "unknown",
-        errorDetails: error.stack || "No hay detalles del error disponibles",
-        errorCode: error.code || error.number || "UNKNOWN_ERROR",
-        consecutiveUsed: null,
-        consecutiveValue: null,
-      };
-    }
-  }
   /**
    * Procesa un único documento según la configuración (sin transacciones)
    * @param {string} documentId - ID del documento
@@ -1666,9 +1020,9 @@ class DynamicTransferService {
             }
 
             const insertDetailQuery = `
-            INSERT INTO ${detailConfig.targetTable} (${detailFields.join(", ")})
-            VALUES (${detailValues.join(", ")})
-          `;
+           INSERT INTO ${detailConfig.targetTable} (${detailFields.join(", ")})
+           VALUES (${detailValues.join(", ")})
+         `;
 
             // Insertar detalle sin transacción
             await SqlService.query(
@@ -2036,11 +1390,11 @@ class DynamicTransferService {
 
       // Consultar metadata de la columna
       const query = `
-      SELECT CHARACTER_MAXIMUM_LENGTH 
-      FROM INFORMATION_SCHEMA.COLUMNS 
-      WHERE TABLE_NAME = '${tableNameOnly}' 
-      AND COLUMN_NAME = '${columnName}'
-    `;
+     SELECT CHARACTER_MAXIMUM_LENGTH 
+     FROM INFORMATION_SCHEMA.COLUMNS 
+     WHERE TABLE_NAME = '${tableNameOnly}' 
+     AND COLUMN_NAME = '${columnName}'
+   `;
 
       const result = await SqlService.query(connection, query);
 
@@ -2080,11 +1434,11 @@ class DynamicTransferService {
       if (!mainTable) return false;
 
       const query = `
-      UPDATE ${mainTable.sourceTable} 
-      SET ${mapping.markProcessedField} = @processedValue,
-          PROCESSED_DATE = GETDATE()
-      WHERE ${mainTable.primaryKey || "NUM_PED"} = @documentId
-    `;
+     UPDATE ${mainTable.sourceTable} 
+     SET ${mapping.markProcessedField} = @processedValue,
+         PROCESSED_DATE = GETDATE()
+     WHERE ${mainTable.primaryKey || "NUM_PED"} = @documentId
+   `;
 
       const params = {
         documentId,
@@ -2114,10 +1468,10 @@ class DynamicTransferService {
       try {
         logger.info("Listando tablas disponibles en la base de datos...");
         const listTablesQuery = `
-        SELECT TOP 50 TABLE_SCHEMA, TABLE_NAME 
-        FROM INFORMATION_SCHEMA.TABLES 
-        ORDER BY TABLE_SCHEMA, TABLE_NAME
-      `;
+       SELECT TOP 50 TABLE_SCHEMA, TABLE_NAME 
+       FROM INFORMATION_SCHEMA.TABLES 
+       ORDER BY TABLE_SCHEMA, TABLE_NAME
+     `;
 
         const tablesResult = await SqlService.query(
           connection,
@@ -2186,10 +1540,10 @@ class DynamicTransferService {
         );
 
         const checkTableQuery = `
-        SELECT COUNT(*) AS table_exists 
-        FROM INFORMATION_SCHEMA.TABLES 
-        WHERE TABLE_SCHEMA = '${schema}' AND TABLE_NAME = '${tableName}'
-      `;
+       SELECT COUNT(*) AS table_exists 
+       FROM INFORMATION_SCHEMA.TABLES 
+       WHERE TABLE_SCHEMA = '${schema}' AND TABLE_NAME = '${tableName}'
+     `;
 
         const tableCheck = await SqlService.query(connection, checkTableQuery);
 
@@ -2199,10 +1553,10 @@ class DynamicTransferService {
         ) {
           // Si no se encuentra, intentar buscar sin distinguir mayúsculas/minúsculas
           const searchTableQuery = `
-          SELECT TOP 5 TABLE_SCHEMA, TABLE_NAME 
-          FROM INFORMATION_SCHEMA.TABLES 
-          WHERE TABLE_NAME LIKE '%${tableName}%'
-        `;
+         SELECT TOP 5 TABLE_SCHEMA, TABLE_NAME 
+         FROM INFORMATION_SCHEMA.TABLES 
+         WHERE TABLE_NAME LIKE '%${tableName}%'
+       `;
 
           const searchResult = await SqlService.query(
             connection,
@@ -2226,10 +1580,10 @@ class DynamicTransferService {
 
         // Obtener todas las columnas de la tabla para validar los campos
         const columnsQuery = `
-        SELECT COLUMN_NAME, DATA_TYPE 
-        FROM INFORMATION_SCHEMA.COLUMNS 
-        WHERE TABLE_SCHEMA = '${schema}' AND TABLE_NAME = '${tableName}'
-      `;
+       SELECT COLUMN_NAME, DATA_TYPE 
+       FROM INFORMATION_SCHEMA.COLUMNS 
+       WHERE TABLE_SCHEMA = '${schema}' AND TABLE_NAME = '${tableName}'
+     `;
 
         const columnsResult = await SqlService.query(connection, columnsQuery);
 
@@ -2285,10 +1639,10 @@ class DynamicTransferService {
 
         // Construir consulta basada en filtros, usando el nombre completo de la tabla
         let query = `
-        SELECT ${selectFieldsStr}
-        FROM ${fullTableName}
-        WHERE 1=1
-      `;
+       SELECT ${selectFieldsStr}
+       FROM ${fullTableName}
+       WHERE 1=1
+     `;
 
         const params = {};
 
@@ -2624,57 +1978,6 @@ class DynamicTransferService {
       logger.error(
         `Error al eliminar configuración de mapeo: ${error.message}`
       );
-      throw error;
-    }
-  }
-
-  /**
-   * Genera un consecutivo según la configuración
-   * @param {Object} mapping - Configuración de mapeo
-   * @returns {Promise<Object>} - { value: number, formatted: string }
-   */
-  async generateConsecutive(mapping) {
-    try {
-      if (!mapping.consecutiveConfig || !mapping.consecutiveConfig.enabled) {
-        return null;
-      }
-
-      // Generar número consecutivo
-      const lastValue = mapping.consecutiveConfig.lastValue || 0;
-      const newValue = lastValue + 1;
-
-      // IMPORTANTE: Actualizar inmediatamente el último valor usado en la configuración
-      // Esto evita que dos documentos obtengan el mismo valor consecutivo
-      await this.updateLastConsecutive(mapping._id, newValue);
-      logger.info(
-        `Consecutivo reservado: ${newValue} para mapeo ${mapping._id}`
-      );
-
-      // Formatear según el patrón si existe
-      let formattedValue = String(newValue);
-
-      if (mapping.consecutiveConfig.pattern) {
-        formattedValue = this.formatConsecutive(
-          mapping.consecutiveConfig.pattern,
-          {
-            PREFIX: mapping.consecutiveConfig.prefix || "",
-            VALUE: newValue,
-            YEAR: new Date().getFullYear(),
-            MONTH: String(new Date().getMonth() + 1).padStart(2, "0"),
-            DAY: String(new Date().getDate()).padStart(2, "0"),
-          }
-        );
-      } else if (mapping.consecutiveConfig.prefix) {
-        // Si no hay patrón pero sí prefijo
-        formattedValue = `${mapping.consecutiveConfig.prefix}${newValue}`;
-      }
-
-      return {
-        value: newValue,
-        formatted: formattedValue,
-      };
-    } catch (error) {
-      logger.error(`Error al generar consecutivo: ${error.message}`);
       throw error;
     }
   }
