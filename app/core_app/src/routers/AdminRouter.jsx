@@ -11,7 +11,6 @@ import {
   LoadsResumen,
   Statistics,
   LogsPage,
-  OrdersVisualization,
   DocumentsVisualization,
   ConsecutiveManager,
 } from "../index";

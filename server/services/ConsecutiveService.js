@@ -4,6 +4,182 @@ const mongoose = require("mongoose");
 
 class ConsecutiveService {
   /**
+   * Reserva múltiples valores consecutivos de forma atómica
+   * @param {string} idOrName - ID o nombre del consecutivo
+   * @param {number} quantity - Cantidad de valores a reservar
+   * @param {Object} options - Opciones adicionales
+   * @param {Object} user - Usuario que realiza la acción
+   * @returns {Promise<Array>} - Array de valores consecutivos reservados
+   */
+  static async reserveConsecutiveValues(
+    idOrName,
+    quantity = 1,
+    options = {},
+    user = {}
+  ) {
+    try {
+      // Buscar consecutivo por ID o por nombre
+      let consecutive;
+      if (mongoose.Types.ObjectId.isValid(idOrName)) {
+        consecutive = await Consecutive.findById(idOrName);
+      } else {
+        consecutive = await Consecutive.findOne({ name: idOrName });
+      }
+
+      if (!consecutive) {
+        throw new Error(`Consecutivo ${idOrName} no encontrado`);
+      }
+
+      // Verificar que esté activo
+      if (!consecutive.active) {
+        throw new Error(`El consecutivo ${consecutive.name} está desactivado`);
+      }
+
+      // Verificar permisos si hay asignaciones y se proporciona usuario
+      if (consecutive.assignedTo.length > 0 && user && user.id) {
+        const hasPermission = consecutive.assignedTo.some(
+          (assignment) =>
+            assignment.entityType === "user" &&
+            assignment.entityId.equals(user.id) &&
+            (assignment.allowedOperations.includes("increment") ||
+              assignment.allowedOperations.includes("all"))
+        );
+
+        if (!hasPermission) {
+          throw new Error(
+            `El usuario no tiene permiso para incrementar este consecutivo`
+          );
+        }
+      }
+
+      // Determinar el segmento si es necesario
+      let segmentValue = null;
+      if (consecutive.segments.enabled) {
+        if (options.segment) {
+          segmentValue = options.segment;
+        } else if (consecutive.segments.type === "year") {
+          segmentValue = new Date().getFullYear().toString();
+        } else if (consecutive.segments.type === "month") {
+          const date = new Date();
+          segmentValue = `${date.getFullYear()}${(date.getMonth() + 1)
+            .toString()
+            .padStart(2, "0")}`;
+        } else if (
+          consecutive.segments.type === "company" &&
+          options.companyId
+        ) {
+          segmentValue = options.companyId;
+        } else if (consecutive.segments.type === "user" && user && user.id) {
+          segmentValue = user.id.toString();
+        }
+      }
+
+      // Generar identificador único para la reserva
+      const reservedBy = `batch_${Date.now()}_${Math.random().toString(36)}`;
+
+      // Obtener valores consecutivos con bloqueo atómico
+      const values = await consecutive.getNextValue(
+        segmentValue,
+        quantity,
+        reservedBy
+      );
+
+      logger.info(
+        `Reservados ${quantity} valores consecutivos para ${consecutive.name}`
+      );
+
+      return {
+        reservationId: reservedBy,
+        values: values,
+        consecutiveId: consecutive._id,
+        consecutiveName: consecutive.name,
+      };
+    } catch (error) {
+      logger.error(`Error al reservar valores consecutivos: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Confirma una reserva de valores consecutivos
+   * @param {string} consecutiveId - ID del consecutivo
+   * @param {string} reservationId - ID de la reserva
+   * @param {Array} values - Valores a confirmar
+   * @returns {Promise<boolean>} - true si se confirmó correctamente
+   */
+  static async commitReservation(consecutiveId, reservationId, values) {
+    try {
+      const consecutive = await Consecutive.findById(consecutiveId);
+      if (!consecutive) {
+        throw new Error(`Consecutivo ${consecutiveId} no encontrado`);
+      }
+
+      await consecutive.commitReservations(values, reservationId);
+
+      logger.info(
+        `Confirmada reserva ${reservationId} para consecutivo ${consecutive.name}`
+      );
+      return true;
+    } catch (error) {
+      logger.error(`Error al confirmar reserva: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Cancela una reserva no utilizada
+   * @param {string} consecutiveId - ID del consecutivo
+   * @param {string} reservationId - ID de la reserva
+   * @returns {Promise<boolean>} - true si se canceló correctamente
+   */
+  static async cancelReservation(consecutiveId, reservationId) {
+    try {
+      const consecutive = await Consecutive.findById(consecutiveId);
+      if (!consecutive) {
+        throw new Error(`Consecutivo ${consecutiveId} no encontrado`);
+      }
+
+      // Cambiar estado de las reservas a expirado
+      for (const reservation of consecutive.reservations) {
+        if (
+          reservation.reservedBy === reservationId &&
+          reservation.status === "reserved"
+        ) {
+          reservation.status = "expired";
+          reservation.expiresAt = new Date();
+        }
+      }
+
+      await consecutive.save();
+
+      logger.info(
+        `Cancelada reserva ${reservationId} para consecutivo ${consecutive.name}`
+      );
+      return true;
+    } catch (error) {
+      logger.error(`Error al cancelar reserva: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Limpia reservas expiradas de todos los consecutivos
+   */
+  static async cleanAllExpiredReservations() {
+    try {
+      const consecutives = await Consecutive.find({ active: true });
+
+      for (const consecutive of consecutives) {
+        await consecutive.cleanExpiredReservations();
+      }
+
+      logger.info("Limpieza de reservas expiradas completada");
+    } catch (error) {
+      logger.error(`Error al limpiar reservas expiradas: ${error.message}`);
+      throw error;
+    }
+  }
+  /**
    * Obtiene todos los consecutivos
    * @param {Object} filter - Filtros opcionales
    * @returns {Promise<Array>} - Lista de consecutivos
