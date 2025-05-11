@@ -75,7 +75,7 @@ const ConsecutiveSchema = new Schema({
           "reset",
           "updated",
           "reserved",
-          "commited", // ← Esto está mal escrito (falta 't')
+          "committed", // ← Esto está mal escrito (falta 't')
         ],
         required: true,
       },
@@ -330,6 +330,10 @@ ConsecutiveSchema.methods.commitReservations = async function (
         (r) => !toRemove.some((tr) => tr._id.toString() === r._id.toString())
       );
     }
+
+    console.log("Intentando agregar al historial:", {
+      action: "committed",
+    });
 
     // Registrar en historial
     this.history.push({
