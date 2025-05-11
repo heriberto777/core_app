@@ -220,7 +220,7 @@ class DynamicTransferService {
                     centralizedConsecutiveId,
                     1, // Solo un valor para este documento
                     { segment: null }, // Configurar según necesidad
-                    { id: "system", name: "System" }
+                    { id: mapping._id.toString(), name: "mapping" }
                   );
 
                 currentConsecutive = {
