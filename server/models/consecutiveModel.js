@@ -163,8 +163,8 @@ ConsecutiveSchema.methods.getNextValue = async function (
   quantity = 1,
   reservedBy = "system"
 ) {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  // const session = await mongoose.startSession();
+  // session.startTransaction();
 
   try {
     // Bloqueo pesimista para evitar concurrencia
@@ -183,7 +183,7 @@ ConsecutiveSchema.methods.getNextValue = async function (
           lockedAt: new Date(),
           lockedBy: reservedBy,
         },
-        { session, new: true }
+        { new: true }
       );
 
     if (!consecutiveLocked) {
@@ -270,21 +270,19 @@ ConsecutiveSchema.methods.getNextValue = async function (
     }
 
     // Guardar los cambios
-    await this.save({ session });
+    await this.save();
 
     // Liberar bloqueo
-    await mongoose
-      .model("Consecutive")
-      .findByIdAndUpdate(
-        this._id,
-        { locked: false, lockedBy: null, lockedAt: null },
-        { session }
-      );
+    await mongoose.model("Consecutive").findByIdAndUpdate(this._id, {
+      locked: false,
+      lockedBy: null,
+      lockedAt: null,
+    });
 
-    await session.commitTransaction();
+    // await session.commitTransaction();
     return values;
   } catch (error) {
-    await session.abortTransaction();
+    // await session.abortTransaction();
 
     // Intentar liberar bloqueo en caso de error
     await mongoose.model("Consecutive").findByIdAndUpdate(this._id, {
@@ -294,8 +292,6 @@ ConsecutiveSchema.methods.getNextValue = async function (
     });
 
     throw error;
-  } finally {
-    session.endSession();
   }
 };
 
@@ -304,8 +300,8 @@ ConsecutiveSchema.methods.commitReservations = async function (
   values,
   reservedBy = "system"
 ) {
-  const session = await mongoose.startSession();
-  session.startTransaction();
+  // const session = await mongoose.startSession();
+  // session.startTransaction();
 
   try {
     for (const value of values) {
@@ -346,13 +342,11 @@ ConsecutiveSchema.methods.commitReservations = async function (
       ]),
     });
 
-    await this.save({ session });
-    await session.commitTransaction();
+    await this.save();
+    // await session.commitTransaction();
   } catch (error) {
-    await session.abortTransaction();
+    // await session.abortTransaction();
     throw error;
-  } finally {
-    session.endSession();
   }
 };
 
