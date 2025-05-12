@@ -1439,8 +1439,7 @@ class DynamicTransferService {
 
       const query = `
     UPDATE ${mainTable.sourceTable} 
-    SET ${mapping.markProcessedField} = @processedValue,
-        PROCESSED_DATE = GETDATE()
+    SET ${mapping.markProcessedField} = @processedValue
     WHERE ${mainTable.primaryKey || "NUM_PED"} = @documentId
   `;
 
