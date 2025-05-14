@@ -1,5 +1,6 @@
+/* ===== VARIABLES Y CONFIGURACIÓN GLOBAL ===== */
 :root {
-  /* Variables de color principales */
+  /* Colores principales */
   --primary-color: #28a745;
   --primary-hover: #218838;
   --secondary-color: #6c757d;
@@ -13,36 +14,49 @@
   --light-bg: #f8f9fa;
   --white: #ffffff;
 
-  /* Variables estructurales */
+  /* Elementos estructurales */
   --border-color: #ddd;
   --card-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
   --transition: all 0.3s ease;
 
+  /* Tipografía responsiva */
   --font-size-base: 14px;
   --font-size-tablet: 15px;
   --font-size-desktop: 16px;
 
-  /* Tipografía */
-  font-family: Inter, system-ui, Avenir, Helvetica, Arial, sans-serif;
-  line-height: 1.5;
-  font-weight: 400;
-  font-synthesis: none;
-  text-rendering: optimizeLegibility;
-  -webkit-font-smoothing: antialiased;
-  -moz-osx-font-smoothing: grayscale;
+  /* Otros */
+  --border-radius-sm: 4px;
+  --border-radius-md: 6px;
+  --border-radius-lg: 8px;
+  --spacing-xs: 5px;
+  --spacing-sm: 10px;
+  --spacing-md: 15px;
+  --spacing-lg: 20px;
 }
 
-/* ===== ESTILOS GENERALES ===== */
+/* ===== RESETS Y ESTILOS BASE ===== */
 body {
   font-family: "Inter", system-ui, sans-serif;
   background-color: var(--light-bg);
   margin: 0;
   padding: 0;
   color: #333;
+  line-height: 1.5;
+  font-weight: 400;
+  text-rendering: optimizeLegibility;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
 }
 
 html {
   font-size: var(--font-size-base);
+  box-sizing: border-box;
+}
+
+*,
+*:before,
+*:after {
+  box-sizing: inherit;
 }
 
 @media (min-width: 768px) {
@@ -57,46 +71,47 @@ html {
   }
 }
 
-/* Línea 27-33: Mejorar responsive images */
 img {
   max-width: 100%;
   height: auto;
 }
 
-/* Contenedor principal */
+h2 {
+  text-align: center;
+  width: 100%;
+  margin-bottom: var(--spacing-lg);
+  font-weight: 600;
+  color: #333;
+}
+
+/* ===== LAYOUT Y CONTENEDORES ===== */
 .container {
   width: 90%;
   max-width: 1200px;
   margin: auto;
-  padding: 20px;
+  padding: var(--spacing-lg);
   display: flex;
   flex-direction: column;
   align-items: center;
 }
 
 .main-content {
-  margin: 10px;
-  padding: 15px;
+  margin: var(--spacing-sm);
+  padding: var(--spacing-md);
   width: 90%;
   max-width: 1200px;
   margin-left: auto;
   margin-right: auto;
-
-  /* Mejoras de scroll */
   overflow-y: auto;
   overflow-x: hidden;
-  -webkit-overflow-scrolling: touch; /* Para scroll suave en iOS */
-  scroll-behavior: smooth; /* Scroll suave al navegar entre secciones */
-
-  /* Altura máxima con scroll interno */
-  max-height: calc(100vh - 150px); /* Restar altura de header y otras áreas */
-
-  /* Estilo personalizado para la barra de scroll */
-  scrollbar-width: thin; /* Firefox */
-  scrollbar-color: rgba(0, 123, 255, 0.5) transparent; /* Firefox */
+  -webkit-overflow-scrolling: touch;
+  scroll-behavior: smooth;
+  max-height: calc(100vh - 150px);
+  scrollbar-width: thin;
+  scrollbar-color: rgba(0, 123, 255, 0.5) transparent;
 }
 
-/* Estilo para la barra de scroll en Chrome, Edge y Safari */
+/* Personalización de barras de scroll */
 .main-content::-webkit-scrollbar {
   width: 8px;
 }
@@ -107,63 +122,29 @@ img {
 
 .main-content::-webkit-scrollbar-thumb {
   background-color: rgba(0, 123, 255, 0.5);
-  border-radius: 4px;
+  border-radius: var(--border-radius-sm);
 }
 
 .main-content::-webkit-scrollbar-thumb:hover {
   background-color: rgba(0, 123, 255, 0.7);
 }
 
-@media (max-width: 768px) {
-  .main-content {
-    max-height: calc(
-      100vh - 120px
-    ); /* Ajustar para headers más pequeños en móviles */
-    padding: 10px;
-  }
-}
-
-@media (max-width: 480px) {
-  .main-content {
-    max-height: calc(100vh - 100px);
-    padding: 8px;
-    margin: 5px;
-  }
-}
-
-/* Títulos */
-h2 {
-  text-align: center;
-  width: 100%;
-  margin-bottom: 20px;
-  font-weight: 600;
-  color: #333;
-}
-
-/* ===== BARRA DE HERRAMIENTAS ===== */
+/* ===== TOOLBAR Y ELEMENTOS DE NAVEGACIÓN ===== */
 .toolbar {
   display: flex;
   justify-content: space-between;
   align-items: center;
   width: 100%;
-  margin-bottom: 20px;
+  margin-bottom: var(--spacing-lg);
   gap: 12px;
   flex-wrap: wrap;
 }
 
-@media (max-width: 768px) {
-  .toolbar {
-    flex-direction: column;
-    align-items: stretch;
-  }
-}
-
-/* Input de búsqueda */
 .input-search {
   padding: 10px 12px;
   flex: 1;
   border: 1px solid var(--border-color);
-  border-radius: 6px;
+  border-radius: var(--border-radius-md);
   font-size: 0.95rem;
   transition: var(--transition);
 }
@@ -179,14 +160,15 @@ h2 {
   display: flex;
   justify-content: space-around;
   align-items: center;
-  gap: 5px;
+  gap: var(--spacing-xs);
 }
+
 .button {
   padding: 10px 16px;
   cursor: pointer;
   border: none;
   color: white;
-  border-radius: 6px;
+  border-radius: var(--border-radius-md);
   font-weight: 500;
   font-size: 0.95rem;
   background-color: var(--primary-color);
@@ -212,12 +194,12 @@ h2 {
   transform: none;
 }
 
-/* ===== DISEÑO DE TARJETAS ===== */
+/* ===== CARDS Y CONTENEDORES DE TARJETAS ===== */
 .cards-container {
   display: flex;
   flex-wrap: wrap;
   justify-content: center;
-  gap: 20px;
+  gap: var(--spacing-lg);
   width: 100%;
 }
 
@@ -225,7 +207,7 @@ h2 {
   width: 320px;
   background: var(--white);
   padding: 24px;
-  border-radius: 12px;
+  border-radius: var(--border-radius-lg);
   box-shadow: var(--card-shadow);
   display: flex;
   flex-direction: column;
@@ -251,245 +233,12 @@ h2 {
   width: 100%;
 }
 
-/* ===== ESTILOS PARA FORMULARIOS EN SWEETALERT2 ===== */
-.swal2-container {
-  padding: 0 !important;
-  display: flex !important;
-  align-items: center !important;
-  justify-content: center !important;
-  overflow-y: auto !important;
-}
-
-.swal2-popup {
-  font-family: "Inter", system-ui, sans-serif !important;
-  border-radius: 12px !important;
-  padding: 1.25rem !important;
-  width: 95% !important; /* Ancho fijo en porcentaje */
-  max-width: 500px !important; /* Ancho máximo absoluto */
-  min-width: 280px !important; /* Ancho mínimo para móviles pequeños */
-  margin: 1rem auto !important;
-  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1) !important;
-  overflow: hidden !important; /* Importante: ocultar desbordamiento */
-  box-sizing: border-box !important;
-}
-
-.swal2-title {
-  font-size: 1.4rem !important;
-  font-weight: 600 !important;
-  color: #333 !important;
-  margin: 0 0 1rem 0 !important;
-  padding-bottom: 0.75rem !important;
-  border-bottom: 1px solid #eee !important;
-  white-space: normal !important; /* Permitir saltos de línea en títulos */
-  word-break: break-word !important;
-}
-
-.swal2-html-container {
-  margin: 0 !important;
-  padding: 0 !important;
-  width: 100% !important;
-  max-height: 70vh !important;
-  overflow-y: auto !important;
-  overflow-x: hidden !important;
-  box-sizing: border-box !important;
-}
-
-/* Asegurar que los inputs se ajusten correctamente */
-.swal2-input,
-.swal2-textarea,
-.swal2-select {
-  width: 100% !important;
-  max-width: 100% !important;
-  box-sizing: border-box !important;
-  margin: 0.3rem 0 0.7rem 0 !important;
-  font-size: 0.9rem !important;
-}
-
-.swal2-input {
-  height: 38px !important;
-  padding: 0 10px !important;
-}
-
-.swal2-select {
-  height: 38px !important;
-  padding: 0 10px !important;
-}
-
-.swal2-textarea {
-  padding: 8px 10px !important;
-  min-height: 80px !important;
-}
-
-/* Estilos para etiquetas más compactas */
-.swal2-label,
-.form-group label {
-  display: block !important;
-  font-size: 0.9rem !important;
-  font-weight: 500 !important;
-  margin-bottom: 0.3rem !important;
-  color: #555 !important;
-}
-
-/* Estilos para secciones del formulario */
-.swal2-form-container {
-  display: flex !important;
-  flex-direction: column !important;
-  gap: 0.25rem !important;
-  width: 100% !important;
-  box-sizing: border-box !important;
-  padding: 0 !important;
-}
-
-/* Estilos para checkboxes */
-.swal2-checkbox-container {
-  display: flex !important;
-  align-items: center !important;
-  margin: 0.5rem 0 !important;
-  padding: 0.4rem 0.75rem !important;
-  background-color: #f8f9fa !important;
-  border-radius: 6px !important;
-}
-
-.swal2-checkbox-container label {
-  margin-left: 8px;
-  font-size: 14px;
-}
-
-/* Estilos para botones de acción */
-.swal2-actions {
-  margin-top: 1rem !important;
-  gap: 0.5rem !important;
-  border-top: 1px solid #eee !important;
-  padding-top: 1rem !important;
-  flex-wrap: wrap !important;
-  justify-content: center !important;
-  width: 100% !important;
-}
-
-.swal2-styled.swal2-confirm {
-  background-color: var(--primary-color) !important;
-  padding: 0.75rem 1.5rem !important;
-  border-radius: 6px !important;
-}
-
-.swal2-styled.swal2-confirm:hover {
-  background-color: var(--primary-hover) !important;
-}
-
-.swal2-styled.swal2-cancel {
-  background-color: var(--secondary-color) !important;
-  padding: 0.75rem 1.5rem !important;
-  border-radius: 6px !important;
-}
-
-.swal2-styled.swal2-cancel:hover {
-  background-color: var(--secondary-hover) !important;
-}
-
-/* Estilos para textarea SQL */
-.textarea-sql {
-  padding: 0.6rem 0.75rem !important;
-  border-radius: 6px !important;
-  border: 1px solid #ddd !important;
-  box-shadow: none !important;
-  width: 100% !important;
-  max-width: 100% !important;
-  font-family: "Consolas", "Monaco", monospace !important;
-  line-height: 1.4 !important;
-  transition: all 0.2s ease !important;
-  margin-bottom: 0.5rem !important;
-  resize: vertical;
-  box-sizing: border-box !important;
-  min-height: 100px !important;
-  max-height: 250px !important;
-  background-color: #282c34 !important;
-  color: #abb2bf !important;
-  font-size: 0.9rem !important;
-}
-
-.textarea-sql::selection {
-  background: rgba(255, 255, 0, 0.3);
-}
-
-.textarea-sql::-webkit-scrollbar {
-  width: 8px;
-}
-
-.textarea-sql::-webkit-scrollbar-track {
-  background: #1e1e1e;
-}
-
-.textarea-sql::-webkit-scrollbar-thumb {
-  background: #555;
-  border-radius: 5px;
-}
-
-/* Estilos para campos de parámetros JSON */
-#swal-parameters {
-  min-height: 80px !important;
-}
-
-/* Estilos para grupos de formulario */
-.form-group {
-  margin-bottom: 0.8rem !important;
-  width: 100% !important;
-  box-sizing: border-box !important;
-}
-
-.form-group label {
-  display: block !important;
-  margin-bottom: 0.5rem !important;
-  font-weight: 500 !important;
-  color: #555 !important;
-}
-
-/* Estilos de check */
-.form-check {
-  display: flex;
-  align-items: center;
-  margin-bottom: 0.8rem;
-  width: 100%;
-}
-
-.form-check input[type="checkbox"] {
-  margin-right: 0.75rem;
-  width: 18px;
-  height: 18px;
-}
-
-.form-check label {
-  cursor: pointer;
-  font-size: 0.95rem;
-  margin: 0;
-}
-
-/* Estilos de validación */
-.swal2-validation-message {
-  background-color: rgba(220, 53, 69, 0.1) !important;
-  color: var(--danger-color) !important;
-  padding: 0.5rem !important;
-  border-radius: 4px !important;
-  margin-top: 0.5rem !important;
-  font-size: 0.9rem !important;
-}
-
-/* Modales específicos para formularios */
-.swal2-popup.swal2-form-popup {
-  overflow-y: auto !important;
-  max-height: 85vh !important;
-}
-
-.swal2-popup.swal2-form-popup .swal2-form-content {
-  max-height: 70vh !important;
-  overflow-y: auto !important;
-}
-
-/* ===== ESTILOS PARA TABLAS ===== */
+/* ===== TABLAS Y ELEMENTOS DE DATOS ===== */
 table {
   width: 100%;
   border-collapse: collapse;
   background-color: var(--white);
-  border-radius: 8px;
+  border-radius: var(--border-radius-lg);
   overflow: hidden;
   box-shadow: var(--card-shadow);
 }
@@ -521,7 +270,425 @@ table tr.disabled {
   background-color: #f2f2f2;
 }
 
-/* Estilos para estados e íconos */
+/* ===== DOCUMENTOS Y DETALLES ===== */
+.document-details-container {
+  z-index: 9999;
+}
+
+.document-details {
+  text-align: left;
+}
+
+.document-header {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--spacing-sm);
+  margin-bottom: var(--spacing-lg);
+  padding: var(--spacing-sm);
+  background-color: #f8f9fa;
+  border-radius: var(--border-radius-sm);
+}
+
+.document-header-item {
+  flex: 1 1 30%;
+  min-width: 150px;
+}
+
+.items-table-container {
+  max-height: 300px;
+  overflow-y: auto;
+  margin-bottom: var(--spacing-lg);
+}
+
+.items-table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.items-table th,
+.items-table td {
+  padding: 8px;
+  border: 1px solid #ddd;
+  text-align: left;
+}
+
+.items-table th {
+  background-color: #f0f0f0;
+  position: sticky;
+  top: 0;
+}
+
+/* ===== ESTILOS PARA SWEETALERT2 ===== */
+/* Configuración base para todos los modales de SweetAlert */
+.swal2-container {
+  padding: 0 !important;
+  display: flex !important;
+  align-items: center !important;
+  justify-content: center !important;
+  overflow-y: auto !important;
+}
+
+.swal2-popup {
+  font-family: "Inter", system-ui, sans-serif !important;
+  border-radius: var(--border-radius-lg) !important;
+  padding: 1.25rem !important;
+  width: 95% !important;
+  max-width: 500px !important;
+  min-width: 280px !important;
+  margin: 1rem auto !important;
+  box-shadow: 0 8px 30px rgba(0, 0, 0, 0.1) !important;
+  overflow: hidden !important;
+  box-sizing: border-box !important;
+}
+
+.swal2-title {
+  font-size: 1.4rem !important;
+  font-weight: 600 !important;
+  color: #333 !important;
+  margin: 0 0 1rem 0 !important;
+  padding-bottom: 0.75rem !important;
+  border-bottom: 1px solid #eee !important;
+  white-space: normal !important;
+  word-break: break-word !important;
+}
+
+.swal2-html-container {
+  margin: 0 !important;
+  padding: 0 !important;
+  width: 100% !important;
+  max-height: 70vh !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+  box-sizing: border-box !important;
+}
+
+/* Estilo para scroll en el contenido HTML */
+.swal2-html-container::-webkit-scrollbar {
+  width: 8px;
+}
+
+.swal2-html-container::-webkit-scrollbar-track {
+  background: #f1f1f1;
+}
+
+.swal2-html-container::-webkit-scrollbar-thumb {
+  background: #888;
+  border-radius: var(--border-radius-sm);
+}
+
+.swal2-html-container::-webkit-scrollbar-thumb:hover {
+  background: #555;
+}
+
+/* Inputs y controles de formulario */
+.swal2-input,
+.swal2-textarea,
+.swal2-select {
+  width: 100% !important;
+  max-width: 100% !important;
+  box-sizing: border-box !important;
+  margin: 0.3rem 0 0.7rem 0 !important;
+  font-size: 0.9rem !important;
+}
+
+.swal2-input {
+  height: 38px !important;
+  padding: 0 10px !important;
+}
+
+.swal2-select {
+  height: 38px !important;
+  padding: 0 10px !important;
+}
+
+.swal2-textarea {
+  padding: 8px 10px !important;
+  min-height: 80px !important;
+}
+
+/* Etiquetas y grupos de formulario */
+.swal2-label,
+.form-group label {
+  display: block !important;
+  font-size: 0.9rem !important;
+  font-weight: 500 !important;
+  margin-bottom: 0.3rem !important;
+  color: #555 !important;
+}
+
+.swal2-form-container {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 0.25rem !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+  padding: 0 !important;
+}
+
+.form-group {
+  margin-bottom: 0.8rem !important;
+  width: 100% !important;
+  box-sizing: border-box !important;
+}
+
+.form-group label {
+  display: block !important;
+  margin-bottom: 0.5rem !important;
+  font-weight: 500 !important;
+  color: #555 !important;
+}
+
+/* Checkboxes */
+.swal2-checkbox-container {
+  display: flex !important;
+  align-items: center !important;
+  margin: 0.5rem 0 !important;
+  padding: 0.4rem 0.75rem !important;
+  background-color: #f8f9fa !important;
+  border-radius: var(--border-radius-md) !important;
+}
+
+.swal2-checkbox-container label {
+  margin-left: 8px;
+  font-size: 14px;
+}
+
+.form-check {
+  display: flex;
+  align-items: center;
+  margin-bottom: 0.8rem;
+  width: 100%;
+}
+
+.form-check input[type="checkbox"] {
+  margin-right: 0.75rem;
+  width: 18px;
+  height: 18px;
+}
+
+.form-check label {
+  cursor: pointer;
+  font-size: 0.95rem;
+  margin: 0;
+}
+
+/* Botones de acción */
+.swal2-actions {
+  margin-top: 1rem !important;
+  gap: 0.5rem !important;
+  border-top: 1px solid #eee !important;
+  padding-top: 1rem !important;
+  flex-wrap: wrap !important;
+  justify-content: center !important;
+  width: 100% !important;
+}
+
+.swal2-styled.swal2-confirm {
+  background-color: var(--primary-color) !important;
+  padding: 0.75rem 1.5rem !important;
+  border-radius: var(--border-radius-md) !important;
+}
+
+.swal2-styled.swal2-confirm:hover {
+  background-color: var(--primary-hover) !important;
+}
+
+.swal2-styled.swal2-cancel {
+  background-color: var(--secondary-color) !important;
+  padding: 0.75rem 1.5rem !important;
+  border-radius: var(--border-radius-md) !important;
+}
+
+.swal2-styled.swal2-cancel:hover {
+  background-color: var(--secondary-hover) !important;
+}
+
+/* Estilos de validación */
+.swal2-validation-message {
+  background-color: rgba(220, 53, 69, 0.1) !important;
+  color: var(--danger-color) !important;
+  padding: 0.5rem !important;
+  border-radius: var(--border-radius-sm) !important;
+  margin-top: 0.5rem !important;
+  font-size: 0.9rem !important;
+  margin: 0.5rem 0 !important;
+  padding: 0.5rem 0.75rem !important;
+  border-left: 3px solid var(--danger-color) !important;
+}
+
+/* ===== EDITOR DE MAPEO MODAL ===== */
+.swal2-popup.mapping-editor-modal {
+  padding: 0 !important;
+  width: 650px !important;
+  max-width: 95vw !important;
+}
+
+.mapping-editor-modal .swal2-title {
+  background-color: #007bff !important;
+  color: white !important;
+  padding: 15px !important;
+  margin: 0 !important;
+  border-radius: 5px 5px 0 0 !important;
+  font-size: 1.3rem !important;
+}
+
+.mapping-editor-modal .swal2-html-container {
+  padding: 20px 25px !important;
+  margin: 0 !important;
+  overflow-x: hidden !important;
+}
+
+.mapping-editor-modal .mapping-form {
+  display: flex !important;
+  flex-direction: column !important;
+  gap: 18px !important;
+}
+
+.mapping-editor-modal .mapping-form .form-group {
+  margin-bottom: 0 !important;
+}
+
+.mapping-editor-modal .mapping-form .form-group label {
+  display: block !important;
+  font-weight: 500 !important;
+  margin-bottom: 8px !important;
+  color: #333 !important;
+}
+
+.mapping-editor-modal .mapping-form .field-container {
+  display: flex !important;
+  flex-direction: column !important;
+}
+
+.mapping-editor-modal .mapping-form .field-header {
+  background-color: #f8f9fa !important;
+  padding: 10px 15px !important;
+  border-radius: 4px 4px 0 0 !important;
+  border: 1px solid #ced4da !important;
+  border-bottom: none !important;
+  font-weight: 500 !important;
+  color: #495057 !important;
+}
+
+.mapping-editor-modal .swal2-input,
+.mapping-editor-modal .swal2-textarea,
+.mapping-editor-modal .swal2-select {
+  width: 100% !important;
+  padding: 10px 12px !important;
+  border: 1px solid #ced4da !important;
+  border-radius: var(--border-radius-sm) !important;
+  background-color: #fff !important;
+  color: #495057 !important;
+  font-size: 1rem !important;
+  margin: 0 !important;
+  box-shadow: none !important;
+}
+
+.mapping-editor-modal .swal2-textarea {
+  min-height: 80px !important;
+  resize: vertical !important;
+}
+
+.mapping-editor-modal .form-check {
+  display: flex !important;
+  align-items: center !important;
+  margin-bottom: 0 !important;
+  padding: 10px 0 !important;
+}
+
+.mapping-editor-modal .form-check input[type="checkbox"] {
+  width: 18px !important;
+  height: 18px !important;
+  margin-right: 10px !important;
+}
+
+.mapping-editor-modal .form-info {
+  background-color: #f8f9fa !important;
+  border-left: 4px solid #17a2b8 !important;
+  padding: 12px !important;
+  border-radius: var(--border-radius-sm) !important;
+  margin-top: 10px !important;
+}
+
+.mapping-editor-modal .sql-info {
+  background-color: #f0f7ff !important;
+  border-left: 4px solid #007bff !important;
+  padding: 12px !important;
+  border-radius: var(--border-radius-sm) !important;
+  margin-top: 10px !important;
+}
+
+.mapping-editor-modal .sql-info ul {
+  margin-top: 8px !important;
+  margin-bottom: 5px !important;
+  padding-left: 20px !important;
+}
+
+.mapping-editor-modal .sql-info li {
+  margin-bottom: 5px !important;
+}
+
+.mapping-editor-modal small {
+  display: block !important;
+  margin-top: 6px !important;
+  color: #6c757d !important;
+  font-size: 0.85rem !important;
+}
+
+.mapping-editor-modal .help-icon {
+  margin-left: 5px !important;
+  color: #17a2b8 !important;
+  cursor: pointer !important;
+}
+
+.mapping-editor-modal .sql-function-container {
+  border: 1px solid #ccc !important;
+  border-radius: var(--border-radius-sm) !important;
+  padding: 15px !important;
+  margin-top: 15px !important;
+  background-color: #f9f9f9 !important;
+}
+
+.mapping-editor-modal .field-section {
+  border-bottom: 1px solid #eee !important;
+  padding-bottom: 15px !important;
+}
+
+.mapping-editor-modal .swal2-actions {
+  padding: 15px !important;
+  border-top: 1px solid #e9ecef !important;
+  margin-top: 0 !important;
+}
+
+.mapping-editor-modal .swal2-confirm {
+  background-color: #28a745 !important;
+  font-weight: 500 !important;
+  padding: 8px 25px !important;
+}
+
+.mapping-editor-modal .swal2-cancel {
+  background-color: #6c757d !important;
+  font-weight: 500 !important;
+  padding: 8px 25px !important;
+}
+
+/* Estilo para cuando está activo el modo SQL */
+.mapping-editor-modal .sql-active-state {
+  border: 1px solid #b8daff !important;
+  padding: 15px !important;
+  background-color: #f0f7ff !important;
+  border-radius: var(--border-radius-sm) !important;
+}
+
+/* Estilo para el select de servidor SQL */
+.mapping-editor-modal .server-select {
+  background-color: white !important;
+  width: auto !important;
+  min-width: 200px !important;
+  margin-left: 10px !important;
+}
+
+/* ===== ESTADOS Y BADGES ===== */
 .status-icon {
   display: flex;
   align-items: center;
@@ -547,12 +714,6 @@ table tr.disabled {
   font-weight: bold;
 }
 
-/* ===== ESTILOS PARA HISTORIAL DE TAREAS ===== */
-.history-table-container {
-  max-height: 400px;
-  overflow-y: auto;
-}
-
 .status-badge {
   padding: 3px 8px;
   border-radius: 50px;
@@ -574,7 +735,43 @@ table tr.disabled {
   background-color: var(--danger-color);
 }
 
-/* ===== MEDIA QUERIES PARA RESPONSIVIDAD ===== */
+/* ===== CONTENEDORES ESPECIALIZADOS ===== */
+.history-table-container {
+  max-height: 400px;
+  overflow-y: auto;
+}
+
+/* ===== TOOLTIPS ===== */
+[data-tooltip] {
+  position: relative;
+  cursor: help;
+}
+
+[data-tooltip]::after {
+  content: attr(data-tooltip);
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  padding: 5px 10px;
+  background-color: rgba(0, 0, 0, 0.8);
+  color: white;
+  border-radius: var(--border-radius-sm);
+  font-size: 12px;
+  white-space: nowrap;
+  opacity: 0;
+  visibility: hidden;
+  transition: all 0.2s ease;
+  z-index: 10;
+}
+
+[data-tooltip]:hover::after {
+  opacity: 1;
+  visibility: visible;
+  bottom: calc(100% + 5px);
+}
+
+/* ===== RESPONSIVE Y MEDIA QUERIES ===== */
 @media (max-width: 992px) {
   table {
     font-size: 0.9rem;
@@ -583,6 +780,10 @@ table tr.disabled {
   table th,
   table td {
     padding: 10px 12px;
+  }
+
+  .main-content {
+    max-height: calc(100vh - 130px);
   }
 }
 
@@ -602,6 +803,16 @@ table tr.disabled {
     white-space: nowrap;
   }
 
+  .toolbar {
+    flex-direction: column;
+    align-items: stretch;
+  }
+
+  .main-content {
+    max-height: calc(100vh - 120px);
+    padding: 10px;
+  }
+
   .swal2-popup {
     min-width: auto !important;
     max-width: 90vw !important;
@@ -612,6 +823,16 @@ table tr.disabled {
   .swal2-styled.swal2-cancel {
     padding: 0.6rem 1.2rem !important;
     font-size: 0.9rem !important;
+  }
+
+  .mapping-editor-modal .field-container {
+    flex-direction: column;
+  }
+
+  .mapping-editor-modal .server-select {
+    margin-left: 0;
+    margin-top: 8px;
+    width: 100%;
   }
 }
 
@@ -628,6 +849,12 @@ table tr.disabled {
   .button {
     width: 100%;
     margin-bottom: 8px;
+  }
+
+  .main-content {
+    max-height: calc(100vh - 100px);
+    padding: 8px;
+    margin: 5px;
   }
 
   .swal2-popup {
@@ -660,11 +887,16 @@ table tr.disabled {
   .swal2-title {
     font-size: 1.2rem !important;
   }
+
+  .mapping-editor-modal .swal2-html-container {
+    padding: 15px !important;
+  }
+
+  .mapping-editor-modal .sql-function-container {
+    padding: 10px !important;
+  }
 }
 
-/* ===== ESTILOS ADICIONALES PARA MEJORAR MODALES DE SWEETALERT2 ===== */
-
-/* Ajustes para asegurar que los modales no desborden en móviles pequeños */
 @media (max-width: 320px) {
   .swal2-popup {
     padding: 0.75rem 0.5rem !important;
@@ -679,47 +911,13 @@ table tr.disabled {
   .form-group {
     margin-bottom: 0.6rem !important;
   }
+
+  .mapping-editor-modal .form-check {
+    flex-wrap: wrap;
+  }
 }
 
-/* Mejoras para la visualización de formularios largos */
-.swal2-html-container::-webkit-scrollbar {
-  width: 8px;
-}
-
-.swal2-html-container::-webkit-scrollbar-track {
-  background: #f1f1f1;
-}
-
-.swal2-html-container::-webkit-scrollbar-thumb {
-  background: #888;
-  border-radius: 4px;
-}
-
-.swal2-html-container::-webkit-scrollbar-thumb:hover {
-  background: #555;
-}
-
-/* Ajustes para inputs readonly */
-.swal2-input[readonly] {
-  background-color: #f8f9fa !important;
-  cursor: default;
-}
-
-/* Mejoras visuales para botones en formularios */
-.form-group button.swal2-styled {
-  min-width: 90px;
-  margin: 0 5px !important;
-}
-
-/* Estilos para mensajes de error más visibles */
-.swal2-validation-message {
-  margin: 0.5rem 0 !important;
-  padding: 0.5rem 0.75rem !important;
-  font-size: 0.9rem !important;
-  border-left: 3px solid var(--danger-color) !important;
-}
-
-/* Ajustes para sweetalert en modo oscuro si se implementa */
+/* ===== MODO OSCURO (si se implementa) ===== */
 .dark-mode .swal2-popup {
   background-color: #2d3748 !important;
   color: #f7fafc !important;
@@ -740,118 +938,4 @@ table tr.disabled {
 
 .dark-mode .swal2-checkbox-container {
   background-color: #2d3748 !important;
-}
-
-/* Estilos para tooltips en campos de formulario */
-[data-tooltip] {
-  position: relative;
-  cursor: help;
-}
-
-[data-tooltip]::after {
-  content: attr(data-tooltip);
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  padding: 5px 10px;
-  background-color: rgba(0, 0, 0, 0.8);
-  color: white;
-  border-radius: 4px;
-  font-size: 12px;
-  white-space: nowrap;
-  opacity: 0;
-  visibility: hidden;
-  transition: all 0.2s ease;
-  z-index: 10;
-}
-
-[data-tooltip]:hover::after {
-  opacity: 1;
-  visibility: visible;
-  bottom: calc(100% + 5px);
-}
-
-/* .swal-confirm-button { */
-/* background-color: ${({ theme }) => theme.primary} !important */
-/* } */
-
-/* Estilos para documentos y detalles de documentos */
-.document-details-container {
-  z-index: 9999;
-}
-
-.document-details {
-  text-align: left;
-}
-
-.document-header {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-  margin-bottom: 20px;
-  padding: 10px;
-  background-color: #f8f9fa;
-  border-radius: 5px;
-}
-
-.document-header-item {
-  flex: 1 1 30%;
-  min-width: 150px;
-}
-
-.items-table-container {
-  max-height: 300px;
-  overflow-y: auto;
-  margin-bottom: 20px;
-}
-
-.items-table {
-  width: 100%;
-  border-collapse: collapse;
-}
-
-.items-table th,
-.items-table td {
-  padding: 8px;
-  border: 1px solid #ddd;
-  text-align: left;
-}
-
-.items-table th {
-  background-color: #f0f0f0;
-  position: sticky;
-  top: 0;
-}
-
-/* Estilos para resultados de procesamiento */
-.document-processing-result {
-  max-width: 100%;
-  overflow-x: hidden;
-}
-
-.result-summary {
-  text-align: left;
-}
-
-.error-details {
-  max-height: 200px;
-  overflow-y: auto;
-  text-align: left;
-  background: #f8f8f8;
-  padding: 10px;
-  border-radius: 4px;
-  margin-top: 10px;
-}
-
-.error-detail-item {
-  margin: 5px 0;
-  border-bottom: 1px solid #eee;
-  padding-bottom: 5px;
-}
-
-/* Estilos para modales y overlays específicos */
-.document-details-wrapper {
-  max-height: 70vh;
-  overflow-y: auto;
 }

@@ -13,6 +13,12 @@ const FieldMappingSchema = new Schema({
   targetField: { type: String, required: true },
   defaultValue: { type: Schema.Types.Mixed },
   isSqlFunction: { type: Boolean, default: false },
+  sqlFunctionServer: {
+    type: String,
+    enum: ["source", "target"],
+    default: "target",
+  },
+  sqlFunctionPreExecute: { type: Boolean, default: false },
   isRequired: { type: Boolean, default: false },
   removePrefix: { type: String }, // Prefijo a eliminar (ej: "CN")
   valueMappings: [ValueMapSchema],
