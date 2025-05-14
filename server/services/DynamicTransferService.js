@@ -668,6 +668,31 @@ class DynamicTransferService {
       // Create column length cache
       const columnLengthCache = new Map();
 
+      const formatSqlDate = (dateValue) => {
+        if (!dateValue) return null;
+
+        let date;
+        if (dateValue instanceof Date) {
+          date = dateValue;
+        } else if (typeof dateValue === "string") {
+          // Intentar convertir string a Date
+          date = new Date(dateValue);
+
+          // Verificar si la conversión fue válida
+          if (isNaN(date.getTime())) {
+            logger.warn(
+              `Valor de fecha inválido: ${dateValue}, retornando NULL`
+            );
+            return null;
+          }
+        } else {
+          return null;
+        }
+
+        // Formato YYYY-MM-DD que SQL Server acepta sin problemas
+        return date.toISOString().split("T")[0];
+      };
+
       // 1. Identify main (non-detail) tables
       const mainTables = mapping.tableConfigs.filter((tc) => !tc.isDetailTable);
 
@@ -818,6 +843,23 @@ class DynamicTransferService {
                       );
                     }
 
+                    // NUEVO: Manejar valores de fecha correctamente
+                    if (
+                      fieldValue instanceof Date ||
+                      (typeof fieldValue === "string" &&
+                        fieldValue.includes("T") &&
+                        fieldValue.includes("Z") &&
+                        !isNaN(new Date(fieldValue).getTime()))
+                    ) {
+                      logger.debug(
+                        `Detectado valor de fecha en campo ${fieldName}: ${fieldValue}`
+                      );
+                      fieldValue = formatSqlDate(fieldValue);
+                      logger.debug(
+                        `Fecha formateada para SQL Server: ${fieldValue}`
+                      );
+                    }
+
                     params[paramName] = fieldValue;
                     return `@${paramName}`;
                   }
@@ -942,6 +984,16 @@ class DynamicTransferService {
                     // For direct SQL insertion, properly sanitize values
                     if (fieldValue === undefined || fieldValue === null) {
                       return "NULL";
+                    } else if (
+                      fieldValue instanceof Date ||
+                      (typeof fieldValue === "string" &&
+                        fieldValue.includes("T") &&
+                        fieldValue.includes("Z") &&
+                        !isNaN(new Date(fieldValue).getTime()))
+                    ) {
+                      // NUEVO: Manejar fechas en expresiones SQL directas
+                      const formattedDate = formatSqlDate(fieldValue);
+                      return formattedDate ? `'${formattedDate}'` : "NULL";
                     } else if (typeof fieldValue === "string") {
                       return `'${fieldValue.replace(/'/g, "''")}'`; // Escape quotes
                     } else {
@@ -1497,6 +1549,32 @@ class DynamicTransferService {
         }
       }
 
+      if (
+        error.message &&
+        error.message.toLowerCase().includes("conversion failed") &&
+        (error.message.toLowerCase().includes("date") ||
+          error.message.toLowerCase().includes("time"))
+      ) {
+        logger.error(
+          `Error de conversión de fecha en documento ${documentId}: ${error.message}`,
+          {
+            documentId,
+            errorStack: error.stack,
+            errorDetails: error.code || error.number || "",
+          }
+        );
+
+        return {
+          success: false,
+          message: `Error de conversión de fecha: ${error.message}. Por favor, verifique los formatos de fecha utilizados.`,
+          documentType: "unknown",
+          errorDetails: error.stack,
+          errorCode: "DATE_CONVERSION_ERROR",
+          consecutiveUsed: null,
+          consecutiveValue: null,
+        };
+      }
+
       // Specific error handling
       if (
         error.name === "AggregateError" ||
@@ -1690,7 +1768,12 @@ class DynamicTransferService {
   determineErrorCode(error) {
     const message = error.message.toLowerCase();
 
-    if (message.includes("cannot insert the value null into column")) {
+    if (
+      message.includes("conversion failed") &&
+      (message.includes("date") || message.includes("time"))
+    ) {
+      return "DATE_CONVERSION_ERROR";
+    } else if (message.includes("cannot insert the value null into column")) {
       return "NULL_VALUE_ERROR";
     } else if (message.includes("string or binary data would be truncated")) {
       return "TRUNCATION_ERROR";
