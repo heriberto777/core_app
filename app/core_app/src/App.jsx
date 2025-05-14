@@ -1,14 +1,13 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { AdminRouter, AuthContext, ReloadProvider, Light, Dark } from "./index";
-import {  ThemeProvider } from "styled-components";
+import { ThemeProvider } from "styled-components";
 
 export const ThemeContext = createContext(null);
 
 export function App() {
-   const { user } = useContext(AuthContext);
+  const { user } = useContext(AuthContext);
   const [theme, setTheme] = useState("light");
   const themeStyle = theme === "light" ? Light : Dark;
-
 
   useEffect(() => {
     if (user && user?.theme) {

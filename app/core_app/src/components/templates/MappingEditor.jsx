@@ -312,43 +312,133 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     Swal.fire({
       title: "Nuevo Mapeo de Campo",
       html: `
-    <div class="form-group">
-      <label for="sourceField">Campo origen (opcional)</label>
-      <input id="sourceField" class="swal2-input" placeholder="Ej: NUM_PED">
-    </div>
-    <div class="form-group">
-      <label for="targetField">Campo destino (obligatorio)</label>
-      <input id="targetField" class="swal2-input" placeholder="Ej: NUM_PEDIDO">
-    </div>
-    <div class="form-group">
-      <label for="defaultValue">Valor por defecto</label>
-      <input id="defaultValue" class="swal2-input" placeholder="Ej: 'N/A'">
-    </div>
-    <div class="form-group">
-      <label for="removePrefix">Eliminar prefijo específico</label>
-      <input id="removePrefix" class="swal2-input" placeholder="Ej: CN">
-      <small style="display:block;margin-top:4px;color:#666;">
-        Si se especifica, se eliminará automáticamente este prefijo del valor. Ej: 'CN10133' → '10133'
-      </small>
-    </div>
-    <div class="form-check">
-      <input type="checkbox" id="isSqlFunction" class="swal2-checkbox">
-      <label for="isSqlFunction">¿Es función SQL?</label>
-    </div>
-    <div class="form-check">
-      <input type="checkbox" id="isRequired" class="swal2-checkbox">
-      <label for="isRequired">¿Campo obligatorio en destino?</label>
-    </div>
-    <div class="form-info">
-      <small style="display:block;margin-top:10px;color:#666;">
-        <b>Nota:</b> Para campos obligatorios en la tabla destino, 
-        asegúrese de proporcionar un valor por defecto si no hay campo origen.
-      </small>
-    </div>
-  `,
+      <div class="mapping-form">
+        <div class="field-section">
+          <div class="form-group">
+            <div class="field-container">
+              <div class="field-header">Campo origen (opcional)</div>
+              <input id="sourceField" class="swal2-input" placeholder="Ej: COD_CLT">
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <div class="field-container">
+              <div class="field-header">Campo destino (obligatorio)</div>
+              <input id="targetField" class="swal2-input" placeholder="Ej: CODIGO">
+            </div>
+          </div>
+        </div>
+        
+        <div class="form-check">
+          <input type="checkbox" id="isSqlFunction" class="swal2-checkbox">
+          <label for="isSqlFunction"><strong>¿Es función SQL?</strong></label>
+        </div>
+        
+        <div class="form-group">
+          <div class="field-container">
+            <div id="defaultValueLabel" class="field-header">Valor por defecto</div>
+            <textarea id="defaultValue" class="swal2-textarea" rows="3" placeholder="Ingrese valor por defecto"></textarea>
+          </div>
+        </div>
+        
+        <!-- Opciones para funciones SQL -->
+        <div id="sqlFunctionOptions" class="sql-function-container" style="display:none;">
+          <div class="sql-info">
+            <strong>Nota sobre funciones SQL:</strong>
+            <ul>
+              <li>Ingrese la expresión SQL en el campo "Expresión SQL" arriba</li>
+              <li>Para usar valores del registro actual, use @{CAMPO_ORIGEN}</li>
+              <li>Ejemplo: (SELECT RUTA FROM CLIENTES WHERE CODIGO = '@{COD_CLT}')</li>
+              <li>Los prefijos se eliminarán antes de ejecutar la expresión SQL</li>
+            </ul>
+          </div>
+          
+          <div class="form-check">
+            <input type="checkbox" id="sqlFunctionPreExecute" class="swal2-checkbox">
+            <label for="sqlFunctionPreExecute"><strong>Ejecutar como consulta separada</strong></label>
+            <small>Activa esta opción para ejecutar la consulta y obtener el valor antes de la inserción principal.</small>
+          </div>
+          
+          <div class="form-group" style="display: flex; align-items: center; margin-top: 15px;">
+            <label for="sqlFunctionServer"><strong>Ejecutar en servidor:</strong></label>
+            <select id="sqlFunctionServer" class="swal2-select server-select">
+              <option value="target">Destino (predeterminado)</option>
+              <option value="source">Origen</option>
+            </select>
+          </div>
+        </div>
+        
+        <!-- Sección de eliminación de prefijos - Destacada visualmente -->
+        <div class="form-group">
+          <div class="field-container">
+            <div class="field-header">Eliminar prefijo específico</div>
+            <input id="removePrefix" class="swal2-input" placeholder="Ej: CN">
+            <div class="form-info" style="margin-top: 8px;">
+              <strong>Ejemplo de uso de prefijos:</strong><br>
+              <span style="display: block; margin-top: 5px;">
+                Si el valor en origen es <code>CN10133</code> y el prefijo es <code>CN</code>, 
+                el valor en destino será <code>10133</code>
+              </span>
+              <span style="display: block; margin-top: 5px;">
+                Esto aplica tanto para campos normales como para funciones SQL
+              </span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="form-check">
+          <input type="checkbox" id="isRequired" class="swal2-checkbox">
+          <label for="isRequired"><strong>¿Campo obligatorio en destino?</strong></label>
+        </div>
+        
+        <div class="form-info">
+          <strong>Nota:</strong> Para campos obligatorios en la tabla destino, asegúrese de proporcionar un valor por defecto si no hay campo origen.
+        </div>
+      </div>
+    `,
       showCancelButton: true,
-      confirmButtonText: "Añadir",
+      confirmButtonText: "Guardar",
       cancelButtonText: "Cancelar",
+      customClass: {
+        popup: "mapping-editor-modal",
+      },
+      didOpen: () => {
+        // Mostrar/ocultar opciones de función SQL y cambiar etiqueta del campo
+        const isSqlFunctionCheckbox = document.getElementById("isSqlFunction");
+        const sqlFunctionOptions =
+          document.getElementById("sqlFunctionOptions");
+        const defaultValueLabel = document.getElementById("defaultValueLabel");
+        const defaultValueField = document.getElementById("defaultValue");
+
+        // Función para actualizar la UI según si es función SQL o no
+        const updateUIForSqlFunction = (isSqlFunction) => {
+          sqlFunctionOptions.style.display = isSqlFunction ? "block" : "none";
+          defaultValueLabel.textContent = isSqlFunction
+            ? "Expresión SQL"
+            : "Valor por defecto";
+
+          if (isSqlFunction) {
+            defaultValueField.placeholder =
+              "Ej: (SELECT RUTA FROM CLIENTES WHERE CODIGO = '@{COD_CLT}')";
+            defaultValueField.rows = 3;
+            defaultValueField.parentElement.classList.add("sql-active-state");
+          } else {
+            defaultValueField.placeholder = "Ej: 'N/A'";
+            defaultValueField.rows = 1;
+            defaultValueField.parentElement.classList.remove(
+              "sql-active-state"
+            );
+          }
+        };
+
+        // Inicializar según el estado actual
+        updateUIForSqlFunction(isSqlFunctionCheckbox.checked);
+
+        // Actualizar cuando cambia el checkbox
+        isSqlFunctionCheckbox.addEventListener("change", function () {
+          updateUIForSqlFunction(this.checked);
+        });
+      },
       preConfirm: () => {
         const sourceField = document.getElementById("sourceField").value;
         const targetField = document.getElementById("targetField").value;
@@ -356,6 +446,17 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         const removePrefix = document.getElementById("removePrefix").value;
         const isSqlFunction = document.getElementById("isSqlFunction").checked;
         const isRequired = document.getElementById("isRequired").checked;
+
+        // Nuevas propiedades para funciones SQL
+        let sqlFunctionPreExecute = false;
+        let sqlFunctionServer = "target";
+
+        if (isSqlFunction) {
+          sqlFunctionPreExecute =
+            document.getElementById("sqlFunctionPreExecute")?.checked || false;
+          sqlFunctionServer =
+            document.getElementById("sqlFunctionServer")?.value || "target";
+        }
 
         if (!targetField) {
           Swal.showValidationMessage("El campo destino es obligatorio");
@@ -385,6 +486,8 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           defaultValue: processedDefaultValue,
           removePrefix: removePrefix || null,
           isSqlFunction,
+          sqlFunctionPreExecute,
+          sqlFunctionServer,
           isRequired,
           valueMappings: [],
         };
@@ -651,61 +754,155 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     Swal.fire({
       title: "Editar Mapeo de Campo",
       html: `
-    <div class="form-group">
-      <label for="sourceField">Campo origen (opcional)</label>
-      <input id="sourceField" class="swal2-input" value="${
-        field.sourceField || ""
-      }" placeholder="Ej: NUM_PED">
-    </div>
-    <div class="form-group">
-      <label for="targetField">Campo destino (obligatorio)</label>
-      <input id="targetField" class="swal2-input" value="${
-        field.targetField
-      }" placeholder="Ej: NUM_PEDIDO">
-    </div>
-    <div class="form-group">
-      <label for="defaultValue">Valor por defecto</label>
-      <input id="defaultValue" class="swal2-input" value="${
-        field.defaultValue !== undefined ? field.defaultValue : ""
-      }" placeholder="Ej: 'N/A'">
-    </div>
-    <div class="form-group">
-      <label for="removePrefix">Eliminar prefijo específico</label>
-      <input id="removePrefix" class="swal2-input" value="${
-        field.removePrefix || ""
-      }" placeholder="Ej: CN">
-      <small style="display:block;margin-top:4px;color:#666;">
-        Si se especifica, se eliminará automáticamente este prefijo del valor. Ej: 'CN10133' → '10133'
-      </small>
-    </div>
-    <div class="form-check">
-      <input type="checkbox" id="isSqlFunction" class="swal2-checkbox" ${
-        field.isSqlFunction ? "checked" : ""
-      }>
-      <label for="isSqlFunction">¿Es función SQL?</label>
-    </div>
-    <div class="form-check">
-      <input type="checkbox" id="isRequired" class="swal2-checkbox" ${
-        field.isRequired ? "checked" : ""
-      }>
-      <label for="isRequired">¿Campo obligatorio en destino?</label>
-    </div>
-    <div class="form-info">
-      <small style="display:block;margin-top:10px;color:#666;">
-        <b>Nota:</b> Para campos obligatorios en la tabla destino, 
-        asegúrese de proporcionar un valor por defecto si no hay campo origen.
-        <br><br>
-        Utilice comillas para valores de texto: 'texto'
-        <br>
-        Valor numérico sin comillas: 0
-        <br>
-        Para valor NULL escriba la palabra: NULL
-      </small>
-    </div>
+      <div class="mapping-form">
+        <div class="field-section">
+          <div class="form-group">
+            <div class="field-container">
+              <div class="field-header">Campo origen (opcional)</div>
+              <input id="sourceField" class="swal2-input" value="${
+                field.sourceField || ""
+              }" placeholder="Ej: COD_CLT">
+            </div>
+          </div>
+          
+          <div class="form-group">
+            <div class="field-container">
+              <div class="field-header">Campo destino (obligatorio)</div>
+              <input id="targetField" class="swal2-input" value="${
+                field.targetField
+              }" placeholder="Ej: CODIGO">
+            </div>
+          </div>
+        </div>
+        
+        <div class="form-check">
+          <input type="checkbox" id="isSqlFunction" class="swal2-checkbox" ${
+            field.isSqlFunction ? "checked" : ""
+          }>
+          <label for="isSqlFunction"><strong>¿Es función SQL?</strong></label>
+        </div>
+        
+        <div class="form-group">
+          <div class="field-container">
+            <div id="defaultValueLabel" class="field-header">Valor por defecto</div>
+            <textarea id="defaultValue" class="swal2-textarea" rows="3" placeholder="Ingrese valor por defecto">${
+              field.defaultValue !== undefined ? field.defaultValue : ""
+            }</textarea>
+          </div>
+        </div>
+        
+        <!-- Opciones para funciones SQL -->
+        <div id="sqlFunctionOptions" class="sql-function-container" style="display:${
+          field.isSqlFunction ? "block" : "none"
+        };">
+          <div class="sql-info">
+            <strong>Nota sobre funciones SQL:</strong>
+            <ul>
+              <li>Ingrese la expresión SQL en el campo "Expresión SQL" arriba</li>
+              <li>Para usar valores del registro actual, use @{CAMPO_ORIGEN}</li>
+              <li>Ejemplo: (SELECT RUTA FROM CLIENTES WHERE CODIGO = '@{COD_CLT}')</li>
+              <li>Los prefijos se eliminarán antes de ejecutar la expresión SQL</li>
+            </ul>
+          </div>
+          
+          <div class="form-check">
+            <input type="checkbox" id="sqlFunctionPreExecute" class="swal2-checkbox" ${
+              field.sqlFunctionPreExecute ? "checked" : ""
+            }>
+            <label for="sqlFunctionPreExecute"><strong>Ejecutar como consulta separada</strong></label>
+            <small>Activa esta opción para ejecutar la consulta y obtener el valor antes de la inserción principal.</small>
+          </div>
+          
+          <div class="form-group" style="display: flex; align-items: center; margin-top: 15px;">
+            <label for="sqlFunctionServer"><strong>Ejecutar en servidor:</strong></label>
+            <select id="sqlFunctionServer" class="swal2-select server-select">
+              <option value="target" ${
+                field.sqlFunctionServer === "target" || !field.sqlFunctionServer
+                  ? "selected"
+                  : ""
+              }>Destino (predeterminado)</option>
+              <option value="source" ${
+                field.sqlFunctionServer === "source" ? "selected" : ""
+              }>Origen</option>
+            </select>
+          </div>
+        </div>
+        
+        <!-- Sección de eliminación de prefijos - Destacada visualmente -->
+        <div class="form-group">
+          <div class="field-container">
+            <div class="field-header">Eliminar prefijo específico</div>
+            <input id="removePrefix" class="swal2-input" value="${
+              field.removePrefix || ""
+            }" placeholder="Ej: CN">
+            <div class="form-info" style="margin-top: 8px;">
+              <strong>Ejemplo de uso de prefijos:</strong><br>
+              <span style="display: block; margin-top: 5px;">
+                Si el valor en origen es <code>CN10133</code> y el prefijo es <code>CN</code>, 
+                el valor en destino será <code>10133</code>
+              </span>
+              <span style="display: block; margin-top: 5px;">
+                Esto aplica tanto para campos normales como para funciones SQL
+              </span>
+            </div>
+          </div>
+        </div>
+        
+        <div class="form-check">
+          <input type="checkbox" id="isRequired" class="swal2-checkbox" ${
+            field.isRequired ? "checked" : ""
+          }>
+          <label for="isRequired"><strong>¿Campo obligatorio en destino?</strong></label>
+        </div>
+        
+        <div class="form-info">
+          <strong>Nota:</strong> Para campos obligatorios en la tabla destino, asegúrese de proporcionar un valor por defecto si no hay campo origen.
+        </div>
+      </div>
     `,
       showCancelButton: true,
       confirmButtonText: "Guardar",
       cancelButtonText: "Cancelar",
+      customClass: {
+        popup: "mapping-editor-modal",
+      },
+      didOpen: () => {
+        // Mostrar/ocultar opciones de función SQL y cambiar etiqueta del campo
+        const isSqlFunctionCheckbox = document.getElementById("isSqlFunction");
+        const sqlFunctionOptions =
+          document.getElementById("sqlFunctionOptions");
+        const defaultValueLabel = document.getElementById("defaultValueLabel");
+        const defaultValueField = document.getElementById("defaultValue");
+
+        // Función para actualizar la UI según si es función SQL o no
+        const updateUIForSqlFunction = (isSqlFunction) => {
+          sqlFunctionOptions.style.display = isSqlFunction ? "block" : "none";
+          defaultValueLabel.textContent = isSqlFunction
+            ? "Expresión SQL"
+            : "Valor por defecto";
+
+          if (isSqlFunction) {
+            defaultValueField.placeholder =
+              "Ej: (SELECT RUTA FROM CLIENTES WHERE CODIGO = '@{COD_CLT}')";
+            defaultValueField.rows = 3;
+            defaultValueField.parentElement.classList.add("sql-active-state");
+          } else {
+            defaultValueField.placeholder = "Ej: 'N/A'";
+            defaultValueField.rows = 1;
+            defaultValueField.parentElement.classList.remove(
+              "sql-active-state"
+            );
+          }
+        };
+
+        // Inicializar según el estado actual
+        updateUIForSqlFunction(isSqlFunctionCheckbox.checked);
+
+        // Actualizar cuando cambia el checkbox
+        isSqlFunctionCheckbox.addEventListener("change", function () {
+          updateUIForSqlFunction(this.checked);
+        });
+      },
       preConfirm: () => {
         const sourceField = document.getElementById("sourceField").value;
         const targetField = document.getElementById("targetField").value;
@@ -713,6 +910,17 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         const removePrefix = document.getElementById("removePrefix").value;
         const isSqlFunction = document.getElementById("isSqlFunction").checked;
         const isRequired = document.getElementById("isRequired").checked;
+
+        // Nuevas propiedades para funciones SQL
+        let sqlFunctionPreExecute = false;
+        let sqlFunctionServer = "target";
+
+        if (isSqlFunction) {
+          sqlFunctionPreExecute =
+            document.getElementById("sqlFunctionPreExecute")?.checked || false;
+          sqlFunctionServer =
+            document.getElementById("sqlFunctionServer")?.value || "target";
+        }
 
         if (!targetField) {
           Swal.showValidationMessage("El campo destino es obligatorio");
@@ -742,6 +950,8 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           defaultValue: processedDefaultValue,
           removePrefix: removePrefix || null,
           isSqlFunction,
+          sqlFunctionPreExecute,
+          sqlFunctionServer,
           isRequired,
           valueMappings: field.valueMappings || [],
         };
