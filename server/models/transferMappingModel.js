@@ -12,16 +12,21 @@ const FieldMappingSchema = new Schema({
   sourceField: { type: String },
   targetField: { type: String, required: true },
   defaultValue: { type: Schema.Types.Mixed },
-  isSqlFunction: { type: Boolean, default: false },
-  sqlFunctionServer: {
-    type: String,
-    enum: ["source", "target"],
-    default: "target",
-  },
-  sqlFunctionPreExecute: { type: Boolean, default: false },
   isRequired: { type: Boolean, default: false },
   removePrefix: { type: String }, // Prefijo a eliminar (ej: "CN")
   valueMappings: [ValueMapSchema],
+  // Campos para lookup en BD destino
+  lookupFromTarget: { type: Boolean, default: false }, // Indica si el campo debe consultarse en la BD destino
+  lookupQuery: { type: String }, // Consulta SQL para obtener el valor desde la BD destino
+  lookupParams: [
+    {
+      // Parámetros para la consulta de lookup
+      sourceField: { type: String }, // Campo de origen para usar como parámetro
+      paramName: { type: String }, // Nombre del parámetro en la consulta SQL
+    },
+  ],
+  validateExistence: { type: Boolean, default: false }, // Si debe validarse que existe el registro
+  failIfNotFound: { type: Boolean, default: false }, // Si debe fallar el proceso si no se encuentra
 });
 
 // Schema para la configuración de tabla
