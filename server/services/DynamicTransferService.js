@@ -699,39 +699,39 @@ class DynamicTransferService {
             // Construir consulta básica con alias para evitar ambigüedad
             const tableAlias = "t1";
             const query = `
-            SELECT ${tableAlias}.* FROM ${tableConfig.sourceTable} ${tableAlias}
-            WHERE ${tableAlias}.${
+          SELECT ${tableAlias}.* FROM ${tableConfig.sourceTable} ${tableAlias}
+          WHERE ${tableAlias}.${
               tableConfig.primaryKey || "NUM_PED"
             } = @documentId
-            ${
-              tableConfig.filterCondition
-                ? ` AND ${tableConfig.filterCondition.replace(
-                    /\b(\w+)\b/g,
-                    (m, field) => {
-                      if (
-                        !field.includes(".") &&
-                        !field.match(/^[\d.]+$/) &&
-                        ![
-                          "AND",
-                          "OR",
-                          "NULL",
-                          "IS",
-                          "NOT",
-                          "IN",
-                          "LIKE",
-                          "BETWEEN",
-                          "TRUE",
-                          "FALSE",
-                        ].includes(field.toUpperCase())
-                      ) {
-                        return `${tableAlias}.${field}`;
-                      }
-                      return m;
+          ${
+            tableConfig.filterCondition
+              ? ` AND ${tableConfig.filterCondition.replace(
+                  /\b(\w+)\b/g,
+                  (m, field) => {
+                    if (
+                      !field.includes(".") &&
+                      !field.match(/^[\d.]+$/) &&
+                      ![
+                        "AND",
+                        "OR",
+                        "NULL",
+                        "IS",
+                        "NOT",
+                        "IN",
+                        "LIKE",
+                        "BETWEEN",
+                        "TRUE",
+                        "FALSE",
+                      ].includes(field.toUpperCase())
+                    ) {
+                      return `${tableAlias}.${field}`;
                     }
-                  )}`
-                : ""
-            }
-          `;
+                    return m;
+                  }
+                )}`
+              : ""
+          }
+        `;
             logger.debug(`Ejecutando consulta principal: ${query}`);
             const result = await SqlService.query(sourceConnection, query, {
               documentId,
@@ -761,33 +761,7 @@ class DynamicTransferService {
           throw new Error(`Error al obtener datos de origen: ${error.message}`);
         }
 
-        // 3. NUEVO: Ejecutar todas las funciones SQL primero
-        const sqlExecutionResult = await this.executeAllSqlFunctions(
-          tableConfig,
-          sourceData,
-          sourceConnection,
-          targetConnection
-        );
-
-        // Si hay errores en las funciones SQL, cancelar el procesamiento
-        if (!sqlExecutionResult.success) {
-          const failedFieldsMsg = sqlExecutionResult.failedFields
-            ? sqlExecutionResult.failedFields
-                .map((f) => `${f.field}: ${f.error}`)
-                .join(", ")
-            : sqlExecutionResult.error || "Error desconocido en funciones SQL";
-
-          throw new Error(
-            `Falló la ejecución de funciones SQL para campos: ${failedFieldsMsg}`
-          );
-        }
-
-        const sqlFunctionResults = sqlExecutionResult.results;
-        logger.info(
-          `Funciones SQL ejecutadas correctamente. Continuando con el procesamiento...`
-        );
-
-        // 4. Determinar el tipo de documento basado en las reglas
+        // 3. Determinar el tipo de documento basado en las reglas
         for (const rule of mapping.documentTypeRules) {
           const fieldValue = sourceData[rule.sourceField];
 
@@ -801,11 +775,11 @@ class DynamicTransferService {
         // Determinar la clave en la tabla destino correspondiente a primaryKey
         const targetPrimaryKey = this.getTargetPrimaryKeyField(tableConfig);
 
-        // 5. Verificar si el documento ya existe en destino
+        // 4. Verificar si el documento ya existe en destino
         const checkQuery = `
-        SELECT TOP 1 1 FROM ${tableConfig.targetTable}
-        WHERE ${targetPrimaryKey} = @documentId
-      `;
+      SELECT TOP 1 1 FROM ${tableConfig.targetTable}
+      WHERE ${targetPrimaryKey} = @documentId
+    `;
 
         logger.debug(`Verificando existencia en destino: ${checkQuery}`);
         const checkResult = await SqlService.query(
@@ -830,241 +804,236 @@ class DynamicTransferService {
           };
         }
 
-        // 6. Preparar datos para inserción en tabla principal
+        // 5. Preparar datos para inserción en tabla principal
         const targetData = {};
         const targetFields = [];
         const targetValues = [];
-        const directSqlFields = new Set(); // Nuevo: para rastrear campos con expresiones SQL directas
+        const directSqlFields = new Set(); // Para rastrear campos con expresiones SQL directas
+
+        // NUEVO: Realizar consulta de lookup en la BD destino para obtener valores
+        let lookupResults = {};
+        if (tableConfig.fieldMappings.some((fm) => fm.lookupFromTarget)) {
+          logger.info(
+            `Realizando lookups en BD destino para tabla ${tableConfig.name}`
+          );
+          const lookupExecution = await this.lookupValuesFromTarget(
+            tableConfig,
+            sourceData,
+            targetConnection
+          );
+
+          if (!lookupExecution.success) {
+            // Si hay errores críticos en lookup, fallar el procesamiento
+            const failedMsg = lookupExecution.failedFields
+              ? lookupExecution.failedFields
+                  .map((f) => `${f.field}: ${f.error}`)
+                  .join(", ")
+              : lookupExecution.error || "Error desconocido en lookup";
+
+            throw new Error(
+              `Falló la validación de lookup para tabla ${tableConfig.name}: ${failedMsg}`
+            );
+          }
+
+          lookupResults = lookupExecution.results;
+          logger.info(
+            `Lookup completado exitosamente. Continuando con el procesamiento...`
+          );
+        }
 
         // Procesar todos los campos
         for (const fieldMapping of tableConfig.fieldMappings) {
           let value;
 
-          if (fieldMapping.isSqlFunction) {
-            if (fieldMapping.sqlFunctionPreExecute) {
-              // Usar valor pre-ejecutado
-              value = sqlFunctionResults[fieldMapping.targetField];
+          // NUEVO: Priorizar los valores obtenidos por lookup si existen
+          if (
+            fieldMapping.lookupFromTarget &&
+            lookupResults[fieldMapping.targetField] !== undefined
+          ) {
+            value = lookupResults[fieldMapping.targetField];
+            logger.debug(
+              `Usando valor de lookup para ${fieldMapping.targetField}: ${value}`
+            );
+
+            targetFields.push(fieldMapping.targetField);
+            targetValues.push(`@${fieldMapping.targetField}`);
+            targetData[fieldMapping.targetField] = value;
+          } else {
+            // Verificar si el campo es una función SQL nativa (GETDATE(), etc)
+            const defaultValue = fieldMapping.defaultValue;
+
+            // Lista de funciones SQL nativas a insertar directamente
+            const sqlNativeFunctions = [
+              "GETDATE()",
+              "CURRENT_TIMESTAMP",
+              "NEWID()",
+              "SYSUTCDATETIME()",
+              "SYSDATETIME()",
+              "GETUTCDATE()",
+              "DAY(",
+              "MONTH(",
+              "YEAR(",
+              "GETDATE",
+              "DATEADD",
+              "DATEDIFF",
+            ];
+
+            // Verificar si es una función SQL nativa
+            const isNativeFunction =
+              typeof defaultValue === "string" &&
+              sqlNativeFunctions.some((func) =>
+                defaultValue.trim().toUpperCase().includes(func)
+              );
+
+            if (isNativeFunction) {
+              // Para funciones nativas, usar la expresión SQL directamente
               logger.debug(
-                `Usando valor pre-calculado para ${fieldMapping.targetField}: ${value}`
+                `Detectada función SQL nativa para ${fieldMapping.targetField}: ${defaultValue}`
               );
 
               targetFields.push(fieldMapping.targetField);
-              targetValues.push(`@${fieldMapping.targetField}`);
-              targetData[fieldMapping.targetField] = value;
+              targetValues.push(defaultValue); // Expresión SQL directa
+              directSqlFields.add(fieldMapping.targetField); // Marcar como SQL directo
             } else {
-              // Para funciones SQL que irán directo en el INSERT
-              let sqlExpression = fieldMapping.defaultValue;
+              // Obtener valor del origen o usar valor por defecto
+              if (fieldMapping.sourceField) {
+                value = sourceData[fieldMapping.sourceField];
 
-              // NUEVO: Lista de funciones SQL nativas a insertar directamente
-              const sqlNativeFunctions = [
-                "GETDATE()",
-                "CURRENT_TIMESTAMP",
-                "NEWID()",
-                "SYSUTCDATETIME()",
-                "SYSDATETIME()",
-                "GETUTCDATE()",
-                "DAY(",
-                "MONTH(",
-                "YEAR(",
-                "GETDATE",
-                "DATEADD",
-                "DATEDIFF",
-              ];
-
-              // Verificar si es una función SQL nativa
-              const isNativeFunction = sqlNativeFunctions.some((func) =>
-                sqlExpression.trim().toUpperCase().includes(func)
-              );
-
-              if (isNativeFunction) {
-                // Para funciones nativas, usar la expresión SQL directamente
-                logger.debug(
-                  `Detectada función SQL nativa para ${fieldMapping.targetField}: ${sqlExpression}`
-                );
-
-                targetFields.push(fieldMapping.targetField);
-                targetValues.push(sqlExpression); // Expresión SQL directa
-                directSqlFields.add(fieldMapping.targetField); // Marcar como SQL directo
-              } else if (
-                typeof sqlExpression === "string" &&
-                sqlExpression.includes("@{")
-              ) {
-                // Para expresiones con referencias a campos
-                const regex = /@\{([^}]+)\}/g;
-
-                sqlExpression = sqlExpression.replace(
-                  regex,
-                  (match, fieldName) => {
-                    // Buscar el campo en datos de origen
-                    const fieldValue = sourceData[fieldName];
-
-                    // Para SQL directo, sanitizar valores
-                    if (fieldValue === undefined || fieldValue === null) {
-                      return "NULL";
-                    } else if (
-                      fieldValue instanceof Date ||
-                      (typeof fieldValue === "string" &&
-                        fieldValue.includes("T"))
-                    ) {
-                      const formattedDate = this.formatSqlDate(fieldValue);
-                      return formattedDate ? `'${formattedDate}'` : "NULL";
-                    } else if (typeof fieldValue === "string") {
-                      return `'${fieldValue.replace(/'/g, "''")}'`;
-                    } else {
-                      return fieldValue;
-                    }
-                  }
-                );
-
-                targetFields.push(fieldMapping.targetField);
-                targetValues.push(sqlExpression); // Expresión SQL procesada
-                directSqlFields.add(fieldMapping.targetField); // Marcar como SQL directo
+                // Aplicar eliminación de prefijo específico si está configurado
+                if (
+                  fieldMapping.removePrefix &&
+                  typeof value === "string" &&
+                  value.startsWith(fieldMapping.removePrefix)
+                ) {
+                  const originalValue = value;
+                  value = value.substring(fieldMapping.removePrefix.length);
+                  logger.debug(
+                    `Prefijo '${fieldMapping.removePrefix}' eliminado del campo ${fieldMapping.sourceField}: '${originalValue}' → '${value}'`
+                  );
+                }
               } else {
-                // Expresión SQL simple
-                targetFields.push(fieldMapping.targetField);
-                targetValues.push(sqlExpression);
-                directSqlFields.add(fieldMapping.targetField);
+                // No hay campo origen, usar valor por defecto
+                if (defaultValue === "NULL") {
+                  value = null; // Convertir la cadena "NULL" a null real
+                } else {
+                  value = defaultValue;
+                }
               }
-            }
 
-            continue;
-          }
+              // Si el valor es undefined/null pero hay un valor por defecto
+              if (
+                (value === undefined || value === null) &&
+                defaultValue !== undefined
+              ) {
+                // Validación de los campos NULL
+                if (defaultValue === "NULL") {
+                  value = null; // Convertir la cadena "NULL" a null real
+                } else {
+                  value = defaultValue;
+                }
+              }
 
-          // Obtener valor del origen o usar valor por defecto
-          if (fieldMapping.sourceField) {
-            value = sourceData[fieldMapping.sourceField];
+              // Formatear fechas si es necesario
+              if (
+                value instanceof Date ||
+                (typeof value === "string" &&
+                  value.includes("T") &&
+                  !isNaN(new Date(value).getTime()))
+              ) {
+                logger.debug(
+                  `Convirtiendo fecha a formato SQL Server: ${value}`
+                );
+                value = this.formatSqlDate(value);
+                logger.debug(`Fecha convertida: ${value}`);
+              }
 
-            // Aplicar eliminación de prefijo específico si está configurado
-            if (
-              fieldMapping.removePrefix &&
-              typeof value === "string" &&
-              value.startsWith(fieldMapping.removePrefix)
-            ) {
-              const originalValue = value;
-              value = value.substring(fieldMapping.removePrefix.length);
-              logger.debug(
-                `Prefijo '${fieldMapping.removePrefix}' eliminado del campo ${fieldMapping.sourceField}: '${originalValue}' → '${value}'`
-              );
-            }
-          } else {
-            // No hay campo origen, usar valor por defecto
-            if (fieldMapping.defaultValue === "NULL") {
-              value = null; // Convertir la cadena "NULL" a null real
-            } else {
-              value = fieldMapping.defaultValue;
-            }
-          }
+              // IMPORTANTE: Aplicar consecutivo si corresponde a esta tabla y campo
+              if (
+                currentConsecutive &&
+                mapping.consecutiveConfig &&
+                mapping.consecutiveConfig.enabled
+              ) {
+                // Verificar si este campo debe recibir el consecutivo (en tabla principal)
+                if (
+                  mapping.consecutiveConfig.fieldName ===
+                    fieldMapping.targetField ||
+                  (mapping.consecutiveConfig.applyToTables &&
+                    mapping.consecutiveConfig.applyToTables.some(
+                      (t) =>
+                        t.tableName === tableConfig.name &&
+                        t.fieldName === fieldMapping.targetField
+                    ))
+                ) {
+                  // Asignar el consecutivo al campo correspondiente
+                  value = currentConsecutive.formatted;
+                  logger.debug(
+                    `Asignando consecutivo ${currentConsecutive.formatted} a campo ${fieldMapping.targetField} en tabla ${tableConfig.name}`
+                  );
+                }
+              }
 
-          // Si el valor es undefined/null pero hay un valor por defecto
-          if (
-            (value === undefined || value === null) &&
-            fieldMapping.defaultValue !== undefined
-          ) {
-            //Validacion de los campos NULL
-            if (fieldMapping.defaultValue === "NULL") {
-              value = null; // Convertir la cadena "NULL" a null real
-            } else {
-              value = fieldMapping.defaultValue;
-            }
-          }
+              // Si es un campo obligatorio y aún no tiene valor, lanzar error
+              if (
+                fieldMapping.isRequired &&
+                (value === undefined || value === null)
+              ) {
+                throw new Error(
+                  `El campo obligatorio '${fieldMapping.targetField}' no tiene valor de origen ni valor por defecto`
+                );
+              }
 
-          // Formatear fechas si es necesario
-          if (
-            value instanceof Date ||
-            (typeof value === "string" &&
-              value.includes("T") &&
-              !isNaN(new Date(value).getTime()))
-          ) {
-            logger.debug(`Convirtiendo fecha a formato SQL Server: ${value}`);
-            value = this.formatSqlDate(value);
-            logger.debug(`Fecha convertida: ${value}`);
-          }
+              // Aplicar mapeo de valores si existe
+              if (
+                value !== null &&
+                value !== undefined &&
+                fieldMapping.valueMappings?.length > 0
+              ) {
+                const mapping = fieldMapping.valueMappings.find(
+                  (vm) => vm.sourceValue === value
+                );
+                if (mapping) {
+                  logger.debug(
+                    `Aplicando mapeo de valor para ${fieldMapping.targetField}: ${value} → ${mapping.targetValue}`
+                  );
+                  value = mapping.targetValue;
+                }
+              }
 
-          // IMPORTANTE: Aplicar consecutivo si corresponde a esta tabla y campo
-          if (
-            currentConsecutive &&
-            mapping.consecutiveConfig &&
-            mapping.consecutiveConfig.enabled
-          ) {
-            // Verificar si este campo debe recibir el consecutivo (en tabla principal)
-            if (
-              mapping.consecutiveConfig.fieldName ===
-                fieldMapping.targetField ||
-              (mapping.consecutiveConfig.applyToTables &&
-                mapping.consecutiveConfig.applyToTables.some(
-                  (t) =>
-                    t.tableName === tableConfig.name &&
-                    t.fieldName === fieldMapping.targetField
-                ))
-            ) {
-              // Asignar el consecutivo al campo correspondiente
-              value = currentConsecutive.formatted;
-              logger.debug(
-                `Asignando consecutivo ${currentConsecutive.formatted} a campo ${fieldMapping.targetField} en tabla ${tableConfig.name}`
-              );
-            }
-          }
+              // Si el valor es un string, verificar y ajustar longitud
+              if (typeof value === "string") {
+                const maxLength = await this.getColumnMaxLength(
+                  targetConnection,
+                  tableConfig.targetTable,
+                  fieldMapping.targetField,
+                  columnLengthCache
+                );
 
-          // Si es un campo obligatorio y aún no tiene valor, lanzar error
-          if (
-            fieldMapping.isRequired &&
-            (value === undefined || value === null)
-          ) {
-            throw new Error(
-              `El campo obligatorio '${fieldMapping.targetField}' no tiene valor de origen ni valor por defecto`
-            );
-          }
+                // Si hay un límite de longitud y se excede, truncar
+                if (maxLength > 0 && value.length > maxLength) {
+                  logger.warn(
+                    `Truncando valor para campo ${fieldMapping.targetField} de longitud ${value.length} a ${maxLength} caracteres en documento ${documentId}`
+                  );
+                  value = value.substring(0, maxLength);
+                }
+              }
 
-          // Aplicar mapeo de valores si existe
-          if (
-            value !== null &&
-            value !== undefined &&
-            fieldMapping.valueMappings?.length > 0
-          ) {
-            const mapping = fieldMapping.valueMappings.find(
-              (vm) => vm.sourceValue === value
-            );
-            if (mapping) {
-              logger.debug(
-                `Aplicando mapeo de valor para ${fieldMapping.targetField}: ${value} → ${mapping.targetValue}`
-              );
-              value = mapping.targetValue;
+              targetData[fieldMapping.targetField] = value;
+              targetFields.push(fieldMapping.targetField);
+              targetValues.push(`@${fieldMapping.targetField}`);
             }
           }
-
-          // Si el valor es un string, verificar y ajustar longitud
-          if (typeof value === "string") {
-            const maxLength = await this.getColumnMaxLength(
-              targetConnection,
-              tableConfig.targetTable,
-              fieldMapping.targetField,
-              columnLengthCache
-            );
-
-            // Si hay un límite de longitud y se excede, truncar
-            if (maxLength > 0 && value.length > maxLength) {
-              logger.warn(
-                `Truncando valor para campo ${fieldMapping.targetField} de longitud ${value.length} a ${maxLength} caracteres en documento ${documentId}`
-              );
-              value = value.substring(0, maxLength);
-            }
-          }
-
-          targetData[fieldMapping.targetField] = value;
-          targetFields.push(fieldMapping.targetField);
-          targetValues.push(`@${fieldMapping.targetField}`);
         }
 
-        // 7. NUEVO: Construir la consulta INSERT con manejo especial para expresiones SQL directas
+        // 6. Construir la consulta INSERT con manejo especial para expresiones SQL directas
         const insertFieldsList = targetFields;
         const insertValuesList = targetFields.map((field, index) => {
           return directSqlFields.has(field) ? targetValues[index] : `@${field}`;
         });
 
         const insertQuery = `
-        INSERT INTO ${tableConfig.targetTable} (${insertFieldsList.join(", ")})
-        VALUES (${insertValuesList.join(", ")})
-      `;
+      INSERT INTO ${tableConfig.targetTable} (${insertFieldsList.join(", ")})
+      VALUES (${insertValuesList.join(", ")})
+    `;
 
         logger.debug(
           `Ejecutando inserción en tabla principal ${tableConfig.name}: ${insertQuery}`
@@ -1089,7 +1058,7 @@ class DynamicTransferService {
         );
         processedTables.push(tableConfig.name);
 
-        // 8. Procesar tablas de detalle relacionadas
+        // 7. Procesar tablas de detalle relacionadas
         const detailTables = mapping.tableConfigs.filter(
           (tc) => tc.isDetailTable && tc.parentTableRef === tableConfig.name
         );
@@ -1114,42 +1083,40 @@ class DynamicTransferService {
             const tableAlias = "d1";
             const orderByColumn = detailConfig.orderByColumn || "";
             const query = `
-            SELECT ${tableAlias}.* FROM ${
-              detailConfig.sourceTable
-            } ${tableAlias}
-            WHERE ${tableAlias}.${
+          SELECT ${tableAlias}.* FROM ${detailConfig.sourceTable} ${tableAlias}
+          WHERE ${tableAlias}.${
               detailConfig.primaryKey || "NUM_PED"
             } = @documentId
-            ${
-              detailConfig.filterCondition
-                ? ` AND ${detailConfig.filterCondition.replace(
-                    /\b(\w+)\b/g,
-                    (m, field) => {
-                      if (
-                        !field.includes(".") &&
-                        !field.match(/^[\d.]+$/) &&
-                        ![
-                          "AND",
-                          "OR",
-                          "NULL",
-                          "IS",
-                          "NOT",
-                          "IN",
-                          "LIKE",
-                          "BETWEEN",
-                          "TRUE",
-                          "FALSE",
-                        ].includes(field.toUpperCase())
-                      ) {
-                        return `${tableAlias}.${field}`;
-                      }
-                      return m;
+          ${
+            detailConfig.filterCondition
+              ? ` AND ${detailConfig.filterCondition.replace(
+                  /\b(\w+)\b/g,
+                  (m, field) => {
+                    if (
+                      !field.includes(".") &&
+                      !field.match(/^[\d.]+$/) &&
+                      ![
+                        "AND",
+                        "OR",
+                        "NULL",
+                        "IS",
+                        "NOT",
+                        "IN",
+                        "LIKE",
+                        "BETWEEN",
+                        "TRUE",
+                        "FALSE",
+                      ].includes(field.toUpperCase())
+                    ) {
+                      return `${tableAlias}.${field}`;
                     }
-                  )}`
-                : ""
-            }
-            ${orderByColumn ? ` ORDER BY ${tableAlias}.${orderByColumn}` : ""}
-          `;
+                    return m;
+                  }
+                )}`
+              : ""
+          }
+          ${orderByColumn ? ` ORDER BY ${tableAlias}.${orderByColumn}` : ""}
+        `;
             logger.debug(`Ejecutando consulta para detalles: ${query}`);
             const result = await SqlService.query(sourceConnection, query, {
               documentId,
@@ -1168,43 +1135,6 @@ class DynamicTransferService {
             `Procesando ${detailsData.length} registros de detalle en ${detailConfig.name}`
           );
 
-          // Pre-ejecutar todas las funciones SQL para los detalles
-          const detailSqlFields = detailConfig.fieldMappings.filter(
-            (fm) => fm.isSqlFunction && fm.sqlFunctionPreExecute
-          );
-
-          // Si hay funciones SQL que pre-ejecutar, hacerlo con la primera fila de detalle
-          let detailSqlFunctionResults = {};
-          if (detailSqlFields.length > 0 && detailsData.length > 0) {
-            logger.info(`Pre-ejecutando funciones SQL para detalles...`);
-            const firstDetailRow = detailsData[0];
-
-            const detailSqlExecution = await this.executeAllSqlFunctions(
-              detailConfig,
-              firstDetailRow,
-              sourceConnection,
-              targetConnection
-            );
-
-            if (!detailSqlExecution.success) {
-              const failedFieldsMsg = detailSqlExecution.failedFields
-                ? detailSqlExecution.failedFields
-                    .map((f) => `${f.field}: ${f.error}`)
-                    .join(", ")
-                : detailSqlExecution.error ||
-                  "Error desconocido en funciones SQL";
-
-              throw new Error(
-                `Falló la ejecución de funciones SQL para campos de detalle: ${failedFieldsMsg}`
-              );
-            }
-
-            detailSqlFunctionResults = detailSqlExecution.results;
-            logger.info(
-              `Funciones SQL para detalles pre-ejecutadas correctamente`
-            );
-          }
-
           // Insertar detalles - usar el mismo consecutivo que el encabezado
           for (const detailRow of detailsData) {
             const detailTargetData = {};
@@ -1212,213 +1142,214 @@ class DynamicTransferService {
             const detailValues = [];
             const detailDirectSqlFields = new Set(); // Para SQL directo en detalles
 
+            // NUEVO: Realizar lookup para este detalle si es necesario
+            let detailLookupResults = {};
+            if (detailConfig.fieldMappings.some((fm) => fm.lookupFromTarget)) {
+              logger.info(
+                `Realizando lookups en BD destino para detalle en tabla ${detailConfig.name}`
+              );
+
+              // Los detalles pueden requerir valores del header para las consultas
+              const combinedSourceData = {
+                ...sourceData, // Datos del encabezado
+                ...detailRow, // Datos del detalle (prevalecen sobre el encabezado en caso de colisión)
+              };
+
+              const detailLookupExecution = await this.lookupValuesFromTarget(
+                detailConfig,
+                combinedSourceData,
+                targetConnection
+              );
+
+              if (!detailLookupExecution.success) {
+                // Si hay errores críticos en lookup, fallar el procesamiento
+                const failedMsg = detailLookupExecution.failedFields
+                  ? detailLookupExecution.failedFields
+                      .map((f) => `${f.field}: ${f.error}`)
+                      .join(", ")
+                  : detailLookupExecution.error ||
+                    "Error desconocido en lookup de detalle";
+
+                throw new Error(
+                  `Falló la validación de lookup para detalle en tabla ${detailConfig.name}: ${failedMsg}`
+                );
+              }
+
+              detailLookupResults = detailLookupExecution.results;
+              logger.info(
+                `Lookup de detalle completado exitosamente. Continuando con el procesamiento...`
+              );
+            }
+
             for (const fieldMapping of detailConfig.fieldMappings) {
               let value;
 
-              if (fieldMapping.isSqlFunction) {
-                if (fieldMapping.sqlFunctionPreExecute) {
-                  // Usar valor pre-ejecutado
-                  value = detailSqlFunctionResults[fieldMapping.targetField];
+              // NUEVO: Priorizar los valores obtenidos por lookup si existen
+              if (
+                fieldMapping.lookupFromTarget &&
+                detailLookupResults[fieldMapping.targetField] !== undefined
+              ) {
+                value = detailLookupResults[fieldMapping.targetField];
+                logger.debug(
+                  `Usando valor de lookup para detalle ${fieldMapping.targetField}: ${value}`
+                );
+
+                detailFields.push(fieldMapping.targetField);
+                detailValues.push(`@${fieldMapping.targetField}`);
+                detailTargetData[fieldMapping.targetField] = value;
+              } else {
+                // Verificar si el campo es una función SQL nativa (GETDATE(), etc)
+                const defaultValue = fieldMapping.defaultValue;
+
+                // Lista de funciones SQL nativas a insertar directamente
+                const sqlNativeFunctions = [
+                  "GETDATE()",
+                  "CURRENT_TIMESTAMP",
+                  "NEWID()",
+                  "SYSUTCDATETIME()",
+                  "SYSDATETIME()",
+                  "GETUTCDATE()",
+                  "DAY(",
+                  "MONTH(",
+                  "YEAR(",
+                  "GETDATE",
+                  "DATEADD",
+                  "DATEDIFF",
+                ];
+
+                // Verificar si es una función SQL nativa
+                const isNativeFunction =
+                  typeof defaultValue === "string" &&
+                  sqlNativeFunctions.some((func) =>
+                    defaultValue.trim().toUpperCase().includes(func)
+                  );
+
+                if (isNativeFunction) {
+                  // Para funciones nativas, usar la expresión SQL directamente
                   logger.debug(
-                    `Usando valor pre-calculado para detalle ${fieldMapping.targetField}: ${value}`
+                    `Detectada función SQL nativa para detalle ${fieldMapping.targetField}: ${defaultValue}`
                   );
 
                   detailFields.push(fieldMapping.targetField);
-                  detailValues.push(`@${fieldMapping.targetField}`);
-                  detailTargetData[fieldMapping.targetField] = value;
+                  detailValues.push(defaultValue); // Expresión SQL directa
+                  detailDirectSqlFields.add(fieldMapping.targetField); // Marcar como SQL directo
                 } else {
-                  // Para funciones SQL que irán directo en el INSERT
-                  let sqlExpression = fieldMapping.defaultValue;
+                  // Obtener valor del origen o usar valor por defecto
+                  value = detailRow[fieldMapping.sourceField];
 
-                  // Lista de funciones SQL nativas a insertar directamente
-                  const sqlNativeFunctions = [
-                    "GETDATE()",
-                    "CURRENT_TIMESTAMP",
-                    "NEWID()",
-                    "SYSUTCDATETIME()",
-                    "SYSDATETIME()",
-                    "GETUTCDATE()",
-                    "DAY(",
-                    "MONTH(",
-                    "YEAR(",
-                    "GETDATE",
-                    "DATEADD",
-                    "DATEDIFF",
-                  ];
-
-                  // Verificar si es una función SQL nativa
-                  const isNativeFunction = sqlNativeFunctions.some((func) =>
-                    sqlExpression.trim().toUpperCase().includes(func)
-                  );
-
-                  if (isNativeFunction) {
-                    // Para funciones nativas, usar la expresión SQL directamente
-                    logger.debug(
-                      `Detectada función SQL nativa para detalle ${fieldMapping.targetField}: ${sqlExpression}`
-                    );
-
-                    detailFields.push(fieldMapping.targetField);
-                    detailValues.push(sqlExpression); // Expresión SQL directa
-                    detailDirectSqlFields.add(fieldMapping.targetField); // Marcar como SQL directo
-                  } else if (
-                    typeof sqlExpression === "string" &&
-                    sqlExpression.includes("@{")
+                  // Aplicar eliminación de prefijo específico si está configurado
+                  if (
+                    fieldMapping.removePrefix &&
+                    typeof value === "string" &&
+                    value.startsWith(fieldMapping.removePrefix)
                   ) {
-                    // Para expresiones con referencias a campos
-                    const regex = /@\{([^}]+)\}/g;
+                    const originalValue = value;
+                    value = value.substring(fieldMapping.removePrefix.length);
+                    logger.debug(
+                      `Prefijo '${fieldMapping.removePrefix}' eliminado del campo de detalle ${fieldMapping.sourceField}: '${originalValue}' → '${value}'`
+                    );
+                  }
 
-                    sqlExpression = sqlExpression.replace(
-                      regex,
-                      (match, fieldName) => {
-                        // Buscar el campo en los datos de detalle
-                        const fieldValue = detailRow[fieldName];
+                  if (
+                    (value === undefined || value === null) &&
+                    fieldMapping.defaultValue !== undefined
+                  ) {
+                    if (fieldMapping.defaultValue === "NULL") {
+                      value = null;
+                    } else {
+                      value = fieldMapping.defaultValue;
+                    }
+                  }
 
-                        // Para SQL directo, sanitizar valores
-                        if (fieldValue === undefined || fieldValue === null) {
-                          return "NULL";
-                        } else if (
-                          fieldValue instanceof Date ||
-                          (typeof fieldValue === "string" &&
-                            fieldValue.includes("T"))
-                        ) {
-                          const formattedDate = this.formatSqlDate(fieldValue);
-                          return formattedDate ? `'${formattedDate}'` : "NULL";
-                        } else if (typeof fieldValue === "string") {
-                          return `'${fieldValue.replace(/'/g, "''")}'`;
-                        } else {
-                          return fieldValue;
-                        }
-                      }
+                  // Formatear fechas si es necesario
+                  if (
+                    value instanceof Date ||
+                    (typeof value === "string" &&
+                      value.includes("T") &&
+                      !isNaN(new Date(value).getTime()))
+                  ) {
+                    logger.debug(
+                      `Convirtiendo fecha de detalle a formato SQL Server: ${value}`
+                    );
+                    value = this.formatSqlDate(value);
+                    logger.debug(`Fecha de detalle convertida: ${value}`);
+                  }
+
+                  // IMPORTANTE: Aplicar consecutivo en detalles si corresponde
+                  if (
+                    currentConsecutive &&
+                    mapping.consecutiveConfig &&
+                    mapping.consecutiveConfig.enabled
+                  ) {
+                    // Verificar si este campo debe recibir el consecutivo (en tabla de detalle)
+                    if (
+                      mapping.consecutiveConfig.detailFieldName ===
+                        fieldMapping.targetField ||
+                      (mapping.consecutiveConfig.applyToTables &&
+                        mapping.consecutiveConfig.applyToTables.some(
+                          (t) =>
+                            t.tableName === detailConfig.name &&
+                            t.fieldName === fieldMapping.targetField
+                        ))
+                    ) {
+                      // Asignar el consecutivo al campo correspondiente en el detalle
+                      value = currentConsecutive.formatted;
+                      logger.debug(
+                        `Asignando consecutivo ${currentConsecutive.formatted} a campo ${fieldMapping.targetField} en tabla de detalle ${detailConfig.name}`
+                      );
+                    }
+                  }
+
+                  // Si es un campo obligatorio y aún no tiene valor, lanzar error
+                  if (
+                    fieldMapping.isRequired &&
+                    (value === undefined || value === null)
+                  ) {
+                    throw new Error(
+                      `El campo obligatorio '${fieldMapping.targetField}' en detalle no tiene valor de origen ni valor por defecto`
+                    );
+                  }
+
+                  // Aplicar mapeo de valores si existe
+                  if (
+                    value !== null &&
+                    value !== undefined &&
+                    fieldMapping.valueMappings?.length > 0
+                  ) {
+                    const mapping = fieldMapping.valueMappings.find(
+                      (vm) => vm.sourceValue === value
+                    );
+                    if (mapping) {
+                      logger.debug(
+                        `Aplicando mapeo de valor para detalle ${fieldMapping.targetField}: ${value} → ${mapping.targetValue}`
+                      );
+                      value = mapping.targetValue;
+                    }
+                  }
+
+                  // Si el valor es un string, verificar y ajustar longitud
+                  if (typeof value === "string") {
+                    const maxLength = await this.getColumnMaxLength(
+                      targetConnection,
+                      detailConfig.targetTable,
+                      fieldMapping.targetField,
+                      columnLengthCache
                     );
 
-                    detailFields.push(fieldMapping.targetField);
-                    detailValues.push(sqlExpression); // Expresión SQL procesada
-                    detailDirectSqlFields.add(fieldMapping.targetField); // Marcar como SQL directo
-                  } else {
-                    // Expresión SQL simple
-                    detailFields.push(fieldMapping.targetField);
-                    detailValues.push(sqlExpression);
-                    detailDirectSqlFields.add(fieldMapping.targetField);
+                    // Si hay un límite de longitud y se excede, truncar
+                    if (maxLength > 0 && value.length > maxLength) {
+                      logger.warn(
+                        `Truncando valor para campo ${fieldMapping.targetField} de longitud ${value.length} a ${maxLength} caracteres en detalle de documento ${documentId}`
+                      );
+                      value = value.substring(0, maxLength);
+                    }
                   }
-                }
 
-                continue;
-              }
-
-              // Obtener valor del origen o usar valor por defecto
-              value = detailRow[fieldMapping.sourceField];
-
-              // Aplicar eliminación de prefijo específico si está configurado
-              if (
-                fieldMapping.removePrefix &&
-                typeof value === "string" &&
-                value.startsWith(fieldMapping.removePrefix)
-              ) {
-                const originalValue = value;
-                value = value.substring(fieldMapping.removePrefix.length);
-                logger.debug(
-                  `Prefijo '${fieldMapping.removePrefix}' eliminado del campo de detalle ${fieldMapping.sourceField}: '${originalValue}' → '${value}'`
-                );
-              }
-
-              if (
-                (value === undefined || value === null) &&
-                fieldMapping.defaultValue !== undefined
-              ) {
-                if (fieldMapping.defaultValue === "NULL") {
-                  value = null;
-                } else {
-                  value = fieldMapping.defaultValue;
+                  detailTargetData[fieldMapping.targetField] = value;
+                  detailFields.push(fieldMapping.targetField);
+                  detailValues.push(`@${fieldMapping.targetField}`);
                 }
               }
-
-              // Formatear fechas si es necesario
-              if (
-                value instanceof Date ||
-                (typeof value === "string" &&
-                  value.includes("T") &&
-                  !isNaN(new Date(value).getTime()))
-              ) {
-                logger.debug(
-                  `Convirtiendo fecha de detalle a formato SQL Server: ${value}`
-                );
-                value = this.formatSqlDate(value);
-                logger.debug(`Fecha de detalle convertida: ${value}`);
-              }
-
-              // IMPORTANTE: Aplicar consecutivo en detalles si corresponde
-              if (
-                currentConsecutive &&
-                mapping.consecutiveConfig &&
-                mapping.consecutiveConfig.enabled
-              ) {
-                // Verificar si este campo debe recibir el consecutivo (en tabla de detalle)
-                if (
-                  mapping.consecutiveConfig.detailFieldName ===
-                    fieldMapping.targetField ||
-                  (mapping.consecutiveConfig.applyToTables &&
-                    mapping.consecutiveConfig.applyToTables.some(
-                      (t) =>
-                        t.tableName === detailConfig.name &&
-                        t.fieldName === fieldMapping.targetField
-                    ))
-                ) {
-                  // Asignar el consecutivo al campo correspondiente en el detalle
-                  value = currentConsecutive.formatted;
-                  logger.debug(
-                    `Asignando consecutivo ${currentConsecutive.formatted} a campo ${fieldMapping.targetField} en tabla de detalle ${detailConfig.name}`
-                  );
-                }
-              }
-
-              // Si es un campo obligatorio y aún no tiene valor, lanzar error
-              if (
-                fieldMapping.isRequired &&
-                (value === undefined || value === null)
-              ) {
-                throw new Error(
-                  `El campo obligatorio '${fieldMapping.targetField}' en detalle no tiene valor de origen ni valor por defecto`
-                );
-              }
-
-              // Aplicar mapeo de valores si existe
-              if (
-                value !== null &&
-                value !== undefined &&
-                fieldMapping.valueMappings?.length > 0
-              ) {
-                const mapping = fieldMapping.valueMappings.find(
-                  (vm) => vm.sourceValue === value
-                );
-                if (mapping) {
-                  logger.debug(
-                    `Aplicando mapeo de valor para detalle ${fieldMapping.targetField}: ${value} → ${mapping.targetValue}`
-                  );
-                  value = mapping.targetValue;
-                }
-              }
-
-              // Si el valor es un string, verificar y ajustar longitud
-              if (typeof value === "string") {
-                const maxLength = await this.getColumnMaxLength(
-                  targetConnection,
-                  detailConfig.targetTable,
-                  fieldMapping.targetField,
-                  columnLengthCache
-                );
-
-                // Si hay un límite de longitud y se excede, truncar
-                if (maxLength > 0 && value.length > maxLength) {
-                  logger.warn(
-                    `Truncando valor para campo ${fieldMapping.targetField} de longitud ${value.length} a ${maxLength} caracteres en detalle de documento ${documentId}`
-                  );
-                  value = value.substring(0, maxLength);
-                }
-              }
-
-              detailTargetData[fieldMapping.targetField] = value;
-              detailFields.push(fieldMapping.targetField);
-              detailValues.push(`@${fieldMapping.targetField}`);
             }
 
             // Construir la consulta INSERT para detalle con manejo especial para SQL directo
@@ -1430,11 +1361,11 @@ class DynamicTransferService {
             });
 
             const insertDetailQuery = `
-            INSERT INTO ${
-              detailConfig.targetTable
-            } (${insertDetailFieldsList.join(", ")})
-            VALUES (${insertDetailValuesList.join(", ")})
-          `;
+          INSERT INTO ${
+            detailConfig.targetTable
+          } (${insertDetailFieldsList.join(", ")})
+          VALUES (${insertDetailValuesList.join(", ")})
+        `;
 
             logger.debug(
               `Ejecutando inserción en tabla de detalle: ${insertDetailQuery}`
@@ -1703,6 +1634,288 @@ class DynamicTransferService {
         errorCode: this.determineErrorCode(error),
         consecutiveUsed: null,
         consecutiveValue: null,
+      };
+    }
+  }
+
+  /**
+   * Realiza consultas de lookup en la base de datos destino para enriquecer los datos
+   * @param {Object} tableConfig - Configuración de la tabla
+   * @param {Object} sourceData - Datos de origen
+   * @param {Object} targetConnection - Conexión a la base de datos destino
+   * @returns {Promise<Object>} - Objeto con los valores obtenidos del lookup
+   */
+  async lookupValuesFromTarget(tableConfig, sourceData, targetConnection) {
+    try {
+      logger.info(
+        `Realizando consultas de lookup en base de datos destino para tabla ${tableConfig.name}`
+      );
+
+      const lookupResults = {};
+      const failedLookups = [];
+
+      // Identificar todos los campos que requieren lookup
+      const lookupFields = tableConfig.fieldMappings.filter(
+        (fm) => fm.lookupFromTarget && fm.lookupQuery
+      );
+
+      if (lookupFields.length === 0) {
+        logger.debug(
+          `No se encontraron campos que requieran lookup en tabla ${tableConfig.name}`
+        );
+        return { results: {}, success: true };
+      }
+
+      logger.info(
+        `Encontrados ${lookupFields.length} campos con lookupFromTarget para procesar`
+      );
+
+      // Ejecutar cada consulta de lookup
+      for (const fieldMapping of lookupFields) {
+        try {
+          let lookupQuery = fieldMapping.lookupQuery;
+          logger.debug(
+            `Procesando lookup para campo ${fieldMapping.targetField}: ${lookupQuery}`
+          );
+
+          // Preparar parámetros para la consulta
+          const params = {};
+          const missingParams = [];
+
+          // Registrar todos los parámetros que se esperan en la consulta
+          const expectedParams = [];
+          const paramRegex = /@(\w+)/g;
+          let match;
+          while ((match = paramRegex.exec(lookupQuery)) !== null) {
+            expectedParams.push(match[1]);
+          }
+
+          logger.debug(
+            `Parámetros esperados en la consulta: ${expectedParams.join(", ")}`
+          );
+
+          // Si hay parámetros definidos, extraerlos de los datos de origen
+          if (
+            fieldMapping.lookupParams &&
+            fieldMapping.lookupParams.length > 0
+          ) {
+            for (const param of fieldMapping.lookupParams) {
+              if (!param.sourceField || !param.paramName) {
+                logger.warn(
+                  `Parámetro mal configurado para ${fieldMapping.targetField}. Debe tener sourceField y paramName.`
+                );
+                continue;
+              }
+
+              // Obtener el valor del campo origen
+              let paramValue = sourceData[param.sourceField];
+
+              // Registrar si el valor está presente
+              logger.debug(
+                `Parámetro ${param.paramName} (desde campo ${
+                  param.sourceField
+                }): ${
+                  paramValue !== undefined && paramValue !== null
+                    ? "PRESENTE"
+                    : "NO ENCONTRADO"
+                }`
+              );
+
+              // Comprobar si el parámetro es requerido en la consulta
+              if (
+                expectedParams.includes(param.paramName) &&
+                (paramValue === undefined || paramValue === null)
+              ) {
+                missingParams.push(
+                  `@${param.paramName} (campo: ${param.sourceField})`
+                );
+              }
+
+              // Aplicar eliminación de prefijo si está configurado
+              if (
+                fieldMapping.removePrefix &&
+                typeof paramValue === "string" &&
+                paramValue.startsWith(fieldMapping.removePrefix)
+              ) {
+                const originalValue = paramValue;
+                paramValue = paramValue.substring(
+                  fieldMapping.removePrefix.length
+                );
+                logger.debug(
+                  `Prefijo '${fieldMapping.removePrefix}' eliminado del parámetro ${param.paramName}: '${originalValue}' → '${paramValue}'`
+                );
+              }
+
+              params[param.paramName] = paramValue;
+            }
+          }
+
+          // Verificar si faltan parámetros requeridos
+          if (missingParams.length > 0) {
+            const errorMessage = `Faltan parámetros requeridos para la consulta: ${missingParams.join(
+              ", "
+            )}`;
+            logger.error(errorMessage);
+
+            if (fieldMapping.failIfNotFound) {
+              throw new Error(errorMessage);
+            } else {
+              // No es obligatorio, usar null y continuar
+              lookupResults[fieldMapping.targetField] = null;
+              failedLookups.push({
+                field: fieldMapping.targetField,
+                error: errorMessage,
+              });
+              continue;
+            }
+          }
+
+          logger.debug(`Parámetros para lookup: ${JSON.stringify(params)}`);
+
+          // Ejecutar la consulta
+          try {
+            // Asegurar que es una consulta SELECT
+            if (!lookupQuery.trim().toUpperCase().startsWith("SELECT")) {
+              lookupQuery = `SELECT ${lookupQuery} AS result`;
+            }
+
+            // Verificar que los parámetros esperados tengan valor asignado
+            for (const expectedParam of expectedParams) {
+              if (params[expectedParam] === undefined) {
+                logger.warn(
+                  `El parámetro @${expectedParam} en la consulta no está definido en los parámetros proporcionados. Se usará NULL.`
+                );
+                params[expectedParam] = null;
+              }
+            }
+
+            const result = await SqlService.query(
+              targetConnection,
+              lookupQuery,
+              params
+            );
+
+            // Verificar resultados
+            if (result.recordset && result.recordset.length > 0) {
+              // Extraer el valor del resultado (primera columna o columna 'result')
+              const value =
+                result.recordset[0].result !== undefined
+                  ? result.recordset[0].result
+                  : Object.values(result.recordset[0])[0];
+
+              // Validar existencia si es requerido
+              if (
+                fieldMapping.validateExistence &&
+                (value === null || value === undefined) &&
+                fieldMapping.failIfNotFound
+              ) {
+                throw new Error(
+                  `No se encontró valor para el campo ${fieldMapping.targetField} con los parámetros proporcionados`
+                );
+              }
+
+              // Guardar el valor obtenido
+              lookupResults[fieldMapping.targetField] = value;
+              logger.debug(
+                `Lookup exitoso para ${fieldMapping.targetField}: ${value}`
+              );
+            } else if (fieldMapping.failIfNotFound) {
+              // No se encontraron resultados y es obligatorio
+              throw new Error(
+                `No se encontraron resultados para el campo ${fieldMapping.targetField}`
+              );
+            } else {
+              // No se encontraron resultados pero no es obligatorio
+              lookupResults[fieldMapping.targetField] = null;
+              logger.debug(
+                `No se encontraron resultados para lookup de ${fieldMapping.targetField}, usando NULL`
+              );
+            }
+          } catch (queryError) {
+            // Error en la consulta SQL
+            const errorMessage = `Error ejecutando consulta SQL para ${fieldMapping.targetField}: ${queryError.message}`;
+            logger.error(errorMessage, {
+              sql: lookupQuery,
+              params: params,
+              error: queryError,
+            });
+
+            if (fieldMapping.failIfNotFound) {
+              throw new Error(errorMessage);
+            } else {
+              // Registrar fallo pero continuar
+              failedLookups.push({
+                field: fieldMapping.targetField,
+                error: `Error en consulta SQL: ${queryError.message}`,
+              });
+              lookupResults[fieldMapping.targetField] = null; // Usar null como valor por defecto
+            }
+          }
+        } catch (fieldError) {
+          // Error al procesar el campo
+          logger.error(
+            `Error al realizar lookup para campo ${fieldMapping.targetField}: ${fieldError.message}`
+          );
+
+          if (fieldMapping.failIfNotFound) {
+            // Si es obligatorio, añadir a los errores pero seguir con otros campos
+            failedLookups.push({
+              field: fieldMapping.targetField,
+              error: fieldError.message,
+            });
+          } else {
+            // No es obligatorio, usar null y continuar
+            lookupResults[fieldMapping.targetField] = null;
+          }
+        }
+      }
+
+      // Verificar si hay errores críticos (campos que fallan y son obligatorios)
+      const criticalFailures = failedLookups.filter((fail) => {
+        // Buscar si el campo que falló está marcado como obligatorio
+        const field = lookupFields.find((f) => f.targetField === fail.field);
+        return field && field.failIfNotFound;
+      });
+
+      if (criticalFailures.length > 0) {
+        const failuresMsg = criticalFailures
+          .map((f) => `${f.field}: ${f.error}`)
+          .join(", ");
+
+        logger.error(`Fallos críticos en lookup: ${failuresMsg}`);
+
+        return {
+          results: lookupResults,
+          success: false,
+          failedFields: criticalFailures,
+          error: `Error en validación de datos: ${failuresMsg}`,
+        };
+      }
+
+      logger.info(
+        `Lookup completado. Obtenidos ${
+          Object.keys(lookupResults).length
+        } valores.`
+      );
+
+      return {
+        results: lookupResults,
+        success: true,
+        failedFields: failedLookups, // Incluir fallos no críticos para información
+      };
+    } catch (error) {
+      logger.error(
+        `Error general al ejecutar lookup en destino: ${error.message}`,
+        {
+          error,
+          stack: error.stack,
+        }
+      );
+
+      return {
+        results: {},
+        success: false,
+        error: error.message,
       };
     }
   }

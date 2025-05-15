@@ -307,7 +307,6 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     });
   };
 
-  // Field Mappings
   const addFieldMapping = (tableIndex) => {
     Swal.fire({
       title: "Nuevo Mapeo de Campo",
@@ -329,42 +328,62 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           </div>
         </div>
         
-        <div class="form-check">
-          <input type="checkbox" id="isSqlFunction" class="swal2-checkbox">
-          <label for="isSqlFunction"><strong>¿Es función SQL?</strong></label>
+        <!-- Opciones para especificar el origen de datos -->
+        <div class="data-source-options">
+          <!-- NUEVA OPCIÓN: Consulta en base de datos destino -->
+          <div class="form-check">
+            <input type="checkbox" id="lookupFromTarget" class="swal2-checkbox">
+            <label for="lookupFromTarget"><strong>¿Consultar en BD destino?</strong></label>
+          </div>
         </div>
         
-        <div class="form-group">
+        <!-- Opciones para valor por defecto -->
+        <div id="defaultValueSection" class="form-group">
           <div class="field-container">
             <div id="defaultValueLabel" class="field-header">Valor por defecto</div>
-            <textarea id="defaultValue" class="swal2-textarea" rows="3" placeholder="Ingrese valor por defecto"></textarea>
+            <textarea id="defaultValue" class="swal2-textarea" rows="3" placeholder="Ingrese valor por defecto o función SQL nativa (GETDATE(), etc.)"></textarea>
+            <div class="form-info">
+              <strong>Nota:</strong> Para usar funciones SQL nativas como GETDATE(), NEWID(), etc. ingréselas directamente en el valor por defecto.
+            </div>
           </div>
         </div>
         
-        <!-- Opciones para funciones SQL -->
-        <div id="sqlFunctionOptions" class="sql-function-container" style="display:none;">
-          <div class="sql-info">
-            <strong>Nota sobre funciones SQL:</strong>
-            <ul>
-              <li>Ingrese la expresión SQL en el campo "Expresión SQL" arriba</li>
-              <li>Para usar valores del registro actual, use @{CAMPO_ORIGEN}</li>
-              <li>Ejemplo: (SELECT RUTA FROM CLIENTES WHERE CODIGO = '@{COD_CLT}')</li>
-              <li>Los prefijos se eliminarán antes de ejecutar la expresión SQL</li>
-            </ul>
+        <!-- NUEVA SECCIÓN: Opciones para consulta en BD destino -->
+        <div id="lookupSection" class="lookup-section" style="display:none;">
+          <div class="form-group">
+            <div class="field-container">
+              <div class="field-header">Consulta SQL en destino</div>
+              <textarea id="lookupQuery" class="swal2-textarea" rows="3" placeholder="Ej: SELECT nombre FROM clientes WHERE codigo = @codigo"></textarea>
+              <div class="form-info" style="margin-top: 8px;">
+                <strong>Nota:</strong> Use @parametro en la consulta para referenciar valores.
+              </div>
+            </div>
           </div>
           
-          <div class="form-check">
-            <input type="checkbox" id="sqlFunctionPreExecute" class="swal2-checkbox">
-            <label for="sqlFunctionPreExecute"><strong>Ejecutar como consulta separada</strong></label>
-            <small>Activa esta opción para ejecutar la consulta y obtener el valor antes de la inserción principal.</small>
+          <div class="lookup-params-container">
+            <div class="lookup-params-header">
+              <h4>Parámetros para la consulta</h4>
+              <button type="button" id="addLookupParam" class="btn-add-param">
+                <i class="fa fa-plus"></i> Añadir
+              </button>
+            </div>
+            
+            <div id="lookupParamsContainer">
+              <!-- Los parámetros se generarán dinámicamente aquí -->
+            </div>
           </div>
           
-          <div class="form-group" style="display: flex; align-items: center; margin-top: 15px;">
-            <label for="sqlFunctionServer"><strong>Ejecutar en servidor:</strong></label>
-            <select id="sqlFunctionServer" class="swal2-select server-select">
-              <option value="target">Destino (predeterminado)</option>
-              <option value="source">Origen</option>
-            </select>
+          <div class="validation-options">
+            <div class="form-check">
+              <input type="checkbox" id="validateExistence" class="swal2-checkbox">
+              <label for="validateExistence"><strong>Validar existencia</strong></label>
+            </div>
+            
+            <div class="form-check">
+              <input type="checkbox" id="failIfNotFound" class="swal2-checkbox">
+              <label for="failIfNotFound"><strong>Fallar si no existe</strong></label>
+              <small>Si está marcado, el procesamiento fallará si no se encuentra un valor. De lo contrario, usará NULL.</small>
+            </div>
           </div>
         </div>
         
@@ -380,7 +399,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                 el valor en destino será <code>10133</code>
               </span>
               <span style="display: block; margin-top: 5px;">
-                Esto aplica tanto para campos normales como para funciones SQL
+                Esto aplica tanto para campos normales como para parámetros de lookups
               </span>
             </div>
           </div>
@@ -397,87 +416,163 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       </div>
     `,
       showCancelButton: true,
-      confirmButtonText: "Guardar",
+      confirmButtonText: "Añadir",
       cancelButtonText: "Cancelar",
       customClass: {
         popup: "mapping-editor-modal",
       },
       didOpen: () => {
-        // Mostrar/ocultar opciones de función SQL y cambiar etiqueta del campo
-        const isSqlFunctionCheckbox = document.getElementById("isSqlFunction");
-        const sqlFunctionOptions =
-          document.getElementById("sqlFunctionOptions");
-        const defaultValueLabel = document.getElementById("defaultValueLabel");
-        const defaultValueField = document.getElementById("defaultValue");
+        // Control de visibilidad de secciones según selección
+        const lookupFromTargetCheckbox =
+          document.getElementById("lookupFromTarget");
+        const lookupSection = document.getElementById("lookupSection");
+        const defaultValueSection = document.getElementById(
+          "defaultValueSection"
+        );
 
-        // Función para actualizar la UI según si es función SQL o no
-        const updateUIForSqlFunction = (isSqlFunction) => {
-          sqlFunctionOptions.style.display = isSqlFunction ? "block" : "none";
-          defaultValueLabel.textContent = isSqlFunction
-            ? "Expresión SQL"
-            : "Valor por defecto";
+        // Función para actualizar la UI según selección
+        const updateUI = () => {
+          const isLookup = lookupFromTargetCheckbox.checked;
 
-          if (isSqlFunction) {
-            defaultValueField.placeholder =
-              "Ej: (SELECT RUTA FROM CLIENTES WHERE CODIGO = '@{COD_CLT}')";
-            defaultValueField.rows = 3;
-            defaultValueField.parentElement.classList.add("sql-active-state");
-          } else {
-            defaultValueField.placeholder = "Ej: 'N/A'";
-            defaultValueField.rows = 1;
-            defaultValueField.parentElement.classList.remove(
-              "sql-active-state"
-            );
-          }
+          // Mostrar/ocultar secciones según corresponda
+          lookupSection.style.display = isLookup ? "block" : "none";
+          defaultValueSection.style.display = isLookup ? "none" : "block";
         };
 
-        // Inicializar según el estado actual
-        updateUIForSqlFunction(isSqlFunctionCheckbox.checked);
+        // Asignar eventos
+        lookupFromTargetCheckbox.addEventListener("change", updateUI);
 
-        // Actualizar cuando cambia el checkbox
-        isSqlFunctionCheckbox.addEventListener("change", function () {
-          updateUIForSqlFunction(this.checked);
+        // Inicializar UI
+        updateUI();
+
+        // Manejar parámetros de consulta
+        const addLookupParamButton = document.getElementById("addLookupParam");
+        const lookupParamsContainer = document.getElementById(
+          "lookupParamsContainer"
+        );
+
+        // Función para añadir una fila de parámetro
+        const addLookupParamRow = (paramName = "", sourceField = "") => {
+          const index = document.querySelectorAll(".lookup-param-row").length;
+          const row = document.createElement("div");
+          row.className = "lookup-param-row";
+          row.dataset.index = index;
+
+          row.innerHTML = `
+          <input type="text" class="swal2-input param-name" placeholder="Nombre parámetro" value="${paramName}">
+          <input type="text" class="swal2-input source-field" placeholder="Campo origen" value="${sourceField}">
+          <button type="button" class="btn-remove-param">
+            <i class="fa fa-trash"></i>
+          </button>
+        `;
+
+          // Añadir evento para eliminar parámetro
+          const removeBtn = row.querySelector(".btn-remove-param");
+          removeBtn.addEventListener("click", () => {
+            row.remove();
+          });
+
+          lookupParamsContainer.appendChild(row);
+        };
+
+        // Evento para añadir parámetro
+        addLookupParamButton.addEventListener("click", () => {
+          addLookupParamRow();
         });
+
+        // Añadir un parámetro inicial vacío
+        if (lookupParamsContainer.children.length === 0) {
+          addLookupParamRow();
+        }
       },
       preConfirm: () => {
         const sourceField = document.getElementById("sourceField").value;
         const targetField = document.getElementById("targetField").value;
         const defaultValue = document.getElementById("defaultValue").value;
         const removePrefix = document.getElementById("removePrefix").value;
-        const isSqlFunction = document.getElementById("isSqlFunction").checked;
         const isRequired = document.getElementById("isRequired").checked;
 
-        // Nuevas propiedades para funciones SQL
-        let sqlFunctionPreExecute = false;
-        let sqlFunctionServer = "target";
+        // Nuevos campos
+        const lookupFromTarget =
+          document.getElementById("lookupFromTarget").checked;
 
-        if (isSqlFunction) {
-          sqlFunctionPreExecute =
-            document.getElementById("sqlFunctionPreExecute")?.checked || false;
-          sqlFunctionServer =
-            document.getElementById("sqlFunctionServer")?.value || "target";
-        }
-
+        // Validaciones básicas
         if (!targetField) {
           Swal.showValidationMessage("El campo destino es obligatorio");
           return false;
         }
 
-        // Permitir campos destino sin origen, pero con valor por defecto si son obligatorios
-        if (!sourceField && isRequired && !defaultValue) {
+        // Validar que tengamos origen de datos (source, lookup o valor default)
+        if (!sourceField && !lookupFromTarget && !defaultValue && isRequired) {
           Swal.showValidationMessage(
-            "Los campos obligatorios sin origen deben tener un valor por defecto"
+            "Los campos obligatorios deben tener un origen de datos (campo origen, consulta o valor por defecto)"
           );
           return false;
         }
 
+        // Procesar el valor por defecto
         let processedDefaultValue;
         if (defaultValue === "NULL") {
-          processedDefaultValue = null; // Convertir a null real de JavaScript
+          processedDefaultValue = null;
         } else if (defaultValue === "") {
-          processedDefaultValue = undefined; // Dejar undefined si está vacío
+          processedDefaultValue = undefined;
         } else {
           processedDefaultValue = defaultValue;
+        }
+
+        // Propiedades de lookup
+        let lookupQuery = "";
+        let lookupParams = [];
+        let validateExistence = false;
+        let failIfNotFound = false;
+
+        if (lookupFromTarget) {
+          lookupQuery = document.getElementById("lookupQuery").value;
+          validateExistence =
+            document.getElementById("validateExistence").checked;
+          failIfNotFound = document.getElementById("failIfNotFound").checked;
+
+          // Recopilar parámetros
+          document.querySelectorAll(".lookup-param-row").forEach((row) => {
+            const paramName = row.querySelector(".param-name").value;
+            const sourceField = row.querySelector(".source-field").value;
+
+            if (paramName && sourceField) {
+              lookupParams.push({ paramName, sourceField });
+            }
+          });
+
+          // Validar consulta
+          if (!lookupQuery) {
+            Swal.showValidationMessage(
+              "Debe proporcionar una consulta SQL para el lookup"
+            );
+            return false;
+          }
+
+          // Validar que exista al menos un parámetro si la consulta utiliza parámetros
+          const paramRegex = /@(\w+)/g;
+          const expectedParams = [];
+          let match;
+          while ((match = paramRegex.exec(lookupQuery)) !== null) {
+            expectedParams.push(match[1]);
+          }
+
+          if (expectedParams.length > 0) {
+            const definedParams = lookupParams.map((p) => p.paramName);
+            const missingParams = expectedParams.filter(
+              (p) => !definedParams.includes(p)
+            );
+
+            if (missingParams.length > 0) {
+              Swal.showValidationMessage(
+                `Faltan definiciones para los siguientes parámetros: ${missingParams.join(
+                  ", "
+                )}`
+              );
+              return false;
+            }
+          }
         }
 
         return {
@@ -485,11 +580,14 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           targetField,
           defaultValue: processedDefaultValue,
           removePrefix: removePrefix || null,
-          isSqlFunction,
-          sqlFunctionPreExecute,
-          sqlFunctionServer,
           isRequired,
           valueMappings: [],
+          // Propiedades de lookup
+          lookupFromTarget,
+          lookupQuery: lookupFromTarget ? lookupQuery : null,
+          lookupParams: lookupFromTarget ? lookupParams : [],
+          validateExistence: lookupFromTarget ? validateExistence : false,
+          failIfNotFound: lookupFromTarget ? failIfNotFound : false,
         };
       },
     }).then((result) => {
@@ -775,60 +873,97 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           </div>
         </div>
         
-        <div class="form-check">
-          <input type="checkbox" id="isSqlFunction" class="swal2-checkbox" ${
-            field.isSqlFunction ? "checked" : ""
-          }>
-          <label for="isSqlFunction"><strong>¿Es función SQL?</strong></label>
+        <!-- Opciones para especificar el origen de datos -->
+        <div class="data-source-options">
+          <!-- NUEVA OPCIÓN: Consulta en base de datos destino -->
+          <div class="form-check">
+            <input type="checkbox" id="lookupFromTarget" class="swal2-checkbox" ${
+              field.lookupFromTarget ? "checked" : ""
+            }>
+            <label for="lookupFromTarget"><strong>¿Consultar en BD destino?</strong></label>
+          </div>
         </div>
         
-        <div class="form-group">
+        <!-- Opciones para valor por defecto -->
+        <div id="defaultValueSection" class="form-group" style="display:${
+          field.lookupFromTarget ? "none" : "block"
+        }">
           <div class="field-container">
             <div id="defaultValueLabel" class="field-header">Valor por defecto</div>
-            <textarea id="defaultValue" class="swal2-textarea" rows="3" placeholder="Ingrese valor por defecto">${
+            <textarea id="defaultValue" class="swal2-textarea" rows="3" placeholder="Ingrese valor por defecto o función SQL nativa (GETDATE(), etc.)">${
               field.defaultValue !== undefined ? field.defaultValue : ""
             }</textarea>
+            <div class="form-info">
+              <strong>Nota:</strong> Para usar funciones SQL nativas como GETDATE(), NEWID(), etc. ingréselas directamente en el valor por defecto.
+            </div>
           </div>
         </div>
         
-        <!-- Opciones para funciones SQL -->
-        <div id="sqlFunctionOptions" class="sql-function-container" style="display:${
-          field.isSqlFunction ? "block" : "none"
-        };">
-          <div class="sql-info">
-            <strong>Nota sobre funciones SQL:</strong>
-            <ul>
-              <li>Ingrese la expresión SQL en el campo "Expresión SQL" arriba</li>
-              <li>Para usar valores del registro actual, use @{CAMPO_ORIGEN}</li>
-              <li>Ejemplo: (SELECT RUTA FROM CLIENTES WHERE CODIGO = '@{COD_CLT}')</li>
-              <li>Los prefijos se eliminarán antes de ejecutar la expresión SQL</li>
-            </ul>
+        <!-- NUEVA SECCIÓN: Opciones para consulta en BD destino -->
+        <div id="lookupSection" class="lookup-section" style="display:${
+          field.lookupFromTarget ? "block" : "none"
+        }">
+          <div class="form-group">
+            <div class="field-container">
+              <div class="field-header">Consulta SQL en destino</div>
+              <textarea id="lookupQuery" class="swal2-textarea" rows="3" placeholder="Ej: SELECT nombre FROM clientes WHERE codigo = @codigo">${
+                field.lookupQuery || ""
+              }</textarea>
+              <div class="form-info" style="margin-top: 8px;">
+                <strong>Nota:</strong> Use @parametro en la consulta para referenciar valores.
+              </div>
+            </div>
           </div>
           
-          <div class="form-check">
-            <input type="checkbox" id="sqlFunctionPreExecute" class="swal2-checkbox" ${
-              field.sqlFunctionPreExecute ? "checked" : ""
-            }>
-            <label for="sqlFunctionPreExecute"><strong>Ejecutar como consulta separada</strong></label>
-            <small>Activa esta opción para ejecutar la consulta y obtener el valor antes de la inserción principal.</small>
+          <div class="lookup-params-container">
+            <div class="lookup-params-header">
+              <h4>Parámetros para la consulta</h4>
+              <button type="button" id="addLookupParam" class="btn-add-param">
+                <i class="fa fa-plus"></i> Añadir
+              </button>
+            </div>
+            
+            <div id="lookupParamsContainer">
+              <!-- Los parámetros se generarán dinámicamente aquí -->
+              ${(field.lookupParams || [])
+                .map(
+                  (param, idx) => `
+                <div class="lookup-param-row" data-index="${idx}">
+                  <input type="text" class="swal2-input param-name" placeholder="Nombre parámetro" value="${
+                    param.paramName || ""
+                  }">
+                  <input type="text" class="swal2-input source-field" placeholder="Campo origen" value="${
+                    param.sourceField || ""
+                  }">
+                  <button type="button" class="btn-remove-param">
+                    <i class="fa fa-trash"></i>
+                  </button>
+                </div>
+              `
+                )
+                .join("")}
+            </div>
           </div>
           
-          <div class="form-group" style="display: flex; align-items: center; margin-top: 15px;">
-            <label for="sqlFunctionServer"><strong>Ejecutar en servidor:</strong></label>
-            <select id="sqlFunctionServer" class="swal2-select server-select">
-              <option value="target" ${
-                field.sqlFunctionServer === "target" || !field.sqlFunctionServer
-                  ? "selected"
-                  : ""
-              }>Destino (predeterminado)</option>
-              <option value="source" ${
-                field.sqlFunctionServer === "source" ? "selected" : ""
-              }>Origen</option>
-            </select>
+          <div class="validation-options">
+            <div class="form-check">
+              <input type="checkbox" id="validateExistence" class="swal2-checkbox" ${
+                field.validateExistence ? "checked" : ""
+              }>
+              <label for="validateExistence"><strong>Validar existencia</strong></label>
+            </div>
+            
+            <div class="form-check">
+              <input type="checkbox" id="failIfNotFound" class="swal2-checkbox" ${
+                field.failIfNotFound ? "checked" : ""
+              }>
+              <label for="failIfNotFound"><strong>Fallar si no existe</strong></label>
+              <small>Si está marcado, el procesamiento fallará si no se encuentra un valor. De lo contrario, usará NULL.</small>
+            </div>
           </div>
         </div>
         
-        <!-- Sección de eliminación de prefijos - Destacada visualmente -->
+        <!-- Sección de eliminación de prefijos -->
         <div class="form-group">
           <div class="field-container">
             <div class="field-header">Eliminar prefijo específico</div>
@@ -840,9 +975,6 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
               <span style="display: block; margin-top: 5px;">
                 Si el valor en origen es <code>CN10133</code> y el prefijo es <code>CN</code>, 
                 el valor en destino será <code>10133</code>
-              </span>
-              <span style="display: block; margin-top: 5px;">
-                Esto aplica tanto para campos normales como para funciones SQL
               </span>
             </div>
           </div>
@@ -867,81 +999,151 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         popup: "mapping-editor-modal",
       },
       didOpen: () => {
-        // Mostrar/ocultar opciones de función SQL y cambiar etiqueta del campo
-        const isSqlFunctionCheckbox = document.getElementById("isSqlFunction");
-        const sqlFunctionOptions =
-          document.getElementById("sqlFunctionOptions");
-        const defaultValueLabel = document.getElementById("defaultValueLabel");
-        const defaultValueField = document.getElementById("defaultValue");
+        // Control de visibilidad de secciones según selección
+        const lookupFromTargetCheckbox =
+          document.getElementById("lookupFromTarget");
+        const lookupSection = document.getElementById("lookupSection");
+        const defaultValueSection = document.getElementById(
+          "defaultValueSection"
+        );
 
-        // Función para actualizar la UI según si es función SQL o no
-        const updateUIForSqlFunction = (isSqlFunction) => {
-          sqlFunctionOptions.style.display = isSqlFunction ? "block" : "none";
-          defaultValueLabel.textContent = isSqlFunction
-            ? "Expresión SQL"
-            : "Valor por defecto";
+        // Función para actualizar la UI según selección
+        const updateUI = () => {
+          const isLookup = lookupFromTargetCheckbox.checked;
 
-          if (isSqlFunction) {
-            defaultValueField.placeholder =
-              "Ej: (SELECT RUTA FROM CLIENTES WHERE CODIGO = '@{COD_CLT}')";
-            defaultValueField.rows = 3;
-            defaultValueField.parentElement.classList.add("sql-active-state");
-          } else {
-            defaultValueField.placeholder = "Ej: 'N/A'";
-            defaultValueField.rows = 1;
-            defaultValueField.parentElement.classList.remove(
-              "sql-active-state"
-            );
-          }
+          // Mostrar/ocultar secciones según corresponda
+          lookupSection.style.display = isLookup ? "block" : "none";
+          defaultValueSection.style.display = isLookup ? "none" : "block";
         };
 
-        // Inicializar según el estado actual
-        updateUIForSqlFunction(isSqlFunctionCheckbox.checked);
+        // Asignar eventos
+        lookupFromTargetCheckbox.addEventListener("change", updateUI);
 
-        // Actualizar cuando cambia el checkbox
-        isSqlFunctionCheckbox.addEventListener("change", function () {
-          updateUIForSqlFunction(this.checked);
+        // Inicializar UI
+        updateUI();
+
+        // Manejar parámetros de consulta
+        const addLookupParamButton = document.getElementById("addLookupParam");
+        const lookupParamsContainer = document.getElementById(
+          "lookupParamsContainer"
+        );
+
+        // Función para añadir una fila de parámetro
+        const addLookupParamRow = (paramName = "", sourceField = "") => {
+          const index = document.querySelectorAll(".lookup-param-row").length;
+          const row = document.createElement("div");
+          row.className = "lookup-param-row";
+          row.dataset.index = index;
+
+          row.innerHTML = `
+          <input type="text" class="swal2-input param-name" placeholder="Nombre parámetro" value="${paramName}">
+          <input type="text" class="swal2-input source-field" placeholder="Campo origen" value="${sourceField}">
+          <button type="button" class="btn-remove-param">
+            <i class="fa fa-trash"></i>
+          </button>
+        `;
+
+          // Añadir evento para eliminar parámetro
+          const removeBtn = row.querySelector(".btn-remove-param");
+          removeBtn.addEventListener("click", () => {
+            row.remove();
+          });
+
+          lookupParamsContainer.appendChild(row);
+        };
+
+        // Evento para añadir parámetro
+        addLookupParamButton.addEventListener("click", () => {
+          addLookupParamRow();
         });
+
+        // Añadir eventos para eliminar parámetros existentes
+        document.querySelectorAll(".btn-remove-param").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            btn.closest(".lookup-param-row").remove();
+          });
+        });
+
+        // Si no hay parámetros iniciales, añadir uno vacío
+        if (
+          lookupParamsContainer.children.length === 0 &&
+          lookupFromTargetCheckbox.checked
+        ) {
+          addLookupParamRow();
+        }
       },
       preConfirm: () => {
         const sourceField = document.getElementById("sourceField").value;
         const targetField = document.getElementById("targetField").value;
         const defaultValue = document.getElementById("defaultValue").value;
         const removePrefix = document.getElementById("removePrefix").value;
-        const isSqlFunction = document.getElementById("isSqlFunction").checked;
         const isRequired = document.getElementById("isRequired").checked;
 
-        // Nuevas propiedades para funciones SQL
-        let sqlFunctionPreExecute = false;
-        let sqlFunctionServer = "target";
+        // Nuevos campos
+        const lookupFromTarget =
+          document.getElementById("lookupFromTarget").checked;
 
-        if (isSqlFunction) {
-          sqlFunctionPreExecute =
-            document.getElementById("sqlFunctionPreExecute")?.checked || false;
-          sqlFunctionServer =
-            document.getElementById("sqlFunctionServer")?.value || "target";
-        }
-
+        // Validaciones básicas
         if (!targetField) {
           Swal.showValidationMessage("El campo destino es obligatorio");
           return false;
         }
 
-        // Permitir campos destino sin origen, pero con valor por defecto si son obligatorios
-        if (!sourceField && isRequired && !defaultValue) {
+        // Validar que tengamos origen de datos (source, lookup o valor default)
+        if (!sourceField && !lookupFromTarget && !defaultValue && isRequired) {
           Swal.showValidationMessage(
-            "Los campos obligatorios sin origen deben tener un valor por defecto"
+            "Los campos obligatorios deben tener un origen de datos (campo origen, consulta o valor por defecto)"
           );
           return false;
         }
 
+        // Procesar el valor por defecto
         let processedDefaultValue;
         if (defaultValue === "NULL") {
-          processedDefaultValue = null; // Convertir a null real de JavaScript
+          processedDefaultValue = null;
         } else if (defaultValue === "") {
-          processedDefaultValue = undefined; // Dejar undefined si está vacío
+          processedDefaultValue = undefined;
         } else {
           processedDefaultValue = defaultValue;
+        }
+
+        // Propiedades de lookup
+        let lookupQuery = "";
+        let lookupParams = [];
+        let validateExistence = false;
+        let failIfNotFound = false;
+
+        if (lookupFromTarget) {
+          lookupQuery = document.getElementById("lookupQuery").value;
+          validateExistence =
+            document.getElementById("validateExistence").checked;
+          failIfNotFound = document.getElementById("failIfNotFound").checked;
+
+          // Recopilar parámetros
+          document.querySelectorAll(".lookup-param-row").forEach((row) => {
+            const paramName = row.querySelector(".param-name").value;
+            const sourceField = row.querySelector(".source-field").value;
+
+            if (paramName && sourceField) {
+              lookupParams.push({ paramName, sourceField });
+            }
+          });
+
+          // Validar consulta
+          if (!lookupQuery) {
+            Swal.showValidationMessage(
+              "Debe proporcionar una consulta SQL para el lookup"
+            );
+            return false;
+          }
+
+          // Validar que exista al menos un parámetro si la consulta utiliza parámetros
+          if (lookupQuery.includes("@") && lookupParams.length === 0) {
+            Swal.showValidationMessage(
+              "La consulta utiliza parámetros pero no se han definido"
+            );
+            return false;
+          }
         }
 
         return {
@@ -949,11 +1151,18 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           targetField,
           defaultValue: processedDefaultValue,
           removePrefix: removePrefix || null,
-          isSqlFunction,
-          sqlFunctionPreExecute,
-          sqlFunctionServer,
           isRequired,
           valueMappings: field.valueMappings || [],
+          // Propiedades de lookup
+          lookupFromTarget,
+          lookupQuery: lookupFromTarget ? lookupQuery : null,
+          lookupParams: lookupFromTarget ? lookupParams : [],
+          validateExistence: lookupFromTarget ? validateExistence : false,
+          failIfNotFound: lookupFromTarget ? failIfNotFound : false,
+          // Establecemos estas en false explícitamente para que no se usen
+          isSqlFunction: false,
+          sqlFunctionPreExecute: false,
+          sqlFunctionServer: "target",
         };
       },
     }).then((result) => {
