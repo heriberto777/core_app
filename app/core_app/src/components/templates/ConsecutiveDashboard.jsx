@@ -7,7 +7,6 @@ import {
   FaCheckCircle,
   FaExclamationTriangle,
 } from "react-icons/fa";
-import { Line } from "react-chartjs-2";
 
 const api = new TransferApi();
 
