@@ -7,6 +7,7 @@ import {
   MappingsList,
   MappingEditor,
   CustomerEditor,
+  RefreshButton,
 } from "../../index";
 
 import Swal from "sweetalert2";
@@ -55,6 +56,7 @@ export function DocumentsVisualization() {
     data: documents,
     setData: setDocuments,
     loading,
+    refreshing,
     error,
     refetch: fetchDocuments,
   } = useFetchData(
@@ -64,7 +66,7 @@ export function DocumentsVisualization() {
         : [],
     [accessToken, activeMappingId, filters],
     !!activeMappingId,
-    30000 // Refresh every 30 seconds
+    30000
   );
 
   // Load mapping configuration when activeMappingId changes
@@ -984,9 +986,15 @@ export function DocumentsVisualization() {
               </FiltersContainer>
 
               <ButtonsRow>
-                <ActionButton onClick={fetchDocuments} title="Refrescar datos">
+                {/* <ActionButton onClick={fetchDocuments} title="Refrescar datos">
                   <FaSync /> Refrescar
-                </ActionButton>
+                </ActionButton> */}
+
+                <RefreshButton
+                  onClick={fetchDocuments}
+                  refreshing={refreshing}
+                  label="Recargar"
+                />
 
                 <ActionButton
                   onClick={processDocuments}

@@ -5,6 +5,7 @@ import {
   useAuth,
   useFetchData,
   progressClient,
+  RefreshButton,
 } from "../../index";
 import { useEffect, useState, useRef, useCallback } from "react";
 import Swal from "sweetalert2";
@@ -13,12 +14,10 @@ import {
   FaTrash,
   FaPlay,
   FaPlus,
-  FaSync,
   FaList,
   FaTable,
   FaHistory,
   FaStop,
-  FaCog,
   FaBell,
   FaChartLine,
   FaInfoCircle,
@@ -30,19 +29,16 @@ export function TransferTasks() {
   const [search, setSearch] = useState("");
   const [selectedTask, setSelectedTask] = useState(null);
   const { accessToken, user } = useAuth();
-  const [openstate, setOpenState] = useState(false);
+
   const [viewMode, setViewMode] = useState("cards"); // "cards", "list", "table"
   const [executionTime, setExecutionTime] = useState("20:30");
-  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
   const [cancellationStatus, setCancellationStatus] = useState({});
   const [cancelling, setCancelling] = useState(false);
-  const [showMetricsPanel, setShowMetricsPanel] = useState(false);
-  const [taskMetrics, setTaskMetrics] = useState({});
   const [activeTasks, setActiveTasks] = useState({});
   const [taskEstimates, setTaskEstimates] = useState({});
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const previousTasksRef = useRef(null);
-  const FETCH_INTERVAL = 5000; // 5 segundos
+  const FETCH_INTERVAL = 5000;
 
   // Estados para filtros
   const [filters, setFilters] = useState({
@@ -63,14 +59,10 @@ export function TransferTasks() {
     data: tasks,
     setData: setTasks,
     loading,
+    refreshing, // Nuevo estado de refreshing
     error,
     refetch: fetchTasks,
-  } = useFetchData(
-    fetchTasksCallback,
-    [accessToken],
-    true, // Auto-refresco activado
-    FETCH_INTERVAL // Intervalo entre fetches
-  );
+  } = useFetchData(fetchTasksCallback, [accessToken], true, FETCH_INTERVAL);
 
   const { data: schudleTime, setData: setSchudleTime } = useFetchData(
     () => cnnApi.getSchuledTime(accessToken),
@@ -1929,9 +1921,11 @@ export function TransferTasks() {
             <FaPlus /> Nueva Tarea
           </AddButton>
 
-          <RefreshButton onClick={fetchTasks}>
-            <FaSync /> Refrescar
-          </RefreshButton>
+          <RefreshButton
+            onClick={fetchTasks}
+            refreshing={refreshing}
+            label="Recargar"
+          />
 
           {/* Botón para métricas */}
           <MetricsButton onClick={showTaskMetricsPanel}>
@@ -1998,7 +1992,7 @@ export function TransferTasks() {
         </ScheduleRow>
       </ActionsContainer>
 
-      {loading && (
+      {loading && !refreshing && (
         <LoadingContainer>
           <LoadingMessage>Cargando tareas...</LoadingMessage>
         </LoadingContainer>
@@ -2494,27 +2488,27 @@ const AddButton = styled.button`
   }
 `;
 
-const RefreshButton = styled.button`
-  background-color: #17a2b8;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 10px 15px;
-  font-size: 14px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: background-color 0.3s;
+// const RefreshButton = styled.button`
+//   background-color: #17a2b8;
+//   color: white;
+//   border: none;
+//   border-radius: 4px;
+//   padding: 10px 15px;
+//   font-size: 14px;
+//   cursor: pointer;
+//   display: flex;
+//   align-items: center;
+//   gap: 8px;
+//   transition: background-color 0.3s;
 
-  &:hover {
-    background-color: #138496;
-  }
+//   &:hover {
+//     background-color: #138496;
+//   }
 
-  @media (max-width: 480px) {
-    width: 100%;
-  }
-`;
+//   @media (max-width: 480px) {
+//     width: 100%;
+//   }
+// `;
 
 const MetricsButton = styled.button`
   background-color: #6f42c1;
