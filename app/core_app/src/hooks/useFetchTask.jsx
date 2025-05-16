@@ -1,9 +1,8 @@
-// useFetchData.js - Versión mejorada sin refresh completo de la página
+// useFetchData.js - Versión mejorada con indicador de refrescando
 import { useState, useEffect, useRef } from "react";
 
 /**
- * Hook personalizado para realizar peticiones de datos con soporte para auto-refresh
- * SIN recargar toda la página
+ * Hook personalizado para realizar peticiones de datos con soporte para auto-refresh y estado de refrescando
  */
 export function useFetchData(
   fetchFunction,
@@ -13,12 +12,14 @@ export function useFetchData(
 ) {
   const [data, setData] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false); // Nuevo estado para indicar refrescos manuales
   const [error, setError] = useState(null);
   const timerRef = useRef(null);
   const isFirstRender = useRef(true);
   const isMounted = useRef(true);
+  const isAutoRefreshing = useRef(false); // Para saber si es un auto-refresh o manual
 
-  // Función para realizar la petición
+  // Función para realizar la petición inicial
   const fetchData = async () => {
     try {
       setLoading(true);
@@ -40,8 +41,8 @@ export function useFetchData(
     }
   };
 
-  // Función para refrescar datos manualmente
-  const refetch = async () => {
+  // Función para refrescar datos (puede ser llamada manualmente o por auto-refresh)
+  const refetch = async (isManualRefresh = true) => {
     try {
       // Limpiar cualquier timer existente
       if (timerRef.current) {
@@ -49,28 +50,43 @@ export function useFetchData(
         timerRef.current = null;
       }
 
-      // Ejecutar la consulta pero sin cambiar el estado de loading a true
-      // para evitar parpadeos durante refrescos manuales
+      // Establecer estado refrescando solo si es un refresh manual
+      if (isManualRefresh && isMounted.current) {
+        setRefreshing(true);
+      }
+
+      isAutoRefreshing.current = !isManualRefresh;
+
+      // Ejecutar la consulta
       const result = await fetchFunction();
 
       // Solo actualizar estado si el componente sigue montado
       if (isMounted.current) {
         setData(result);
         setError(null);
+        // Desactivar estado refrescando si fue un refresh manual
+        if (isManualRefresh) {
+          setRefreshing(false);
+        }
       }
 
       // Reiniciar el timer si el auto-refresh está activado
       if (autoRefresh && isMounted.current) {
-        timerRef.current = setTimeout(refetch, refreshInterval);
+        timerRef.current = setTimeout(() => refetch(false), refreshInterval);
       }
     } catch (error) {
       if (isMounted.current) {
         console.error("Error en refetch:", error);
         setError(error.message || "Error al refrescar los datos");
 
+        // Desactivar estado refrescando si fue un refresh manual
+        if (isManualRefresh) {
+          setRefreshing(false);
+        }
+
         // Incluso en caso de error, reiniciar el timer
         if (autoRefresh) {
-          timerRef.current = setTimeout(refetch, refreshInterval);
+          timerRef.current = setTimeout(() => refetch(false), refreshInterval);
         }
       }
     }
@@ -88,7 +104,6 @@ export function useFetchData(
         isFirstRender.current = false;
       }
 
-      // useFetchData.js (continuación)
       try {
         const result = await fetchFunction();
 
@@ -110,7 +125,7 @@ export function useFetchData(
 
       // Configurar el auto-refresh solo si está habilitado
       if (autoRefresh && isMounted.current) {
-        timerRef.current = setTimeout(refetch, refreshInterval);
+        timerRef.current = setTimeout(() => refetch(false), refreshInterval);
       }
     };
 
@@ -127,5 +142,6 @@ export function useFetchData(
     };
   }, dependencies); // eslint-disable-line react-hooks/exhaustive-deps
 
-  return { data, loading, error, setData, refetch };
+  // Devolver el nuevo estado refreshing junto con los demás
+  return { data, loading, refreshing, error, setData, refetch };
 }
