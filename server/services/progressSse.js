@@ -51,6 +51,15 @@ function progressSseHandler(req, res) {
  * @param {String} status - Estado de la tarea (opcional)
  */
 function sendProgress(taskId, progress, status = null) {
+  // Si el progreso es 100, asegurar que el estado sea "completed"
+  if (progress === 100 && !status) {
+    status = "completed";
+  }
+  // Si el progreso es -1, asegurar que el estado sea "cancelled"
+  else if (progress === -1 && !status) {
+    status = "cancelled";
+  }
+
   // Enviar un evento de tipo "progress"
   sendEvent(taskId, "progress", {
     progress,
