@@ -1,6 +1,12 @@
 import styled from "styled-components";
-import { Header, TransferApi, useAuth, useFetchData } from "../../index";
-import { useEffect, useState } from "react";
+import {
+  ScheduleConfigButton,
+  TransferApi,
+  useAuth,
+  useFetchData,
+  progressClient,
+} from "../../index";
+import { useEffect, useState, useRef, useCallback } from "react";
 import Swal from "sweetalert2";
 import {
   FaEdit,
@@ -12,6 +18,10 @@ import {
   FaTable,
   FaHistory,
   FaStop,
+  FaCog,
+  FaBell,
+  FaChartLine,
+  FaInfoCircle,
 } from "react-icons/fa";
 
 const cnnApi = new TransferApi();
@@ -26,8 +36,15 @@ export function TransferTasks() {
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
   const [cancellationStatus, setCancellationStatus] = useState({});
   const [cancelling, setCancelling] = useState(false);
+  const [showMetricsPanel, setShowMetricsPanel] = useState(false);
+  const [taskMetrics, setTaskMetrics] = useState({});
+  const [activeTasks, setActiveTasks] = useState({});
+  const [taskEstimates, setTaskEstimates] = useState({});
+  const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+  const previousTasksRef = useRef(null);
+  const FETCH_INTERVAL = 5000; // 5 segundos
 
-  // En el componente TransferTasks, añade estos estados
+  // Estados para filtros
   const [filters, setFilters] = useState({
     type: "all", // "all", "manual", "auto", "both"
     executionMode: "all", // "all", "normal", "batchesSSE"
@@ -35,6 +52,13 @@ export function TransferTasks() {
     status: "all", // "all", "active", "inactive"
   });
 
+  // Usamos useCallback para crear funciones estables
+  const fetchTasksCallback = useCallback(async () => {
+    const result = await cnnApi.getTasks(accessToken);
+    return result;
+  }, [accessToken]);
+
+  // Fetch de tareas con intervalo personalizado
   const {
     data: tasks,
     setData: setTasks,
@@ -42,16 +66,186 @@ export function TransferTasks() {
     error,
     refetch: fetchTasks,
   } = useFetchData(
-    () => cnnApi.getTasks(accessToken),
+    fetchTasksCallback,
     [accessToken],
-    true,
-    5000
+    true, // Auto-refresco activado
+    FETCH_INTERVAL // Intervalo entre fetches
   );
 
   const { data: schudleTime, setData: setSchudleTime } = useFetchData(
     () => cnnApi.getSchuledTime(accessToken),
     [accessToken]
   );
+
+  // Pedir permiso para notificaciones
+  useEffect(() => {
+    const requestNotificationPermission = async () => {
+      if ("Notification" in window) {
+        const permission = await Notification.requestPermission();
+        setNotificationsEnabled(permission === "granted");
+      }
+    };
+
+    requestNotificationPermission();
+  }, []);
+
+  // Configurar SSE para tareas en ejecución
+  useEffect(() => {
+    // Identificar tareas en ejecución que necesitan suscripción
+    const runningTasks = tasks.filter((task) => task.status === "running");
+
+    // Para cada tarea en ejecución, configurar SSE si no está ya configurado
+    runningTasks.forEach((task) => {
+      if (!progressClient.isSubscribed(task._id)) {
+        progressClient.subscribe(task._id, {
+          // Manejar evento de progreso
+          progress: (data) => {
+            // Actualizar el progreso en la tarea
+            setTasks((prevTasks) =>
+              prevTasks.map((t) =>
+                t._id === task._id
+                  ? {
+                      ...t,
+                      progress: data.progress,
+                      status: data.status || t.status,
+                    }
+                  : t
+              )
+            );
+
+            // Si tenemos la hora de inicio, calcular la estimación de tiempo
+            if (activeTasks[task._id]?.startTime) {
+              const startTime = activeTasks[task._id].startTime;
+              const elapsed = Date.now() - startTime;
+
+              // Solo calcular si tenemos un progreso válido
+              if (data.progress > 0) {
+                const totalEstimate = (elapsed / data.progress) * 100;
+                const remaining = totalEstimate - elapsed;
+
+                setTaskEstimates((prev) => ({
+                  ...prev,
+                  [task._id]: {
+                    elapsed,
+                    remaining,
+                    total: totalEstimate,
+                    speed: data.progress / (elapsed / 1000 / 60), // % por minuto
+                  },
+                }));
+              }
+            }
+          },
+
+          // Manejar evento de estado
+          status: (data) => {
+            // Actualizar el estado de la tarea
+            setTasks((prevTasks) =>
+              prevTasks.map((t) =>
+                t._id === task._id ? { ...t, status: data.status } : t
+              )
+            );
+
+            // Si la tarea ha completado, mostrar notificación
+            if (data.status === "completed" && notificationsEnabled) {
+              new Notification("Tarea completada", {
+                body: `La tarea "${task.name}" ha finalizado correctamente.`,
+                icon: "/favicon.ico",
+              });
+            } else if (data.status === "error" && notificationsEnabled) {
+              new Notification("Error en tarea", {
+                body: `La tarea "${task.name}" ha finalizado con errores.`,
+                icon: "/favicon.ico",
+              });
+            }
+          },
+
+          // Manejar evento de conexión
+          connected: () => {
+            console.log(`Conectado a SSE para tarea ${task._id}`);
+          },
+
+          // Manejar errores
+          error: (error) => {
+            console.error(`Error en SSE para tarea ${task._id}:`, error);
+          },
+
+          // Manejar fallos en reconexión
+          reconnectFailed: () => {
+            console.warn(`Reconexión fallida para tarea ${task._id}`);
+            // Actualizar UI para mostrar que perdimos conexión
+            setTasks((prevTasks) =>
+              prevTasks.map((t) =>
+                t._id === task._id
+                  ? {
+                      ...t,
+                      connectionLost: true,
+                    }
+                  : t
+              )
+            );
+          },
+        });
+
+        // Registrar tiempo de inicio si no existe
+        if (!activeTasks[task._id]) {
+          setActiveTasks((prev) => ({
+            ...prev,
+            [task._id]: {
+              startTime: Date.now(),
+            },
+          }));
+        }
+      }
+    });
+
+    // Cancelar suscripciones para tareas que ya no están en ejecución
+    tasks.forEach((task) => {
+      if (task.status !== "running" && progressClient.isSubscribed(task._id)) {
+        progressClient.unsubscribe(task._id);
+      }
+    });
+
+    // Limpiar al desmontar
+    return () => {
+      progressClient.closeAll();
+    };
+  }, [tasks, activeTasks, notificationsEnabled]);
+
+  // Detectar cambios en el estado de las tareas
+  useEffect(() => {
+    if (!previousTasksRef.current) {
+      previousTasksRef.current = tasks;
+      return;
+    }
+
+    // Verificar tareas que cambiaron de estado running a completed/error
+    tasks.forEach((task) => {
+      const prevTask = previousTasksRef.current.find((t) => t._id === task._id);
+      if (
+        prevTask &&
+        prevTask.status === "running" &&
+        (task.status === "completed" || task.status === "error")
+      ) {
+        // Mostrar notificación solo si están habilitadas
+        if (notificationsEnabled) {
+          const notificationTitle =
+            task.status === "completed" ? "Tarea completada" : "Error en tarea";
+          const notificationBody =
+            task.status === "completed"
+              ? `La tarea "${task.name}" ha finalizado correctamente.`
+              : `La tarea "${task.name}" ha finalizado con errores.`;
+
+          new Notification(notificationTitle, {
+            body: notificationBody,
+            icon: "/favicon.ico",
+          });
+        }
+      }
+    });
+
+    // Actualizar referencia
+    previousTasksRef.current = tasks;
+  }, [tasks, notificationsEnabled]);
 
   // ⏰ Sincronizar `executionTime` con `schudleTime`
   useEffect(() => {
@@ -69,7 +263,6 @@ export function TransferTasks() {
   };
 
   // Filtro dinámico
-  // Modifica la función de filtrado para incluir los nuevos filtros
   const filteredTasks = tasks.filter((task) => {
     // Filtro por texto de búsqueda
     const matchesSearch = task.name
@@ -100,40 +293,6 @@ export function TransferTasks() {
 
   const handleSearch = (e) => {
     setSearch(e.target.value);
-  };
-
-  const handleTimeChange = async () => {
-    try {
-      // Mostrar indicador de carga
-      Swal.fire({
-        title: "Guardando horario...",
-        allowOutsideClick: false,
-        didOpen: () => {
-          Swal.showLoading();
-        },
-      });
-
-      const result = await cnnApi.addTimeTransfer(accessToken, {
-        hour: executionTime,
-      });
-
-      if (result) {
-        Swal.fire(
-          "Éxito",
-          `Las tareas se ejecutarán todos los días a las ${executionTime}.`,
-          "success"
-        );
-      } else {
-        throw new Error("No se pudo guardar el horario.");
-      }
-    } catch (error) {
-      console.log(error);
-      Swal.fire(
-        "Error",
-        error.message || "Ocurrió un error al guardar",
-        "error"
-      );
-    }
   };
 
   const addOrEditTask = async (task = null) => {
@@ -491,6 +650,17 @@ export function TransferTasks() {
           color: #444;
           font-size: 16px;
           margin-top: 0;
+        }
+        .textarea-sql {
+          width: 100%;
+          height: 120px;
+          padding: 8px;
+          font-family: monospace;
+          font-size: 14px;
+          line-height: 1.5;
+          border: 1px solid #d9d9d9;
+          border-radius: 4px;
+          resize: vertical;
         }
       `;
         document.head.appendChild(style);
@@ -918,6 +1088,14 @@ export function TransferTasks() {
         )
       );
 
+      // Registrar tiempo de inicio para estimaciones
+      setActiveTasks((prev) => ({
+        ...prev,
+        [taskId]: {
+          startTime: Date.now(),
+        },
+      }));
+
       const result = await cnnApi.executeTask(accessToken, taskId);
 
       if (result?.result.success) {
@@ -930,6 +1108,14 @@ export function TransferTasks() {
           )
         );
         Swal.fire("Éxito", "Tarea ejecutada correctamente.", "success");
+
+        // Notificación solo si tenemos permiso
+        if (notificationsEnabled) {
+          new Notification("Tarea completada", {
+            body: `La tarea "${selectedTask.name}" ha finalizado correctamente.`,
+            icon: "/favicon.ico",
+          });
+        }
       } else {
         throw new Error(result.message || "No se pudo completar la tarea.");
       }
@@ -945,6 +1131,14 @@ export function TransferTasks() {
         error.message || "No se pudo ejecutar la tarea.",
         "error"
       );
+
+      // Notificación de error solo si tenemos permiso
+      if (notificationsEnabled) {
+        new Notification("Error en tarea", {
+          body: `La tarea "${selectedTask.name}" ha finalizado con errores.`,
+          icon: "/favicon.ico",
+        });
+      }
     }
   };
 
@@ -1118,11 +1312,17 @@ export function TransferTasks() {
     }
   };
 
+  // Función mejorada de cancelación de tareas
   const handleCancelTask = async (taskId) => {
-    // Usar SweetAlert2 para la confirmación
+    const taskToCancel = tasks.find((task) => task._id === taskId);
+
+    console.log(taskToCancel);
+    if (!taskToCancel) return;
+
+    // Solicitar confirmación
     const result = await Swal.fire({
       title: "¿Detener tarea?",
-      text: "¿Estás seguro de que deseas detener esta tarea en ejecución? Esta acción no se puede deshacer.",
+      text: `¿Estás seguro de que deseas detener la tarea "${taskToCancel.name}"? Esta acción no se puede deshacer.`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#d33",
@@ -1131,58 +1331,500 @@ export function TransferTasks() {
       cancelButtonText: "Cancelar",
     });
 
-    // Si el usuario cancela la acción
-    if (!result.isConfirmed) {
-      return;
-    }
+    if (!result.isConfirmed) return;
 
     setCancelling(true);
 
-    // Mostrar indicador de carga
-    Swal.fire({
+    // Actualizar UI inmediatamente para mejor feedback
+    setTasks((prevTasks) =>
+      prevTasks.map((task) =>
+        task._id === taskId
+          ? { ...task, status: "cancelling", cancellationRequested: true }
+          : task
+      )
+    );
+
+    // Mostrar indicador de progreso de cancelación
+    const cancelSwal = Swal.fire({
       title: "Deteniendo tarea...",
-      text: "Por favor espera mientras se detiene la tarea.",
+      html: `
+        <div>
+          <p>Por favor espera mientras se detiene la tarea "${taskToCancel.name}".</p>
+          <p>Esta operación puede tardar unos segundos...</p>
+          <div class="progress-container" style="width: 100%; background-color: #f3f3f3; border-radius: 4px; height: 10px; margin-top: 15px; overflow: hidden;">
+            <div class="progress-bar" style="width: 0; height: 100%; background-color: #dc3545; transition: width 0.3s;"></div>
+          </div>
+        </div>
+      `,
       allowOutsideClick: false,
+      showConfirmButton: false,
       didOpen: () => {
-        Swal.showLoading();
+        // Simulación visual del progreso de cancelación
+        let width = 0;
+        const progressBar = Swal.getPopup().querySelector(".progress-bar");
+        const interval = setInterval(() => {
+          if (width < 95) {
+            width += 5;
+            progressBar.style.width = `${width}%`;
+          }
+        }, 500);
+
+        // Guardar el interval para poder limpiarlo después
+        Swal.getPopup().interval = interval;
+      },
+      willClose: () => {
+        clearInterval(Swal.getPopup().interval);
       },
     });
 
     try {
-      // const response = await cnnApi.cancelTask(accessToken, taskId);
+      // Llamar a la API para cancelar la tarea
       const result = await cnnApi.cancelTask(accessToken, taskId, {
+        force: false,
+        reason: "Cancelado por el usuario desde la interfaz",
         onStatusChange: (status) => {
           setCancellationStatus((prev) => ({
             ...prev,
             [taskId]: status.data,
           }));
+
+          // Actualizar UI con el estado más reciente
+          if (status.data && status.data.state) {
+            setTasks((prevTasks) =>
+              prevTasks.map((task) =>
+                task._id === taskId
+                  ? { ...task, status: status.data.state }
+                  : task
+              )
+            );
+          }
         },
       });
 
-      if (result.succes) {
-        // Mostrar notificación de éxito
+      // Cerrar el indicador de progreso
+      cancelSwal.close();
+
+      if (result.success) {
         Swal.fire({
           title: "Tarea detenida",
-          text: "La solicitud de cancelación se ha enviado correctamente. La tarea se detendrá en breve.",
+          text: "La solicitud de cancelación se ha procesado correctamente.",
           icon: "success",
           timer: 3000,
           timerProgressBar: true,
         });
+
+        // Actualizar estado en la UI
+        setTasks((prevTasks) =>
+          prevTasks.map((task) =>
+            task._id === taskId
+              ? { ...task, status: "cancelled", progress: -1 }
+              : task
+          )
+        );
+
+        // Mostrar notificación si está habilitado
+        if (notificationsEnabled) {
+          new Notification("Tarea cancelada", {
+            body: `La tarea "${taskToCancel.name}" ha sido cancelada.`,
+            icon: "/favicon.ico",
+          });
+        }
+      } else {
+        throw new Error(result.message || "Error al cancelar la tarea");
       }
 
-      // Actualizar la lista de tareas después de un breve retraso
+      // Refrescar la lista de tareas después de un breve retraso
       setTimeout(() => {
         fetchTasks();
       }, 2000);
     } catch (error) {
-      // Mostrar notificación de error
+      // Cerrar el indicador de progreso
+      cancelSwal.close();
+
+      // Mostrar error
       Swal.fire({
         title: "Error",
         text: `No se pudo detener la tarea: ${error.message}`,
         icon: "error",
       });
+
+      // Intentar restablecer el estado
+      fetchTasks();
     } finally {
       setCancelling(false);
+    }
+  };
+
+  // Panel para ver detalles de progreso detallado
+  const showDetailedProgress = (taskId) => {
+    const task = tasks.find((t) => t._id === taskId);
+    if (!task || task.status !== "running") return;
+
+    // Obtener estimaciones de tiempo
+    const estimate = taskEstimates[taskId] || {};
+    const elapsedMinutes = estimate.elapsed
+      ? Math.floor(estimate.elapsed / 1000 / 60)
+      : 0;
+    const elapsedSeconds = estimate.elapsed
+      ? Math.floor((estimate.elapsed / 1000) % 60)
+      : 0;
+    const remainingMinutes = estimate.remaining
+      ? Math.floor(estimate.remaining / 1000 / 60)
+      : 0;
+    const remainingSeconds = estimate.remaining
+      ? Math.floor((estimate.remaining / 1000) % 60)
+      : 0;
+
+    Swal.fire({
+      title: `Progreso de tarea: ${task.name}`,
+      html: `
+        <div class="detailed-progress">
+          <div class="progress-container">
+            <div class="progress-bar-detailed">
+              <div class="progress-fill" style="width: ${task.progress}%">${
+        task.progress
+      }%</div>
+            </div>
+          </div>
+          
+          <div class="time-estimates">
+            <p><strong>Tiempo transcurrido:</strong> ${elapsedMinutes}m ${elapsedSeconds}s</p>
+            <p><strong>Tiempo restante est.:</strong> ${remainingMinutes}m ${remainingSeconds}s</p>
+            <p><strong>Velocidad de procesamiento:</strong> ${
+              estimate.speed?.toFixed(2) || 0
+            }% por minuto</p>
+            <p><strong>Hora estimada de finalización:</strong> ${
+              estimate.remaining
+                ? new Date(Date.now() + estimate.remaining).toLocaleTimeString()
+                : "Desconocida"
+            }</p>
+          </div>
+          
+          <div class="status-info">
+            <p><strong>Estado de la tarea:</strong> <span class="status-badge">${
+              task.status === "running" ? "En ejecución" : task.status
+            }</span></p>
+            <p><strong>Conexión SSE:</strong> <span class="connection-badge ${
+              progressClient.getConnectionState(taskId) === "open"
+                ? "connected"
+                : "disconnected"
+            }">${
+        progressClient.getConnectionState(taskId) === "open"
+          ? "Conectado"
+          : progressClient.getConnectionState(taskId) || "Desconectado"
+      }</span></p>
+          </div>
+        </div>
+      `,
+      showConfirmButton: true,
+      confirmButtonText: "Cerrar",
+      showCancelButton: true,
+      cancelButtonText: "Cancelar tarea",
+      cancelButtonColor: "#dc3545",
+      customClass: {
+        container: "progress-modal",
+      },
+      didOpen: () => {
+        // Agregar estilos para este diálogo
+        const style = document.createElement("style");
+        style.innerHTML = `
+          .progress-modal .detailed-progress {
+            text-align: left;
+          }
+          .progress-modal .progress-container {
+            margin: 20px 0;
+          }
+          .progress-modal .progress-bar-detailed {
+            width: 100%;
+            height: 30px;
+            background-color: #f3f3f3;
+            border-radius: 15px;
+            overflow: hidden;
+          }
+          .progress-modal .progress-fill {
+            height: 100%;
+            background-color: #17a2b8;
+            text-align: center;
+            line-height: 30px;
+            color: white;
+            font-weight: bold;
+            transition: width 0.5s ease;
+            position: relative;
+          }
+          .progress-modal .progress-fill::after {
+            content: "";
+            position: absolute;
+            top: 0;
+            left: 0;
+            right: 0;
+            bottom: 0;
+            background: linear-gradient(
+              90deg, 
+              rgba(255,255,255,0) 0%, 
+              rgba(255,255,255,0.3) 50%, 
+              rgba(255,255,255,0) 100%
+            );
+            animation: progressShine 2s infinite linear;
+            width: 200%;
+          }
+          @keyframes progressShine {
+            from { transform: translateX(-100%); }
+            to { transform: translateX(50%); }
+          }
+          .progress-modal .time-estimates {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #f8f9fa;
+            border-radius: 8px;
+          }
+          .progress-modal .status-info {
+            margin: 20px 0;
+            padding: 15px;
+            background-color: #e9ecef;
+            border-radius: 8px;
+          }
+          .progress-modal .status-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            background-color: #17a2b8;
+            color: white;
+            font-weight: 500;
+          }
+          .progress-modal .connection-badge {
+            display: inline-block;
+            padding: 3px 8px;
+            border-radius: 4px;
+            font-weight: 500;
+          }
+          .progress-modal .connection-badge.connected {
+            background-color: #28a745;
+            color: white;
+          }
+          .progress-modal .connection-badge.disconnected {
+            background-color: #dc3545;
+            color: white;
+          }
+        `;
+        document.head.appendChild(style);
+
+        // Actualizar la barra de progreso en tiempo real
+        const progressFill = Swal.getPopup().querySelector(".progress-fill");
+        const progressInterval = setInterval(() => {
+          const updatedTask = tasks.find((t) => t._id === taskId);
+          if (updatedTask && progressFill) {
+            progressFill.style.width = `${updatedTask.progress}%`;
+            progressFill.textContent = `${updatedTask.progress}%`;
+          }
+        }, 1000);
+
+        // Guardar el interval para limpiarlo después
+        Swal.getPopup().progressInterval = progressInterval;
+      },
+      willClose: () => {
+        // Limpiar el interval al cerrar
+        clearInterval(Swal.getPopup().progressInterval);
+      },
+    }).then((result) => {
+      if (result.dismiss === Swal.DismissReason.cancel) {
+        // Usuario quiere cancelar la tarea
+        handleCancelTask(taskId);
+      }
+    });
+  };
+
+  // Nueva función para mostrar el panel de métricas
+  const showTaskMetricsPanel = async () => {
+    try {
+      // Mostrar indicador de carga
+      Swal.fire({
+        title: "Cargando métricas...",
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        },
+      });
+
+      // Calcular métricas
+      const completedToday = tasks.filter((task) => {
+        if (!task.lastExecutionDate) return false;
+        const execDate = new Date(task.lastExecutionDate);
+        const today = new Date();
+        return (
+          execDate.getDate() === today.getDate() &&
+          execDate.getMonth() === today.getMonth() &&
+          execDate.getFullYear() === today.getFullYear() &&
+          task.lastExecutionResult?.success === true
+        );
+      }).length;
+
+      const failedToday = tasks.filter((task) => {
+        if (!task.lastExecutionDate) return false;
+        const execDate = new Date(task.lastExecutionDate);
+        const today = new Date();
+        return (
+          execDate.getDate() === today.getDate() &&
+          execDate.getMonth() === today.getMonth() &&
+          execDate.getFullYear() === today.getFullYear() &&
+          task.lastExecutionResult?.success === false
+        );
+      }).length;
+
+      // Calcular tasa de éxito general
+      const totalExecutions = tasks.reduce(
+        (sum, task) => sum + (task.executionCount || 0),
+        0
+      );
+      const successRate =
+        totalExecutions > 0
+          ? (tasks.filter((t) => t.lastExecutionResult?.success).length /
+              tasks.length) *
+            100
+          : 0;
+
+      // Tareas más ejecutadas
+      const topTasks = [...tasks]
+        .sort((a, b) => (b.executionCount || 0) - (a.executionCount || 0))
+        .slice(0, 5)
+        .map((task) => ({
+          name: task.name,
+          executions: task.executionCount || 0,
+          lastExecution: task.lastExecutionDate
+            ? new Date(task.lastExecutionDate).toLocaleString()
+            : "Nunca",
+          successRate: task.lastExecutionResult?.success ? 100 : 0,
+        }));
+
+      // Cerrar indicador de carga
+      Swal.close();
+
+      // Mostrar panel de métricas
+      Swal.fire({
+        title: "Métricas de Tareas",
+        html: `
+          <div class="metrics-panel">
+            <div class="metrics-summary">
+              <div class="metric-card">
+                <h4>Tareas Completadas Hoy</h4>
+                <p class="metric-value">${completedToday}</p>
+              </div>
+              <div class="metric-card">
+                <h4>Tareas Fallidas Hoy</h4>
+                <p class="metric-value">${failedToday}</p>
+              </div>
+              <div class="metric-card">
+                <h4>Tasa de Éxito General</h4>
+                <p class="metric-value">${successRate.toFixed(1)}%</p>
+              </div>
+            </div>
+            
+            <div class="metrics-table-container">
+              <h4>Tareas más ejecutadas</h4>
+              <table>
+                <thead>
+                  <tr>
+                    <th>Tarea</th>
+                    <th>Ejecuciones</th>
+                    <th>Última ejecución</th>
+                    <th>Estado</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  ${topTasks
+                    .map(
+                      (task) => `
+                    <tr>
+                      <td>${task.name}</td>
+                      <td>${task.executions}</td>
+                      <td>${task.lastExecution}</td>
+                      <td>${
+                        task.successRate === 100
+                          ? '<span class="status-ok">✓</span>'
+                          : '<span class="status-fail">✗</span>'
+                      }</td>
+                    </tr>
+                  `
+                    )
+                    .join("")}
+                </tbody>
+              </table>
+            </div>
+          </div>
+        `,
+        width: "600px",
+        showConfirmButton: true,
+        confirmButtonText: "Cerrar",
+        didOpen: () => {
+          // Estilos para el panel de métricas
+          const style = document.createElement("style");
+          style.innerHTML = `
+            .metrics-panel {
+              font-family: Arial, sans-serif;
+            }
+            .metrics-summary {
+              display: flex;
+              justify-content: space-between;
+              gap: 15px;
+              margin-bottom: 30px;
+            }
+            .metric-card {
+              flex: 1;
+              background-color: #f8f9fa;
+              border-radius: 8px;
+              padding: 15px;
+              text-align: center;
+            }
+            .metric-card h4 {
+              font-size: 14px;
+              margin: 0 0 10px;
+              color: #495057;
+            }
+            .metric-value {
+              font-size: 24px;
+              font-weight: 600;
+              margin: 0;
+              color: #007bff;
+            }
+            .metrics-table-container {
+              background-color: #fff;
+              border-radius: 8px;
+              box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+              padding: 15px;
+            }
+            .metrics-table-container h4 {
+              margin-top: 0;
+              margin-bottom: 15px;
+              color: #495057;
+            }
+            .metrics-table-container table {
+              width: 100%;
+              border-collapse: collapse;
+            }
+            .metrics-table-container th, 
+            .metrics-table-container td {
+              padding: 8px 12px;
+              text-align: left;
+              border-bottom: 1px solid #dee2e6;
+            }
+            .metrics-table-container th {
+              font-weight: 600;
+              background-color: #f8f9fa;
+            }
+            .status-ok {
+              color: #28a745;
+              font-weight: bold;
+            }
+            .status-fail {
+              color: #dc3545;
+              font-weight: bold;
+            }
+          `;
+          document.head.appendChild(style);
+        },
+      });
+    } catch (error) {
+      console.error("Error al mostrar métricas:", error);
+      Swal.fire("Error", "No se pudieron cargar las métricas", "error");
     }
   };
 
@@ -1246,7 +1888,7 @@ export function TransferTasks() {
               }
             >
               <option value="all">Todas</option>
-              <option value="general">General</option>
+              <option value="">General</option>
               <option value="up">Transfer Up</option>
               <option value="down">Transfer Down</option>
               <option value="internal">Transfer Interno</option>
@@ -1291,6 +1933,32 @@ export function TransferTasks() {
             <FaSync /> Refrescar
           </RefreshButton>
 
+          {/* Botón para métricas */}
+          <MetricsButton onClick={showTaskMetricsPanel}>
+            <FaChartLine /> Métricas
+          </MetricsButton>
+
+          {/* Botón para habilitar/deshabilitar notificaciones */}
+          <NotificationButton
+            $enabled={notificationsEnabled}
+            onClick={() => {
+              if (!notificationsEnabled && "Notification" in window) {
+                Notification.requestPermission().then((permission) => {
+                  setNotificationsEnabled(permission === "granted");
+                });
+              } else {
+                setNotificationsEnabled(!notificationsEnabled);
+              }
+            }}
+            title={
+              notificationsEnabled
+                ? "Notificaciones activadas"
+                : "Activar notificaciones"
+            }
+          >
+            <FaBell /> {notificationsEnabled ? "" : "Activar Notificaciones"}
+          </NotificationButton>
+
           <ViewButtonsGroup>
             <ViewButton
               $active={viewMode === "cards"}
@@ -1316,9 +1984,17 @@ export function TransferTasks() {
             value={executionTime}
             onChange={(e) => setExecutionTime(e.target.value)}
           />
-          <ScheduleButton onClick={handleTimeChange}>
-            Guardar horario
-          </ScheduleButton>
+          <ScheduleConfigButton
+            disabled={loading}
+            onSuccess={(result) => {
+              // Actualizar el estado local si es necesario
+              if (result.hour) {
+                setExecutionTime(result.hour);
+              }
+              // Refrescar la lista de tareas
+              fetchTasks();
+            }}
+          />
         </ScheduleRow>
       </ActionsContainer>
 
@@ -1336,6 +2012,14 @@ export function TransferTasks() {
         </EmptyMessage>
       )}
 
+      {/* Mostrar contador de tareas en ejecución */}
+      {tasks.filter((task) => task.status === "running").length > 0 && (
+        <RunningTasksCounter>
+          {tasks.filter((task) => task.status === "running").length} tarea(s) en
+          ejecución
+        </RunningTasksCounter>
+      )}
+
       {!loading && filteredTasks.length > 0 && viewMode === "cards" && (
         <CardsContainer>
           {filteredTasks.map((task) => (
@@ -1344,12 +2028,15 @@ export function TransferTasks() {
               $selected={selectedTask && selectedTask._id === task._id}
               $active={task.active}
               $transferType={task.transferType}
+              $status={task.status}
             >
               <CardHeader>
                 <CardTitle>{task.name}</CardTitle>
                 <StatusBadge $status={task.status} $active={task.active}>
                   {task.status === "completed" && "✅ Completada"}
                   {task.status === "running" && "🔄 En Progreso"}
+                  {task.status === "cancelling" && "⏹️ Cancelando..."}
+                  {task.status === "cancelled" && "⏹️ Cancelada"}
                   {task.status === "error" && "⚠️ Error"}
                   {!task.status && (task.active ? "Activa" : "Inactiva")}
                 </StatusBadge>
@@ -1398,7 +2085,24 @@ export function TransferTasks() {
                             Interno (Server1→Server1)
                           </span>
                         )}
-                        {task.transferType === "general" && "General"}
+                        {!task.transferType && "General"}
+                      </InfoValue>
+                    </InfoItem>
+                  )}
+
+                  {/* Mostrar estimación de tiempo si está en ejecución */}
+                  {task.status === "running" && taskEstimates[task._id] && (
+                    <InfoItem>
+                      <InfoLabel>Tiempo est.:</InfoLabel>
+                      <InfoValue>
+                        {Math.floor(taskEstimates[task._id].remaining / 60000)}{" "}
+                        min
+                        <TimeEstimateButton
+                          onClick={() => showDetailedProgress(task._id)}
+                          title="Ver detalles de progreso"
+                        >
+                          <FaInfoCircle />
+                        </TimeEstimateButton>
                       </InfoValue>
                     </InfoItem>
                   )}
@@ -1418,9 +2122,23 @@ export function TransferTasks() {
 
                 {/* Barra de progreso para tareas en ejecución */}
                 {task.status === "running" && (
-                  <ProgressBar>
-                    <ProgressFill style={{ width: `${task.progress}%` }}>
-                      {task.progress}%
+                  <>
+                    <ProgressBar onClick={() => showDetailedProgress(task._id)}>
+                      <ProgressFill style={{ width: `${task.progress}%` }}>
+                        {task.progress}%
+                      </ProgressFill>
+                    </ProgressBar>
+                    <ProgressText>
+                      Haga clic en la barra de progreso para más detalles
+                    </ProgressText>
+                  </>
+                )}
+
+                {/* Barra de progreso para tareas en cancelación */}
+                {task.status === "cancelling" && (
+                  <ProgressBar $cancelling>
+                    <ProgressFill $cancelling style={{ width: "100%" }}>
+                      Cancelando...
                     </ProgressFill>
                   </ProgressBar>
                 )}
@@ -1432,7 +2150,10 @@ export function TransferTasks() {
                     <ActionButton
                       $color="#007bff"
                       onClick={() => addOrEditTask(task)}
-                      disabled={task.status === "running"}
+                      disabled={
+                        task.status === "running" ||
+                        task.status === "cancelling"
+                      }
                       title="Editar tarea"
                     >
                       <FaEdit />
@@ -1441,7 +2162,10 @@ export function TransferTasks() {
                     <ActionButton
                       $color="#dc3545"
                       onClick={() => deleteTask(task._id)}
-                      disabled={task.status === "running"}
+                      disabled={
+                        task.status === "running" ||
+                        task.status === "cancelling"
+                      }
                       title="Eliminar tarea"
                     >
                       <FaTrash />
@@ -1452,6 +2176,7 @@ export function TransferTasks() {
                       onClick={() => executeTask(task._id)}
                       disabled={
                         task.status === "running" ||
+                        task.status === "cancelling" ||
                         !task.active ||
                         (task.type !== "manual" && task.type !== "both") ||
                         tasks.some(
@@ -1477,10 +2202,21 @@ export function TransferTasks() {
                       <ActionButton
                         $color="#dc3545"
                         onClick={() => handleCancelTask(task._id)}
-                        disabled={cancelling}
+                        disabled={cancelling || task.status === "cancelling"}
                         title="Detener tarea en ejecución"
                       >
                         <FaStop />
+                      </ActionButton>
+                    )}
+
+                    {/* Botón para mostrar detalles del progreso */}
+                    {task.status === "running" && (
+                      <ActionButton
+                        $color="#17a2b8"
+                        onClick={() => showDetailedProgress(task._id)}
+                        title="Ver detalles del progreso"
+                      >
+                        <FaInfoCircle />
                       </ActionButton>
                     )}
                   </ActionRow>
@@ -1500,6 +2236,7 @@ export function TransferTasks() {
                 <th>Estado</th>
                 <th>Tipo</th>
                 <th>Modo</th>
+                <th>Progreso</th>
                 <th>Acciones</th>
               </tr>
             </thead>
@@ -1509,6 +2246,8 @@ export function TransferTasks() {
                   key={task._id}
                   className={`${!task.active ? "disabled" : ""} ${
                     task.transferType === "internal" ? "internal-transfer" : ""
+                  } ${task.status === "running" ? "running" : ""} ${
+                    task.status === "cancelling" ? "cancelling" : ""
                   }`}
                 >
                   <td>{task.name}</td>
@@ -1520,6 +2259,8 @@ export function TransferTasks() {
                     >
                       {task.status === "completed" && "✅ Completada"}
                       {task.status === "running" && "🔄 En Progreso"}
+                      {task.status === "cancelling" && "⏹️ Cancelando..."}
+                      {task.status === "cancelled" && "⏹️ Cancelada"}
                       {task.status === "error" && "⚠️ Error"}
                       {!task.status && (task.active ? "Activa" : "Inactiva")}
                     </StatusBadge>
@@ -1539,12 +2280,38 @@ export function TransferTasks() {
                   </td>
                   <td>{task.executionMode}</td>
                   <td>
+                    {task.status === "running" && (
+                      <TableProgressBar
+                        onClick={() => showDetailedProgress(task._id)}
+                      >
+                        <TableProgressFill
+                          style={{ width: `${task.progress}%` }}
+                        >
+                          {task.progress}%
+                        </TableProgressFill>
+                      </TableProgressBar>
+                    )}
+                    {task.status === "cancelling" && (
+                      <TableProgressBar $cancelling>
+                        <TableProgressFill
+                          $cancelling
+                          style={{ width: "100%" }}
+                        >
+                          Cancelando...
+                        </TableProgressFill>
+                      </TableProgressBar>
+                    )}
+                  </td>
+                  <td>
                     <ActionButtons>
                       <TableActionButton
                         title="Editar"
                         $color="#007bff"
                         onClick={() => addOrEditTask(task)}
-                        disabled={task.status === "running"}
+                        disabled={
+                          task.status === "running" ||
+                          task.status === "cancelling"
+                        }
                       >
                         <FaEdit />
                       </TableActionButton>
@@ -1553,7 +2320,10 @@ export function TransferTasks() {
                         title="Eliminar"
                         $color="#dc3545"
                         onClick={() => deleteTask(task._id)}
-                        disabled={task.status === "running"}
+                        disabled={
+                          task.status === "running" ||
+                          task.status === "cancelling"
+                        }
                       >
                         <FaTrash />
                       </TableActionButton>
@@ -1564,6 +2334,7 @@ export function TransferTasks() {
                         onClick={() => executeTask(task._id)}
                         disabled={
                           task.status === "running" ||
+                          task.status === "cancelling" ||
                           !task.active ||
                           (task.type !== "manual" && task.type !== "both") ||
                           tasks.some(
@@ -1585,14 +2356,26 @@ export function TransferTasks() {
                       </TableActionButton>
 
                       {task.status === "running" && (
-                        <TableActionButton
-                          title="Detener tarea"
-                          $color="#dc3545"
-                          onClick={() => handleCancelTask(task._id)}
-                          disabled={cancelling}
-                        >
-                          <FaStop />
-                        </TableActionButton>
+                        <>
+                          <TableActionButton
+                            title="Detener tarea"
+                            $color="#dc3545"
+                            onClick={() => handleCancelTask(task._id)}
+                            disabled={
+                              cancelling || task.status === "cancelling"
+                            }
+                          >
+                            <FaStop />
+                          </TableActionButton>
+
+                          <TableActionButton
+                            title="Ver detalles"
+                            $color="#17a2b8"
+                            onClick={() => showDetailedProgress(task._id)}
+                          >
+                            <FaInfoCircle />
+                          </TableActionButton>
+                        </>
                       )}
                     </ActionButtons>
                   </td>
@@ -1606,85 +2389,7 @@ export function TransferTasks() {
   );
 }
 
-// Estilos del Contenedor Principal
-const Container = styled.div`
-  min-height: 100vh;
-  padding: 15px;
-  width: 100%;
-  background-color: ${(props) => props.theme.bg};
-  color: ${(props) => props.theme.text};
-  display: grid;
-  grid-template:
-    "header" 90px
-    "area1" auto
-    "area2" auto
-    "main" 1fr;
-
-  @media (max-width: 768px) {
-    grid-template:
-      "header" 70px
-      "area1" auto
-      "area2" auto
-      "main" 1fr;
-    padding: 10px;
-  }
-
-  @media (max-width: 480px) {
-    grid-template:
-      "header" 60px
-      "area1" auto
-      "area2" auto
-      "main" 1fr;
-    padding: 5px;
-  }
-
-  .header {
-    grid-area: header;
-    display: flex;
-    align-items: center;
-    margin-bottom: 20px;
-  }
-
-  .area1 {
-    grid-area: area1;
-    margin-bottom: 10px;
-  }
-
-  .area2 {
-    grid-area: area2;
-    display: flex;
-    align-items: center;
-    justify-content: flex-end;
-    margin-bottom: 20px;
-
-    @media (max-width: 768px) {
-      margin-top: 15px;
-      margin-bottom: 10px;
-    }
-
-    @media (max-width: 480px) {
-      margin-top: 10px;
-      margin-bottom: 5px;
-      flex-direction: column;
-    }
-  }
-
-  .main {
-    grid-area: main;
-    margin-top: 10px;
-    overflow-x: auto;
-
-    @media (max-width: 768px) {
-      padding: 10px;
-    }
-
-    @media (max-width: 480px) {
-      padding: 5px;
-    }
-  }
-`;
-
-// Sección de Información
+// Estilos para componentes
 const ToolbarContainer = styled.div`
   display: flex;
   flex-direction: column;
@@ -1811,6 +2516,52 @@ const RefreshButton = styled.button`
   }
 `;
 
+const MetricsButton = styled.button`
+  background-color: #6f42c1;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 10px 15px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 0.3s;
+
+  &:hover {
+    background-color: #5e35b1;
+  }
+
+  @media (max-width: 480px) {
+    width: 100%;
+    justify-content: center;
+  }
+`;
+
+const NotificationButton = styled.button`
+  background-color: ${(props) => (props.$enabled ? "#28a745" : "#6c757d")};
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 10px 15px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: background-color 0.3s;
+
+  &:hover {
+    background-color: ${(props) => (props.$enabled ? "#218838" : "#5a6268")};
+  }
+
+  @media (max-width: 480px) {
+    width: 100%;
+    justify-content: center;
+  }
+`;
+
 const ViewButton = styled.button`
   background-color: ${(props) => (props.$active ? "#6c757d" : "#f8f9fa")};
   color: ${(props) => (props.$active ? "white" : "#212529")};
@@ -1868,25 +2619,6 @@ const TimeInput = styled.input`
   }
 `;
 
-const ScheduleButton = styled.button`
-  background-color: #6f42c1;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 8px 12px;
-  font-size: 14px;
-  cursor: pointer;
-  transition: background-color 0.3s;
-
-  &:hover {
-    background-color: #5a36a5;
-  }
-
-  @media (max-width: 480px) {
-    width: 100%;
-  }
-`;
-
 // Contenedores de Carga, Error y Mensaje Vacío
 const LoadingContainer = styled.div`
   display: flex;
@@ -1918,6 +2650,30 @@ const EmptyMessage = styled.div`
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 `;
 
+const RunningTasksCounter = styled.div`
+  padding: 10px 15px;
+  background-color: #f8d7da;
+  color: #721c24;
+  border-radius: 4px;
+  margin: 0 auto 20px;
+  text-align: center;
+  font-weight: 500;
+  max-width: 300px;
+  animation: pulse 2s infinite;
+
+  @keyframes pulse {
+    0% {
+      background-color: #f8d7da;
+    }
+    50% {
+      background-color: #fadfe1;
+    }
+    100% {
+      background-color: #f8d7da;
+    }
+  }
+`;
+
 // Vista de Tarjetas
 const CardsContainer = styled.div`
   display: flex;
@@ -1940,6 +2696,8 @@ const Card = styled.div`
   flex-direction: column;
   border-left: 4px solid
     ${(props) => {
+      if (props.$status === "running") return "#17a2b8"; // Azul para en ejecución
+      if (props.$status === "cancelling") return "#dc3545"; // Rojo para cancelando
       if (props.$transferType === "internal") return "#dc3545"; // Rojo para transferencias internas
       if (props.$selected) return "#007bff";
       if (props.$active) return "#28a745";
@@ -1987,7 +2745,11 @@ const StatusBadge = styled.div`
       case "completed":
         return "#28a745";
       case "running":
-        return "#ffc107";
+        return "#17a2b8";
+      case "cancelling":
+        return "#dc3545";
+      case "cancelled":
+        return "#dc3545";
       case "error":
         return "#dc3545";
       default:
@@ -2041,6 +2803,23 @@ const InfoLabel = styled.span`
 
 const InfoValue = styled.span`
   flex: 1;
+  display: flex;
+  align-items: center;
+`;
+
+const TimeEstimateButton = styled.button`
+  background: none;
+  border: none;
+  color: #007bff;
+  font-size: 14px;
+  cursor: pointer;
+  margin-left: 10px;
+  padding: 2px 5px;
+  border-radius: 4px;
+
+  &:hover {
+    background-color: rgba(0, 123, 255, 0.1);
+  }
 `;
 
 const CardQuerySection = styled.div`
@@ -2067,24 +2846,68 @@ const QueryBox = styled.textarea`
   color: ${({ theme }) => theme.text};
 `;
 
+const ProgressText = styled.div`
+  text-align: center;
+  font-size: 12px;
+  color: #6c757d;
+  margin-top: 5px;
+  cursor: pointer;
+`;
+
+// Mejoras a los estilos de progreso
 const ProgressBar = styled.div`
   width: 100%;
-  height: 20px;
-  background-color: #eee;
-  border-radius: 10px;
+  height: 24px;
+  background-color: ${(props) => (props.$cancelling ? "#f8d7da" : "#eee")};
+  border-radius: 12px;
   margin-top: 15px;
   overflow: hidden;
+  cursor: ${(props) => (props.$cancelling ? "default" : "pointer")};
+  box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.1);
+  position: relative;
+
+  &:hover {
+    box-shadow: inset 0 1px 2px rgba(0, 0, 0, 0.2);
+  }
 `;
 
 const ProgressFill = styled.div`
   height: 100%;
-  background-color: #17a2b8;
+  background-color: ${(props) => (props.$cancelling ? "#dc3545" : "#17a2b8")};
   text-align: center;
-  font-size: 12px;
-  font-weight: 500;
+  font-size: 14px;
+  font-weight: 600;
   color: white;
-  line-height: 20px;
-  transition: width 0.5s ease-in-out;
+  line-height: 24px;
+  transition: width 0.3s ease-out;
+  position: relative;
+
+  /* Efecto de animación para barras en ejecución */
+  &::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.3) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    width: 200%;
+    animation: shine 2s infinite linear;
+  }
+
+  @keyframes shine {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(50%);
+    }
+  }
 `;
 
 const CardActions = styled.div`
@@ -2193,6 +3016,98 @@ const StyledTable = styled.table`
       border-left: 4px solid #dc3545; // Borde rojo para transferencias internas
       background-color: rgba(220, 53, 69, 0.05); // Fondo rojizo muy sutil
     }
+
+    &.running {
+      background-color: rgba(23, 162, 184, 0.05);
+    }
+
+    &.cancelling {
+      background-color: rgba(220, 53, 69, 0.05);
+    }
+
+    /* Indicador pulsante para tareas en ejecución */
+    &.running td:first-child::before {
+      content: "";
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: #17a2b8;
+      margin-right: 8px;
+      animation: pulse 1.5s infinite;
+    }
+
+    &.cancelling td:first-child::before {
+      content: "";
+      display: inline-block;
+      width: 8px;
+      height: 8px;
+      border-radius: 50%;
+      background-color: #dc3545;
+      margin-right: 8px;
+      animation: pulse 1.5s infinite;
+    }
+
+    @keyframes pulse {
+      0% {
+        opacity: 1;
+      }
+      50% {
+        opacity: 0.5;
+      }
+      100% {
+        opacity: 1;
+      }
+    }
+  }
+`;
+
+// Estilos para progreso en tabla
+const TableProgressBar = styled.div`
+  width: 100%;
+  height: 20px;
+  background-color: ${(props) => (props.$cancelling ? "#f8d7da" : "#eee")};
+  border-radius: 10px;
+  overflow: hidden;
+  cursor: ${(props) => (props.$cancelling ? "default" : "pointer")};
+`;
+
+const TableProgressFill = styled.div`
+  height: 100%;
+  background-color: ${(props) => (props.$cancelling ? "#dc3545" : "#17a2b8")};
+  text-align: center;
+  font-size: 12px;
+  font-weight: 500;
+  color: white;
+  line-height: 20px;
+  transition: width 0.5s ease-in-out;
+  position: relative;
+
+  /* Agregar animación para progreso */
+  &::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: 0;
+    right: 0;
+    bottom: 0;
+    background: linear-gradient(
+      90deg,
+      rgba(255, 255, 255, 0) 0%,
+      rgba(255, 255, 255, 0.3) 50%,
+      rgba(255, 255, 255, 0) 100%
+    );
+    width: 200%;
+    animation: tableShine 2s infinite linear;
+  }
+
+  @keyframes tableShine {
+    from {
+      transform: translateX(-100%);
+    }
+    to {
+      transform: translateX(50%);
+    }
   }
 `;
 
@@ -2222,6 +3137,7 @@ const TableActionButton = styled.button`
     cursor: not-allowed;
   }
 `;
+
 // Estilos para los filtros
 const FiltersContainer = styled.div`
   display: flex;

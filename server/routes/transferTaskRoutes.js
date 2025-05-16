@@ -1,5 +1,3 @@
-// routes/transferRoutes.js
-
 const express = require("express");
 const {
   getTransferTasks,

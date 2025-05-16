@@ -99,8 +99,8 @@ export class TransferApi {
     }
   }
 
+  // Actualización para TransferApi.jsx
   async addTimeTransfer(accessToken, datos) {
-    // console.log(datos);
     try {
       const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/config/horas`;
       const params = {
@@ -483,8 +483,8 @@ export class TransferApi {
       // Marcar como en proceso de cancelación
       this.cancellationInProgress.set(taskId, true);
 
-      // Nueva ruta para cancelación
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.CANCELLATION}/tasks/${taskId}/cancel`;
+      // Updated URL to match the correct endpoint in transferTaskRoutes.js
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/cancel/${taskId}`;
 
       const params = {
         method: "POST",

@@ -283,42 +283,46 @@ const getConfigurarHora = async (req, res) => {
  * Actualizar la configuración de hora para tareas automáticas
  */
 const updateConfig = async (req, res) => {
-  const { hour } = req.body;
-
-  if (!hour) {
-    return res.status(400).json({
-      success: false,
-      message: "Se requiere la hora de ejecución",
-    });
-  }
+  const { hour, enabled } = req.body;
 
   try {
     // Validar formato de hora (HH:MM)
-    if (!/^([01]\d|2[0-3]):([0-5]\d)$/.test(hour)) {
+    if (hour && !/^([01]\d|2[0-3]):([0-5]\d)$/.test(hour)) {
       return res.status(400).json({
-        success: false,
         message: "Formato de hora inválido. Use formato HH:MM (24 horas)",
       });
     }
 
+    // Buscar configuración existente o crear nueva
     const config = await Config.findOneAndUpdate(
       {},
-      { hour },
+      {
+        hour,
+        enabled: enabled !== undefined ? enabled : true, // Nuevo campo
+        lastModified: new Date(),
+      },
       { upsert: true, new: true }
     );
 
-    // Actualizar la tarea programada con la nueva hora
-    startCronJob(config.hour);
+    console.log(`Configuración actualizada: ${JSON.stringify(config)}`);
+
+    // Si está habilitado, iniciar el trabajo cron con la nueva hora
+    if (config.enabled !== false) {
+      startCronJob(config.hour);
+    } else {
+      // Si está deshabilitado, detener el trabajo cron
+      if (typeof stopCronJob === "function") {
+        stopCronJob();
+      }
+    }
 
     res.json({
-      success: true,
-      message: "Configuración actualizada correctamente",
+      message: "Configuración actualizada",
       config,
     });
   } catch (error) {
-    logger.error("Error al actualizar configuración de hora:", error);
+    console.error("Error al actualizar la configuración:", error);
     res.status(500).json({
-      success: false,
       message: "Error al actualizar la configuración",
       error: error.message,
     });

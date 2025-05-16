@@ -77,7 +77,7 @@ class UnifiedCancellationService {
   async cancelTask(taskId, options = {}) {
     const task = this.tasks.get(taskId);
     if (!task) {
-      logger.warn(`Attempted to cancel non-existent task ${taskId}`);
+      logger.warn(`Attempted to cancel non-existent task ${taskId}`); 
       return { success: false, message: "Task not found" };
     }
 
