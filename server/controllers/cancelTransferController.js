@@ -1,4 +1,3 @@
-// controllers/cancelTransferController.js
 const UnifiedCancellationService = require("../services/UnifiedCancellationService");
 const TransferTask = require("../models/transferTaks");
 const logger = require("../services/logger");
