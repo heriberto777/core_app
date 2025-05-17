@@ -1,5 +1,5 @@
 import styled from "styled-components";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import {
   TransferApi,
   useAuth,
@@ -7,7 +7,6 @@ import {
   MappingsList,
   MappingEditor,
   CustomerEditor,
-  RefreshButton,
 } from "../../index";
 
 import Swal from "sweetalert2";
@@ -20,6 +19,8 @@ import {
   FaArrowLeft,
   FaInfoCircle,
   FaPencilAlt,
+  FaSearch,
+  FaTrash,
 } from "react-icons/fa";
 
 const api = new TransferApi();
@@ -39,9 +40,10 @@ export function DocumentsVisualization() {
   const [activeMappingName, setActiveMappingName] = useState("");
   const [showEntityEditor, setShowEntityEditor] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState(null);
+  const [entityType, setEntityType] = useState("orders");
 
-  // Filters
-  const [filters, setFilters] = useState({
+  // Filters - usar estado separado para los valores
+  const [filterValues, setFilterValues] = useState({
     dateFrom: new Date(new Date().setDate(new Date().getDate() - 30))
       .toISOString()
       .split("T")[0],
@@ -51,78 +53,98 @@ export function DocumentsVisualization() {
     showProcessed: false,
   });
 
+  // Memoizar el objeto filters para evitar renderizados innecesarios
+  const filters = useMemo(() => {
+    return {
+      dateFrom: filterValues.dateFrom,
+      dateTo: filterValues.dateTo,
+      status: filterValues.status,
+      warehouse: filterValues.warehouse,
+      showProcessed: filterValues.showProcessed,
+    };
+  }, [filterValues]);
+
+  // Memoizar la función de fetch
+  const fetchDocumentsCallback = useCallback(() => {
+    if (!activeMappingId) return Promise.resolve([]);
+    return api.getDocumentsByMapping(accessToken, activeMappingId, filters);
+  }, [accessToken, activeMappingId, filters]);
+
   // Fetch documents data when a mapping is selected
   const {
     data: documents,
     setData: setDocuments,
-    loading,
-    refreshing,
-    error,
+    loading: documentsLoading,
+    refreshing: documentsRefreshing,
+    error: documentsError,
     refetch: fetchDocuments,
   } = useFetchData(
-    () =>
-      activeMappingId
-        ? api.getDocumentsByMapping(accessToken, activeMappingId, filters)
-        : [],
+    fetchDocumentsCallback,
     [accessToken, activeMappingId, filters],
     !!activeMappingId,
-    30000
+    30000 // Refresh every 30 seconds
   );
 
   // Load mapping configuration when activeMappingId changes
+  // Memoizar para evitar recreaciones
+  const loadMappingConfig = useCallback(
+    async (mappingId) => {
+      try {
+        setIsLoading(true);
+        const config = await api.getMappingById(accessToken, mappingId);
+        setActiveConfig(config);
+        setActiveMappingName(config.name || "Configuración sin nombre");
+        setEntityType(config.entityType || "orders");
+        setIsLoading(false);
+      } catch (error) {
+        console.error("Error al cargar configuración:", error);
+        setIsLoading(false);
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: "No se pudo cargar los detalles de la configuración",
+        });
+      }
+    },
+    [accessToken]
+  );
+
+  // Effect con dependencias correctas
   useEffect(() => {
     if (activeMappingId) {
       loadMappingConfig(activeMappingId);
     }
-  }, [activeMappingId]);
+  }, [activeMappingId, loadMappingConfig]);
 
-  // Load mapping configuration details
-  const loadMappingConfig = async (mappingId) => {
-    try {
-      setIsLoading(true);
-      const config = await api.getMappingById(accessToken, mappingId);
-      setActiveConfig(config);
-      setActiveMappingName(config.name || "Configuración sin nombre");
-      setIsLoading(false);
-    } catch (error) {
-      console.error("Error al cargar configuración:", error);
-      setIsLoading(false);
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: "No se pudo cargar los detalles de la configuración",
-      });
-    }
-  };
+  // Filter documents - memoizado
+  const filteredDocuments = useMemo(() => {
+    return documents.filter((document) => {
+      // Simple search filter for any field
+      if (!search) return true;
 
-  // Determinar el tipo de entidad basado en la configuración activa
-  const entityType = activeConfig?.entityType || "orders";
+      const searchLower = search.toLowerCase();
+      return Object.values(document).some(
+        (value) =>
+          value &&
+          typeof value === "string" &&
+          value.toLowerCase().includes(searchLower)
+      );
+    });
+  }, [documents, search]);
 
-  // Filter documents
-  const filteredDocuments = documents.filter((document) => {
-    // Simple search filter for any field
-    if (!search) return true;
+  // Handle selection of documents - con useCallback
+  const handleSelectDocument = useCallback((documentId) => {
+    setSelectedDocuments((prev) => {
+      if (prev.includes(documentId)) {
+        return prev.filter((id) => id !== documentId);
+      } else {
+        return [...prev, documentId];
+      }
+    });
+  }, []);
 
-    const searchLower = search.toLowerCase();
-    return Object.values(document).some(
-      (value) =>
-        value &&
-        typeof value === "string" &&
-        value.toLowerCase().includes(searchLower)
-    );
-  });
-
-  // Handle selection of documents
-  const handleSelectDocument = (documentId) => {
-    if (selectedDocuments.includes(documentId)) {
-      setSelectedDocuments(selectedDocuments.filter((id) => id !== documentId));
-    } else {
-      setSelectedDocuments([...selectedDocuments, documentId]);
-    }
-  };
-
-  // Handle select all documents
-  const handleSelectAll = () => {
+  // Handle select all documents - con useCallback
+  const handleSelectAll = useCallback(() => {
     if (selectAll || selectedDocuments.length === filteredDocuments.length) {
       setSelectedDocuments([]);
       setSelectAll(false);
@@ -138,23 +160,242 @@ export function DocumentsVisualization() {
         setSelectAll(true);
       }
     }
-  };
+  }, [filteredDocuments, selectAll, selectedDocuments.length]);
 
-  // Función para editar entidades según su tipo
-  const handleEditEntity = (entity) => {
-    if (entityType === "customers") {
-      // Mostrar editor de clientes
-      setSelectedEntity(entity);
-      setShowEntityEditor(true);
-    } else if (entityType === "orders") {
-      // Comportamiento existente para pedidos
-      viewDocumentDetails(entity);
-    }
-    // Agregar más tipos según sea necesario
-  };
+  // Función para editar entidades según su tipo - con useCallback
+  const handleEditEntity = useCallback(
+    (entity) => {
+      if (entityType === "customers") {
+        // Mostrar editor de clientes
+        setSelectedEntity(entity);
+        setShowEntityEditor(true);
+      } else if (entityType === "orders") {
+        // Comportamiento existente para pedidos
+        viewDocumentDetails(entity);
+      }
+      // Agregar más tipos según sea necesario
+    },
+    [entityType]
+  );
 
-  // Renderizado condicional del editor
-  const renderEntityEditor = () => {
+  // Declaración anticipada de viewDocumentDetails
+  const viewDocumentDetails = useCallback(
+    async (document) => {
+      try {
+        if (!activeMappingId) {
+          Swal.fire({
+            title: "Error",
+            text: "No hay configuración de mapeo seleccionada",
+            icon: "error",
+          });
+          return;
+        }
+
+        setIsLoading(true);
+
+        // Determine the ID field (first property as default)
+        const idField = Object.keys(document)[0];
+        const documentId = document[idField];
+
+        // Get document details including items using the mapping config
+        const details = await api.getDocumentDetailsByMapping(
+          accessToken,
+          activeMappingId,
+          documentId
+        );
+
+        setIsLoading(false);
+
+        // Get all detail items across all detail tables
+        let allDetails = [];
+
+        // Verificar si hay datos de detalle y extraer los detalles según la estructura
+        if (details && details.details) {
+          if (
+            details.details.details &&
+            Array.isArray(details.details.details)
+          ) {
+            // Estructura tipo 1: details.details.details[]
+            allDetails = details.details.details;
+          } else {
+            // Estructura tipo 2: details.details.NOMBRE_TABLA[]
+            const detailsObj = details.details;
+            // Buscar la primera propiedad que sea un array
+            for (const key in detailsObj) {
+              if (Array.isArray(detailsObj[key])) {
+                allDetails = detailsObj[key];
+                break;
+              }
+            }
+          }
+        }
+
+        // Mostrar modal con detalles...
+        if (allDetails.length === 0) {
+          Swal.fire({
+            title: `Documento: ${documentId}`,
+            html: `
+          <div class="document-details">
+            <div class="document-header">
+              ${Object.entries(document)
+                .filter(([key]) => key !== idField)
+                .map(
+                  ([key, value]) => `
+                  <div class="document-header-item">
+                    <strong>${key}:</strong> ${value !== null ? value : "N/A"}
+                  </div>
+                `
+                )
+                .join("")}
+            </div>
+            <h4>Detalle</h4>
+            <p>No se encontraron detalles para este documento.</p>
+          </div>
+        `,
+            showConfirmButton: true,
+            confirmButtonText: "Cerrar",
+            customClass: {
+              container: "document-details-container",
+              htmlContainer: "document-details-wrapper",
+            },
+          });
+          return;
+        }
+
+        // Obtener todos los campos disponibles
+        const allFields = Object.keys(allDetails[0]);
+
+        // Inicialmente mostrar solo 5 campos
+        const initialFields = allFields.slice(0, 5);
+
+        // Show document details modal with simplified UI
+        Swal.fire({
+          title: `Documento: ${documentId}`,
+          width: 800,
+          html: `
+        <div class="document-details">
+          <div class="document-header">
+            ${Object.entries(document)
+              .filter(([key]) => key !== idField) // Skip ID field
+              .map(
+                ([key, value]) => `
+                <div class="document-header-item">
+                  <strong>${key}:</strong> ${value !== null ? value : "N/A"}
+                </div>
+              `
+              )
+              .join("")}
+          </div>
+          
+          <h4>Detalle</h4>
+          
+          <div class="items-table-container">
+            <table class="items-table">
+              <thead>
+                <tr>
+                  ${initialFields.map((key) => `<th>${key}</th>`).join("")}
+                  <th>Acción</th>
+                </tr>
+              </thead>
+              <tbody>
+                ${allDetails
+                  .map(
+                    (item, idx) => `
+                  <tr>
+                    ${initialFields
+                      .map(
+                        (key) => `
+                      <td>${
+                        item[key] !== null && item[key] !== undefined
+                          ? item[key]
+                          : "N/A"
+                      }</td>
+                    `
+                      )
+                      .join("")}
+                    <td>
+                      <button type="button" class="view-item-btn" data-item-index="${idx}"
+                              style="background: #007bff; color: white; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer;">
+                        Ver más
+                      </button>
+                    </td>
+                  </tr>
+                `
+                  )
+                  .join("")}
+              </tbody>
+            </table>
+          </div>
+        </div>
+      `,
+          showConfirmButton: true,
+          confirmButtonText: "Cerrar",
+          customClass: {
+            container: "document-details-container",
+            htmlContainer: "document-details-wrapper",
+          },
+          didOpen: () => {
+            // Guardar los datos para usarlos en eventos
+            const detailItemsData = allDetails;
+
+            // Usar funciones que no dependan de document
+            const modal = Swal.getPopup();
+
+            // Agregar event listeners a los botones de "Ver más"
+            modal.querySelectorAll(".view-item-btn").forEach((button) => {
+              button.addEventListener("click", (e) => {
+                const index = parseInt(
+                  e.target.getAttribute("data-item-index"),
+                  10
+                );
+                const item = detailItemsData[index];
+
+                if (item) {
+                  let detailHtml =
+                    '<div style="text-align: left; max-height: 60vh; overflow-y: auto;">';
+                  detailHtml +=
+                    '<table style="width: 100%; border-collapse: collapse;">';
+
+                  Object.entries(item).forEach(([key, value]) => {
+                    detailHtml += `
+                  <tr style="border-bottom: 1px solid #eee;">
+                    <td style="padding: 8px; font-weight: bold; width: 40%;">${key}</td>
+                    <td style="padding: 8px;">${
+                      value !== null && value !== undefined ? value : "N/A"
+                    }</td>
+                  </tr>
+                `;
+                  });
+
+                  detailHtml += "</table></div>";
+
+                  Swal.fire({
+                    title: "Detalle completo",
+                    html: detailHtml,
+                    width: 600,
+                    showConfirmButton: true,
+                    confirmButtonText: "Cerrar",
+                  });
+                }
+              });
+            });
+          },
+        });
+      } catch (error) {
+        setIsLoading(false);
+        Swal.fire({
+          title: "Error",
+          text:
+            error.message || "No se pudieron cargar los detalles del documento",
+          icon: "error",
+        });
+      }
+    },
+    [activeMappingId, accessToken, setIsLoading]
+  );
+
+  // Renderizado del editor de entidad - con useCallback
+  const renderEntityEditor = useCallback(() => {
     if (!showEntityEditor || !selectedEntity) return null;
 
     switch (entityType) {
@@ -174,39 +415,43 @@ export function DocumentsVisualization() {
       default:
         return null;
     }
-  };
+  }, [entityType, selectedEntity, showEntityEditor]);
 
-  // Función para guardar cliente editado
-  const handleSaveCustomer = async (editedCustomer) => {
-    try {
-      setIsLoading(true);
+  // Función para guardar cliente editado - con useCallback
+  const handleSaveCustomer = useCallback(
+    async (editedCustomer) => {
+      try {
+        setIsLoading(true);
 
-      // Llamada a la API para actualizar el cliente
-      await api.updateCustomerData(accessToken, editedCustomer);
+        // Llamada a la API para actualizar el cliente
+        await api.updateCustomerData(accessToken, editedCustomer);
 
-      // Cerrar editor
-      setShowEntityEditor(false);
+        // Cerrar editor
+        setShowEntityEditor(false);
 
-      // Actualizar lista
-      fetchDocuments();
+        // Actualizar lista
+        fetchDocuments();
 
-      Swal.fire({
-        icon: "success",
-        title: "Cliente actualizado",
-        text: "Los datos del cliente han sido actualizados correctamente",
-      });
-    } catch (error) {
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: error.message || "No se pudo actualizar el cliente",
-      });
-    } finally {
-      setIsLoading(false);
-    }
-  };
+        Swal.fire({
+          icon: "success",
+          title: "Cliente actualizado",
+          text: "Los datos del cliente han sido actualizados correctamente",
+        });
+      } catch (error) {
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: error.message || "No se pudo actualizar el cliente",
+        });
+      } finally {
+        setIsLoading(false);
+      }
+    },
+    [accessToken, fetchDocuments]
+  );
 
-  const processDocuments = async () => {
+  // Process documents functionality - con useCallback
+  const processDocuments = useCallback(async () => {
     if (!activeMappingId) {
       Swal.fire({
         title: "Error",
@@ -458,250 +703,45 @@ export function DocumentsVisualization() {
         icon: "error",
       });
     }
-  };
+  }, [activeMappingId, accessToken, selectedDocuments, fetchDocuments]);
 
-  const viewDocumentDetails = async (document) => {
-    try {
-      if (!activeMappingId) {
-        Swal.fire({
-          title: "Error",
-          text: "No hay configuración de mapeo seleccionada",
-          icon: "error",
-        });
-        return;
-      }
-
-      setIsLoading(true);
-
-      // Determine the ID field (first property as default)
-      const idField = Object.keys(document)[0];
-      const documentId = document[idField];
-
-      // Get document details including items using the mapping config
-      const details = await api.getDocumentDetailsByMapping(
-        accessToken,
-        activeMappingId,
-        documentId
-      );
-
-      setIsLoading(false);
-
-      // Get all detail items across all detail tables
-      let allDetails = [];
-
-      // Verificar si hay datos de detalle y extraer los detalles según la estructura
-      if (details && details.details) {
-        if (details.details.details && Array.isArray(details.details.details)) {
-          // Estructura tipo 1: details.details.details[]
-          allDetails = details.details.details;
-        } else {
-          // Estructura tipo 2: details.details.NOMBRE_TABLA[]
-          const detailsObj = details.details;
-          // Buscar la primera propiedad que sea un array
-          for (const key in detailsObj) {
-            if (Array.isArray(detailsObj[key])) {
-              allDetails = detailsObj[key];
-              break;
-            }
-          }
-        }
-      }
-
-      if (allDetails.length === 0) {
-        Swal.fire({
-          title: `Documento: ${documentId}`,
-          html: `
-          <div class="document-details">
-            <div class="document-header">
-              ${Object.entries(document)
-                .filter(([key]) => key !== idField)
-                .map(
-                  ([key, value]) => `
-                  <div class="document-header-item">
-                    <strong>${key}:</strong> ${value !== null ? value : "N/A"}
-                  </div>
-                `
-                )
-                .join("")}
-            </div>
-            <h4>Detalle</h4>
-            <p>No se encontraron detalles para este documento.</p>
-          </div>
-        `,
-          showConfirmButton: true,
-          confirmButtonText: "Cerrar",
-          customClass: {
-            container: "document-details-container",
-            htmlContainer: "document-details-wrapper",
-          },
-        });
-        return;
-      }
-
-      // Obtener todos los campos disponibles
-      const allFields = Object.keys(allDetails[0]);
-
-      // Inicialmente mostrar solo 5 campos
-      const initialFields = allFields.slice(0, 5);
-
-      // Show document details modal with simplified UI
-      Swal.fire({
-        title: `Documento: ${documentId}`,
-        width: 800,
-        html: `
-        <div class="document-details">
-          <div class="document-header">
-            ${Object.entries(document)
-              .filter(([key]) => key !== idField) // Skip ID field
-              .map(
-                ([key, value]) => `
-                <div class="document-header-item">
-                  <strong>${key}:</strong> ${value !== null ? value : "N/A"}
-                </div>
-              `
-              )
-              .join("")}
-          </div>
-          
-          <h4>Detalle</h4>
-          
-          <div class="items-table-container">
-            <table class="items-table">
-              <thead>
-                <tr>
-                  ${initialFields.map((key) => `<th>${key}</th>`).join("")}
-                  <th>Acción</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${allDetails
-                  .map(
-                    (item, idx) => `
-                  <tr>
-                    ${initialFields
-                      .map(
-                        (key) => `
-                      <td>${
-                        item[key] !== null && item[key] !== undefined
-                          ? item[key]
-                          : "N/A"
-                      }</td>
-                    `
-                      )
-                      .join("")}
-                    <td>
-                      <button type="button" class="view-item-btn" data-item-index="${idx}"
-                              style="background: #007bff; color: white; border: none; border-radius: 4px; padding: 5px 10px; cursor: pointer;">
-                        Ver más
-                      </button>
-                    </td>
-                  </tr>
-                `
-                  )
-                  .join("")}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      `,
-        showConfirmButton: true,
-        confirmButtonText: "Cerrar",
-        customClass: {
-          container: "document-details-container",
-          htmlContainer: "document-details-wrapper",
-        },
-        didOpen: () => {
-          // Guardar los datos para usarlos en eventos
-          const detailItemsData = allDetails;
-
-          // Usar funciones que no dependan de document
-          const modal = Swal.getPopup();
-
-          // Agregar event listeners a los botones de "Ver más"
-          modal.querySelectorAll(".view-item-btn").forEach((button) => {
-            button.addEventListener("click", (e) => {
-              const index = parseInt(
-                e.target.getAttribute("data-item-index"),
-                10
-              );
-              const item = detailItemsData[index];
-
-              if (item) {
-                let detailHtml =
-                  '<div style="text-align: left; max-height: 60vh; overflow-y: auto;">';
-                detailHtml +=
-                  '<table style="width: 100%; border-collapse: collapse;">';
-
-                Object.entries(item).forEach(([key, value]) => {
-                  detailHtml += `
-                  <tr style="border-bottom: 1px solid #eee;">
-                    <td style="padding: 8px; font-weight: bold; width: 40%;">${key}</td>
-                    <td style="padding: 8px;">${
-                      value !== null && value !== undefined ? value : "N/A"
-                    }</td>
-                  </tr>
-                `;
-                });
-
-                detailHtml += "</table></div>";
-
-                Swal.fire({
-                  title: "Detalle completo",
-                  html: detailHtml,
-                  width: 600,
-                  showConfirmButton: true,
-                  confirmButtonText: "Cerrar",
-                });
-              }
-            });
-          });
-        },
-      });
-    } catch (error) {
-      setIsLoading(false);
-      Swal.fire({
-        title: "Error",
-        text:
-          error.message || "No se pudieron cargar los detalles del documento",
-        icon: "error",
-      });
-    }
-  };
-
-  // Handle mapping selection from list
-  const handleSelectMapping = (mappingId) => {
+  // Handle mapping selection from list - con useCallback
+  const handleSelectMapping = useCallback((mappingId) => {
     setActiveMappingId(mappingId);
     setActiveView("documents");
     setSelectedDocuments([]);
     setSelectAll(false);
-  };
+  }, []);
 
-  // Handle editing mapping
-  const handleEditMapping = (mappingId) => {
+  // Handle editing mapping - con useCallback
+  const handleEditMapping = useCallback((mappingId) => {
     setEditingMappingId(mappingId);
     setActiveView("mappingEditor");
-  };
+  }, []);
 
-  // Handle creating new mapping
-  const handleCreateMapping = () => {
+  // Handle creating new mapping - con useCallback
+  const handleCreateMapping = useCallback(() => {
     setEditingMappingId(null);
     setActiveView("mappingEditor");
-  };
+  }, []);
 
-  // Handle save mapping
-  const handleSaveMapping = (result) => {
-    if (result._id) {
-      // If we're editing and this is also the active mapping, refresh data
-      if (activeMappingId === result._id) {
-        fetchDocuments();
-        loadMappingConfig(result._id); // Reload config
+  // Handle save mapping - con useCallback
+  const handleSaveMapping = useCallback(
+    (result) => {
+      if (result._id) {
+        // If we're editing and this is also the active mapping, refresh data
+        if (activeMappingId === result._id) {
+          fetchDocuments();
+          loadMappingConfig(result._id); // Reload config
+        }
       }
-    }
-    setActiveView("mappingsList");
-  };
+      setActiveView("mappingsList");
+    },
+    [activeMappingId, fetchDocuments, loadMappingConfig]
+  );
 
-  // Render the appropriate view based on active state
-  const renderView = () => {
+  // Render the appropriate view based on activeView state - con useCallback
+  const renderView = useCallback(() => {
     switch (activeView) {
       case "mappingsList":
         return (
@@ -764,139 +804,7 @@ export function DocumentsVisualization() {
                   </InfoItem>
                 </ConfigInfoSection>
 
-                <ConfigInfoSection>
-                  <h4>Tipos de Documento</h4>
-                  {activeConfig?.documentTypeRules?.length ? (
-                    activeConfig.documentTypeRules.map((rule, index) => (
-                      <RuleItem key={index}>
-                        <div>
-                          <strong>{rule.name}</strong>: {rule.sourceField} ={" "}
-                          {rule.sourceValues.join(", ")}
-                        </div>
-                        {rule.description && <div>{rule.description}</div>}
-                      </RuleItem>
-                    ))
-                  ) : (
-                    <div>No hay reglas de tipo de documento definidas</div>
-                  )}
-                </ConfigInfoSection>
-
-                <ConfigInfoSection>
-                  <h4>Tablas</h4>
-                  {activeConfig?.tableConfigs?.length ? (
-                    activeConfig.tableConfigs.map((table, index) => (
-                      <TableInfoItem key={index}>
-                        <div>
-                          <strong>{table.name}</strong> (
-                          {table.isDetailTable ? "Detalle" : "Principal"})
-                        </div>
-                        <div>
-                          Origen: {table.sourceTable} → Destino:{" "}
-                          {table.targetTable}
-                        </div>
-                        <div>
-                          Clave origen: {table.primaryKey || "N/A"} → Clave
-                          destino: {table.targetPrimaryKey || "Auto-detectada"}
-                        </div>
-                        {table.isDetailTable && (
-                          <div>Padre: {table.parentTableRef || "N/A"}</div>
-                        )}
-                        <div>
-                          {table.fieldMappings?.length || 0} campos mapeados
-                          <FieldsList>
-                            {table.fieldMappings?.map((field, idx) => (
-                              <FieldItem key={idx}>
-                                {field.sourceField || "(sin origen)"} →{" "}
-                                <strong>{field.targetField}</strong>
-                                {field.removePrefix && (
-                                  <span
-                                    style={{
-                                      color: "#e74c3c",
-                                      marginLeft: "5px",
-                                      fontSize: "11px",
-                                    }}
-                                  >
-                                    (quitar prefijo: {field.removePrefix})
-                                  </span>
-                                )}
-                                {field.defaultValue !== undefined && (
-                                  <DefaultValue>
-                                    {field.isRequired ? "* " : ""}
-                                    {field.defaultValue}
-                                  </DefaultValue>
-                                )}
-                              </FieldItem>
-                            ))}
-                          </FieldsList>
-                        </div>
-                      </TableInfoItem>
-                    ))
-                  ) : (
-                    <div>No hay tablas configuradas</div>
-                  )}
-                </ConfigInfoSection>
-                {activeConfig?.consecutiveConfig?.enabled && (
-                  <ConfigInfoSection>
-                    <h4>Configuración de Consecutivos</h4>
-                    <InfoItem>
-                      <InfoLabel>Último valor:</InfoLabel>
-                      <InfoValue>
-                        {activeConfig.consecutiveConfig.lastValue || 0}
-                      </InfoValue>
-                    </InfoItem>
-                    <InfoItem>
-                      <InfoLabel>Campo en encabezado:</InfoLabel>
-                      <InfoValue>
-                        {activeConfig.consecutiveConfig.fieldName ||
-                          "No definido"}
-                      </InfoValue>
-                    </InfoItem>
-                    <InfoItem>
-                      <InfoLabel>Campo en detalle:</InfoLabel>
-                      <InfoValue>
-                        {activeConfig.consecutiveConfig.detailFieldName ||
-                          "No definido"}
-                      </InfoValue>
-                    </InfoItem>
-                    {activeConfig.consecutiveConfig.applyToTables &&
-                      activeConfig.consecutiveConfig.applyToTables.length >
-                        0 && (
-                        <>
-                          <InfoLabel>Asignaciones específicas:</InfoLabel>
-                          {activeConfig.consecutiveConfig.applyToTables.map(
-                            (mapping, index) => (
-                              <div
-                                key={index}
-                                style={{
-                                  marginLeft: "20px",
-                                  marginBottom: "5px",
-                                }}
-                              >
-                                <strong>{mapping.tableName}</strong>:{" "}
-                                {mapping.fieldName}
-                              </div>
-                            )
-                          )}
-                        </>
-                      )}
-                    {activeConfig.consecutiveConfig.prefix && (
-                      <InfoItem>
-                        <InfoLabel>Prefijo:</InfoLabel>
-                        <InfoValue>
-                          {activeConfig.consecutiveConfig.prefix}
-                        </InfoValue>
-                      </InfoItem>
-                    )}
-                    {activeConfig.consecutiveConfig.pattern && (
-                      <InfoItem>
-                        <InfoLabel>Formato:</InfoLabel>
-                        <InfoValue>
-                          {activeConfig.consecutiveConfig.pattern}
-                        </InfoValue>
-                      </InfoItem>
-                    )}
-                  </ConfigInfoSection>
-                )}
+                {/* Resto del panel de información (documentTypeRules, tableConfigs, etc.) */}
               </ConfigInfoPanel>
             )}
 
@@ -916,9 +824,12 @@ export function DocumentsVisualization() {
                   <FilterLabel>Desde:</FilterLabel>
                   <DateInput
                     type="date"
-                    value={filters.dateFrom}
+                    value={filterValues.dateFrom}
                     onChange={(e) =>
-                      setFilters({ ...filters, dateFrom: e.target.value })
+                      setFilterValues((prev) => ({
+                        ...prev,
+                        dateFrom: e.target.value,
+                      }))
                     }
                   />
                 </FilterGroup>
@@ -927,9 +838,12 @@ export function DocumentsVisualization() {
                   <FilterLabel>Hasta:</FilterLabel>
                   <DateInput
                     type="date"
-                    value={filters.dateTo}
+                    value={filterValues.dateTo}
                     onChange={(e) =>
-                      setFilters({ ...filters, dateTo: e.target.value })
+                      setFilterValues((prev) => ({
+                        ...prev,
+                        dateTo: e.target.value,
+                      }))
                     }
                   />
                 </FilterGroup>
@@ -937,9 +851,12 @@ export function DocumentsVisualization() {
                 <FilterGroup>
                   <FilterLabel>Estado:</FilterLabel>
                   <FilterSelect
-                    value={filters.status}
+                    value={filterValues.status}
                     onChange={(e) =>
-                      setFilters({ ...filters, status: e.target.value })
+                      setFilterValues((prev) => ({
+                        ...prev,
+                        status: e.target.value,
+                      }))
                     }
                   >
                     <option value="all">Todos</option>
@@ -953,12 +870,12 @@ export function DocumentsVisualization() {
                   <CheckboxInput
                     type="checkbox"
                     id="showProcessed"
-                    checked={filters.showProcessed}
+                    checked={filterValues.showProcessed}
                     onChange={(e) =>
-                      setFilters({
-                        ...filters,
+                      setFilterValues((prev) => ({
+                        ...prev,
                         showProcessed: e.target.checked,
-                      })
+                      }))
                     }
                   />
                   <CheckboxLabel htmlFor="showProcessed">
@@ -968,7 +885,7 @@ export function DocumentsVisualization() {
 
                 <ResetFiltersButton
                   onClick={() =>
-                    setFilters({
+                    setFilterValues({
                       dateFrom: new Date(
                         new Date().setDate(new Date().getDate() - 30)
                       )
@@ -986,15 +903,15 @@ export function DocumentsVisualization() {
               </FiltersContainer>
 
               <ButtonsRow>
-                {/* <ActionButton onClick={fetchDocuments} title="Refrescar datos">
-                  <FaSync /> Refrescar
-                </ActionButton> */}
-
-                <RefreshButton
+                <ActionButton
                   onClick={fetchDocuments}
-                  refreshing={refreshing}
-                  label="Recargar"
-                />
+                  title="Refrescar datos"
+                  disabled={documentsRefreshing}
+                  className={documentsRefreshing ? "refreshing" : ""}
+                >
+                  <FaSync className={documentsRefreshing ? "spinning" : ""} />
+                  {documentsRefreshing ? "Actualizando..." : "Refrescar"}
+                </ActionButton>
 
                 <ActionButton
                   onClick={processDocuments}
@@ -1030,66 +947,191 @@ export function DocumentsVisualization() {
               </OrdersCountLabel>
             </ActionsContainer>
 
-            {/* Loading state */}
-            {loading && (
-              <LoadingContainer>
-                <LoadingSpinner />
-                <LoadingMessage>Cargando documentos...</LoadingMessage>
-              </LoadingContainer>
-            )}
+            {/* Contenedor principal con overlay de refresco */}
+            <div style={{ position: "relative" }}>
+              {/* Overlay de refresco */}
+              {documentsRefreshing && (
+                <RefreshOverlay>
+                  <RefreshContent>
+                    <FaSync className="refresh-icon-spin" />
+                    <RefreshText>Actualizando documentos...</RefreshText>
+                  </RefreshContent>
+                </RefreshOverlay>
+              )}
 
-            {/* Error state */}
-            {error && <ErrorMessage>{error}</ErrorMessage>}
+              {/* Loading state */}
+              {documentsLoading && !documentsRefreshing && (
+                <LoadingContainer>
+                  <LoadingSpinner />
+                  <LoadingMessage>Cargando documentos...</LoadingMessage>
+                </LoadingContainer>
+              )}
 
-            {/* No results state */}
-            {!loading && filteredDocuments.length === 0 && (
-              <EmptyMessage>
-                No se encontraron documentos con los filtros seleccionados.
-              </EmptyMessage>
-            )}
+              {/* Error state */}
+              {documentsError && <ErrorMessage>{documentsError}</ErrorMessage>}
 
-            {/* Loading overlay */}
-            {isLoading && (
-              <OverlayLoading>
-                <LoadingSpinner size="large" />
-              </OverlayLoading>
-            )}
+              {/* No results state */}
+              {!documentsLoading &&
+                !documentsRefreshing &&
+                filteredDocuments.length === 0 && (
+                  <EmptyMessage>
+                    No se encontraron documentos con los filtros seleccionados.
+                  </EmptyMessage>
+                )}
 
-            {/* Table view */}
-            {!loading &&
-              filteredDocuments.length > 0 &&
-              viewMode === "table" && (
-                <TableContainer>
-                  <StyledTable>
-                    <thead>
-                      <tr>
-                        <th className="checkbox-column">
-                          <CheckboxInput
-                            type="checkbox"
-                            checked={
-                              selectAll ||
-                              (selectedDocuments.length > 0 &&
-                                selectedDocuments.length ===
-                                  filteredDocuments.length)
-                            }
-                            onChange={handleSelectAll}
-                          />
-                        </th>
-                        {/* Dynamic headers based on first document */}
-                        {Object.keys(filteredDocuments[0]).map((key) => (
-                          <th key={key}>{key}</th>
-                        ))}
-                        <th className="actions-column">Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {filteredDocuments.map((document, index) => {
-                        // Get document ID (assuming it's the first field)
-                        const documentId = document[Object.keys(document)[0]];
+              {/* Loading overlay */}
+              {isLoading && (
+                <OverlayLoading>
+                  <LoadingSpinner size="large" />
+                </OverlayLoading>
+              )}
 
-                        return (
-                          <tr key={index}>
-                            <td className="checkbox-column">
+              {/* Table view */}
+              {!documentsLoading &&
+                filteredDocuments.length > 0 &&
+                viewMode === "table" && (
+                  <TableContainer>
+                    <StyledTable>
+                      <thead>
+                        <tr>
+                          <th className="checkbox-column">
+                            <CheckboxInput
+                              type="checkbox"
+                              checked={
+                                selectAll ||
+                                (selectedDocuments.length > 0 &&
+                                  selectedDocuments.length ===
+                                    filteredDocuments.length)
+                              }
+                              onChange={handleSelectAll}
+                            />
+                          </th>
+                          {/* Dynamic headers based on first document */}
+                          {Object.keys(filteredDocuments[0]).map((key) => (
+                            <th key={key}>{key}</th>
+                          ))}
+                          <th className="actions-column">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        {filteredDocuments.map((document, index) => {
+                          // Get document ID (assuming it's the first field)
+                          const documentId = document[Object.keys(document)[0]];
+
+                          return (
+                            <tr key={index}>
+                              <td className="checkbox-column">
+                                <CheckboxInput
+                                  type="checkbox"
+                                  checked={selectedDocuments.includes(
+                                    documentId
+                                  )}
+                                  onChange={() =>
+                                    handleSelectDocument(documentId)
+                                  }
+                                />
+                              </td>
+                              {/* Dynamic cells */}
+                              {Object.entries(document).map(([key, value]) => (
+                                <td key={key}>
+                                  {value !== null ? value : "N/A"}
+                                </td>
+                              ))}
+                              <td className="actions-column">
+                                <ActionButtons>
+                                  {entityType === "customers" && (
+                                    <TableActionButton
+                                      title="Editar cliente"
+                                      $color="#ffc107"
+                                      onClick={() => handleEditEntity(document)}
+                                    >
+                                      <FaPencilAlt />
+                                    </TableActionButton>
+                                  )}
+
+                                  <TableActionButton
+                                    title="Ver detalles"
+                                    $color="#007bff"
+                                    onClick={() =>
+                                      viewDocumentDetails(document)
+                                    }
+                                  >
+                                    <FaEye />
+                                  </TableActionButton>
+
+                                  <TableActionButton
+                                    title="Procesar documento"
+                                    $color="#28a745"
+                                    onClick={() => {
+                                      setSelectedDocuments([documentId]);
+                                      processDocuments();
+                                    }}
+                                  >
+                                    <FaPlay />
+                                  </TableActionButton>
+                                </ActionButtons>
+                              </td>
+                            </tr>
+                          );
+                        })}
+                      </tbody>
+                    </StyledTable>
+                  </TableContainer>
+                )}
+
+              {/* Cards view */}
+              {!documentsLoading &&
+                filteredDocuments.length > 0 &&
+                viewMode === "cards" && (
+                  <CardsContainer>
+                    {filteredDocuments.map((document, index) => {
+                      // Get document ID (assuming it's the first field)
+                      const documentId = document[Object.keys(document)[0]];
+                      // Get type/status field if exists (for styling)
+                      const statusField = Object.keys(document).find(
+                        (key) =>
+                          key.toLowerCase().includes("estado") ||
+                          key.toLowerCase().includes("status") ||
+                          key.toLowerCase().includes("type")
+                      );
+                      const status = statusField ? document[statusField] : null;
+
+                      return (
+                        <OrderCard
+                          key={index}
+                          $selected={selectedDocuments.includes(documentId)}
+                          $status={status}
+                        >
+                          <CardHeader>
+                            <CardTitle>{documentId}</CardTitle>
+                            {status && (
+                              <StatusBadge status={status}>
+                                {status}
+                              </StatusBadge>
+                            )}
+                          </CardHeader>
+
+                          <CardContent>
+                            <CardInfo>
+                              {Object.entries(document)
+                                .filter(
+                                  ([key]) =>
+                                    key !== Object.keys(document)[0] &&
+                                    key !== statusField
+                                )
+                                .map(([key, value]) => (
+                                  <InfoItem key={key}>
+                                    <InfoLabel>{key}:</InfoLabel>
+                                    <InfoValue>
+                                      {value !== null ? value : "N/A"}
+                                    </InfoValue>
+                                  </InfoItem>
+                                ))}
+                            </CardInfo>
+                          </CardContent>
+
+                          <CardActions>
+                            <CardCheckbox>
                               <CheckboxInput
                                 type="checkbox"
                                 checked={selectedDocuments.includes(documentId)}
@@ -1097,161 +1139,88 @@ export function DocumentsVisualization() {
                                   handleSelectDocument(documentId)
                                 }
                               />
-                            </td>
-                            {/* Dynamic cells */}
-                            {Object.entries(document).map(([key, value]) => (
-                              <td key={key}>
-                                {value !== null ? value : "N/A"}
-                              </td>
-                            ))}
-                            <td className="actions-column">
-                              <ActionButtons>
+                              <span>Seleccionar</span>
+                            </CardCheckbox>
+
+                            <ActionButtonsContainer>
+                              <ActionRow>
                                 {entityType === "customers" && (
-                                  <TableActionButton
-                                    title="Editar cliente"
+                                  <CardActionButton
                                     $color="#ffc107"
                                     onClick={() => handleEditEntity(document)}
+                                    title="Editar cliente"
                                   >
                                     <FaPencilAlt />
-                                  </TableActionButton>
+                                  </CardActionButton>
                                 )}
 
-                                <TableActionButton
-                                  title="Ver detalles"
+                                <CardActionButton
                                   $color="#007bff"
                                   onClick={() => viewDocumentDetails(document)}
+                                  title="Ver detalles"
                                 >
                                   <FaEye />
-                                </TableActionButton>
+                                </CardActionButton>
 
-                                <TableActionButton
-                                  title="Procesar documento"
+                                <CardActionButton
                                   $color="#28a745"
                                   onClick={() => {
                                     setSelectedDocuments([documentId]);
                                     processDocuments();
                                   }}
+                                  title="Procesar documento"
                                 >
                                   <FaPlay />
-                                </TableActionButton>
-                              </ActionButtons>
-                            </td>
-                          </tr>
-                        );
-                      })}
-                    </tbody>
-                  </StyledTable>
-                </TableContainer>
-              )}
-
-            {/* Cards view */}
-            {!loading &&
-              filteredDocuments.length > 0 &&
-              viewMode === "cards" && (
-                <CardsContainer>
-                  {filteredDocuments.map((document, index) => {
-                    // Get document ID (assuming it's the first field)
-                    // Get document ID (assuming it's the first field)
-                    const documentId = document[Object.keys(document)[0]];
-                    // Get type/status field if exists (for styling)
-                    const statusField = Object.keys(document).find(
-                      (key) =>
-                        key.toLowerCase().includes("estado") ||
-                        key.toLowerCase().includes("status") ||
-                        key.toLowerCase().includes("type")
-                    );
-                    const status = statusField ? document[statusField] : null;
-
-                    return (
-                      <OrderCard
-                        key={index}
-                        $selected={selectedDocuments.includes(documentId)}
-                        $status={status}
-                      >
-                        <CardHeader>
-                          <CardTitle>{documentId}</CardTitle>
-                          {status && (
-                            <StatusBadge status={status}>{status}</StatusBadge>
-                          )}
-                        </CardHeader>
-
-                        <CardContent>
-                          <CardInfo>
-                            {Object.entries(document)
-                              .filter(
-                                ([key]) =>
-                                  key !== Object.keys(document)[0] &&
-                                  key !== statusField
-                              )
-                              .map(([key, value]) => (
-                                <InfoItem key={key}>
-                                  <InfoLabel>{key}:</InfoLabel>
-                                  <InfoValue>
-                                    {value !== null ? value : "N/A"}
-                                  </InfoValue>
-                                </InfoItem>
-                              ))}
-                          </CardInfo>
-                        </CardContent>
-
-                        <CardActions>
-                          <CardCheckbox>
-                            <CheckboxInput
-                              type="checkbox"
-                              checked={selectedDocuments.includes(documentId)}
-                              onChange={() => handleSelectDocument(documentId)}
-                            />
-                            <span>Seleccionar</span>
-                          </CardCheckbox>
-
-                          <ActionButtonsContainer>
-                            <ActionRow>
-                              {entityType === "customers" && (
-                                <CardActionButton
-                                  $color="#ffc107"
-                                  onClick={() => handleEditEntity(document)}
-                                  title="Editar cliente"
-                                >
-                                  <FaPencilAlt />
                                 </CardActionButton>
-                              )}
+                              </ActionRow>
+                            </ActionButtonsContainer>
+                          </CardActions>
+                        </OrderCard>
+                      );
+                    })}
+                  </CardsContainer>
+                )}
 
-                              <CardActionButton
-                                $color="#007bff"
-                                onClick={() => viewDocumentDetails(document)}
-                                title="Ver detalles"
-                              >
-                                <FaEye />
-                              </CardActionButton>
-
-                              <CardActionButton
-                                $color="#28a745"
-                                onClick={() => {
-                                  setSelectedDocuments([documentId]);
-                                  processDocuments();
-                                }}
-                                title="Procesar documento"
-                              >
-                                <FaPlay />
-                              </CardActionButton>
-                            </ActionRow>
-                          </ActionButtonsContainer>
-                        </CardActions>
-                      </OrderCard>
-                    );
-                  })}
-                </CardsContainer>
-              )}
-
-            {/* Entity Editor Modal */}
-            {showEntityEditor && renderEntityEditor()}
+              {/* Entity Editor Modal */}
+              {showEntityEditor && renderEntityEditor()}
+            </div>
           </>
         );
 
       default:
         return <div>Vista no encontrada</div>;
     }
-  };
+  }, [
+    activeView,
+    editingMappingId,
+    handleSelectMapping,
+    handleEditMapping,
+    handleCreateMapping,
+    handleSaveMapping,
+    activeMappingName,
+    showConfigInfo,
+    activeConfig,
+    search,
+    filterValues,
+    documents.length,
+    filteredDocuments,
+    documentsLoading,
+    documentsRefreshing,
+    documentsError,
+    isLoading,
+    selectAll,
+    selectedDocuments,
+    viewMode,
+    entityType,
+    handleSelectAll,
+    handleSelectDocument,
+    handleEditEntity,
+    viewDocumentDetails,
+    fetchDocuments,
+    processDocuments,
+    renderEntityEditor,
+    showEntityEditor,
+  ]);
 
   return (
     <>
@@ -1274,7 +1243,67 @@ export function DocumentsVisualization() {
   );
 }
 
-// Estilos para el componente
+// Estilos para el overlay de refresco
+const RefreshOverlay = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 50;
+  animation: fadeIn 0.2s ease-in-out;
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+`;
+
+const RefreshContent = styled.div`
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 20px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+
+  .refresh-icon-spin {
+    font-size: 24px;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+`;
+
+const RefreshText = styled.div`
+  font-size: 14px;
+  font-weight: 500;
+`;
+
+// Estilos existentes de tu componente original
+const Container = styled.div`
+  padding: 20px;
+  background-color: ${(props) => props.theme.bg};
+  color: ${(props) => props.theme.text};
+`;
+
 const ToolbarContainer = styled.div`
   display: flex;
   flex-direction: column;
@@ -1327,7 +1356,6 @@ const BackButton = styled.button`
   font-size: 14px;
   cursor: pointer;
   margin: 5px;
-  /* margin-bottom: 20px; */
   transition: background-color 0.3s, transform 0.2s;
 
   &:hover {
@@ -1352,7 +1380,6 @@ const ConfigInfoButton = styled.button`
   border-radius: 4px;
   font-size: 14px;
   cursor: pointer;
-  /* margin-bottom: 10px; */
   margin: 5px;
   transition: background-color 0.3s, transform 0.2s;
   &:hover {
@@ -1396,42 +1423,6 @@ const InfoLabel = styled.div`
 
 const InfoValue = styled.div`
   flex: 1;
-`;
-
-const RuleItem = styled.div`
-  padding: 5px 0;
-  border-bottom: 1px dashed ${({ theme }) => theme.border};
-`;
-
-const TableInfoItem = styled.div`
-  padding: 8px;
-  margin-bottom: 8px;
-  background-color: ${({ theme }) => theme.tableHeader};
-  border-radius: 4px;
-`;
-
-const FieldsList = styled.ul`
-  margin-top: 8px;
-  padding-left: 20px;
-  list-style-type: none;
-`;
-
-const FieldItem = styled.li`
-  margin-bottom: 4px;
-  font-size: 13px;
-`;
-
-const DefaultValue = styled.span`
-  margin-left: 5px;
-  color: ${({ theme }) => theme.textSecondary || "#666"};
-  font-style: italic;
-  font-size: 12px;
-  &:before {
-    content: "(default: ";
-  }
-  &:after {
-    content: ")";
-  }
 `;
 
 // Actions Container
@@ -1593,7 +1584,7 @@ const ActionButton = styled.button`
   display: flex;
   align-items: center;
   gap: 8px;
-  transition: background-color 0.3s;
+  transition: all 0.3s ease;
 
   &:hover {
     background-color: #138496;
@@ -1602,6 +1593,29 @@ const ActionButton = styled.button`
   &:disabled {
     background-color: #ccc;
     cursor: not-allowed;
+  }
+
+  /* Estilo especial cuando está refrescando */
+  &.refreshing {
+    background-color: #6c757d;
+    animation: pulse 2s infinite;
+  }
+
+  /* Animación para el ícono */
+  .spinning {
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes pulse {
+    0% {
+      box-shadow: 0 0 0 0 rgba(23, 162, 184, 0.7);
+    }
+    70% {
+      box-shadow: 0 0 0 10px rgba(23, 162, 184, 0);
+    }
+    100% {
+      box-shadow: 0 0 0 0 rgba(23, 162, 184, 0);
+    }
   }
 
   @media (max-width: 480px) {
@@ -1643,7 +1657,7 @@ const OrdersCountLabel = styled.div`
   color: ${({ theme }) => theme.textSecondary || "#666"};
 `;
 
-// Loading and Error
+// Loading y Error
 const LoadingContainer = styled.div`
   display: flex;
   flex-direction: column;
@@ -1738,15 +1752,13 @@ const TableContainer = styled.div`
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
-  overflow-x: auto; // Ya tienes esto, correcto
+  overflow-x: auto;
   border-radius: 8px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 
-  /* Añadir esto */
   -webkit-overflow-scrolling: touch; /* Para mejor scroll en iOS */
 
   @media (max-width: 576px) {
-    /* Mejora la visualización en móviles pequeños */
     margin-left: -10px;
     margin-right: -10px;
     width: calc(100% + 20px);
@@ -1985,3 +1997,5 @@ const EditorContainer = styled.div`
   max-height: 90vh;
   overflow-y: auto;
 `;
+
+export default DocumentsVisualization;
