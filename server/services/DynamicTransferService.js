@@ -1078,6 +1078,65 @@ class DynamicTransferService {
             );
             const result = await SqlService.query(sourceConnection, query);
             detailsData = result.recordset;
+          } else if (detailConfig.useSameSourceTable) {
+            // Usar la misma data del encabezado para el detalle
+            // Buscar la tabla principal asociada a través de parentTableRef
+            const parentTable = mapping.tableConfigs.find(
+              (tc) => tc.name === detailConfig.parentTableRef
+            );
+
+            if (!parentTable) {
+              logger.warn(
+                `No se encontró la tabla padre ${detailConfig.parentTableRef} para el detalle ${detailConfig.name}`
+              );
+              continue;
+            }
+
+            // Crear una consulta para obtener los mismos datos del encabezado
+            const tableAlias = "d1";
+            const orderByColumn = detailConfig.orderByColumn || "";
+            const query = `
+      SELECT ${tableAlias}.* FROM ${parentTable.sourceTable} ${tableAlias}
+      WHERE ${tableAlias}.${
+              detailConfig.primaryKey || parentTable.primaryKey || "NUM_PED"
+            } = @documentId
+      ${
+        detailConfig.filterCondition
+          ? ` AND ${detailConfig.filterCondition.replace(
+              /\b(\w+)\b/g,
+              (m, field) => {
+                if (
+                  !field.includes(".") &&
+                  !field.match(/^[\d.]+$/) &&
+                  ![
+                    "AND",
+                    "OR",
+                    "NULL",
+                    "IS",
+                    "NOT",
+                    "IN",
+                    "LIKE",
+                    "BETWEEN",
+                    "TRUE",
+                    "FALSE",
+                  ].includes(field.toUpperCase())
+                ) {
+                  return `${tableAlias}.${field}`;
+                }
+                return m;
+              }
+            )}`
+          : ""
+      }
+      ${orderByColumn ? ` ORDER BY ${tableAlias}.${orderByColumn}` : ""}
+    `;
+            logger.debug(
+              `Ejecutando consulta para detalles usando misma tabla que encabezado: ${query}`
+            );
+            const result = await SqlService.query(sourceConnection, query, {
+              documentId,
+            });
+            detailsData = result.recordset;
           } else {
             // Construir consulta básica con alias para evitar ambigüedad
             const tableAlias = "d1";
@@ -1920,7 +1979,6 @@ class DynamicTransferService {
     }
   }
 
-  
   /**
    * Función auxiliar para formatear fechas en formato SQL Server
    * @param {Date|string} dateValue - Valor de fecha a formatear
