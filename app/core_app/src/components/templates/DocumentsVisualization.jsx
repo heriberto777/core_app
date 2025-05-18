@@ -230,6 +230,31 @@ export function DocumentsVisualization() {
           }
         }
 
+        if (allDetails.length === 0 && activeConfig) {
+          const detailTablesWithSameSource = activeConfig.tableConfigs.filter(
+            (tc) => tc.isDetailTable && tc.useSameSourceTable
+          );
+
+          if (detailTablesWithSameSource.length > 0) {
+            // Para cada tabla de detalle que usa la misma fuente, crea un detalle
+            // con los mismos datos del documento principal
+            for (const detailTable of detailTablesWithSameSource) {
+              const detailItem = { ...document }; // Copia los datos del documento principal
+
+              // Agregar información adicional para identificar la tabla de detalle
+              detailItem._detailTableName = detailTable.name;
+              detailItem._targetTable = detailTable.targetTable;
+
+              allDetails.push(detailItem);
+            }
+
+            console.log(
+              "Detalles generados a partir de tablas con misma fuente:",
+              allDetails
+            );
+          }
+        }
+
         // Mostrar modal con detalles...
         if (allDetails.length === 0) {
           Swal.fire({
@@ -250,6 +275,26 @@ export function DocumentsVisualization() {
             </div>
             <h4>Detalle</h4>
             <p>No se encontraron detalles para este documento.</p>
+            ${
+              activeConfig
+                ? `
+              <div style="text-align: left; margin-top: 15px; padding: 10px; background-color: #f8f9fa; border-radius: 5px;">
+                <strong>Información de configuración:</strong>
+                <ul style="margin-top: 5px; padding-left: 20px;">
+                  <li>Tablas de detalle configuradas: ${
+                    activeConfig.tableConfigs.filter((tc) => tc.isDetailTable)
+                      .length
+                  }</li>
+                  <li>Tablas con misma fuente que el encabezado: ${
+                    activeConfig.tableConfigs.filter(
+                      (tc) => tc.isDetailTable && tc.useSameSourceTable
+                    ).length
+                  }</li>
+                </ul>
+              </div>
+            `
+                : ""
+            }
           </div>
         `,
             showConfirmButton: true,
