@@ -357,6 +357,58 @@ const getDocumentDetailsByMapping = async (req, res) => {
 
       if (detailConfig.customQuery) {
         query = detailConfig.customQuery.replace(/@documentId/g, documentId);
+      } else if (detailConfig.useSameSourceTable) {
+        // Caso especial: usa la misma tabla que el encabezado
+        // Buscamos la tabla principal asociada
+        const parentTable = mapping.tableConfigs.find(
+          (tc) => tc.name === detailConfig.parentTableRef
+        );
+
+        if (!parentTable) {
+          logger.warn(
+            `No se encontró la tabla padre ${detailConfig.parentTableRef} para el detalle ${detailConfig.name}`
+          );
+          continue;
+        }
+
+        // Usar el mismo filtro que la tabla principal
+        const tableAlias = "d1";
+        const orderByColumn = detailConfig.orderByColumn || "";
+        query = `
+          SELECT ${tableAlias}.* FROM ${parentTable.sourceTable} ${tableAlias}
+          WHERE ${tableAlias}.${
+          detailConfig.primaryKey || parentTable.primaryKey || "NUM_PED"
+        } = @documentId
+          ${
+            detailConfig.filterCondition
+              ? ` AND ${detailConfig.filterCondition.replace(
+                  /\b(\w+)\b/g,
+                  (m, field) => {
+                    if (
+                      !field.includes(".") &&
+                      !field.match(/^[\d.]+$/) &&
+                      ![
+                        "AND",
+                        "OR",
+                        "NULL",
+                        "IS",
+                        "NOT",
+                        "IN",
+                        "LIKE",
+                        "BETWEEN",
+                        "TRUE",
+                        "FALSE",
+                      ].includes(field.toUpperCase())
+                    ) {
+                      return `${tableAlias}.${field}`;
+                    }
+                    return m;
+                  }
+                )}`
+              : ""
+          }
+          ${orderByColumn ? ` ORDER BY ${tableAlias}.${orderByColumn}` : ""}
+        `;
       } else {
         // Usar el campo de ordenamiento si está configurado, o nada si no existe
         const orderByColumn = detailConfig.orderByColumn || "";
@@ -372,6 +424,7 @@ const getDocumentDetailsByMapping = async (req, res) => {
         `;
       }
 
+      logger.debug(`Ejecutando consulta para detalles: ${query}`);
       const result = await SqlService.query(connection, query, { documentId });
       details[detailConfig.name] = result.recordset || [];
     }
