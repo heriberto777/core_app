@@ -34,6 +34,8 @@ export function LoadsResumen() {
   const navigate = useNavigate();
   const { loadId } = useParams(); // Optional loadId from URL params
 
+  const FETCH_INTERVAL = 5000;
+
   // If loadId is provided from URL params, use it in the initial filters
   useEffect(() => {
     if (loadId) {
@@ -67,9 +69,17 @@ export function LoadsResumen() {
     data: summaries,
     setData: setSummaries,
     loading,
+    refreshing: tasksRefreshing,
+    loadingState: tasksLoadingState,
     error,
     refetch: refreshSummaries,
-  } = useFetchData(fetchSummaries, [filters, currentPage, accessToken]);
+  } = useFetchData(fetchSummaries, [filters, currentPage, accessToken], {
+    autoRefresh: true,
+    refreshInterval: FETCH_INTERVAL,
+    enableCache: true,
+    cacheTime: 60000, // 1 minuto
+    initialData: [],
+  });
 
   const handleSearch = () => {
     setCurrentPage(1);
@@ -553,8 +563,14 @@ export function LoadsResumen() {
 
             <ClearButton onClick={clearFilters}>Limpiar Filtros</ClearButton>
 
-            <RefreshButton onClick={refreshSummaries}>
-              <FaSync /> Refrescar
+            <RefreshButton
+              onClick={refreshSummaries}
+              refreshing={tasksRefreshing}
+              label="Recargar"
+              className={tasksRefreshing ? "refreshing" : ""}
+            >
+              <FaSync className={tasksRefreshing ? "spinning" : ""} />
+              {tasksRefreshing ? "Actualizando..." : "Refrescar"}
             </RefreshButton>
           </ButtonsContainer>
         </FiltersContainer>
@@ -574,7 +590,7 @@ export function LoadsResumen() {
           </EmptyMessage>
         )}
 
-        {!loading && summaries.length > 0 && (
+        {!loading && !tasksRefreshing && summaries.length > 0 && (
           <>
             <TableContainer>
               <StyledTable>

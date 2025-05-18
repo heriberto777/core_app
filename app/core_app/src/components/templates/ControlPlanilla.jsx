@@ -1,5 +1,5 @@
 import styled from "styled-components";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Swal from "sweetalert2";
 import {
   FaEdit,
@@ -11,24 +11,40 @@ import {
 } from "react-icons/fa";
 import { EmailRecipientApi, useAuth, useFetchData, Header } from "../../index";
 
-const recipientApi = new EmailRecipientApi();
+const cnnApi = new EmailRecipientApi();
 
 export function ControlPlanilla() {
   const [openstate, setOpenState] = useState(false);
   const { accessToken, user } = useAuth();
+  const FETCH_INTERVAL = 5000;
 
-  // Usar tu hook personalizado useFetchData para obtener los destinatarios
+  const fetchControlCallback = useCallback(
+    async (options = {}) => {
+      try {
+        const result = await cnnApi.getRecipients(accessToken);
+        return result;
+      } catch (error) {
+        console.error("Error al obtener tareas:", error);
+        throw error; // Permitir que el hook maneje el error
+      }
+    },
+    [accessToken]
+  );
+
   const {
     data: recipients,
-    setData: setRecipients,
     loading,
+    refreshing: tasksRefreshing,
+    loadingState,
     error,
     refetch: fetchRecipients,
-  } = useFetchData(
-    () => recipientApi.getRecipients(accessToken),
-    [accessToken],
-    true // Carga automática
-  );
+  } = useFetchData(fetchControlCallback, [accessToken], {
+    autoRefresh: true,
+    refreshInterval: FETCH_INTERVAL,
+    enableCache: true,
+    cacheTime: 60000, // 1 minuto
+    initialData: [],
+  });
 
   const handleAdd = () => {
     Swal.fire({
@@ -403,8 +419,14 @@ export function ControlPlanilla() {
           <AddButton onClick={handleAdd}>
             <FaPlus /> Agregar Destinatario
           </AddButton>
-          <RefreshButton onClick={fetchRecipients}>
-            <FaSync /> Refrescar
+          <RefreshButton
+            onClick={fetchRecipients}
+            refreshing={tasksRefreshing}
+            label="Recargar"
+            className={tasksRefreshing ? "refreshing" : ""}
+          >
+            <FaSync className={tasksRefreshing ? "spinning" : ""} />
+            {tasksRefreshing ? "Actualizando..." : "Refrescar"}
           </RefreshButton>
           <DefaultsButton onClick={handleInitializeDefaults}>
             Inicializar por defecto
@@ -412,8 +434,16 @@ export function ControlPlanilla() {
         </ActionsContainer>
       </section>
 
-      <section className="main-content">
-        {loading && (
+      <section className="main-content" style={{ position: "relative" }}>
+        {tasksRefreshing && (
+          <RefreshOverlay>
+            <RefreshContent>
+              <FaSync className="refresh-icon-spin" />
+              <RefreshText>Actualizando tareas...</RefreshText>
+            </RefreshContent>
+          </RefreshOverlay>
+        )}
+        {loading && !tasksRefreshing && (
           <LoadingContainer>
             <LoadingMessage>Cargando destinatarios...</LoadingMessage>
           </LoadingContainer>
@@ -421,7 +451,7 @@ export function ControlPlanilla() {
 
         {error && <ErrorMessage>{error}</ErrorMessage>}
 
-        {!loading && !error && recipients.length === 0 && (
+        {!loading && !tasksRefreshing && recipients.length === 0 && (
           <EmptyMessage>
             No hay destinatarios configurados. Haga clic en "Agregar
             Destinatario" para crear uno.
@@ -837,4 +867,57 @@ const EmptyMessage = styled.div`
   background-color: ${({ theme }) => theme.cardBg || "#fff"};
   border-radius: 8px;
   box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+`;
+
+const RefreshOverlay = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background-color: rgba(255, 255, 255, 0.7);
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  z-index: 50;
+  animation: fadeIn 0.2s ease-in-out;
+
+  @keyframes fadeIn {
+    from {
+      opacity: 0;
+    }
+    to {
+      opacity: 1;
+    }
+  }
+`;
+
+const RefreshContent = styled.div`
+  background-color: rgba(0, 0, 0, 0.7);
+  color: white;
+  padding: 20px;
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 10px;
+
+  .refresh-icon-spin {
+    font-size: 24px;
+    animation: spin 1s linear infinite;
+  }
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+`;
+
+const RefreshText = styled.div`
+  font-size: 14px;
+  font-weight: 500;
 `;

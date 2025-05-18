@@ -804,7 +804,188 @@ export function DocumentsVisualization() {
                   </InfoItem>
                 </ConfigInfoSection>
 
-                {/* Resto del panel de información (documentTypeRules, tableConfigs, etc.) */}
+                <ConfigInfoSection>
+                  <h4>Tipos de Documento</h4>
+                  {activeConfig?.documentTypeRules?.length ? (
+                    activeConfig.documentTypeRules.map((rule, index) => (
+                      <RuleItem key={index}>
+                        <div>
+                          <strong>{rule.name}</strong>: {rule.sourceField} ={" "}
+                          {rule.sourceValues.join(", ")}
+                        </div>
+                        {rule.description && <div>{rule.description}</div>}
+                      </RuleItem>
+                    ))
+                  ) : (
+                    <div>No hay reglas de tipo de documento definidas</div>
+                  )}
+                </ConfigInfoSection>
+
+                <ConfigInfoSection>
+                  <h4>Tablas</h4>
+                  {activeConfig?.tableConfigs?.length ? (
+                    activeConfig.tableConfigs.map((table, index) => (
+                      <div
+                        key={index}
+                        className="table-info-item"
+                        style={{
+                          padding: "8px",
+                          marginBottom: "8px",
+                          backgroundColor: `${({ theme }) =>
+                            theme.tableHeader || "#f0f0f0"}`,
+                          borderRadius: "4px",
+                        }}
+                      >
+                        <div>
+                          <strong>{table.name}</strong> (
+                          {table.isDetailTable ? "Detalle" : "Principal"})
+                        </div>
+                        <div>
+                          Origen: {table.sourceTable} → Destino:{" "}
+                          {table.targetTable}
+                        </div>
+                        <div>
+                          Clave origen: {table.primaryKey || "N/A"} → Clave
+                          destino: {table.targetPrimaryKey || "Auto-detectada"}
+                        </div>
+                        {table.isDetailTable && (
+                          <>
+                            <div>Padre: {table.parentTableRef || "N/A"}</div>
+                            {table.useSameSourceTable && (
+                              <div
+                                style={{ color: "#e67e22", fontWeight: "bold" }}
+                              >
+                                Usa misma tabla de origen que el encabezado
+                              </div>
+                            )}
+                          </>
+                        )}
+                        <div>
+                          {table.fieldMappings?.length || 0} campos mapeados
+                          <div
+                            style={{
+                              marginTop: "8px",
+                              paddingLeft: "20px",
+                              listStyleType: "none",
+                            }}
+                          >
+                            {table.fieldMappings?.map((field, idx) => (
+                              <div
+                                key={idx}
+                                style={{
+                                  marginBottom: "4px",
+                                  fontSize: "13px",
+                                }}
+                              >
+                                {field.sourceField || "(sin origen)"} →{" "}
+                                <strong>{field.targetField}</strong>
+                                {field.removePrefix && (
+                                  <span
+                                    style={{
+                                      color: "#e74c3c",
+                                      marginLeft: "5px",
+                                      fontSize: "11px",
+                                    }}
+                                  >
+                                    (quitar prefijo: {field.removePrefix})
+                                  </span>
+                                )}
+                                {field.defaultValue !== undefined && (
+                                  <span
+                                    style={{
+                                      marginLeft: "5px",
+                                      color: "#666",
+                                      fontStyle: "italic",
+                                      fontSize: "12px",
+                                    }}
+                                  >
+                                    {field.isRequired ? "* " : ""}
+                                    (default: {field.defaultValue})
+                                  </span>
+                                )}
+                                {field.lookupFromTarget && (
+                                  <span
+                                    style={{
+                                      marginLeft: "5px",
+                                      color: "#3498db",
+                                      fontSize: "11px",
+                                    }}
+                                  >
+                                    (consulta en destino)
+                                  </span>
+                                )}
+                              </div>
+                            ))}
+                          </div>
+                        </div>
+                      </div>
+                    ))
+                  ) : (
+                    <div>No hay tablas configuradas</div>
+                  )}
+                </ConfigInfoSection>
+                {activeConfig?.consecutiveConfig?.enabled && (
+                  <ConfigInfoSection>
+                    <h4>Configuración de Consecutivos</h4>
+                    <InfoItem>
+                      <InfoLabel>Último valor:</InfoLabel>
+                      <InfoValue>
+                        {activeConfig.consecutiveConfig.lastValue || 0}
+                      </InfoValue>
+                    </InfoItem>
+                    <InfoItem>
+                      <InfoLabel>Campo en encabezado:</InfoLabel>
+                      <InfoValue>
+                        {activeConfig.consecutiveConfig.fieldName ||
+                          "No definido"}
+                      </InfoValue>
+                    </InfoItem>
+                    <InfoItem>
+                      <InfoLabel>Campo en detalle:</InfoLabel>
+                      <InfoValue>
+                        {activeConfig.consecutiveConfig.detailFieldName ||
+                          "No definido"}
+                      </InfoValue>
+                    </InfoItem>
+                    {activeConfig.consecutiveConfig.applyToTables &&
+                      activeConfig.consecutiveConfig.applyToTables.length >
+                        0 && (
+                        <>
+                          <InfoLabel>Asignaciones específicas:</InfoLabel>
+                          {activeConfig.consecutiveConfig.applyToTables.map(
+                            (mapping, index) => (
+                              <div
+                                key={index}
+                                style={{
+                                  marginLeft: "20px",
+                                  marginBottom: "5px",
+                                }}
+                              >
+                                <strong>{mapping.tableName}</strong>:{" "}
+                                {mapping.fieldName}
+                              </div>
+                            )
+                          )}
+                        </>
+                      )}
+                    {activeConfig.consecutiveConfig.prefix && (
+                      <InfoItem>
+                        <InfoLabel>Prefijo:</InfoLabel>
+                        <InfoValue>
+                          {activeConfig.consecutiveConfig.prefix}
+                        </InfoValue>
+                      </InfoItem>
+                    )}
+                    {activeConfig.consecutiveConfig.pattern && (
+                      <InfoItem>
+                        <InfoLabel>Formato:</InfoLabel>
+                        <InfoValue>
+                          {activeConfig.consecutiveConfig.pattern}
+                        </InfoValue>
+                      </InfoItem>
+                    )}
+                  </ConfigInfoSection>
+                )}
               </ConfigInfoPanel>
             )}
 
@@ -1996,6 +2177,11 @@ const EditorContainer = styled.div`
   max-width: 800px;
   max-height: 90vh;
   overflow-y: auto;
+`;
+
+const RuleItem = styled.div`
+  padding: 5px 0;
+  border-bottom: 1px dashed ${({ theme }) => theme.border};
 `;
 
 export default DocumentsVisualization;

@@ -236,16 +236,25 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       <input type="checkbox" id="isDetailTable" class="swal2-checkbox">
       <label for="isDetailTable">¿Es tabla de detalle?</label>
     </div>
-    <div class="form-group">
-      <label for="parentTableRef">Referencia a tabla padre (si es detalle)</label>
-      <input id="parentTableRef" class="swal2-input" placeholder="Ej: pedidosHeader">
-    </div>
-    <div class="form-group">
-      <label for="orderByColumn">Columna de ordenamiento (opcional)</label>
-      <input id="orderByColumn" class="swal2-input" placeholder="Ej: SECUENCIA">
-      <small style="display:block;margin-top:4px;color:#666;">
-        Solo para tablas de detalle. Ej: SECUENCIA, LINEA, etc.
-      </small>
+    <div id="detailOptions" style="display: none; margin-left: 20px; padding-left: 10px; border-left: 2px solid #eee;">
+      <div class="form-group">
+        <label for="parentTableRef">Referencia a tabla padre</label>
+        <input id="parentTableRef" class="swal2-input" placeholder="Ej: pedidosHeader">
+      </div>
+      <div class="form-check">
+        <input type="checkbox" id="useSameSourceTable" class="swal2-checkbox">
+        <label for="useSameSourceTable"><strong>Usar misma tabla de origen que el encabezado</strong></label>
+        <small style="display:block;margin-top:4px;color:#666;">
+          Seleccione esta opción si los detalles provienen de la misma tabla que el encabezado.
+        </small>
+      </div>
+      <div class="form-group">
+        <label for="orderByColumn">Columna de ordenamiento (opcional)</label>
+        <input id="orderByColumn" class="swal2-input" placeholder="Ej: SECUENCIA">
+        <small style="display:block;margin-top:4px;color:#666;">
+          Solo para tablas de detalle. Ej: SECUENCIA, LINEA, etc.
+        </small>
+      </div>
     </div>
     <div class="form-group">
       <label for="filterCondition">Condición de filtro adicional (opcional)</label>
@@ -255,6 +264,15 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       showCancelButton: true,
       confirmButtonText: "Añadir",
       cancelButtonText: "Cancelar",
+      didOpen: () => {
+        // Mostrar/ocultar opciones de detalle según checkbox
+        const isDetailCheckbox = document.getElementById("isDetailTable");
+        const detailOptionsDiv = document.getElementById("detailOptions");
+
+        isDetailCheckbox.addEventListener("change", function () {
+          detailOptionsDiv.style.display = this.checked ? "block" : "none";
+        });
+      },
       preConfirm: () => {
         const name = document.getElementById("tableName").value;
         const sourceTable = document.getElementById("sourceTable").value;
@@ -263,14 +281,26 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         const targetPrimaryKey =
           document.getElementById("targetPrimaryKey").value;
         const isDetailTable = document.getElementById("isDetailTable").checked;
-        const parentTableRef = document.getElementById("parentTableRef").value;
-        const orderByColumn = document.getElementById("orderByColumn").value;
+        const parentTableRef =
+          document.getElementById("parentTableRef")?.value || "";
+        const useSameSourceTable = isDetailTable
+          ? document.getElementById("useSameSourceTable")?.checked
+          : false;
+        const orderByColumn =
+          document.getElementById("orderByColumn")?.value || "";
         const filterCondition =
           document.getElementById("filterCondition").value;
 
         if (!name || !sourceTable || !targetTable) {
           Swal.showValidationMessage(
             "Los campos nombre, tabla origen y tabla destino son obligatorios"
+          );
+          return false;
+        }
+
+        if (isDetailTable && !parentTableRef) {
+          Swal.showValidationMessage(
+            "Para tablas de detalle, debe especificar la referencia a la tabla padre"
           );
           return false;
         }
@@ -283,6 +313,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           targetPrimaryKey,
           isDetailTable,
           parentTableRef: isDetailTable ? parentTableRef : null,
+          useSameSourceTable, // Nuevo campo
           orderByColumn: orderByColumn || null,
           filterCondition: filterCondition || null,
           fieldMappings: [],
@@ -775,20 +806,33 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       }>
       <label for="isDetailTable">¿Es tabla de detalle?</label>
     </div>
-    <div class="form-group">
-      <label for="parentTableRef">Referencia a tabla padre (si es detalle)</label>
-      <input id="parentTableRef" class="swal2-input" value="${
-        tableConfig.parentTableRef || ""
-      }" placeholder="Ej: pedidosHeader">
-    </div>
-    <div class="form-group">
-      <label for="orderByColumn">Columna de ordenamiento (opcional)</label>
-      <input id="orderByColumn" class="swal2-input" value="${
-        tableConfig.orderByColumn || ""
-      }" placeholder="Ej: SECUENCIA">
-      <small style="display:block;margin-top:4px;color:#666;">
-        Solo para tablas de detalle. Ej: SECUENCIA, LINEA, etc.
-      </small>
+    <div id="detailOptions" style="display: ${
+      tableConfig.isDetailTable ? "block" : "none"
+    }; margin-left: 20px; padding-left: 10px; border-left: 2px solid #eee;">
+      <div class="form-group">
+        <label for="parentTableRef">Referencia a tabla padre</label>
+        <input id="parentTableRef" class="swal2-input" value="${
+          tableConfig.parentTableRef || ""
+        }" placeholder="Ej: pedidosHeader">
+      </div>
+      <div class="form-check">
+        <input type="checkbox" id="useSameSourceTable" class="swal2-checkbox" ${
+          tableConfig.useSameSourceTable ? "checked" : ""
+        }>
+        <label for="useSameSourceTable"><strong>Usar misma tabla de origen que el encabezado</strong></label>
+        <small style="display:block;margin-top:4px;color:#666;">
+          Seleccione esta opción si los detalles provienen de la misma tabla que el encabezado.
+        </small>
+      </div>
+      <div class="form-group">
+        <label for="orderByColumn">Columna de ordenamiento (opcional)</label>
+        <input id="orderByColumn" class="swal2-input" value="${
+          tableConfig.orderByColumn || ""
+        }" placeholder="Ej: SECUENCIA">
+        <small style="display:block;margin-top:4px;color:#666;">
+          Solo para tablas de detalle. Ej: SECUENCIA, LINEA, etc.
+        </small>
+      </div>
     </div>
     <div class="form-group">
       <label for="filterCondition">Condición de filtro adicional (opcional)</label>
@@ -796,10 +840,19 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         tableConfig.filterCondition || ""
       }" placeholder="Ej: ESTADO = 'A'">
     </div>
-    `,
+  `,
       showCancelButton: true,
       confirmButtonText: "Guardar",
       cancelButtonText: "Cancelar",
+      didOpen: () => {
+        // Mostrar/ocultar opciones de detalle según checkbox
+        const isDetailCheckbox = document.getElementById("isDetailTable");
+        const detailOptionsDiv = document.getElementById("detailOptions");
+
+        isDetailCheckbox.addEventListener("change", function () {
+          detailOptionsDiv.style.display = this.checked ? "block" : "none";
+        });
+      },
       preConfirm: () => {
         const name = document.getElementById("tableName").value;
         const sourceTable = document.getElementById("sourceTable").value;
@@ -808,14 +861,26 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         const targetPrimaryKey =
           document.getElementById("targetPrimaryKey").value;
         const isDetailTable = document.getElementById("isDetailTable").checked;
-        const parentTableRef = document.getElementById("parentTableRef").value;
-        const orderByColumn = document.getElementById("orderByColumn").value;
+        const parentTableRef =
+          document.getElementById("parentTableRef")?.value || "";
+        const useSameSourceTable = isDetailTable
+          ? document.getElementById("useSameSourceTable")?.checked
+          : false;
+        const orderByColumn =
+          document.getElementById("orderByColumn")?.value || "";
         const filterCondition =
           document.getElementById("filterCondition").value;
 
         if (!name || !sourceTable || !targetTable) {
           Swal.showValidationMessage(
             "Los campos nombre, tabla origen y tabla destino son obligatorios"
+          );
+          return false;
+        }
+
+        if (isDetailTable && !parentTableRef) {
+          Swal.showValidationMessage(
+            "Para tablas de detalle, debe especificar la referencia a la tabla padre"
           );
           return false;
         }
@@ -828,6 +893,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           targetPrimaryKey,
           isDetailTable,
           parentTableRef: isDetailTable ? parentTableRef : null,
+          useSameSourceTable, // Nuevo campo
           orderByColumn: orderByColumn || null,
           filterCondition: filterCondition || null,
           fieldMappings: tableConfig.fieldMappings,

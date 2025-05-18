@@ -1,6 +1,6 @@
 import styled from "styled-components";
 import { Header, TransferApi, useAuth, useFetchData } from "../../index";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback } from "react";
 import Swal from "sweetalert2";
 import { FaPlay, FaSync, FaList, FaTable, FaHistory } from "react-icons/fa";
 import { useNavigate } from "react-router-dom";
@@ -8,7 +8,6 @@ import { useNavigate } from "react-router-dom";
 const cnnApi = new TransferApi();
 
 export function LoadsTasks() {
-  const [openstate, setOpenState] = useState(false);
   const [search, setSearch] = useState("");
   const { accessToken, user } = useAuth();
   const [viewMode, setViewMode] = useState("cards"); // "cards", "list", "table"
@@ -16,15 +15,8 @@ export function LoadsTasks() {
   const [vendedores, setVendedores] = useState([]);
   const [loadingVendedores, setLoadingVendedores] = useState(false);
 
+  const FETCH_INTERVAL = 5000;
   const navigate = useNavigate();
-
-  const {
-    data: tasks,
-    setData: setTasks,
-    loading,
-    error,
-    refetch: fetchTasks,
-  } = useFetchData(() => cnnApi.getTasks(accessToken), [accessToken], false, 0);
 
   // Función para cargar los vendedores
   const fetchVendedores = async () => {
@@ -40,6 +32,35 @@ export function LoadsTasks() {
       setLoadingVendedores(false);
     }
   };
+
+  const fetchTasksCallback = useCallback(
+    async (options = {}) => {
+      try {
+        const result = await cnnApi.getTasks(accessToken);
+        return result;
+      } catch (error) {
+        console.error("Error al obtener tareas:", error);
+        throw error; // Permitir que el hook maneje el error
+      }
+    },
+    [accessToken]
+  );
+
+  // Fetch de tareas con el hook mejorado
+  const {
+    data: tasks,
+    loading,
+    refreshing: tasksRefreshing,
+    loadingState: tasksLoadingState,
+    error,
+    refetch: fetchTasks,
+  } = useFetchData(fetchTasksCallback, [accessToken], {
+    autoRefresh: true,
+    refreshInterval: FETCH_INTERVAL,
+    enableCache: true,
+    cacheTime: 60000, // 1 minuto
+    initialData: [],
+  });
 
   // Cargar vendedores al iniciar el componente
   useEffect(() => {
