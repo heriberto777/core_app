@@ -1,4 +1,3 @@
-// controllers/transferTaskController.js
 const TransferTask = require("../models/transferTaks");
 const TransferSummary = require("../models/transferSummaryModel");
 const Consecutivo = require("../models/consecutivoModej");
@@ -1103,6 +1102,137 @@ const getDailyStats = async (req, res) => {
   }
 };
 
+const getSourceDataByMapping = async (req, res) => {
+  let connection = null;
+
+  try {
+    const { mappingId, documentId } = req.params;
+
+    if (!mappingId || !documentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requieren los IDs de la configuración y del documento",
+      });
+    }
+
+    // Obtener configuración de mapping
+    const mapping = await DynamicTransferService.getMappingById(mappingId);
+    if (!mapping) {
+      return res.status(404).json({
+        success: false,
+        message: "Configuración de mapping no encontrada",
+      });
+    }
+
+    // Obtener conexión al servidor origen
+    const connectionResult = await ConnectionManager.enhancedRobustConnect(
+      mapping.sourceServer
+    );
+    if (!connectionResult.success) {
+      throw new Error(
+        `No se pudo establecer conexión a ${mapping.sourceServer}: ${
+          connectionResult.error?.message || "Error desconocido"
+        }`
+      );
+    }
+
+    connection = connectionResult.connection;
+
+    // Buscar la tabla principal en la configuración
+    const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
+    if (!mainTable) {
+      throw new Error("No se encontró configuración de tabla principal");
+    }
+
+    // Construir consulta para obtener datos de la tabla origen
+    const query = `
+      SELECT * FROM ${mainTable.sourceTable}
+      WHERE ${mainTable.primaryKey} = @documentId
+    `;
+
+    // Ejecutar consulta
+    const result = await SqlService.query(connection, query, { documentId });
+
+    if (!result.recordset || result.recordset.length === 0) {
+      return res.status(404).json({
+        success: false,
+        message: `No se encontraron datos para el documento ${documentId} en la tabla ${mainTable.sourceTable}`,
+      });
+    }
+
+    // Transformar datos según configuración de mapping
+    const sourceData = result.recordset[0];
+    const transformedData = {};
+
+    // Aplicar reglas de mapeo
+    if (mainTable.fieldMappings && mainTable.fieldMappings.length > 0) {
+      mainTable.fieldMappings.forEach((field) => {
+        // Solo procesar si hay campo origen definido
+        if (field.sourceField) {
+          let value = sourceData[field.sourceField];
+
+          // Aplicar eliminación de prefijo si está configurado
+          if (
+            field.removePrefix &&
+            typeof value === "string" &&
+            value.startsWith(field.removePrefix)
+          ) {
+            value = value.substring(field.removePrefix.length);
+          }
+
+          // Aplicar mapeo de valores si existe
+          if (
+            value !== null &&
+            value !== undefined &&
+            field.valueMappings?.length > 0
+          ) {
+            const valueMap = field.valueMappings.find(
+              (vm) => vm.sourceValue === value
+            );
+            if (valueMap) {
+              value = valueMap.targetValue;
+            }
+          }
+
+          // Guardar en el objeto transformado con el nombre del campo destino
+          transformedData[field.targetField] = value;
+        } else if (field.defaultValue !== undefined) {
+          // Si no hay campo origen pero sí valor por defecto
+          transformedData[field.targetField] =
+            field.defaultValue === "NULL" ? null : field.defaultValue;
+        }
+      });
+    }
+
+    res.json({
+      success: true,
+      data: {
+        sourceData, // Datos originales
+        transformedData, // Datos transformados según mapping
+        mappingConfig: {
+          sourceTable: mainTable.sourceTable,
+          primaryKey: mainTable.primaryKey,
+        },
+      },
+    });
+  } catch (error) {
+    logger.error(`Error al obtener datos de origen: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  } finally {
+    // Liberar conexión
+    if (connection) {
+      try {
+        await ConnectionManager.releaseConnection(connection);
+      } catch (e) {
+        logger.error(`Error al liberar conexión: ${e.message}`);
+      }
+    }
+  }
+};
+
 module.exports = {
   getTransferTasks,
   getTransferTask,
@@ -1123,4 +1253,5 @@ module.exports = {
   getTransferHistory,
   checkServerStatus,
   getTransferSummaries,
+  getSourceDataByMapping,
 };
