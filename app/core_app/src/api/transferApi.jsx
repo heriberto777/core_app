@@ -2007,4 +2007,24 @@ export class TransferApi {
       throw error;
     }
   }
+
+  async getSourceDataByMapping(accessToken, mappingId, documentId) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/source-data/${mappingId}/${documentId}`;
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al obtener datos de origen:", error);
+      throw error;
+    }
+  }
 }

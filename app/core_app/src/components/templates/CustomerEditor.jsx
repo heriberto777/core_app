@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { FaSave, FaTimes, FaSync } from "react-icons/fa";
+import { FaSave, FaTimes, FaSync, FaDatabase } from "react-icons/fa";
 import { TransferApi, useAuth } from "../../index";
 import Swal from "sweetalert2";
 
@@ -9,6 +9,7 @@ const api = new TransferApi();
 export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
   const { accessToken } = useAuth();
   const [editedCustomer, setEditedCustomer] = useState({});
+  const [originalSourceData, setOriginalSourceData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [mapping, setMapping] = useState(null);
   const [fieldLoading, setFieldLoading] = useState({});
@@ -31,8 +32,57 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
         const mappingData = await api.getMappingById(accessToken, mappingId);
         setMapping(mappingData);
 
-        // Preparar datos del cliente
-        setEditedCustomer(customer || {});
+        // Determinar ID del documento
+        let documentId = null;
+        if (customer) {
+          // Buscar el ID basado en la tabla principal
+          const mainTable = mappingData.tableConfigs.find(
+            (tc) => !tc.isDetailTable
+          );
+          if (mainTable && mainTable.primaryKey) {
+            // Buscar el campo destino que corresponde al primaryKey
+            const primaryKeyMapping = mainTable.fieldMappings.find(
+              (fm) => fm.sourceField === mainTable.primaryKey
+            );
+
+            if (primaryKeyMapping) {
+              documentId = customer[primaryKeyMapping.targetField];
+            } else {
+              // Si no hay mapeo específico, probar con el campo directamente
+              documentId = customer[mainTable.primaryKey];
+            }
+          }
+
+          // Si no encontramos el ID mediante la configuración, usar la primera propiedad
+          if (!documentId) {
+            documentId = customer[Object.keys(customer)[0]];
+          }
+        }
+
+        // Si tenemos un ID de documento, intentar cargar datos de la tabla origen
+        if (documentId) {
+          try {
+            const sourceDataResult = await api.getSourceDataByMapping(
+              accessToken,
+              mappingId,
+              documentId
+            );
+
+            if (sourceDataResult.success) {
+              setOriginalSourceData(sourceDataResult.data.sourceData);
+
+              // Si llegamos hasta aquí, usamos los datos transformados como base
+              setEditedCustomer(sourceDataResult.data.transformedData);
+            }
+          } catch (sourceError) {
+            console.warn("Error al cargar datos de origen:", sourceError);
+            // Si falla, simplemente usamos los datos que nos pasaron
+            setEditedCustomer(customer || {});
+          }
+        } else {
+          // No hay ID o no se pudo determinar, usar los datos que nos pasaron
+          setEditedCustomer(customer || {});
+        }
 
         // Inicializar metadatos de los campos
         if (mappingData && mappingData.tableConfigs) {
@@ -80,93 +130,239 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
     initializeEditor();
   }, [mappingId, accessToken, customer]);
 
-  // Organizar campos en grupos para mejor presentación
-  const organizeFieldsInGroups = (fieldMappings) => {
-    // Predefinir algunos grupos comunes
-    const groups = [
-      {
-        title: "Información Principal",
-        fields: [
-          "CLIENTE",
-          "NOMBRE_CLIENTE",
-          "ALIAS",
-          "CONTACTO",
-          "CARGO",
-          "CONTRIBUYENTE",
-        ],
-      },
-      {
-        title: "Contacto y Ubicación",
-        fields: [
-          "TELEFONO1",
-          "TELEFONO2",
-          "E_MAIL",
-          "DIRECCION",
-          "PAIS",
-          "ZONA",
-          "GEO_LATITUD",
-          "GEO_LONGITUD",
-        ],
-      },
-      {
-        title: "Configuración Comercial",
-        fields: [
-          "LIMITE_CREDITO",
-          "CONDICION_PAGO",
-          "NIVEL_PRECIO",
-          "MULTIMONEDA",
-          "VENDEDOR",
-          "RUTA",
-          "COBRADOR",
-        ],
-      },
-      {
-        title: "Clasificación",
-        fields: ["CATEGORIA_CLIENTE", "CLASE_ABC", "CODIGO_IMPUESTO"],
-      },
-    ];
+  // Función para cargar datos desde la tabla origen
+  const loadSourceData = async () => {
+    try {
+      setLoading(true);
 
-    // Grupo para campos no clasificados
-    const otherGroup = {
-      title: "Otros Campos",
-      fields: [],
-    };
+      // Determinar ID del documento actual
+      let documentId = null;
+      if (mapping) {
+        const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
+        if (mainTable && mainTable.primaryKey) {
+          // Buscar el campo destino que corresponde al primaryKey
+          const primaryKeyMapping = mainTable.fieldMappings.find(
+            (fm) => fm.sourceField === mainTable.primaryKey
+          );
 
-    // Asignar campos a los grupos
-    const assignedFields = new Set();
-    fieldMappings.forEach((field) => {
-      const targetField = field.targetField;
-      let assigned = false;
+          if (primaryKeyMapping) {
+            documentId = editedCustomer[primaryKeyMapping.targetField];
+          } else {
+            // Si no hay mapeo específico, probar con el campo directamente
+            documentId = editedCustomer[mainTable.primaryKey];
+          }
+        }
 
-      for (const group of groups) {
-        if (group.fields.includes(targetField)) {
-          assignedFields.add(targetField);
-          assigned = true;
-          break;
+        // Si no encontramos el ID mediante la configuración, usar la primera propiedad
+        if (!documentId) {
+          documentId = editedCustomer[Object.keys(editedCustomer)[0]];
         }
       }
 
-      if (!assigned) {
-        otherGroup.fields.push(targetField);
-        assignedFields.add(targetField);
+      if (!documentId) {
+        Swal.fire({
+          title: "Error",
+          text: "No se pudo determinar el ID del documento",
+          icon: "error",
+        });
+        setLoading(false);
+        return;
       }
-    });
 
-    // Añadir el grupo "otros" solo si tiene campos
-    if (otherGroup.fields.length > 0) {
-      groups.push(otherGroup);
-    }
-
-    // Filtrar cada grupo para incluir solo campos que existen en el mapping
-    groups.forEach((group) => {
-      group.fields = group.fields.filter((field) =>
-        fieldMappings.some((f) => f.targetField === field)
+      // Cargar datos de la tabla origen
+      const sourceDataResult = await api.getSourceDataByMapping(
+        accessToken,
+        mappingId,
+        documentId
       );
+
+      if (sourceDataResult.success) {
+        setOriginalSourceData(sourceDataResult.data.sourceData);
+
+        // Confirmar si se desea reemplazar los datos actuales
+        const confirmResult = await Swal.fire({
+          title: "Datos cargados",
+          text: "¿Desea reemplazar los datos actuales con los datos de la tabla origen?",
+          icon: "question",
+          showCancelButton: true,
+          confirmButtonText: "Sí, reemplazar",
+          cancelButtonText: "No, mantener mis cambios",
+        });
+
+        if (confirmResult.isConfirmed) {
+          setEditedCustomer(sourceDataResult.data.transformedData);
+        }
+      }
+    } catch (error) {
+      console.error("Error al cargar datos de origen:", error);
+      Swal.fire({
+        title: "Error",
+        text: `No se pudieron cargar los datos de origen: ${error.message}`,
+        icon: "error",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Clasificación inteligente de campos en grupos
+  const organizeFieldsInGroups = (fieldMappings) => {
+    // Clasificación inteligente basada en prefijos o sufijos comunes
+    const identifyGroupByFieldName = (fieldName) => {
+      // Normalizar a mayúsculas para comparaciones consistentes
+      const name = fieldName.toUpperCase();
+
+      // Mapeo de patrones a grupos
+      const patternGroups = {
+        "INFORMACIÓN BÁSICA": [
+          /^NOMBRE/i,
+          /^ALIAS/i,
+          /^RAZON/i,
+          /^COD/i,
+          /^ID/i,
+          /^CODE/i,
+          /UNIT/i,
+          /ORG/i,
+          /CLIENTE/i,
+        ],
+        CONTACTO: [
+          /CONTACTO/i,
+          /MAIL/i,
+          /EMAIL/i,
+          /^E_MAIL/i,
+          /TELEFONO/i,
+          /^TEL/i,
+          /FAX/i,
+          /DIRECCION/i,
+          /DIR_/i,
+        ],
+        UBICACIÓN: [
+          /PAIS/i,
+          /ZONA/i,
+          /RUTA/i,
+          /GEO/i,
+          /LATITUD/i,
+          /LONGITUD/i,
+          /UBICACION/i,
+          /DIVISION_GEO/i,
+          /GEOGRAFICA/i,
+        ],
+        COMERCIAL: [
+          /VENDEDOR/i,
+          /COBRADOR/i,
+          /CATEGORIA/i,
+          /CLASE/i,
+          /NIVEL/i,
+          /PRECIO/i,
+          /LIMITE/i,
+          /CREDITO/i,
+          /CONDICION/i,
+          /TARJETA/i,
+          /MORA/i,
+          /DESCUENTO/i,
+          /TASA/i,
+        ],
+        FINANZAS: [
+          /SALDO/i,
+          /MONTO/i,
+          /LIMITE_CREDITO/i,
+          /MORA/i,
+          /MONEDA/i,
+          /TASA_INTERES/i,
+          /IMPUESTO/i,
+          /CREDITO/i,
+          /COBRO/i,
+        ],
+        IMPUESTOS: [
+          /IMPUESTO/i,
+          /CONTRIBUYENTE/i,
+          /EXEN/i,
+          /IVA/i,
+          /REGIMEN/i,
+          /RETENCION/i,
+          /TARIFA/i,
+          /IMP[0-9]/i,
+          /TRIBUTA/i,
+        ],
+        CONFIGURACIÓN: [
+          /ACTIVO/i,
+          /CONFIG/i,
+          /ACEPTA/i,
+          /PERMITE/i,
+          /USA/i,
+          /^ES_/i,
+          /DOC_/i,
+          /USUARIO/i,
+          /FECHA_HORA/i,
+          /ELECTRONICO/i,
+          /API/i,
+        ],
+      };
+
+      // Verificar cada patrón
+      for (const [groupName, patterns] of Object.entries(patternGroups)) {
+        for (const pattern of patterns) {
+          if (pattern.test(name)) {
+            return groupName;
+          }
+        }
+      }
+
+      // Campo no clasificado
+      return "OTROS CAMPOS";
+    };
+
+    // Crear grupos iniciales vacíos
+    const groupsMap = {};
+
+    // Clasificar cada campo
+    fieldMappings.forEach((field) => {
+      const targetField = field.targetField;
+      const groupName = identifyGroupByFieldName(targetField);
+
+      if (!groupsMap[groupName]) {
+        groupsMap[groupName] = {
+          title: groupName,
+          fields: [],
+        };
+      }
+
+      groupsMap[groupName].fields.push(targetField);
     });
 
-    // Filtrar grupos que no tienen campos
-    const filteredGroups = groups.filter((group) => group.fields.length > 0);
-    setFieldGroups(filteredGroups);
+    // Convertir el mapa a array
+    const groups = Object.values(groupsMap);
+
+    // Ordenar grupos para una presentación consistente
+    const groupOrder = [
+      "INFORMACIÓN BÁSICA",
+      "CONTACTO",
+      "UBICACIÓN",
+      "COMERCIAL",
+      "FINANZAS",
+      "IMPUESTOS",
+      "CONFIGURACIÓN",
+      "OTROS CAMPOS",
+    ];
+
+    groups.sort((a, b) => {
+      const indexA = groupOrder.indexOf(a.title);
+      const indexB = groupOrder.indexOf(b.title);
+
+      // Si ambos están en la lista de orden, ordenar por esa posición
+      if (indexA !== -1 && indexB !== -1) {
+        return indexA - indexB;
+      }
+
+      // Si solo uno está en la lista, ese va primero
+      if (indexA !== -1) return -1;
+      if (indexB !== -1) return 1;
+
+      // Si ninguno está en la lista, orden alfabético
+      return a.title.localeCompare(b.title);
+    });
+
+    setFieldGroups(groups);
   };
 
   // Cargar valor dinámico para un campo
@@ -324,7 +520,8 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
   const renderField = (fieldName) => {
     // Obtener metadatos del campo
     const meta = fieldMeta[fieldName] || {};
-    const value = editedCustomer[fieldName] || "";
+    const value =
+      editedCustomer[fieldName] !== undefined ? editedCustomer[fieldName] : "";
     const isLoading = fieldLoading[fieldName] || false;
 
     // Determinar tipo de campo
@@ -350,6 +547,23 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
       fieldName.includes("LIMITE")
     ) {
       inputType = "number";
+    } else if (
+      (typeof value === "string" && value.length > 100) ||
+      fieldName.includes("NOTAS") ||
+      fieldName.includes("DIRECCION") ||
+      fieldName.includes("OBSERVACION")
+    ) {
+      inputType = "textarea";
+    }
+
+    // Si es un valor booleano o campos que suelen ser checkbox
+    const booleanFields = ["ACTIVO", "ES_", "PERMITE_", "ACEPTA_", "USA_"];
+    const isBoolean =
+      typeof value === "boolean" ||
+      booleanFields.some((prefix) => fieldName.toUpperCase().includes(prefix));
+
+    if (isBoolean) {
+      inputType = "checkbox";
     }
 
     // Renderizar según el tipo
@@ -366,17 +580,34 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
           {inputType === "textarea" ? (
             <textarea
               name={fieldName}
-              value={value}
+              value={value || ""}
               onChange={handleChange}
               className="swal2-textarea"
               rows="3"
               disabled={isLoading}
+              style={{ flex: 1 }}
             />
+          ) : inputType === "checkbox" ? (
+            <div style={{ display: "flex", alignItems: "center" }}>
+              <input
+                type="checkbox"
+                name={fieldName}
+                checked={Boolean(value)}
+                onChange={handleChange}
+                disabled={isLoading}
+                style={{
+                  marginRight: "8px",
+                  width: "18px",
+                  height: "18px",
+                }}
+              />
+              <span>{fieldName}</span>
+            </div>
           ) : (
             <input
               type={inputType}
               name={fieldName}
-              value={value}
+              value={value || ""}
               onChange={handleChange}
               className="swal2-input"
               style={{ flex: 1 }}
@@ -387,7 +618,6 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
 
           {meta.dynamicQuery && (
             <button
-              className="btn-refresh"
               onClick={() => handleRefreshDynamicField(fieldName)}
               disabled={isLoading}
               style={{
@@ -461,7 +691,23 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
         </h3>
         <div style={{ display: "flex", gap: "10px" }}>
           <button
-            className="button"
+            style={{
+              backgroundColor: "#17a2b8",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              padding: "8px 15px",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              cursor: "pointer",
+            }}
+            onClick={loadSourceData}
+            title="Cargar datos de la tabla origen"
+          >
+            <FaDatabase /> Actualizar desde origen
+          </button>
+          <button
             style={{
               backgroundColor: "#6c757d",
               color: "white",
@@ -478,7 +724,6 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
             <FaTimes /> Cancelar
           </button>
           <button
-            className="button"
             style={{
               backgroundColor: "#28a745",
               color: "white",
@@ -496,6 +741,67 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
           </button>
         </div>
       </div>
+
+      {/* Sección para mostrar datos originales cuando estén disponibles */}
+      {originalSourceData && (
+        <div
+          style={{
+            marginBottom: "20px",
+            borderBottom: "1px solid #dee2e6",
+            paddingBottom: "10px",
+          }}
+        >
+          <button
+            onClick={() => {
+              Swal.fire({
+                title: "Datos originales",
+                html: `
+                  <div style="max-height: 60vh; overflow-y: auto; text-align: left;">
+                    <table style="width: 100%; border-collapse: collapse;">
+                      <thead>
+                        <tr>
+                          <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align: left;">Campo</th>
+                          <th style="padding: 8px; border-bottom: 1px solid #ddd; text-align: left;">Valor</th>
+                        </tr>
+                      </thead>
+                      <tbody>
+                        ${Object.entries(originalSourceData)
+                          .map(
+                            ([key, value]) => `
+                            <tr>
+                              <td style="padding: 8px; border-bottom: 1px solid #eee; font-weight: bold;">${key}</td>
+                              <td style="padding: 8px; border-bottom: 1px solid #eee;">${
+                                value !== null && value !== undefined
+                                  ? value
+                                  : "N/A"
+                              }</td>
+                            </tr>
+                          `
+                          )
+                          .join("")}
+                      </tbody>
+                    </table>
+                  </div>
+                `,
+                width: 800,
+                showConfirmButton: true,
+                confirmButtonText: "Cerrar",
+              });
+            }}
+            style={{
+              backgroundColor: "transparent",
+              color: "#17a2b8",
+              border: "1px solid #17a2b8",
+              borderRadius: "4px",
+              padding: "5px 10px",
+              fontSize: "13px",
+              cursor: "pointer",
+            }}
+          >
+            Ver datos originales de la tabla fuente
+          </button>
+        </div>
+      )}
 
       {fieldGroups.map((group, groupIndex) => (
         <div key={groupIndex} style={{ marginBottom: "20px" }}>
@@ -515,7 +821,7 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
         </div>
       ))}
 
-      <style jsx>{`
+      <style jsx="true">{`
         .loading-spinner {
           display: inline-block;
           width: 40px;
@@ -533,8 +839,28 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
           }
         }
 
-        .btn-refresh:hover {
-          background-color: #138496 !important;
+        .swal2-input,
+        .swal2-textarea {
+          width: 100%;
+          padding: 8px 12px;
+          border: 1px solid #ced4da;
+          border-radius: 4px;
+          font-size: 14px;
+        }
+
+        .swal2-textarea {
+          min-height: 80px;
+          resize: vertical;
+        }
+
+        .form-group {
+          margin-bottom: 15px;
+        }
+
+        .form-group label {
+          display: block;
+          margin-bottom: 5px;
+          font-weight: 500;
         }
       `}</style>
     </div>
