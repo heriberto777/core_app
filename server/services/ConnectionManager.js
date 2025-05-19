@@ -387,9 +387,18 @@ class ConnectionManager {
         poolKey = connectionPoolMap.get(connection);
         if (!poolKey) {
           logger.warn(
-            `No se pudo determinar el origen de la conexión, intentando con server1`
+            `No se pudo determinar el origen de la conexión, cerrando directamente`
           );
-          poolKey = "server1";
+          try {
+            connection.close();
+            connectionPoolMap.delete(connection);
+            CONNECTION_OPERATION_LIMITS.operationCounter.delete(connection);
+          } catch (directCloseError) {
+            logger.error(
+              `Error al cerrar conexión directamente: ${directCloseError.message}`
+            );
+          }
+          return;
         }
       }
 
@@ -400,6 +409,16 @@ class ConnectionManager {
         if (connection._acquiredAt) {
           const usageTime = Date.now() - connection._acquiredAt;
           logger.debug(`Conexión usada durante ${usageTime}ms (${poolKey})`);
+        }
+
+        // Verificar si la conexión sigue siendo válida
+        if (!connection.connected) {
+          logger.warn(
+            `Conexión a liberar ya está cerrada, limpiando referencias`
+          );
+          connectionPoolMap.delete(connection);
+          CONNECTION_OPERATION_LIMITS.operationCounter.delete(connection);
+          return;
         }
 
         await pool.release(connection);
@@ -416,21 +435,36 @@ class ConnectionManager {
         logger.warn(
           `No se encontró pool para ${poolKey}, cerrando conexión directamente`
         );
-        connection.close();
+        try {
+          connection.close();
+        } catch (directCloseError) {
+          logger.error(
+            `Error al cerrar conexión directamente: ${directCloseError.message}`
+          );
+        }
         connectionPoolMap.delete(connection);
         CONNECTION_OPERATION_LIMITS.operationCounter.delete(connection);
       }
     } catch (error) {
       this.connectionStats.errors++;
-      logger.error(`Error al liberar conexión:`, error);
+      logger.error(`Error al liberar conexión: ${error.message}`);
+
+      // Registrar error para posible renovación
+      if (connection._poolOrigin) {
+        this.registerConnectionError(connection._poolOrigin, error);
+      }
 
       // Intentar cerrar directamente como último recurso
       try {
-        connection.close();
+        if (connection && typeof connection.close === "function") {
+          connection.close();
+        }
         connectionPoolMap.delete(connection);
         CONNECTION_OPERATION_LIMITS.operationCounter.delete(connection);
       } catch (closeError) {
-        logger.error(`Error al cerrar conexión directamente:`, closeError);
+        logger.error(
+          `Error al cerrar conexión directamente: ${closeError.message}`
+        );
       }
     }
   }
@@ -772,19 +806,68 @@ class ConnectionManager {
   async enhancedRobustConnect(serverKey, maxAttempts = 5, baseDelay = 3000) {
     let attempt = 0;
     let delay = baseDelay;
+    let existingPool = false;
 
-    // Limpiar pools si existen para forzar nuevas conexiones
+    // Verificar si ya existe un pool y está funcionando
     try {
       if (this.pools && this.pools[serverKey]) {
+        // Intentar verificar el pool existente en lugar de cerrarlo directamente
+        try {
+          const testConnection = await this.getConnection(serverKey);
+          if (testConnection) {
+            // Verificar que la conexión funciona con una consulta simple
+            const testRequest = new Request(
+              "SELECT 1 AS test",
+              (err, rowCount, rows) => {
+                if (err) throw err;
+              }
+            );
+
+            return new Promise((resolve, reject) => {
+              testRequest.on("done", () => {
+                logger.info(
+                  `Pool existente para ${serverKey} verificado y funcionando correctamente`
+                );
+                resolve({ success: true, connection: testConnection });
+              });
+
+              testRequest.on("error", (err) => {
+                logger.warn(
+                  `Conexión de prueba falló, se iniciará reconexión: ${err.message}`
+                );
+                ConnectionManager.releaseConnection(testConnection);
+                reject(new Error("Conexión de prueba falló"));
+              });
+
+              testConnection.execSql(testRequest);
+            }).catch(() => {
+              // Si la prueba falla, continuar con el proceso normal de reconexión
+              existingPool = true;
+              return null;
+            });
+          }
+        } catch (poolTestError) {
+          logger.warn(
+            `Error al verificar pool existente: ${poolTestError.message}`
+          );
+          existingPool = true;
+        }
+      }
+    } catch (checkError) {
+      logger.warn(`Error al verificar estado de pools: ${checkError.message}`);
+    }
+
+    // Solo cerrar el pool si existe y está teniendo problemas
+    if (existingPool) {
+      try {
         logger.info(
-          `Cerrando pool existente para ${serverKey} antes de reconectar`
+          `Cerrando pool con problemas para ${serverKey} antes de reconectar`
         );
         await this.closePool(serverKey);
+      } catch (closeError) {
+        logger.warn(`Error al cerrar pool existente: ${closeError.message}`);
+        // Continuar de todos modos
       }
-    } catch (error) {
-      logger.warn(
-        `Error al cerrar pool existente para ${serverKey}: ${error.message}`
-      );
     }
 
     while (attempt < maxAttempts) {
@@ -795,7 +878,7 @@ class ConnectionManager {
           `Intento ${attempt}/${maxAttempts} para conectar a ${serverKey}...`
         );
 
-        // Inicializar el pool desde cero
+        // Inicializar el pool desde cero solo si no existe o se cerró
         const initialized = await this.initPool(serverKey);
 
         if (!initialized) {
@@ -810,7 +893,16 @@ class ConnectionManager {
         }
 
         // Verificar la conexión con una query simple
-        await this.verifyConnection(connection, serverKey);
+        const result = await SqlService.query(
+          connection,
+          "SELECT 1 AS test",
+          {},
+          serverKey
+        );
+
+        if (!result || !result.recordset || result.recordset.length === 0) {
+          throw new Error(`Verificación de conexión falló para ${serverKey}`);
+        }
 
         logger.info(
           `Conexión a ${serverKey} establecida y verificada (intento ${attempt})`
@@ -831,11 +923,36 @@ class ConnectionManager {
           };
         }
 
+        // Liberar recursos antes de reintentar
+        try {
+          // Cerrar pool solo si hay un error grave
+          if (
+            error.message &&
+            (error.message.includes("timeout") ||
+              error.message.includes("network") ||
+              error.message.includes("state"))
+          ) {
+            await this.closePool(serverKey);
+          }
+        } catch (cleanupError) {
+          logger.warn(
+            `Error al limpiar recursos antes de reintento: ${cleanupError.message}`
+          );
+        }
+
         // Esperar antes del siguiente intento con backoff exponencial
         await new Promise((resolve) => setTimeout(resolve, delay));
         delay = Math.min(delay * 1.5, 30000); // Máximo 30 segundos
       }
     }
+
+    // No debería llegar aquí debido al retorno en la última iteración
+    return {
+      success: false,
+      error: new Error(
+        `No se pudo establecer conexión a ${serverKey} después de ${maxAttempts} intentos`
+      ),
+    };
   }
 }
 
