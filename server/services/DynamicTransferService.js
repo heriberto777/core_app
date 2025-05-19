@@ -20,6 +20,9 @@ class DynamicTransferService {
     const localAbortController = !signal ? new AbortController() : null;
     signal = signal || localAbortController.signal;
 
+    // Define cancelTaskId at the function level so it's available in all scopes
+    const cancelTaskId = `dynamic_process_${mappingId}_${Date.now()}`;
+
     // Configurar un timeout interno como medida de seguridad
     const timeoutId = setTimeout(() => {
       if (localAbortController) {
@@ -76,7 +79,7 @@ class DynamicTransferService {
       }
 
       // 3. Registrar en TaskTracker para permitir cancelación
-      const cancelTaskId = `dynamic_process_${mappingId}_${Date.now()}`;
+
       TaskTracker.registerTask(
         cancelTaskId,
         localAbortController || { abort: () => {} },
@@ -137,7 +140,7 @@ class DynamicTransferService {
 
             // Verificar que la conexión sea válida
             await SqlService.query(
-              connectionResult,
+              connectionResult.connection,
               "SELECT 1 AS test"
             );
 
