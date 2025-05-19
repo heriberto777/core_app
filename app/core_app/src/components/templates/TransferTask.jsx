@@ -81,6 +81,7 @@ export function TransferTasks() {
     loading: tasksLoading,
     refreshing: tasksRefreshing,
     loadingState: tasksLoadingState,
+    setData: setTasks,
     error: tasksError,
     refetch: fetchTasks,
   } = useFetchData(fetchTasksCallback, [accessToken], {
