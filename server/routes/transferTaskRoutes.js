@@ -20,6 +20,7 @@ const {
   checkServerStatus,
   getTransferSummaries,
   getSourceDataByMapping,
+  updateEntityData,
 } = require("../controllers/transferTaskController");
 
 const router = express.Router();
@@ -84,4 +85,5 @@ router.get("/history/logs", getTransferHistory);
 router.get("/server-status/server", checkServerStatus);
 router.get("/task-summaries/recent", getTransferSummaries);
 router.get("/source-data/:mappingId/:documentId", getSourceDataByMapping);
+router.post("/update-entity-data", updateEntityData);
 module.exports = router;

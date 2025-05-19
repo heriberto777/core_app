@@ -1192,6 +1192,147 @@ const getSourceDataByMapping = async (req, res) => {
   }
 };
 
+const updateEntityData = async (req, res) => {
+  let sourceConnection = null;
+  let targetConnection = null;
+
+  try {
+    const { mappingId, documentId, targetData, sourceData, _dynamicFields } =
+      req.body;
+
+    if (!mappingId || !documentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requieren mappingId y documentId",
+      });
+    }
+
+    // Obtener la configuración de mapping
+    const mapping = await DynamicTransferService.getMappingById(mappingId);
+    if (!mapping) {
+      return res.status(404).json({
+        success: false,
+        message: "Configuración de mapping no encontrada",
+      });
+    }
+
+    // Asegurarse de que hay datos para actualizar
+    if (!sourceData || Object.keys(sourceData).length === 0) {
+      return res.status(400).json({
+        success: false,
+        message: "No hay datos para actualizar en origen",
+      });
+    }
+
+    // 1. Actualizar en la tabla origen
+    try {
+      // Obtener conexión al servidor origen
+      const sourceConnResult = await ConnectionManager.enhancedRobustConnect(
+        mapping.sourceServer
+      );
+      if (!sourceConnResult.success) {
+        throw new Error(`No se pudo conectar a ${mapping.sourceServer}`);
+      }
+      sourceConnection = sourceConnResult.connection;
+
+      // Encontrar la tabla principal
+      const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
+      if (!mainTable) {
+        throw new Error("No se encontró configuración de tabla principal");
+      }
+
+      // Construir consulta de actualización
+      const setClause = Object.entries(sourceData)
+        .map(([field, _]) => `${field} = @${field}`)
+        .join(", ");
+
+      const updateQuery = `
+        UPDATE ${mainTable.sourceTable}
+        SET ${setClause}
+        WHERE ${mainTable.primaryKey} = @documentId
+      `;
+
+      // Ejecutar actualización
+      await SqlService.query(sourceConnection, updateQuery, {
+        ...sourceData,
+        documentId,
+      });
+
+      logger.info(
+        `Actualización en origen completada para documento ${documentId}`
+      );
+    } catch (sourceError) {
+      logger.error(`Error al actualizar en origen: ${sourceError.message}`);
+      throw new Error(`Error al actualizar en origen: ${sourceError.message}`);
+    } finally {
+      if (sourceConnection) {
+        await ConnectionManager.releaseConnection(sourceConnection);
+      }
+    }
+
+    // 2. Actualizar campos dinámicos (secuencias) si es necesario
+    if (_dynamicFields && Object.keys(_dynamicFields).length > 0) {
+      try {
+        // Obtener conexión al servidor destino
+        const targetConnResult = await ConnectionManager.enhancedRobustConnect(
+          mapping.targetServer
+        );
+        if (!targetConnResult.success) {
+          throw new Error(`No se pudo conectar a ${mapping.targetServer}`);
+        }
+        targetConnection = targetConnResult.connection;
+
+        // Actualizar cada secuencia
+        for (const [fieldName, fieldConfig] of Object.entries(_dynamicFields)) {
+          if (
+            fieldConfig.queryType === "sequence" &&
+            fieldConfig.queryDefinition
+          ) {
+            const { sequenceTable, sequenceField, sequenceCondition } =
+              fieldConfig.queryDefinition;
+
+            // Construir consulta de actualización
+            let query = `UPDATE ${sequenceTable} SET ${sequenceField} = @newValue`;
+            const params = {
+              newValue: fieldConfig.newValue,
+            };
+
+            if (sequenceCondition) {
+              query += ` WHERE ${sequenceCondition}`;
+            }
+
+            // Ejecutar la actualización
+            await SqlService.query(targetConnection, query, params);
+
+            logger.info(
+              `Secuencia actualizada en ${sequenceTable}.${sequenceField} con valor ${fieldConfig.newValue}`
+            );
+          }
+        }
+      } catch (seqError) {
+        logger.warn(`Error al actualizar secuencias: ${seqError.message}`);
+        // No fallamos toda la operación por error en secuencias
+      } finally {
+        if (targetConnection) {
+          await ConnectionManager.releaseConnection(targetConnection);
+        }
+      }
+    }
+
+    // Responder con éxito
+    res.json({
+      success: true,
+      message: "Datos actualizados correctamente en origen y destino",
+    });
+  } catch (error) {
+    logger.error(`Error al actualizar entidad: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
 module.exports = {
   getTransferTasks,
   getTransferTask,
@@ -1213,4 +1354,5 @@ module.exports = {
   checkServerStatus,
   getTransferSummaries,
   getSourceDataByMapping,
+  updateEntityData,
 };
