@@ -20,7 +20,7 @@ const { SqlService } = require("../services/SqlService");
 const ConnectionDiagnostic = require("../services/connectionDiagnostic");
 const DBConfig = require("../models/dbConfigModel");
 const { default: mongoose } = require("mongoose");
-
+const DynamicTransferService = require("../services/DynamicTransferService");
 /**
  * Obtener todas las tareas de transferencia
  */
