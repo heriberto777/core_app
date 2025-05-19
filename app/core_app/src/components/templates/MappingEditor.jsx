@@ -444,6 +444,76 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         <div class="form-info">
           <strong>Nota:</strong> Para campos obligatorios en la tabla destino, asegúrese de proporcionar un valor por defecto si no hay campo origen.
         </div>
+        
+        <!-- NUEVA SECCIÓN: Opciones de visualización -->
+        <div class="display-options-section">
+          <h4 style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">Opciones de visualización</h4>
+          
+          <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 10px;">
+            <div class="form-check" style="flex: 1 1 200px;">
+              <input type="checkbox" id="isEditable" class="swal2-checkbox" checked>
+              <label for="isEditable"><strong>¿Permitir edición?</strong></label>
+              <small style="display: block; margin-top: 5px;">Si está marcado, este campo podrá editarse en formularios.</small>
+            </div>
+            
+            <div class="form-check" style="flex: 1 1 200px;">
+              <input type="checkbox" id="showInList" class="swal2-checkbox">
+              <label for="showInList"><strong>¿Mostrar en listas?</strong></label>
+              <small style="display: block; margin-top: 5px;">Si está marcado, este campo aparecerá en vistas de lista.</small>
+            </div>
+          </div>
+          
+          <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 15px;">
+            <div class="form-group" style="flex: 1 1 200px;">
+              <label for="displayName">Nombre para mostrar</label>
+              <input id="displayName" class="swal2-input" placeholder="Ej: Código de Cliente">
+              <small style="display: block; margin-top: 5px;">Nombre amigable para mostrar en la interfaz.</small>
+            </div>
+            
+            <div class="form-group" style="flex: 1 1 200px;">
+              <label for="displayOrder">Orden de visualización</label>
+              <input id="displayOrder" type="number" class="swal2-input" value="0" placeholder="0">
+              <small style="display: block; margin-top: 5px;">Posición de este campo en listas y formularios (menor = primero).</small>
+            </div>
+          </div>
+          
+          <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 15px;">
+            <div class="form-group" style="flex: 1 1 200px;">
+              <label for="fieldGroup">Grupo de campos</label>
+              <input id="fieldGroup" class="swal2-input" placeholder="Ej: Información General">
+              <small style="display: block; margin-top: 5px;">Grupo donde aparecerá en formularios de edición.</small>
+            </div>
+            
+            <div class="form-group" style="flex: 1 1 200px;">
+              <label for="fieldType">Tipo de campo</label>
+              <select id="fieldType" class="swal2-select">
+                <option value="text" selected>Texto</option>
+                <option value="number">Número</option>
+                <option value="date">Fecha</option>
+                <option value="boolean">Sí/No</option>
+                <option value="select">Lista desplegable</option>
+                <option value="textarea">Texto largo</option>
+                <option value="email">Correo electrónico</option>
+                <option value="tel">Teléfono</option>
+                <option value="hidden">Oculto</option>
+              </select>
+              <small style="display: block; margin-top: 5px;">Tipo de entrada para formularios.</small>
+            </div>
+          </div>
+          
+          <!-- Opciones para tipo "select" -->
+          <div id="selectOptionsContainer" style="margin-top: 15px; display: none;">
+            <label>Opciones para lista desplegable</label>
+            <div id="optionsContainer">
+              <div class="option-row" style="display: flex; gap: 10px; margin-bottom: 10px;">
+                <input type="text" class="swal2-input option-label" placeholder="Etiqueta" style="flex: 1;">
+                <input type="text" class="swal2-input option-value" placeholder="Valor" style="flex: 1;">
+                <button type="button" class="btn-remove-option" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 0 10px;">✕</button>
+              </div>
+            </div>
+            <button type="button" id="addOption" style="background: #28a745; color: white; border: none; border-radius: 4px; padding: 5px 10px; margin-top: 10px;">+ Añadir Opción</button>
+          </div>
+        </div>
       </div>
     `,
       showCancelButton: true,
@@ -461,6 +531,12 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           "defaultValueSection"
         );
 
+        // Selector de tipo de campo
+        const fieldTypeSelect = document.getElementById("fieldType");
+        const selectOptionsContainer = document.getElementById(
+          "selectOptionsContainer"
+        );
+
         // Función para actualizar la UI según selección
         const updateUI = () => {
           const isLookup = lookupFromTargetCheckbox.checked;
@@ -468,13 +544,50 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           // Mostrar/ocultar secciones según corresponda
           lookupSection.style.display = isLookup ? "block" : "none";
           defaultValueSection.style.display = isLookup ? "none" : "block";
+
+          // Actualizar mostrar/ocultar opciones de select
+          selectOptionsContainer.style.display =
+            fieldTypeSelect.value === "select" ? "block" : "none";
         };
 
         // Asignar eventos
         lookupFromTargetCheckbox.addEventListener("change", updateUI);
+        fieldTypeSelect.addEventListener("change", updateUI);
 
         // Inicializar UI
         updateUI();
+
+        // Manejar botón para añadir opciones
+        const addOptionBtn = document.getElementById("addOption");
+        const optionsContainer = document.getElementById("optionsContainer");
+
+        addOptionBtn.addEventListener("click", () => {
+          const optionRow = document.createElement("div");
+          optionRow.className = "option-row";
+          optionRow.style = "display: flex; gap: 10px; margin-bottom: 10px;";
+
+          optionRow.innerHTML = `
+          <input type="text" class="swal2-input option-label" placeholder="Etiqueta" style="flex: 1;">
+          <input type="text" class="swal2-input option-value" placeholder="Valor" style="flex: 1;">
+          <button type="button" class="btn-remove-option" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 0 10px;">✕</button>
+        `;
+
+          optionsContainer.appendChild(optionRow);
+
+          // Añadir evento para eliminar
+          optionRow
+            .querySelector(".btn-remove-option")
+            .addEventListener("click", () => {
+              optionRow.remove();
+            });
+        });
+
+        // Añadir eventos a los botones de eliminar existentes
+        document.querySelectorAll(".btn-remove-option").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            btn.closest(".option-row").remove();
+          });
+        });
 
         // Manejar parámetros de consulta
         const addLookupParamButton = document.getElementById("addLookupParam");
@@ -492,8 +605,8 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           row.innerHTML = `
           <input type="text" class="swal2-input param-name" placeholder="Nombre parámetro" value="${paramName}">
           <input type="text" class="swal2-input source-field" placeholder="Campo origen" value="${sourceField}">
-          <button type="button" class="btn-remove-param">
-            <i class="fa fa-trash"></i>
+          <button type="button" class="btn-remove-param" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 0 10px;">
+            ✕
           </button>
         `;
 
@@ -523,9 +636,18 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         const removePrefix = document.getElementById("removePrefix").value;
         const isRequired = document.getElementById("isRequired").checked;
 
-        // Nuevos campos
+        // NUEVO: Valores para lookup
         const lookupFromTarget =
           document.getElementById("lookupFromTarget").checked;
+
+        // Nuevos campos para visualización
+        const isEditable = document.getElementById("isEditable").checked;
+        const showInList = document.getElementById("showInList").checked;
+        const displayName = document.getElementById("displayName").value;
+        const displayOrder =
+          parseInt(document.getElementById("displayOrder").value) || 0;
+        const fieldGroup = document.getElementById("fieldGroup").value;
+        const fieldType = document.getElementById("fieldType").value;
 
         // Validaciones básicas
         if (!targetField) {
@@ -549,6 +671,19 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           processedDefaultValue = undefined;
         } else {
           processedDefaultValue = defaultValue;
+        }
+
+        // Recopilar opciones para tipo "select"
+        const options = [];
+        if (fieldType === "select") {
+          document.querySelectorAll(".option-row").forEach((row) => {
+            const label = row.querySelector(".option-label").value;
+            const value = row.querySelector(".option-value").value;
+
+            if (label || value) {
+              options.push({ label, value });
+            }
+          });
         }
 
         // Propiedades de lookup
@@ -619,6 +754,15 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           lookupParams: lookupFromTarget ? lookupParams : [],
           validateExistence: lookupFromTarget ? validateExistence : false,
           failIfNotFound: lookupFromTarget ? failIfNotFound : false,
+
+          // Nuevas propiedades
+          isEditable,
+          showInList,
+          displayName: displayName || null,
+          displayOrder,
+          fieldGroup: fieldGroup || null,
+          fieldType,
+          options: options.length > 0 ? options : null,
         };
       },
     }).then((result) => {
@@ -1029,7 +1173,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           </div>
         </div>
         
-        <!-- Sección de eliminación de prefijos -->
+        <!-- Sección de eliminación de prefijos - Destacada visualmente -->
         <div class="form-group">
           <div class="field-container">
             <div class="field-header">Eliminar prefijo específico</div>
@@ -1053,8 +1197,125 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           <label for="isRequired"><strong>¿Campo obligatorio en destino?</strong></label>
         </div>
         
-        <div class="form-info">
-          <strong>Nota:</strong> Para campos obligatorios en la tabla destino, asegúrese de proporcionar un valor por defecto si no hay campo origen.
+        <!-- NUEVA SECCIÓN: Opciones de visualización -->
+        <div class="display-options-section">
+          <h4 style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">Opciones de visualización</h4>
+          
+          <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 10px;">
+            <div class="form-check" style="flex: 1 1 200px;">
+              <input type="checkbox" id="isEditable" class="swal2-checkbox" ${
+                field.isEditable !== false ? "checked" : ""
+              }>
+              <label for="isEditable"><strong>¿Permitir edición?</strong></label>
+              <small style="display: block; margin-top: 5px;">Si está marcado, este campo podrá editarse en formularios.</small>
+            </div>
+            
+            <div class="form-check" style="flex: 1 1 200px;">
+              <input type="checkbox" id="showInList" class="swal2-checkbox" ${
+                field.showInList ? "checked" : ""
+              }>
+              <label for="showInList"><strong>¿Mostrar en listas?</strong></label>
+              <small style="display: block; margin-top: 5px;">Si está marcado, este campo aparecerá en vistas de lista.</small>
+            </div>
+          </div>
+          
+          <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 15px;">
+            <div class="form-group" style="flex: 1 1 200px;">
+              <label for="displayName">Nombre para mostrar</label>
+              <input id="displayName" class="swal2-input" value="${
+                field.displayName || ""
+              }" placeholder="Ej: Código de Cliente">
+              <small style="display: block; margin-top: 5px;">Nombre amigable para mostrar en la interfaz.</small>
+            </div>
+            
+            <div class="form-group" style="flex: 1 1 200px;">
+              <label for="displayOrder">Orden de visualización</label>
+              <input id="displayOrder" type="number" class="swal2-input" value="${
+                field.displayOrder || 0
+              }" placeholder="0">
+              <small style="display: block; margin-top: 5px;">Posición de este campo en listas y formularios (menor = primero).</small>
+            </div>
+          </div>
+          
+          <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 15px;">
+            <div class="form-group" style="flex: 1 1 200px;">
+              <label for="fieldGroup">Grupo de campos</label>
+              <input id="fieldGroup" class="swal2-input" value="${
+                field.fieldGroup || ""
+              }" placeholder="Ej: Información General">
+              <small style="display: block; margin-top: 5px;">Grupo donde aparecerá en formularios de edición.</small>
+            </div>
+            
+            <div class="form-group" style="flex: 1 1 200px;">
+              <label for="fieldType">Tipo de campo</label>
+              <select id="fieldType" class="swal2-select">
+                <option value="text" ${
+                  !field.fieldType || field.fieldType === "text"
+                    ? "selected"
+                    : ""
+                }>Texto</option>
+                <option value="number" ${
+                  field.fieldType === "number" ? "selected" : ""
+                }>Número</option>
+                <option value="date" ${
+                  field.fieldType === "date" ? "selected" : ""
+                }>Fecha</option>
+                <option value="boolean" ${
+                  field.fieldType === "boolean" ? "selected" : ""
+                }>Sí/No</option>
+                <option value="select" ${
+                  field.fieldType === "select" ? "selected" : ""
+                }>Lista desplegable</option>
+                <option value="textarea" ${
+                  field.fieldType === "textarea" ? "selected" : ""
+                }>Texto largo</option>
+                <option value="email" ${
+                  field.fieldType === "email" ? "selected" : ""
+                }>Correo electrónico</option>
+                <option value="tel" ${
+                  field.fieldType === "tel" ? "selected" : ""
+                }>Teléfono</option>
+                <option value="hidden" ${
+                  field.fieldType === "hidden" ? "selected" : ""
+                }>Oculto</option>
+              </select>
+              <small style="display: block; margin-top: 5px;">Tipo de entrada para formularios.</small>
+            </div>
+          </div>
+          
+          <!-- Opciones para tipo "select" -->
+          <div id="selectOptionsContainer" style="margin-top: 15px; display: ${
+            field.fieldType === "select" ? "block" : "none"
+          };">
+            <label>Opciones para lista desplegable</label>
+            <div id="optionsContainer">
+              ${
+                (field.options || [])
+                  .map(
+                    (option, idx) => `
+                  <div class="option-row" style="display: flex; gap: 10px; margin-bottom: 10px;">
+                    <input type="text" class="swal2-input option-label" placeholder="Etiqueta" value="${
+                      option.label || ""
+                    }" style="flex: 1;">
+                    <input type="text" class="swal2-input option-value" placeholder="Valor" value="${
+                      option.value || ""
+                    }" style="flex: 1;">
+                    <button type="button" class="btn-remove-option" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 0 10px;">✕</button>
+                  </div>
+                `
+                  )
+                  .join("") ||
+                `
+                  <div class="option-row" style="display: flex; gap: 10px; margin-bottom: 10px;">
+                    <input type="text" class="swal2-input option-label" placeholder="Etiqueta" style="flex: 1;">
+                    <input type="text" class="swal2-input option-value" placeholder="Valor" style="flex: 1;">
+                    <button type="button" class="btn-remove-option" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 0 10px;">✕</button>
+                  </div>
+                `
+              }
+            </div>
+            <button type="button" id="addOption" style="background: #28a745; color: white; border: none; border-radius: 4px; padding: 5px 10px; margin-top: 10px;">+ Añadir Opción</button>
+          </div>
         </div>
       </div>
     `,
@@ -1073,81 +1334,136 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           "defaultValueSection"
         );
 
+        // Selector de tipo de campo
+        const fieldTypeSelect = document.getElementById("fieldType");
+        const selectOptionsContainer = document.getElementById(
+          "selectOptionsContainer"
+        );
+
         // Función para actualizar la UI según selección
         const updateUI = () => {
           const isLookup = lookupFromTargetCheckbox.checked;
 
           // Mostrar/ocultar secciones según corresponda
-          lookupSection.style.display = isLookup ? "block" : "none";
+          if (lookupSection) {
+            lookupSection.style.display = isLookup ? "block" : "none";
+          }
           defaultValueSection.style.display = isLookup ? "none" : "block";
+
+          // Actualizar mostrar/ocultar opciones de select
+          selectOptionsContainer.style.display =
+            fieldTypeSelect.value === "select" ? "block" : "none";
         };
 
         // Asignar eventos
         lookupFromTargetCheckbox.addEventListener("change", updateUI);
+        fieldTypeSelect.addEventListener("change", updateUI);
 
         // Inicializar UI
         updateUI();
 
-        // Manejar parámetros de consulta
-        const addLookupParamButton = document.getElementById("addLookupParam");
-        const lookupParamsContainer = document.getElementById(
-          "lookupParamsContainer"
-        );
+        // Manejar botón para añadir opciones
+        const addOptionBtn = document.getElementById("addOption");
+        const optionsContainer = document.getElementById("optionsContainer");
 
-        // Función para añadir una fila de parámetro
-        const addLookupParamRow = (paramName = "", sourceField = "") => {
-          const index = document.querySelectorAll(".lookup-param-row").length;
-          const row = document.createElement("div");
-          row.className = "lookup-param-row";
-          row.dataset.index = index;
+        addOptionBtn.addEventListener("click", () => {
+          const optionRow = document.createElement("div");
+          optionRow.className = "option-row";
+          optionRow.style = "display: flex; gap: 10px; margin-bottom: 10px;";
 
-          row.innerHTML = `
-          <input type="text" class="swal2-input param-name" placeholder="Nombre parámetro" value="${paramName}">
-          <input type="text" class="swal2-input source-field" placeholder="Campo origen" value="${sourceField}">
-          <button type="button" class="btn-remove-param">
-            <i class="fa fa-trash"></i>
-          </button>
+          optionRow.innerHTML = `
+          <input type="text" class="swal2-input option-label" placeholder="Etiqueta" style="flex: 1;">
+          <input type="text" class="swal2-input option-value" placeholder="Valor" style="flex: 1;">
+          <button type="button" class="btn-remove-option" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 0 10px;">✕</button>
         `;
 
-          // Añadir evento para eliminar parámetro
-          const removeBtn = row.querySelector(".btn-remove-param");
-          removeBtn.addEventListener("click", () => {
-            row.remove();
-          });
+          optionsContainer.appendChild(optionRow);
 
-          lookupParamsContainer.appendChild(row);
-        };
-
-        // Evento para añadir parámetro
-        addLookupParamButton.addEventListener("click", () => {
-          addLookupParamRow();
+          // Añadir evento para eliminar
+          optionRow
+            .querySelector(".btn-remove-option")
+            .addEventListener("click", () => {
+              optionRow.remove();
+            });
         });
 
-        // Añadir eventos para eliminar parámetros existentes
-        document.querySelectorAll(".btn-remove-param").forEach((btn) => {
+        // Añadir eventos a los botones de eliminar existentes
+        document.querySelectorAll(".btn-remove-option").forEach((btn) => {
           btn.addEventListener("click", () => {
-            btn.closest(".lookup-param-row").remove();
+            btn.closest(".option-row").remove();
           });
         });
 
-        // Si no hay parámetros iniciales, añadir uno vacío
-        if (
-          lookupParamsContainer.children.length === 0 &&
-          lookupFromTargetCheckbox.checked
-        ) {
-          addLookupParamRow();
+        // Manejar parámetros de consulta
+        const addLookupParamButton = document.getElementById("addLookupParam");
+        if (addLookupParamButton) {
+          const lookupParamsContainer = document.getElementById(
+            "lookupParamsContainer"
+          );
+
+          // Función para añadir una fila de parámetro
+          const addLookupParamRow = (paramName = "", sourceField = "") => {
+            const index = document.querySelectorAll(".lookup-param-row").length;
+            const row = document.createElement("div");
+            row.className = "lookup-param-row";
+            row.dataset.index = index;
+
+            row.innerHTML = `
+            <input type="text" class="swal2-input param-name" placeholder="Nombre parámetro" value="${paramName}">
+            <input type="text" class="swal2-input source-field" placeholder="Campo origen" value="${sourceField}">
+            <button type="button" class="btn-remove-param" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 0 10px;">
+              ✕
+            </button>
+          `;
+
+            // Añadir evento para eliminar parámetro
+            const removeBtn = row.querySelector(".btn-remove-param");
+            removeBtn.addEventListener("click", () => {
+              row.remove();
+            });
+
+            lookupParamsContainer.appendChild(row);
+          };
+
+          // Evento para añadir parámetro
+          addLookupParamButton.addEventListener("click", () => {
+            addLookupParamRow();
+          });
+
+          // Añadir eventos a los botones de eliminar existentes
+          document.querySelectorAll(".btn-remove-param").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              btn.closest(".lookup-param-row").remove();
+            });
+          });
+
+          // Añadir un parámetro inicial si no hay parámetros y está en modo lookup
+          if (
+            lookupFromTargetCheckbox.checked &&
+            lookupParamsContainer.children.length === 0
+          ) {
+            addLookupParamRow();
+          }
         }
       },
       preConfirm: () => {
+        // Recopilar todos los valores
         const sourceField = document.getElementById("sourceField").value;
         const targetField = document.getElementById("targetField").value;
         const defaultValue = document.getElementById("defaultValue").value;
         const removePrefix = document.getElementById("removePrefix").value;
         const isRequired = document.getElementById("isRequired").checked;
-
-        // Nuevos campos
         const lookupFromTarget =
           document.getElementById("lookupFromTarget").checked;
+
+        // Nuevos campos para visualización
+        const isEditable = document.getElementById("isEditable").checked;
+        const showInList = document.getElementById("showInList").checked;
+        const displayName = document.getElementById("displayName").value;
+        const displayOrder =
+          parseInt(document.getElementById("displayOrder").value) || 0;
+        const fieldGroup = document.getElementById("fieldGroup").value;
+        const fieldType = document.getElementById("fieldType").value;
 
         // Validaciones básicas
         if (!targetField) {
@@ -1155,7 +1471,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           return false;
         }
 
-        // Validar que tengamos origen de datos (source, lookup o valor default)
+        // Validar que los campos obligatorios tengan origen de datos
         if (!sourceField && !lookupFromTarget && !defaultValue && isRequired) {
           Swal.showValidationMessage(
             "Los campos obligatorios deben tener un origen de datos (campo origen, consulta o valor por defecto)"
@@ -1173,6 +1489,19 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           processedDefaultValue = defaultValue;
         }
 
+        // Recopilar opciones para tipo "select"
+        const options = [];
+        if (fieldType === "select") {
+          document.querySelectorAll(".option-row").forEach((row) => {
+            const label = row.querySelector(".option-label").value;
+            const value = row.querySelector(".option-value").value;
+
+            if (label || value) {
+              options.push({ label, value });
+            }
+          });
+        }
+
         // Propiedades de lookup
         let lookupQuery = "";
         let lookupParams = [];
@@ -1180,10 +1509,21 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         let failIfNotFound = false;
 
         if (lookupFromTarget) {
-          lookupQuery = document.getElementById("lookupQuery").value;
-          validateExistence =
-            document.getElementById("validateExistence").checked;
-          failIfNotFound = document.getElementById("failIfNotFound").checked;
+          const lookupQueryElem = document.getElementById("lookupQuery");
+          if (lookupQueryElem) {
+            lookupQuery = lookupQueryElem.value;
+          }
+
+          const validateExistenceElem =
+            document.getElementById("validateExistence");
+          if (validateExistenceElem) {
+            validateExistence = validateExistenceElem.checked;
+          }
+
+          const failIfNotFoundElem = document.getElementById("failIfNotFound");
+          if (failIfNotFoundElem) {
+            failIfNotFound = failIfNotFoundElem.checked;
+          }
 
           // Recopilar parámetros
           document.querySelectorAll(".lookup-param-row").forEach((row) => {
@@ -1196,17 +1536,21 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           });
 
           // Validar consulta
-          if (!lookupQuery) {
+          if (!lookupQuery && lookupFromTarget) {
             Swal.showValidationMessage(
               "Debe proporcionar una consulta SQL para el lookup"
             );
             return false;
           }
 
-          // Validar que exista al menos un parámetro si la consulta utiliza parámetros
-          if (lookupQuery.includes("@") && lookupParams.length === 0) {
+          // Validar parámetros
+          if (
+            lookupQuery &&
+            lookupQuery.includes("@") &&
+            lookupParams.length === 0
+          ) {
             Swal.showValidationMessage(
-              "La consulta utiliza parámetros pero no se han definido"
+              "La consulta usa parámetros pero no se han definido"
             );
             return false;
           }
@@ -1225,10 +1569,15 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           lookupParams: lookupFromTarget ? lookupParams : [],
           validateExistence: lookupFromTarget ? validateExistence : false,
           failIfNotFound: lookupFromTarget ? failIfNotFound : false,
-          // Establecemos estas en false explícitamente para que no se usen
-          isSqlFunction: false,
-          sqlFunctionPreExecute: false,
-          sqlFunctionServer: "target",
+
+          // Nuevas propiedades
+          isEditable,
+          showInList,
+          displayName: displayName || null,
+          displayOrder,
+          fieldGroup: fieldGroup || null,
+          fieldType,
+          options: options.length > 0 ? options : null,
         };
       },
     }).then((result) => {

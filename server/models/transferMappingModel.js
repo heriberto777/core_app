@@ -27,6 +27,34 @@ const FieldMappingSchema = new Schema({
   ],
   validateExistence: { type: Boolean, default: false }, // Si debe validarse que existe el registro
   failIfNotFound: { type: Boolean, default: false }, // Si debe fallar el proceso si no se encuentra
+  // Nuevos campos para controlar la visualización y edición
+  isEditable: { type: Boolean, default: true }, // Si el campo se puede editar en formularios
+  showInList: { type: Boolean, default: false }, // Si el campo aparece en vistas de lista
+  displayOrder: { type: Number, default: 0 }, // Orden de visualización (menor número = primero)
+  displayName: { type: String }, // Nombre amigable para mostrar en la interfaz
+  fieldGroup: { type: String }, // Grupo al que pertenece en formularios
+  fieldType: {
+    type: String,
+    enum: [
+      "text",
+      "number",
+      "date",
+      "boolean",
+      "select",
+      "textarea",
+      "email",
+      "tel",
+      "hidden",
+    ],
+    default: "text",
+  }, // Tipo de campo para formularios
+  options: [
+    {
+      // Opciones para tipo 'select'
+      label: { type: String },
+      value: { type: String },
+    },
+  ],
 });
 
 // Schema para la configuración de tabla

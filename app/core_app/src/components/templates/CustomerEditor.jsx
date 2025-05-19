@@ -160,7 +160,13 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
 
             // Crear metadatos para cada campo
             const meta = {};
-            mainTable.fieldMappings.forEach((field) => {
+
+            // Filtrar campos ocultos si no queremos que se procesen
+            const visibleFields = mainTable.fieldMappings.filter(
+              (field) => field.fieldType !== "hidden"
+            );
+
+            visibleFields.forEach((field) => {
               meta[field.targetField] = {
                 ...field,
                 loading: false,
@@ -321,164 +327,214 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
     }
   };
 
-  // Clasificación inteligente de campos en grupos
+  // Organización de campos en grupos
   const organizeFieldsInGroups = (fieldMappings) => {
-    // Clasificación inteligente basada en prefijos o sufijos comunes
-    const identifyGroupByFieldName = (fieldName) => {
-      // Normalizar a mayúsculas para comparaciones consistentes
-      const name = fieldName.toUpperCase();
+    // Usar grupos definidos en la configuración si existen
+    const hasDefinedGroups = fieldMappings.some((fm) => fm.fieldGroup);
 
-      // Mapeo de patrones a grupos
-      const patternGroups = {
-        "INFORMACIÓN BÁSICA": [
-          /^NOMBRE/i,
-          /^ALIAS/i,
-          /^RAZON/i,
-          /^COD/i,
-          /^ID/i,
-          /^CODE/i,
-          /UNIT/i,
-          /ORG/i,
-          /CLIENTE/i,
-        ],
-        CONTACTO: [
-          /CONTACTO/i,
-          /MAIL/i,
-          /EMAIL/i,
-          /^E_MAIL/i,
-          /TELEFONO/i,
-          /^TEL/i,
-          /FAX/i,
-          /DIRECCION/i,
-          /DIR_/i,
-        ],
-        UBICACIÓN: [
-          /PAIS/i,
-          /ZONA/i,
-          /RUTA/i,
-          /GEO/i,
-          /LATITUD/i,
-          /LONGITUD/i,
-          /UBICACION/i,
-          /DIVISION_GEO/i,
-          /GEOGRAFICA/i,
-        ],
-        COMERCIAL: [
-          /VENDEDOR/i,
-          /COBRADOR/i,
-          /CATEGORIA/i,
-          /CLASE/i,
-          /NIVEL/i,
-          /PRECIO/i,
-          /LIMITE/i,
-          /CREDITO/i,
-          /CONDICION/i,
-          /TARJETA/i,
-          /MORA/i,
-          /DESCUENTO/i,
-          /TASA/i,
-        ],
-        FINANZAS: [
-          /SALDO/i,
-          /MONTO/i,
-          /LIMITE_CREDITO/i,
-          /MORA/i,
-          /MONEDA/i,
-          /TASA_INTERES/i,
-          /IMPUESTO/i,
-          /CREDITO/i,
-          /COBRO/i,
-        ],
-        IMPUESTOS: [
-          /IMPUESTO/i,
-          /CONTRIBUYENTE/i,
-          /EXEN/i,
-          /IVA/i,
-          /REGIMEN/i,
-          /RETENCION/i,
-          /TARIFA/i,
-          /IMP[0-9]/i,
-          /TRIBUTA/i,
-        ],
-        CONFIGURACIÓN: [
-          /ACTIVO/i,
-          /CONFIG/i,
-          /ACEPTA/i,
-          /PERMITE/i,
-          /USA/i,
-          /^ES_/i,
-          /DOC_/i,
-          /USUARIO/i,
-          /FECHA_HORA/i,
-          /ELECTRONICO/i,
-          /API/i,
-        ],
-      };
+    if (hasDefinedGroups) {
+      // Crear mapa de grupos
+      const groupsMap = {};
 
-      // Verificar cada patrón
-      for (const [groupName, patterns] of Object.entries(patternGroups)) {
-        for (const pattern of patterns) {
-          if (pattern.test(name)) {
-            return groupName;
+      // Clasificar cada campo según su grupo definido
+      fieldMappings.forEach((field) => {
+        // Skip campos ocultos (hidden)
+        if (field.fieldType === "hidden") {
+          return;
+        }
+
+        const groupName = field.fieldGroup || "OTROS CAMPOS";
+
+        if (!groupsMap[groupName]) {
+          groupsMap[groupName] = {
+            title: groupName,
+            fields: [],
+          };
+        }
+
+        // Añadir campo al grupo
+        groupsMap[groupName].fields.push(field.targetField);
+      });
+
+      // Convertir mapa a array
+      const groups = Object.values(groupsMap);
+
+      // Ordenar campos dentro de cada grupo por displayOrder
+      groups.forEach((group) => {
+        group.fields.sort((fieldA, fieldB) => {
+          const metaA = fieldMappings.find((fm) => fm.targetField === fieldA);
+          const metaB = fieldMappings.find((fm) => fm.targetField === fieldB);
+          return (metaA?.displayOrder || 0) - (metaB?.displayOrder || 0);
+        });
+      });
+
+      // Ordenar grupos alfabéticamente
+      groups.sort((a, b) => a.title.localeCompare(b.title));
+
+      setFieldGroups(groups);
+    } else {
+      // Clasificación inteligente basada en prefijos o sufijos comunes
+      const identifyGroupByFieldName = (fieldName) => {
+        // Normalizar a mayúsculas para comparaciones consistentes
+        const name = fieldName.toUpperCase();
+
+        // Mapeo de patrones a grupos
+        const patternGroups = {
+          "INFORMACIÓN BÁSICA": [
+            /^NOMBRE/i,
+            /^ALIAS/i,
+            /^RAZON/i,
+            /^COD/i,
+            /^ID/i,
+            /^CODE/i,
+            /UNIT/i,
+            /ORG/i,
+            /CLIENTE/i,
+          ],
+          CONTACTO: [
+            /CONTACTO/i,
+            /MAIL/i,
+            /EMAIL/i,
+            /^E_MAIL/i,
+            /TELEFONO/i,
+            /^TEL/i,
+            /FAX/i,
+            /DIRECCION/i,
+            /DIR_/i,
+          ],
+          UBICACIÓN: [
+            /PAIS/i,
+            /ZONA/i,
+            /RUTA/i,
+            /GEO/i,
+            /LATITUD/i,
+            /LONGITUD/i,
+            /UBICACION/i,
+            /DIVISION_GEO/i,
+            /GEOGRAFICA/i,
+          ],
+          COMERCIAL: [
+            /VENDEDOR/i,
+            /COBRADOR/i,
+            /CATEGORIA/i,
+            /CLASE/i,
+            /NIVEL/i,
+            /PRECIO/i,
+            /LIMITE/i,
+            /CREDITO/i,
+            /CONDICION/i,
+            /TARJETA/i,
+            /MORA/i,
+            /DESCUENTO/i,
+            /TASA/i,
+          ],
+          FINANZAS: [
+            /SALDO/i,
+            /MONTO/i,
+            /LIMITE_CREDITO/i,
+            /MORA/i,
+            /MONEDA/i,
+            /TASA_INTERES/i,
+            /IMPUESTO/i,
+            /CREDITO/i,
+            /COBRO/i,
+          ],
+          IMPUESTOS: [
+            /IMPUESTO/i,
+            /CONTRIBUYENTE/i,
+            /EXEN/i,
+            /IVA/i,
+            /REGIMEN/i,
+            /RETENCION/i,
+            /TARIFA/i,
+            /IMP[0-9]/i,
+            /TRIBUTA/i,
+          ],
+          CONFIGURACIÓN: [
+            /ACTIVO/i,
+            /CONFIG/i,
+            /ACEPTA/i,
+            /PERMITE/i,
+            /USA/i,
+            /^ES_/i,
+            /DOC_/i,
+            /USUARIO/i,
+            /FECHA_HORA/i,
+            /ELECTRONICO/i,
+            /API/i,
+          ],
+        };
+
+        // Verificar cada patrón
+        for (const [groupName, patterns] of Object.entries(patternGroups)) {
+          for (const pattern of patterns) {
+            if (pattern.test(name)) {
+              return groupName;
+            }
           }
         }
-      }
 
-      // Campo no clasificado
-      return "OTROS CAMPOS";
-    };
+        // Campo no clasificado
+        return "OTROS CAMPOS";
+      };
 
-    // Crear grupos iniciales vacíos
-    const groupsMap = {};
+      // Crear grupos iniciales vacíos
+      const groupsMap = {};
 
-    // Clasificar cada campo
-    fieldMappings.forEach((field) => {
-      const targetField = field.targetField;
-      const groupName = identifyGroupByFieldName(targetField);
+      // Clasificar cada campo
+      fieldMappings.forEach((field) => {
+        // Saltar campos ocultos
+        if (field.fieldType === "hidden") {
+          return;
+        }
 
-      if (!groupsMap[groupName]) {
-        groupsMap[groupName] = {
-          title: groupName,
-          fields: [],
-        };
-      }
+        const targetField = field.targetField;
+        const groupName = identifyGroupByFieldName(targetField);
 
-      groupsMap[groupName].fields.push(targetField);
-    });
+        if (!groupsMap[groupName]) {
+          groupsMap[groupName] = {
+            title: groupName,
+            fields: [],
+          };
+        }
 
-    // Convertir el mapa a array
-    const groups = Object.values(groupsMap);
+        groupsMap[groupName].fields.push(targetField);
+      });
 
-    // Ordenar grupos para una presentación consistente
-    const groupOrder = [
-      "INFORMACIÓN BÁSICA",
-      "CONTACTO",
-      "UBICACIÓN",
-      "COMERCIAL",
-      "FINANZAS",
-      "IMPUESTOS",
-      "CONFIGURACIÓN",
-      "OTROS CAMPOS",
-    ];
+      // Convertir el mapa a array
+      const groups = Object.values(groupsMap);
 
-    groups.sort((a, b) => {
-      const indexA = groupOrder.indexOf(a.title);
-      const indexB = groupOrder.indexOf(b.title);
+      // Ordenar grupos para una presentación consistente
+      const groupOrder = [
+        "INFORMACIÓN BÁSICA",
+        "CONTACTO",
+        "UBICACIÓN",
+        "COMERCIAL",
+        "FINANZAS",
+        "IMPUESTOS",
+        "CONFIGURACIÓN",
+        "OTROS CAMPOS",
+      ];
 
-      // Si ambos están en la lista de orden, ordenar por esa posición
-      if (indexA !== -1 && indexB !== -1) {
-        return indexA - indexB;
-      }
+      groups.sort((a, b) => {
+        const indexA = groupOrder.indexOf(a.title);
+        const indexB = groupOrder.indexOf(b.title);
 
-      // Si solo uno está en la lista, ese va primero
-      if (indexA !== -1) return -1;
-      if (indexB !== -1) return 1;
+        // Si ambos están en la lista de orden, ordenar por esa posición
+        if (indexA !== -1 && indexB !== -1) {
+          return indexA - indexB;
+        }
 
-      // Si ninguno está en la lista, orden alfabético
-      return a.title.localeCompare(b.title);
-    });
+        // Si solo uno está en la lista, ese va primero
+        if (indexA !== -1) return -1;
+        if (indexB !== -1) return 1;
 
-    setFieldGroups(groups);
+        // Si ninguno está en la lista, orden alfabético
+        return a.title.localeCompare(b.title);
+      });
+
+      setFieldGroups(groups);
+    }
   };
 
   // Cargar valor dinámico para un campo
@@ -704,53 +760,73 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
       editedCustomer[fieldName] !== undefined ? editedCustomer[fieldName] : "";
     const isLoading = fieldLoading[fieldName] || false;
 
-    // Determinar tipo de campo
-    let inputType = "text"; // Por defecto
+    // Si el campo no es editable y no tiene valor dinámico, mostrarlo como solo lectura
+    const isReadOnly = meta.isEditable === false && !meta.dynamicQuery;
 
-    // Intentar inferir el tipo basándose en el nombre o el valor
-    if (fieldName.includes("EMAIL") || fieldName.includes("E_MAIL")) {
-      inputType = "email";
-    } else if (fieldName.includes("FECHA") || fieldName.includes("DATE")) {
-      inputType = "date";
-    } else if (
-      fieldName.includes("TELEFONO") ||
-      fieldName.includes("PHONE") ||
-      fieldName.includes("TEL")
-    ) {
-      inputType = "tel";
-    } else if (
-      typeof value === "number" ||
-      fieldName.includes("PRECIO") ||
-      fieldName.includes("MONTO") ||
-      fieldName.includes("CREDITO") ||
-      fieldName.includes("SALDO") ||
-      fieldName.includes("LIMITE")
-    ) {
-      inputType = "number";
-    } else if (
-      (typeof value === "string" && value.length > 100) ||
-      fieldName.includes("NOTAS") ||
-      fieldName.includes("DIRECCION") ||
-      fieldName.includes("OBSERVACION")
-    ) {
-      inputType = "textarea";
+    // Usar el tipo especificado en la configuración, o inferirlo
+    let inputType = meta.fieldType || "text";
+
+    // Si no está definido explícitamente, intentar inferirlo
+    if (!meta.fieldType) {
+      // Código existente para inferir tipo
+      if (fieldName.includes("EMAIL") || fieldName.includes("E_MAIL")) {
+        inputType = "email";
+      } else if (fieldName.includes("FECHA") || fieldName.includes("DATE")) {
+        inputType = "date";
+      } else if (
+        fieldName.includes("TELEFONO") ||
+        fieldName.includes("PHONE") ||
+        fieldName.includes("TEL")
+      ) {
+        inputType = "tel";
+      } else if (
+        typeof value === "number" ||
+        fieldName.includes("PRECIO") ||
+        fieldName.includes("MONTO") ||
+        fieldName.includes("CREDITO") ||
+        fieldName.includes("SALDO") ||
+        fieldName.includes("LIMITE")
+      ) {
+        inputType = "number";
+      } else if (
+        (typeof value === "string" && value.length > 100) ||
+        fieldName.includes("NOTAS") ||
+        fieldName.includes("DIRECCION") ||
+        fieldName.includes("OBSERVACION")
+      ) {
+        inputType = "textarea";
+      }
+
+      // Si es un valor booleano o campos que suelen ser checkbox
+      const booleanFields = ["ACTIVO", "ES_", "PERMITE_", "ACEPTA_", "USA_"];
+      const isBoolean =
+        typeof value === "boolean" ||
+        booleanFields.some((prefix) =>
+          fieldName.toUpperCase().includes(prefix)
+        );
+
+      if (isBoolean) {
+        inputType = "boolean";
+      }
     }
 
-    // Si es un valor booleano o campos que suelen ser checkbox
-    const booleanFields = ["ACTIVO", "ES_", "PERMITE_", "ACEPTA_", "USA_"];
-    const isBoolean =
-      typeof value === "boolean" ||
-      booleanFields.some((prefix) => fieldName.toUpperCase().includes(prefix));
-
-    if (isBoolean) {
-      inputType = "checkbox";
+    // No renderizar campos ocultos
+    if (inputType === "hidden") {
+      return (
+        <input
+          key={fieldName}
+          type="hidden"
+          name={fieldName}
+          value={value || ""}
+        />
+      );
     }
 
     // Renderizar según el tipo
     return (
       <div key={fieldName} className="form-group" style={{ flex: "1 1 250px" }}>
         <label>
-          {fieldName}
+          {meta.displayName || fieldName}
           {meta.isRequired && (
             <span style={{ color: "var(--danger-color)" }}> *</span>
           )}
@@ -764,25 +840,50 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
               onChange={handleChange}
               className="swal2-textarea"
               rows="3"
-              disabled={isLoading}
-              style={{ flex: 1 }}
+              disabled={isLoading || isReadOnly}
+              readOnly={isReadOnly}
+              style={{
+                flex: 1,
+                backgroundColor: isReadOnly ? "#f8f9fa" : "white",
+              }}
             />
-          ) : inputType === "checkbox" ? (
+          ) : inputType === "boolean" ? (
             <div style={{ display: "flex", alignItems: "center" }}>
               <input
                 type="checkbox"
                 name={fieldName}
                 checked={Boolean(value)}
                 onChange={handleChange}
-                disabled={isLoading}
+                disabled={isLoading || isReadOnly}
                 style={{
                   marginRight: "8px",
                   width: "18px",
                   height: "18px",
+                  cursor: isReadOnly ? "default" : "pointer",
                 }}
               />
-              <span>{fieldName}</span>
+              <span>{meta.displayName || fieldName}</span>
             </div>
+          ) : inputType === "select" ? (
+            <select
+              name={fieldName}
+              value={value || ""}
+              onChange={handleChange}
+              className="swal2-select"
+              disabled={isLoading || isReadOnly}
+              style={{
+                flex: 1,
+                backgroundColor: isReadOnly ? "#f8f9fa" : "white",
+              }}
+            >
+              <option value="">-- Seleccione --</option>
+              {meta.options &&
+                meta.options.map((option, idx) => (
+                  <option key={idx} value={option.value}>
+                    {option.label}
+                  </option>
+                ))}
+            </select>
           ) : (
             <input
               type={inputType}
@@ -790,8 +891,12 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
               value={value || ""}
               onChange={handleChange}
               className="swal2-input"
-              style={{ flex: 1 }}
-              disabled={isLoading}
+              style={{
+                flex: 1,
+                backgroundColor: isReadOnly ? "#f8f9fa" : "white",
+              }}
+              disabled={isLoading || isReadOnly}
+              readOnly={isReadOnly}
               step={inputType === "number" ? "0.01" : undefined}
             />
           )}

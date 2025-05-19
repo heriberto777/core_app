@@ -1247,10 +1247,33 @@ export function DocumentsVisualization() {
                               onChange={handleSelectAll}
                             />
                           </th>
-                          {/* Dynamic headers based on first document */}
-                          {Object.keys(filteredDocuments[0]).map((key) => (
-                            <th key={key}>{key}</th>
-                          ))}
+                          {/* Mostrar solo encabezados de columnas marcadas como showInList */}
+                          {activeConfig &&
+                            activeConfig.tableConfigs &&
+                            activeConfig.tableConfigs
+                              .find((tc) => !tc.isDetailTable)
+                              ?.fieldMappings.filter(
+                                (field) => field.showInList
+                              )
+                              .sort(
+                                (a, b) =>
+                                  (a.displayOrder || 0) - (b.displayOrder || 0)
+                              )
+                              .map((field) => (
+                                <th key={field.targetField}>
+                                  {field.displayName || field.targetField}
+                                </th>
+                              ))}
+
+                          {/* Si no hay configuración o ningún campo marcado, usar todos los campos */}
+                          {(!activeConfig ||
+                            !activeConfig.tableConfigs ||
+                            !activeConfig.tableConfigs
+                              .find((tc) => !tc.isDetailTable)
+                              ?.fieldMappings.some((f) => f.showInList)) &&
+                            Object.keys(filteredDocuments[0]).map((key) => (
+                              <th key={key}>{key}</th>
+                            ))}
                           <th className="actions-column">Acciones</th>
                         </tr>
                       </thead>
@@ -1272,12 +1295,38 @@ export function DocumentsVisualization() {
                                   }
                                 />
                               </td>
-                              {/* Dynamic cells */}
-                              {Object.entries(document).map(([key, value]) => (
-                                <td key={key}>
-                                  {value !== null ? value : "N/A"}
-                                </td>
-                              ))}
+                              {/* Mostrar solo campos marcados como showInList */}
+                              {activeConfig &&
+                                activeConfig.tableConfigs &&
+                                activeConfig.tableConfigs
+                                  .find((tc) => !tc.isDetailTable)
+                                  ?.fieldMappings.filter(
+                                    (field) => field.showInList
+                                  )
+                                  .sort(
+                                    (a, b) =>
+                                      (a.displayOrder || 0) -
+                                      (b.displayOrder || 0)
+                                  )
+                                  .map((field) => (
+                                    <td key={field.targetField}>
+                                      {document[field.targetField] !== null
+                                        ? document[field.targetField]
+                                        : "N/A"}
+                                    </td>
+                                  ))}
+
+                              {/* Si no hay configuración o ningún campo marcado, mostrar todos los campos */}
+                              {(!activeConfig ||
+                                !activeConfig.tableConfigs ||
+                                !activeConfig.tableConfigs
+                                  .find((tc) => !tc.isDetailTable)
+                                  ?.fieldMappings.some((f) => f.showInList)) &&
+                                Object.entries(document).map(([key, value]) => (
+                                  <td key={key}>
+                                    {value !== null ? value : "N/A"}
+                                  </td>
+                                ))}
                               <td className="actions-column">
                                 <ActionButtons>
                                   {entityType === "customers" && (
