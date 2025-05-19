@@ -14,6 +14,7 @@ const obtenerConsecutivo = require("../utils/obtenerConsecutivo");
 const { realizarTraspaso } = require("../services/traspasoService");
 const { withConnection } = require("../utils/dbUtils");
 const logger = require("../services/logger");
+const ConnectionManager = require("../services/ConnectionManager");
 const TaskTracker = require("../services/TaskTracker");
 const transferService = require("../services/transferService");
 const { SqlService } = require("../services/SqlService");
