@@ -371,11 +371,28 @@ const getDocumentDetailsByMapping = async (req, res) => {
           continue;
         }
 
-        // Usar el mismo filtro que la tabla principal
+        // Usar el mismo filtro que la tabla principal, pero seleccionar solo los campos mapeados
         const tableAlias = "d1";
         const orderByColumn = detailConfig.orderByColumn || "";
+
+        // Construir la lista de campos a seleccionar basada en los mappings
+        let selectFields = "*"; // Default to all fields
+        if (
+          detailConfig.fieldMappings &&
+          detailConfig.fieldMappings.length > 0
+        ) {
+          const fieldList = detailConfig.fieldMappings
+            .filter((fm) => fm.sourceField) // Solo campos con origen definido
+            .map((fm) => `${tableAlias}.${fm.sourceField}`)
+            .join(", ");
+
+          if (fieldList) {
+            selectFields = fieldList;
+          }
+        }
+
         query = `
-          SELECT ${tableAlias}.* FROM ${parentTable.sourceTable} ${tableAlias}
+          SELECT ${selectFields} FROM ${parentTable.sourceTable} ${tableAlias}
           WHERE ${tableAlias}.${
           detailConfig.primaryKey || parentTable.primaryKey || "NUM_PED"
         } = @documentId
@@ -410,10 +427,27 @@ const getDocumentDetailsByMapping = async (req, res) => {
           ${orderByColumn ? ` ORDER BY ${tableAlias}.${orderByColumn}` : ""}
         `;
       } else {
-        // Usar el campo de ordenamiento si está configurado, o nada si no existe
+        // Tabla de detalle normal con su propia fuente
         const orderByColumn = detailConfig.orderByColumn || "";
+
+        // Construir la lista de campos a seleccionar
+        let selectFields = "*"; // Default to all fields
+        if (
+          detailConfig.fieldMappings &&
+          detailConfig.fieldMappings.length > 0
+        ) {
+          const fieldList = detailConfig.fieldMappings
+            .filter((fm) => fm.sourceField) // Solo campos con origen definido
+            .map((fm) => fm.sourceField)
+            .join(", ");
+
+          if (fieldList) {
+            selectFields = fieldList;
+          }
+        }
+
         query = `
-          SELECT * FROM ${detailConfig.sourceTable} 
+          SELECT ${selectFields} FROM ${detailConfig.sourceTable} 
           WHERE ${detailConfig.primaryKey || "NUM_PED"} = @documentId
           ${
             detailConfig.filterCondition
@@ -426,7 +460,66 @@ const getDocumentDetailsByMapping = async (req, res) => {
 
       logger.debug(`Ejecutando consulta para detalles: ${query}`);
       const result = await SqlService.query(connection, query, { documentId });
-      details[detailConfig.name] = result.recordset || [];
+
+      // Aplicar transformaciones de acuerdo al mapeo
+      const transformedData = result.recordset.map((record) => {
+        const transformedRecord = {};
+
+        // Aplicar reglas de mapeo y transformaciones
+        detailConfig.fieldMappings.forEach((mapping) => {
+          // Solo procesar si hay campo origen definido
+          if (mapping.sourceField) {
+            let value = record[mapping.sourceField];
+
+            // Aplicar eliminación de prefijo si está configurado
+            if (
+              mapping.removePrefix &&
+              typeof value === "string" &&
+              value.startsWith(mapping.removePrefix)
+            ) {
+              value = value.substring(mapping.removePrefix.length);
+            }
+
+            // Aplicar mapeo de valores si existe
+            if (
+              value !== null &&
+              value !== undefined &&
+              mapping.valueMappings?.length > 0
+            ) {
+              const valueMap = mapping.valueMappings.find(
+                (vm) => vm.sourceValue === value
+              );
+              if (valueMap) {
+                value = valueMap.targetValue;
+              }
+            }
+
+            // Usar valor por defecto si es null/undefined y hay default definido
+            if (
+              (value === null || value === undefined) &&
+              mapping.defaultValue !== undefined
+            ) {
+              value =
+                mapping.defaultValue === "NULL" ? null : mapping.defaultValue;
+            }
+
+            // Guardar en el objeto transformado con el nombre del campo destino
+            transformedRecord[mapping.targetField] = value;
+          } else if (mapping.defaultValue !== undefined) {
+            // Si no hay campo origen pero sí valor por defecto
+            transformedRecord[mapping.targetField] =
+              mapping.defaultValue === "NULL" ? null : mapping.defaultValue;
+          }
+        });
+
+        // Agregar metadatos para identificación
+        transformedRecord._detailTableName = detailConfig.name;
+        transformedRecord._targetTable = detailConfig.targetTable;
+
+        return transformedRecord;
+      });
+
+      details[detailConfig.name] = transformedData || [];
     }
 
     res.json({
