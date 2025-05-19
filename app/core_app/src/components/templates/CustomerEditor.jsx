@@ -1,16 +1,237 @@
 import React, { useState, useEffect } from "react";
-import { FaSave, FaTimes } from "react-icons/fa";
+import { FaSave, FaTimes, FaSync } from "react-icons/fa";
+import { TransferApi, useAuth } from "../../index";
+import Swal from "sweetalert2";
 
-export function CustomerEditor({ customer, onSave, onCancel }) {
-  const [editedCustomer, setEditedCustomer] = useState({ ...customer });
+// Instancia de la API
+const api = new TransferApi();
 
-  console.log(customer);
+export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
+  const { accessToken } = useAuth();
+  const [editedCustomer, setEditedCustomer] = useState({});
+  const [loading, setLoading] = useState(true);
+  const [mapping, setMapping] = useState(null);
+  const [fieldLoading, setFieldLoading] = useState({});
+  const [fieldMeta, setFieldMeta] = useState({});
+  const [fieldGroups, setFieldGroups] = useState([]);
 
-  // Cuando el cliente cambia externamente, actualizar el estado
+  // Cargar datos iniciales y mapping
   useEffect(() => {
-    setEditedCustomer({ ...customer });
-  }, [customer]);
+    const initializeEditor = async () => {
+      if (!mappingId) {
+        console.error("No se proporcionó ID de mapping");
+        setLoading(false);
+        return;
+      }
 
+      try {
+        setLoading(true);
+
+        // Cargar configuración de mapping
+        const mappingData = await api.getMappingById(accessToken, mappingId);
+        setMapping(mappingData);
+
+        // Preparar datos del cliente
+        setEditedCustomer(customer || {});
+
+        // Inicializar metadatos de los campos
+        if (mappingData && mappingData.tableConfigs) {
+          // Buscar la tabla principal
+          const mainTable = mappingData.tableConfigs.find(
+            (tc) => !tc.isDetailTable
+          );
+
+          if (mainTable && mainTable.fieldMappings) {
+            // Organizar campos en grupos para la UI
+            organizeFieldsInGroups(mainTable.fieldMappings);
+
+            // Crear metadatos para cada campo
+            const meta = {};
+            mainTable.fieldMappings.forEach((field) => {
+              meta[field.targetField] = {
+                ...field,
+                loading: false,
+                originalField: field.sourceField,
+                dynamicValue: null,
+              };
+
+              // Si el campo tiene consulta dinámica, cargar su valor
+              if (field.dynamicQuery) {
+                loadDynamicValue(field.targetField, field);
+              }
+            });
+
+            setFieldMeta(meta);
+          }
+        }
+
+        setLoading(false);
+      } catch (error) {
+        console.error("Error al inicializar editor:", error);
+        Swal.fire({
+          title: "Error",
+          text: `No se pudo cargar la configuración: ${error.message}`,
+          icon: "error",
+        });
+        setLoading(false);
+      }
+    };
+
+    initializeEditor();
+  }, [mappingId, accessToken, customer]);
+
+  // Organizar campos en grupos para mejor presentación
+  const organizeFieldsInGroups = (fieldMappings) => {
+    // Predefinir algunos grupos comunes
+    const groups = [
+      {
+        title: "Información Principal",
+        fields: [
+          "CLIENTE",
+          "NOMBRE_CLIENTE",
+          "ALIAS",
+          "CONTACTO",
+          "CARGO",
+          "CONTRIBUYENTE",
+        ],
+      },
+      {
+        title: "Contacto y Ubicación",
+        fields: [
+          "TELEFONO1",
+          "TELEFONO2",
+          "E_MAIL",
+          "DIRECCION",
+          "PAIS",
+          "ZONA",
+          "GEO_LATITUD",
+          "GEO_LONGITUD",
+        ],
+      },
+      {
+        title: "Configuración Comercial",
+        fields: [
+          "LIMITE_CREDITO",
+          "CONDICION_PAGO",
+          "NIVEL_PRECIO",
+          "MULTIMONEDA",
+          "VENDEDOR",
+          "RUTA",
+          "COBRADOR",
+        ],
+      },
+      {
+        title: "Clasificación",
+        fields: ["CATEGORIA_CLIENTE", "CLASE_ABC", "CODIGO_IMPUESTO"],
+      },
+    ];
+
+    // Grupo para campos no clasificados
+    const otherGroup = {
+      title: "Otros Campos",
+      fields: [],
+    };
+
+    // Asignar campos a los grupos
+    const assignedFields = new Set();
+    fieldMappings.forEach((field) => {
+      const targetField = field.targetField;
+      let assigned = false;
+
+      for (const group of groups) {
+        if (group.fields.includes(targetField)) {
+          assignedFields.add(targetField);
+          assigned = true;
+          break;
+        }
+      }
+
+      if (!assigned) {
+        otherGroup.fields.push(targetField);
+        assignedFields.add(targetField);
+      }
+    });
+
+    // Añadir el grupo "otros" solo si tiene campos
+    if (otherGroup.fields.length > 0) {
+      groups.push(otherGroup);
+    }
+
+    // Filtrar cada grupo para incluir solo campos que existen en el mapping
+    groups.forEach((group) => {
+      group.fields = group.fields.filter((field) =>
+        fieldMappings.some((f) => f.targetField === field)
+      );
+    });
+
+    // Filtrar grupos que no tienen campos
+    const filteredGroups = groups.filter((group) => group.fields.length > 0);
+    setFieldGroups(filteredGroups);
+  };
+
+  // Cargar valor dinámico para un campo
+  const loadDynamicValue = async (fieldName, fieldConfig) => {
+    try {
+      setFieldLoading((prev) => ({ ...prev, [fieldName]: true }));
+
+      // Construir contexto con los valores actuales
+      const context = { ...editedCustomer };
+
+      const result = await api.queryDynamicFieldValue(
+        accessToken,
+        mappingId,
+        fieldConfig,
+        context
+      );
+
+      if (result.success) {
+        // Actualizar valor según tipo de consulta
+        let newValue;
+        if (fieldConfig.queryType === "sequence") {
+          newValue = result.nextValue;
+
+          // Actualizar metadatos con la info de secuencia
+          setFieldMeta((prev) => ({
+            ...prev,
+            [fieldName]: {
+              ...prev[fieldName],
+              currentValue: result.currentValue,
+              dynamicValue: newValue,
+            },
+          }));
+        } else {
+          newValue = result.value;
+
+          // Actualizar metadatos
+          setFieldMeta((prev) => ({
+            ...prev,
+            [fieldName]: {
+              ...prev[fieldName],
+              dynamicValue: newValue,
+            },
+          }));
+        }
+
+        // Actualizar valor en el cliente
+        setEditedCustomer((prev) => ({
+          ...prev,
+          [fieldName]: newValue,
+        }));
+      }
+    } catch (error) {
+      console.error(`Error al cargar valor dinámico para ${fieldName}:`, error);
+      Swal.fire({
+        title: "Error",
+        text: `No se pudo obtener valor para ${fieldName}: ${error.message}`,
+        icon: "error",
+        timer: 3000,
+      });
+    } finally {
+      setFieldLoading((prev) => ({ ...prev, [fieldName]: false }));
+    }
+  };
+
+  // Manejar cambios en los campos
   const handleChange = (e) => {
     const { name, value, type, checked } = e.target;
     setEditedCustomer({
@@ -19,23 +240,214 @@ export function CustomerEditor({ customer, onSave, onCancel }) {
     });
   };
 
-  const handleSave = () => {
-    // Validación básica
-    if (!editedCustomer.code) {
-      alert("El código de cliente es obligatorio");
-      return;
+  // Manejar refresco de campo dinámico
+  const handleRefreshDynamicField = (fieldName) => {
+    const fieldConfig = fieldMeta[fieldName];
+    if (fieldConfig && fieldConfig.dynamicQuery) {
+      loadDynamicValue(fieldName, fieldConfig);
     }
-
-    if (!editedCustomer.name) {
-      alert("El nombre del cliente es obligatorio");
-      return;
-    }
-
-    onSave(editedCustomer);
   };
 
+  // Guardar cambios
+  const handleSave = async () => {
+    try {
+      setLoading(true);
+
+      // Validar campos requeridos
+      const requiredFields = Object.entries(fieldMeta)
+        .filter(([_, meta]) => meta.isRequired)
+        .map(([field]) => field);
+
+      const missingFields = requiredFields.filter(
+        (field) =>
+          !editedCustomer[field] &&
+          editedCustomer[field] !== 0 &&
+          editedCustomer[field] !== false
+      );
+
+      if (missingFields.length > 0) {
+        Swal.fire({
+          title: "Campos requeridos",
+          html: `Por favor complete los siguientes campos:<br><br>
+            <ul style="text-align: left; display: inline-block;">
+              ${missingFields.map((field) => `<li>${field}</li>`).join("")}
+            </ul>`,
+          icon: "warning",
+        });
+        setLoading(false);
+        return;
+      }
+
+      // Preparar datos para guardar
+      const saveData = {
+        ...editedCustomer,
+        _dynamicFields: {},
+      };
+
+      // Incluir información de campos dinámicos que necesitan actualización
+      Object.entries(fieldMeta).forEach(([fieldName, meta]) => {
+        if (
+          meta.dynamicQuery &&
+          meta.queryType === "sequence" &&
+          meta.queryDefinition &&
+          meta.queryDefinition.updateOnSave
+        ) {
+          saveData._dynamicFields[fieldName] = {
+            ...meta,
+            newValue: editedCustomer[fieldName],
+          };
+        }
+      });
+
+      // Llamar al handler de guardado pasando la configuración de mapping
+      await onSave(saveData, mappingId);
+
+      Swal.fire({
+        title: "Guardado",
+        text: "Los datos se guardaron correctamente",
+        icon: "success",
+        timer: 2000,
+      });
+    } catch (error) {
+      console.error("Error al guardar:", error);
+      Swal.fire({
+        title: "Error",
+        text: error.message || "No se pudieron guardar los cambios",
+        icon: "error",
+      });
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // Renderizar campo según su tipo
+  const renderField = (fieldName) => {
+    // Obtener metadatos del campo
+    const meta = fieldMeta[fieldName] || {};
+    const value = editedCustomer[fieldName] || "";
+    const isLoading = fieldLoading[fieldName] || false;
+
+    // Determinar tipo de campo
+    let inputType = "text"; // Por defecto
+
+    // Intentar inferir el tipo basándose en el nombre o el valor
+    if (fieldName.includes("EMAIL") || fieldName.includes("E_MAIL")) {
+      inputType = "email";
+    } else if (fieldName.includes("FECHA") || fieldName.includes("DATE")) {
+      inputType = "date";
+    } else if (
+      fieldName.includes("TELEFONO") ||
+      fieldName.includes("PHONE") ||
+      fieldName.includes("TEL")
+    ) {
+      inputType = "tel";
+    } else if (
+      typeof value === "number" ||
+      fieldName.includes("PRECIO") ||
+      fieldName.includes("MONTO") ||
+      fieldName.includes("CREDITO") ||
+      fieldName.includes("SALDO") ||
+      fieldName.includes("LIMITE")
+    ) {
+      inputType = "number";
+    }
+
+    // Renderizar según el tipo
+    return (
+      <div key={fieldName} className="form-group" style={{ flex: "1 1 250px" }}>
+        <label>
+          {fieldName}
+          {meta.isRequired && (
+            <span style={{ color: "var(--danger-color)" }}> *</span>
+          )}
+        </label>
+
+        <div style={{ display: "flex", gap: "5px" }}>
+          {inputType === "textarea" ? (
+            <textarea
+              name={fieldName}
+              value={value}
+              onChange={handleChange}
+              className="swal2-textarea"
+              rows="3"
+              disabled={isLoading}
+            />
+          ) : (
+            <input
+              type={inputType}
+              name={fieldName}
+              value={value}
+              onChange={handleChange}
+              className="swal2-input"
+              style={{ flex: 1 }}
+              disabled={isLoading}
+              step={inputType === "number" ? "0.01" : undefined}
+            />
+          )}
+
+          {meta.dynamicQuery && (
+            <button
+              className="btn-refresh"
+              onClick={() => handleRefreshDynamicField(fieldName)}
+              disabled={isLoading}
+              style={{
+                backgroundColor: "#17a2b8",
+                color: "white",
+                border: "none",
+                borderRadius: "4px",
+                padding: "0 10px",
+                cursor: isLoading ? "not-allowed" : "pointer",
+              }}
+              title="Refrescar valor"
+            >
+              <FaSync />
+            </button>
+          )}
+        </div>
+
+        {meta.dynamicQuery &&
+          meta.queryType === "sequence" &&
+          meta.currentValue !== undefined && (
+            <small
+              style={{
+                display: "block",
+                fontSize: "0.8rem",
+                color: "#6c757d",
+                marginTop: "3px",
+              }}
+            >
+              Valor actual en secuencia: {meta.currentValue}
+            </small>
+          )}
+
+        {meta.originalField && (
+          <small
+            style={{
+              display: "block",
+              fontSize: "0.8rem",
+              color: "#6c757d",
+              marginTop: "3px",
+            }}
+          >
+            Campo origen: {meta.originalField}
+          </small>
+        )}
+      </div>
+    );
+  };
+
+  // Mostrar pantalla de carga
+  if (loading) {
+    return (
+      <div style={{ padding: "40px", textAlign: "center" }}>
+        <div className="loading-spinner"></div>
+        <p>Cargando formulario...</p>
+      </div>
+    );
+  }
+
   return (
-    <div className="swal2-form-container">
+    <div className="customer-editor">
       <div
         style={{
           display: "flex",
@@ -44,247 +456,87 @@ export function CustomerEditor({ customer, onSave, onCancel }) {
           marginBottom: "20px",
         }}
       >
-        <h3 style={{ margin: 0 }}>Editar Cliente</h3>
+        <h3 style={{ margin: 0 }}>
+          Editar {mapping?.entityType === "customers" ? "Cliente" : "Documento"}
+        </h3>
         <div style={{ display: "flex", gap: "10px" }}>
           <button
             className="button"
-            style={{ backgroundColor: "var(--secondary-color)" }}
+            style={{
+              backgroundColor: "#6c757d",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              padding: "8px 15px",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              cursor: "pointer",
+            }}
             onClick={onCancel}
           >
             <FaTimes /> Cancelar
           </button>
-          <button className="button" onClick={handleSave}>
+          <button
+            className="button"
+            style={{
+              backgroundColor: "#28a745",
+              color: "white",
+              border: "none",
+              borderRadius: "4px",
+              padding: "8px 15px",
+              display: "flex",
+              alignItems: "center",
+              gap: "8px",
+              cursor: "pointer",
+            }}
+            onClick={handleSave}
+          >
             <FaSave /> Guardar
           </button>
         </div>
       </div>
 
-      <div style={{ display: "flex", flexDirection: "column", gap: "15px" }}>
-        <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
-          <div className="form-group" style={{ flex: "1 1 250px" }}>
-            <label>Código</label>
-            <input
-              type="text"
-              name="code"
-              value={editedCustomer.COD_CLT || ""}
-              onChange={handleChange}
-              disabled={true} // El código normalmente no se cambia
-              className="swal2-input"
-              style={{ backgroundColor: "#f8f9fa" }}
-            />
-            <small
-              style={{ color: "var(--secondary-color)", fontSize: "0.8rem" }}
-            >
-              El código no se puede modificar
-            </small>
-          </div>
+      {fieldGroups.map((group, groupIndex) => (
+        <div key={groupIndex} style={{ marginBottom: "20px" }}>
+          <h4
+            style={{
+              borderBottom: "1px solid #dee2e6",
+              paddingBottom: "8px",
+              marginBottom: "15px",
+            }}
+          >
+            {group.title}
+          </h4>
 
-          <div className="form-group" style={{ flex: "1 1 250px" }}>
-            <label>
-              Nombre <span style={{ color: "var(--danger-color)" }}>*</span>
-            </label>
-            <input
-              type="text"
-              name="name"
-              value={editedCustomer.name || ""}
-              onChange={handleChange}
-              className="swal2-input"
-              required
-            />
+          <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
+            {group.fields.map((fieldName) => renderField(fieldName))}
           </div>
         </div>
+      ))}
 
-        <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
-          <div className="form-group" style={{ flex: "1 1 250px" }}>
-            <label>Tipo de Cliente</label>
-            <select
-              name="customerType"
-              value={editedCustomer.customerType || ""}
-              onChange={handleChange}
-              className="swal2-select"
-            >
-              <option value="">Seleccione...</option>
-              <option value="INDIVIDUAL">Individual</option>
-              <option value="COMPANY">Empresa</option>
-              <option value="GOVERNMENT">Gobierno</option>
-            </select>
-          </div>
+      <style jsx>{`
+        .loading-spinner {
+          display: inline-block;
+          width: 40px;
+          height: 40px;
+          border: 4px solid rgba(0, 123, 255, 0.1);
+          border-radius: 50%;
+          border-top-color: #007bff;
+          animation: spin 1s linear infinite;
+          margin-bottom: 15px;
+        }
 
-          <div className="form-group" style={{ flex: "1 1 250px" }}>
-            <label>Categoría</label>
-            <select
-              name="category"
-              value={editedCustomer.category || ""}
-              onChange={handleChange}
-              className="swal2-select"
-            >
-              <option value="">Seleccione...</option>
-              <option value="A">A - Premium</option>
-              <option value="B">B - Regular</option>
-              <option value="C">C - Ocasional</option>
-            </select>
-          </div>
-        </div>
+        @keyframes spin {
+          to {
+            transform: rotate(360deg);
+          }
+        }
 
-        <div className="form-group">
-          <label>Dirección</label>
-          <textarea
-            name="address"
-            value={editedCustomer.address || ""}
-            onChange={handleChange}
-            className="swal2-textarea"
-            rows="3"
-          />
-        </div>
-
-        <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
-          <div className="form-group" style={{ flex: "1 1 200px" }}>
-            <label>Ciudad</label>
-            <input
-              type="text"
-              name="city"
-              value={editedCustomer.city || ""}
-              onChange={handleChange}
-              className="swal2-input"
-            />
-          </div>
-
-          <div className="form-group" style={{ flex: "1 1 200px" }}>
-            <label>Provincia/Estado</label>
-            <input
-              type="text"
-              name="state"
-              value={editedCustomer.state || ""}
-              onChange={handleChange}
-              className="swal2-input"
-            />
-          </div>
-
-          <div className="form-group" style={{ flex: "1 1 150px" }}>
-            <label>Código Postal</label>
-            <input
-              type="text"
-              name="postalCode"
-              value={editedCustomer.postalCode || ""}
-              onChange={handleChange}
-              className="swal2-input"
-            />
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
-          <div className="form-group" style={{ flex: "1 1 200px" }}>
-            <label>Teléfono</label>
-            <input
-              type="tel"
-              name="phone"
-              value={editedCustomer.phone || ""}
-              onChange={handleChange}
-              className="swal2-input"
-              placeholder="(XXX) XXX-XXXX"
-            />
-          </div>
-
-          <div className="form-group" style={{ flex: "1 1 200px" }}>
-            <label>Email</label>
-            <input
-              type="email"
-              name="email"
-              value={editedCustomer.email || ""}
-              onChange={handleChange}
-              className="swal2-input"
-              placeholder="ejemplo@dominio.com"
-            />
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
-          <div className="form-group" style={{ flex: "1 1 200px" }}>
-            <label>RNC/Cédula</label>
-            <input
-              type="text"
-              name="taxId"
-              value={editedCustomer.taxId || ""}
-              onChange={handleChange}
-              className="swal2-input"
-            />
-          </div>
-
-          <div className="form-group" style={{ flex: "1 1 200px" }}>
-            <label>Límite de Crédito</label>
-            <input
-              type="number"
-              name="creditLimit"
-              value={editedCustomer.creditLimit || ""}
-              onChange={handleChange}
-              className="swal2-input"
-              min="0"
-              step="0.01"
-            />
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: "15px", flexWrap: "wrap" }}>
-          <div className="form-group" style={{ flex: "1 1 200px" }}>
-            <label>Contacto Principal</label>
-            <input
-              type="text"
-              name="contactPerson"
-              value={editedCustomer.contactPerson || ""}
-              onChange={handleChange}
-              className="swal2-input"
-            />
-          </div>
-
-          <div className="form-group" style={{ flex: "1 1 200px" }}>
-            <label>Días de Crédito</label>
-            <input
-              type="number"
-              name="creditDays"
-              value={editedCustomer.creditDays || ""}
-              onChange={handleChange}
-              className="swal2-input"
-              min="0"
-            />
-          </div>
-        </div>
-
-        <div style={{ display: "flex", gap: "20px", flexWrap: "wrap" }}>
-          <div className="form-check" style={{ flex: "1 1 200px" }}>
-            <input
-              type="checkbox"
-              id="isActive"
-              name="isActive"
-              checked={editedCustomer.isActive || false}
-              onChange={handleChange}
-            />
-            <label htmlFor="isActive">Cliente Activo</label>
-          </div>
-
-          <div className="form-check" style={{ flex: "1 1 200px" }}>
-            <input
-              type="checkbox"
-              id="hasCredit"
-              name="hasCredit"
-              checked={editedCustomer.hasCredit || false}
-              onChange={handleChange}
-            />
-            <label htmlFor="hasCredit">Permite Crédito</label>
-          </div>
-        </div>
-
-        <div className="form-group">
-          <label>Notas</label>
-          <textarea
-            name="notes"
-            value={editedCustomer.notes || ""}
-            onChange={handleChange}
-            className="swal2-textarea"
-            rows="3"
-            placeholder="Información adicional sobre el cliente..."
-          />
-        </div>
-      </div>
+        .btn-refresh:hover {
+          background-color: #138496 !important;
+        }
+      `}</style>
     </div>
   );
 }
