@@ -1160,55 +1160,13 @@ const getSourceDataByMapping = async (req, res) => {
       });
     }
 
-    // Transformar datos según configuración de mapping
+    // Devolver los datos de origen tal cual, sin transformar
     const sourceData = result.recordset[0];
-    const transformedData = {};
-
-    // Aplicar reglas de mapeo
-    if (mainTable.fieldMappings && mainTable.fieldMappings.length > 0) {
-      mainTable.fieldMappings.forEach((field) => {
-        // Solo procesar si hay campo origen definido
-        if (field.sourceField) {
-          let value = sourceData[field.sourceField];
-
-          // Aplicar eliminación de prefijo si está configurado
-          if (
-            field.removePrefix &&
-            typeof value === "string" &&
-            value.startsWith(field.removePrefix)
-          ) {
-            value = value.substring(field.removePrefix.length);
-          }
-
-          // Aplicar mapeo de valores si existe
-          if (
-            value !== null &&
-            value !== undefined &&
-            field.valueMappings?.length > 0
-          ) {
-            const valueMap = field.valueMappings.find(
-              (vm) => vm.sourceValue === value
-            );
-            if (valueMap) {
-              value = valueMap.targetValue;
-            }
-          }
-
-          // Guardar en el objeto transformado con el nombre del campo destino
-          transformedData[field.targetField] = value;
-        } else if (field.defaultValue !== undefined) {
-          // Si no hay campo origen pero sí valor por defecto
-          transformedData[field.targetField] =
-            field.defaultValue === "NULL" ? null : field.defaultValue;
-        }
-      });
-    }
 
     res.json({
       success: true,
       data: {
         sourceData, // Datos originales
-        transformedData, // Datos transformados según mapping
         mappingConfig: {
           sourceTable: mainTable.sourceTable,
           primaryKey: mainTable.primaryKey,
