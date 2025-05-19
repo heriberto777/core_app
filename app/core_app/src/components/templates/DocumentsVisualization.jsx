@@ -296,8 +296,8 @@ export function DocumentsVisualization() {
         // Ordenar los campos para que sean consistentes
         const sortedFields = Array.from(allFields).sort();
 
-        // Inicialmente mostrar solo 5 campos
-        const initialFields = allFields.slice(0, 5);
+        // Inicialmente mostrar solo hasta 5 campos
+        const initialFields = sortedFields.slice(0, 5);
 
         // Show document details modal with improved UI
         Swal.fire({
