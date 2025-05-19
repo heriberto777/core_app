@@ -1247,33 +1247,44 @@ export function DocumentsVisualization() {
                               onChange={handleSelectAll}
                             />
                           </th>
+
                           {/* Mostrar solo encabezados de columnas marcadas como showInList */}
                           {activeConfig &&
                             activeConfig.tableConfigs &&
-                            activeConfig.tableConfigs
-                              .find((tc) => !tc.isDetailTable)
-                              ?.fieldMappings.filter(
-                                (field) => field.showInList
-                              )
-                              .sort(
-                                (a, b) =>
-                                  (a.displayOrder || 0) - (b.displayOrder || 0)
-                              )
-                              .map((field) => (
-                                <th key={field.targetField}>
-                                  {field.displayName || field.targetField}
-                                </th>
-                              ))}
+                            (() => {
+                              // Buscar tabla principal
+                              const mainTable = activeConfig.tableConfigs.find(
+                                (tc) => !tc.isDetailTable
+                              );
 
-                          {/* Si no hay configuración o ningún campo marcado, usar todos los campos */}
-                          {(!activeConfig ||
-                            !activeConfig.tableConfigs ||
-                            !activeConfig.tableConfigs
-                              .find((tc) => !tc.isDetailTable)
-                              ?.fieldMappings.some((f) => f.showInList)) &&
-                            Object.keys(filteredDocuments[0]).map((key) => (
-                              <th key={key}>{key}</th>
-                            ))}
+                              // Si hay configuración y campos marcados para mostrar en lista
+                              if (
+                                mainTable &&
+                                mainTable.fieldMappings &&
+                                mainTable.fieldMappings.some(
+                                  (f) => f.showInList
+                                )
+                              ) {
+                                return mainTable.fieldMappings
+                                  .filter((field) => field.showInList)
+                                  .sort(
+                                    (a, b) =>
+                                      (a.displayOrder || 0) -
+                                      (b.displayOrder || 0)
+                                  )
+                                  .map((field) => (
+                                    <th key={field.targetField}>
+                                      {field.displayName || field.targetField}
+                                    </th>
+                                  ));
+                              }
+
+                              // Si no hay configuración específica, mostrar todos los campos
+                              return Object.keys(
+                                filteredDocuments[0] || {}
+                              ).map((key) => <th key={key}>{key}</th>);
+                            })()}
+
                           <th className="actions-column">Acciones</th>
                         </tr>
                       </thead>
@@ -1295,38 +1306,51 @@ export function DocumentsVisualization() {
                                   }
                                 />
                               </td>
+
                               {/* Mostrar solo campos marcados como showInList */}
                               {activeConfig &&
                                 activeConfig.tableConfigs &&
-                                activeConfig.tableConfigs
-                                  .find((tc) => !tc.isDetailTable)
-                                  ?.fieldMappings.filter(
-                                    (field) => field.showInList
-                                  )
-                                  .sort(
-                                    (a, b) =>
-                                      (a.displayOrder || 0) -
-                                      (b.displayOrder || 0)
-                                  )
-                                  .map((field) => (
-                                    <td key={field.targetField}>
-                                      {document[field.targetField] !== null
-                                        ? document[field.targetField]
-                                        : "N/A"}
-                                    </td>
-                                  ))}
+                                (() => {
+                                  // Buscar tabla principal
+                                  const mainTable =
+                                    activeConfig.tableConfigs.find(
+                                      (tc) => !tc.isDetailTable
+                                    );
 
-                              {/* Si no hay configuración o ningún campo marcado, mostrar todos los campos */}
-                              {(!activeConfig ||
-                                !activeConfig.tableConfigs ||
-                                !activeConfig.tableConfigs
-                                  .find((tc) => !tc.isDetailTable)
-                                  ?.fieldMappings.some((f) => f.showInList)) &&
-                                Object.entries(document).map(([key, value]) => (
-                                  <td key={key}>
-                                    {value !== null ? value : "N/A"}
-                                  </td>
-                                ))}
+                                  // Si hay configuración y campos marcados para mostrar en lista
+                                  if (
+                                    mainTable &&
+                                    mainTable.fieldMappings &&
+                                    mainTable.fieldMappings.some(
+                                      (f) => f.showInList
+                                    )
+                                  ) {
+                                    return mainTable.fieldMappings
+                                      .filter((field) => field.showInList)
+                                      .sort(
+                                        (a, b) =>
+                                          (a.displayOrder || 0) -
+                                          (b.displayOrder || 0)
+                                      )
+                                      .map((field) => (
+                                        <td key={field.targetField}>
+                                          {document[field.targetField] !== null
+                                            ? document[field.targetField]
+                                            : "N/A"}
+                                        </td>
+                                      ));
+                                  }
+
+                                  // Si no hay configuración específica, mostrar todos los campos
+                                  return Object.entries(document).map(
+                                    ([key, value]) => (
+                                      <td key={key}>
+                                        {value !== null ? value : "N/A"}
+                                      </td>
+                                    )
+                                  );
+                                })()}
+
                               <td className="actions-column">
                                 <ActionButtons>
                                   {entityType === "customers" && (
@@ -1377,7 +1401,8 @@ export function DocumentsVisualization() {
                     {filteredDocuments.map((document, index) => {
                       // Get document ID (assuming it's the first field)
                       const documentId = document[Object.keys(document)[0]];
-                      // Get type/status field if exists (for styling)
+
+                      // Get status field if exists (for styling)
                       const statusField = Object.keys(document).find(
                         (key) =>
                           key.toLowerCase().includes("estado") ||
@@ -1385,6 +1410,60 @@ export function DocumentsVisualization() {
                           key.toLowerCase().includes("type")
                       );
                       const status = statusField ? document[statusField] : null;
+
+                      // Determinar qué campos mostrar
+                      let displayFields = [];
+
+                      if (activeConfig && activeConfig.tableConfigs) {
+                        const mainTable = activeConfig.tableConfigs.find(
+                          (tc) => !tc.isDetailTable
+                        );
+
+                        if (
+                          mainTable &&
+                          mainTable.fieldMappings &&
+                          mainTable.fieldMappings.some((f) => f.showInList)
+                        ) {
+                          // Usar campos configurados para mostrar en lista
+                          displayFields = mainTable.fieldMappings
+                            .filter((field) => field.showInList)
+                            .sort(
+                              (a, b) =>
+                                (a.displayOrder || 0) - (b.displayOrder || 0)
+                            )
+                            .map((field) => ({
+                              key: field.targetField,
+                              label: field.displayName || field.targetField,
+                              value: document[field.targetField],
+                            }));
+                        } else {
+                          // Usar todos los campos excepto ID y status que ya se muestran arriba
+                          displayFields = Object.entries(document)
+                            .filter(
+                              ([key]) =>
+                                key !== Object.keys(document)[0] &&
+                                key !== statusField
+                            )
+                            .map(([key, value]) => ({
+                              key,
+                              label: key,
+                              value,
+                            }));
+                        }
+                      } else {
+                        // Sin configuración, mostrar todos los campos
+                        displayFields = Object.entries(document)
+                          .filter(
+                            ([key]) =>
+                              key !== Object.keys(document)[0] &&
+                              key !== statusField
+                          )
+                          .map(([key, value]) => ({
+                            key,
+                            label: key,
+                            value,
+                          }));
+                      }
 
                       return (
                         <OrderCard
@@ -1403,20 +1482,14 @@ export function DocumentsVisualization() {
 
                           <CardContent>
                             <CardInfo>
-                              {Object.entries(document)
-                                .filter(
-                                  ([key]) =>
-                                    key !== Object.keys(document)[0] &&
-                                    key !== statusField
-                                )
-                                .map(([key, value]) => (
-                                  <InfoItem key={key}>
-                                    <InfoLabel>{key}:</InfoLabel>
-                                    <InfoValue>
-                                      {value !== null ? value : "N/A"}
-                                    </InfoValue>
-                                  </InfoItem>
-                                ))}
+                              {displayFields.map((field) => (
+                                <InfoItem key={field.key}>
+                                  <InfoLabel>{field.label}:</InfoLabel>
+                                  <InfoValue>
+                                    {field.value !== null ? field.value : "N/A"}
+                                  </InfoValue>
+                                </InfoItem>
+                              ))}
                             </CardInfo>
                           </CardContent>
 
