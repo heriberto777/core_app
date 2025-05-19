@@ -466,6 +466,7 @@ export function DocumentsVisualization() {
             <EditorContainer>
               <CustomerEditor
                 customer={selectedEntity}
+                mappingId={activeMappingId}
                 onSave={handleSaveCustomer}
                 onCancel={() => setShowEntityEditor(false)}
               />
