@@ -41,6 +41,7 @@ export function DocumentsVisualization() {
   const [showEntityEditor, setShowEntityEditor] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState(null);
   const [entityType, setEntityType] = useState("orders");
+  const [currentProcessingTask, setCurrentProcessingTask] = useState(null);
 
   // Filters - usar estado separado para los valores
   const [filterValues, setFilterValues] = useState({
