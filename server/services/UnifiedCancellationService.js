@@ -77,7 +77,7 @@ class UnifiedCancellationService {
   async cancelTask(taskId, options = {}) {
     const task = this.tasks.get(taskId);
     if (!task) {
-      logger.warn(`Attempted to cancel non-existent task ${taskId}`); 
+      logger.warn(`Attempted to cancel non-existent task ${taskId}`);
       return { success: false, message: "Task not found" };
     }
 
@@ -367,6 +367,30 @@ class UnifiedCancellationService {
     }
     this.isInitialized = false;
     logger.info("Servicio de cancelación detenido");
+  }
+
+  /**
+   * Elimina una tarea del sistema de cancelación
+   * @param {string} taskId - ID de la tarea a eliminar
+   * @returns {boolean} - true si se eliminó correctamente
+   */
+  removeTask(taskId) {
+    if (!this.tasks.has(taskId)) {
+      logger.warn(`Attempted to remove non-existent task ${taskId}`);
+      return false;
+    }
+
+    // Notificar antes de eliminar
+    this.notifyObservers(taskId, "removed", this.tasks.get(taskId));
+
+    // Eliminar la tarea
+    this.tasks.delete(taskId);
+
+    // Eliminar observadores
+    this.observers.delete(taskId);
+
+    logger.debug(`Task ${taskId} removed from cancellation tracking`);
+    return true;
   }
 }
 
