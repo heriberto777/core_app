@@ -35,7 +35,7 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
         // Determinar ID del documento
         let documentId = null;
         if (customer) {
-          // Buscar el ID basado en la tabla principal
+          // Buscar la tabla principal en la configuración
           const mainTable = mappingData.tableConfigs.find(
             (tc) => !tc.isDetailTable
           );
@@ -62,6 +62,9 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
         // Si tenemos un ID de documento, intentar cargar datos de la tabla origen
         if (documentId) {
           try {
+            console.log(
+              `Cargando datos de origen para documento ${documentId}`
+            );
             const sourceDataResult = await api.getSourceDataByMapping(
               accessToken,
               mappingId,
@@ -69,10 +72,70 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
             );
 
             if (sourceDataResult.success) {
-              setOriginalSourceData(sourceDataResult.data.sourceData);
+              // Guardar datos originales para referencia
+              const sourceData = sourceDataResult.data.sourceData;
+              setOriginalSourceData(sourceData);
 
-              // Si llegamos hasta aquí, usamos los datos transformados como base
-              setEditedCustomer(sourceDataResult.data.transformedData);
+              // Inicializar objeto de cliente
+              const newCustomerData = {};
+
+              // Buscar la tabla principal
+              const mainTable = mappingData.tableConfigs.find(
+                (tc) => !tc.isDetailTable
+              );
+
+              if (mainTable && mainTable.fieldMappings) {
+                // Para cada mapeo de campo, aplicar la transformación
+                mainTable.fieldMappings.forEach((field) => {
+                  // Si el campo tiene un origen definido, obtener el valor de los datos de origen
+                  if (field.sourceField) {
+                    let value = sourceData[field.sourceField];
+
+                    // Aplicar eliminación de prefijo si está configurado
+                    if (
+                      field.removePrefix &&
+                      typeof value === "string" &&
+                      value.startsWith(field.removePrefix)
+                    ) {
+                      const originalValue = value;
+                      value = value.substring(field.removePrefix.length);
+                      console.log(
+                        `Prefijo '${field.removePrefix}' eliminado del campo ${field.sourceField}: '${originalValue}' → '${value}'`
+                      );
+                    }
+
+                    // Aplicar mapeo de valores si existe
+                    if (
+                      value !== null &&
+                      value !== undefined &&
+                      field.valueMappings?.length > 0
+                    ) {
+                      const valueMap = field.valueMappings.find(
+                        (vm) => vm.sourceValue === value
+                      );
+                      if (valueMap) {
+                        value = valueMap.targetValue;
+                      }
+                    }
+
+                    // Guardar en el objeto del cliente
+                    newCustomerData[field.targetField] = value;
+                  } else if (field.defaultValue !== undefined) {
+                    // Si no hay campo origen pero sí valor por defecto
+                    newCustomerData[field.targetField] =
+                      field.defaultValue === "NULL" ? null : field.defaultValue;
+                  }
+                });
+              }
+
+              console.log("Datos transformados desde origen:", newCustomerData);
+              setEditedCustomer(newCustomerData);
+            } else {
+              // Si no hay éxito, usar los datos que nos pasaron
+              console.warn(
+                "No se obtuvieron datos de origen, usando datos proporcionados"
+              );
+              setEditedCustomer(customer || {});
             }
           } catch (sourceError) {
             console.warn("Error al cargar datos de origen:", sourceError);
@@ -177,7 +240,8 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
       );
 
       if (sourceDataResult.success) {
-        setOriginalSourceData(sourceDataResult.data.sourceData);
+        const sourceData = sourceDataResult.data.sourceData;
+        setOriginalSourceData(sourceData);
 
         // Confirmar si se desea reemplazar los datos actuales
         const confirmResult = await Swal.fire({
@@ -190,7 +254,59 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
         });
 
         if (confirmResult.isConfirmed) {
-          setEditedCustomer(sourceDataResult.data.transformedData);
+          // Inicializar objeto de cliente
+          const newCustomerData = {};
+
+          // Buscar la tabla principal
+          const mainTable = mapping.tableConfigs.find(
+            (tc) => !tc.isDetailTable
+          );
+
+          if (mainTable && mainTable.fieldMappings) {
+            // Para cada mapeo de campo, aplicar la transformación
+            mainTable.fieldMappings.forEach((field) => {
+              // Si el campo tiene un origen definido, obtener el valor de los datos de origen
+              if (field.sourceField) {
+                let value = sourceData[field.sourceField];
+
+                // Aplicar eliminación de prefijo si está configurado
+                if (
+                  field.removePrefix &&
+                  typeof value === "string" &&
+                  value.startsWith(field.removePrefix)
+                ) {
+                  const originalValue = value;
+                  value = value.substring(field.removePrefix.length);
+                  console.log(
+                    `Prefijo '${field.removePrefix}' eliminado del campo ${field.sourceField}: '${originalValue}' → '${value}'`
+                  );
+                }
+
+                // Aplicar mapeo de valores si existe
+                if (
+                  value !== null &&
+                  value !== undefined &&
+                  field.valueMappings?.length > 0
+                ) {
+                  const valueMap = field.valueMappings.find(
+                    (vm) => vm.sourceValue === value
+                  );
+                  if (valueMap) {
+                    value = valueMap.targetValue;
+                  }
+                }
+
+                // Guardar en el objeto del cliente
+                newCustomerData[field.targetField] = value;
+              } else if (field.defaultValue !== undefined) {
+                // Si no hay campo origen pero sí valor por defecto
+                newCustomerData[field.targetField] =
+                  field.defaultValue === "NULL" ? null : field.defaultValue;
+              }
+            });
+          }
+
+          setEditedCustomer(newCustomerData);
         }
       }
     } catch (error) {
