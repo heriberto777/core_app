@@ -208,50 +208,25 @@ export function DocumentsVisualization() {
 
         // Get all detail items across all detail tables
         let allDetails = [];
+        let detailTableMapping = {}; // Para mantener registro de qué detalles pertenecen a qué tabla
 
         // Verificar si hay datos de detalle y extraer los detalles según la estructura
         if (details && details.details) {
-          if (
-            details.details.details &&
-            Array.isArray(details.details.details)
-          ) {
-            // Estructura tipo 1: details.details.details[]
-            allDetails = details.details.details;
-          } else {
-            // Estructura tipo 2: details.details.NOMBRE_TABLA[]
-            const detailsObj = details.details;
-            // Buscar la primera propiedad que sea un array
-            for (const key in detailsObj) {
-              if (Array.isArray(detailsObj[key])) {
-                allDetails = detailsObj[key];
-                break;
-              }
+          // Procesar cada tabla de detalle y agregar sus datos al array principal
+          for (const tableName in details.details) {
+            if (
+              Array.isArray(details.details[tableName]) &&
+              details.details[tableName].length > 0
+            ) {
+              // Guardar información sobre el origen de cada detalle
+              details.details[tableName].forEach((item) => {
+                item._detailTableName = tableName;
+                detailTableMapping[tableName] = item._targetTable || tableName;
+              });
+
+              // Agregar los detalles al array principal
+              allDetails = allDetails.concat(details.details[tableName]);
             }
-          }
-        }
-
-        if (allDetails.length === 0 && activeConfig) {
-          const detailTablesWithSameSource = activeConfig.tableConfigs.filter(
-            (tc) => tc.isDetailTable && tc.useSameSourceTable
-          );
-
-          if (detailTablesWithSameSource.length > 0) {
-            // Para cada tabla de detalle que usa la misma fuente, crea un detalle
-            // con los mismos datos del documento principal
-            for (const detailTable of detailTablesWithSameSource) {
-              const detailItem = { ...document }; // Copia los datos del documento principal
-
-              // Agregar información adicional para identificar la tabla de detalle
-              detailItem._detailTableName = detailTable.name;
-              detailItem._targetTable = detailTable.targetTable;
-
-              allDetails.push(detailItem);
-            }
-
-            console.log(
-              "Detalles generados a partir de tablas con misma fuente:",
-              allDetails
-            );
           }
         }
 
@@ -307,16 +282,27 @@ export function DocumentsVisualization() {
           return;
         }
 
-        // Obtener todos los campos disponibles
-        const allFields = Object.keys(allDetails[0]);
+        // Obtener todos los campos disponibles (excluyendo metadatos)
+        const allFields = new Set();
+        allDetails.forEach((item) => {
+          Object.keys(item).forEach((key) => {
+            if (!key.startsWith("_")) {
+              // Excluir campos de metadatos
+              allFields.add(key);
+            }
+          });
+        });
+
+        // Ordenar los campos para que sean consistentes
+        const sortedFields = Array.from(allFields).sort();
 
         // Inicialmente mostrar solo 5 campos
         const initialFields = allFields.slice(0, 5);
 
-        // Show document details modal with simplified UI
+        // Show document details modal with improved UI
         Swal.fire({
           title: `Documento: ${documentId}`,
-          width: 800,
+          width: 900,
           html: `
         <div class="document-details">
           <div class="document-header">
@@ -335,9 +321,20 @@ export function DocumentsVisualization() {
           <h4>Detalle</h4>
           
           <div class="items-table-container">
+            <div style="margin-bottom: 8px; text-align: left;">
+              <strong>Tablas disponibles:</strong> 
+              ${Object.keys(detailTableMapping)
+                .map(
+                  (tableName) =>
+                    `<span style="background-color: #f0f0f0; padding: 2px 6px; border-radius: 3px; margin-right: 5px;">${tableName}</span>`
+                )
+                .join("")}
+            </div>
+            
             <table class="items-table">
               <thead>
                 <tr>
+                  <th style="width: 150px;">Tabla</th>
                   ${initialFields.map((key) => `<th>${key}</th>`).join("")}
                   <th>Acción</th>
                 </tr>
@@ -347,6 +344,9 @@ export function DocumentsVisualization() {
                   .map(
                     (item, idx) => `
                   <tr>
+                    <td style="font-weight: bold; color: #007bff;">
+                      ${item._detailTableName || "N/A"}
+                    </td>
                     ${initialFields
                       .map(
                         (key) => `
@@ -398,18 +398,34 @@ export function DocumentsVisualization() {
                 if (item) {
                   let detailHtml =
                     '<div style="text-align: left; max-height: 60vh; overflow-y: auto;">';
+                  detailHtml += `
+                <div style="margin-bottom: 12px; padding-bottom: 8px; border-bottom: 1px solid #eee;">
+                  <strong style="font-size: 16px; color: #007bff;">Tabla de detalle: ${
+                    item._detailTableName || "N/A"
+                  }</strong>
+                  ${
+                    item._targetTable
+                      ? `<div><strong>Tabla destino:</strong> ${item._targetTable}</div>`
+                      : ""
+                  }
+                </div>
+              `;
+
                   detailHtml +=
                     '<table style="width: 100%; border-collapse: collapse;">';
 
+                  // Mostrar primero los campos normales (sin _)
                   Object.entries(item).forEach(([key, value]) => {
-                    detailHtml += `
-                  <tr style="border-bottom: 1px solid #eee;">
-                    <td style="padding: 8px; font-weight: bold; width: 40%;">${key}</td>
-                    <td style="padding: 8px;">${
-                      value !== null && value !== undefined ? value : "N/A"
-                    }</td>
-                  </tr>
-                `;
+                    if (!key.startsWith("_")) {
+                      detailHtml += `
+                    <tr style="border-bottom: 1px solid #eee;">
+                      <td style="padding: 8px; font-weight: bold; width: 40%;">${key}</td>
+                      <td style="padding: 8px;">${
+                        value !== null && value !== undefined ? value : "N/A"
+                      }</td>
+                    </tr>
+                  `;
+                    }
                   });
 
                   detailHtml += "</table></div>";
