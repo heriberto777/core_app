@@ -8,14 +8,12 @@ const {
 
 let task;
 let isRunning = false;
-let isEnabled = false; // Inicializamos como deshabilitado por defecto
-let currentHour = "02:00"; // Hora por defecto
+let isEnabled = true; // Nueva variable para controlar si el servicio está habilitado
 let transferService; // Se inicializará con importación diferida
 
 /**
  * Inicia el trabajo programado para ejecutar transferencias
  * @param {string} hour - Hora de ejecución en formato "HH:MM"
- * @returns {object} - Estado del planificador
  */
 const startCronJob = (hour) => {
   // Importación diferida para evitar dependencia circular
@@ -35,23 +33,16 @@ const startCronJob = (hour) => {
     logger.info(
       "La ejecución automática está deshabilitada. No se programará ningún trabajo cron."
     );
-    return {
-      enabled: isEnabled,
-      active: false,
-      hour: hour || currentHour,
-    };
+    return;
   }
 
   // Validar formato de hora
   if (!hour || !/^([01]\d|2[0-3]):([0-5]\d)$/.test(hour)) {
     logger.error(
-      `Formato de hora inválido: ${hour}. Usando ${currentHour} por defecto.`
+      `Formato de hora inválido: ${hour}. Usando 02:00 por defecto.`
     );
-    hour = currentHour;
+    hour = "02:00";
   }
-
-  // Actualizar la hora actual
-  currentHour = hour;
 
   const [hh, mm] = hour.split(":");
   const cronExpression = `${mm} ${hh} * * *`;
@@ -59,12 +50,7 @@ const startCronJob = (hour) => {
   // Validar expresión cron
   if (!cron.validate(cronExpression)) {
     logger.error(`Expresión cron inválida: ${cronExpression}`);
-    return {
-      enabled: isEnabled,
-      active: false,
-      hour: currentHour,
-      error: "Expresión cron inválida",
-    };
+    return;
   }
 
   logger.info(
@@ -175,17 +161,10 @@ const startCronJob = (hour) => {
 
   task.start();
   logger.info(`🕒 Transferencias programadas diariamente a las ${hour}`);
-
-  return {
-    enabled: isEnabled,
-    active: true,
-    hour: currentHour,
-  };
 };
 
 /**
  * Detiene el trabajo cron programado
- * @returns {boolean} - true si se detuvo correctamente, false si no había ninguno activo
  */
 const stopCronJob = () => {
   if (task) {
@@ -200,62 +179,40 @@ const stopCronJob = () => {
 };
 
 /**
- * Habilita o deshabilita el planificador de tareas y establece su hora de ejecución
+ * Habilita o deshabilita el planificador de tareas
  * @param {boolean} enabled - true para habilitar, false para deshabilitar
  * @param {string} hour - Hora a la que programar las tareas (si se habilita)
- * @returns {object} - Estado actualizado del planificador
  */
 const setSchedulerEnabled = (enabled, hour = "02:00") => {
-  // Actualizar variables de estado
   isEnabled = enabled;
 
-  if (hour && hour !== currentHour) {
-    currentHour = hour;
-  }
-
   if (enabled) {
-    logger.info(`Habilitando planificador de tareas para las ${currentHour}`);
-    const result = startCronJob(currentHour);
-    return result;
+    logger.info(`Habilitando planificador de tareas para las ${hour}`);
+    startCronJob(hour);
   } else {
     logger.info("Deshabilitando planificador de tareas");
     stopCronJob();
-    return {
-      enabled: false,
-      active: false,
-      hour: currentHour,
-    };
   }
+
+  return {
+    enabled: isEnabled,
+    hour: hour,
+    active: task !== null,
+  };
 };
 
 /**
  * Retorna el estado actual del planificador
- * @returns {object} - Estado actual del planificador
  */
 const getSchedulerStatus = () => {
   return {
     enabled: isEnabled,
     active: task !== null,
     running: isRunning,
-    hour: currentHour,
     nextExecution: task
       ? getNextExecutionTime(task.options?.cronTime?.source)
       : null,
   };
-};
-
-/**
- * Sincroniza el estado del planificador con la configuración guardada en la BD
- * @param {object} config - Configuración cargada desde la BD
- * @returns {object} - Estado actualizado del planificador
- */
-const syncWithConfig = (config) => {
-  if (!config) {
-    return getSchedulerStatus();
-  }
-
-  // Actualizar el estado del planificador con la configuración de la BD
-  return setSchedulerEnabled(config.enabled, config.hour);
 };
 
 /**
@@ -297,5 +254,4 @@ module.exports = {
   stopCronJob,
   setSchedulerEnabled,
   getSchedulerStatus,
-  syncWithConfig,
 };

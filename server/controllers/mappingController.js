@@ -1,6 +1,6 @@
 const DynamicTransferService = require("../services/DynamicTransferService");
 const { SqlService } = require("../services/SqlService");
-const ConnectionManager = require("../services/ConnectionManager");
+const ConnectionManager = require("../services/ConnectionCentralService");
 const logger = require("../services/logger");
 const TransferMapping = require("../models/transferMappingModel");
 

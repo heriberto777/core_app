@@ -1,5 +1,5 @@
 const logger = require("./logger");
-const ConnectionService = require("./ConnectionCentralService");
+const ConnectionManager = require("./ConnectionManager");
 const { SqlService } = require("./SqlService");
 const TransferTask = require("../models/transferTaks");
 const withCancellation = require("../decorators/withCancellation");
@@ -575,7 +575,7 @@ class TransferService {
       // Cerrar las conexiones
       try {
         if (server1Connection) {
-          await ConnectionService.releaseConnection(server1Connection);
+          await ConnectionManager.releaseConnection(server1Connection);
           server1Connection = null;
         }
       } catch (closeError) {
@@ -584,7 +584,7 @@ class TransferService {
 
       try {
         if (server2Connection) {
-          await ConnectionService.releaseConnection(server2Connection);
+          await ConnectionManager.releaseConnection(server2Connection);
           server2Connection = null;
         }
       } catch (closeError) {
@@ -655,7 +655,7 @@ class TransferService {
       logger.info(
         `Estableciendo conexión a server1 para tarea ${task.name}...`
       );
-      const server1Result = await ConnectionService.enhancedRobustConnect(
+      const server1Result = await ConnectionManager.enhancedRobustConnect(
         "server1"
       );
 
@@ -677,13 +677,13 @@ class TransferService {
       logger.info(
         `Estableciendo conexión a server2 para tarea ${task.name}...`
       );
-      const server2Result = await ConnectionService.enhancedRobustConnect(
+      const server2Result = await ConnectionManager.enhancedRobustConnect(
         "server2"
       );
 
       if (!server2Result.success) {
         // Liberar conexión a server1 antes de lanzar error
-        await ConnectionService.releaseConnection(server1Connection);
+        await ConnectionManager.releaseConnection(server1Connection);
         throw new Error(
           `No se pudo establecer conexión a server2: ${server2Result.error.message}`
         );
@@ -1188,7 +1188,7 @@ class TransferService {
         logger.warn(`Conexión perdida durante procesamiento, reconectando...`);
 
         // CORREGIDO: Reconectar al servidor correcto según tipo
-        const reconnectResult = await ConnectionService.enhancedRobustConnect(
+        const reconnectResult = await ConnectionManager.enhancedRobustConnect(
           targetServer // Servidor correcto según tipo
         );
         if (!reconnectResult.success) {
@@ -1365,7 +1365,7 @@ class TransferService {
 
                 // CORREGIDO: Reconectar al servidor correcto
                 const reconnectResult =
-                  await ConnectionService.enhancedRobustConnect(targetServer);
+                  await ConnectionManager.enhancedRobustConnect(targetServer);
                 if (!reconnectResult.success) {
                   throw new Error(
                     `No se pudo restablecer la conexión tras error: ${
@@ -1476,7 +1476,7 @@ class TransferService {
 
                 // CORREGIDO: Reconectar al servidor correcto
                 const reconnectResult =
-                  await ConnectionService.enhancedRobustConnect(targetServer);
+                  await ConnectionManager.enhancedRobustConnect(targetServer);
 
                 if (!reconnectResult.success) {
                   throw new Error(
@@ -1628,7 +1628,7 @@ class TransferService {
       } catch (testError) {
         logger.warn(`Reconectando para post-actualización...`);
 
-        const reconnectResult = await ConnectionService.enhancedRobustConnect(
+        const reconnectResult = await ConnectionManager.enhancedRobustConnect(
           "server1"
         );
         if (!reconnectResult.success) {
@@ -1703,7 +1703,7 @@ class TransferService {
             );
 
             const reconnectResult =
-              await ConnectionService.enhancedRobustConnect("server1");
+              await ConnectionManager.enhancedRobustConnect("server1");
             if (!reconnectResult.success) {
               throw new Error(
                 `No se pudo reconectar para reintentar post-actualización: ${reconnectResult.error.message}`
@@ -1783,10 +1783,10 @@ class TransferService {
 
         // Reiniciar pools de conexión si es necesario
         logger.info(`Reiniciando pools de conexión...`);
-        await ConnectionService.closePools();
+        await ConnectionManager.closePools();
         await new Promise((resolve) => setTimeout(resolve, 2000)); // Esperar 2s
-        await ConnectionService.initPool("server1");
-        await ConnectionService.initPool("server2");
+        await ConnectionManager.initPool("server1");
+        await ConnectionManager.initPool("server2");
       }
 
       logger.info(`Verificación de conexiones completada para tarea ${taskId}`);
@@ -1923,7 +1923,7 @@ class TransferService {
 
           // Verificación básica de conexiones
           const mongoConnected = MongoDbService.isConnected();
-          const poolStatus = ConnectionService.getConnectionStats();
+          const poolStatus = ConnectionManager.getPoolsStatus();
 
           connectionsOk =
             mongoConnected &&
@@ -2196,7 +2196,7 @@ class TransferService {
 
           // Usar conexión robusta para el borrado
           const connectionResult =
-            await ConnectionService.enhancedRobustConnect("server2");
+            await ConnectionManager.enhancedRobustConnect("server2");
           if (!connectionResult.success) {
             throw new Error(
               `No se pudo establecer conexión a server2 para borrado: ${
@@ -2254,7 +2254,7 @@ class TransferService {
         try {
           // Usar conexión robusta
           const connectionResult =
-            await ConnectionService.enhancedRobustConnect("server2");
+            await ConnectionManager.enhancedRobustConnect("server2");
           if (!connectionResult.success) {
             throw new Error(
               `No se pudo establecer conexión a server2: ${
@@ -2365,11 +2365,11 @@ class TransferService {
           );
 
           try {
-            await ConnectionService.releaseConnection(server2Connection);
+            await ConnectionManager.releaseConnection(server2Connection);
           } catch (e) {}
 
           // Usar conexión robusta
-          const reconnectResult = await ConnectionService.enhancedRobustConnect(
+          const reconnectResult = await ConnectionManager.enhancedRobustConnect(
             "server2"
           );
           if (!reconnectResult.success) {
@@ -2467,12 +2467,12 @@ class TransferService {
                 );
 
                 try {
-                  await ConnectionService.releaseConnection(server2Connection);
+                  await ConnectionManager.releaseConnection(server2Connection);
                 } catch (e) {}
 
                 // Usar conexión robusta
                 const reconnectResult =
-                  await ConnectionService.enhancedRobustConnect("server2");
+                  await ConnectionManager.enhancedRobustConnect("server2");
                 if (!reconnectResult.success) {
                   throw new Error(
                     `No se pudo restablecer la conexión: ${
@@ -2679,7 +2679,7 @@ class TransferService {
       // Cerrar conexión
       try {
         if (server2Connection) {
-          await ConnectionService.releaseConnection(server2Connection);
+          await ConnectionManager.releaseConnection(server2Connection);
           logger.debug(
             `Conexión server2 cerrada correctamente para inserción en lotes de ${taskName} (taskId: ${taskId})`
           );
@@ -2727,7 +2727,7 @@ class TransferService {
 
       // 3. Establecer conexiones a ambos servidores
       logger.info(`Conectando a Server2 (origen)...`);
-      const server2Result = await ConnectionService.enhancedRobustConnect(
+      const server2Result = await ConnectionManager.enhancedRobustConnect(
         "server2"
       );
       if (!server2Result.success) {
@@ -2741,7 +2741,7 @@ class TransferService {
       logger.info(`Conexión establecida a Server2`);
 
       logger.info(`Conectando a Server1 (destino)...`);
-      const server1Result = await ConnectionService.enhancedRobustConnect(
+      const server1Result = await ConnectionManager.enhancedRobustConnect(
         "server1"
       );
       if (!server1Result.success) {
@@ -3085,7 +3085,7 @@ class TransferService {
       // Liberar conexiones
       if (server1Connection) {
         try {
-          await ConnectionService.releaseConnection(server1Connection);
+          await ConnectionManager.releaseConnection(server1Connection);
         } catch (e) {
           logger.error(`Error al liberar conexión Server1: ${e.message}`);
         }
@@ -3093,7 +3093,7 @@ class TransferService {
 
       if (server2Connection) {
         try {
-          await ConnectionService.releaseConnection(server2Connection);
+          await ConnectionManager.releaseConnection(server2Connection);
         } catch (e) {
           logger.error(`Error al liberar conexión Server2: ${e.message}`);
         }
