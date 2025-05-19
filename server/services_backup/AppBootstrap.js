@@ -200,48 +200,23 @@ class AppBootstrap {
    */
   async initializeCronService() {
     try {
+      const { startCronJob } = require("./cronService");
       const Config = require("../models/configModel");
-      const cronService = require("../services/cronService");
 
-      // Buscar configuración guardada
-      const savedConfig = await Config.findOne();
+      const config = await Config.findOne();
+      const cronTime = config?.hour || "02:00";
 
-      if (savedConfig) {
-        // Sincronizar estado del planificador con la configuración guardada
-        cronService.setSchedulerEnabled(savedConfig.enabled, savedConfig.hour);
-
-        logger.info(
-          `Servicio de tareas programadas inicializado: ${
-            savedConfig.enabled ? "habilitado" : "deshabilitado"
-          } a las ${savedConfig.hour}`
-        );
-      } else {
-        // Si no hay configuración, crear una configuración por defecto (deshabilitada)
-        const defaultConfig = new Config({
-          hour: "02:00",
-          enabled: false, // Deshabilitado por defecto
-          lastModified: new Date(),
-        });
-
-        await defaultConfig.save();
-        logger.info(
-          "Configuración inicial del planificador creada como deshabilitada"
-        );
-
-        // Asegurar que el planificador esté deshabilitado
-        cronService.setSchedulerEnabled(false, "02:00");
-      }
-
-      return {
-        success: true,
-        message: "Servicio cron inicializado correctamente",
-      };
-    } catch (error) {
-      logger.error(`Error al inicializar servicio cron: ${error.message}`);
-      return {
-        success: false,
-        message: `Error al inicializar servicio cron: ${error.message}`,
-      };
+      logger.info(
+        `⏰ Configurando tareas programadas para ejecutarse diariamente a las ${cronTime}...`
+      );
+      startCronJob(cronTime);
+      this.state.cronService = true;
+      logger.info("✅ Tareas programadas configuradas correctamente");
+    } catch (cronError) {
+      logger.warn(
+        "⚠️ No se pudo iniciar el servicio de tareas programadas:",
+        cronError.message
+      );
     }
   }
 

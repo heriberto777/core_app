@@ -1,6 +1,6 @@
 // services/dynamicQueryService.js - VERSIÓN MEJORADA
 const TransferTask = require("../models/transferTaks");
-const ConnectionService = require("./ConnectionCentralService");
+const ConnectionManager = require("./ConnectionManager");
 const { SqlService } = require("./SqlService");
 const logger = require("./logger");
 const MemoryManager = require("./MemoryManager");
@@ -142,7 +142,7 @@ async function executeDynamicSelect(
       );
       sendProgress(task._id, 10);
 
-      const connectionResult = await ConnectionService.enhancedRobustConnect(
+      const connectionResult = await ConnectionManager.enhancedRobustConnect(
         serverKey
       );
 
@@ -273,12 +273,12 @@ async function executeDynamicSelect(
 
               // Liberar la conexión actual
               try {
-                await ConnectionService.releaseConnection(connection);
+                await ConnectionManager.releaseConnection(connection);
               } catch (e) {}
 
               // Obtener nueva conexión
               const reconnectResult =
-                await ConnectionService.enhancedRobustConnect(serverKey);
+                await ConnectionManager.enhancedRobustConnect(serverKey);
 
               if (!reconnectResult.success) {
                 throw new Error(
@@ -445,7 +445,7 @@ async function executeDynamicSelect(
     if (ownConnection) {
       try {
         if (connection) {
-          await ConnectionService.releaseConnection(connection);
+          await ConnectionManager.releaseConnection(connection);
           logger.debug(
             `✅ Conexión cerrada correctamente para consulta '${taskName}'`
           );
@@ -533,7 +533,7 @@ async function executeNonDestructiveQuery(
       `🔌 Estableciendo conexión a ${serverKey} para tarea no destructiva '${taskName}'...`
     );
 
-    const connectionResult = await ConnectionService.enhancedRobustConnect(
+    const connectionResult = await ConnectionManager.enhancedRobustConnect(
       serverKey
     );
 
@@ -656,12 +656,12 @@ async function executeNonDestructiveQuery(
 
               // Liberar la conexión actual
               try {
-                await ConnectionService.releaseConnection(connection);
+                await ConnectionManager.releaseConnection(connection);
               } catch (e) {}
 
               // Obtener nueva conexión
               const reconnectResult =
-                await ConnectionService.enhancedRobustConnect(serverKey);
+                await ConnectionManager.enhancedRobustConnect(serverKey);
 
               if (!reconnectResult.success) {
                 throw new Error(
@@ -801,7 +801,7 @@ async function executeNonDestructiveQuery(
     // Cerrar la conexión en el bloque finally para garantizar que se cierre incluso si hay errores
     try {
       if (connection) {
-        await ConnectionService.releaseConnection(connection);
+        await ConnectionManager.releaseConnection(connection);
         logger.debug(
           `✅ Conexión cerrada correctamente para consulta no destructiva '${taskName}'`
         );

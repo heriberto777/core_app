@@ -1,5 +1,5 @@
 const logger = require("./logger");
-const ConnectionService = require("./ConnectionCentralService");
+const ConnectionManager = require("./ConnectionManager");
 const { SqlService } = require("./SqlService");
 const TransferMapping = require("../models/transferMappingModel");
 const TaskExecution = require("../models/taskExecutionModel");
@@ -117,7 +117,7 @@ class DynamicTransferService {
             );
 
             const connectionResult =
-              await ConnectionService.enhancedRobustConnect(serverName);
+              await ConnectionManager.enhancedRobustConnect(serverName);
 
             if (!connectionResult.success || !connectionResult.connection) {
               const error =
@@ -137,7 +137,7 @@ class DynamicTransferService {
 
             // Verificar que la conexión sea válida
             await SqlService.query(
-              connectionResult,
+              connectionResult.connection,
               "SELECT 1 AS test"
             );
 
@@ -619,7 +619,7 @@ class DynamicTransferService {
 
         if (sourceConnection) {
           releasePromises.push(
-            ConnectionService.releaseConnection(sourceConnection).catch((e) =>
+            ConnectionManager.releaseConnection(sourceConnection).catch((e) =>
               logger.error(`Error al liberar conexión origen: ${e.message}`)
             )
           );
@@ -627,7 +627,7 @@ class DynamicTransferService {
 
         if (targetConnection) {
           releasePromises.push(
-            ConnectionService.releaseConnection(targetConnection).catch((e) =>
+            ConnectionManager.releaseConnection(targetConnection).catch((e) =>
               logger.error(`Error al liberar conexión destino: ${e.message}`)
             )
           );
@@ -1448,7 +1448,7 @@ class DynamicTransferService {
         try {
           logger.info(`Intentando reconexión para documento ${documentId}...`);
           const targetServer = mapping.targetServer;
-          const reconnectResult = await ConnectionService.enhancedRobustConnect(
+          const reconnectResult = await ConnectionManager.enhancedRobustConnect(
             targetServer
           );
 

@@ -1,6 +1,6 @@
 // services/healthMonitorService.js
 const logger = require("./logger");
-const ConnectionService = require("./ConnectionCentralService");
+const ConnectionManager = require("./ConnectionManager");
 const MongoDbService = require("./mongoDbService");
 const ConnectionDiagnostic = require("./connectionDiagnostic");
 
@@ -120,7 +120,7 @@ async function checkSystemHealth() {
     // 2. Verificar estado de los pools
     let poolStatus = {};
     try {
-      poolStatus = ConnectionService.getConnectionStats();
+      poolStatus = ConnectionManager.getPoolsStatus();
     } catch (error) {
       logger.warn("Error al obtener estado de pools:", error);
       poolStatus = {};
@@ -243,7 +243,7 @@ async function attemptDatabaseRecovery() {
 
     // 2. Reiniciar pools de conexión
     try {
-      await ConnectionService.closePools();
+      await ConnectionManager.closePools();
       logger.info("Pools cerrados correctamente");
     } catch (closeError) {
       logger.error("Error al cerrar pools:", closeError);
@@ -326,7 +326,7 @@ async function attemptConnectionRecovery() {
   try {
     // 1. Cerrar pools existentes
     try {
-      await ConnectionService.closePools();
+      await ConnectionManager.closePools();
       logger.info("Pools cerrados correctamente");
     } catch (closeError) {
       logger.error("Error al cerrar pools:", closeError);
@@ -426,7 +426,7 @@ async function performFullDiagnostic() {
     // 4. Verificar estado de pools
     let poolStatus = {};
     try {
-      poolStatus = ConnectionService.getConnectionStats();
+      poolStatus = ConnectionManager.getPoolsStatus();
     } catch (poolError) {
       logger.warn("Error al obtener estado de pools:", poolError);
       poolStatus = { error: poolError.message };
