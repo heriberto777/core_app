@@ -2027,4 +2027,27 @@ export class TransferApi {
       throw error;
     }
   }
+
+  async updateEntityData(accessToken, updateData) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/update-entity-data`;
+      const params = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify(updateData),
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al actualizar entidad:", error);
+      throw error;
+    }
+  }
 }

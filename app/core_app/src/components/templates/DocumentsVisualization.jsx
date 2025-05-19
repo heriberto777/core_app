@@ -480,37 +480,34 @@ export function DocumentsVisualization() {
   }, [entityType, selectedEntity, showEntityEditor]);
 
   // Función para guardar cliente editado - con useCallback
-  const handleSaveCustomer = useCallback(
-    async (editedCustomer) => {
-      try {
-        setIsLoading(true);
+  const handleSaveCustomer = async (updateData) => {
+    try {
+      setIsLoading(true);
 
-        // Llamada a la API para actualizar el cliente
-        await api.updateCustomerData(accessToken, editedCustomer);
+      // Llamada a la API para actualizar tanto destino como origen
+      await api.updateEntityData(accessToken, updateData);
 
-        // Cerrar editor
-        setShowEntityEditor(false);
+      // Cerrar editor
+      setShowEntityEditor(false);
 
-        // Actualizar lista
-        fetchDocuments();
+      // Actualizar lista
+      fetchDocuments();
 
-        Swal.fire({
-          icon: "success",
-          title: "Cliente actualizado",
-          text: "Los datos del cliente han sido actualizados correctamente",
-        });
-      } catch (error) {
-        Swal.fire({
-          icon: "error",
-          title: "Error",
-          text: error.message || "No se pudo actualizar el cliente",
-        });
-      } finally {
-        setIsLoading(false);
-      }
-    },
-    [accessToken, fetchDocuments]
-  );
+      Swal.fire({
+        icon: "success",
+        title: "Actualizado",
+        text: "Los datos han sido actualizados correctamente en ambas bases de datos",
+      });
+    } catch (error) {
+      Swal.fire({
+        icon: "error",
+        title: "Error",
+        text: error.message || "No se pudo actualizar la entidad",
+      });
+    } finally {
+      setIsLoading(false);
+    }
+  };
 
   // Process documents functionality - con useCallback
   const processDocuments = useCallback(async () => {

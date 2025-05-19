@@ -581,20 +581,84 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
         Swal.fire({
           title: "Campos requeridos",
           html: `Por favor complete los siguientes campos:<br><br>
-            <ul style="text-align: left; display: inline-block;">
-              ${missingFields.map((field) => `<li>${field}</li>`).join("")}
-            </ul>`,
+          <ul style="text-align: left; display: inline-block;">
+            ${missingFields.map((field) => `<li>${field}</li>`).join("")}
+          </ul>`,
           icon: "warning",
         });
         setLoading(false);
         return;
       }
 
-      // Preparar datos para guardar
-      const saveData = {
-        ...editedCustomer,
+      // Preparar datos para actualizar el origen
+      const updateData = {
+        mappingId,
+        documentId: null, // Se determinará abajo
+        targetData: editedCustomer,
+        sourceData: {}, // Datos a actualizar en la tabla origen
         _dynamicFields: {},
       };
+
+      // Determinar el ID del documento
+      if (mapping) {
+        const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
+        if (mainTable && mainTable.primaryKey) {
+          // Buscar el ID en los datos editados
+          const primaryKeyMapping = mainTable.fieldMappings.find(
+            (fm) => fm.sourceField === mainTable.primaryKey
+          );
+
+          if (primaryKeyMapping) {
+            updateData.documentId =
+              editedCustomer[primaryKeyMapping.targetField];
+          } else {
+            updateData.documentId = editedCustomer[mainTable.primaryKey];
+          }
+        }
+
+        // Si aún no encontramos el ID, usar la primera propiedad
+        if (!updateData.documentId) {
+          updateData.documentId =
+            editedCustomer[Object.keys(editedCustomer)[0]];
+        }
+
+        // Mapear los datos de vuelta a los campos origen
+        if (mainTable && mainTable.fieldMappings) {
+          mainTable.fieldMappings.forEach((field) => {
+            if (
+              field.sourceField &&
+              editedCustomer[field.targetField] !== undefined
+            ) {
+              let sourceValue = editedCustomer[field.targetField];
+
+              // Aplicar mapeo de valores inverso si existe
+              if (field.valueMappings?.length > 0) {
+                const inverseMap = field.valueMappings.find(
+                  (vm) => vm.targetValue === sourceValue
+                );
+                if (inverseMap) {
+                  sourceValue = inverseMap.sourceValue;
+                }
+              }
+
+              // Aplicar prefijo si fue removido originalmente
+              if (field.removePrefix && originalSourceData) {
+                const originalValue = originalSourceData[field.sourceField];
+                if (
+                  originalValue &&
+                  typeof originalValue === "string" &&
+                  originalValue.startsWith(field.removePrefix)
+                ) {
+                  sourceValue = field.removePrefix + sourceValue;
+                }
+              }
+
+              // Guardar valor para actualizar en origen
+              updateData.sourceData[field.sourceField] = sourceValue;
+            }
+          });
+        }
+      }
 
       // Incluir información de campos dinámicos que necesitan actualización
       Object.entries(fieldMeta).forEach(([fieldName, meta]) => {
@@ -604,19 +668,19 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
           meta.queryDefinition &&
           meta.queryDefinition.updateOnSave
         ) {
-          saveData._dynamicFields[fieldName] = {
+          updateData._dynamicFields[fieldName] = {
             ...meta,
             newValue: editedCustomer[fieldName],
           };
         }
       });
 
-      // Llamar al handler de guardado pasando la configuración de mapping
-      await onSave(saveData, mappingId);
+      // Llamar al handler de guardado pasando los datos completos
+      await onSave(updateData);
 
       Swal.fire({
         title: "Guardado",
-        text: "Los datos se guardaron correctamente",
+        text: "Los datos se guardaron correctamente en ambas tablas",
         icon: "success",
         timer: 2000,
       });
