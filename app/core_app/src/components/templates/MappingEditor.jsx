@@ -108,13 +108,41 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       return;
     }
 
+    // Verificar que todos los campos tienen las propiedades de visualización necesarias
+    const mappingCopy = JSON.parse(JSON.stringify(mapping));
+
+    // Verificar y corregir propiedades faltantes para cada campo en cada tabla
+    mappingCopy.tableConfigs.forEach((tableConfig) => {
+      if (tableConfig.fieldMappings) {
+        tableConfig.fieldMappings.forEach((field) => {
+          // Asegurarse de que existen todas las propiedades de visualización
+          field.isEditable = field.isEditable !== false; // true por defecto
+          field.showInList = field.showInList === true; // false por defecto
+          field.displayName = field.displayName || null;
+          field.displayOrder = field.displayOrder || 0;
+          field.fieldGroup = field.fieldGroup || null;
+          field.fieldType = field.fieldType || "text";
+
+          // Mantener las options solo si fieldType es select
+          if (field.fieldType === "select") {
+            field.options = field.options || [];
+          } else {
+            field.options = null;
+          }
+        });
+      }
+    });
+
+    // Log para depuración
+    console.log("Mapping a guardar:", mappingCopy);
+
     setLoading(true);
     try {
       let result;
       if (isEditing) {
-        result = await api.updateMapping(accessToken, mappingId, mapping);
+        result = await api.updateMapping(accessToken, mappingId, mappingCopy);
       } else {
-        result = await api.createMapping(accessToken, mapping);
+        result = await api.createMapping(accessToken, mappingCopy);
       }
 
       if (result.success) {
@@ -630,23 +658,26 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         }
       },
       preConfirm: () => {
-        const sourceField = document.getElementById("sourceField").value;
-        const targetField = document.getElementById("targetField").value;
+        // Recopilar valores de los campos
+        const sourceField = document.getElementById("sourceField").value.trim();
+        const targetField = document.getElementById("targetField").value.trim();
         const defaultValue = document.getElementById("defaultValue").value;
-        const removePrefix = document.getElementById("removePrefix").value;
+        const removePrefix = document
+          .getElementById("removePrefix")
+          .value.trim();
         const isRequired = document.getElementById("isRequired").checked;
 
-        // NUEVO: Valores para lookup
+        // Valores para lookup
         const lookupFromTarget =
           document.getElementById("lookupFromTarget").checked;
 
-        // Nuevos campos para visualización
+        // Propiedades de visualización
         const isEditable = document.getElementById("isEditable").checked;
         const showInList = document.getElementById("showInList").checked;
-        const displayName = document.getElementById("displayName").value;
+        const displayName = document.getElementById("displayName").value.trim();
         const displayOrder =
           parseInt(document.getElementById("displayOrder").value) || 0;
-        const fieldGroup = document.getElementById("fieldGroup").value;
+        const fieldGroup = document.getElementById("fieldGroup").value.trim();
         const fieldType = document.getElementById("fieldType").value;
 
         // Validaciones básicas
@@ -677,8 +708,8 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         const options = [];
         if (fieldType === "select") {
           document.querySelectorAll(".option-row").forEach((row) => {
-            const label = row.querySelector(".option-label").value;
-            const value = row.querySelector(".option-value").value;
+            const label = row.querySelector(".option-label").value.trim();
+            const value = row.querySelector(".option-value").value.trim();
 
             if (label || value) {
               options.push({ label, value });
@@ -693,18 +724,20 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         let failIfNotFound = false;
 
         if (lookupFromTarget) {
-          lookupQuery = document.getElementById("lookupQuery").value;
+          lookupQuery = document.getElementById("lookupQuery").value.trim();
           validateExistence =
             document.getElementById("validateExistence").checked;
           failIfNotFound = document.getElementById("failIfNotFound").checked;
 
           // Recopilar parámetros
           document.querySelectorAll(".lookup-param-row").forEach((row) => {
-            const paramName = row.querySelector(".param-name").value;
-            const sourceField = row.querySelector(".source-field").value;
+            const paramName = row.querySelector(".param-name").value.trim();
+            const paramSourceField = row
+              .querySelector(".source-field")
+              .value.trim();
 
-            if (paramName && sourceField) {
-              lookupParams.push({ paramName, sourceField });
+            if (paramName && paramSourceField) {
+              lookupParams.push({ paramName, sourceField: paramSourceField });
             }
           });
 
@@ -741,6 +774,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           }
         }
 
+        // Crear objeto completo con todas las propiedades
         return {
           sourceField: sourceField || null,
           targetField,
@@ -748,6 +782,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           removePrefix: removePrefix || null,
           isRequired,
           valueMappings: [],
+
           // Propiedades de lookup
           lookupFromTarget,
           lookupQuery: lookupFromTarget ? lookupQuery : null,
@@ -755,7 +790,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           validateExistence: lookupFromTarget ? validateExistence : false,
           failIfNotFound: lookupFromTarget ? failIfNotFound : false,
 
-          // Nuevas propiedades
+          // Propiedades de visualización - ASEGÚRATE DE QUE ESTAS PROPIEDADES ESTÉN CORRECTAMENTE DEFINIDAS
           isEditable,
           showInList,
           displayName: displayName || null,
@@ -766,14 +801,60 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         };
       },
     }).then((result) => {
-      if (result.isConfirmed) {
-        const newTableConfigs = [...mapping.tableConfigs];
+      if (result.isConfirmed && result.value) {
+        // Agregar log para depuración
+        console.log("Nuevo campo a agregar:", result.value);
+
+        // Verificar que el objeto result.value tiene todas las propiedades
+        const expectedProps = [
+          "sourceField",
+          "targetField",
+          "defaultValue",
+          "removePrefix",
+          "isRequired",
+          "valueMappings",
+          "lookupFromTarget",
+          "lookupQuery",
+          "lookupParams",
+          "validateExistence",
+          "failIfNotFound",
+          "isEditable",
+          "showInList",
+          "displayName",
+          "displayOrder",
+          "fieldGroup",
+          "fieldType",
+          "options",
+        ];
+
+        const missingProps = expectedProps.filter(
+          (prop) => result.value[prop] === undefined
+        );
+        if (missingProps.length > 0) {
+          console.warn("Propiedades faltantes en el campo:", missingProps);
+        }
+
+        // Crear copia profunda de las tablas para evitar referencias mutables
+        const newTableConfigs = JSON.parse(
+          JSON.stringify(mapping.tableConfigs)
+        );
+
+        // Asegurarse de que fieldMappings existe en esta tabla
+        if (!newTableConfigs[tableIndex].fieldMappings) {
+          newTableConfigs[tableIndex].fieldMappings = [];
+        }
+
+        // Añadir el nuevo campo asegurándonos de que todas las propiedades están presentes
         newTableConfigs[tableIndex].fieldMappings.push(result.value);
 
+        // Actualizar el estado con la nueva configuración
         setMapping({
           ...mapping,
           tableConfigs: newTableConfigs,
         });
+
+        // Log del nuevo estado para verificar
+        console.log("Tabla actualizada:", newTableConfigs[tableIndex]);
       }
     });
   };
@@ -1059,6 +1140,16 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
   const editFieldMapping = (tableIndex, fieldIndex) => {
     const field = mapping.tableConfigs[tableIndex].fieldMappings[fieldIndex];
 
+    // Verificar que el campo existe y tiene todas las propiedades necesarias
+    if (!field) {
+      console.error(
+        `Campo no encontrado en posición ${tableIndex}-${fieldIndex}`
+      );
+      return;
+    }
+
+    console.log("Campo a editar:", field);
+
     Swal.fire({
       title: "Editar Mapeo de Campo",
       html: `
@@ -1101,7 +1192,9 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           <div class="field-container">
             <div id="defaultValueLabel" class="field-header">Valor por defecto</div>
             <textarea id="defaultValue" class="swal2-textarea" rows="3" placeholder="Ingrese valor por defecto o función SQL nativa (GETDATE(), etc.)">${
-              field.defaultValue !== undefined ? field.defaultValue : ""
+              field.defaultValue !== undefined && field.defaultValue !== null
+                ? field.defaultValue
+                : ""
             }</textarea>
             <div class="form-info">
               <strong>Nota:</strong> Para usar funciones SQL nativas como GETDATE(), NEWID(), etc. ingréselas directamente en el valor por defecto.
@@ -1448,21 +1541,23 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       },
       preConfirm: () => {
         // Recopilar todos los valores
-        const sourceField = document.getElementById("sourceField").value;
-        const targetField = document.getElementById("targetField").value;
+        const sourceField = document.getElementById("sourceField").value.trim();
+        const targetField = document.getElementById("targetField").value.trim();
         const defaultValue = document.getElementById("defaultValue").value;
-        const removePrefix = document.getElementById("removePrefix").value;
+        const removePrefix = document
+          .getElementById("removePrefix")
+          .value.trim();
         const isRequired = document.getElementById("isRequired").checked;
         const lookupFromTarget =
           document.getElementById("lookupFromTarget").checked;
 
-        // Nuevos campos para visualización
+        // Propiedades de visualización
         const isEditable = document.getElementById("isEditable").checked;
         const showInList = document.getElementById("showInList").checked;
-        const displayName = document.getElementById("displayName").value;
+        const displayName = document.getElementById("displayName").value.trim();
         const displayOrder =
           parseInt(document.getElementById("displayOrder").value) || 0;
-        const fieldGroup = document.getElementById("fieldGroup").value;
+        const fieldGroup = document.getElementById("fieldGroup").value.trim();
         const fieldType = document.getElementById("fieldType").value;
 
         // Validaciones básicas
@@ -1493,8 +1588,8 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         const options = [];
         if (fieldType === "select") {
           document.querySelectorAll(".option-row").forEach((row) => {
-            const label = row.querySelector(".option-label").value;
-            const value = row.querySelector(".option-value").value;
+            const label = row.querySelector(".option-label").value.trim();
+            const value = row.querySelector(".option-value").value.trim();
 
             if (label || value) {
               options.push({ label, value });
@@ -1511,7 +1606,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         if (lookupFromTarget) {
           const lookupQueryElem = document.getElementById("lookupQuery");
           if (lookupQueryElem) {
-            lookupQuery = lookupQueryElem.value;
+            lookupQuery = lookupQueryElem.value.trim();
           }
 
           const validateExistenceElem =
@@ -1527,11 +1622,13 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
 
           // Recopilar parámetros
           document.querySelectorAll(".lookup-param-row").forEach((row) => {
-            const paramName = row.querySelector(".param-name").value;
-            const sourceField = row.querySelector(".source-field").value;
+            const paramName = row.querySelector(".param-name").value.trim();
+            const paramSourceField = row
+              .querySelector(".source-field")
+              .value.trim();
 
-            if (paramName && sourceField) {
-              lookupParams.push({ paramName, sourceField });
+            if (paramName && paramSourceField) {
+              lookupParams.push({ paramName, sourceField: paramSourceField });
             }
           });
 
@@ -1556,7 +1653,8 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           }
         }
 
-        return {
+        // Objeto final con todos los valores
+        const updatedField = {
           sourceField: sourceField || null,
           targetField,
           defaultValue: processedDefaultValue,
@@ -1570,7 +1668,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           validateExistence: lookupFromTarget ? validateExistence : false,
           failIfNotFound: lookupFromTarget ? failIfNotFound : false,
 
-          // Nuevas propiedades
+          // Propiedades de visualización
           isEditable,
           showInList,
           displayName: displayName || null,
@@ -1579,16 +1677,65 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           fieldType,
           options: options.length > 0 ? options : null,
         };
+
+        return updatedField;
       },
     }).then((result) => {
-      if (result.isConfirmed) {
-        const newTableConfigs = [...mapping.tableConfigs];
+      if (result.isConfirmed && result.value) {
+        // Agregar log para depuración
+        console.log("Campo actualizado:", result.value);
+
+        // Verificar que el objeto result.value tiene todas las propiedades
+        const expectedProps = [
+          "sourceField",
+          "targetField",
+          "defaultValue",
+          "removePrefix",
+          "isRequired",
+          "valueMappings",
+          "lookupFromTarget",
+          "lookupQuery",
+          "lookupParams",
+          "validateExistence",
+          "failIfNotFound",
+          "isEditable",
+          "showInList",
+          "displayName",
+          "displayOrder",
+          "fieldGroup",
+          "fieldType",
+          "options",
+        ];
+
+        const missingProps = expectedProps.filter(
+          (prop) => result.value[prop] === undefined
+        );
+        if (missingProps.length > 0) {
+          console.warn(
+            "⚠️ Propiedades faltantes en el campo actualizado:",
+            missingProps
+          );
+        }
+
+        // Crear copia profunda de las tablas para evitar referencias mutables
+        const newTableConfigs = JSON.parse(
+          JSON.stringify(mapping.tableConfigs)
+        );
+
+        // Actualizar el campo con el objeto completo result.value
         newTableConfigs[tableIndex].fieldMappings[fieldIndex] = result.value;
 
+        // Actualizar el estado del mapping con las configuraciones actualizadas
         setMapping({
           ...mapping,
           tableConfigs: newTableConfigs,
         });
+
+        // Log del nuevo estado para verificar
+        console.log(
+          "Campo después de la actualización:",
+          newTableConfigs[tableIndex].fieldMappings[fieldIndex]
+        );
       }
     });
   };
