@@ -478,7 +478,7 @@ export function DocumentsVisualization() {
       default:
         return null;
     }
-  }, [entityType, selectedEntity, showEntityEditor]);
+  }, [entityType, selectedEntity, showEntityEditor, activeMappingId]);
 
   // Función para guardar cliente editado - con useCallback
   const handleSaveCustomer = async (updateData) => {
@@ -1334,7 +1334,10 @@ export function DocumentsVisualization() {
                                       )
                                       .map((field) => (
                                         <td key={field.targetField}>
-                                          {document[field.targetField] !== null
+                                          {document[field.targetField] !==
+                                            null &&
+                                          document[field.targetField] !==
+                                            undefined
                                             ? document[field.targetField]
                                             : "N/A"}
                                         </td>
@@ -1345,7 +1348,9 @@ export function DocumentsVisualization() {
                                   return Object.entries(document).map(
                                     ([key, value]) => (
                                       <td key={key}>
-                                        {value !== null ? value : "N/A"}
+                                        {value !== null && value !== undefined
+                                          ? value
+                                          : "N/A"}
                                       </td>
                                     )
                                   );
@@ -1486,7 +1491,10 @@ export function DocumentsVisualization() {
                                 <InfoItem key={field.key}>
                                   <InfoLabel>{field.label}:</InfoLabel>
                                   <InfoValue>
-                                    {field.value !== null ? field.value : "N/A"}
+                                    {field.value !== null &&
+                                    field.value !== undefined
+                                      ? field.value
+                                      : "N/A"}
                                   </InfoValue>
                                 </InfoItem>
                               ))}

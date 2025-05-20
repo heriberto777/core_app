@@ -155,18 +155,19 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
           );
 
           if (mainTable && mainTable.fieldMappings) {
+            // Filtrar campos ocultos y no editables
+            const fieldsToShow = mainTable.fieldMappings.filter(
+              (field) =>
+                field.fieldType !== "hidden" && field.isEditable !== false
+            );
+
             // Organizar campos en grupos para la UI
-            organizeFieldsInGroups(mainTable.fieldMappings);
+            organizeFieldsInGroups(fieldsToShow);
 
             // Crear metadatos para cada campo
             const meta = {};
 
-            // Filtrar campos ocultos si no queremos que se procesen
-            const visibleFields = mainTable.fieldMappings.filter(
-              (field) => field.fieldType !== "hidden"
-            );
-
-            visibleFields.forEach((field) => {
+            fieldsToShow.forEach((field) => {
               meta[field.targetField] = {
                 ...field,
                 loading: false,
@@ -338,8 +339,8 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
 
       // Clasificar cada campo según su grupo definido
       fieldMappings.forEach((field) => {
-        // Skip campos ocultos (hidden)
-        if (field.fieldType === "hidden") {
+        // Skip campos ocultos (hidden) o no editables
+        if (field.fieldType === "hidden" || field.isEditable === false) {
           return;
         }
 
@@ -483,8 +484,8 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
 
       // Clasificar cada campo
       fieldMappings.forEach((field) => {
-        // Saltar campos ocultos
-        if (field.fieldType === "hidden") {
+        // Saltar campos ocultos o no editables
+        if (field.fieldType === "hidden" || field.isEditable === false) {
           return;
         }
 
@@ -756,6 +757,12 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
   const renderField = (fieldName) => {
     // Obtener metadatos del campo
     const meta = fieldMeta[fieldName] || {};
+
+    // Skip rendering if field is not editable and has no dynamic query
+    if (meta.isEditable === false && !meta.dynamicQuery) {
+      return null;
+    }
+
     const value =
       editedCustomer[fieldName] !== undefined ? editedCustomer[fieldName] : "";
     const isLoading = fieldLoading[fieldName] || false;
