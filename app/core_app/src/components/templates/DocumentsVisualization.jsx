@@ -1333,12 +1333,12 @@ export function DocumentsVisualization() {
                                           (b.displayOrder || 0)
                                       )
                                       .map((field) => (
-                                        <td key={field.targetField}>
-                                          {document[field.targetField] !==
+                                        <td key={field.sourceField}>
+                                          {document[field.sourceField] !==
                                             null &&
-                                          document[field.targetField] !==
+                                          document[field.sourceField] !==
                                             undefined
-                                            ? document[field.targetField]
+                                            ? document[field.sourceField]
                                             : "N/A"}
                                         </td>
                                       ));
