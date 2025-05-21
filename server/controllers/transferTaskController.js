@@ -1200,6 +1200,8 @@ const updateEntityData = async (req, res) => {
     const { mappingId, documentId, targetData, sourceData, _dynamicFields } =
       req.body;
 
+    console.log("Datas recibidos -> ", req.body);
+
     if (!mappingId || !documentId) {
       return res.status(400).json({
         success: false,

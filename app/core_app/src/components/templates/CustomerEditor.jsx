@@ -71,6 +71,11 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
               documentId
             );
 
+            console.log(
+              `Datos de origen cargados con éxito para documento ${documentId}`,
+              sourceDataResult
+            );
+
             if (sourceDataResult.success) {
               // Guardar datos originales para referencia
               const sourceData = sourceDataResult.data.sourceData;
