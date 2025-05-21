@@ -45,6 +45,8 @@ const getMappingById = async (req, res) => {
       success: true,
       data: mapping,
     });
+
+    console.log("Mapping obtenida:", mapping);
   } catch (error) {
     logger.error(`Error al obtener configuración de mapeo: ${error.message}`);
     res.status(500).json({
