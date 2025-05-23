@@ -15,7 +15,8 @@ const FormatRuleSchema = new Schema({
 
 // Schema principal para consecutivos
 const ConsecutiveSchema = new Schema({
-  name: { type: String, required: true, unique: true },
+  // ✅ CORRECCIÓN: Quitar unique: true aquí porque ya lo defines en el índice más abajo
+  name: { type: String, required: true }, // Sin unique: true
   description: { type: String },
   currentValue: { type: Number, default: 0 },
   incrementBy: { type: Number, default: 1 },
@@ -75,7 +76,7 @@ const ConsecutiveSchema = new Schema({
           "reset",
           "updated",
           "reserved",
-          "committed", // ← Esto está mal escrito (falta 't')
+          "committed", // ✅ CORRECCIÓN: Ya está bien escrito
         ],
         required: true,
       },
@@ -110,14 +111,15 @@ const ConsecutiveSchema = new Schema({
   active: { type: Boolean, default: true },
 });
 
-// Índices para mejor rendimiento
-ConsecutiveSchema.index({ name: 1 }, { unique: true });
+// ✅ CORRECCIÓN: Índices únicos - definir solo una vez
+ConsecutiveSchema.index({ name: 1 }, { unique: true }); // Solo aquí, no en el campo
 ConsecutiveSchema.index({
   "assignedTo.entityType": 1,
   "assignedTo.entityId": 1,
 });
 ConsecutiveSchema.index({ "reservations.expiresAt": 1 }); // Para limpiar reservas expiradas
 ConsecutiveSchema.index({ "reservations.value": 1, "reservations.status": 1 });
+ConsecutiveSchema.index({ active: 1, name: 1 }); // Índice compuesto para consultas frecuentes
 
 // Middleware para actualizar fecha de modificación
 ConsecutiveSchema.pre("save", function (next) {
@@ -163,9 +165,6 @@ ConsecutiveSchema.methods.getNextValue = async function (
   quantity = 1,
   reservedBy = "system"
 ) {
-  // const session = await mongoose.startSession();
-  // session.startTransaction();
-
   try {
     // Bloqueo pesimista para evitar concurrencia
     const consecutiveLocked = await mongoose
@@ -279,17 +278,18 @@ ConsecutiveSchema.methods.getNextValue = async function (
       lockedAt: null,
     });
 
-    // await session.commitTransaction();
     return values;
   } catch (error) {
-    // await session.abortTransaction();
-
     // Intentar liberar bloqueo en caso de error
-    await mongoose.model("Consecutive").findByIdAndUpdate(this._id, {
-      locked: false,
-      lockedBy: null,
-      lockedAt: null,
-    });
+    try {
+      await mongoose.model("Consecutive").findByIdAndUpdate(this._id, {
+        locked: false,
+        lockedBy: null,
+        lockedAt: null,
+      });
+    } catch (unlockError) {
+      console.error("Error liberando bloqueo:", unlockError.message);
+    }
 
     throw error;
   }
@@ -300,9 +300,6 @@ ConsecutiveSchema.methods.commitReservations = async function (
   values,
   reservedBy = "system"
 ) {
-  // const session = await mongoose.startSession();
-  // session.startTransaction();
-
   try {
     for (const value of values) {
       const reservation = this.reservations.find(
@@ -331,10 +328,6 @@ ConsecutiveSchema.methods.commitReservations = async function (
       );
     }
 
-    console.log("Intentando agregar al historial:", {
-      action: "committed",
-    });
-
     // Registrar en historial
     this.history.push({
       date: new Date(),
@@ -347,20 +340,57 @@ ConsecutiveSchema.methods.commitReservations = async function (
     });
 
     await this.save();
-    // await session.commitTransaction();
   } catch (error) {
-    // await session.abortTransaction();
     throw error;
   }
 };
 
 // Limpiar reservas expiradas
 ConsecutiveSchema.methods.cleanExpiredReservations = async function () {
-  const now = new Date();
-  this.reservations = this.reservations.filter(
-    (r) => r.status === "committed" || r.expiresAt > now
-  );
-  await this.save();
+  try {
+    const now = new Date();
+    const initialCount = this.reservations.length;
+
+    this.reservations = this.reservations.filter(
+      (r) => r.status === "committed" || r.expiresAt > now
+    );
+
+    const cleanedCount = initialCount - this.reservations.length;
+
+    if (cleanedCount > 0) {
+      await this.save();
+      console.log(
+        `Limpiadas ${cleanedCount} reservas expiradas para consecutivo ${this.name}`
+      );
+    }
+
+    return cleanedCount;
+  } catch (error) {
+    console.error(`Error limpiando reservas expiradas: ${error.message}`);
+    throw error;
+  }
+};
+
+// ✅ Método estático para limpiar todas las reservas expiradas
+ConsecutiveSchema.statics.cleanAllExpiredReservations = async function () {
+  try {
+    const result = await this.updateMany(
+      { "reservations.expiresAt": { $lt: new Date() } },
+      {
+        $pull: {
+          reservations: { expiresAt: { $lt: new Date() }, status: "reserved" },
+        },
+      }
+    );
+
+    console.log(
+      `Limpieza masiva completada: ${result.modifiedCount} documentos actualizados`
+    );
+    return result;
+  } catch (error) {
+    console.error(`Error en limpieza masiva: ${error.message}`);
+    throw error;
+  }
 };
 
 module.exports = mongoose.model("Consecutive", ConsecutiveSchema);

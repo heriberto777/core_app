@@ -1,10 +1,7 @@
-// services/mongoDBTransport.js - Versión refactorizada
+// services/mongoDBTransport.js - Versión mejorada para manejar sesiones
 const Transport = require("winston-transport");
 const Log = require("../models/loggerModel");
 
-/**
- * Transporte optimizado de Winston para MongoDB
- */
 class MongoDBTransport extends Transport {
   constructor(opts) {
     super(opts);
@@ -12,148 +9,296 @@ class MongoDBTransport extends Transport {
     this.level = opts.level || "info";
     this.silent = opts.silent || false;
 
-    // Control de errores mejorado
-    this.errorThresholds = {
-      connectionErrors: 0,
-      savingErrors: 0,
-      maxErrors: 5,
-      cooldownPeriod: 30000, // 30 segundos
-    };
+    // Estado del transporte
+    this.isReady = false;
+    this.errorCount = 0;
+    this.maxErrors = 10; // Aumentado para ser más tolerante
+    this.lastError = 0;
+    this.cooldownTime = 60000; // 1 minuto de cooldown
+    this.reconnectAttempts = 0;
+    this.maxReconnectAttempts = 5;
 
-    // Estado de conexión
-    this.connectionStatus = {
-      isHealthy: true,
-      lastErrorTime: 0,
-      consecutiveErrors: 0,
-    };
+    // Buffer para logs
+    this.logBuffer = [];
+    this.maxBufferSize = 100;
+    this.isProcessingBuffer = false;
 
-    console.log("Transporte MongoDB para logs inicializado");
+    console.log("🔗 MongoDB Transport inicializado");
+
+    // Verificar conexión con delay mayor
+    setTimeout(() => this.initializeConnection(), 5000);
+
+    // Limpiar buffer periódicamente
+    this.bufferCleanupInterval = setInterval(() => {
+      this.cleanupBuffer();
+    }, 30000); // Cada 30 segundos
   }
 
-  /**
-   * Procesa logs con mejor manejo de errores y reconexión automática
-   */
+  async initializeConnection() {
+    try {
+      if (this._isMongoConnected()) {
+        this.isReady = true;
+        this.errorCount = 0;
+        this.reconnectAttempts = 0;
+        console.log("✅ MongoDB Transport conectado y listo");
+
+        // Procesar buffer de logs pendientes
+        if (this.logBuffer.length > 0 && !this.isProcessingBuffer) {
+          setTimeout(() => this.processBuffer(), 1000);
+        }
+      } else {
+        this.reconnectAttempts++;
+        if (this.reconnectAttempts <= this.maxReconnectAttempts) {
+          console.log(
+            `🔄 Intento de conexión ${this.reconnectAttempts}/${this.maxReconnectAttempts}`
+          );
+          // Reintento con backoff exponencial
+          const delay = Math.min(
+            5000 * Math.pow(2, this.reconnectAttempts - 1),
+            30000
+          );
+          setTimeout(() => this.initializeConnection(), delay);
+        } else {
+          console.warn("⚠️ MongoDB Transport: máximo de reintentos alcanzado");
+          this.isReady = false;
+        }
+      }
+    } catch (error) {
+      console.warn("⚠️ Error inicializando MongoDB transport:", error.message);
+      this.reconnectAttempts++;
+      if (this.reconnectAttempts <= this.maxReconnectAttempts) {
+        const delay = Math.min(
+          5000 * Math.pow(2, this.reconnectAttempts - 1),
+          30000
+        );
+        setTimeout(() => this.initializeConnection(), delay);
+      }
+    }
+  }
+
+  async processBuffer() {
+    if (this.isProcessingBuffer || this.logBuffer.length === 0) return;
+
+    this.isProcessingBuffer = true;
+    const batchSize = 10; // Procesar en lotes pequeños
+
+    try {
+      while (this.logBuffer.length > 0 && this._isMongoConnected()) {
+        const batch = this.logBuffer.splice(0, batchSize);
+
+        for (const logInfo of batch) {
+          try {
+            await this.saveLogSafe(logInfo);
+            // Pequeña pausa entre logs para no sobrecargar
+            await new Promise((resolve) => setTimeout(resolve, 10));
+          } catch (error) {
+            // Si falla, reintroducir al buffer si hay espacio
+            if (this.logBuffer.length < this.maxBufferSize) {
+              this.logBuffer.push(logInfo);
+            }
+            console.warn("⚠️ Error procesando log del buffer:", error.message);
+            break; // Parar el procesamiento del batch
+          }
+        }
+
+        // Pausa entre batches
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    } catch (error) {
+      console.warn("⚠️ Error procesando buffer:", error.message);
+    } finally {
+      this.isProcessingBuffer = false;
+    }
+  }
+
   log(info, callback) {
-    // Siempre llamar al callback primero para evitar múltiples llamadas
+    // Siempre llamar callback inmediatamente
     setImmediate(() => {
       callback();
     });
 
-    // Si está en modo silencioso, no hacer nada más
-    if (this.silent) return;
+    if (this.silent || this.isInCooldown()) return;
 
-    // Verificar si estamos en modo de enfriamiento
-    if (this.isInCooldown()) {
+    // Si MongoDB no está conectado, usar buffer
+    if (!this.isReady || !this._isMongoConnected()) {
+      this.addToBuffer(info);
       return;
     }
 
-    // Procesar el log de forma asíncrona
-    this._processLogAsync(info).catch((error) => {
-      this._handleError(error);
+    // Procesar log con manejo de errores mejorado
+    this.saveLogSafe(info).catch((error) => {
+      this.handleError(error);
+      // Guardar en buffer como respaldo
+      this.addToBuffer(info);
     });
   }
 
-  /**
-   * Verifica si estamos en período de enfriamiento
-   */
-  isInCooldown() {
-    const now = Date.now();
-    const lastError = this.connectionStatus.lastErrorTime;
-    return now - lastError < this.errorThresholds.cooldownPeriod;
-  }
-
-  /**
-   * Procesa el log de forma asíncrona con mejor manejo de errores
-   */
-  async _processLogAsync(info) {
-    // Verificar conexión antes de intentar guardar
+  async saveLogSafe(info) {
     if (!this._isMongoConnected()) {
-      throw new Error("MongoDB no está conectado");
+      throw new Error("MongoDB desconectado");
     }
 
     try {
-      const { level, message, timestamp, ...rest } = info;
+      const { level, message, timestamp, source, stack, ...rest } = info;
 
-      // Crear objeto de log
-      const log = new Log({
-        level: level || "info",
-        message: message || "",
-        timestamp: timestamp ? new Date(timestamp) : new Date(),
-        source: rest.source || "app",
-        stack: rest.stack || "",
+      // ✅ Usar el método estático mejorado del modelo
+      const log = await Log.createLog(level || "info", message || "", {
+        source: source || "app",
+        stack: stack,
         metadata: rest.metadata || rest,
+        user: rest.user,
+        ip: rest.ip,
       });
 
-      // Guardar en MongoDB con timeout
-      await Promise.race([
-        log.save(),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Timeout guardando log")), 5000)
-        ),
-      ]);
-
-      // Éxito - resetear contadores de errores
-      this.connectionStatus.consecutiveErrors = 0;
-      this.connectionStatus.isHealthy = true;
-
-      // Emitir evento logged
-      this.emit("logged", info);
+      if (log) {
+        // Éxito - resetear contador de errores
+        this.errorCount = Math.max(0, this.errorCount - 1);
+        return log;
+      } else {
+        throw new Error("No se pudo crear el log");
+      }
     } catch (error) {
-      throw error;
+      // Clasificar tipos de error
+      if (this.isConnectionError(error)) {
+        throw new Error(`Conexión: ${error.message}`);
+      } else if (this.isSessionError(error)) {
+        throw new Error(`Sesión: ${error.message}`);
+      } else {
+        throw error;
+      }
     }
   }
 
-  /**
-   * Maneja errores con estrategia de reconexión
-   */
-  _handleError(error) {
-    this.connectionStatus.consecutiveErrors++;
-    this.connectionStatus.lastErrorTime = Date.now();
+  sanitizeMetadata(metadata) {
+    if (!metadata || typeof metadata !== "object") return {};
 
-    // Incrementar contador según tipo de error
-    if (error.message?.includes("no está conectado")) {
-      this.errorThresholds.connectionErrors++;
-    } else {
-      this.errorThresholds.savingErrors++;
+    try {
+      // Convertir a JSON y limitar tamaño
+      const jsonStr = JSON.stringify(metadata);
+      if (jsonStr.length > 5000) {
+        return { _truncated: true, _originalSize: jsonStr.length };
+      }
+      return metadata;
+    } catch (error) {
+      return { _error: "Error serializando metadata" };
+    }
+  }
+
+  addToBuffer(info) {
+    if (this.logBuffer.length >= this.maxBufferSize) {
+      // Remover logs más antiguos, mantener los más recientes
+      this.logBuffer.shift();
     }
 
-    // Emitir error para logging interno
+    // Agregar timestamp si no existe
+    if (!info.timestamp) {
+      info.timestamp = new Date().toISOString();
+    }
+
+    this.logBuffer.push(info);
+  }
+
+  handleError(error) {
+    this.errorCount++;
+    this.lastError = Date.now();
+
+    // Emitir error sin usar console para evitar loops
     this.emit("error", error);
 
-    // Si superamos el umbral, poner en modo silencioso temporal
-    if (
-      this.connectionStatus.consecutiveErrors >= this.errorThresholds.maxErrors
-    ) {
-      this.connectionStatus.isHealthy = false;
+    // Si hay muchos errores, intentar reconexión
+    if (this.errorCount >= this.maxErrors) {
+      this.isReady = false;
+      console.warn(
+        `⚠️ MongoDB Transport: demasiados errores (${this.errorCount}), intentando reconexión...`
+      );
 
-      // Programar reactivación
+      // Reiniciar proceso de conexión
       setTimeout(() => {
-        this.connectionStatus.consecutiveErrors = 0;
-        this.connectionStatus.isHealthy = true;
-        console.log("MongoDB transport re-enabled after error threshold");
-      }, this.errorThresholds.cooldownPeriod);
+        this.errorCount = Math.floor(this.maxErrors / 2); // Reducir pero no resetear completamente
+        this.reconnectAttempts = 0;
+        this.initializeConnection();
+      }, this.cooldownTime);
     }
   }
 
-  /**
-   * Verifica si MongoDB está conectado
-   */
-  _isMongoConnected() {
-    // Importar dinámicamente para evitar dependencias circulares
-    const mongoose = require("mongoose");
-    return mongoose.connection.readyState === 1;
+  isInCooldown() {
+    return (
+      this.errorCount >= this.maxErrors &&
+      Date.now() - this.lastError < this.cooldownTime
+    );
   }
 
-  /**
-   * Obtiene estadísticas del transporte
-   */
+  isConnectionError(error) {
+    const connectionErrors = [
+      "connection",
+      "pool",
+      "socket",
+      "network",
+      "timeout",
+      "closed",
+      "cancelled",
+    ];
+
+    return connectionErrors.some((term) =>
+      error.message?.toLowerCase().includes(term)
+    );
+  }
+
+  isSessionError(error) {
+    const sessionErrors = [
+      "session",
+      "expired",
+      "ended",
+      "MongoExpiredSessionError",
+    ];
+
+    return sessionErrors.some(
+      (term) => error.message?.includes(term) || error.name?.includes(term)
+    );
+  }
+
+  _isMongoConnected() {
+    try {
+      const mongoose = require("mongoose");
+      return mongoose.connection.readyState === 1;
+    } catch (error) {
+      return false;
+    }
+  }
+
+  cleanupBuffer() {
+    // Limpiar logs muy antiguos del buffer
+    const now = Date.now();
+    const maxAge = 5 * 60 * 1000; // 5 minutos
+
+    this.logBuffer = this.logBuffer.filter((log) => {
+      if (!log.timestamp) return true; // Mantener si no tiene timestamp
+
+      const logTime = new Date(log.timestamp).getTime();
+      return now - logTime < maxAge;
+    });
+  }
+
   getStats() {
     return {
-      connectionStatus: this.connectionStatus,
-      errorThresholds: this.errorThresholds,
-      isHealthy: this.connectionStatus.isHealthy,
-      lastError: this.connectionStatus.lastErrorTime,
+      isReady: this.isReady,
+      errorCount: this.errorCount,
+      bufferedLogs: this.logBuffer.length,
+      lastError: this.lastError,
+      isInCooldown: this.isInCooldown(),
+      reconnectAttempts: this.reconnectAttempts,
+      isProcessingBuffer: this.isProcessingBuffer,
+      mongoConnected: this._isMongoConnected(),
     };
+  }
+
+  // Método para limpiar recursos
+  close() {
+    if (this.bufferCleanupInterval) {
+      clearInterval(this.bufferCleanupInterval);
+    }
+    this.logBuffer = [];
+    this.isReady = false;
   }
 }
 

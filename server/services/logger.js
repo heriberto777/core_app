@@ -1,4 +1,4 @@
-// services/logger.js - Usar ESTE archivo (el completo)
+// services/logger.js - Versión mejorada con stream robusto
 const { createLogger, format, transports } = require("winston");
 const { combine, timestamp, printf, colorize } = format;
 const path = require("path");
@@ -99,13 +99,25 @@ const logger = createLogger({
   exitOnError: false,
 });
 
-// Stream para Morgan
+// Stream mejorado para Morgan con manejo de errores
 logger.stream = {
   write: function (message) {
-    if (typeof message === "string") {
-      logger.info(message.trim());
-    } else {
-      logger.info(String(message).trim());
+    try {
+      if (typeof message === "string") {
+        logger.info(message.trim());
+      } else {
+        logger.info(String(message).trim());
+      }
+    } catch (error) {
+      // Fallback a console si logger falla
+      try {
+        console.log(
+          typeof message === "string" ? message.trim() : String(message).trim()
+        );
+      } catch (consoleError) {
+        // Último recurso
+        console.log("Log message (could not format)");
+      }
     }
   },
 };
@@ -128,11 +140,16 @@ logger.db = logger.withSource("database");
 
 // Método adicional para compatibilidad con el logger actual
 logger.logError = function (error, context = {}) {
-  this.error({
-    message: error.message,
-    stack: error.stack,
-    ...context,
-  });
+  try {
+    this.error({
+      message: error.message,
+      stack: error.stack,
+      ...context,
+    });
+  } catch (logError) {
+    console.error("Error logging error:", error.message);
+    console.error("Original error:", error);
+  }
 };
 
 module.exports = logger;

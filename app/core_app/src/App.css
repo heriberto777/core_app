@@ -1138,3 +1138,334 @@ table tr.disabled {
   font-size: 11px;
   margin-top: 2px;
 }
+
+/* ===== ESTILOS PARA MODAL DE TAREAS ===== */
+.task-modal-container {
+  padding: 0 !important;
+}
+
+.task-modal-popup {
+  width: 95% !important;
+  max-width: 650px !important;
+  min-width: 300px !important;
+  margin: 1rem auto !important;
+  border-radius: 12px !important;
+  overflow: hidden !important;
+}
+
+.task-modal-html {
+  padding: 0 !important;
+  margin: 0 !important;
+  max-height: 70vh !important;
+  overflow-y: auto !important;
+  overflow-x: hidden !important;
+}
+
+.task-modal-title {
+  background: linear-gradient(135deg, #007bff, #0056b3) !important;
+  color: white !important;
+  padding: 15px 20px !important;
+  margin: 0 !important;
+  font-size: 1.4rem !important;
+  font-weight: 600 !important;
+  border-radius: 0 !important;
+}
+
+.task-modal-actions {
+  padding: 15px 20px !important;
+  background-color: #f8f9fa !important;
+  border-top: 1px solid #dee2e6 !important;
+  margin-top: 0 !important;
+}
+
+/* Contenedor principal del formulario */
+.task-form-container {
+  padding: 20px;
+  font-family: "Inter", system-ui, sans-serif;
+}
+
+/* Secciones del formulario */
+.task-form-section {
+  margin-bottom: 25px;
+  padding: 20px;
+  background-color: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #007bff;
+}
+
+.task-form-section-title {
+  color: #495057;
+  font-size: 1.1rem;
+  font-weight: 600;
+  margin: 0 0 15px 0;
+  padding-bottom: 8px;
+  border-bottom: 1px solid #dee2e6;
+}
+
+/* Grupos de campos */
+.task-form-group {
+  margin-bottom: 15px;
+}
+
+.task-form-label {
+  display: block;
+  font-weight: 500;
+  margin-bottom: 6px;
+  color: #495057;
+  font-size: 0.95rem;
+}
+
+/* Inputs y controles */
+.task-form-input,
+.task-form-select,
+.task-form-textarea {
+  width: 100%;
+  padding: 10px 12px;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  font-size: 0.95rem;
+  color: #495057;
+  background-color: #fff;
+  transition: border-color 0.15s ease-in-out, box-shadow 0.15s ease-in-out;
+  box-sizing: border-box;
+}
+
+.task-form-input:focus,
+.task-form-select:focus,
+.task-form-textarea:focus {
+  border-color: #007bff;
+  outline: 0;
+  box-shadow: 0 0 0 0.2rem rgba(0, 123, 255, 0.25);
+}
+
+.task-form-textarea {
+  min-height: 80px;
+  resize: vertical;
+  font-family: inherit;
+}
+
+.task-form-textarea-sql {
+  width: 100%;
+  min-height: 120px;
+  padding: 10px 12px;
+  font-family: "Consolas", "Monaco", "Courier New", monospace;
+  font-size: 14px;
+  line-height: 1.5;
+  border: 1px solid #ced4da;
+  border-radius: 6px;
+  resize: vertical;
+  background-color: #f8f9fa;
+}
+
+.task-form-select-multiple {
+  height: 100px;
+}
+
+/* Checkboxes */
+.task-form-checkbox-container {
+  display: flex;
+  align-items: center;
+  margin-bottom: 12px;
+  padding: 8px 12px;
+  background-color: rgba(0, 123, 255, 0.05);
+  border-radius: 6px;
+  border: 1px solid rgba(0, 123, 255, 0.1);
+}
+
+.task-form-checkbox-container input[type="checkbox"] {
+  width: 18px;
+  height: 18px;
+  margin-right: 10px;
+  accent-color: #007bff;
+}
+
+.task-form-checkbox-label {
+  margin: 0;
+  cursor: pointer;
+  font-weight: 500;
+  color: #495057;
+}
+
+/* Texto de ayuda */
+.task-form-help-text {
+  display: block;
+  margin-top: 5px;
+  font-size: 0.85rem;
+  color: #6c757d;
+  line-height: 1.4;
+}
+
+.task-form-description {
+  font-size: 0.9rem;
+  color: #6c757d;
+  margin-bottom: 10px;
+}
+
+/* Cajas de información */
+.task-form-info-box {
+  background-color: #e3f2fd;
+  border: 1px solid #bbdefb;
+  border-left: 4px solid #2196f3;
+  border-radius: 6px;
+  padding: 15px;
+  margin-bottom: 20px;
+}
+
+.task-form-info-title {
+  font-weight: 600;
+  color: #1565c0;
+  margin-bottom: 10px;
+  font-size: 0.95rem;
+}
+
+.task-form-info-list {
+  margin: 0;
+  padding-left: 20px;
+  color: #424242;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.task-form-info-list li {
+  margin-bottom: 6px;
+}
+
+/* Cajas de estado */
+.task-form-status-box {
+  border-radius: 6px;
+  padding: 15px;
+  margin: 15px 0;
+}
+
+.task-form-status-success {
+  background-color: #e8f5e8;
+  border: 1px solid #c3e6c3;
+  border-left: 4px solid #4caf50;
+}
+
+.task-form-status-warning {
+  background-color: #fff3e0;
+  border: 1px solid #ffcc80;
+  border-left: 4px solid #ff9800;
+}
+
+.task-form-status-title {
+  font-weight: 600;
+  margin-bottom: 10px;
+  font-size: 0.95rem;
+}
+
+.task-form-status-success .task-form-status-title {
+  color: #2e7d32;
+}
+
+.task-form-status-warning .task-form-status-title {
+  color: #e65100;
+}
+
+.task-form-status-content {
+  color: #424242;
+  font-size: 0.9rem;
+  line-height: 1.5;
+}
+
+.task-form-status-content > div {
+  margin-bottom: 6px;
+}
+
+.task-form-linked-tasks-list {
+  margin: 8px 0;
+  padding-left: 20px;
+}
+
+.task-form-linked-tasks-list li {
+  margin-bottom: 4px;
+}
+
+.task-form-reminder {
+  margin-top: 12px;
+  padding: 8px 12px;
+  background-color: #fff;
+  border-radius: 4px;
+  font-size: 0.85rem;
+}
+
+/* Cajas de advertencia */
+.task-form-warning-box {
+  background-color: #fff3e0;
+  border: 1px solid #ffcc80;
+  border-left: 4px solid #ff9800;
+  border-radius: 6px;
+  padding: 15px;
+  margin-top: 20px;
+}
+
+.task-form-warning-title {
+  font-weight: 600;
+  color: #e65100;
+  margin-bottom: 10px;
+  font-size: 0.95rem;
+}
+
+.task-form-warning-list {
+  margin: 0;
+  padding-left: 20px;
+  color: #424242;
+  font-size: 0.85rem;
+  line-height: 1.4;
+}
+
+.task-form-warning-list li {
+  margin-bottom: 4px;
+}
+
+/* Campos de mapeo */
+.task-form-mapping-fields {
+  background-color: #f0f7ff;
+  border: 1px solid #bee3f8;
+  border-radius: 6px;
+  padding: 15px;
+  margin: 15px 0;
+}
+
+.task-form-key-field-group {
+  margin-top: 20px;
+  padding-top: 15px;
+  border-top: 1px dashed #dee2e6;
+}
+
+/* Responsive */
+@media (max-width: 768px) {
+  .task-form-container {
+    padding: 15px;
+  }
+
+  .task-form-section {
+    padding: 15px;
+    margin-bottom: 20px;
+  }
+
+  .task-modal-popup {
+    width: 95% !important;
+    margin: 0.5rem auto !important;
+  }
+
+  .task-modal-html {
+    max-height: 75vh !important;
+  }
+}
+
+@media (max-width: 480px) {
+  .task-form-container {
+    padding: 10px;
+  }
+
+  .task-form-section {
+    padding: 12px;
+  }
+
+  .task-modal-title {
+    font-size: 1.2rem !important;
+    padding: 12px 15px !important;
+  }
+}

@@ -23,6 +23,10 @@ const DBConfig = require("../models/dbConfigModel");
 const { default: mongoose } = require("mongoose");
 const DynamicTransferService = require("../services/DynamicTransferService");
 const LinkedTasksService = require("../services/LinkedTasksService");
+const {
+  sendTransferResultsEmail,
+  sendCriticalErrorEmail,
+} = require("../services/emailService");
 
 /**
  * Obtener todas las tareas de transferencia
@@ -78,6 +82,9 @@ const getTransferTask = async (req, res) => {
  * Crear o actualizar una tarea de transferencia en MongoDB
  */
 const upsertTransferTaskController = async (req, res) => {
+  console.log(
+    "Una tarea no puede tener tanto grupo vinculado como tareas vinculadas directas. Use solo uno de los dos métodos."
+  );
   try {
     // Extraer todos los campos necesarios del req.body
     const {
@@ -94,6 +101,7 @@ const upsertTransferTaskController = async (req, res) => {
       clearBeforeInsert,
       fieldMapping,
       nextTasks,
+      targetTable, // ✅ AGREGADO: para transferencias internas
       // 🔗 CAMPOS DE VINCULACIÓN - Con valores por defecto
       linkedTasks = [], // ← Valor por defecto
       linkedGroup,
@@ -155,6 +163,8 @@ const upsertTransferTaskController = async (req, res) => {
       clearBeforeInsert: clearBeforeInsert || false,
       fieldMapping: fieldMapping || {},
       nextTasks: nextTasks || [],
+      // ✅ AGREGADO: Tabla destino para transferencias internas
+      targetTable: targetTable || null,
       // 🔗 CAMPOS DE VINCULACIÓN
       linkedTasks: linkedTasks || [],
       linkedGroup: linkedGroup ? linkedGroup.trim() : null,
@@ -176,6 +186,85 @@ const upsertTransferTaskController = async (req, res) => {
     // Si es una edición, incluir el ID
     if (_id) {
       taskData._id = _id;
+    }
+
+    // ✅ VALIDACIONES ESPECÍFICAS POR TIPO DE TRANSFERENCIA
+    if (transferType === "down") {
+      // Validar que tenga fieldMapping completo
+      if (
+        !fieldMapping ||
+        !fieldMapping.sourceTable ||
+        !fieldMapping.targetTable
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Las transferencias DOWN requieren configuración completa de mapeo de campos (tabla origen y destino).",
+        });
+      }
+
+      // IMPORTANTE: Configurar validationRules para transferencias DOWN
+      if (fieldMapping.targetTable) {
+        // Si no hay tabla de validación especificada, usar la tabla destino
+        if (
+          !taskData.validationRules.existenceCheck ||
+          !taskData.validationRules.existenceCheck.table
+        ) {
+          taskData.validationRules.existenceCheck =
+            taskData.validationRules.existenceCheck || {};
+          taskData.validationRules.existenceCheck.table =
+            fieldMapping.targetTable;
+        }
+
+        // Si no hay clave especificada y hay campos destino, usar el primero
+        if (
+          !taskData.validationRules.existenceCheck.key &&
+          fieldMapping.targetFields &&
+          fieldMapping.targetFields.length > 0
+        ) {
+          taskData.validationRules.existenceCheck.key =
+            fieldMapping.targetFields[0];
+          taskData.validationRules.requiredFields = taskData.validationRules
+            .requiredFields || [fieldMapping.targetFields[0]];
+        }
+      }
+    } else if (transferType === "internal") {
+      // Validar que tenga tabla destino
+      if (!targetTable) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Las transferencias internas requieren especificar la tabla destino.",
+        });
+      }
+
+      // Verificar que haya al menos una clave primaria o campo requerido
+      if (
+        (!taskData.validationRules.existenceCheck ||
+          !taskData.validationRules.existenceCheck.key) &&
+        (!taskData.validationRules.requiredFields ||
+          taskData.validationRules.requiredFields.length === 0)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Debe especificar al menos una clave primaria o un campo obligatorio para identificar registros en transferencias internas.",
+        });
+      }
+    } else {
+      // Para otros tipos (up, general), verificar validationRules básicas
+      if (
+        (!taskData.validationRules.existenceCheck ||
+          !taskData.validationRules.existenceCheck.key) &&
+        (!taskData.validationRules.requiredFields ||
+          taskData.validationRules.requiredFields.length === 0)
+      ) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Debe especificar al menos una clave primaria o un campo obligatorio para identificar registros.",
+        });
+      }
     }
 
     // Llamar al servicio
@@ -210,90 +299,170 @@ const upsertTransferTaskController = async (req, res) => {
  * Ejecuta una tarea de transferencia manualmente
  */
 const executeTransferTask = async (req, res) => {
+  console.log("executeTransferTask, Requiere mas datos....");
+  let responseData = null;
+
   try {
     const { taskId } = req.params;
 
+    // Log de inicio
+    logger.info(`🔄 [executeTransferTask] Iniciando - TaskID: ${taskId}`);
+    // console.log(`🔄 [executeTransferTask] Iniciando - TaskID: ${taskId}`);
+
+    // Validación de entrada
     if (!taskId) {
-      return res.status(400).json({
+      responseData = {
         success: false,
         message: "Se requiere el ID de la tarea",
-      });
+      };
+      logger.error("❌ [executeTransferTask] taskId no proporcionado");
+      return res.status(400).json(responseData);
     }
 
+    // Buscar la tarea
+    logger.info(`🔍 [executeTransferTask] Buscando tarea: ${taskId}`);
     const task = await TransferTask.findById(taskId);
 
     if (!task) {
-      return res.status(404).json({
+      responseData = {
         success: false,
         message: "Tarea no encontrada.",
-      });
+      };
+      logger.error(`❌ [executeTransferTask] Tarea no encontrada: ${taskId}`);
+      return res.status(404).json(responseData);
     }
 
+    logger.info(
+      `📋 [executeTransferTask] Tarea encontrada: ${task.name} (${task.type})`
+    );
+
+    // Validaciones de la tarea
     if (!task.active) {
-      return res.status(400).json({
+      responseData = {
         success: false,
         message: "La tarea está inactiva y no puede ejecutarse.",
-      });
+      };
+      logger.warn(`⚠️ [executeTransferTask] Tarea inactiva: ${task.name}`);
+      return res.status(400).json(responseData);
     }
 
     if (task.type !== "manual" && task.type !== "both") {
-      return res.status(400).json({
+      responseData = {
         success: false,
         message:
           "Solo se pueden ejecutar manualmente las tareas de tipo 'manual' o 'both'.",
-      });
+      };
+      logger.warn(`⚠️ [executeTransferTask] Tipo no válido: ${task.type}`);
+      return res.status(400).json(responseData);
     }
 
-    // Verificar si hay una tarea automática en progreso
+    // Verificar si hay otra tarea en progreso
     const taskInProgress = await TransferTask.findOne({
       status: "running",
       type: { $in: ["auto", "both"] },
     });
 
     if (taskInProgress) {
-      return res.status(400).json({
+      responseData = {
         success: false,
         message:
           "No se puede ejecutar esta tarea en este momento. Hay otra tarea automática en curso.",
-      });
+      };
+      logger.warn(
+        `⚠️ [executeTransferTask] Tarea en progreso: ${taskInProgress.name}`
+      );
+      return res.status(400).json(responseData);
     }
 
-    logger.info(`Iniciando ejecución para la tarea: ${task.name}`);
+    // Ejecutar la tarea
+    logger.info(
+      `🚀 [executeTransferTask] Iniciando ejecución de: ${task.name}`
+    );
+    let result = null;
+    let isLinkedGroup = false;
 
-    // 🔗 NUEVA LÓGICA: SIEMPRE verificar vinculaciones
-    // Si la tarea tiene vinculaciones, ejecutar todo el grupo
-    // Si no tiene vinculaciones, ejecutar individualmente
-    const result = await LinkedTasksService.executeLinkedGroup(
-      taskId,
-      "manual"
+    try {
+      // Intentar con LinkedTasksService si está disponible
+      if (
+        LinkedTasksService &&
+        typeof LinkedTasksService.executeLinkedGroup === "function"
+      ) {
+        logger.info("🔗 [executeTransferTask] Usando LinkedTasksService");
+        result = await LinkedTasksService.executeLinkedGroup(taskId, "manual");
+        isLinkedGroup = result.isLinkedGroup || false;
+        logger.info(
+          `🔗 [executeTransferTask] LinkedTasksService completado - isLinkedGroup: ${isLinkedGroup}`
+        );
+      } else {
+        logger.info(
+          "📝 [executeTransferTask] LinkedTasksService no disponible, usando transferService"
+        );
+        result = await transferService.executeTransferWithRetry(taskId);
+        isLinkedGroup = false;
+      }
+    } catch (executionError) {
+      logger.error(
+        `❌ [executeTransferTask] Error en ejecución: ${executionError.message}`
+      );
+
+      // Fallback a ejecución simple
+      try {
+        logger.info("🔄 [executeTransferTask] Intentando fallback");
+        result = await transferService.executeTransferWithRetry(taskId);
+        isLinkedGroup = false;
+        logger.info("✅ [executeTransferTask] Fallback exitoso");
+      } catch (fallbackError) {
+        logger.error(
+          `❌ [executeTransferTask] Error en fallback: ${fallbackError.message}`
+        );
+        responseData = {
+          success: false,
+          message: "Error en la ejecución de la tarea",
+          error: fallbackError.message,
+        };
+        return res.status(500).json(responseData);
+      }
+    }
+
+    // Validar resultado
+    if (!result || typeof result !== "object") {
+      logger.error("❌ [executeTransferTask] Resultado inválido:", result);
+      responseData = {
+        success: false,
+        message: "Error: No se obtuvo resultado válido de la ejecución",
+      };
+      return res.status(500).json(responseData);
+    }
+
+    logger.info(
+      `📊 [executeTransferTask] Resultado obtenido - Success: ${result.success}, isLinkedGroup: ${isLinkedGroup}`
     );
 
-    if (result && result.success) {
-      // Enviar correo según si es grupo o individual
-      try {
-        if (result.isLinkedGroup) {
-          // Enviar correo de grupo
-          await sendTransferResultsEmail(
-            result.linkedTasksResults.map((r) => ({
-              name: r.taskName,
-              success: r.success,
+    // Enviar correo de notificación (asíncrono, sin bloquear respuesta)
+    if (result.success) {
+      // Importar el servicio aquí para evitar problemas de dependencia circular
+      setImmediate(async () => {
+        try {
+          const {
+            sendTransferResultsEmail,
+          } = require("../services/emailService");
+
+          if (isLinkedGroup && result.linkedTasksResults) {
+            const emailData = result.linkedTasksResults.map((r) => ({
+              name: r.taskName || "Tarea desconocida",
+              success: r.success || false,
               inserted: r.inserted || 0,
               updated: r.updated || 0,
               duplicates: r.duplicates || 0,
               rows: r.rows || 0,
-              message: r.message,
+              message: r.message || "Completado",
               errorDetail: r.error || "N/A",
-            })),
-            "manual_linked_group"
-          );
+            }));
 
-          logger.info(
-            `📧 Correo de grupo vinculado enviado para: ${result.mainTask}`
-          );
-        } else {
-          // Enviar correo individual (lógica existente)
-          await sendTransferResultsEmail(
-            [
+            await sendTransferResultsEmail(emailData, "manual_linked_group");
+            logger.info(`📧 [executeTransferTask] Correo de grupo enviado`);
+          } else {
+            const emailData = [
               {
                 name: task.name,
                 success: result.success,
@@ -301,39 +470,61 @@ const executeTransferTask = async (req, res) => {
                 updated: result.updated || 0,
                 duplicates: result.duplicates || 0,
                 rows: result.rows || 0,
-                message: result.message,
+                message: result.message || "Completado",
                 errorDetail: result.errorDetail || "N/A",
               },
-            ],
-            "manual"
+            ];
+
+            await sendTransferResultsEmail(emailData, "manual");
+            logger.info(`📧 [executeTransferTask] Correo individual enviado`);
+          }
+        } catch (emailError) {
+          logger.error(
+            `❌ [executeTransferTask] Error enviando correo: ${emailError.message}`
           );
         }
-      } catch (emailError) {
-        logger.error(`❌ Error al enviar correo: ${emailError.message}`);
-      }
-
-      return res.json({
-        success: true,
-        message: result.isLinkedGroup
-          ? `Grupo ejecutado desde "${result.triggeredBy}": ${result.successfulTasks}/${result.totalTasks} tareas exitosas`
-          : "Tarea ejecutada con éxito",
-        result,
-        isLinkedGroup: result.isLinkedGroup || false,
-      });
-    } else {
-      return res.status(400).json({
-        success: false,
-        message: "Error en la ejecución.",
-        result,
       });
     }
+
+    // Preparar y enviar respuesta
+    responseData = {
+      success: result.success || false,
+      message: isLinkedGroup
+        ? `Grupo ejecutado desde "${result.triggeredBy || task.name}": ${
+            result.successfulTasks || 0
+          }/${result.totalTasks || 1} tareas exitosas`
+        : result.success
+        ? "Tarea ejecutada con éxito"
+        : result.message || "Error en la ejecución",
+      result: {
+        ...result,
+        isLinkedGroup,
+        taskName: task.name,
+        taskId: taskId,
+      },
+    };
+
+    logger.info(
+      `✅ [executeTransferTask] Enviando respuesta exitosa - Success: ${responseData.success}`
+    );
+    return res.status(200).json(responseData);
   } catch (error) {
-    logger.error("Error en la ejecución de la tarea:", error);
-    return res.status(500).json({
-      success: false,
-      message: "Error en la ejecución",
-      error: error.message,
+    logger.error(`❌ [executeTransferTask] Error crítico: ${error.message}`, {
+      stack: error.stack,
+      taskId: req.params?.taskId,
     });
+
+    // Asegurar que siempre enviamos una respuesta JSON válida
+    responseData = {
+      success: false,
+      message: "Error interno del servidor",
+      error:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : "Error interno",
+    };
+
+    return res.status(500).json(responseData);
   }
 };
 
@@ -995,11 +1186,11 @@ const getVendedores = async (req, res) => {
     return await withConnection("server1", async (connection) => {
       // Consulta para obtener los vendedores y sus bodegas asignadas
       const query = `
-        SELECT VENDEDOR, NOMBRE, U_BODEGA
-        FROM CATELLI.VENDEDOR 
-        WHERE ACTIVO = 'S' and U_ESVENDEDOR = 'Re'
-        ORDER BY VENDEDOR
-      `;
+       SELECT VENDEDOR, NOMBRE, U_BODEGA
+       FROM CATELLI.VENDEDOR 
+       WHERE ACTIVO = 'S' and U_ESVENDEDOR = 'Re'
+       ORDER BY VENDEDOR
+     `;
 
       const result = await SqlService.query(connection, query);
       console.log("Result -> ", result);
@@ -1330,9 +1521,9 @@ const getSourceDataByMapping = async (req, res) => {
 
     // Construir consulta para obtener datos de la tabla origen
     const query = `
-      SELECT * FROM ${mainTable.sourceTable}
-      WHERE ${mainTable.primaryKey} = @documentId
-    `;
+     SELECT * FROM ${mainTable.sourceTable}
+     WHERE ${mainTable.primaryKey} = @documentId
+   `;
 
     // Ejecutar consulta
     const result = await SqlService.query(connection, query, { documentId });
@@ -1432,10 +1623,10 @@ const updateEntityData = async (req, res) => {
         .join(", ");
 
       const updateQuery = `
-        UPDATE ${mainTable.sourceTable}
-        SET ${setClause}
-        WHERE ${mainTable.primaryKey} = @documentId
-      `;
+       UPDATE ${mainTable.sourceTable}
+       SET ${setClause}
+       WHERE ${mainTable.primaryKey} = @documentId
+     `;
 
       // Ejecutar actualización
       await SqlService.query(sourceConnection, updateQuery, {
@@ -1595,4 +1786,5 @@ module.exports = {
   getTaskLinkingInfo,
   executeLinkedGroup,
   getLinkedGroupStats,
+  getDailyStats, // ✅ Agregado al export
 };

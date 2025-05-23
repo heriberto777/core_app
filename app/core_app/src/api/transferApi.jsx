@@ -56,6 +56,7 @@ export class TransferApi {
    * 📌 Ejecutar una tarea manualmente
    */
   async executeTask(accessToken, taskId) {
+    console.log(`🚀 Ejecutando tarea: ${taskId}`);
     try {
       const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/execute/${taskId}`;
       const params = {
@@ -69,32 +70,80 @@ export class TransferApi {
       console.log(`🚀 Enviando petición a: ${url}`);
 
       const response = await fetch(url, params);
-      const result = await response.json();
 
-      console.log("📌 Respuesta del backend:", response.status, result);
-
+      console.log(response);
+      // Verificar si la respuesta es válida antes de intentar parsear JSON
       if (!response.ok) {
+        // Intentar obtener el texto de error
+        let errorMessage = `Error HTTP ${response.status}`;
+        try {
+          const errorText = await response.text();
+          if (errorText) {
+            // Intentar parsear como JSON si es posible
+            try {
+              const errorJson = JSON.parse(errorText);
+              errorMessage = errorJson.message || errorMessage;
+            } catch (parseError) {
+              // Si no es JSON válido, usar el texto tal como está
+              errorMessage = errorText;
+            }
+          }
+        } catch (textError) {
+          console.error("No se pudo obtener texto de error:", textError);
+        }
+
         switch (response.status) {
           case 404:
             throw new Error(`🚫 Tarea no encontrada (ID: ${taskId})`);
           case 400:
-            throw new Error(
-              result.message || "🚫 No se pudo ejecutar la tarea."
-            );
+            throw new Error(errorMessage || "🚫 No se pudo ejecutar la tarea.");
           case 500:
-            throw new Error("💥 Error interno en el servidor.");
+            throw new Error(`💥 Error interno en el servidor: ${errorMessage}`);
           default:
             throw new Error(
-              `❌ Error desconocido (${response.status}): ${
-                result.message || "Sin detalles"
-              }`
+              `❌ Error desconocido (${response.status}): ${errorMessage}`
             );
         }
       }
 
+      // Verificar que hay contenido en la respuesta
+      const responseText = await response.text();
+
+      if (!responseText || responseText.trim() === "") {
+        throw new Error("🚫 El servidor devolvió una respuesta vacía");
+      }
+
+      // Intentar parsear el JSON
+      let result;
+      try {
+        result = JSON.parse(responseText);
+      } catch (jsonError) {
+        console.error(
+          "❌ Error parseando JSON:",
+          responseText.substring(0, 200) + "..."
+        );
+        console.error("❌ Error de parseo:", jsonError);
+        throw new Error("🚫 La respuesta del servidor no es JSON válido");
+      }
+
+      console.log("📌 Respuesta del backend:", response.status, result);
+
+      // Validar que el resultado tiene la estructura esperada
+      if (typeof result !== "object" || result === null) {
+        throw new Error("🚫 Respuesta del servidor inválida");
+      }
+
       return result; // ✅ Devolver el resultado en caso de éxito
     } catch (error) {
-      console.error("❌ Error ejecutando tarea manual:", error.message);
+      console.error("❌ Error ejecutando tarea manual:", error);
+
+      // Si es un error de red o fetch, dar más contexto
+      if (error.name === "TypeError" && error.message.includes("fetch")) {
+        throw new Error(
+          "🌐 Error de conexión con el servidor. Verifique su conexión a internet."
+        );
+      }
+
       throw error; // Re-lanza el error para que el frontend lo maneje
     }
   }

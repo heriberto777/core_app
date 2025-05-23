@@ -1,4 +1,4 @@
-// services/cronService.js
+// services/cronService.js - Versión mejorada
 const cron = require("node-cron");
 const logger = require("./logger");
 const {
@@ -8,19 +8,23 @@ const {
 
 let task;
 let isRunning = false;
-let isEnabled = false; // Inicializamos como deshabilitado por defecto
-let currentHour = "02:00"; // Hora por defecto
-let transferService; // Se inicializará con importación diferida
+let isEnabled = false;
+let currentHour = "02:00";
+let transferService;
+let LinkedTasksService; // Nueva importación diferida
 
-/**
- * Inicia el trabajo programado para ejecutar transferencias
- * @param {string} hour - Hora de ejecución en formato "HH:MM"
- * @returns {object} - Estado del planificador
- */
 const startCronJob = (hour) => {
-  // Importación diferida para evitar dependencia circular
+  // Importaciones diferidas para evitar dependencia circular
   if (!transferService) {
     transferService = require("./transferService");
+  }
+  if (!LinkedTasksService) {
+    try {
+      LinkedTasksService = require("./LinkedTasksService");
+    } catch (error) {
+      logger.warn("LinkedTasksService no disponible, usando modo compatible");
+      LinkedTasksService = null;
+    }
   }
 
   // Detener tarea existente si hay una
@@ -30,33 +34,21 @@ const startCronJob = (hour) => {
     task = null;
   }
 
-  // Si el planificador está deshabilitado, no crear nueva tarea
   if (!isEnabled) {
-    logger.info(
-      "La ejecución automática está deshabilitada. No se programará ningún trabajo cron."
-    );
-    return {
-      enabled: isEnabled,
-      active: false,
-      hour: hour || currentHour,
-    };
+    logger.info("La ejecución automática está deshabilitada.");
+    return { enabled: isEnabled, active: false, hour: hour || currentHour };
   }
 
   // Validar formato de hora
   if (!hour || !/^([01]\d|2[0-3]):([0-5]\d)$/.test(hour)) {
-    logger.error(
-      `Formato de hora inválido: ${hour}. Usando ${currentHour} por defecto.`
-    );
+    logger.error(`Formato de hora inválido: ${hour}. Usando ${currentHour}`);
     hour = currentHour;
   }
 
-  // Actualizar la hora actual
   currentHour = hour;
-
   const [hh, mm] = hour.split(":");
   const cronExpression = `${mm} ${hh} * * *`;
 
-  // Validar expresión cron
   if (!cron.validate(cronExpression)) {
     logger.error(`Expresión cron inválida: ${cronExpression}`);
     return {
@@ -72,7 +64,6 @@ const startCronJob = (hour) => {
   );
 
   task = cron.schedule(cronExpression, async () => {
-    // Verificar si el planificador sigue habilitado
     if (!isEnabled) {
       logger.info("El planificador fue deshabilitado. Omitiendo ejecución.");
       return;
@@ -83,23 +74,209 @@ const startCronJob = (hour) => {
       return;
     }
 
-    isRunning = true;
-    let results = [];
+    await executeAutomaticTransfers();
+  });
 
-    try {
-      logger.info("🔄 Iniciando transferencias programadas...");
+  task.start();
+  logger.info(`🕒 Transferencias programadas diariamente a las ${hour}`);
 
-      const tasks = await transferService.getTransferTasks();
-      logger.debug(
-        "Tareas activas para el cronservices -> ",
-        tasks.map((t) => t.name)
-      );
+  return { enabled: isEnabled, active: true, hour: currentHour };
+};
 
-      if (!tasks.length) {
-        throw new Error("❌ No hay transferencias definidas para ejecutar.");
+/**
+ * Ejecuta transferencias automáticas con soporte para tareas vinculadas
+ */
+const executeAutomaticTransfers = async () => {
+  isRunning = true;
+  let results = [];
+  let processedGroups = new Set();
+
+  try {
+    logger.info("🔄 Iniciando transferencias automáticas programadas...");
+
+    const tasks = await transferService.getTransferTasks();
+    logger.info(`📋 Se encontraron ${tasks.length} tareas automáticas`);
+
+    if (!tasks.length) {
+      logger.info("ℹ️ No hay transferencias definidas para ejecutar.");
+      return;
+    }
+
+    // Si LinkedTasksService está disponible, usar lógica avanzada
+    if (LinkedTasksService) {
+      const tasksToExecute = [];
+      const groupRepresentatives = new Map();
+
+      // Agrupar tareas por vinculación
+      for (const task of tasks) {
+        if (!task.active) {
+          logger.warn(`⚠️ La tarea ${task.name} está inactiva. Omitiendo.`);
+          continue;
+        }
+
+        try {
+          const linkingInfo = await LinkedTasksService.getTaskLinkingInfo(
+            task._id
+          );
+
+          if (
+            linkingInfo &&
+            linkingInfo.hasLinkedTasks &&
+            linkingInfo.linkedGroup
+          ) {
+            const groupName = linkingInfo.linkedGroup;
+
+            if (!groupRepresentatives.has(groupName)) {
+              groupRepresentatives.set(groupName, {
+                taskId: task._id,
+                taskName: task.name,
+                groupName: groupName,
+                isGroup: true,
+                linkingInfo,
+              });
+              logger.info(
+                `🔗 Grupo "${groupName}" representado por tarea "${task.name}"`
+              );
+            } else {
+              logger.info(
+                `⏭️ Tarea "${task.name}" omitida (grupo "${groupName}" ya representado)`
+              );
+            }
+          } else {
+            // Tarea individual
+            tasksToExecute.push({
+              taskId: task._id,
+              taskName: task.name,
+              isGroup: false,
+              task,
+            });
+          }
+        } catch (linkingError) {
+          logger.warn(
+            `⚠️ Error verificando vinculaciones de ${task.name}: ${linkingError.message}`
+          );
+          tasksToExecute.push({
+            taskId: task._id,
+            taskName: task.name,
+            isGroup: false,
+            task,
+          });
+        }
       }
 
-      // 🔄 **Ejecución SECUENCIAL de las transferencias**
+      // Agregar representantes de grupos
+      for (const groupInfo of groupRepresentatives.values()) {
+        tasksToExecute.push(groupInfo);
+      }
+
+      logger.info(
+        `🎯 Se ejecutarán ${tasksToExecute.length} elementos (individuales + grupos)`
+      );
+
+      // Ejecutar con límite de concurrencia
+      const concurrencyLimit = 2;
+      for (let i = 0; i < tasksToExecute.length; i += concurrencyLimit) {
+        const batch = tasksToExecute.slice(i, i + concurrencyLimit);
+
+        const batchPromises = batch.map(async (item) => {
+          try {
+            if (item.isGroup) {
+              logger.info(
+                `🔗 Ejecutando grupo "${item.groupName}" desde tarea "${item.taskName}"`
+              );
+              const groupResult = await LinkedTasksService.executeLinkedGroup(
+                item.taskId,
+                "auto"
+              );
+
+              if (groupResult.success && groupResult.linkedTasksResults) {
+                groupResult.linkedTasksResults.forEach((taskResult) => {
+                  results.push({
+                    name: taskResult.taskName,
+                    success: taskResult.success,
+                    inserted: taskResult.inserted || 0,
+                    updated: taskResult.updated || 0,
+                    duplicates: taskResult.duplicates || 0,
+                    rows: taskResult.rows || 0,
+                    message:
+                      taskResult.message ||
+                      "Transferencia automática completada",
+                    errorDetail: taskResult.error || "N/A",
+                    isGroupMember: true,
+                    groupName: item.groupName,
+                  });
+                });
+                logger.info(
+                  `✅ Grupo "${item.groupName}": ${groupResult.successfulTasks}/${groupResult.totalTasks} exitosas`
+                );
+              } else {
+                results.push({
+                  name: `Grupo: ${item.groupName}`,
+                  success: false,
+                  inserted: 0,
+                  updated: 0,
+                  duplicates: 0,
+                  rows: 0,
+                  message:
+                    groupResult.message || "Error en la ejecución del grupo",
+                  errorDetail: groupResult.error || "N/A",
+                  groupName: item.groupName,
+                });
+                logger.error(
+                  `❌ Error en grupo "${item.groupName}": ${groupResult.message}`
+                );
+              }
+            } else {
+              // Tarea individual
+              logger.info(`📌 Ejecutando tarea individual: ${item.taskName}`);
+              const result = await item.task.execute();
+
+              results.push({
+                name: item.taskName,
+                success: result?.success || false,
+                inserted: result?.inserted || 0,
+                updated: result?.updated || 0,
+                duplicates: result?.duplicates || 0,
+                rows: result?.rows || 0,
+                message:
+                  result?.message || "Transferencia automática completada",
+                errorDetail: result?.errorDetail || "N/A",
+              });
+              logger.info(
+                `${result?.success ? "✅" : "❌"} Tarea "${item.taskName}": ${
+                  result?.success ? "Éxito" : "Error"
+                }`
+              );
+            }
+          } catch (taskError) {
+            logger.error(
+              `❌ Error ejecutando ${item.isGroup ? "grupo" : "tarea"} "${
+                item.taskName
+              }": ${taskError.message}`
+            );
+            results.push({
+              name: item.taskName,
+              success: false,
+              inserted: 0,
+              updated: 0,
+              duplicates: 0,
+              rows: 0,
+              message: "Error en la ejecución automática",
+              errorDetail: taskError.message || "Error desconocido",
+            });
+          }
+        });
+
+        await Promise.all(batchPromises);
+
+        // Pausa entre lotes
+        if (i + concurrencyLimit < tasksToExecute.length) {
+          logger.info("⏸️ Pausa de 30 segundos entre lotes...");
+          await new Promise((resolve) => setTimeout(resolve, 30000));
+        }
+      }
+    } else {
+      // Lógica simple sin tareas vinculadas (modo compatible)
       for (const task of tasks) {
         if (!task.active) {
           logger.warn(`⚠️ La tarea ${task.name} está inactiva. Omitiendo.`);
@@ -110,9 +287,7 @@ const startCronJob = (hour) => {
 
         let result;
         try {
-          if (task.transferType === "up") {
-            result = await transferService.executeTransferWithRetry(task._id);
-          } else if (task.transferType === "down") {
+          if (task.transferType === "down") {
             result = await transferService.executeTransferDown(task._id);
           } else {
             result = await transferService.executeTransferWithRetry(task._id);
@@ -126,7 +301,6 @@ const startCronJob = (hour) => {
           };
         }
 
-        // Formato unificado para resultados
         results.push({
           name: task.name,
           success: result.success,
@@ -143,50 +317,47 @@ const startCronJob = (hour) => {
           totalDuplicates: result.totalDuplicates || 0,
         });
 
-        logger.info(`✅ Transferencia completada: ${task.name}`, result);
+        logger.info(`✅ Transferencia completada: ${task.name}`);
       }
-
-      logger.info("✅ Todas las transferencias programadas completadas");
-
-      // 📩 Notificar resultado por correo usando el nuevo servicio que obtiene destinatarios de la BD
-      await sendTransferResultsEmail(results, hour);
-      logger.info(
-        `📧 Correo de resultados enviado para ${results.length} transferencias automáticas`
-      );
-    } catch (error) {
-      logger.error("❌ Error en las transferencias programadas:", {
-        message: error.message,
-      });
-
-      // 📩 Enviar correo de error crítico usando el nuevo servicio
-      try {
-        const errorMessage = `Se produjo un error crítico durante la ejecución: ${error.message}`;
-        await sendCriticalErrorEmail(errorMessage, hour);
-        logger.info(`📧 Correo de error crítico enviado`);
-      } catch (emailError) {
-        logger.error(
-          `❌ Error al enviar correo de notificación: ${emailError.message}`
-        );
-      }
-    } finally {
-      isRunning = false;
     }
-  });
 
-  task.start();
-  logger.info(`🕒 Transferencias programadas diariamente a las ${hour}`);
+    // Generar resumen
+    const successfulTasks = results.filter((r) => r.success).length;
+    const failedTasks = results.filter((r) => !r.success).length;
+    const totalRecords = results.reduce(
+      (sum, r) => sum + (r.inserted || 0) + (r.updated || 0),
+      0
+    );
 
-  return {
-    enabled: isEnabled,
-    active: true,
-    hour: currentHour,
-  };
+    logger.info(
+      `📊 Resumen: ${successfulTasks} exitosas, ${failedTasks} fallidas, ${totalRecords} registros`
+    );
+    logger.info("✅ Todas las transferencias programadas completadas");
+
+    // Enviar correo con resultados
+    if (results.length > 0) {
+      await sendTransferResultsEmail(results, currentHour);
+      logger.info(
+        `📧 Correo de resultados enviado para ${results.length} transferencias`
+      );
+    }
+  } catch (error) {
+    logger.error("❌ Error en las transferencias programadas:", error.message);
+
+    try {
+      const errorMessage = `Error crítico durante la ejecución: ${error.message}`;
+      await sendCriticalErrorEmail(errorMessage, currentHour);
+      logger.info(`📧 Correo de error crítico enviado`);
+    } catch (emailError) {
+      logger.error(
+        `❌ Error al enviar correo de notificación: ${emailError.message}`
+      );
+    }
+  } finally {
+    isRunning = false;
+  }
 };
 
-/**
- * Detiene el trabajo cron programado
- * @returns {boolean} - true si se detuvo correctamente, false si no había ninguno activo
- */
 const stopCronJob = () => {
   if (task) {
     logger.info("Deteniendo planificador de tareas...");
@@ -199,39 +370,22 @@ const stopCronJob = () => {
   return false;
 };
 
-/**
- * Habilita o deshabilita el planificador de tareas y establece su hora de ejecución
- * @param {boolean} enabled - true para habilitar, false para deshabilitar
- * @param {string} hour - Hora a la que programar las tareas (si se habilita)
- * @returns {object} - Estado actualizado del planificador
- */
 const setSchedulerEnabled = (enabled, hour = "02:00") => {
-  // Actualizar variables de estado
   isEnabled = enabled;
-
   if (hour && hour !== currentHour) {
     currentHour = hour;
   }
 
   if (enabled) {
     logger.info(`Habilitando planificador de tareas para las ${currentHour}`);
-    const result = startCronJob(currentHour);
-    return result;
+    return startCronJob(currentHour);
   } else {
     logger.info("Deshabilitando planificador de tareas");
     stopCronJob();
-    return {
-      enabled: false,
-      active: false,
-      hour: currentHour,
-    };
+    return { enabled: false, active: false, hour: currentHour };
   }
 };
 
-/**
- * Retorna el estado actual del planificador
- * @returns {object} - Estado actual del planificador
- */
 const getSchedulerStatus = () => {
   return {
     enabled: isEnabled,
@@ -244,25 +398,13 @@ const getSchedulerStatus = () => {
   };
 };
 
-/**
- * Sincroniza el estado del planificador con la configuración guardada en la BD
- * @param {object} config - Configuración cargada desde la BD
- * @returns {object} - Estado actualizado del planificador
- */
 const syncWithConfig = (config) => {
   if (!config) {
     return getSchedulerStatus();
   }
-
-  // Actualizar el estado del planificador con la configuración de la BD
   return setSchedulerEnabled(config.enabled, config.hour);
 };
 
-/**
- * Calcula la próxima fecha de ejecución a partir de una expresión cron
- * @param {string} cronExpression - Expresión cron (e.g. "30 2 * * *")
- * @returns {Date|null} - Fecha de la próxima ejecución
- */
 const getNextExecutionTime = (cronExpression) => {
   try {
     if (!cronExpression) return null;
@@ -271,7 +413,6 @@ const getNextExecutionTime = (cronExpression) => {
     if (parts.length !== 5) return null;
 
     const [minute, hour] = parts;
-
     const now = new Date();
     const nextRun = new Date();
 
@@ -280,7 +421,6 @@ const getNextExecutionTime = (cronExpression) => {
     nextRun.setSeconds(0);
     nextRun.setMilliseconds(0);
 
-    // Si la hora ya pasó hoy, programar para mañana
     if (nextRun <= now) {
       nextRun.setDate(nextRun.getDate() + 1);
     }

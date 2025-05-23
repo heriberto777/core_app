@@ -365,7 +365,9 @@ class LinkedTasksService {
       );
       if (!connectionResult.success) {
         throw new Error(
-          `No se pudo establecer conexión: ${connectionResult.error.message}`
+          `No se pudo establecer conexión: ${
+            connectionResult.error?.message || "Error de conexión"
+          }`
         );
       }
       connection = connectionResult.connection;
@@ -404,27 +406,28 @@ class LinkedTasksService {
         // Construir consulta dinámica
         const dynamicUpdateQuery = `${coordinatorTask.postUpdateQuery} WHERE ${primaryKeyField} IN (${keyParams})`;
 
-        logger.debug(
-          `Ejecutando post-update coordinado: ${dynamicUpdateQuery}`
-        );
-        logger.debug(`Con parámetros: ${JSON.stringify(Object.keys(params))}`);
+        try {
+          // Ejecutar la actualización
+          const sanitizedParams = SqlService.sanitizeParams(params);
+          const updateResult = await SqlService.query(
+            connection,
+            dynamicUpdateQuery,
+            sanitizedParams
+          );
 
-        // Ejecutar la actualización
-        const sanitizedParams = SqlService.sanitizeParams(params);
-        const updateResult = await SqlService.query(
-          connection,
-          dynamicUpdateQuery,
-          sanitizedParams
-        );
+          const batchUpdated = updateResult.rowsAffected || 0;
+          totalUpdated += batchUpdated;
 
-        const batchUpdated = updateResult.rowsAffected || 0;
-        totalUpdated += batchUpdated;
-
-        logger.info(
-          `Post-update lote ${
-            Math.floor(i / batchSize) + 1
-          }: ${batchUpdated} registros actualizados`
-        );
+          logger.info(
+            `Post-update lote ${
+              Math.floor(i / batchSize) + 1
+            }: ${batchUpdated} registros actualizados`
+          );
+        } catch (queryError) {
+          logger.error(`Error en lote de post-update: ${queryError.message}`);
+          // Continuar con el siguiente lote en lugar de fallar todo
+          continue;
+        }
       }
 
       logger.info(
@@ -438,7 +441,11 @@ class LinkedTasksService {
       };
     } catch (error) {
       logger.error(`❌ Error en post-update coordinado: ${error.message}`);
-      throw error;
+      return {
+        success: false,
+        message: `Error en post-update coordinado: ${error.message}`,
+        updated: 0,
+      };
     } finally {
       if (connection) {
         try {

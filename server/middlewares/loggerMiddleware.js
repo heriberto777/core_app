@@ -1,99 +1,127 @@
-// services/logger.js - Con soporte para Morgan
-const winston = require("winston");
-const path = require("path");
-const fs = require("fs");
-
-// Asegurar que existe el directorio de logs
-const logDir = path.join(process.cwd(), "logs");
-if (!fs.existsSync(logDir)) {
-  fs.mkdirSync(logDir, { recursive: true });
-}
-
-// Formato personalizado para consola
-const consoleFormat = winston.format.printf(({ level, message, timestamp }) => {
-  return `${timestamp} ${level.toUpperCase()}: ${message}`;
-});
-
-// Crear logger con configuración simple y robusta
-const logger = winston.createLogger({
-  level: process.env.LOG_LEVEL || "info",
-  format: winston.format.combine(
-    winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
-    winston.format.json()
-  ),
-  transports: [
-    // Transporte de consola con colores y formato legible
-    new winston.transports.Console({
-      format: winston.format.combine(
-        winston.format.colorize(),
-        winston.format.timestamp({ format: "YYYY-MM-DD HH:mm:ss" }),
-        consoleFormat
-      ),
-      handleExceptions: true,
-    }),
-    // Archivo para todos los logs
-    new winston.transports.File({
-      filename: path.join(logDir, "combined.log"),
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-      handleExceptions: true,
-    }),
-    // Archivo solo para errores
-    new winston.transports.File({
-      filename: path.join(logDir, "error.log"),
-      level: "error",
-      maxsize: 5242880, // 5MB
-      maxFiles: 5,
-      handleExceptions: true,
-    }),
-  ],
-  exitOnError: false, // No cerrar en errores no manejados
-});
-
-// IMPORTANTE: Añadir stream para Morgan
-logger.stream = {
-  write: function (message) {
-    // Remover salto de línea que Morgan añade al final
-    logger.info(message.trim());
-  },
-};
-
-// Métodos auxiliares
-logger.logError = function (error, context = {}) {
-  this.error({
-    message: error.message,
-    stack: error.stack,
-    ...context,
-  });
-};
-
-// Opcional: Intenta configurar transporte MongoDB si está disponible
+let morgan;
 try {
-  // Importamos estos módulos solo si los necesitamos
-  const mongoose = require("mongoose");
-  const { MongoDBTransport } = require("./mongoDBTransport");
-
-  // Verificar si MongoDB está conectado
-  if (
-    mongoose.connection.readyState === 1 &&
-    process.env.DISABLE_MONGO_LOGS !== "true"
-  ) {
-    // Agregar transporte MongoDB
-    const mongoTransport = new MongoDBTransport({
-      level: "info",
-      handleExceptions: true,
-    });
-
-    // Manejo de errores
-    mongoTransport.on("error", (error) => {
-      console.error("Error en transporte MongoDB (no fatal):", error.message);
-    });
-
-    logger.add(mongoTransport);
-    logger.info("Transporte MongoDB agregado al logger");
-  }
-} catch (error) {
-  console.warn("No se pudo configurar transporte MongoDB:", error.message);
+  morgan = require("morgan");
+} catch (morganError) {
+  console.warn("⚠️ Morgan no disponible:", morganError.message);
+  morgan = null;
 }
 
-module.exports = logger;
+const logger = require("../services/logger");
+
+// Crear un middleware de logging robusto
+const createLoggerMiddleware = () => {
+  try {
+    // Si Morgan no está disponible, usar middleware básico
+    if (!morgan) {
+      console.log("📝 Usando middleware de logging básico (sin Morgan)");
+      return (req, res, next) => {
+        const start = Date.now();
+
+        const logRequest = () => {
+          try {
+            const duration = Date.now() - start;
+            const message = `${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`;
+
+            if (res.statusCode >= 500) {
+              logger.error(message);
+            } else if (res.statusCode >= 400) {
+              logger.warn(message);
+            } else {
+              logger.info(message);
+            }
+          } catch (logError) {
+            console.log(`${req.method} ${req.originalUrl} ${res.statusCode}`);
+          }
+        };
+
+        res.on("finish", logRequest);
+        res.on("close", logRequest);
+        next();
+      };
+    }
+
+    // Verificar si logger tiene el stream necesario
+    if (!logger.stream) {
+      console.warn("⚠️ Logger no tiene stream, creando uno básico...");
+      logger.stream = {
+        write: function (message) {
+          try {
+            if (typeof message === "string") {
+              logger.info(message.trim());
+            } else {
+              logger.info(String(message).trim());
+            }
+          } catch (error) {
+            console.log(message.trim());
+          }
+        },
+      };
+    }
+
+    // Configurar formato de Morgan
+    const format =
+      process.env.NODE_ENV === "production"
+        ? "combined"
+        : ':remote-addr - :remote-user [:date[clf]] ":method :url HTTP/:http-version" :status :res[content-length] ":referrer" ":user-agent" - :response-time ms';
+
+    // Crear middleware con manejo de errores
+    const morganMiddleware = morgan(format, {
+      stream: logger.stream,
+      skip: (req, res) => {
+        // Omitir logs de health check en producción
+        if (process.env.NODE_ENV === "production" && req.path === "/health") {
+          return true;
+        }
+        return false;
+      },
+    });
+
+    // Wrapper para manejar errores del middleware
+    return (req, res, next) => {
+      try {
+        return morganMiddleware(req, res, (err) => {
+          if (err) {
+            console.error("Error en middleware de logging:", err.message);
+          }
+          next(err);
+        });
+      } catch (error) {
+        console.warn(
+          "⚠️ Error en loggerMiddleware, continuando sin logging:",
+          error.message
+        );
+        next();
+      }
+    };
+  } catch (error) {
+    console.error("❌ Error creando middleware de logging:", error.message);
+
+    // Retornar middleware básico como fallback usando tu lógica
+    return (req, res, next) => {
+      const start = Date.now();
+
+      const logRequest = () => {
+        try {
+          const duration = Date.now() - start;
+          const message = `${req.method} ${req.originalUrl} ${res.statusCode} ${duration}ms`;
+
+          if (res.statusCode >= 500) {
+            logger.error(message);
+          } else if (res.statusCode >= 400) {
+            logger.warn(message);
+          } else {
+            logger.info(message);
+          }
+        } catch (logError) {
+          console.log(`${req.method} ${req.originalUrl} ${res.statusCode}`);
+        }
+      };
+
+      res.on("finish", logRequest);
+      res.on("close", logRequest);
+      next();
+    };
+  }
+};
+
+module.exports = createLoggerMiddleware();
