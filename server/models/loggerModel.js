@@ -1,4 +1,4 @@
-// models/loggerModel.js
+// models/loggerModel.js - Versión corregida
 const mongoose = require("mongoose");
 
 /**
@@ -11,7 +11,7 @@ const logSchema = new mongoose.Schema(
       type: String,
       required: true,
       enum: ["error", "warn", "info", "debug"],
-      index: true, // Indexar para búsquedas más rápidas
+      // ✅ CORRECCIÓN: Quitar index: true de aquí
     },
     message: {
       type: String,
@@ -24,7 +24,7 @@ const logSchema = new mongoose.Schema(
     source: {
       type: String,
       default: "app",
-      index: true, // Para identificar el origen (módulo/servicio)
+      // ✅ CORRECCIÓN: Quitar index: true de aquí
     },
     stack: {
       type: String,
@@ -40,61 +40,177 @@ const logSchema = new mongoose.Schema(
     }, // Dirección IP de origen (si aplica)
   },
   {
-    timestamps: true, // Añadir createdAt y updatedAt automáticamente
+    // ✅ CORRECCIÓN: Desactivar timestamps automáticos para evitar conflictos
+    timestamps: false, // Ya tenemos timestamp manual
+    collection: "logs", // Especificar nombre de colección
+    versionKey: false, // Quitar __v
   }
 );
 
-// Método estático para simplificar la creación de logs
+// ✅ ÍNDICES DEFINIDOS SOLO UNA VEZ AQUÍ
+// Índice principal para consultas por fecha (descendente para logs más recientes primero)
+logSchema.index({ timestamp: -1 });
+
+// Índices compuestos para consultas comunes
+logSchema.index({ level: 1, timestamp: -1 }); // Buscar por nivel y fecha
+logSchema.index({ source: 1, timestamp: -1 }); // Buscar por fuente y fecha
+logSchema.index({ level: 1, source: 1, timestamp: -1 }); // Búsqueda combinada
+
+// ✅ ÍNDICE TTL MEJORADO - Solo si está habilitado
+if (process.env.AUTO_DELETE_LOGS !== "false") {
+  const ttlDays = parseInt(process.env.LOG_TTL_DAYS || "90");
+  // Solo crear el índice TTL si no existe ya el índice principal de timestamp
+  logSchema.index(
+    { timestamp: 1 }, // Ascendente para TTL
+    {
+      expireAfterSeconds: ttlDays * 24 * 60 * 60,
+      background: true,
+      name: "log_ttl_index", // Nombre específico para evitar conflictos
+    }
+  );
+}
+
+// Método estático mejorado para crear logs (sin sesiones)
 logSchema.statics.createLog = async function (level, message, options = {}) {
   try {
     const { source, stack, metadata, user, ip } = options;
 
-    const log = new this({
-      level,
-      message,
-      source,
-      stack,
-      metadata,
-      user,
-      ip,
-    });
+    // Validar y sanitizar datos
+    const sanitizedLevel = ["error", "warn", "info", "debug"].includes(level)
+      ? level
+      : "info";
+    const sanitizedMessage = String(message || "").substring(0, 1000); // Limitar longitud
+    const sanitizedSource = String(source || "app").substring(0, 100);
 
-    return await log.save();
+    const logData = {
+      level: sanitizedLevel,
+      message: sanitizedMessage,
+      timestamp: new Date(),
+      source: sanitizedSource,
+      stack: stack ? String(stack).substring(0, 2000) : undefined,
+      metadata: this.sanitizeMetadata(metadata),
+      user: user ? String(user).substring(0, 100) : undefined,
+      ip: ip ? String(ip).substring(0, 45) : undefined, // IPv6 máximo
+    };
+
+    const log = new this(logData);
+
+    // ✅ Guardar sin sesión para evitar errores de sesión expirada
+    return await log.save({ session: null });
   } catch (error) {
-    console.error("Error al guardar log:", error);
-    // En caso de error, no queremos que falle la aplicación
+    // No usar console.error aquí para evitar loops infinitos
+    // Solo emitir un evento si es necesario
+    process.emit("logError", error);
     return null;
   }
 };
 
-// Método estático para limpiar logs antiguos
-logSchema.statics.cleanOldLogs = async function (daysToKeep = 30) {
+// Método para sanitizar metadata
+logSchema.statics.sanitizeMetadata = function (metadata) {
+  if (!metadata || typeof metadata !== "object") return undefined;
+
+  try {
+    // Convertir a JSON para verificar serializabilidad
+    const jsonStr = JSON.stringify(metadata);
+
+    // Limitar tamaño para evitar documentos muy grandes
+    if (jsonStr.length > 5000) {
+      return {
+        _truncated: true,
+        _originalSize: jsonStr.length,
+        _sample: JSON.parse(jsonStr.substring(0, 1000) + "}"),
+      };
+    }
+
+    return metadata;
+  } catch (error) {
+    return { _error: "Error serializando metadata" };
+  }
+};
+
+// Método estático mejorado para limpiar logs antiguos
+logSchema.statics.cleanOldLogs = async function (
+  daysToKeep = 30,
+  batchSize = 1000
+) {
   try {
     const limitDate = new Date();
     limitDate.setDate(limitDate.getDate() - daysToKeep);
 
-    const result = await this.deleteMany({
-      timestamp: { $lt: limitDate },
-    });
+    let totalDeleted = 0;
+    let deletedInBatch = 0;
 
-    return result.deletedCount;
+    // Eliminar en lotes para evitar timeouts en colecciones grandes
+    do {
+      const result = await this.deleteMany(
+        { timestamp: { $lt: limitDate } },
+        { limit: batchSize }
+      );
+
+      deletedInBatch = result.deletedCount;
+      totalDeleted += deletedInBatch;
+
+      // Pausa pequeña entre lotes para no sobrecargar la DB
+      if (deletedInBatch > 0) {
+        await new Promise((resolve) => setTimeout(resolve, 100));
+      }
+    } while (deletedInBatch === batchSize);
+
+    return totalDeleted;
   } catch (error) {
-    console.error("Error al limpiar logs antiguos:", error);
+    process.emit("logError", error);
     return 0;
   }
 };
 
-// Crear un índice TTL para eliminar automáticamente logs antiguos
-// Solo si no se ha configurado en la aplicación otro mecanismo
-if (process.env.AUTO_DELETE_LOGS !== "false") {
-  const ttlDays = parseInt(process.env.LOG_TTL_DAYS || "90");
-  logSchema.index(
-    { timestamp: 1 },
-    {
-      expireAfterSeconds: ttlDays * 24 * 60 * 60,
-      background: true,
-    }
-  );
-}
+// Método para obtener estadísticas de logs
+logSchema.statics.getLogStats = async function (hours = 24) {
+  try {
+    const since = new Date(Date.now() - hours * 60 * 60 * 1000);
+
+    const stats = await this.aggregate([
+      { $match: { timestamp: { $gte: since } } },
+      {
+        $group: {
+          _id: "$level",
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    const total = await this.countDocuments({ timestamp: { $gte: since } });
+
+    return {
+      total,
+      byLevel: stats.reduce((acc, stat) => {
+        acc[stat._id] = stat.count;
+        return acc;
+      }, {}),
+      period: `${hours} hours`,
+    };
+  } catch (error) {
+    process.emit("logError", error);
+    return { total: 0, byLevel: {}, error: error.message };
+  }
+};
+
+// Middleware pre-save para validaciones adicionales
+logSchema.pre("save", function (next) {
+  // Asegurar que el timestamp sea válido
+  if (!this.timestamp || isNaN(this.timestamp.getTime())) {
+    this.timestamp = new Date();
+  }
+
+  // Truncar campos si son muy largos
+  if (this.message && this.message.length > 1000) {
+    this.message = this.message.substring(0, 997) + "...";
+  }
+
+  if (this.stack && this.stack.length > 2000) {
+    this.stack = this.stack.substring(0, 1997) + "...";
+  }
+
+  next();
+});
 
 module.exports = mongoose.model("Log", logSchema);
