@@ -1016,6 +1016,201 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     });
   };
 
+  const editForeignKeyDependency = (index) => {
+    const dependency = mapping.foreignKeyDependencies[index];
+
+    Swal.fire({
+      title: "Editar Dependencia de Foreign Key",
+      html: `
+      <div class="fk-dependency-form">
+        <div class="form-group">
+          <label for="fieldName">Campo que causa dependencia</label>
+          <input id="fieldName" class="swal2-input" value="${
+            dependency.fieldName
+          }" placeholder="Ej: COD_CLT">
+          <small>Campo en la tabla origen que referencia otra tabla</small>
+        </div>
+        
+        <div class="form-group">
+          <label for="dependentTable">Tabla dependiente</label>
+          <input id="dependentTable" class="swal2-input" value="${
+            dependency.dependentTable
+          }" placeholder="Ej: CLIENTES">
+          <small>Tabla donde debe existir/insertarse el registro referenciado</small>
+        </div>
+        
+        <div class="form-group">
+          <label for="executionOrder">Orden de ejecución</label>
+          <input id="executionOrder" type="number" class="swal2-input" value="${
+            dependency.executionOrder || 0
+          }" placeholder="0">
+          <small>Orden de procesamiento (0 = primero)</small>
+        </div>
+        
+        <div class="form-check-group">
+          <div class="form-check">
+            <input type="checkbox" id="insertIfNotExists" class="swal2-checkbox" ${
+              dependency.insertIfNotExists ? "checked" : ""
+            }>
+            <label for="insertIfNotExists">Insertar si no existe</label>
+          </div>
+          
+          <div class="form-check">
+            <input type="checkbox" id="validateOnly" class="swal2-checkbox" ${
+              dependency.validateOnly ? "checked" : ""
+            }>
+            <label for="validateOnly">Solo validar (no insertar)</label>
+          </div>
+        </div>
+        
+        <div class="dependent-fields-section">
+          <h4>Campos a insertar/validar</h4>
+          <div id="dependentFieldsContainer">
+            ${dependency.dependentFields
+              .map(
+                (field) => `
+              <div class="dependent-field-row">
+                <input type="text" class="swal2-input source-field" value="${
+                  field.sourceField || ""
+                }" placeholder="Campo origen" style="width: 30%;">
+                <input type="text" class="swal2-input target-field" value="${
+                  field.targetField
+                }" placeholder="Campo destino" style="width: 30%;">
+                <input type="text" class="swal2-input default-value" value="${
+                  field.defaultValue || ""
+                }" placeholder="Valor por defecto" style="width: 25%;">
+                <div class="checkbox-container" style="width: 10%;">
+                  <input type="checkbox" class="is-key-checkbox" ${
+                    field.isKey ? "checked" : ""
+                  }>
+                  <label>Clave</label>
+                </div>
+                <button type="button" class="btn-remove-field" style="width: 5%; background: #dc3545; color: white; border: none; border-radius: 4px;">✕</button>
+              </div>
+            `
+              )
+              .join("")}
+          </div>
+          <button type="button" id="addDependentField" style="background: #28a745; color: white; border: none; border-radius: 4px; padding: 5px 10px; margin-top: 10px;">+ Añadir Campo</button>
+        </div>
+      </div>
+    `,
+      showCancelButton: true,
+      confirmButtonText: "Guardar",
+      cancelButtonText: "Cancelar",
+      width: 800,
+      didOpen: () => {
+        // Manejar eventos (mismo código que en addForeignKeyDependency)
+        const addFieldBtn = document.getElementById("addDependentField");
+        const fieldsContainer = document.getElementById(
+          "dependentFieldsContainer"
+        );
+
+        // Añadir campo dependiente
+        addFieldBtn.addEventListener("click", () => {
+          const fieldRow = document.createElement("div");
+          fieldRow.className = "dependent-field-row";
+          fieldRow.innerHTML = `
+          <input type="text" class="swal2-input source-field" placeholder="Campo origen" style="width: 30%;">
+          <input type="text" class="swal2-input target-field" placeholder="Campo destino" style="width: 30%;">
+          <input type="text" class="swal2-input default-value" placeholder="Valor por defecto" style="width: 25%;">
+          <div class="checkbox-container" style="width: 10%;">
+            <input type="checkbox" class="is-key-checkbox">
+            <label>Clave</label>
+          </div>
+          <button type="button" class="btn-remove-field" style="width: 5%; background: #dc3545; color: white; border: none; border-radius: 4px;">✕</button>
+        `;
+
+          fieldsContainer.appendChild(fieldRow);
+
+          // Añadir evento para eliminar
+          fieldRow
+            .querySelector(".btn-remove-field")
+            .addEventListener("click", () => {
+              fieldRow.remove();
+            });
+        });
+
+        // Eventos para eliminar campos existentes
+        document.querySelectorAll(".btn-remove-field").forEach((btn) => {
+          btn.addEventListener("click", (e) => {
+            e.target.closest(".dependent-field-row").remove();
+          });
+        });
+      },
+      preConfirm: () => {
+        const fieldName = document.getElementById("fieldName").value.trim();
+        const dependentTable = document
+          .getElementById("dependentTable")
+          .value.trim();
+        const executionOrder =
+          parseInt(document.getElementById("executionOrder").value) || 0;
+        const insertIfNotExists =
+          document.getElementById("insertIfNotExists").checked;
+        const validateOnly = document.getElementById("validateOnly").checked;
+
+        if (!fieldName || !dependentTable) {
+          Swal.showValidationMessage(
+            "Campo y tabla dependiente son obligatorios"
+          );
+          return false;
+        }
+
+        // Recopilar campos dependientes
+        const dependentFields = [];
+        document.querySelectorAll(".dependent-field-row").forEach((row) => {
+          const sourceField = row.querySelector(".source-field").value.trim();
+          const targetField = row.querySelector(".target-field").value.trim();
+          const defaultValue = row.querySelector(".default-value").value.trim();
+          const isKey = row.querySelector(".is-key-checkbox").checked;
+
+          if (targetField) {
+            dependentFields.push({
+              sourceField: sourceField || null,
+              targetField,
+              defaultValue: defaultValue || undefined,
+              isKey,
+            });
+          }
+        });
+
+        if (dependentFields.length === 0) {
+          Swal.showValidationMessage(
+            "Debe definir al menos un campo dependiente"
+          );
+          return false;
+        }
+
+        const hasKey = dependentFields.some((f) => f.isKey);
+        if (!hasKey) {
+          Swal.showValidationMessage(
+            "Debe marcar al menos un campo como clave"
+          );
+          return false;
+        }
+
+        return {
+          fieldName,
+          dependentTable,
+          executionOrder,
+          insertIfNotExists,
+          validateOnly,
+          dependentFields,
+        };
+      },
+    }).then((result) => {
+      if (result.isConfirmed) {
+        const newDependencies = [...mapping.foreignKeyDependencies];
+        newDependencies[index] = result.value;
+
+        setMapping({
+          ...mapping,
+          foreignKeyDependencies: newDependencies,
+        });
+      }
+    });
+  };
+
   const removeForeignKeyDependency = (index) => {
     const newDependencies = [...(mapping.foreignKeyDependencies || [])];
     newDependencies.splice(index, 1);
