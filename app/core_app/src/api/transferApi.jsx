@@ -2050,4 +2050,48 @@ export class TransferApi {
       throw error;
     }
   }
+
+  // Obtener información de vinculación de una tarea
+  async getTaskLinkingInfo(accessToken, taskId) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/linking-info/${taskId}`;
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al obtener info de vinculación:", error);
+      throw error;
+    }
+  }
+
+  // Ejecutar grupo de tareas vinculadas
+  async executeLinkedGroup(accessToken, taskId) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/execute-linked-group/${taskId}`;
+      const params = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al ejecutar grupo vinculado:", error);
+      throw error;
+    }
+  }
 }

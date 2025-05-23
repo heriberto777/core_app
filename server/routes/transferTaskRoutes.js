@@ -21,6 +21,8 @@ const {
   getTransferSummaries,
   getSourceDataByMapping,
   updateEntityData,
+  getTaskLinkingInfo,
+  executeLinkedGroup,
 } = require("../controllers/transferTaskController");
 
 const router = express.Router();
@@ -86,4 +88,6 @@ router.get("/server-status/server", checkServerStatus);
 router.get("/task-summaries/recent", getTransferSummaries);
 router.get("/source-data/:mappingId/:documentId", getSourceDataByMapping);
 router.post("/update-entity-data", updateEntityData);
+router.get("/linking-info/:taskId", getTaskLinkingInfo);
+router.post("/execute-linked-group/:taskId", executeLinkedGroup);
 module.exports = router;

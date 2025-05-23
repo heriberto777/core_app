@@ -48,6 +48,7 @@ class TransferService {
 
   /**
    * Obtiene todas las tareas activas desde MongoDB (type: auto o both).
+   * ACTUALIZADO: Ahora considera tareas vinculadas para ejecución automática
    */
   async getTransferTasks() {
     try {
@@ -63,8 +64,9 @@ class TransferService {
         active: task.active,
         _id: task._id,
         transferType: task.transferType || "standard",
+        // 🔗 ACTUALIZADO: La función execute ahora maneja automáticamente las tareas vinculadas
         execute: (updateProgress) =>
-          this.executeTransferWithRetry(task._id, updateProgress),
+          this.executeTaskWithLinkingLogic(task._id, updateProgress, "auto"),
       }));
     } catch (error) {
       logger.error("Error al obtener tareas de transferencia:", error);
@@ -73,7 +75,106 @@ class TransferService {
   }
 
   /**
+   * NUEVA FUNCIÓN: Ejecuta una tarea considerando si tiene vinculaciones
+   * Esta función es llamada tanto para ejecuciones manuales como automáticas
+   */
+  async executeTaskWithLinkingLogic(
+    taskId,
+    updateProgress = null,
+    executionType = "auto"
+  ) {
+    try {
+      logger.info(
+        `🔄 Iniciando ejecución de tarea ${taskId} (${executionType})`
+      );
+
+      // Verificar si debe ejecutarse como grupo o individualmente
+      const executionStrategy = await LinkedTasksService.shouldExecuteAsGroup(
+        taskId
+      );
+
+      if (executionStrategy.executeAsGroup) {
+        logger.info(
+          `🔗 Ejecutando como grupo vinculado (${executionType}): ${executionStrategy.reason}`
+        );
+
+        // Ejecutar todo el grupo
+        const groupResult = await LinkedTasksService.executeLinkedGroup(
+          taskId,
+          executionType
+        );
+
+        // Enviar correos según el tipo de ejecución
+        if (groupResult.success && groupResult.linkedTasksResults) {
+          try {
+            const emailResults = groupResult.linkedTasksResults.map((r) => ({
+              name: r.taskName,
+              success: r.success,
+              inserted: r.inserted || 0,
+              updated: r.updated || 0,
+              duplicates: r.duplicates || 0,
+              rows: r.rows || 0,
+              message: r.message || "Transferencia completada",
+              errorDetail: r.error || "N/A",
+            }));
+
+            const emailType =
+              executionType === "auto"
+                ? "auto_linked_group"
+                : "manual_linked_group";
+            await sendTransferResultsEmail(emailResults, emailType);
+            logger.info(`📧 Correo de grupo (${executionType}) enviado`);
+          } catch (emailError) {
+            logger.error(
+              `❌ Error al enviar correo de grupo: ${emailError.message}`
+            );
+          }
+        }
+
+        return groupResult;
+      } else {
+        logger.info(
+          `📌 Ejecutando individualmente (${executionType}): ${executionStrategy.reason}`
+        );
+
+        // Ejecutar individualmente
+        const result = await this.executeTransferWithRetry(taskId);
+
+        // Para ejecuciones automáticas, enviar correo individual
+        if (executionType === "auto" && result) {
+          try {
+            const task = await TransferTask.findById(taskId);
+            const formattedResult = {
+              name: task?.name || "desconocida",
+              success: result.success || false,
+              inserted: result.inserted || 0,
+              updated: result.updated || 0,
+              duplicates: result.duplicates || 0,
+              rows: result.rows || 0,
+              message: result.message || "Transferencia completada",
+              errorDetail: result.errorDetail || "N/A",
+            };
+
+            await sendTransferResultsEmail([formattedResult], "auto");
+            logger.info(`📧 Correo automático enviado para ${task?.name}`);
+          } catch (emailError) {
+            logger.error(
+              `❌ Error al enviar correo automático: ${emailError.message}`
+            );
+          }
+        }
+
+        return result;
+      }
+    } catch (error) {
+      logger.error(`❌ Error en executeTaskWithLinkingLogic: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
    * Ejecuta una transferencia manualmente y envía resultados detallados por correo.
+   * ACTUALIZADO: Ahora maneja tareas vinculadas automáticamente
    */
   async executeTransferManual(taskId) {
     logger.info(`🔄 Ejecutando transferencia manual: ${taskId}`);
@@ -98,83 +199,153 @@ class TransferService {
         return { success: false, message: "Tarea inactiva" };
       }
 
-      // 2. Ejecutar la transferencia
-      logger.info(`📌 Ejecutando transferencia para la tarea: ${transferName}`);
-      Telemetry.trackTransfer("started");
+      // 2. 🔗 NUEVA LÓGICA: Verificar si debe ejecutarse como grupo o individualmente
+      const executionStrategy = await LinkedTasksService.shouldExecuteAsGroup(
+        taskId
+      );
 
-      const result = await this.executeTransferWithRetry(taskId);
-      Telemetry.trackTransfer(result.success ? "completed" : "failed");
-
-      // Verificar que result sea un objeto válido para evitar errores
-      if (!result) {
-        logger.error(
-          `❌ No se obtuvo un resultado válido para la tarea: ${transferName}`
-        );
-        return { success: false, message: "No se obtuvo un resultado válido" };
-      }
-
-      // 3. Preparar datos para el correo
-      const formattedResult = {
-        name: transferName,
-        success: result.success || false,
-        inserted: result.inserted || 0,
-        updated: result.updated || 0,
-        duplicates: result.duplicates || 0,
-        rows: result.rows || 0,
-        message: result.message || "Transferencia completada",
-        errorDetail: result.errorDetail || "N/A",
-        initialCount: result.initialCount || 0,
-        finalCount: result.finalCount || 0,
-        duplicatedRecords: result.duplicatedRecords || [],
-        hasMoreDuplicates: result.hasMoreDuplicates || false,
-        totalDuplicates: result.totalDuplicates || 0,
-      };
-
-      // 4. Enviar correo con el resultado
-      try {
-        await sendTransferResultsEmail([formattedResult], "manual");
+      if (executionStrategy.executeAsGroup) {
         logger.info(
-          `📧 Correo de notificación enviado para la transferencia: ${transferName}`
+          `🔗 Ejecutando como grupo vinculado: ${executionStrategy.reason}`
         );
-      } catch (emailError) {
-        logger.error(
-          `❌ Error al enviar correo de notificación: ${emailError.message}`
-        );
-      }
 
-      // 5. Devolver el resultado
-      if (result.success) {
-        logger.info(
-          `✅ Transferencia manual completada con éxito: ${transferName}`
+        // Ejecutar todo el grupo usando LinkedTasksService
+        const groupResult = await LinkedTasksService.executeLinkedGroup(
+          taskId,
+          "manual"
         );
-        // Al final de la ejecución exitosa de una tarea:
-        await TransferTask.findByIdAndUpdate(taskId, {
-          lastExecutionDate: new Date(),
-          $inc: { executionCount: 1 },
-          lastExecutionResult: {
-            success: result.success,
-            message: result.message || "Transferencia completada",
-            affectedRecords: (result.inserted || 0) + (result.updated || 0), // Evitar NaN
-          },
-        });
 
-        return {
-          success: true,
-          message: "Transferencia manual ejecutada con éxito",
-          result,
-          emailSent: true,
-        };
+        if (groupResult.success) {
+          logger.info(
+            `✅ Ejecución de grupo completada exitosamente desde ${transferName}`
+          );
+
+          // Enviar correo de grupo si es necesario
+          try {
+            const emailResults = groupResult.linkedTasksResults.map((r) => ({
+              name: r.taskName,
+              success: r.success,
+              inserted: r.inserted || 0,
+              updated: r.updated || 0,
+              duplicates: r.duplicates || 0,
+              rows: r.rows || 0,
+              message: r.message || "Transferencia completada",
+              errorDetail: r.error || "N/A",
+            }));
+
+            await sendTransferResultsEmail(emailResults, "manual_linked_group");
+            logger.info(`📧 Correo de grupo enviado para ${transferName}`);
+          } catch (emailError) {
+            logger.error(
+              `❌ Error al enviar correo de grupo: ${emailError.message}`
+            );
+          }
+
+          return {
+            success: true,
+            message: groupResult.message,
+            result: groupResult,
+            emailSent: true,
+            isLinkedGroup: true,
+          };
+        } else {
+          return {
+            success: false,
+            message: groupResult.message,
+            result: groupResult,
+            emailSent: true,
+            isLinkedGroup: true,
+          };
+        }
       } else {
-        logger.error(
-          `❌ Error en la transferencia manual: ${transferName}`,
-          result
+        logger.info(
+          `📌 Ejecutando individualmente: ${executionStrategy.reason}`
         );
-        return {
-          success: false,
-          message: "Error en la ejecución de la transferencia manual",
-          result,
-          emailSent: true,
+
+        // Ejecutar individualmente (lógica original)
+        logger.info(
+          `📌 Ejecutando transferencia para la tarea: ${transferName}`
+        );
+        Telemetry.trackTransfer("started");
+
+        const result = await this.executeTransferWithRetry(taskId);
+        Telemetry.trackTransfer(result.success ? "completed" : "failed");
+
+        // Verificar que result sea un objeto válido para evitar errores
+        if (!result) {
+          logger.error(
+            `❌ No se obtuvo un resultado válido para la tarea: ${transferName}`
+          );
+          return {
+            success: false,
+            message: "No se obtuvo un resultado válido",
+          };
+        }
+
+        // 3. Preparar datos para el correo
+        const formattedResult = {
+          name: transferName,
+          success: result.success || false,
+          inserted: result.inserted || 0,
+          updated: result.updated || 0,
+          duplicates: result.duplicates || 0,
+          rows: result.rows || 0,
+          message: result.message || "Transferencia completada",
+          errorDetail: result.errorDetail || "N/A",
+          initialCount: result.initialCount || 0,
+          finalCount: result.finalCount || 0,
+          duplicatedRecords: result.duplicatedRecords || [],
+          hasMoreDuplicates: result.hasMoreDuplicates || false,
+          totalDuplicates: result.totalDuplicates || 0,
         };
+
+        // 4. Enviar correo con el resultado
+        try {
+          await sendTransferResultsEmail([formattedResult], "manual");
+          logger.info(
+            `📧 Correo de notificación enviado para la transferencia: ${transferName}`
+          );
+        } catch (emailError) {
+          logger.error(
+            `❌ Error al enviar correo de notificación: ${emailError.message}`
+          );
+        }
+
+        // 5. Devolver el resultado
+        if (result.success) {
+          logger.info(
+            `✅ Transferencia manual completada con éxito: ${transferName}`
+          );
+
+          // Actualizar estadísticas de la tarea
+          await TransferTask.findByIdAndUpdate(taskId, {
+            lastExecutionDate: new Date(),
+            $inc: { executionCount: 1 },
+            lastExecutionResult: {
+              success: result.success,
+              message: result.message || "Transferencia completada",
+              affectedRecords: (result.inserted || 0) + (result.updated || 0),
+            },
+          });
+
+          return {
+            success: true,
+            message: "Transferencia manual ejecutada con éxito",
+            result,
+            emailSent: true,
+          };
+        } else {
+          logger.error(
+            `❌ Error en la transferencia manual: ${transferName}`,
+            result
+          );
+          return {
+            success: false,
+            message: "Error en la ejecución de la transferencia manual",
+            result,
+            emailSent: true,
+          };
+        }
       }
     } catch (error) {
       logger.error(
@@ -1686,7 +1857,189 @@ class TransferService {
   }
 
   /**
+   * Ejecuta una transferencia manualmente y envía resultados detallados por correo.
+   * ACTUALIZADO: Ahora maneja tareas vinculadas automáticamente
+   */
+  async executeTransferManual(taskId) {
+    logger.info(`🔄 Ejecutando transferencia manual: ${taskId}`);
+    let task = null;
+    let transferName = "desconocida";
+
+    try {
+      // 1. Buscar la tarea en la base de datos
+      task = await TransferTask.findById(taskId);
+      if (!task) {
+        logger.error(`❌ No se encontró la tarea con ID: ${taskId}`);
+        return { success: false, message: "Tarea no encontrada" };
+      }
+
+      transferName = task.name;
+      logger.info(
+        `📌 Encontrada tarea de transferencia: ${transferName} (${taskId})`
+      );
+
+      if (!task.active) {
+        logger.warn(`⚠️ La tarea ${transferName} está inactiva.`);
+        return { success: false, message: "Tarea inactiva" };
+      }
+
+      // 2. 🔗 NUEVA LÓGICA: Verificar si debe ejecutarse como grupo o individualmente
+      const executionStrategy = await LinkedTasksService.shouldExecuteAsGroup(
+        taskId
+      );
+
+      if (executionStrategy.executeAsGroup) {
+        logger.info(
+          `🔗 Ejecutando como grupo vinculado: ${executionStrategy.reason}`
+        );
+
+        // Ejecutar todo el grupo usando LinkedTasksService
+        const groupResult = await LinkedTasksService.executeLinkedGroup(
+          taskId,
+          "manual"
+        );
+
+        if (groupResult.success) {
+          logger.info(
+            `✅ Ejecución de grupo completada exitosamente desde ${transferName}`
+          );
+
+          // Enviar correo de grupo si es necesario
+          try {
+            const emailResults = groupResult.linkedTasksResults.map((r) => ({
+              name: r.taskName,
+              success: r.success,
+              inserted: r.inserted || 0,
+              updated: r.updated || 0,
+              duplicates: r.duplicates || 0,
+              rows: r.rows || 0,
+              message: r.message || "Transferencia completada",
+              errorDetail: r.error || "N/A",
+            }));
+
+            await sendTransferResultsEmail(emailResults, "manual_linked_group");
+            logger.info(`📧 Correo de grupo enviado para ${transferName}`);
+          } catch (emailError) {
+            logger.error(
+              `❌ Error al enviar correo de grupo: ${emailError.message}`
+            );
+          }
+
+          return {
+            success: true,
+            message: groupResult.message,
+            result: groupResult,
+            emailSent: true,
+            isLinkedGroup: true,
+          };
+        } else {
+          return {
+            success: false,
+            message: groupResult.message,
+            result: groupResult,
+            emailSent: true,
+            isLinkedGroup: true,
+          };
+        }
+      } else {
+        logger.info(
+          `📌 Ejecutando individualmente: ${executionStrategy.reason}`
+        );
+
+        // Ejecutar individualmente (lógica original)
+        logger.info(
+          `📌 Ejecutando transferencia para la tarea: ${transferName}`
+        );
+        Telemetry.trackTransfer("started");
+
+        const result = await this.executeTransferWithRetry(taskId);
+        Telemetry.trackTransfer(result.success ? "completed" : "failed");
+
+        // Verificar que result sea un objeto válido para evitar errores
+        if (!result) {
+          logger.error(
+            `❌ No se obtuvo un resultado válido para la tarea: ${transferName}`
+          );
+          return {
+            success: false,
+            message: "No se obtuvo un resultado válido",
+          };
+        }
+
+        // 3. Preparar datos para el correo
+        const formattedResult = {
+          name: transferName,
+          success: result.success || false,
+          inserted: result.inserted || 0,
+          updated: result.updated || 0,
+          duplicates: result.duplicates || 0,
+          rows: result.rows || 0,
+          message: result.message || "Transferencia completada",
+          errorDetail: result.errorDetail || "N/A",
+          initialCount: result.initialCount || 0,
+          finalCount: result.finalCount || 0,
+          duplicatedRecords: result.duplicatedRecords || [],
+          hasMoreDuplicates: result.hasMoreDuplicates || false,
+          totalDuplicates: result.totalDuplicates || 0,
+        };
+
+        // 4. Enviar correo con el resultado
+        try {
+          await sendTransferResultsEmail([formattedResult], "manual");
+          logger.info(
+            `📧 Correo de notificación enviado para la transferencia: ${transferName}`
+          );
+        } catch (emailError) {
+          logger.error(
+            `❌ Error al enviar correo de notificación: ${emailError.message}`
+          );
+        }
+
+        // 5. Devolver el resultado
+        if (result.success) {
+          logger.info(
+            `✅ Transferencia manual completada con éxito: ${transferName}`
+          );
+
+          // Actualizar estadísticas de la tarea
+          await TransferTask.findByIdAndUpdate(taskId, {
+            lastExecutionDate: new Date(),
+            $inc: { executionCount: 1 },
+            lastExecutionResult: {
+              success: result.success,
+              message: result.message || "Transferencia completada",
+              affectedRecords: (result.inserted || 0) + (result.updated || 0),
+            },
+          });
+
+          return {
+            success: true,
+            message: "Transferencia manual ejecutada con éxito",
+            result,
+            emailSent: true,
+          };
+        } else {
+          logger.error(
+            `❌ Error en la transferencia manual: ${transferName}`,
+            result
+          );
+          return {
+            success: false,
+            message: "Error en la ejecución de la transferencia manual",
+            result,
+            emailSent: true,
+          };
+        }
+      }
+    } catch (error) {
+      logger.error(`❌ Error en executeTaskWithLinkingLogic: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
    * Ejecuta operaciones post-transferencia (actualizaciones adicionales)
+   * ACTUALIZADO: Ahora verifica si la tarea está en un grupo vinculado antes de ejecutar post-update
    */
   async executePostTransferOperations(
     connection,
@@ -1702,8 +2055,31 @@ class TransferService {
     }
 
     try {
+      // 🔗 NUEVA VERIFICACIÓN: Si la tarea es parte de un grupo vinculado,
+      // el post-update debe ser manejado por el coordinador del grupo
+      const linkingInfo = await LinkedTasksService.getTaskLinkingInfo(
+        task._id.toString()
+      );
+
+      if (
+        linkingInfo &&
+        linkingInfo.hasLinkedTasks &&
+        !linkingInfo.isCoordinator
+      ) {
+        logger.info(
+          `⏸️ Tarea ${task.name} es parte de un grupo vinculado pero no es coordinadora. Post-update será manejado por el coordinador.`
+        );
+        return {
+          success: true,
+          message: "Post-update será manejado por el coordinador del grupo",
+          deferred: true,
+        };
+      }
+
+      // Si llegamos aquí, la tarea debe ejecutar su post-update normalmente
+      // (ya sea porque no está vinculada o porque es la coordinadora)
       logger.info(
-        `Ejecutando operaciones post-transferencia para ${affectedRecords.length} registros...`
+        `🔄 Ejecutando operaciones post-transferencia para ${affectedRecords.length} registros...`
       );
 
       // Verificar si la tarea fue cancelada

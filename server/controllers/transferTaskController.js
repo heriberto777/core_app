@@ -22,6 +22,8 @@ const ConnectionDiagnostic = require("../services/connectionDiagnostic");
 const DBConfig = require("../models/dbConfigModel");
 const { default: mongoose } = require("mongoose");
 const DynamicTransferService = require("../services/DynamicTransferService");
+const LinkedTasksService = require("../services/LinkedTasksService");
+
 /**
  * Obtener todas las tareas de transferencia
  */
@@ -90,8 +92,16 @@ const upsertTransferTaskController = async (req, res) => {
       postUpdateQuery,
       postUpdateMapping,
       clearBeforeInsert,
-      fieldMapping, // Añadir estos dos
-      nextTasks, // campos
+      fieldMapping,
+      nextTasks,
+      // 🔗 CAMPOS DE VINCULACIÓN - Con valores por defecto
+      linkedTasks = [], // ← Valor por defecto
+      linkedGroup,
+      executeLinkedTasks = false, // ← Valor por defecto
+      linkedExecutionOrder = 0, // ← Valor por defecto
+      delayPostUpdate = false, // ← Valor por defecto
+      coordinationConfig,
+      linkingMetadata,
       _id, // Para manejar ediciones correctamente
     } = req.body;
 
@@ -100,6 +110,34 @@ const upsertTransferTaskController = async (req, res) => {
         success: false,
         message: "El nombre y la consulta SQL son obligatorios.",
       });
+    }
+
+    // Validaciones específicas para tareas vinculadas
+    if (linkedGroup && linkedGroup.trim() !== "") {
+      // Si especifica un grupo, verificar que no tenga también linkedTasks directas
+      if (linkedTasks && linkedTasks.length > 0) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Una tarea no puede tener tanto grupo vinculado como tareas vinculadas directas. Use solo uno de los dos métodos.",
+        });
+      }
+
+      // Si es coordinadora (tiene postUpdateQuery), validar que sea la única en el grupo
+      if (postUpdateQuery && postUpdateQuery.trim() !== "") {
+        const existingCoordinators = await TransferTask.find({
+          linkedGroup: linkedGroup.trim(),
+          postUpdateQuery: { $exists: true, $ne: null, $ne: "" },
+          _id: { $ne: _id }, // Excluir la tarea actual en caso de edición
+        });
+
+        if (existingCoordinators.length > 0) {
+          return res.status(400).json({
+            success: false,
+            message: `Ya existe una tarea coordinadora en el grupo "${linkedGroup}": ${existingCoordinators[0].name}. Solo una tarea por grupo puede tener post-update query.`,
+          });
+        }
+      }
     }
 
     // Construir el objeto con todos los campos
@@ -115,8 +153,24 @@ const upsertTransferTaskController = async (req, res) => {
       postUpdateQuery: postUpdateQuery || null,
       postUpdateMapping: postUpdateMapping || {},
       clearBeforeInsert: clearBeforeInsert || false,
-      fieldMapping: fieldMapping || {}, // Añadir estos dos
-      nextTasks: nextTasks || [], // campos
+      fieldMapping: fieldMapping || {},
+      nextTasks: nextTasks || [],
+      // 🔗 CAMPOS DE VINCULACIÓN
+      linkedTasks: linkedTasks || [],
+      linkedGroup: linkedGroup ? linkedGroup.trim() : null,
+      executeLinkedTasks: executeLinkedTasks || false,
+      linkedExecutionOrder: linkedExecutionOrder || 0,
+      delayPostUpdate: delayPostUpdate || false,
+      coordinationConfig: coordinationConfig || {
+        waitForLinkedTasks: false,
+        maxWaitTime: 300000,
+        postUpdateStrategy: "individual",
+      },
+      linkingMetadata: linkingMetadata || {
+        isCoordinator: postUpdateQuery && postUpdateQuery.trim() !== "",
+        lastGroupExecution: null,
+        lastGroupExecutionId: null,
+      },
     };
 
     // Si es una edición, incluir el ID
@@ -128,6 +182,16 @@ const upsertTransferTaskController = async (req, res) => {
     const result = await upsertTransferTaskService(taskData);
 
     if (result.success) {
+      // Si la tarea tiene vinculaciones, actualizar automáticamente executeLinkedTasks
+      if (
+        taskData.linkedGroup ||
+        (taskData.linkedTasks && taskData.linkedTasks.length > 0)
+      ) {
+        await TransferTask.findByIdAndUpdate(result.task._id, {
+          executeLinkedTasks: true,
+        });
+      }
+
       return res.json({ success: true, task: result.task });
     } else {
       return res.status(500).json({ success: false, message: result.message });
@@ -194,22 +258,72 @@ const executeTransferTask = async (req, res) => {
       });
     }
 
-    // Ejecutar la transferencia manual
-    logger.info(`Iniciando ejecución manual para la tarea: ${taskId}`);
-    // const result = await executeTransferManual(taskId);
-    // result = await transferService.executeTransfer(task._id);
-    result = await transferService.executeTransferWithRetry(taskId);
+    logger.info(`Iniciando ejecución para la tarea: ${task.name}`);
+
+    // 🔗 NUEVA LÓGICA: SIEMPRE verificar vinculaciones
+    // Si la tarea tiene vinculaciones, ejecutar todo el grupo
+    // Si no tiene vinculaciones, ejecutar individualmente
+    const result = await LinkedTasksService.executeLinkedGroup(
+      taskId,
+      "manual"
+    );
 
     if (result && result.success) {
+      // Enviar correo según si es grupo o individual
+      try {
+        if (result.isLinkedGroup) {
+          // Enviar correo de grupo
+          await sendTransferResultsEmail(
+            result.linkedTasksResults.map((r) => ({
+              name: r.taskName,
+              success: r.success,
+              inserted: r.inserted || 0,
+              updated: r.updated || 0,
+              duplicates: r.duplicates || 0,
+              rows: r.rows || 0,
+              message: r.message,
+              errorDetail: r.error || "N/A",
+            })),
+            "manual_linked_group"
+          );
+
+          logger.info(
+            `📧 Correo de grupo vinculado enviado para: ${result.mainTask}`
+          );
+        } else {
+          // Enviar correo individual (lógica existente)
+          await sendTransferResultsEmail(
+            [
+              {
+                name: task.name,
+                success: result.success,
+                inserted: result.inserted || 0,
+                updated: result.updated || 0,
+                duplicates: result.duplicates || 0,
+                rows: result.rows || 0,
+                message: result.message,
+                errorDetail: result.errorDetail || "N/A",
+              },
+            ],
+            "manual"
+          );
+        }
+      } catch (emailError) {
+        logger.error(`❌ Error al enviar correo: ${emailError.message}`);
+      }
+
       return res.json({
         success: true,
-        message: "Tarea ejecutada con éxito",
+        message: result.isLinkedGroup
+          ? `Grupo ejecutado desde "${result.triggeredBy}": ${result.successfulTasks}/${result.totalTasks} tareas exitosas`
+          : "Tarea ejecutada con éxito",
         result,
+        isLinkedGroup: result.isLinkedGroup || false,
       });
     } else {
       return res.status(400).json({
         success: false,
-        message: "Error en la ejecución de la tarea.",
+        message: "Error en la ejecución.",
         result,
       });
     }
@@ -218,6 +332,73 @@ const executeTransferTask = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Error en la ejecución",
+      error: error.message,
+    });
+  }
+};
+
+// 🔗 NUEVO: Controlador para obtener información de vinculación
+const getTaskLinkingInfo = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+
+    if (!taskId) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requiere el ID de la tarea",
+      });
+    }
+
+    const linkingInfo = await LinkedTasksService.getTaskLinkingInfo(taskId);
+
+    if (!linkingInfo) {
+      return res.status(404).json({
+        success: false,
+        message: "Tarea no encontrada",
+      });
+    }
+
+    return res.json({
+      success: true,
+      data: linkingInfo,
+    });
+  } catch (error) {
+    logger.error("Error al obtener información de vinculación:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error al obtener información de vinculación",
+      error: error.message,
+    });
+  }
+};
+
+// 🔗 NUEVO: Controlador para ejecutar solo un grupo vinculado
+const executeLinkedGroup = async (req, res) => {
+  try {
+    const { taskId } = req.params;
+
+    if (!taskId) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requiere el ID de la tarea",
+      });
+    }
+
+    const result = await LinkedTasksService.executeLinkedGroup(
+      taskId,
+      "manual"
+    );
+
+    return res.json({
+      success: true,
+      message: `Grupo vinculado ejecutado: ${result.successfulTasks}/${result.totalTasks} tareas exitosas`,
+      result,
+    });
+  } catch (error) {
+    logger.error("Error al ejecutar grupo vinculado:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error al ejecutar grupo vinculado",
       error: error.message,
     });
   }
@@ -1337,6 +1518,58 @@ const updateEntityData = async (req, res) => {
   }
 };
 
+// 5. NUEVA FUNCIÓN: Obtener estadísticas de grupos vinculados
+const getLinkedGroupStats = async (req, res) => {
+  try {
+    const stats = LinkedTasksService.getGroupExecutionStats();
+
+    // Obtener información adicional de la base de datos
+    const linkedGroups = await TransferTask.aggregate([
+      {
+        $match: {
+          linkedGroup: { $exists: true, $ne: null, $ne: "" },
+          active: true,
+        },
+      },
+      {
+        $group: {
+          _id: "$linkedGroup",
+          tasks: {
+            $push: {
+              id: "$_id",
+              name: "$name",
+              isCoordinator: { $ne: ["$postUpdateQuery", null] },
+              executionOrder: "$linkedExecutionOrder",
+            },
+          },
+          count: { $sum: 1 },
+        },
+      },
+    ]);
+
+    return res.json({
+      success: true,
+      data: {
+        activeExecutions: stats,
+        linkedGroups: linkedGroups.map((group) => ({
+          groupName: group._id,
+          taskCount: group.count,
+          tasks: group.tasks.sort(
+            (a, b) => a.executionOrder - b.executionOrder
+          ),
+        })),
+      },
+    });
+  } catch (error) {
+    logger.error("Error al obtener estadísticas de grupos vinculados:", error);
+    return res.status(500).json({
+      success: false,
+      message: "Error al obtener estadísticas",
+      error: error.message,
+    });
+  }
+};
+
 module.exports = {
   getTransferTasks,
   getTransferTask,
@@ -1359,4 +1592,7 @@ module.exports = {
   getTransferSummaries,
   getSourceDataByMapping,
   updateEntityData,
+  getTaskLinkingInfo,
+  executeLinkedGroup,
+  getLinkedGroupStats,
 };
