@@ -683,8 +683,20 @@ class DynamicTransferService {
         };
       }
 
+      // NUEVO: Ordenar tablas por executionOrder si está definido
+      const orderedMainTables = [...mainTables].sort(
+        (a, b) => (a.executionOrder || 0) - (b.executionOrder || 0)
+      );
+      logger.info(
+        `Procesando ${
+          orderedMainTables.length
+        } tablas principales en orden: ${orderedMainTables
+          .map((t) => t.name)
+          .join(" -> ")}`
+      );
+
       // 2. Procesar cada tabla principal
-      for (const tableConfig of mainTables) {
+      for (const tableConfig of orderedMainTables) {
         // Obtener datos de la tabla de origen
         let sourceData;
 
@@ -702,39 +714,39 @@ class DynamicTransferService {
             // Construir consulta básica con alias para evitar ambigüedad
             const tableAlias = "t1";
             const query = `
-          SELECT ${tableAlias}.* FROM ${tableConfig.sourceTable} ${tableAlias}
-          WHERE ${tableAlias}.${
+         SELECT ${tableAlias}.* FROM ${tableConfig.sourceTable} ${tableAlias}
+         WHERE ${tableAlias}.${
               tableConfig.primaryKey || "NUM_PED"
             } = @documentId
-          ${
-            tableConfig.filterCondition
-              ? ` AND ${tableConfig.filterCondition.replace(
-                  /\b(\w+)\b/g,
-                  (m, field) => {
-                    if (
-                      !field.includes(".") &&
-                      !field.match(/^[\d.]+$/) &&
-                      ![
-                        "AND",
-                        "OR",
-                        "NULL",
-                        "IS",
-                        "NOT",
-                        "IN",
-                        "LIKE",
-                        "BETWEEN",
-                        "TRUE",
-                        "FALSE",
-                      ].includes(field.toUpperCase())
-                    ) {
-                      return `${tableAlias}.${field}`;
-                    }
-                    return m;
-                  }
-                )}`
-              : ""
-          }
-        `;
+         ${
+           tableConfig.filterCondition
+             ? ` AND ${tableConfig.filterCondition.replace(
+                 /\b(\w+)\b/g,
+                 (m, field) => {
+                   if (
+                     !field.includes(".") &&
+                     !field.match(/^[\d.]+$/) &&
+                     ![
+                       "AND",
+                       "OR",
+                       "NULL",
+                       "IS",
+                       "NOT",
+                       "IN",
+                       "LIKE",
+                       "BETWEEN",
+                       "TRUE",
+                       "FALSE",
+                     ].includes(field.toUpperCase())
+                   ) {
+                     return `${tableAlias}.${field}`;
+                   }
+                   return m;
+                 }
+               )}`
+             : ""
+         }
+       `;
             logger.debug(`Ejecutando consulta principal: ${query}`);
             const result = await SqlService.query(sourceConnection, query, {
               documentId,
@@ -760,8 +772,34 @@ class DynamicTransferService {
               stack: error.stack,
             }
           );
-
           throw new Error(`Error al obtener datos de origen: ${error.message}`);
+        }
+
+        // NUEVO: Procesar dependencias de foreign key ANTES de insertar datos principales
+        try {
+          if (
+            mapping.foreignKeyDependencies &&
+            mapping.foreignKeyDependencies.length > 0
+          ) {
+            logger.info(
+              `Verificando ${mapping.foreignKeyDependencies.length} dependencias de foreign key para documento ${documentId}`
+            );
+            await this.processForeignKeyDependencies(
+              documentId,
+              mapping,
+              sourceConnection,
+              targetConnection,
+              sourceData
+            );
+            logger.info(
+              `Dependencias de foreign key procesadas exitosamente para documento ${documentId}`
+            );
+          }
+        } catch (depError) {
+          logger.error(
+            `Error en dependencias de foreign key para documento ${documentId}: ${depError.message}`
+          );
+          throw new Error(`Error en dependencias: ${depError.message}`);
         }
 
         // 3. Determinar el tipo de documento basado en las reglas
@@ -780,9 +818,9 @@ class DynamicTransferService {
 
         // 4. Verificar si el documento ya existe en destino
         const checkQuery = `
-      SELECT TOP 1 1 FROM ${tableConfig.targetTable}
-      WHERE ${targetPrimaryKey} = @documentId
-    `;
+     SELECT TOP 1 1 FROM ${tableConfig.targetTable}
+     WHERE ${targetPrimaryKey} = @documentId
+   `;
 
         logger.debug(`Verificando existencia en destino: ${checkQuery}`);
         const checkResult = await SqlService.query(
@@ -1034,9 +1072,9 @@ class DynamicTransferService {
         });
 
         const insertQuery = `
-      INSERT INTO ${tableConfig.targetTable} (${insertFieldsList.join(", ")})
-      VALUES (${insertValuesList.join(", ")})
-    `;
+     INSERT INTO ${tableConfig.targetTable} (${insertFieldsList.join(", ")})
+     VALUES (${insertValuesList.join(", ")})
+   `;
 
         logger.debug(
           `Ejecutando inserción en tabla principal ${tableConfig.name}: ${insertQuery}`
@@ -1061,12 +1099,27 @@ class DynamicTransferService {
         );
         processedTables.push(tableConfig.name);
 
-        // 7. Procesar tablas de detalle relacionadas
+        // 7. Procesar tablas de detalle relacionadas (NUEVO: ordenadas por executionOrder)
         const detailTables = mapping.tableConfigs.filter(
           (tc) => tc.isDetailTable && tc.parentTableRef === tableConfig.name
         );
 
-        for (const detailConfig of detailTables) {
+        // Ordenar tablas de detalle por executionOrder
+        const orderedDetailTables = [...detailTables].sort(
+          (a, b) => (a.executionOrder || 0) - (b.executionOrder || 0)
+        );
+
+        if (orderedDetailTables.length > 0) {
+          logger.info(
+            `Procesando ${
+              orderedDetailTables.length
+            } tablas de detalle en orden: ${orderedDetailTables
+              .map((t) => t.name)
+              .join(" -> ")}`
+          );
+        }
+
+        for (const detailConfig of orderedDetailTables) {
           // Obtener detalles
           let detailsData;
 
@@ -1081,45 +1134,110 @@ class DynamicTransferService {
             );
             const result = await SqlService.query(sourceConnection, query);
             detailsData = result.recordset;
-          } else {
-            // Construir consulta básica con alias para evitar ambigüedad
+          } else if (detailConfig.useSameSourceTable) {
+            // Caso especial: usa la misma tabla que el encabezado
+            // Buscamos la tabla principal asociada
+            const parentTable = mapping.tableConfigs.find(
+              (tc) => tc.name === detailConfig.parentTableRef
+            );
+
+            if (!parentTable) {
+              logger.warn(
+                `No se encontró la tabla padre ${detailConfig.parentTableRef} para el detalle ${detailConfig.name}`
+              );
+              continue;
+            }
+
+            // Usar el mismo filtro que la tabla principal, pero seleccionar solo los campos mapeados
             const tableAlias = "d1";
             const orderByColumn = detailConfig.orderByColumn || "";
+
+            // Construir la lista de campos a seleccionar basada en los mappings
+            let selectFields = "*"; // Default to all fields
+            if (
+              detailConfig.fieldMappings &&
+              detailConfig.fieldMappings.length > 0
+            ) {
+              const fieldList = detailConfig.fieldMappings
+                .filter((fm) => fm.sourceField) // Solo campos con origen definido
+                .map((fm) => `${tableAlias}.${fm.sourceField}`)
+                .join(", ");
+
+              if (fieldList) {
+                selectFields = fieldList;
+              }
+            }
+
             const query = `
-          SELECT ${tableAlias}.* FROM ${detailConfig.sourceTable} ${tableAlias}
-          WHERE ${tableAlias}.${
-              detailConfig.primaryKey || "NUM_PED"
+         SELECT ${selectFields} FROM ${parentTable.sourceTable} ${tableAlias}
+         WHERE ${tableAlias}.${
+              detailConfig.primaryKey || parentTable.primaryKey || "NUM_PED"
             } = @documentId
-          ${
-            detailConfig.filterCondition
-              ? ` AND ${detailConfig.filterCondition.replace(
-                  /\b(\w+)\b/g,
-                  (m, field) => {
-                    if (
-                      !field.includes(".") &&
-                      !field.match(/^[\d.]+$/) &&
-                      ![
-                        "AND",
-                        "OR",
-                        "NULL",
-                        "IS",
-                        "NOT",
-                        "IN",
-                        "LIKE",
-                        "BETWEEN",
-                        "TRUE",
-                        "FALSE",
-                      ].includes(field.toUpperCase())
-                    ) {
-                      return `${tableAlias}.${field}`;
-                    }
-                    return m;
-                  }
-                )}`
-              : ""
-          }
-          ${orderByColumn ? ` ORDER BY ${tableAlias}.${orderByColumn}` : ""}
-        `;
+         ${
+           detailConfig.filterCondition
+             ? ` AND ${detailConfig.filterCondition.replace(
+                 /\b(\w+)\b/g,
+                 (m, field) => {
+                   if (
+                     !field.includes(".") &&
+                     !field.match(/^[\d.]+$/) &&
+                     ![
+                       "AND",
+                       "OR",
+                       "NULL",
+                       "IS",
+                       "NOT",
+                       "IN",
+                       "LIKE",
+                       "BETWEEN",
+                       "TRUE",
+                       "FALSE",
+                     ].includes(field.toUpperCase())
+                   ) {
+                     return `${tableAlias}.${field}`;
+                   }
+                   return m;
+                 }
+               )}`
+             : ""
+         }
+         ${orderByColumn ? ` ORDER BY ${tableAlias}.${orderByColumn}` : ""}
+       `;
+            logger.debug(`Ejecutando consulta para detalles: ${query}`);
+            const result = await SqlService.query(sourceConnection, query, {
+              documentId,
+            });
+            detailsData = result.recordset;
+          } else {
+            // Tabla de detalle normal con su propia fuente
+            const orderByColumn = detailConfig.orderByColumn || "";
+
+            // Construir la lista de campos a seleccionar
+            let selectFields = "*"; // Default to all fields
+            if (
+              detailConfig.fieldMappings &&
+              detailConfig.fieldMappings.length > 0
+            ) {
+              const fieldList = detailConfig.fieldMappings
+                .filter((fm) => fm.sourceField) // Solo campos con origen definido
+                .map((fm) => fm.sourceField)
+                .join(", ");
+
+              if (fieldList) {
+                selectFields = fieldList;
+              }
+            }
+
+            const query = `
+         SELECT ${selectFields} FROM ${detailConfig.sourceTable} 
+         WHERE ${detailConfig.primaryKey || "NUM_PED"} = @documentId
+         ${
+           detailConfig.filterCondition
+             ? ` AND ${detailConfig.filterCondition}`
+             : ""
+         }
+         ${orderByColumn ? ` ORDER BY ${orderByColumn}` : ""}
+       `;
             logger.debug(`Ejecutando consulta para detalles: ${query}`);
             const result = await SqlService.query(sourceConnection, query, {
               documentId,
@@ -1364,11 +1482,11 @@ class DynamicTransferService {
             });
 
             const insertDetailQuery = `
-          INSERT INTO ${
-            detailConfig.targetTable
-          } (${insertDetailFieldsList.join(", ")})
-          VALUES (${insertDetailValuesList.join(", ")})
-        `;
+         INSERT INTO ${detailConfig.targetTable} (${insertDetailFieldsList.join(
+              ", "
+            )})
+         VALUES (${insertDetailValuesList.join(", ")})
+       `;
 
             logger.debug(
               `Ejecutando inserción en tabla de detalle: ${insertDetailQuery}`
@@ -1410,8 +1528,6 @@ class DynamicTransferService {
           consecutiveValue: null,
         };
       }
-
-      // NO ACTUALIZAR el consecutivo aquí porque ya se maneja individualmente en processDocuments
 
       return {
         success: true,
@@ -2741,6 +2857,167 @@ class DynamicTransferService {
       logger.error(`Error al actualizar último consecutivo: ${error.message}`);
       return false;
     }
+  }
+
+  /**
+   * NUEVO: Procesa dependencias de foreign key
+   * @param {string} documentId - ID del documento
+   * @param {Object} mapping - Configuración de mapeo
+   * @param {Object} sourceConnection - Conexión origen
+   * @param {Object} targetConnection - Conexión destino
+   * @param {Object} sourceData - Datos de origen
+   */
+  async processForeignKeyDependencies(
+    documentId,
+    mapping,
+    sourceConnection,
+    targetConnection,
+    sourceData
+  ) {
+    if (
+      !mapping.foreignKeyDependencies ||
+      mapping.foreignKeyDependencies.length === 0
+    ) {
+      return;
+    }
+
+    // Ordenar dependencias por executionOrder
+    const orderedDependencies = [...mapping.foreignKeyDependencies].sort(
+      (a, b) => (a.executionOrder || 0) - (b.executionOrder || 0)
+    );
+
+    logger.info(
+      `Procesando ${orderedDependencies.length} dependencias de FK en orden`
+    );
+
+    for (const dependency of orderedDependencies) {
+      try {
+        logger.info(
+          `Procesando dependencia: ${dependency.fieldName} -> ${dependency.dependentTable}`
+        );
+
+        // Obtener el valor del campo que causa la dependencia
+        const fieldValue = sourceData[dependency.fieldName];
+
+        if (!fieldValue) {
+          logger.warn(
+            `Campo ${dependency.fieldName} no tiene valor, omitiendo dependencia`
+          );
+          continue;
+        }
+
+        // Verificar si el registro ya existe en la tabla dependiente
+        const keyField = dependency.dependentFields.find((f) => f.isKey);
+        if (!keyField) {
+          throw new Error(
+            `No se encontró campo clave para dependencia ${dependency.fieldName}`
+          );
+        }
+
+        const checkQuery = `SELECT COUNT(*) as count FROM ${dependency.dependentTable} WHERE ${keyField.targetField} = @keyValue`;
+        const checkResult = await SqlService.query(
+          targetConnection,
+          checkQuery,
+          { keyValue: fieldValue }
+        );
+        const exists = checkResult.recordset[0].count > 0;
+
+        if (exists) {
+          logger.info(
+            `Registro ya existe en ${dependency.dependentTable} para valor ${fieldValue}`
+          );
+          continue;
+        }
+
+        if (dependency.validateOnly) {
+          throw new Error(
+            `Registro requerido no existe en ${dependency.dependentTable} para valor ${fieldValue}`
+          );
+        }
+
+        if (dependency.insertIfNotExists) {
+          logger.info(
+            `Insertando registro en ${dependency.dependentTable} para valor ${fieldValue}`
+          );
+
+          // Preparar datos para inserción
+          const insertData = {};
+          const insertFields = [];
+          const insertValues = [];
+
+          for (const field of dependency.dependentFields) {
+            let value;
+
+            if (field.sourceField) {
+              value = sourceData[field.sourceField];
+            } else if (field.defaultValue !== undefined) {
+              value = field.defaultValue;
+            } else if (field.isKey) {
+              value = fieldValue;
+            }
+
+            if (value !== undefined) {
+              insertData[field.targetField] = value;
+              insertFields.push(field.targetField);
+              insertValues.push(`@${field.targetField}`);
+            }
+          }
+
+          if (insertFields.length > 0) {
+            const insertQuery = `INSERT INTO ${
+              dependency.dependentTable
+            } (${insertFields.join(", ")}) VALUES (${insertValues.join(", ")})`;
+            await SqlService.query(targetConnection, insertQuery, insertData);
+            logger.info(
+              `Registro insertado exitosamente en ${dependency.dependentTable}`
+            );
+          }
+        }
+      } catch (depError) {
+        logger.error(
+          `Error en dependencia ${dependency.fieldName}: ${depError.message}`
+        );
+        throw new Error(
+          `Error en dependencia FK ${dependency.fieldName}: ${depError.message}`
+        );
+      }
+    }
+  }
+
+  /**
+   * Ordena las tablas según sus dependencias
+   */
+  getTablesExecutionOrder(tableConfigs) {
+    // Separar tablas principales y de detalle
+    const mainTables = tableConfigs.filter((tc) => !tc.isDetailTable);
+    const detailTables = tableConfigs.filter((tc) => tc.isDetailTable);
+
+    // Ordenar tablas principales por executionOrder
+    mainTables.sort(
+      (a, b) => (a.executionOrder || 0) - (b.executionOrder || 0)
+    );
+
+    // Para cada tabla principal, agregar sus detalles después
+    const orderedTables = [];
+
+    for (const mainTable of mainTables) {
+      orderedTables.push(mainTable);
+
+      // Agregar tablas de detalle relacionadas
+      const relatedDetails = detailTables
+        .filter((dt) => dt.parentTableRef === mainTable.name)
+        .sort((a, b) => (a.executionOrder || 0) - (b.executionOrder || 0));
+
+      orderedTables.push(...relatedDetails);
+    }
+
+    // Agregar detalles huérfanos al final
+    const orphanDetails = detailTables.filter(
+      (dt) => !mainTables.some((mt) => mt.name === dt.parentTableRef)
+    );
+    orderedTables.push(...orphanDetails);
+
+    return orderedTables;
   }
 }
 

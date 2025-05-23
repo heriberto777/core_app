@@ -809,6 +809,7 @@ const cancelTransferTask = async (req, res) => {
 };
 
 const getVendedores = async (req, res) => {
+  console.log("getVendedores", req.body);
   try {
     return await withConnection("server1", async (connection) => {
       // Consulta para obtener los vendedores y sus bodegas asignadas
@@ -820,6 +821,7 @@ const getVendedores = async (req, res) => {
       `;
 
       const result = await SqlService.query(connection, query);
+      console.log("Result -> ", result);
 
       if (!result || !result.recordset) {
         return res.status(404).json({
@@ -838,7 +840,7 @@ const getVendedores = async (req, res) => {
     return res.status(500).json({
       success: false,
       message: "Error al obtener vendedores",
-      error: error.message,
+      error: error,
     });
   }
 };

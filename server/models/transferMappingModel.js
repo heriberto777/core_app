@@ -7,6 +7,24 @@ const ValueMapSchema = new Schema({
   targetValue: { type: Schema.Types.Mixed, required: true },
 });
 
+// Schema para dependencias de foreign key
+const ForeignKeyDependencySchema = new Schema({
+  fieldName: { type: String, required: true }, // Campo que causa la dependencia
+  dependentTable: { type: String, required: true }, // Tabla donde debe existir/insertarse
+  dependentFields: [
+    {
+      // Campos a insertar en la tabla dependiente
+      sourceField: { type: String }, // Campo origen
+      targetField: { type: String, required: true }, // Campo destino en tabla dependiente
+      defaultValue: { type: Schema.Types.Mixed },
+      isKey: { type: Boolean, default: false }, // Si es la clave que se referencia
+    },
+  ],
+  insertIfNotExists: { type: Boolean, default: true }, // Si crear el registro si no existe
+  validateOnly: { type: Boolean, default: false }, // Solo validar que existe
+  executionOrder: { type: Number, default: 0 }, // Orden de ejecución (menor primero)
+});
+
 // Schema para el mapeo de campos
 const FieldMappingSchema = new Schema({
   sourceField: { type: String },
@@ -71,6 +89,8 @@ const TableConfigSchema = new Schema({
   filterCondition: { type: String }, // Condición SQL para filtrar registros (WHERE clause)
   customQuery: { type: String }, // Consulta personalizada para casos especiales
   orderByColumn: { type: String }, // Columna para ordenamiento de detalles
+  executionOrder: { type: Number, default: 0 }, // Orden de procesamiento
+  dependsOn: [String], // Nombres de tablas que deben procesarse primero
 });
 
 // Schema para la regla de tipo de documento
@@ -120,6 +140,7 @@ const TransferMappingSchema = new Schema({
     default: "orders",
   },
   consecutiveConfig: ConsecutiveConfigSchema,
+  foreignKeyDependencies: [ForeignKeyDependencySchema],
 });
 
 // Pre-save hook para actualizar fecha

@@ -1,5 +1,5 @@
 // utils/dbUtils.js
-const ConnectionManager = require("../services/ConnectionManager");
+const ConnectionManager = require("../services/ConnectionCentralService");
 const logger = require("../services/logger");
 
 /**
