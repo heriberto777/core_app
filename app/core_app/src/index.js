@@ -22,7 +22,7 @@ export * from './components/templates/ConsecutiveManager';
 export * from './components/templates/ControlPlanilla';
 export * from './components/templates/CustomerEditor';
 export * from './components/templates/Dashboard';
-export * from './components/templates/DocumentsVisualization';
+export { default as DocumentsVisualization } from './components/templates/DocumentsVisualization';
 export * from './components/templates/LoadsResumen';
 export * from './components/templates/LoadsTasks';
 export * from './components/templates/LoginForm';

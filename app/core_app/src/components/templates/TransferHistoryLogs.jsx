@@ -16,7 +16,7 @@ import "react-datepicker/dist/react-datepicker.css";
 
 const cnnApi = new TransferApi();
 
-export function TransferHistory() {
+export function TransferHistoryLogs() {
   const [openstate, setOpenState] = useState(false);
   const { accessToken } = useAuth();
   const [history, setHistory] = useState([]);
@@ -29,6 +29,8 @@ export function TransferHistory() {
     failedToday: 0,
     total: 0,
   });
+
+  console.log("stats", stats);
 
   // Filters
   const [filters, setFilters] = useState({

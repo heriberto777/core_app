@@ -22,6 +22,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     markProcessedField: "IS_PROCESSED",
     markProcessedValue: 1,
     consecutiveConfig: { enabled: false },
+    foreignKeyDependencies: [],
   });
   const [isEditing, setIsEditing] = useState(!!mappingId);
   const [activeTab, setActiveTab] = useState("general");
@@ -856,6 +857,171 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         // Log del nuevo estado para verificar
         console.log("Tabla actualizada:", newTableConfigs[tableIndex]);
       }
+    });
+  };
+
+  const addForeignKeyDependency = () => {
+    Swal.fire({
+      title: "Nueva Dependencia de Foreign Key",
+      html: `
+      <div class="dependency-form">
+        <div class="form-group">
+          <label for="fieldName">Campo que causa la dependencia</label>
+          <input id="fieldName" class="swal2-input" placeholder="Ej: CONTRIBUYENTE">
+          <small>Campo en la tabla principal que debe existir en otra tabla</small>
+        </div>
+        
+        <div class="form-group">
+          <label for="dependentTable">Tabla donde debe existir/insertarse</label>
+          <input id="dependentTable" class="swal2-input" placeholder="Ej: NIT">
+        </div>
+        
+        <div class="form-group">
+          <label for="executionOrder">Orden de ejecución</label>
+          <input id="executionOrder" type="number" class="swal2-input" value="0" placeholder="0">
+          <small>Menor número = se ejecuta primero</small>
+        </div>
+        
+        <div class="form-check">
+          <input type="checkbox" id="insertIfNotExists" class="swal2-checkbox" checked>
+          <label for="insertIfNotExists">Insertar si no existe</label>
+        </div>
+        
+        <div class="form-check">
+          <input type="checkbox" id="validateOnly" class="swal2-checkbox">
+          <label for="validateOnly">Solo validar (no insertar)</label>
+        </div>
+        
+        <div class="dependent-fields-section">
+          <h4>Campos a insertar en la tabla dependiente</h4>
+          <div id="dependentFieldsContainer">
+            <div class="dependent-field-row">
+              <input type="text" class="swal2-input source-field" placeholder="Campo origen (opcional)">
+              <input type="text" class="swal2-input target-field" placeholder="Campo destino" required>
+              <input type="text" class="swal2-input default-value" placeholder="Valor por defecto">
+              <label><input type="checkbox" class="is-key-checkbox"> Es clave</label>
+              <button type="button" class="btn-remove-field">✕</button>
+            </div>
+          </div>
+          <button type="button" id="addDependentField">+ Añadir Campo</button>
+        </div>
+      </div>
+    `,
+      width: 800,
+      showCancelButton: true,
+      confirmButtonText: "Añadir",
+      cancelButtonText: "Cancelar",
+      didOpen: () => {
+        // Manejar añadir/quitar campos
+        document
+          .getElementById("addDependentField")
+          .addEventListener("click", () => {
+            const container = document.getElementById(
+              "dependentFieldsContainer"
+            );
+            const newRow = document.createElement("div");
+            newRow.className = "dependent-field-row";
+            newRow.innerHTML = `
+          <input type="text" class="swal2-input source-field" placeholder="Campo origen (opcional)">
+          <input type="text" class="swal2-input target-field" placeholder="Campo destino" required>
+          <input type="text" class="swal2-input default-value" placeholder="Valor por defecto">
+          <label><input type="checkbox" class="is-key-checkbox"> Es clave</label>
+          <button type="button" class="btn-remove-field">✕</button>
+        `;
+            container.appendChild(newRow);
+
+            newRow
+              .querySelector(".btn-remove-field")
+              .addEventListener("click", () => {
+                newRow.remove();
+              });
+          });
+
+        // Manejar quitar campos existentes
+        document.querySelectorAll(".btn-remove-field").forEach((btn) => {
+          btn.addEventListener("click", () =>
+            btn.closest(".dependent-field-row").remove()
+          );
+        });
+      },
+      preConfirm: () => {
+        const fieldName = document.getElementById("fieldName").value.trim();
+        const dependentTable = document
+          .getElementById("dependentTable")
+          .value.trim();
+        const executionOrder =
+          parseInt(document.getElementById("executionOrder").value) || 0;
+        const insertIfNotExists =
+          document.getElementById("insertIfNotExists").checked;
+        const validateOnly = document.getElementById("validateOnly").checked;
+
+        if (!fieldName || !dependentTable) {
+          Swal.showValidationMessage(
+            "Campo y tabla dependiente son obligatorios"
+          );
+          return false;
+        }
+
+        // Recopilar campos dependientes
+        const dependentFields = [];
+        document.querySelectorAll(".dependent-field-row").forEach((row) => {
+          const sourceField = row.querySelector(".source-field").value.trim();
+          const targetField = row.querySelector(".target-field").value.trim();
+          const defaultValue = row.querySelector(".default-value").value.trim();
+          const isKey = row.querySelector(".is-key-checkbox").checked;
+
+          if (targetField) {
+            dependentFields.push({
+              sourceField: sourceField || null,
+              targetField,
+              defaultValue: defaultValue || undefined,
+              isKey,
+            });
+          }
+        });
+
+        if (dependentFields.length === 0) {
+          Swal.showValidationMessage(
+            "Debe definir al menos un campo para la tabla dependiente"
+          );
+          return false;
+        }
+
+        if (!dependentFields.some((f) => f.isKey)) {
+          Swal.showValidationMessage(
+            "Debe marcar al menos un campo como clave"
+          );
+          return false;
+        }
+
+        return {
+          fieldName,
+          dependentTable,
+          executionOrder,
+          insertIfNotExists,
+          validateOnly,
+          dependentFields,
+        };
+      },
+    }).then((result) => {
+      if (result.isConfirmed) {
+        setMapping({
+          ...mapping,
+          foreignKeyDependencies: [
+            ...(mapping.foreignKeyDependencies || []),
+            result.value,
+          ],
+        });
+      }
+    });
+  };
+
+  const removeForeignKeyDependency = (index) => {
+    const newDependencies = [...(mapping.foreignKeyDependencies || [])];
+    newDependencies.splice(index, 1);
+    setMapping({
+      ...mapping,
+      foreignKeyDependencies: newDependencies,
     });
   };
 
@@ -1772,6 +1938,12 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           Tipos de Documento
         </Tab>
         <Tab
+          $active={activeTab === "dependencies"}
+          onClick={() => setActiveTab("dependencies")}
+        >
+          Dependencias FK
+        </Tab>
+        <Tab
           $active={activeTab === "tables"}
           onClick={() => setActiveTab("tables")}
         >
@@ -1956,6 +2128,100 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                           <PropertyValue>{rule.description}</PropertyValue>
                         </PropertyItem>
                       )}
+                    </PropertyList>
+                  </CardBody>
+                </Card>
+              ))
+            )}
+          </Section>
+        )}
+        {/* Pestaña dependencias de Foreign Key */}
+        {activeTab === "dependencies" && (
+          <Section>
+            <SectionHeader>
+              <h3>Dependencias de Foreign Key</h3>
+              <SmallButton onClick={addForeignKeyDependency}>
+                <FaPlus /> Añadir Dependencia
+              </SmallButton>
+            </SectionHeader>
+
+            {mapping.foreignKeyDependencies.length === 0 ? (
+              <EmptyMessage>
+                <p>No hay dependencias configuradas</p>
+                <small>
+                  Las dependencias de Foreign Key permiten insertar registros en
+                  tablas relacionadas antes de procesar el documento principal,
+                  evitando errores de integridad referencial.
+                </small>
+              </EmptyMessage>
+            ) : (
+              mapping.foreignKeyDependencies.map((dependency, index) => (
+                <Card key={index}>
+                  <CardHeader>
+                    <h4>
+                      {dependency.fieldName} → {dependency.dependentTable}
+                    </h4>
+                    <div className="button_container">
+                      <SmallButton
+                        onClick={() => editForeignKeyDependency(index)}
+                        title="Editar dependencia"
+                      >
+                        <FaEdit />
+                      </SmallButton>
+                      <SmallButton
+                        $danger
+                        onClick={() => removeForeignKeyDependency(index)}
+                      >
+                        <FaTrash />
+                      </SmallButton>
+                    </div>
+                  </CardHeader>
+
+                  <CardBody>
+                    <PropertyList>
+                      <PropertyItem>
+                        <PropertyLabel>
+                          Campo que causa dependencia:
+                        </PropertyLabel>
+                        <PropertyValue>{dependency.fieldName}</PropertyValue>
+                      </PropertyItem>
+
+                      <PropertyItem>
+                        <PropertyLabel>Tabla dependiente:</PropertyLabel>
+                        <PropertyValue>
+                          {dependency.dependentTable}
+                        </PropertyValue>
+                      </PropertyItem>
+
+                      <PropertyItem>
+                        <PropertyLabel>Acción:</PropertyLabel>
+                        <PropertyValue>
+                          {dependency.insertIfNotExists
+                            ? dependency.validateOnly
+                              ? "Solo validar"
+                              : "Insertar si no existe"
+                            : "Solo validar existencia"}
+                        </PropertyValue>
+                      </PropertyItem>
+
+                      <PropertyItem>
+                        <PropertyLabel>Orden de ejecución:</PropertyLabel>
+                        <PropertyValue>
+                          {dependency.executionOrder || 0}
+                        </PropertyValue>
+                      </PropertyItem>
+
+                      <PropertyItem>
+                        <PropertyLabel>Campos a insertar:</PropertyLabel>
+                        <PropertyValue>
+                          {dependency.dependentFields
+                            .map(
+                              (f) =>
+                                `${f.targetField}${f.isKey ? " (clave)" : ""}`
+                            )
+                            .join(", ")}
+                        </PropertyValue>
+                      </PropertyItem>
                     </PropertyList>
                   </CardBody>
                 </Card>

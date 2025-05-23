@@ -13,6 +13,7 @@ import {
   LogsPage,
   DocumentsVisualization,
   ConsecutiveManager,
+  TransferHistoryLogs,
 } from "../index";
 
 // Componente de envoltura para aplicar el AdminLayout a todas las rutas
@@ -94,6 +95,11 @@ export function AdminRouter() {
       <Route
         path="/consecutives"
         element={<ProtectedRoute component={ConsecutiveManager} />}
+      />
+
+      <Route
+        path="/historys"
+        element={<ProtectedRoute component={TransferHistoryLogs} />}
       />
 
       {/* Opcionalmente, puedes tener rutas secundarias o que no requieran el AdminLayout */}
