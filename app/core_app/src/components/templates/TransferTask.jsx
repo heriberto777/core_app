@@ -324,14 +324,25 @@ export function TransferTasks() {
   const addOrEditTask = async (task = null) => {
     const isEdit = Boolean(task);
 
-    // Debug para ver qué tarea estamos editando
-    if (isEdit) {
-      console.log("Editando tarea:", task);
+    // ✅ OBTENER INFORMACIÓN DE VINCULACIÓN ANTES DEL HTML
+    let linkingInfo = null;
+    if (isEdit && task?._id) {
+      try {
+        const linkingResponse = await cnnApi.getTaskLinkingInfo(
+          accessToken,
+          task._id
+        );
+        linkingInfo = linkingResponse.data || null;
+        console.log("Información de vinculación:", linkingInfo);
+      } catch (error) {
+        console.warn("No se pudo obtener info de vinculación:", error);
+        linkingInfo = null;
+      }
     }
 
     const { value: formValues } = await Swal.fire({
       title: isEdit ? "Editar Tarea" : "Nueva Tarea",
-      width: 500,
+      width: 600,
       html: `
     <div style="max-width:100%;">
       <!-- SECCIÓN 1: CONFIGURACIÓN BÁSICA -->
@@ -372,6 +383,9 @@ export function TransferTasks() {
             <option value="down" ${
               task?.transferType === "down" ? "selected" : ""
             }>Transfer Down (Server2 → Server1)</option>
+            <option value="internal" ${
+              task?.transferType === "internal" ? "selected" : ""
+            }>Transfer Interno (Server1 → Server1)</option>
           </select>
         </div>
         
@@ -424,97 +438,62 @@ export function TransferTasks() {
           )}</textarea>
         </div>
       </div>
-      
-      <!-- SECCIÓN 3: MAPEO DE CAMPOS (SOLO PARA DOWN) -->
-      <div id="section-field-mapping" class="form-section" style="display: none;">
-        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Mapeo de Campos (Server2 → Server1)</h4>
+
+      <!-- SECCIÓN 3: TAREAS VINCULADAS -->
+      <div class="form-section">
+        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">🔗 Tareas Vinculadas</h4>
         
-        <div style="margin-bottom: 10px;">
-          <p style="font-size: 13px; color: #666;">Define las tablas y la correspondencia entre campos.</p>
+        <div style="margin-bottom: 15px; padding: 12px; background-color: #e3f2fd; border-radius: 6px; border-left: 4px solid #2196f3;">
+          <div style="font-weight: 600; color: #1565c0; margin-bottom: 8px;">ℹ️ ¿Cómo funciona?</div>
+          <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #424242; line-height: 1.5;">
+            <li><strong>Grupo vinculado:</strong> Si esta tarea pertenece a un grupo, al ejecutar CUALQUIER tarea del grupo se ejecutarán TODAS las tareas del grupo</li>
+            <li><strong>Post-update coordinado:</strong> Solo se ejecutará UN post-update al final con TODOS los registros procesados</li>
+            <li><strong>Evita conflictos:</strong> Perfecto para tareas como IMPLT_Accounts + IMPLT_Accounts_function que actualizan el mismo campo U_ESTATUS</li>
+            <li><strong>Orden de ejecución:</strong> Las tareas se ejecutan según el orden especificado</li>
+          </ul>
         </div>
         
         <div class="form-group">
-          <label>Tabla origen en Server2:</label>
-          <input id="swal-source-table" class="swal2-input" placeholder="Ejemplo: dbo.CLIENTES_EXTERNOS" 
-            value="${task?.fieldMapping?.sourceTable || ""}" />
+          <label>Grupo de vinculación:</label>
+          <input id="swal-linkedGroup" class="swal2-input" 
+                 placeholder="Ejemplo: IMPLT_Accounts_Group" 
+                 value="${task?.linkedGroup || ""}" />
           <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
-            Nombre de la tabla en Server2 de donde se obtendrán los datos
+            <strong>Importante:</strong> Todas las tareas con el mismo nombre de grupo se ejecutarán juntas automáticamente
           </small>
         </div>
 
         <div class="form-group">
-          <label>Tabla destino en Server1:</label>
-          <input id="swal-target-table" class="swal2-input" placeholder="Ejemplo: dbo.Clientes" 
-            value="${task?.fieldMapping?.targetTable || task?.name || ""}" />
+          <label>Orden de ejecución en el grupo:</label>
+          <input id="swal-linkedExecutionOrder" class="swal2-input" type="number" 
+                 placeholder="0" min="0" max="100"
+                 value="${task?.linkedExecutionOrder || 0}" />
           <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
-            Nombre de la tabla en Server1 donde se insertarán los datos
+            Orden en que se ejecutará dentro del grupo (0 = primera, 1 = segunda, etc.)
           </small>
         </div>
-        
-        <div class="mapping-fields">
-          <div style="margin-bottom: 10px;">
-            <label for="swal-source-fields">Campos Origen (Server2):</label>
-            <textarea id="swal-source-fields" class="swal2-textarea" placeholder="ID, NOMBRE_COMPLETO, TELEFONO_CONTACTO...">${
-              Array.isArray(task?.fieldMapping?.sourceFields)
-                ? task.fieldMapping.sourceFields.join(", ")
-                : ""
-            }</textarea>
-          </div>
-          
-          <div style="margin-bottom: 10px;">
-            <label for="swal-target-fields">Campos Destino (Server1):</label>
-            <textarea id="swal-target-fields" class="swal2-textarea" placeholder="ClienteID, Nombre, Telefono...">${
-              Array.isArray(task?.fieldMapping?.targetFields)
-                ? task.fieldMapping.targetFields.join(", ")
-                : ""
-            }</textarea>
-          </div>
-          
-          <div style="margin-bottom: 10px;">
-            <label for="swal-default-values">Valores por defecto (opcional):</label>
-            <textarea id="swal-default-values" class="swal2-textarea" placeholder="Campo1:Valor1, Campo2:Valor2...">${
-              Array.isArray(task?.fieldMapping?.defaultValues)
-                ? task.fieldMapping.defaultValues
-                    .map((d) => `${d.field}:${d.value}`)
-                    .join(", ")
-                : ""
-            }</textarea>
-            <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
-              Formato: NombreCampo:Valor (separados por comas)
-            </small>
-          </div>
-        </div>
-        
-        <!-- NUEVO: Campo de identificación para transferencias DOWN -->
-        <div class="form-group" style="margin-top: 20px; padding-top: 15px; border-top: 1px dashed #ddd;">
-          <label>Campo identificador único:</label>
-          <input id="swal-down-key-field" class="swal2-input" placeholder="Ejemplo: ClienteID, Codigo, etc." 
-            value="${task?.validationRules?.existenceCheck?.key || ""}" />
+
+        <div class="swal2-checkbox-container">
+          <input id="swal-isCoordinator" type="checkbox" ${
+            task?.postUpdateQuery ? "checked" : ""
+          } />
+          <label for="swal-isCoordinator">Esta tarea será la coordinadora del post-update del grupo</label>
           <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
-            <strong>Importante:</strong> Especifique un campo que identifique de manera única cada registro (debe estar en los campos destino).
-            Si no se especifica, se usará el primer campo destino por defecto.
+            <strong>Regla importante:</strong> Solo UNA tarea del grupo debe tener post-update definido (será la coordinadora). 
+            Las demás tareas del grupo deben tener post-update vacío.
           </small>
         </div>
-        
-        <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
-          Los campos deben estar separados por comas y en el mismo orden para establecer la correspondencia correcta.
-        </small>
-      </div>
-      
-      <!-- SECCIÓN DE TAREAS ENCADENADAS (SOLO PARA DOWN) -->
-      <div id="section-chain-tasks" class="form-section" style="display: none;">
-        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Tareas Encadenadas</h4>
-        
+
         <div class="form-group">
-          <label>Ejecutar estas tareas al finalizar (opcional):</label>
-          <select id="swal-next-tasks" class="swal2-select" multiple style="height: 100px; width: 100%;">
+          <label>Tareas vinculadas directamente (alternativa al grupo):</label>
+          <select id="swal-linkedTasks" class="swal2-select" multiple style="height: 100px; width: 100%;">
             ${tasks
               .filter((t) => t._id !== task?._id)
               .map(
                 (t) =>
                   `<option value="${t._id}" ${
-                    Array.isArray(task?.nextTasks) &&
-                    task.nextTasks.some(
+                    Array.isArray(task?.linkedTasks) &&
+                    task.linkedTasks.some(
                       (id) => id.toString() === t._id.toString()
                     )
                       ? "selected"
@@ -524,76 +503,60 @@ export function TransferTasks() {
               .join("")}
           </select>
           <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
-            Mantén presionada la tecla Ctrl para seleccionar múltiples tareas que se ejecutarán en secuencia al finalizar esta tarea.
+            <strong>Alternativa:</strong> Si no usas grupos, puedes vincular tareas específicas aquí. 
+            Mantén presionada Ctrl para seleccionar múltiples tareas.
           </small>
         </div>
-      </div>
-      
-      <!-- SECCIÓN 4: VALIDACIÓN DE DATOS (MÁS RELEVANTE PARA UP) -->
-      <div id="section-validation" class="form-section">
-        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Validación de Datos</h4>
-        
-        <div class="form-group">
-          <label>Campos obligatorios:</label>
-          <input id="swal-requiredFields" class="swal2-input" placeholder="Ejemplo: Code_ofClient, Name1" 
-            value="${
-              Array.isArray(task?.validationRules?.requiredFields)
-                ? task.validationRules.requiredFields.join(", ")
-                : ""
-            }" />
-        </div>
 
-        <div class="form-group">
-          <label>Tabla de validación:</label>
-          <input id="swal-existenceTable" class="swal2-input" placeholder="Ejemplo: dbo.IMPLT_clients" 
-            value="${task?.validationRules?.existenceCheck?.table || ""}" />
-        </div>
+        ${
+          linkingInfo && linkingInfo.hasLinkedTasks
+            ? `
+          <div style="margin-top: 15px; padding: 12px; background-color: #e8f5e8; border-radius: 6px; border-left: 4px solid #4caf50;">
+            <div style="font-weight: 600; color: #2e7d32; margin-bottom: 8px;">📊 Estado actual de vinculación</div>
+            <div style="font-size: 13px; color: #424242;">
+              <div style="margin-bottom: 4px;"><strong>Grupo:</strong> ${
+                linkingInfo.linkedGroup || "Vinculación directa"
+              }</div>
+              <div style="margin-bottom: 4px;"><strong>Total de tareas en el grupo:</strong> ${
+                linkingInfo.linkedTasksCount
+              }</div>
+              <div style="margin-bottom: 4px;"><strong>Tareas vinculadas:</strong></div>
+              <ul style="margin: 4px 0; padding-left: 20px;">
+                ${linkingInfo.linkedTasks
+                  .map((t) => `<li>${t.name} (orden: ${t.order})</li>`)
+                  .join("")}
+              </ul>
+              <div style="margin-top: 8px; padding: 6px; background-color: #fff; border-radius: 4px; font-size: 12px;">
+                <strong>💡 Recordatorio:</strong> Al ejecutar cualquiera de estas tareas, se ejecutarán todas automáticamente
+              </div>
+            </div>
+          </div>
+        `
+            : linkingInfo === null && isEdit
+            ? `
+          <div style="margin-top: 15px; padding: 12px; background-color: #fff3e0; border-radius: 6px; border-left: 4px solid #ff9800;">
+            <div style="font-weight: 500; color: #e65100;">⚠️ No se pudo cargar información de vinculación</div>
+            <div style="font-size: 12px; color: #424242; margin-top: 4px;">
+              Es posible que esta tarea no tenga vinculaciones configuradas o haya ocurrido un error al cargar la información.
+            </div>
+          </div>
+        `
+            : ""
+        }
 
-        <div class="form-group">
-          <label>Clave primaria:</label>
-          <input id="swal-existenceKey" class="swal2-input" placeholder="Ejemplo: Code_ofClient" 
-            value="${task?.validationRules?.existenceCheck?.key || ""}" />
-        </div>
-      </div>
-      
-      <!-- SECCIÓN 5: POST-TRANSFERENCIA (MÁS RELEVANTE PARA UP) -->
-      <div id="section-post-transfer" class="form-section">
-        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Operaciones Post-Transferencia</h4>
-        
-        <div class="form-group">
-          <label>Consulta Post-Transferencia:</label>
-          <textarea id="swal-postUpdateQuery" class="swal2-textarea"
-            placeholder="Ejemplo: UPDATE CATELLI.CLIENTE SET U_ESTATUS = 'Normal'">${
-              task?.postUpdateQuery || ""
-            }</textarea>
-        </div>
-
-        <div class="form-group">
-          <label>Clave en Vista:</label>
-          <input id="swal-postUpdateKeyView" class="swal2-input" placeholder="Ejemplo: Code_OfClient"
-            value="${task?.postUpdateMapping?.viewKey || ""}" />
-        </div>
-        
-        <div class="form-group">
-          <label>Clave en Tabla Real:</label>
-          <input id="swal-postUpdateKeyTable" class="swal2-input" placeholder="Ejemplo: CLIENTE"
-            value="${task?.postUpdateMapping?.tableKey || ""}" />
+        <div style="margin-top: 15px; padding: 10px; background-color: #fff3e0; border-radius: 6px; border-left: 4px solid #ff9800;">
+          <div style="font-weight: 600; color: #e65100; margin-bottom: 6px;">⚠️ Recomendaciones</div>
+          <ul style="margin: 0; padding-left: 20px; font-size: 12px; color: #424242; line-height: 1.4;">
+            <li>Usa <strong>grupos</strong> para tareas que siempre se ejecutan juntas</li>
+            <li>Usa <strong>vinculación directa</strong> solo para casos especiales</li>
+            <li>Define el <strong>orden de ejecución</strong> cuidadosamente</li>
+            <li>Solo <strong>una tarea</strong> del grupo debe tener post-update</li>
+          </ul>
         </div>
       </div>
       
-      <!-- SECCIÓN 6: TABLA DESTINO (SÓLO PARA TRANSFERENCIA INTERNA) -->
-      <div id="section-target-table" class="form-section" style="display: none;">
-        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Configuración de Transferencia Interna</h4>
-        
-        <div class="form-group">
-          <label>Tabla destino:</label>
-          <input id="swal-targetTable" class="swal2-input" placeholder="Ejemplo: dbo.IMPLT_Hist_Orders" 
-            value="${task?.targetTable || ""}" />
-          <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
-            Especifique la tabla destino para transferencias internas en Server1
-          </small>
-        </div>
-      </div>
+      <!-- RESTO DE SECCIONES... -->
+      ${getRestOfSections(task, tasks)}
     </div>
     `,
       confirmButtonText: isEdit ? "Actualizar" : "Agregar",
@@ -1006,6 +969,181 @@ export function TransferTasks() {
         }
       },
     });
+
+    function getRestOfSections(task, tasks) {
+      return `
+      <!-- SECCIÓN 4: MAPEO DE CAMPOS (SOLO PARA DOWN) -->
+      <div id="section-field-mapping" class="form-section" style="display: none;">
+        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Mapeo de Campos (Server2 → Server1)</h4>
+        
+        <div style="margin-bottom: 10px;">
+          <p style="font-size: 13px; color: #666;">Define las tablas y la correspondencia entre campos.</p>
+        </div>
+        
+        <div class="form-group">
+          <label>Tabla origen en Server2:</label>
+          <input id="swal-source-table" class="swal2-input" placeholder="Ejemplo: dbo.CLIENTES_EXTERNOS" 
+            value="${task?.fieldMapping?.sourceTable || ""}" />
+          <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
+            Nombre de la tabla en Server2 de donde se obtendrán los datos
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label>Tabla destino en Server1:</label>
+          <input id="swal-target-table" class="swal2-input" placeholder="Ejemplo: dbo.Clientes" 
+            value="${task?.fieldMapping?.targetTable || task?.name || ""}" />
+          <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
+            Nombre de la tabla en Server1 donde se insertarán los datos
+          </small>
+        </div>
+        
+        <div class="mapping-fields">
+          <div style="margin-bottom: 10px;">
+            <label for="swal-source-fields">Campos Origen (Server2):</label>
+            <textarea id="swal-source-fields" class="swal2-textarea" placeholder="ID, NOMBRE_COMPLETO, TELEFONO_CONTACTO...">${
+              Array.isArray(task?.fieldMapping?.sourceFields)
+                ? task.fieldMapping.sourceFields.join(", ")
+                : ""
+            }</textarea>
+          </div>
+          
+          <div style="margin-bottom: 10px;">
+            <label for="swal-target-fields">Campos Destino (Server1):</label>
+            <textarea id="swal-target-fields" class="swal2-textarea" placeholder="ClienteID, Nombre, Telefono...">${
+              Array.isArray(task?.fieldMapping?.targetFields)
+                ? task.fieldMapping.targetFields.join(", ")
+                : ""
+            }</textarea>
+          </div>
+          
+          <div style="margin-bottom: 10px;">
+            <label for="swal-default-values">Valores por defecto (opcional):</label>
+            <textarea id="swal-default-values" class="swal2-textarea" placeholder="Campo1:Valor1, Campo2:Valor2...">${
+              Array.isArray(task?.fieldMapping?.defaultValues)
+                ? task.fieldMapping.defaultValues
+                    .map((d) => `${d.field}:${d.value}`)
+                    .join(", ")
+                : ""
+            }</textarea>
+            <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
+              Formato: NombreCampo:Valor (separados por comas)
+            </small>
+          </div>
+        </div>
+        
+        <div class="form-group" style="margin-top: 20px; padding-top: 15px; border-top: 1px dashed #ddd;">
+          <label>Campo identificador único:</label>
+          <input id="swal-down-key-field" class="swal2-input" placeholder="Ejemplo: ClienteID, Codigo, etc." 
+            value="${task?.validationRules?.existenceCheck?.key || ""}" />
+          <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
+            <strong>Importante:</strong> Especifique un campo que identifique de manera única cada registro (debe estar en los campos destino).
+          </small>
+        </div>
+        
+        <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
+          Los campos deben estar separados por comas y en el mismo orden para establecer la correspondencia correcta.
+        </small>
+      </div>
+      
+      <!-- SECCIÓN DE TAREAS ENCADENADAS (SOLO PARA DOWN) -->
+      <div id="section-chain-tasks" class="form-section" style="display: none;">
+        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Tareas Encadenadas</h4>
+        
+        <div class="form-group">
+          <label>Ejecutar estas tareas al finalizar (opcional):</label>
+          <select id="swal-next-tasks" class="swal2-select" multiple style="height: 100px; width: 100%;">
+            ${tasks
+              .filter((t) => t._id !== task?._id)
+              .map(
+                (t) =>
+                  `<option value="${t._id}" ${
+                    Array.isArray(task?.nextTasks) &&
+                    task.nextTasks.some(
+                      (id) => id.toString() === t._id.toString()
+                    )
+                      ? "selected"
+                      : ""
+                  }>${t.name}</option>`
+              )
+              .join("")}
+          </select>
+          <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
+            Mantén presionada la tecla Ctrl para seleccionar múltiples tareas que se ejecutarán en secuencia al finalizar esta tarea.
+          </small>
+        </div>
+      </div>
+      
+      <!-- SECCIÓN 5: VALIDACIÓN DE DATOS -->
+      <div id="section-validation" class="form-section">
+        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Validación de Datos</h4>
+        
+        <div class="form-group">
+          <label>Campos obligatorios:</label>
+          <input id="swal-requiredFields" class="swal2-input" placeholder="Ejemplo: Code_ofClient, Name1" 
+            value="${
+              Array.isArray(task?.validationRules?.requiredFields)
+                ? task.validationRules.requiredFields.join(", ")
+                : ""
+            }" />
+        </div>
+
+        <div class="form-group">
+          <label>Tabla de validación:</label>
+          <input id="swal-existenceTable" class="swal2-input" placeholder="Ejemplo: dbo.IMPLT_clients" 
+            value="${task?.validationRules?.existenceCheck?.table || ""}" />
+        </div>
+
+        <div class="form-group">
+          <label>Clave primaria:</label>
+          <input id="swal-existenceKey" class="swal2-input" placeholder="Ejemplo: Code_ofClient" 
+            value="${task?.validationRules?.existenceCheck?.key || ""}" />
+        </div>
+      </div>
+      
+      <!-- SECCIÓN 6: POST-TRANSFERENCIA -->
+      <div id="section-post-transfer" class="form-section">
+        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Operaciones Post-Transferencia</h4>
+        
+        <div class="form-group">
+          <label>Consulta Post-Transferencia:</label>
+          <textarea id="swal-postUpdateQuery" class="swal2-textarea"
+            placeholder="Ejemplo: UPDATE CATELLI.CLIENTE SET U_ESTATUS = 'Normal'">${
+              task?.postUpdateQuery || ""
+            }</textarea>
+          <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
+            <strong>Para tareas vinculadas:</strong> Solo la tarea coordinadora debe tener esta consulta definida
+          </small>
+        </div>
+
+        <div class="form-group">
+          <label>Clave en Vista:</label>
+          <input id="swal-postUpdateKeyView" class="swal2-input" placeholder="Ejemplo: Code_OfClient"
+            value="${task?.postUpdateMapping?.viewKey || ""}" />
+        </div>
+        
+        <div class="form-group">
+          <label>Clave en Tabla Real:</label>
+          <input id="swal-postUpdateKeyTable" class="swal2-input" placeholder="Ejemplo: CLIENTE"
+            value="${task?.postUpdateMapping?.tableKey || ""}" />
+        </div>
+      </div>
+      
+      <!-- SECCIÓN 7: TABLA DESTINO (SÓLO PARA TRANSFERENCIA INTERNA) -->
+      <div id="section-target-table" class="form-section" style="display: none;">
+        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Configuración de Transferencia Interna</h4>
+        
+        <div class="form-group">
+          <label>Tabla destino:</label>
+          <input id="swal-targetTable" class="swal2-input" placeholder="Ejemplo: dbo.IMPLT_Hist_Orders" 
+            value="${task?.targetTable || ""}" />
+          <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
+            Especifique la tabla destino para transferencias internas en Server1
+          </small>
+        </div>
+      </div>
+  `;
+    }
 
     if (!formValues) return; // Usuario canceló
 
