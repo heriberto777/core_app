@@ -1083,3 +1083,58 @@ table tr.disabled {
   border-radius: 4px;
   font-size: 13px;
 }
+
+.fk-dependency-form .form-group {
+  margin-bottom: 15px;
+  text-align: left;
+}
+
+.fk-dependency-form .form-group label {
+  display: block;
+  font-weight: bold;
+  margin-bottom: 5px;
+}
+
+.fk-dependency-form .form-group small {
+  display: block;
+  color: #666;
+  font-size: 12px;
+  margin-top: 3px;
+}
+
+.fk-dependency-form .form-check-group {
+  display: flex;
+  gap: 20px;
+  margin: 15px 0;
+}
+
+.fk-dependency-form .form-check {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.fk-dependency-form .dependent-fields-section {
+  margin-top: 20px;
+  border-top: 1px solid #eee;
+  padding-top: 15px;
+}
+
+.fk-dependency-form .dependent-field-row {
+  display: flex;
+  gap: 10px;
+  margin-bottom: 10px;
+  align-items: center;
+}
+
+.fk-dependency-form .checkbox-container {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  text-align: center;
+}
+
+.fk-dependency-form .checkbox-container label {
+  font-size: 11px;
+  margin-top: 2px;
+}
