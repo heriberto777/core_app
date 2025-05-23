@@ -762,32 +762,119 @@ class TransferService {
       if (parameters?.length > 0) {
         const conditions = [];
         for (const param of parameters) {
-          params[param.field] = param.value;
+          const { field, operator, value } = param;
+
+          // Validar que tenemos los campos necesarios
+          if (!field || !operator || value === undefined || value === null) {
+            logger.warn(`Parámetro inválido omitido: ${JSON.stringify(param)}`);
+            continue;
+          }
 
           // Manejar diferentes tipos de operadores
-          if (
-            param.operator === "BETWEEN" &&
-            param.value &&
-            typeof param.value === "object"
-          ) {
-            params[`${param.field}_from`] = param.value.from;
-            params[`${param.field}_to`] = param.value.to;
-            conditions.push(
-              `${param.field} BETWEEN @${param.field}_from AND @${param.field}_to`
-            );
-          } else if (param.operator === "IN" && Array.isArray(param.value)) {
-            const placeholders = param.value.map((val, idx) => {
-              const paramName = `${param.field}_${idx}`;
-              params[paramName] = val;
-              return `@${paramName}`;
-            });
-            conditions.push(`${param.field} IN (${placeholders.join(", ")})`);
-          } else {
-            conditions.push(`${param.field} ${param.operator} @${param.field}`);
+          switch (operator.toUpperCase()) {
+            case "BETWEEN":
+              // Validar estructura del objeto para BETWEEN
+              if (
+                typeof value === "object" &&
+                value.from !== undefined &&
+                value.to !== undefined
+              ) {
+                params[`${field}_from`] = value.from;
+                params[`${field}_to`] = value.to;
+                conditions.push(
+                  `${field} BETWEEN @${field}_from AND @${field}_to`
+                );
+              } else {
+                logger.warn(
+                  `Valor inválido para BETWEEN en campo ${field}: ${JSON.stringify(
+                    value
+                  )}`
+                );
+              }
+              break;
+
+            case "IN":
+              // Convertir string separado por comas a array si es necesario
+              let inValues = value;
+              if (typeof value === "string") {
+                // Si es string, dividir por comas y limpiar espacios
+                inValues = value
+                  .split(",")
+                  .map((v) => v.trim())
+                  .filter((v) => v !== "");
+                logger.info(
+                  `Convertido string a array para IN: "${value}" → [${inValues.join(
+                    ", "
+                  )}]`
+                );
+              }
+
+              if (Array.isArray(inValues) && inValues.length > 0) {
+                const placeholders = inValues.map((val, idx) => {
+                  const paramName = `${field}_${idx}`;
+                  params[paramName] = val;
+                  return `@${paramName}`;
+                });
+                conditions.push(`${field} IN (${placeholders.join(", ")})`);
+              } else {
+                logger.warn(
+                  `Valor inválido para IN en campo ${field}: ${JSON.stringify(
+                    value
+                  )}`
+                );
+              }
+              break;
+
+            case "LIKE":
+              // Para LIKE, asegurar que el valor sea string
+              if (typeof value === "string") {
+                params[field] = value;
+                conditions.push(`${field} LIKE @${field}`);
+              } else {
+                logger.warn(
+                  `Valor inválido para LIKE en campo ${field}: ${JSON.stringify(
+                    value
+                  )}`
+                );
+              }
+              break;
+
+            case "IS NULL":
+            case "IS NOT NULL":
+              // Estos operadores no necesitan valores
+              conditions.push(`${field} ${operator}`);
+              break;
+
+            case "=":
+            case "!=":
+            case "<>":
+            case ">":
+            case "<":
+            case ">=":
+            case "<=":
+              // Operadores de comparación estándar
+              params[field] = value;
+              conditions.push(`${field} ${operator} @${field}`);
+              break;
+
+            default:
+              logger.warn(
+                `Operador no soportado: ${operator} para campo ${field}`
+              );
+              break;
           }
         }
 
-        finalQuery += ` WHERE ${conditions.join(" AND ")}`;
+        // Solo agregar WHERE si hay condiciones válidas
+        if (conditions.length > 0) {
+          finalQuery += ` WHERE ${conditions.join(" AND ")}`;
+          logger.info(`Condiciones aplicadas: ${conditions.join(" AND ")}`);
+          logger.info(`Parámetros: ${JSON.stringify(params)}`);
+        } else {
+          logger.warn(
+            "No se generaron condiciones válidas de los parámetros proporcionados"
+          );
+        }
       }
 
       logger.debug(
