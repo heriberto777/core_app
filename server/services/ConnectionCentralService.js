@@ -833,101 +833,86 @@ class ConnectionCentralService {
       return;
     }
 
-    // Verificar si la conexión está en una transacción
-    if (this.activeTransactions.has(connection)) {
-      const transaction = this.activeTransactions.get(connection);
-      logger.warn(
-        `Intento de liberar conexión con transacción activa. Haciendo rollback automático.`
-      );
-
-      try {
-        await this.rollbackTransaction(transaction);
-      } catch (rollbackError) {
-        logger.error(
-          `Error al hacer rollback automático: ${rollbackError.message}`
-        );
-      }
-    }
-
+    // MEJORA: Verificar estado de la conexión antes de liberar
     try {
-      // Determinar a qué pool pertenece la conexión
+      // Verificar si la conexión ya está cerrada
+      if (!connection.connected && !connection.loggedIn) {
+        logger.debug(`Conexión ya cerrada, solo limpiando referencias`);
+
+        // Solo limpiar referencias sin intentar liberar
+        this.stats.activeConnections.delete(connection);
+        connectionPoolMap.delete(connection);
+        CONNECTION_LIMITS.operationCounter.delete(connection);
+        return;
+      }
+
+      // Verificar transacciones activas
+      if (this.activeTransactions.has(connection)) {
+        const transaction = this.activeTransactions.get(connection);
+        logger.warn(
+          `Liberando conexión con transacción activa, haciendo rollback`
+        );
+
+        try {
+          await this.rollbackTransaction(transaction);
+        } catch (rollbackError) {
+          logger.warn(`Error en rollback automático: ${rollbackError.message}`);
+        }
+      }
+
+      // Determinar pool de origen
       let poolKey = connection._poolOrigin || connection._serverKey;
 
       if (!poolKey) {
         poolKey = connectionPoolMap.get(connection);
         if (!poolKey) {
-          logger.warn(
-            `No se pudo determinar el origen de la conexión, cerrando directamente`
-          );
-          try {
-            connection.close();
+          logger.debug(`No se pudo determinar origen, cerrando directamente`);
 
-            // Limpiar referencias en todos los mapas
-            this.stats.activeConnections.delete(connection);
-            connectionPoolMap.delete(connection);
-            CONNECTION_LIMITS.operationCounter.delete(connection);
+          try {
+            if (connection.connected) {
+              connection.close();
+            }
           } catch (directCloseError) {
-            logger.error(
-              `Error al cerrar conexión directamente: ${directCloseError.message}`
-            );
+            // Ignorar errores al cerrar directamente
           }
+
+          // Limpiar referencias
+          this._cleanupConnectionReferences(connection);
           return;
         }
       }
 
       const pool = this.pools[poolKey];
 
-      if (pool) {
+      if (pool && !pool._draining) {
         // Registrar tiempo de uso
         if (connection._acquiredAt) {
           const usageTime = Date.now() - connection._acquiredAt;
           logger.debug(`Conexión usada durante ${usageTime}ms (${poolKey})`);
         }
 
-        // Verificar si la conexión sigue siendo válida
-        if (!connection.connected) {
-          logger.warn(
-            `Conexión a liberar ya está cerrada, limpiando referencias`
-          );
-
-          // Limpiar referencias en todos los mapas
-          this.stats.activeConnections.delete(connection);
-          connectionPoolMap.delete(connection);
-          CONNECTION_LIMITS.operationCounter.delete(connection);
-          return;
-        }
-
         await pool.release(connection);
-
-        // Limpiar referencias
-        this.stats.activeConnections.delete(connection);
-        connectionPoolMap.delete(connection);
-        CONNECTION_LIMITS.operationCounter.delete(connection);
-
-        // Actualizar estadísticas
         this.stats.released++;
-
         logger.debug(`Conexión liberada correctamente (${poolKey})`);
       } else {
-        logger.warn(
-          `No se encontró pool para ${poolKey}, cerrando conexión directamente`
+        logger.debug(
+          `Pool no disponible para ${poolKey}, cerrando directamente`
         );
-        try {
-          connection.close();
-        } catch (directCloseError) {
-          logger.error(
-            `Error al cerrar conexión directamente: ${directCloseError.message}`
-          );
-        }
 
-        // Limpiar referencias
-        this.stats.activeConnections.delete(connection);
-        connectionPoolMap.delete(connection);
-        CONNECTION_LIMITS.operationCounter.delete(connection);
+        try {
+          if (connection.connected) {
+            connection.close();
+          }
+        } catch (directCloseError) {
+          // Ignorar errores al cerrar
+        }
       }
+
+      // Limpiar referencias
+      this._cleanupConnectionReferences(connection);
     } catch (error) {
       this.stats.errors++;
-      logger.error(`Error al liberar conexión: ${error.message}`);
+      logger.warn(`Advertencia al liberar conexión: ${error.message}`);
 
       // Registrar error para posible renovación
       if (connection._poolOrigin || connection._serverKey) {
@@ -937,21 +922,24 @@ class ConnectionCentralService {
         );
       }
 
-      // Intentar cerrar directamente como último recurso
-      try {
-        if (connection && typeof connection.close === "function") {
-          connection.close();
-        }
+      // Limpiar referencias como último recurso
+      this._cleanupConnectionReferences(connection);
+    }
+  }
 
-        // Limpiar referencias
-        this.stats.activeConnections.delete(connection);
-        connectionPoolMap.delete(connection);
-        CONNECTION_LIMITS.operationCounter.delete(connection);
-      } catch (closeError) {
-        logger.error(
-          `Error al cerrar conexión directamente: ${closeError.message}`
-        );
+  // NUEVO MÉTODO: Limpieza centralizada de referencias
+  _cleanupConnectionReferences(connection) {
+    try {
+      this.stats.activeConnections.delete(connection);
+      connectionPoolMap.delete(connection);
+      CONNECTION_LIMITS.operationCounter.delete(connection);
+
+      // Limpiar transacciones si existen
+      if (this.activeTransactions.has(connection)) {
+        this.activeTransactions.delete(connection);
       }
+    } catch (cleanupError) {
+      logger.debug(`Error limpiando referencias: ${cleanupError.message}`);
     }
   }
 

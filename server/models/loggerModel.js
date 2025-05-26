@@ -11,7 +11,6 @@ const logSchema = new mongoose.Schema(
       type: String,
       required: true,
       enum: ["error", "warn", "info", "debug"],
-      // ✅ CORRECCIÓN: Quitar index: true de aquí
     },
     message: {
       type: String,
@@ -24,7 +23,6 @@ const logSchema = new mongoose.Schema(
     source: {
       type: String,
       default: "app",
-      // ✅ CORRECCIÓN: Quitar index: true de aquí
     },
     stack: {
       type: String,
@@ -40,15 +38,12 @@ const logSchema = new mongoose.Schema(
     }, // Dirección IP de origen (si aplica)
   },
   {
-    // ✅ CORRECCIÓN: Desactivar timestamps automáticos para evitar conflictos
     timestamps: false, // Ya tenemos timestamp manual
     collection: "logs", // Especificar nombre de colección
     versionKey: false, // Quitar __v
   }
 );
 
-// ✅ ÍNDICES DEFINIDOS SOLO UNA VEZ AQUÍ
-// Índice principal para consultas por fecha (descendente para logs más recientes primero)
 logSchema.index({ timestamp: -1 });
 
 // Índices compuestos para consultas comunes

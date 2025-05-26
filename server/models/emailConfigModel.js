@@ -108,7 +108,7 @@ const emailConfigSchema = new mongoose.Schema(
 );
 
 // Índices para mejorar rendimiento
-emailConfigSchema.index({ name: 1 });
+// emailConfigSchema.index({ name: 1 });
 emailConfigSchema.index({ isActive: 1, isDefault: 1 });
 
 // Middleware para asegurar que solo haya una configuración por defecto

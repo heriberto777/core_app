@@ -253,51 +253,89 @@ class AppBootstrap {
     let shutdownSuccess = true;
 
     try {
-      // 1. Detener servicio de cancelación
+      // 1. Detener servicios que generan nuevas operaciones primero
       if (this.state.cancellationService) {
         try {
           UnifiedCancellationService.shutdown();
           logger.info("✅ Servicio de cancelación detenido");
         } catch (error) {
           logger.warn(
-            "⚠️ Error al detener servicio de cancelación:",
-            error.message
+            `⚠️ Error al detener servicio de cancelación: ${error.message}`
           );
           shutdownSuccess = false;
         }
       }
 
-      // 2. Detener monitor de salud
       if (this.state.healthMonitor) {
         try {
           HealthMonitor.stopHealthMonitor();
           logger.info("✅ Monitor de salud detenido");
         } catch (error) {
-          logger.warn("⚠️ Error al detener monitor de salud:", error.message);
+          logger.warn(`⚠️ Error al detener monitor de salud: ${error.message}`);
           shutdownSuccess = false;
         }
       }
 
-      // 3. Registrar log de cierre en MongoDB si es posible
+      // 2. Registrar log de cierre ANTES de cerrar MongoDB
       if (this.state.mongodb && MongoDbService.isConnected()) {
         try {
           const Log = require("../models/loggerModel");
-          await Log.createLog("info", "🛑 Cierre ordenado de la aplicación", {
-            source: "system",
-          });
-        } catch (error) {
-          logger.warn("⚠️ Error al registrar log de cierre:", error.message);
+
+          // TIMEOUT CORTO para log de cierre
+          await Promise.race([
+            Log.createLog("info", "🛑 Cierre ordenado de la aplicación", {
+              source: "system",
+            }),
+            new Promise((_, reject) =>
+              setTimeout(() => reject(new Error("Timeout log cierre")), 2000)
+            ),
+          ]);
+
+          logger.info("✅ Log de cierre registrado");
+        } catch (logCloseError) {
+          logger.warn(
+            `⚠️ Error al registrar log de cierre: ${logCloseError.message}`
+          );
         }
       }
 
-      // 4. Desconectar MongoDB al final
+      // 3. CERRAR LOGGER TRANSPORT ANTES DE MONGODB
+      try {
+        // Acceder al transport de MongoDB del logger
+        const winston = require("winston");
+        if (logger.transports) {
+          for (const transport of logger.transports) {
+            if (
+              transport.name === "mongodb" &&
+              typeof transport.close === "function"
+            ) {
+              transport.close();
+              logger.info("✅ MongoDB Transport cerrado");
+              break;
+            }
+          }
+        }
+      } catch (transportError) {
+        logger.warn(`⚠️ Error cerrando transport: ${transportError.message}`);
+      }
+
+      // 4. Cerrar pools de conexión ANTES de MongoDB
+      try {
+        const ConnectionService = require("./ConnectionCentralService");
+        await ConnectionService.closePools();
+        logger.info("✅ Pools de conexión cerrados");
+      } catch (poolError) {
+        logger.warn(`⚠️ Error cerrando pools: ${poolError.message}`);
+      }
+
+      // 5. Desconectar MongoDB al final
       if (this.state.mongodb) {
         try {
           logger.info("📊 Cerrando conexión a MongoDB...");
           await MongoDbService.disconnect();
           logger.info("✅ MongoDB desconectado correctamente");
         } catch (error) {
-          logger.warn("⚠️ Error al desconectar MongoDB:", error.message);
+          logger.warn(`⚠️ Error al desconectar MongoDB: ${error.message}`);
           shutdownSuccess = false;
         }
       }
