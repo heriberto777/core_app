@@ -192,7 +192,9 @@ class LinkedTasksService {
           task.postUpdateQuery = null;
 
           const result = await transferService.executeTransferWithRetry(
-            task._id.toString()
+            task._id.toString(),
+            3,
+            { skipPostUpdate: true }
           );
 
           // Restaurar post-update query
