@@ -97,6 +97,10 @@ app.use(
   `/api/${API_VERSION}/linked-groups`,
   require("./routes/linkedGroupsRoutes")
 );
+app.use(
+  `/api/${API_VERSION}/email-config`,
+  require("./routes/emailConfigRoutes")
+);
 
 // Ruta para health check mejorada
 app.get("/health", async (req, res) => {

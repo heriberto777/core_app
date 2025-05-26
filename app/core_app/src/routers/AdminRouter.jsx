@@ -14,6 +14,7 @@ import {
   DocumentsVisualization,
   ConsecutiveManager,
   TransferHistoryLogs,
+  ControlEmailConfig,
 } from "../index";
 
 // Componente de envoltura para aplicar el AdminLayout a todas las rutas
@@ -100,6 +101,11 @@ export function AdminRouter() {
       <Route
         path="/historys"
         element={<ProtectedRoute component={TransferHistoryLogs} />}
+      />
+
+      <Route
+        path="/email-config"
+        element={<ProtectedRoute component={ControlEmailConfig} />}
       />
 
       {/* Opcionalmente, puedes tener rutas secundarias o que no requieran el AdminLayout */}

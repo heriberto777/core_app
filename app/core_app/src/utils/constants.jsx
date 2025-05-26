@@ -23,6 +23,7 @@ export const ENV = {
     LOAD: "load",
     CONFIG_TASK: "config",
     EMAIL_RECIPIENTS: "email-recipients",
+    EMAIL_CONFIG: "email-config",
     SUMMARIES: "summaries",
     LOGS: "logs", // Nueva ruta para logs
   },
