@@ -10,7 +10,7 @@ export class TransferApi {
 
   async getTasks(accessToken) {
     try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/accion`;
       const params = {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -31,7 +31,7 @@ export class TransferApi {
   async upsertTransferTask(accessToken, datos) {
     console.log(datos);
     try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/addEdit`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/accion/addEdit`;
       const params = {
         method: "POST",
         headers: {
@@ -2140,6 +2140,142 @@ export class TransferApi {
       return result;
     } catch (error) {
       console.error("Error al ejecutar grupo vinculado:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener todos los grupos vinculados
+   */
+  async getLinkedGroups(token) {
+    try {
+      const response = await fetch(`${this.baseApi}/linked-groups`, {
+        method: "GET",
+        headers: {
+          Authorization: `Bearer ${token}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error al obtener grupos vinculados:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtener detalles de un grupo específico
+   */
+  async getGroupDetails(token, groupName) {
+    try {
+      const response = await fetch(
+        `${this.baseApi}/linked-groups/${encodeURIComponent(groupName)}`,
+        {
+          method: "GET",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error al obtener detalles del grupo:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Eliminar un grupo vinculado completo
+   */
+  async deleteLinkedGroup(token, groupName) {
+    try {
+      const response = await fetch(
+        `${this.baseApi}/linked-groups/${encodeURIComponent(groupName)}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ confirmDelete: true }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error al eliminar grupo:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Remover una tarea específica de un grupo
+   */
+  async removeTaskFromGroup(token, taskId) {
+    try {
+      const response = await fetch(
+        `${this.baseApi}/linked-groups/task/${taskId}`,
+        {
+          method: "DELETE",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error al remover tarea del grupo:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Reordenar tareas en un grupo
+   */
+  async reorderGroupTasks(token, groupName, taskOrders) {
+    try {
+      const response = await fetch(
+        `${this.baseApi}/linked-groups/${encodeURIComponent(
+          groupName
+        )}/reorder`,
+        {
+          method: "PUT",
+          headers: {
+            Authorization: `Bearer ${token}`,
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({ taskOrders }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`HTTP error! status: ${response.status}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error al reordenar tareas del grupo:", error);
       throw error;
     }
   }

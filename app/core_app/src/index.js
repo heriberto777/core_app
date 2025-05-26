@@ -13,6 +13,7 @@ export * from './components/meleculas/RefreshButton';
 export { default as ConsecutiveConfigSection } from './components/organismos/ConsecutiveConfigSection';
 export * from './components/organismos/DataUser';
 export { default as Header } from './components/organismos/Header';
+export { default as LinkedGroupsManager } from './components/organismos/LinkedGroupsManager';
 export * from './components/organismos/ScheduleConfigManager';
 export { default as Sidebar } from './components/organismos/Sidebar';
 export { default as Spinner } from './components/organismos/Spinner';

@@ -380,6 +380,9 @@ class TransferService {
    * Crea o actualiza una tarea de transferencia en MongoDB (upsert).
    */
   async upsertTransferTask(taskData) {
+
+    console.log("taskData", taskData);
+    
     try {
       let task = await TransferTask.findOne({ name: taskData.name });
       if (task) {

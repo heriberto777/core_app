@@ -5,6 +5,7 @@ import {
   useAuth,
   useFetchData,
   progressClient,
+  LinkedGroupsManager,
 } from "../../index";
 import { useEffect, useState, useRef, useCallback } from "react";
 import Swal from "sweetalert2";
@@ -21,6 +22,7 @@ import {
   FaChartLine,
   FaInfoCircle,
   FaSync,
+  FaLink,
 } from "react-icons/fa";
 
 const cnnApi = new TransferApi();
@@ -29,7 +31,7 @@ export function TransferTasks() {
   const [search, setSearch] = useState("");
   const [selectedTask, setSelectedTask] = useState(null);
   const { accessToken, user } = useAuth();
-
+  const [showGroupsManager, setShowGroupsManager] = useState(false);
   const [viewMode, setViewMode] = useState("cards"); // "cards", "list", "table"
   const [executionTime, setExecutionTime] = useState("20:30");
   const [cancellationStatus, setCancellationStatus] = useState({});
@@ -323,110 +325,42 @@ export function TransferTasks() {
 
   const addOrEditTask = async (task = null) => {
     const isEdit = Boolean(task);
-    let linkingInfo = null;
 
-    // ✅ Mostrar loading mientras se obtiene información de vinculación
+    // ✅ OBTENER INFORMACIÓN DE VINCULACIÓN ANTES DEL HTML
+    let linkingInfo = null;
     if (isEdit && task?._id) {
       try {
-        // Mostrar indicador de carga para edición
-        Swal.fire({
-          title: "Cargando información de la tarea...",
-          allowOutsideClick: false,
-          didOpen: () => {
-            Swal.showLoading();
-          },
-        });
-
         const linkingResponse = await cnnApi.getTaskLinkingInfo(
           accessToken,
           task._id
         );
         linkingInfo = linkingResponse.data || null;
         console.log("Información de vinculación:", linkingInfo);
-
-        // Cerrar el loading
-        Swal.close();
       } catch (error) {
         console.warn("No se pudo obtener info de vinculación:", error);
         linkingInfo = null;
-        Swal.close();
       }
     }
 
     const { value: formValues } = await Swal.fire({
       title: isEdit ? "Editar Tarea" : "Nueva Tarea",
-      width: 650,
-      customClass: {
-        container: "task-modal-container",
-        popup: "task-modal-popup",
-        htmlContainer: "task-modal-html",
-        title: "task-modal-title",
-        actions: "task-modal-actions",
-      },
-      html: getTaskFormHTML(task, tasks, linkingInfo, isEdit),
-      confirmButtonText: isEdit ? "Actualizar" : "Agregar",
-      showCancelButton: true,
-      cancelButtonText: "Cancelar",
-      didOpen: () => {
-        setupFormEventHandlers();
-      },
-      preConfirm: () => {
-        return validateAndProcessForm(task, isEdit);
-      },
-    });
-
-    if (!formValues) return;
-
-    try {
-      // Mostrar indicador de carga para guardado
-      Swal.fire({
-        title: isEdit ? "Actualizando..." : "Creando...",
-        allowOutsideClick: false,
-        didOpen: () => {
-          Swal.showLoading();
-        },
-      });
-
-      console.log("Enviando al backend:", formValues);
-
-      const result = await cnnApi.upsertTransferTask(accessToken, formValues);
-
-      if (result) {
-        await fetchTasks();
-        Swal.fire(
-          "Éxito",
-          `Tarea ${isEdit ? "actualizada" : "creada"} correctamente.`,
-          "success"
-        );
-      } else {
-        throw new Error(
-          `No se pudo ${isEdit ? "actualizar" : "crear"} la tarea.`
-        );
-      }
-    } catch (error) {
-      console.error("Error al guardar:", error);
-      Swal.fire("Error", error.message || "Error desconocido", "error");
-    }
-  };
-
-  // ✅ Función para generar el HTML del formulario
-  function getTaskFormHTML(task, tasks, linkingInfo, isEdit) {
-    return `
-    <div class="task-form-container">
+      width: 600,
+      html: `
+    <div style="max-width:100%;">
       <!-- SECCIÓN 1: CONFIGURACIÓN BÁSICA -->
-      <div class="task-form-section">
-        <h4 class="task-form-section-title">Configuración Básica</h4>
+      <div class="form-section">
+        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Configuración Básica</h4>
         
-        <div class="task-form-group">
-          <label class="task-form-label">Nombre de la tarea:</label>
-          <input id="swal-name" class="task-form-input" placeholder="Nombre" value="${
+        <div class="form-group">
+          <label>Nombre de la tarea:</label>
+          <input id="swal-name" class="swal2-input" placeholder="Nombre" value="${
             task?.name || ""
           }" />
         </div>
 
-        <div class="task-form-group">
-          <label class="task-form-label">Tipo de tarea:</label>
-          <select id="swal-type" class="task-form-select">
+        <div class="form-group">
+          <label>Tipo de tarea:</label>
+          <select id="swal-type" class="swal2-select">
             <option value="manual" ${
               task?.type === "manual" ? "selected" : ""
             }>Manual</option>
@@ -439,9 +373,9 @@ export function TransferTasks() {
           </select>
         </div>
 
-        <div class="task-form-group">
-          <label class="task-form-label">Tipo de Transferencia:</label>
-          <select id="swal-transferType" class="task-form-select">
+        <div class="form-group">
+          <label>Tipo de Transferencia:</label>
+          <select id="swal-transferType" class="swal2-select">
             <option value="" ${
               !task?.transferType ? "selected" : ""
             }>General</option>
@@ -457,9 +391,9 @@ export function TransferTasks() {
           </select>
         </div>
         
-        <div class="task-form-group">
-          <label class="task-form-label">Modo de Ejecución:</label>
-          <select id="swal-executionMode" class="task-form-select">
+        <div class="form-group">
+          <label>Modo de Ejecución:</label>
+          <select id="swal-executionMode" class="swal2-select">
             <option value="normal" ${
               task?.executionMode === "normal" || !task?.executionMode
                 ? "selected"
@@ -471,35 +405,35 @@ export function TransferTasks() {
           </select>
         </div>
         
-        <div class="task-form-checkbox-container">
+        <div class="swal2-checkbox-container">
           <input id="swal-active" type="checkbox" ${
             task?.active !== false ? "checked" : ""
           } />
-          <label for="swal-active" class="task-form-checkbox-label">Activo</label>
+          <label for="swal-active">Activo</label>
         </div>
 
-        <div class="task-form-checkbox-container">
+        <div class="swal2-checkbox-container">
           <input id="swal-clearBeforeInsert" type="checkbox" ${
             task?.clearBeforeInsert ? "checked" : ""
           } />
-          <label for="swal-clearBeforeInsert" class="task-form-checkbox-label">Borrar registros antes de insertar</label>
+          <label for="swal-clearBeforeInsert">Borrar registros antes de insertar</label>
         </div>
       </div>
       
       <!-- SECCIÓN 2: CONSULTA Y PARÁMETROS -->
-      <div class="task-form-section">
-        <h4 class="task-form-section-title">Consulta y Parámetros</h4>
+      <div class="form-section">
+        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Consulta y Parámetros</h4>
         
-        <div class="task-form-group">
-          <label class="task-form-label">Consulta SQL:</label>
-          <textarea id="swal-query" class="task-form-textarea-sql" placeholder="Consulta SQL">${
+        <div class="form-group">
+          <label>Consulta SQL:</label>
+          <textarea id="swal-query" class="textarea-sql" placeholder="Consulta SQL">${
             task?.query || ""
           }</textarea>
         </div>
 
-        <div class="task-form-group">
-          <label class="task-form-label">Parámetros (JSON):</label>
-          <textarea id="swal-parameters" class="task-form-textarea" placeholder='[{"field": "nivel_precio", "operator": "=", "value": "Gold"}]'>${JSON.stringify(
+        <div class="form-group">
+          <label>Parámetros (JSON):</label>
+          <textarea id="swal-parameters" class="swal2-textarea" placeholder='[{"field": "nivel_precio", "operator": "=", "value": "Gold"}]'>${JSON.stringify(
             task?.parameters || [],
             null,
             2
@@ -508,12 +442,12 @@ export function TransferTasks() {
       </div>
 
       <!-- SECCIÓN 3: TAREAS VINCULADAS -->
-      <div class="task-form-section">
-        <h4 class="task-form-section-title">🔗 Tareas Vinculadas</h4>
+      <div class="form-section">
+        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">🔗 Tareas Vinculadas</h4>
         
-        <div class="task-form-info-box">
-          <div class="task-form-info-title">ℹ️ ¿Cómo funciona?</div>
-          <ul class="task-form-info-list">
+        <div style="margin-bottom: 15px; padding: 12px; background-color: #e3f2fd; border-radius: 6px; border-left: 4px solid #2196f3;">
+          <div style="font-weight: 600; color: #1565c0; margin-bottom: 8px;">ℹ️ ¿Cómo funciona?</div>
+          <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #424242; line-height: 1.5;">
             <li><strong>Grupo vinculado:</strong> Si esta tarea pertenece a un grupo, al ejecutar CUALQUIER tarea del grupo se ejecutarán TODAS las tareas del grupo</li>
             <li><strong>Post-update coordinado:</strong> Solo se ejecutará UN post-update al final con TODOS los registros procesados</li>
             <li><strong>Evita conflictos:</strong> Perfecto para tareas como IMPLT_Accounts + IMPLT_Accounts_function que actualizan el mismo campo U_ESTATUS</li>
@@ -521,40 +455,40 @@ export function TransferTasks() {
           </ul>
         </div>
         
-        <div class="task-form-group">
-          <label class="task-form-label">Grupo de vinculación:</label>
-          <input id="swal-linkedGroup" class="task-form-input" 
+        <div class="form-group">
+          <label>Grupo de vinculación:</label>
+          <input id="swal-linkedGroup" class="swal2-input" 
                  placeholder="Ejemplo: IMPLT_Accounts_Group" 
                  value="${task?.linkedGroup || ""}" />
-          <small class="task-form-help-text">
+          <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
             <strong>Importante:</strong> Todas las tareas con el mismo nombre de grupo se ejecutarán juntas automáticamente
           </small>
         </div>
 
-        <div class="task-form-group">
-          <label class="task-form-label">Orden de ejecución en el grupo:</label>
-          <input id="swal-linkedExecutionOrder" class="task-form-input" type="number" 
+        <div class="form-group">
+          <label>Orden de ejecución en el grupo:</label>
+          <input id="swal-linkedExecutionOrder" class="swal2-input" type="number" 
                  placeholder="0" min="0" max="100"
                  value="${task?.linkedExecutionOrder || 0}" />
-          <small class="task-form-help-text">
+          <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
             Orden en que se ejecutará dentro del grupo (0 = primera, 1 = segunda, etc.)
           </small>
         </div>
 
-        <div class="task-form-checkbox-container">
+        <div class="swal2-checkbox-container">
           <input id="swal-isCoordinator" type="checkbox" ${
             task?.postUpdateQuery ? "checked" : ""
           } />
-          <label for="swal-isCoordinator" class="task-form-checkbox-label">Esta tarea será la coordinadora del post-update del grupo</label>
-          <small class="task-form-help-text">
+          <label for="swal-isCoordinator">Esta tarea será la coordinadora del post-update del grupo</label>
+          <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
             <strong>Regla importante:</strong> Solo UNA tarea del grupo debe tener post-update definido (será la coordinadora). 
             Las demás tareas del grupo deben tener post-update vacío.
           </small>
         </div>
 
-        <div class="task-form-group">
-          <label class="task-form-label">Tareas vinculadas directamente (alternativa al grupo):</label>
-          <select id="swal-linkedTasks" class="task-form-select" multiple>
+        <div class="form-group">
+          <label>Tareas vinculadas directamente (alternativa al grupo):</label>
+          <select id="swal-linkedTasks" class="swal2-select" multiple style="height: 100px; width: 100%;">
             ${tasks
               .filter((t) => t._id !== task?._id)
               .map(
@@ -570,17 +504,51 @@ export function TransferTasks() {
               )
               .join("")}
           </select>
-          <small class="task-form-help-text">
+          <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
             <strong>Alternativa:</strong> Si no usas grupos, puedes vincular tareas específicas aquí. 
             Mantén presionada Ctrl para seleccionar múltiples tareas.
           </small>
         </div>
 
-        ${getLinkingStatusHTML(linkingInfo, isEdit)}
+        ${
+          linkingInfo && linkingInfo.hasLinkedTasks
+            ? `
+          <div style="margin-top: 15px; padding: 12px; background-color: #e8f5e8; border-radius: 6px; border-left: 4px solid #4caf50;">
+            <div style="font-weight: 600; color: #2e7d32; margin-bottom: 8px;">📊 Estado actual de vinculación</div>
+            <div style="font-size: 13px; color: #424242;">
+              <div style="margin-bottom: 4px;"><strong>Grupo:</strong> ${
+                linkingInfo.linkedGroup || "Vinculación directa"
+              }</div>
+              <div style="margin-bottom: 4px;"><strong>Total de tareas en el grupo:</strong> ${
+                linkingInfo.linkedTasksCount
+              }</div>
+              <div style="margin-bottom: 4px;"><strong>Tareas vinculadas:</strong></div>
+              <ul style="margin: 4px 0; padding-left: 20px;">
+                ${linkingInfo.linkedTasks
+                  .map((t) => `<li>${t.name} (orden: ${t.order})</li>`)
+                  .join("")}
+              </ul>
+              <div style="margin-top: 8px; padding: 6px; background-color: #fff; border-radius: 4px; font-size: 12px;">
+                <strong>💡 Recordatorio:</strong> Al ejecutar cualquiera de estas tareas, se ejecutarán todas automáticamente
+              </div>
+            </div>
+          </div>
+        `
+            : linkingInfo === null && isEdit
+            ? `
+          <div style="margin-top: 15px; padding: 12px; background-color: #fff3e0; border-radius: 6px; border-left: 4px solid #ff9800;">
+            <div style="font-weight: 500; color: #e65100;">⚠️ No se pudo cargar información de vinculación</div>
+            <div style="font-size: 12px; color: #424242; margin-top: 4px;">
+              Es posible que esta tarea no tenga vinculaciones configuradas o haya ocurrido un error al cargar la información.
+            </div>
+          </div>
+        `
+            : ""
+        }
 
-        <div class="task-form-warning-box">
-          <div class="task-form-warning-title">⚠️ Recomendaciones</div>
-          <ul class="task-form-warning-list">
+        <div style="margin-top: 15px; padding: 10px; background-color: #fff3e0; border-radius: 6px; border-left: 4px solid #ff9800;">
+          <div style="font-weight: 600; color: #e65100; margin-bottom: 6px;">⚠️ Recomendaciones</div>
+          <ul style="margin: 0; padding-left: 20px; font-size: 12px; color: #424242; line-height: 1.4;">
             <li>Usa <strong>grupos</strong> para tareas que siempre se ejecutan juntas</li>
             <li>Usa <strong>vinculación directa</strong> solo para casos especiales</li>
             <li>Define el <strong>orden de ejecución</strong> cuidadosamente</li>
@@ -592,600 +560,696 @@ export function TransferTasks() {
       <!-- RESTO DE SECCIONES... -->
       ${getRestOfSections(task, tasks)}
     </div>
-  `;
-  }
+    `,
+      confirmButtonText: isEdit ? "Actualizar" : "Agregar",
+      showCancelButton: true,
+      cancelButtonText: "Cancelar",
+      customClass: {
+        container: "swal-container",
+        popup: "swal-popup",
+        htmlContainer: "swal-html-container",
+        input: "swal-input",
+        actions: "swal-actions",
+      },
+      didOpen: () => {
+        // Ajustar el tamaño del popup después de abrirlo
+        const popup = Swal.getPopup();
+        popup.style.maxWidth = "500px";
+        popup.style.width = "95%";
 
-  // ✅ Función para obtener el HTML del estado de vinculación
-  function getLinkingStatusHTML(linkingInfo, isEdit) {
-    if (linkingInfo && linkingInfo.hasLinkedTasks) {
-      return `
-      <div class="task-form-status-box task-form-status-success">
-        <div class="task-form-status-title">📊 Estado actual de vinculación</div>
-        <div class="task-form-status-content">
-          <div><strong>Grupo:</strong> ${
-            linkingInfo.linkedGroup || "Vinculación directa"
-          }</div>
-          <div><strong>Total de tareas en el grupo:</strong> ${
-            linkingInfo.linkedTasksCount
-          }</div>
-          <div><strong>Tareas vinculadas:</strong></div>
-          <ul class="task-form-linked-tasks-list">
-            ${linkingInfo.linkedTasks
-              .map((t) => `<li>${t.name} (orden: ${t.order})</li>`)
-              .join("")}
-          </ul>
-          <div class="task-form-reminder">
-            <strong>💡 Recordatorio:</strong> Al ejecutar cualquiera de estas tareas, se ejecutarán todas automáticamente
-          </div>
-        </div>
-      </div>
-    `;
-    } else if (linkingInfo === null && isEdit) {
-      return `
-      <div class="task-form-status-box task-form-status-warning">
-        <div class="task-form-status-title">⚠️ No se pudo cargar información de vinculación</div>
-        <div class="task-form-status-content">
-          Es posible que esta tarea no tenga vinculaciones configuradas o haya ocurrido un error al cargar la información.
-        </div>
-      </div>
-    `;
-    }
-    return "";
-  }
+        // Función para actualizar las secciones visibles basado en el tipo de transferencia
+        const updateVisibleSections = () => {
+          const transferType =
+            document.getElementById("swal-transferType").value;
 
-  // ✅ Función para configurar los event handlers del formulario
-  function setupFormEventHandlers() {
-    // Función para actualizar las secciones visibles basado en el tipo de transferencia
-    const updateVisibleSections = () => {
-      const transferType =
-        document.getElementById("swal-transferType")?.value || "";
-
-      // Sección de mapeo de campos (solo para DOWN)
-      const fieldMappingSection = document.getElementById(
-        "section-field-mapping"
-      );
-      if (fieldMappingSection) {
-        fieldMappingSection.style.display =
-          transferType === "down" ? "block" : "none";
-      }
-
-      // Sección de tareas encadenadas (solo para DOWN)
-      const chainTasksSection = document.getElementById("section-chain-tasks");
-      if (chainTasksSection) {
-        chainTasksSection.style.display =
-          transferType === "down" ? "block" : "none";
-      }
-
-      // Sección de tabla destino (solo para INTERNAL)
-      const targetTableSection = document.getElementById(
-        "section-target-table"
-      );
-      if (targetTableSection) {
-        targetTableSection.style.display =
-          transferType === "internal" ? "block" : "none";
-      }
-
-      // Secciones más relevantes para UP/General
-      const validationSection = document.getElementById("section-validation");
-      const postTransferSection = document.getElementById(
-        "section-post-transfer"
-      );
-
-      if (transferType === "down") {
-        if (validationSection) validationSection.style.display = "none";
-        if (postTransferSection) postTransferSection.style.display = "none";
-      } else {
-        if (validationSection) validationSection.style.display = "block";
-        if (postTransferSection) postTransferSection.style.display = "block";
-      }
-    };
-
-    // Agregar event listener para el cambio de tipo de transferencia
-    const transferTypeSelect = document.getElementById("swal-transferType");
-    if (transferTypeSelect) {
-      transferTypeSelect.addEventListener("change", updateVisibleSections);
-    }
-
-    // Ejecutar una vez para configurar la vista inicial
-    updateVisibleSections();
-  }
-
-  // ✅ Función para validar y procesar el formulario
-  function validateAndProcessForm(task, isEdit) {
-    try {
-      // Obtener valores básicos
-      const name = document.getElementById("swal-name")?.value?.trim() || "";
-      const type =
-        document.getElementById("swal-type")?.value?.trim() || "both";
-      const transferType =
-        document.getElementById("swal-transferType")?.value?.trim() || "";
-      const executionMode =
-        document.getElementById("swal-executionMode")?.value?.trim() ||
-        "normal";
-      const query = document.getElementById("swal-query")?.value?.trim() || "";
-      const active = document.getElementById("swal-active")?.checked || false;
-      const clearBeforeInsert =
-        document.getElementById("swal-clearBeforeInsert")?.checked || false;
-
-      // ✅ OBTENER CAMPOS DE VINCULACIÓN CON CONVERSIONES CORRECTAS
-      const linkedGroupElement = document.getElementById("swal-linkedGroup");
-      const linkedGroup = linkedGroupElement?.value?.trim() || "";
-
-      const linkedExecutionOrderElement = document.getElementById(
-        "swal-linkedExecutionOrder"
-      );
-      const linkedExecutionOrder =
-        parseInt(linkedExecutionOrderElement?.value) || 0;
-
-      const isCoordinatorElement =
-        document.getElementById("swal-isCoordinator");
-      const isCoordinator = Boolean(isCoordinatorElement?.checked);
-
-      // Obtener tareas vinculadas directamente
-      const linkedTasksSelect = document.getElementById("swal-linkedTasks");
-      let linkedTasks = [];
-      if (linkedTasksSelect && linkedTasksSelect.selectedOptions) {
-        linkedTasks = Array.from(linkedTasksSelect.selectedOptions).map(
-          (option) => option.value
-        );
-      }
-
-      // Validaciones requeridas
-      if (!name) {
-        Swal.showValidationMessage("⚠️ El nombre de la tarea es obligatorio");
-        return false;
-      }
-
-      if (!query) {
-        Swal.showValidationMessage("⚠️ La consulta SQL es obligatoria");
-        return false;
-      }
-
-      // Procesar parámetros JSON
-      let parsedParams = [];
-      try {
-        const paramElement = document.getElementById("swal-parameters");
-        const paramValue = paramElement?.value?.trim() || "";
-        if (paramValue) {
-          parsedParams = JSON.parse(paramValue);
-        }
-      } catch (e) {
-        console.error("Error al parsear JSON:", e);
-        Swal.showValidationMessage("⚠️ Error en el formato de parámetros JSON");
-        return false;
-      }
-
-      // ✅ CONSTRUIR EL OBJETO BASE CON CONVERSIONES CORRECTAS
-      const formData = {
-        name,
-        type,
-        transferType,
-        executionMode,
-        query,
-        parameters: Array.isArray(parsedParams) ? parsedParams : [],
-        active: Boolean(active),
-        clearBeforeInsert: Boolean(clearBeforeInsert),
-
-        // ✅ CAMPOS DE VINCULACIÓN CON TIPOS CORRECTOS
-        linkedGroup: linkedGroup || null,
-        linkedExecutionOrder: Number(linkedExecutionOrder),
-        linkedTasks: Array.isArray(linkedTasks) ? linkedTasks : [],
-        executeLinkedTasks: Boolean(linkedGroup || linkedTasks.length > 0), // ✅ Boolean explícito
-        delayPostUpdate: false, // ✅ Boolean explícito
-
-        // Configuración de coordinación
-        coordinationConfig: {
-          waitForLinkedTasks: false,
-          maxWaitTime: 300000,
-          postUpdateStrategy: "individual",
-        },
-        linkingMetadata: {
-          isCoordinator: Boolean(isCoordinator), // ✅ Boolean explícito
-          lastGroupExecution: null,
-          lastGroupExecutionId: null,
-        },
-      };
-
-      // Si es una edición, incluir el ID original
-      if (isEdit && task?._id) {
-        formData._id = task._id;
-      }
-
-      // Procesar campos de validación
-      const requiredFieldsElement = document.getElementById(
-        "swal-requiredFields"
-      );
-      const requiredFieldsStr = requiredFieldsElement?.value?.trim() || "";
-
-      const existenceTableElement = document.getElementById(
-        "swal-existenceTable"
-      );
-      const existenceTable = existenceTableElement?.value?.trim() || "";
-
-      const existenceKeyElement = document.getElementById("swal-existenceKey");
-      const existenceKey = existenceKeyElement?.value?.trim() || "";
-
-      formData.validationRules = {
-        requiredFields: requiredFieldsStr
-          ? requiredFieldsStr
-              .split(",")
-              .map((s) => s.trim())
-              .filter(Boolean)
-          : [],
-        existenceCheck: {
-          table: existenceTable,
-          key: existenceKey,
-        },
-      };
-
-      // Post-transferencia
-      const postUpdateQueryElement = document.getElementById(
-        "swal-postUpdateQuery"
-      );
-      const postUpdateQuery = postUpdateQueryElement?.value?.trim() || "";
-
-      const viewKeyElement = document.getElementById("swal-postUpdateKeyView");
-      const viewKey = viewKeyElement?.value?.trim() || "";
-
-      const tableKeyElement = document.getElementById(
-        "swal-postUpdateKeyTable"
-      );
-      const tableKey = tableKeyElement?.value?.trim() || "";
-
-      formData.postUpdateQuery = postUpdateQuery || null;
-      formData.postUpdateMapping = {
-        viewKey: viewKey || null,
-        tableKey: tableKey || null,
-      };
-
-      // Procesar campos específicos según el tipo de transferencia
-      if (transferType === "down") {
-        // Procesamiento para transferencias DOWN
-        const sourceTableElement = document.getElementById("swal-source-table");
-        const sourceTable = sourceTableElement?.value?.trim() || "";
-
-        const targetTableElement = document.getElementById("swal-target-table");
-        const targetTable = targetTableElement?.value?.trim() || "";
-
-        const sourceFieldsElement =
-          document.getElementById("swal-source-fields");
-        const sourceFieldsStr = sourceFieldsElement?.value?.trim() || "";
-
-        const targetFieldsElement =
-          document.getElementById("swal-target-fields");
-        const targetFieldsStr = targetFieldsElement?.value?.trim() || "";
-
-        const defaultValuesElement = document.getElementById(
-          "swal-default-values"
-        );
-        const defaultValuesStr = defaultValuesElement?.value?.trim() || "";
-
-        if (!sourceTable || !targetTable) {
-          Swal.showValidationMessage(
-            "⚠️ Debe especificar las tablas origen y destino para transferencias DOWN"
+          // Sección de mapeo de campos (solo para DOWN)
+          const fieldMappingSection = document.getElementById(
+            "section-field-mapping"
           );
-          return false;
-        }
+          fieldMappingSection.style.display =
+            transferType === "down" ? "block" : "none";
 
-        if (!sourceFieldsStr || !targetFieldsStr) {
-          Swal.showValidationMessage(
-            "⚠️ Debe especificar los campos origen y destino"
+          // Sección de tareas encadenadas (solo para DOWN)
+          const chainTasksSection = document.getElementById(
+            "section-chain-tasks"
           );
-          return false;
-        }
+          chainTasksSection.style.display =
+            transferType === "down" ? "block" : "none";
 
-        const sourceFields = sourceFieldsStr
-          .split(",")
-          .map((f) => f.trim())
-          .filter(Boolean);
-        const targetFields = targetFieldsStr
-          .split(",")
-          .map((f) => f.trim())
-          .filter(Boolean);
-
-        if (sourceFields.length !== targetFields.length) {
-          Swal.showValidationMessage(
-            "⚠️ Debe haber el mismo número de campos origen y destino"
+          // Sección de tabla destino (solo para INTERNAL)
+          const targetTableSection = document.getElementById(
+            "section-target-table"
           );
-          return false;
-        }
+          targetTableSection.style.display =
+            transferType === "internal" ? "block" : "none";
 
-        // Procesar valores por defecto
-        const defaultValues = [];
-        if (defaultValuesStr) {
-          const defaultPairs = defaultValuesStr.split(",");
-          for (const pair of defaultPairs) {
-            const parts = pair.split(":");
-            if (parts.length === 2) {
-              const field = parts[0].trim();
-              const value = parts[1].trim();
-              if (field) {
-                defaultValues.push({ field, value });
-              }
-            }
+          // Secciones más relevantes para UP (opcional mostrarlas/ocultarlas)
+          const validationSection =
+            document.getElementById("section-validation");
+          const postTransferSection = document.getElementById(
+            "section-post-transfer"
+          );
+
+          if (transferType === "down") {
+            validationSection.style.display = "none";
+            postTransferSection.style.display = "none";
+          } else {
+            validationSection.style.display = "block";
+            postTransferSection.style.display = "block";
           }
-        }
-
-        formData.fieldMapping = {
-          sourceTable,
-          targetTable,
-          sourceFields,
-          targetFields,
-          defaultValues: defaultValues.length > 0 ? defaultValues : [],
         };
 
-        // Procesar tareas encadenadas
-        const nextTasksSelect = document.getElementById("swal-next-tasks");
-        if (nextTasksSelect && nextTasksSelect.selectedOptions) {
-          formData.nextTasks = Array.from(nextTasksSelect.selectedOptions).map(
-            (option) => option.value
-          );
-        } else {
-          formData.nextTasks = [];
+        // Agregar event listener para el cambio de tipo de transferencia
+        document
+          .getElementById("swal-transferType")
+          .addEventListener("change", updateVisibleSections);
+
+        // Ejecutar una vez para configurar la vista inicial según el tipo de transferencia actual
+        updateVisibleSections();
+
+        // Añadir estilos para las secciones
+        const style = document.createElement("style");
+        style.innerHTML = `
+        .form-section {
+          margin-bottom: 20px;
+          padding: 15px;
+          background-color: #f9f9f9;
+          border-radius: 8px;
+          box-shadow: 0 1px 3px rgba(0,0,0,0.1);
         }
+        .form-section h4 {
+          color: #444;
+          font-size: 16px;
+          margin-top: 0;
+        }
+        .textarea-sql {
+          width: 100%;
+          height: 120px;
+          padding: 8px;
+          font-family: monospace;
+          font-size: 14px;
+          line-height: 1.5;
+          border: 1px solid #d9d9d9;
+          border-radius: 4px;
+          resize: vertical;
+        }
+      `;
+        document.head.appendChild(style);
+      },
+      preConfirm: () => {
+        try {
+          // Obtener valores básicos
+          const name = document.getElementById("swal-name").value.trim();
+          const type = document.getElementById("swal-type").value.trim();
+          const transferType = document
+            .getElementById("swal-transferType")
+            .value.trim();
+          const executionMode = document
+            .getElementById("swal-executionMode")
+            .value.trim();
+          const query = document.getElementById("swal-query").value.trim();
+          const active = document.getElementById("swal-active").checked;
+          const clearBeforeInsert = document.getElementById(
+            "swal-clearBeforeInsert"
+          ).checked;
 
-        // Configurar validationRules para DOWN
-        const downKeyFieldElement = document.getElementById(
-          "swal-down-key-field"
-        );
-        const downKeyField = downKeyFieldElement?.value?.trim() || "";
-
-        if (downKeyField) {
-          if (!targetFields.includes(downKeyField)) {
+          // Validaciones requeridas
+          if (!name) {
             Swal.showValidationMessage(
-              `⚠️ El campo identificador "${downKeyField}" debe estar en la lista de campos destino`
+              "⚠️ El nombre de la tarea es obligatorio"
             );
             return false;
           }
-          formData.validationRules.existenceCheck.key = downKeyField;
-          formData.validationRules.requiredFields = [downKeyField];
-          if (!formData.validationRules.existenceCheck.table) {
-            formData.validationRules.existenceCheck.table = targetTable;
+
+          if (!query) {
+            Swal.showValidationMessage("⚠️ La consulta SQL es obligatoria");
+            return false;
           }
-        } else if (targetFields.length > 0) {
-          const primaryField = targetFields[0];
-          formData.validationRules.existenceCheck.key = primaryField;
-          formData.validationRules.requiredFields = [primaryField];
-          if (!formData.validationRules.existenceCheck.table) {
-            formData.validationRules.existenceCheck.table = targetTable;
+
+          // Procesar parámetros JSON
+          let parsedParams = [];
+          try {
+            const paramValue = document
+              .getElementById("swal-parameters")
+              .value.trim();
+            if (paramValue) {
+              parsedParams = JSON.parse(paramValue);
+            }
+          } catch (e) {
+            console.error("Error al parsear JSON:", e);
+            Swal.showValidationMessage(
+              "⚠️ Error en el formato de parámetros JSON"
+            );
+            return false;
           }
-        }
-      } else if (transferType === "internal") {
-        // Procesamiento para transferencias INTERNAL
-        const targetTableElement = document.getElementById("swal-targetTable");
-        const targetTable = targetTableElement?.value?.trim() || "";
 
-        if (!targetTable) {
-          Swal.showValidationMessage(
-            "⚠️ Para transferencias internas debe especificar la tabla destino"
+          // Construir el objeto base de la tarea
+          const formData = {
+            name,
+            type,
+            transferType,
+            executionMode,
+            query,
+            parameters: parsedParams,
+            active,
+            clearBeforeInsert,
+          };
+
+          // Si es una edición, incluir el ID original
+          if (isEdit && task?._id) {
+            formData._id = task._id;
+          }
+
+          // ✅ SECCIÓN CORREGIDA - TAREAS VINCULADAS
+          // Obtener valores de campos de vinculación
+          const linkedGroup = document
+            .getElementById("swal-linkedGroup")
+            .value.trim();
+          const linkedExecutionOrder = parseInt(
+            document.getElementById("swal-linkedExecutionOrder").value || 0
           );
+          const isCoordinatorChecked =
+            document.getElementById("swal-isCoordinator").checked;
+
+          // ✅ CORRECCIÓN PRINCIPAL: Asignar valores correctamente
+          formData.linkedGroup = linkedGroup || null; // String o null
+          formData.linkedExecutionOrder = linkedExecutionOrder; // Number
+          formData.executeLinkedTasks = linkedGroup !== ""; // ✅ Boolean basado en si hay grupo
+
+          // Procesar tareas vinculadas directamente (select múltiple)
+          const linkedTasksSelect = document.getElementById("swal-linkedTasks");
+          const selectedLinkedTasks = linkedTasksSelect
+            ? Array.from(linkedTasksSelect.selectedOptions || []).map(
+                (option) => option.value
+              )
+            : [];
+
+          formData.linkedTasks = selectedLinkedTasks;
+
+          // Obtener los campos de validación para todo tipo de tarea
+          const requiredFieldsStr = document
+            .getElementById("swal-requiredFields")
+            .value.trim();
+          const existenceTable = document
+            .getElementById("swal-existenceTable")
+            .value.trim();
+          const existenceKey = document
+            .getElementById("swal-existenceKey")
+            .value.trim();
+
+          // Inicializar validationRules base para todos los tipos
+          formData.validationRules = {
+            requiredFields: requiredFieldsStr
+              ? requiredFieldsStr
+                  .split(",")
+                  .map((s) => s.trim())
+                  .filter(Boolean)
+              : [],
+            existenceCheck: {
+              table: existenceTable || "",
+              key: existenceKey || "",
+            },
+          };
+
+          // Post-transferencia (para todos los tipos)
+          const postUpdateQuery = document
+            .getElementById("swal-postUpdateQuery")
+            .value.trim();
+          const viewKey = document
+            .getElementById("swal-postUpdateKeyView")
+            .value.trim();
+          const tableKey = document
+            .getElementById("swal-postUpdateKeyTable")
+            .value.trim();
+
+          formData.postUpdateQuery = postUpdateQuery || null;
+          formData.postUpdateMapping = {
+            viewKey: viewKey || null,
+            tableKey: tableKey || null,
+          };
+
+          // Configurar metadatos de coordinación
+          formData.linkingMetadata = {
+            isCoordinator: isCoordinatorChecked && !!formData.postUpdateQuery,
+            lastGroupExecution: null,
+            lastGroupExecutionId: null,
+          };
+
+          // ✅ VALIDACIÓN ADICIONAL: Verificar consistencia
+          if (
+            linkedGroup &&
+            !formData.postUpdateQuery &&
+            isCoordinatorChecked
+          ) {
+            Swal.showValidationMessage(
+              "⚠️ Si marca esta tarea como coordinadora, debe definir una consulta post-transferencia"
+            );
+            return false;
+          }
+
+          if (
+            linkedGroup &&
+            formData.postUpdateQuery &&
+            !isCoordinatorChecked
+          ) {
+            // Auto-marcar como coordinadora si tiene postUpdateQuery y está en un grupo
+            formData.linkingMetadata.isCoordinator = true;
+            console.log(
+              "Auto-marcando como coordinadora porque tiene postUpdateQuery"
+            );
+          }
+
+          // Procesar campos específicos según el tipo de transferencia
+          if (transferType === "down") {
+            // Para transferencias DOWN, procesar el mapeo de campos
+            const sourceTable = document
+              .getElementById("swal-source-table")
+              .value.trim();
+            const targetTable = document
+              .getElementById("swal-target-table")
+              .value.trim();
+            const sourceFieldsStr = document
+              .getElementById("swal-source-fields")
+              .value.trim();
+            const targetFieldsStr = document
+              .getElementById("swal-target-fields")
+              .value.trim();
+            const defaultValuesStr = document
+              .getElementById("swal-default-values")
+              .value.trim();
+
+            // Obtener campo identificador especificado para DOWN
+            const downKeyField = document
+              .getElementById("swal-down-key-field")
+              .value.trim();
+
+            // Validar campos específicos para DOWN
+            if (!sourceTable) {
+              Swal.showValidationMessage(
+                "⚠️ Debe especificar la tabla origen en Server2"
+              );
+              return false;
+            }
+
+            if (!targetTable) {
+              Swal.showValidationMessage(
+                "⚠️ Debe especificar la tabla destino en Server1"
+              );
+              return false;
+            }
+
+            if (!sourceFieldsStr || !targetFieldsStr) {
+              Swal.showValidationMessage(
+                "⚠️ Debe especificar los campos origen y destino"
+              );
+              return false;
+            }
+
+            const sourceFields = sourceFieldsStr
+              .split(",")
+              .map((f) => f.trim())
+              .filter(Boolean);
+            const targetFields = targetFieldsStr
+              .split(",")
+              .map((f) => f.trim())
+              .filter(Boolean);
+
+            if (sourceFields.length !== targetFields.length) {
+              Swal.showValidationMessage(
+                "⚠️ Debe haber el mismo número de campos origen y destino"
+              );
+              return false;
+            }
+
+            // Procesar valores por defecto
+            const defaultValues = [];
+            if (defaultValuesStr) {
+              const defaultPairs = defaultValuesStr.split(",");
+              for (const pair of defaultPairs) {
+                const parts = pair.split(":");
+                if (parts.length === 2) {
+                  const field = parts[0].trim();
+                  const value = parts[1].trim();
+                  if (field) {
+                    defaultValues.push({ field, value });
+                  }
+                }
+              }
+            }
+
+            // Configurar fieldMapping para DOWN
+            formData.fieldMapping = {
+              sourceTable,
+              targetTable,
+              sourceFields,
+              targetFields,
+              defaultValues: defaultValues.length > 0 ? defaultValues : [],
+            };
+
+            // Procesar tareas encadenadas
+            const nextTasksSelect = document.getElementById("swal-next-tasks");
+            if (nextTasksSelect) {
+              const selectedOptions = Array.from(
+                nextTasksSelect.selectedOptions || []
+              );
+              formData.nextTasks = selectedOptions.map(
+                (option) => option.value
+              );
+            } else {
+              formData.nextTasks = [];
+            }
+
+            // IMPORTANTE: Configurar validationRules para transferencias DOWN
+            // Verificar si se especificó un campo identificador específico
+            if (downKeyField) {
+              // Verificar si el campo especificado está en los campos destino
+              if (!targetFields.includes(downKeyField)) {
+                Swal.showValidationMessage(
+                  `⚠️ El campo identificador "${downKeyField}" debe estar en la lista de campos destino`
+                );
+                return false;
+              }
+
+              // Usar el campo identificador especificado
+              formData.validationRules.existenceCheck.key = downKeyField;
+              formData.validationRules.requiredFields = [downKeyField];
+
+              // Asignar tabla para validación si está vacía
+              if (!formData.validationRules.existenceCheck.table) {
+                formData.validationRules.existenceCheck.table = targetTable;
+              }
+            }
+            // Si no se especificó un campo identificador, usar el primer campo destino
+            else if (targetFields.length > 0) {
+              const primaryField = targetFields[0];
+              console.log(
+                `Usando primer campo destino '${primaryField}' como clave para validación en transferencia DOWN`
+              );
+
+              formData.validationRules.existenceCheck.key = primaryField;
+              formData.validationRules.requiredFields = [primaryField];
+
+              // Asignar tabla para validación si está vacía
+              if (!formData.validationRules.existenceCheck.table) {
+                formData.validationRules.existenceCheck.table = targetTable;
+              }
+            } else {
+              Swal.showValidationMessage(
+                "⚠️ No se pueden determinar campos para identificar registros. Especifique al menos un campo destino."
+              );
+              return false;
+            }
+          } else if (transferType === "internal") {
+            // Para transferencias INTERNAL, procesar tabla destino
+            const targetTable = document
+              .getElementById("swal-targetTable")
+              .value.trim();
+
+            if (!targetTable) {
+              Swal.showValidationMessage(
+                "⚠️ Para transferencias internas debe especificar la tabla destino"
+              );
+              return false;
+            }
+
+            formData.targetTable = targetTable;
+
+            // Agregar fieldMapping vacío para mantener consistencia
+            formData.fieldMapping = {
+              sourceTable: "",
+              targetTable: "",
+              sourceFields: [],
+              targetFields: [],
+              defaultValues: [],
+            };
+            formData.nextTasks = [];
+
+            // Verificar que haya al menos una clave primaria o campo requerido
+            if (
+              !formData.validationRules.existenceCheck.key &&
+              formData.validationRules.requiredFields.length === 0
+            ) {
+              Swal.showValidationMessage(
+                "⚠️ Debe especificar al menos una clave primaria o un campo obligatorio para identificar registros"
+              );
+              return false;
+            }
+          } else {
+            // Para otros tipos, agregar fieldMapping vacío para mantener consistencia
+            formData.fieldMapping = {
+              sourceTable: "",
+              targetTable: "",
+              sourceFields: [],
+              targetFields: [],
+              defaultValues: [],
+            };
+            formData.nextTasks = [];
+
+            // Verificar que haya al menos una clave primaria o campo requerido
+            if (
+              !formData.validationRules.existenceCheck.key &&
+              formData.validationRules.requiredFields.length === 0
+            ) {
+              Swal.showValidationMessage(
+                "⚠️ Debe especificar al menos una clave primaria o un campo obligatorio para identificar registros"
+              );
+              return false;
+            }
+          }
+
+          // Log para debug de campos de vinculación
+          console.log("Campos de vinculación procesados:", {
+            linkedGroup: formData.linkedGroup,
+            executeLinkedTasks: formData.executeLinkedTasks,
+            linkedExecutionOrder: formData.linkedExecutionOrder,
+            isCoordinator: formData.linkingMetadata.isCoordinator,
+            linkedTasks: formData.linkedTasks,
+          });
+
+          // Depuración: imprimir objeto completo
+          console.log("Datos del formulario:", formData);
+
+          return formData;
+        } catch (error) {
+          console.error("Error en el formulario:", error);
+          Swal.showValidationMessage(`⚠️ Error: ${error.message}`);
           return false;
         }
+      },
+    });
 
-        formData.targetTable = targetTable;
-        formData.fieldMapping = {
-          sourceTable: "",
-          targetTable: "",
-          sourceFields: [],
-          targetFields: [],
-          defaultValues: [],
-        };
-        formData.nextTasks = [];
+    function getRestOfSections(task, tasks) {
+      return `
+     <!-- SECCIÓN 4: MAPEO DE CAMPOS (SOLO PARA DOWN) -->
+     <div id="section-field-mapping" class="form-section" style="display: none;">
+       <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Mapeo de Campos (Server2 → Server1)</h4>
+       
+       <div style="margin-bottom: 10px;">
+         <p style="font-size: 13px; color: #666;">Define las tablas y la correspondencia entre campos.</p>
+       </div>
+       
+       <div class="form-group">
+         <label>Tabla origen en Server2:</label>
+         <input id="swal-source-table" class="swal2-input" placeholder="Ejemplo: dbo.CLIENTES_EXTERNOS" 
+           value="${task?.fieldMapping?.sourceTable || ""}" />
+         <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
+           Nombre de la tabla en Server2 de donde se obtendrán los datos
+         </small>
+       </div>
 
-        if (
-          !formData.validationRules.existenceCheck.key &&
-          formData.validationRules.requiredFields.length === 0
-        ) {
-          Swal.showValidationMessage(
-            "⚠️ Debe especificar al menos una clave primaria o un campo obligatorio para identificar registros"
-          );
-          return false;
-        }
-      } else {
-        // Para otros tipos
-        formData.fieldMapping = {
-          sourceTable: "",
-          targetTable: "",
-          sourceFields: [],
-          targetFields: [],
-          defaultValues: [],
-        };
-        formData.nextTasks = [];
+       <div class="form-group">
+         <label>Tabla destino en Server1:</label>
+         <input id="swal-target-table" class="swal2-input" placeholder="Ejemplo: dbo.Clientes" 
+           value="${task?.fieldMapping?.targetTable || task?.name || ""}" />
+         <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
+           Nombre de la tabla en Server1 donde se insertarán los datos
+         </small>
+       </div>
+       
+       <div class="mapping-fields">
+         <div style="margin-bottom: 10px;">
+           <label for="swal-source-fields">Campos Origen (Server2):</label>
+           <textarea id="swal-source-fields" class="swal2-textarea" placeholder="ID, NOMBRE_COMPLETO, TELEFONO_CONTACTO...">${
+             Array.isArray(task?.fieldMapping?.sourceFields)
+               ? task.fieldMapping.sourceFields.join(", ")
+               : ""
+           }</textarea>
+         </div>
+         
+         <div style="margin-bottom: 10px;">
+           <label for="swal-target-fields">Campos Destino (Server1):</label>
+           <textarea id="swal-target-fields" class="swal2-textarea" placeholder="ClienteID, Nombre, Telefono...">${
+             Array.isArray(task?.fieldMapping?.targetFields)
+               ? task.fieldMapping.targetFields.join(", ")
+               : ""
+           }</textarea>
+         </div>
+         
+         <div style="margin-bottom: 10px;">
+           <label for="swal-default-values">Valores por defecto (opcional):</label>
+           <textarea id="swal-default-values" class="swal2-textarea" placeholder="Campo1:Valor1, Campo2:Valor2...">${
+             Array.isArray(task?.fieldMapping?.defaultValues)
+               ? task.fieldMapping.defaultValues
+                   .map((d) => `${d.field}:${d.value}`)
+                   .join(", ")
+               : ""
+           }</textarea>
+           <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
+             Formato: NombreCampo:Valor (separados por comas)
+           </small>
+         </div>
+       </div>
+       
+       <div class="form-group" style="margin-top: 20px; padding-top: 15px; border-top: 1px dashed #ddd;">
+         <label>Campo identificador único:</label>
+         <input id="swal-down-key-field" class="swal2-input" placeholder="Ejemplo: ClienteID, Codigo, etc." 
+           value="${task?.validationRules?.existenceCheck?.key || ""}" />
+         <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
+           <strong>Importante:</strong> Especifique un campo que identifique de manera única cada registro (debe estar en los campos destino).
+         </small>
+       </div>
+       
+       <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
+         Los campos deben estar separados por comas y en el mismo orden para establecer la correspondencia correcta.
+       </small>
+     </div>
+     
+     <!-- SECCIÓN DE TAREAS ENCADENADAS (SOLO PARA DOWN) -->
+     <div id="section-chain-tasks" class="form-section" style="display: none;">
+       <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Tareas Encadenadas</h4>
+       
+       <div class="form-group">
+         <label>Ejecutar estas tareas al finalizar (opcional):</label>
+         <select id="swal-next-tasks" class="swal2-select" multiple style="height: 100px; width: 100%;">
+           ${tasks
+             .filter((t) => t._id !== task?._id)
+             .map(
+               (t) =>
+                 `<option value="${t._id}" ${
+                   Array.isArray(task?.nextTasks) &&
+                   task.nextTasks.some(
+                     (id) => id.toString() === t._id.toString()
+                   )
+                     ? "selected"
+                     : ""
+                 }>${t.name}</option>`
+             )
+             .join("")}
+         </select>
+         <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
+           Mantén presionada la tecla Ctrl para seleccionar múltiples tareas que se ejecutarán en secuencia al finalizar esta tarea.
+         </small>
+       </div>
+     </div>
+     
+     <!-- SECCIÓN 5: VALIDACIÓN DE DATOS -->
+     <div id="section-validation" class="form-section">
+       <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Validación de Datos</h4>
+       
+       <div class="form-group">
+         <label>Campos obligatorios:</label>
+         <input id="swal-requiredFields" class="swal2-input" placeholder="Ejemplo: Code_ofClient, Name1" 
+           value="${
+             Array.isArray(task?.validationRules?.requiredFields)
+               ? task.validationRules.requiredFields.join(", ")
+               : ""
+           }" />
+       </div>
 
-        if (
-          !formData.validationRules.existenceCheck.key &&
-          formData.validationRules.requiredFields.length === 0
-        ) {
-          Swal.showValidationMessage(
-            "⚠️ Debe especificar al menos una clave primaria o un campo obligatorio para identificar registros"
-          );
-          return false;
-        }
-      }
+       <div class="form-group">
+         <label>Tabla de validación:</label>
+         <input id="swal-existenceTable" class="swal2-input" placeholder="Ejemplo: dbo.IMPLT_clients" 
+           value="${task?.validationRules?.existenceCheck?.table || ""}" />
+       </div>
 
-      console.log("Datos del formulario procesados:", formData);
-      return formData;
-    } catch (error) {
-      console.error("Error en el formulario:", error);
-      Swal.showValidationMessage(`⚠️ Error: ${error.message}`);
-      return false;
+       <div class="form-group">
+         <label>Clave primaria:</label>
+         <input id="swal-existenceKey" class="swal2-input" placeholder="Ejemplo: Code_ofClient" 
+           value="${task?.validationRules?.existenceCheck?.key || ""}" />
+       </div>
+     </div>
+     
+     <!-- SECCIÓN 6: POST-TRANSFERENCIA -->
+     <div id="section-post-transfer" class="form-section">
+       <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Operaciones Post-Transferencia</h4>
+       
+       <div class="form-group">
+         <label>Consulta Post-Transferencia:</label>
+         <textarea id="swal-postUpdateQuery" class="swal2-textarea"
+           placeholder="Ejemplo: UPDATE CATELLI.CLIENTE SET U_ESTATUS = 'Normal'">${
+             task?.postUpdateQuery || ""
+           }</textarea>
+         <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
+           <strong>Para tareas vinculadas:</strong> Solo la tarea coordinadora debe tener esta consulta definida
+         </small>
+       </div>
+
+       <div class="form-group">
+         <label>Clave en Vista:</label>
+         <input id="swal-postUpdateKeyView" class="swal2-input" placeholder="Ejemplo: Code_OfClient"
+           value="${task?.postUpdateMapping?.viewKey || ""}" />
+       </div>
+       
+       <div class="form-group">
+         <label>Clave en Tabla Real:</label>
+         <input id="swal-postUpdateKeyTable" class="swal2-input" placeholder="Ejemplo: CLIENTE"
+           value="${task?.postUpdateMapping?.tableKey || ""}" />
+       </div>
+     </div>
+     
+     <!-- SECCIÓN 7: TABLA DESTINO (SÓLO PARA TRANSFERENCIA INTERNA) -->
+     <div id="section-target-table" class="form-section" style="display: none;">
+       <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Configuración de Transferencia Interna</h4>
+       
+       <div class="form-group">
+         <label>Tabla destino:</label>
+         <input id="swal-targetTable" class="swal2-input" placeholder="Ejemplo: dbo.IMPLT_Hist_Orders" 
+           value="${task?.targetTable || ""}" />
+         <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
+           Especifique la tabla destino para transferencias internas en Server1
+         </small>
+       </div>
+     </div>
+ `;
     }
-  }
 
-  function getRestOfSections(task, tasks) {
-    return `
-    <!-- SECCIÓN 4: MAPEO DE CAMPOS (SOLO PARA DOWN) -->
-    <div id="section-field-mapping" class="task-form-section" style="display: none;">
-      <h4 class="task-form-section-title">Mapeo de Campos (Server2 → Server1)</h4>
-      
-      <div class="task-form-group">
-        <p class="task-form-description">Define las tablas y la correspondencia entre campos.</p>
-      </div>
-      
-      <div class="task-form-group">
-        <label class="task-form-label">Tabla origen en Server2:</label>
-        <input id="swal-source-table" class="task-form-input" placeholder="Ejemplo: dbo.CLIENTES_EXTERNOS" 
-          value="${task?.fieldMapping?.sourceTable || ""}" />
-        <small class="task-form-help-text">
-          Nombre de la tabla en Server2 de donde se obtendrán los datos
-        </small>
-      </div>
+    if (!formValues) return; // Usuario canceló
 
-      <div class="task-form-group">
-        <label class="task-form-label">Tabla destino en Server1:</label>
-        <input id="swal-target-table" class="task-form-input" placeholder="Ejemplo: dbo.Clientes" 
-          value="${task?.fieldMapping?.targetTable || task?.name || ""}" />
-        <small class="task-form-help-text">
-          Nombre de la tabla en Server1 donde se insertarán los datos
-        </small>
-      </div>
-      
-      <div class="task-form-mapping-fields">
-        <div class="task-form-group">
-          <label class="task-form-label">Campos Origen (Server2):</label>
-          <textarea id="swal-source-fields" class="task-form-textarea" placeholder="ID, NOMBRE_COMPLETO, TELEFONO_CONTACTO...">${
-            Array.isArray(task?.fieldMapping?.sourceFields)
-              ? task.fieldMapping.sourceFields.join(", ")
-              : ""
-          }</textarea>
-        </div>
-        
-        <div class="task-form-group">
-          <label class="task-form-label">Campos Destino (Server1):</label>
-          <textarea id="swal-target-fields" class="task-form-textarea" placeholder="ClienteID, Nombre, Telefono...">${
-            Array.isArray(task?.fieldMapping?.targetFields)
-              ? task.fieldMapping.targetFields.join(", ")
-              : ""
-          }</textarea>
-        </div>
-        
-        <div class="task-form-group">
-          <label class="task-form-label">Valores por defecto (opcional):</label>
-          <textarea id="swal-default-values" class="task-form-textarea" placeholder="Campo1:Valor1, Campo2:Valor2...">${
-            Array.isArray(task?.fieldMapping?.defaultValues)
-              ? task.fieldMapping.defaultValues
-                  .map((d) => `${d.field}:${d.value}`)
-                  .join(", ")
-              : ""
-          }</textarea>
-          <small class="task-form-help-text">
-            Formato: NombreCampo:Valor (separados por comas)
-          </small>
-        </div>
-      </div>
-      
-      <div class="task-form-group task-form-key-field-group">
-        <label class="task-form-label">Campo identificador único:</label>
-        <input id="swal-down-key-field" class="task-form-input" placeholder="Ejemplo: ClienteID, Codigo, etc." 
-          value="${task?.validationRules?.existenceCheck?.key || ""}" />
-        <small class="task-form-help-text">
-          <strong>Importante:</strong> Especifique un campo que identifique de manera única cada registro (debe estar en los campos destino).
-        </small>
-      </div>
-      
-      <small class="task-form-help-text">
-        Los campos deben estar separados por comas y en el mismo orden para establecer la correspondencia correcta.
-      </small>
-    </div>
-    
-    <!-- SECCIÓN DE TAREAS ENCADENADAS (SOLO PARA DOWN) -->
-    <div id="section-chain-tasks" class="task-form-section" style="display: none;">
-      <h4 class="task-form-section-title">Tareas Encadenadas</h4>
-      
-      <div class="task-form-group">
-        <label class="task-form-label">Ejecutar estas tareas al finalizar (opcional):</label>
-        <select id="swal-next-tasks" class="task-form-select task-form-select-multiple" multiple>
-          ${tasks
-            .filter((t) => t._id !== task?._id)
-            .map(
-              (t) =>
-                `<option value="${t._id}" ${
-                  Array.isArray(task?.nextTasks) &&
-                  task.nextTasks.some(
-                    (id) => id.toString() === t._id.toString()
-                  )
-                    ? "selected"
-                    : ""
-                }>${t.name}</option>`
-            )
-            .join("")}
-        </select>
-        <small class="task-form-help-text">
-          Mantén presionada la tecla Ctrl para seleccionar múltiples tareas que se ejecutarán en secuencia al finalizar esta tarea.
-        </small>
-      </div>
-    </div>
-    
-    <!-- SECCIÓN 5: VALIDACIÓN DE DATOS -->
-    <div id="section-validation" class="task-form-section">
-      <h4 class="task-form-section-title">Validación de Datos</h4>
-      
-      <div class="task-form-group">
-        <label class="task-form-label">Campos obligatorios:</label>
-        <input id="swal-requiredFields" class="task-form-input" placeholder="Ejemplo: Code_ofClient, Name1" 
-          value="${
-            Array.isArray(task?.validationRules?.requiredFields)
-              ? task.validationRules.requiredFields.join(", ")
-              : ""
-          }" />
-      </div>
+    try {
+      // Mostrar indicador de carga
+      Swal.fire({
+        title: isEdit ? "Actualizando..." : "Creando...",
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        },
+      });
 
-      <div class="task-form-group">
-        <label class="task-form-label">Tabla de validación:</label>
-        <input id="swal-existenceTable" class="task-form-input" placeholder="Ejemplo: dbo.IMPLT_clients" 
-          value="${task?.validationRules?.existenceCheck?.table || ""}" />
-      </div>
+      // Depuración: Mostrar datos enviados al backend
+      console.log("Enviando al backend:", formValues);
 
-      <div class="task-form-group">
-        <label class="task-form-label">Clave primaria:</label>
-        <input id="swal-existenceKey" class="task-form-input" placeholder="Ejemplo: Code_ofClient" 
-          value="${task?.validationRules?.existenceCheck?.key || ""}" />
-      </div>
-    </div>
-    
-    <!-- SECCIÓN 6: POST-TRANSFERENCIA -->
-    <div id="section-post-transfer" class="task-form-section">
-      <h4 class="task-form-section-title">Operaciones Post-Transferencia</h4>
-      
-      <div class="task-form-group">
-        <label class="task-form-label">Consulta Post-Transferencia:</label>
-        <textarea id="swal-postUpdateQuery" class="task-form-textarea"
-          placeholder="Ejemplo: UPDATE CATELLI.CLIENTE SET U_ESTATUS = 'Normal'">${
-            task?.postUpdateQuery || ""
-          }</textarea>
-        <small class="task-form-help-text">
-          <strong>Para tareas vinculadas:</strong> Solo la tarea coordinadora debe tener esta consulta definida
-        </small>
-      </div>
+      // Llamada a tu API para guardar la tarea
+      const result = await cnnApi.upsertTransferTask(accessToken, formValues);
 
-      <div class="task-form-group">
-        <label class="task-form-label">Clave en Vista:</label>
-        <input id="swal-postUpdateKeyView" class="task-form-input" placeholder="Ejemplo: Code_OfClient"
-          value="${task?.postUpdateMapping?.viewKey || ""}" />
-      </div>
-      
-      <div class="task-form-group">
-        <label class="task-form-label">Clave en Tabla Real:</label>
-        <input id="swal-postUpdateKeyTable" class="task-form-input" placeholder="Ejemplo: CLIENTE"
-          value="${task?.postUpdateMapping?.tableKey || ""}" />
-      </div>
-    </div>
-    
-    <!-- SECCIÓN 7: TABLA DESTINO (SÓLO PARA TRANSFERENCIA INTERNA) -->
-    <div id="section-target-table" class="task-form-section" style="display: none;">
-      <h4 class="task-form-section-title">Configuración de Transferencia Interna</h4>
-      
-      <div class="task-form-group">
-        <label class="task-form-label">Tabla destino:</label>
-        <input id="swal-targetTable" class="task-form-input" placeholder="Ejemplo: dbo.IMPLT_Hist_Orders" 
-          value="${task?.targetTable || ""}" />
-        <small class="task-form-help-text">
-          Especifique la tabla destino para transferencias internas en Server1
-        </small>
-      </div>
-    </div>
-  `;
-  }
+      if (result) {
+        // Refrescar la lista
+        await fetchTasks();
+
+        Swal.fire(
+          "Éxito",
+          `Tarea ${isEdit ? "actualizada" : "creada"} correctamente.`,
+          "success"
+        );
+      } else {
+        throw new Error(
+          `No se pudo ${isEdit ? "actualizar" : "crear"} la tarea.`
+        );
+      }
+    } catch (error) {
+      console.log("Error al guardar:", error);
+      Swal.fire("Error", error.message || "Error desconocido", "error");
+    }
+  };
 
   const executeTask = async (taskId) => {
     const selectedTask = tasks.find((task) => task._id === taskId);
@@ -1387,26 +1451,26 @@ export function TransferTasks() {
       const historyHtml = history
         .map(
           (entry, index) => `
-      <tr>
-        <td>${new Date(entry.date).toLocaleString()}</td>
-        <td>${entry.documentId || "N/A"}</td>
-        <td>${entry.totalProducts || 0}</td>
-        <td>${entry.totalQuantity || 0}</td>
-        <td>
-          <span class="status-badge ${entry.status}">
-            ${
-              entry.status === "completed"
-                ? "Completado"
-                : entry.status === "partial_return"
-                ? "Devolución Parcial"
-                : entry.status === "full_return"
-                ? "Devolución Total"
-                : entry.status
-            }
-          </span>
-        </td>
-      </tr>
-    `
+     <tr>
+       <td>${new Date(entry.date).toLocaleString()}</td>
+       <td>${entry.documentId || "N/A"}</td>
+       <td>${entry.totalProducts || 0}</td>
+       <td>${entry.totalQuantity || 0}</td>
+       <td>
+         <span class="status-badge ${entry.status}">
+           ${
+             entry.status === "completed"
+               ? "Completado"
+               : entry.status === "partial_return"
+               ? "Devolución Parcial"
+               : entry.status === "full_return"
+               ? "Devolución Total"
+               : entry.status
+           }
+         </span>
+       </td>
+     </tr>
+   `
         )
         .join("");
 
@@ -1414,33 +1478,33 @@ export function TransferTasks() {
       Swal.fire({
         title: `Historial de Transferencias: ${task.name}`,
         html: `
-        <div class="history-details">
-          <p><strong>Total de ejecuciones:</strong> ${task.executionCount}</p>
-          <p><strong>Última ejecución:</strong> ${
-            task.lastExecutionDate
-              ? new Date(task.lastExecutionDate).toLocaleString()
-              : "Nunca"
-          }</p>
-          
-          <h4>Últimas transferencias</h4>
-          <div class="history-table-container">
-            <table class="swal2-table">
-              <thead>
-                <tr>
-                  <th>Fecha</th>
-                  <th>Documento</th>
-                  <th>Productos</th>
-                  <th>Cantidad</th>
-                  <th>Estado</th>
-                </tr>
-              </thead>
-              <tbody>
-                ${historyHtml}
-              </tbody>
-            </table>
-          </div>
-        </div>
-      `,
+       <div class="history-details">
+         <p><strong>Total de ejecuciones:</strong> ${task.executionCount}</p>
+         <p><strong>Última ejecución:</strong> ${
+           task.lastExecutionDate
+             ? new Date(task.lastExecutionDate).toLocaleString()
+             : "Nunca"
+         }</p>
+         
+         <h4>Últimas transferencias</h4>
+         <div class="history-table-container">
+           <table class="swal2-table">
+             <thead>
+               <tr>
+                 <th>Fecha</th>
+                 <th>Documento</th>
+                 <th>Productos</th>
+                 <th>Cantidad</th>
+                 <th>Estado</th>
+               </tr>
+             </thead>
+             <tbody>
+               ${historyHtml}
+             </tbody>
+           </table>
+         </div>
+       </div>
+     `,
         width: "800px",
         showConfirmButton: true,
         customClass: {
@@ -1451,28 +1515,28 @@ export function TransferTasks() {
       // Agregar estilos para las badges
       const styleSheet = document.createElement("style");
       styleSheet.textContent = `
-      .history-modal .history-table-container {
-        max-height: 400px;
-        overflow-y: auto;
-      }
-      .history-modal .status-badge {
-        padding: 3px 8px;
-        border-radius: 50px;
-        font-size: 12px;
-        font-weight: 500;
-        color: white;
-      }
-      .history-modal .status-badge.completed {
-        background-color: #28a745;
-      }
-      .history-modal .status-badge.partial_return {
-        background-color: #ffc107;
-        color: #212529;
-      }
-      .history-modal .status-badge.full_return {
-        background-color: #dc3545;
-      }
-    `;
+     .history-modal .history-table-container {
+       max-height: 400px;
+       overflow-y: auto;
+     }
+     .history-modal .status-badge {
+       padding: 3px 8px;
+       border-radius: 50px;
+       font-size: 12px;
+       font-weight: 500;
+       color: white;
+     }
+     .history-modal .status-badge.completed {
+       background-color: #28a745;
+     }
+     .history-modal .status-badge.partial_return {
+       background-color: #ffc107;
+       color: #212529;
+     }
+     .history-modal .status-badge.full_return {
+       background-color: #dc3545;
+     }
+   `;
       document.head.appendChild(styleSheet);
     } catch (error) {
       console.error("Error al ver historial:", error);
@@ -1516,14 +1580,14 @@ export function TransferTasks() {
     const cancelSwal = Swal.fire({
       title: "Deteniendo tarea...",
       html: `
-        <div>
-          <p>Por favor espera mientras se detiene la tarea "${taskToCancel.name}".</p>
-          <p>Esta operación puede tardar unos segundos...</p>
-          <div class="progress-container" style="width: 100%; background-color: #f3f3f3; border-radius: 4px; height: 10px; margin-top: 15px; overflow: hidden;">
-            <div class="progress-bar" style="width: 0; height: 100%; background-color: #dc3545; transition: width 0.3s;"></div>
-          </div>
-        </div>
-      `,
+       <div>
+         <p>Por favor espera mientras se detiene la tarea "${taskToCancel.name}".</p>
+         <p>Esta operación puede tardar unos segundos...</p>
+         <div class="progress-container" style="width: 100%; background-color: #f3f3f3; border-radius: 4px; height: 10px; margin-top: 15px; overflow: hidden;">
+           <div class="progress-bar" style="width: 0; height: 100%; background-color: #dc3545; transition: width 0.3s;"></div>
+         </div>
+       </div>
+     `,
       allowOutsideClick: false,
       showConfirmButton: false,
       didOpen: () => {
@@ -1646,44 +1710,44 @@ export function TransferTasks() {
     Swal.fire({
       title: `Progreso de tarea: ${task.name}`,
       html: `
-        <div class="detailed-progress">
-          <div class="progress-container">
-            <div class="progress-bar-detailed">
-              <div class="progress-fill" style="width: ${task.progress}%">${
+       <div class="detailed-progress">
+         <div class="progress-container">
+           <div class="progress-bar-detailed">
+             <div class="progress-fill" style="width: ${task.progress}%">${
         task.progress
       }%</div>
-            </div>
-          </div>
-          
-          <div class="time-estimates">
-            <p><strong>Tiempo transcurrido:</strong> ${elapsedMinutes}m ${elapsedSeconds}s</p>
-            <p><strong>Tiempo restante est.:</strong> ${remainingMinutes}m ${remainingSeconds}s</p>
-            <p><strong>Velocidad de procesamiento:</strong> ${
-              estimate.speed?.toFixed(2) || 0
-            }% por minuto</p>
-            <p><strong>Hora estimada de finalización:</strong> ${
-              estimate.remaining
-                ? new Date(Date.now() + estimate.remaining).toLocaleTimeString()
-                : "Desconocida"
-            }</p>
-          </div>
-          
-          <div class="status-info">
-            <p><strong>Estado de la tarea:</strong> <span class="status-badge">${
-              task.status === "running" ? "En ejecución" : task.status
-            }</span></p>
-            <p><strong>Conexión SSE:</strong> <span class="connection-badge ${
-              progressClient.getConnectionState(taskId) === "open"
-                ? "connected"
-                : "disconnected"
-            }">${
+           </div>
+         </div>
+         
+         <div class="time-estimates">
+           <p><strong>Tiempo transcurrido:</strong> ${elapsedMinutes}m ${elapsedSeconds}s</p>
+           <p><strong>Tiempo restante est.:</strong> ${remainingMinutes}m ${remainingSeconds}s</p>
+           <p><strong>Velocidad de procesamiento:</strong> ${
+             estimate.speed?.toFixed(2) || 0
+           }% por minuto</p>
+           <p><strong>Hora estimada de finalización:</strong> ${
+             estimate.remaining
+               ? new Date(Date.now() + estimate.remaining).toLocaleTimeString()
+               : "Desconocida"
+           }</p>
+         </div>
+         
+         <div class="status-info">
+           <p><strong>Estado de la tarea:</strong> <span class="status-badge">${
+             task.status === "running" ? "En ejecución" : task.status
+           }</span></p>
+           <p><strong>Conexión SSE:</strong> <span class="connection-badge ${
+             progressClient.getConnectionState(taskId) === "open"
+               ? "connected"
+               : "disconnected"
+           }">${
         progressClient.getConnectionState(taskId) === "open"
           ? "Conectado"
           : progressClient.getConnectionState(taskId) || "Desconectado"
       }</span></p>
-          </div>
-        </div>
-      `,
+         </div>
+       </div>
+     `,
       showConfirmButton: true,
       confirmButtonText: "Cerrar",
       showCancelButton: true,
@@ -1696,84 +1760,84 @@ export function TransferTasks() {
         // Agregar estilos para este diálogo
         const style = document.createElement("style");
         style.innerHTML = `
-          .progress-modal .detailed-progress {
-            text-align: left;
-          }
-          .progress-modal .progress-container {
-            margin: 20px 0;
-          }
-          .progress-modal .progress-bar-detailed {
-            width: 100%;
-            height: 30px;
-            background-color: #f3f3f3;
-            border-radius: 15px;
-            overflow: hidden;
-          }
-          .progress-modal .progress-fill {
-            height: 100%;
-            background-color: #17a2b8;
-            text-align: center;
-            line-height: 30px;
-            color: white;
-            font-weight: bold;
-            transition: width 0.5s ease;
-            position: relative;
-          }
-          .progress-modal .progress-fill::after {
-            content: "";
-            position: absolute;
-            top: 0;
-            left: 0;
-            right: 0;
-            bottom: 0;
-            background: linear-gradient(
-              90deg, 
-              rgba(255,255,255,0) 0%, 
-              rgba(255,255,255,0.3) 50%, 
-              rgba(255,255,255,0) 100%
-            );
-            animation: progressShine 2s infinite linear;
-            width: 200%;
-          }
-          @keyframes progressShine {
-            from { transform: translateX(-100%); }
-            to { transform: translateX(50%); }
-          }
-          .progress-modal .time-estimates {
-            margin: 20px 0;
-            padding: 15px;
-            background-color: #f8f9fa;
-            border-radius: 8px;
-          }
-          .progress-modal .status-info {
-            margin: 20px 0;
-            padding: 15px;
-            background-color: #e9ecef;
-            border-radius: 8px;
-          }
-          .progress-modal .status-badge {
-            display: inline-block;
-            padding: 3px 8px;
-            border-radius: 4px;
-            background-color: #17a2b8;
-            color: white;
-            font-weight: 500;
-          }
-          .progress-modal .connection-badge {
-            display: inline-block;
-            padding: 3px 8px;
-            border-radius: 4px;
-            font-weight: 500;
-          }
-          .progress-modal .connection-badge.connected {
-            background-color: #28a745;
-            color: white;
-          }
-          .progress-modal .connection-badge.disconnected {
-            background-color: #dc3545;
-            color: white;
-          }
-        `;
+         .progress-modal .detailed-progress {
+           text-align: left;
+         }
+         .progress-modal .progress-container {
+           margin: 20px 0;
+         }
+         .progress-modal .progress-bar-detailed {
+           width: 100%;
+           height: 30px;
+           background-color: #f3f3f3;
+           border-radius: 15px;
+           overflow: hidden;
+         }
+         .progress-modal .progress-fill {
+           height: 100%;
+           background-color: #17a2b8;
+           text-align: center;
+           line-height: 30px;
+           color: white;
+           font-weight: bold;
+           transition: width 0.5s ease;
+           position: relative;
+         }
+         .progress-modal .progress-fill::after {
+           content: "";
+           position: absolute;
+           top: 0;
+           left: 0;
+           right: 0;
+           bottom: 0;
+           background: linear-gradient(
+             90deg, 
+             rgba(255,255,255,0) 0%, 
+             rgba(255,255,255,0.3) 50%, 
+             rgba(255,255,255,0) 100%
+           );
+           animation: progressShine 2s infinite linear;
+           width: 200%;
+         }
+         @keyframes progressShine {
+           from { transform: translateX(-100%); }
+           to { transform: translateX(50%); }
+         }
+         .progress-modal .time-estimates {
+           margin: 20px 0;
+           padding: 15px;
+           background-color: #f8f9fa;
+           border-radius: 8px;
+         }
+         .progress-modal .status-info {
+           margin: 20px 0;
+           padding: 15px;
+           background-color: #e9ecef;
+           border-radius: 8px;
+         }
+         .progress-modal .status-badge {
+           display: inline-block;
+           padding: 3px 8px;
+           border-radius: 4px;
+           background-color: #17a2b8;
+           color: white;
+           font-weight: 500;
+         }
+         .progress-modal .connection-badge {
+           display: inline-block;
+           padding: 3px 8px;
+           border-radius: 4px;
+           font-weight: 500;
+         }
+         .progress-modal .connection-badge.connected {
+           background-color: #28a745;
+           color: white;
+         }
+         .progress-modal .connection-badge.disconnected {
+           background-color: #dc3545;
+           color: white;
+         }
+       `;
         document.head.appendChild(style);
 
         // Actualizar la barra de progreso en tiempo real
@@ -1870,55 +1934,55 @@ export function TransferTasks() {
       Swal.fire({
         title: "Métricas de Tareas",
         html: `
-          <div class="metrics-panel">
-            <div class="metrics-summary">
-              <div class="metric-card">
-                <h4>Tareas Completadas Hoy</h4>
-                <p class="metric-value">${completedToday}</p>
-              </div>
-              <div class="metric-card">
-                <h4>Tareas Fallidas Hoy</h4>
-                <p class="metric-value">${failedToday}</p>
-              </div>
-              <div class="metric-card">
-                <h4>Tasa de Éxito General</h4>
-                <p class="metric-value">${successRate.toFixed(1)}%</p>
-              </div>
-            </div>
-            
-            <div class="metrics-table-container">
-              <h4>Tareas más ejecutadas</h4>
-              <table>
-                <thead>
-                  <tr>
-                    <th>Tarea</th>
-                    <th>Ejecuciones</th>
-                    <th>Última ejecución</th>
-                    <th>Estado</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  ${topTasks
-                    .map(
-                      (task) => `
-                    <tr>
-                      <td>${task.name}</td>
-                      <td>${task.executions}</td>
-                      <td>${task.lastExecution}</td>
-                      <td>${
-                        task.successRate === 100
-                          ? '<span class="status-ok">✓</span>'
-                          : '<span class="status-fail">✗</span>'
-                      }</td>
-                    </tr>
-                  `
-                    )
-                    .join("")}
-                </tbody>
-              </table>
-            </div>
-          </div>
-        `,
+         <div class="metrics-panel">
+           <div class="metrics-summary">
+             <div class="metric-card">
+               <h4>Tareas Completadas Hoy</h4>
+               <p class="metric-value">${completedToday}</p>
+             </div>
+             <div class="metric-card">
+               <h4>Tareas Fallidas Hoy</h4>
+               <p class="metric-value">${failedToday}</p>
+             </div>
+             <div class="metric-card">
+               <h4>Tasa de Éxito General</h4>
+               <p class="metric-value">${successRate.toFixed(1)}%</p>
+             </div>
+           </div>
+           
+           <div class="metrics-table-container">
+             <h4>Tareas más ejecutadas</h4>
+             <table>
+               <thead>
+                 <tr>
+                   <th>Tarea</th>
+                   <th>Ejecuciones</th>
+                   <th>Última ejecución</th>
+                   <th>Estado</th>
+                 </tr>
+               </thead>
+               <tbody>
+                 ${topTasks
+                   .map(
+                     (task) => `
+                   <tr>
+                     <td>${task.name}</td>
+                     <td>${task.executions}</td>
+                     <td>${task.lastExecution}</td>
+                     <td>${
+                       task.successRate === 100
+                         ? '<span class="status-ok">✓</span>'
+                         : '<span class="status-fail">✗</span>'
+                     }</td>
+                   </tr>
+                 `
+                   )
+                   .join("")}
+               </tbody>
+             </table>
+           </div>
+         </div>
+       `,
         width: "600px",
         showConfirmButton: true,
         confirmButtonText: "Cerrar",
@@ -1926,67 +1990,67 @@ export function TransferTasks() {
           // Estilos para el panel de métricas
           const style = document.createElement("style");
           style.innerHTML = `
-            .metrics-panel {
-              font-family: Arial, sans-serif;
-            }
-            .metrics-summary {
-              display: flex;
-              justify-content: space-between;
-              gap: 15px;
-              margin-bottom: 30px;
-            }
-            .metric-card {
-              flex: 1;
-              background-color: #f8f9fa;
-              border-radius: 8px;
-              padding: 15px;
-              text-align: center;
-            }
-            .metric-card h4 {
-              font-size: 14px;
-              margin: 0 0 10px;
-              color: #495057;
-            }
-            .metric-value {
-              font-size: 24px;
-              font-weight: 600;
-              margin: 0;
-              color: #007bff;
-            }
-            .metrics-table-container {
-              background-color: #fff;
-              border-radius: 8px;
-              box-shadow: 0 1px 3px rgba(0,0,0,0.1);
-              padding: 15px;
-            }
-            .metrics-table-container h4 {
-              margin-top: 0;
-              margin-bottom: 15px;
-              color: #495057;
-            }
-            .metrics-table-container table {
-              width: 100%;
-              border-collapse: collapse;
-            }
-            .metrics-table-container th, 
-            .metrics-table-container td {
-              padding: 8px 12px;
-              text-align: left;
-              border-bottom: 1px solid #dee2e6;
-            }
-            .metrics-table-container th {
-              font-weight: 600;
-              background-color: #f8f9fa;
-            }
-            .status-ok {
-              color: #28a745;
-              font-weight: bold;
-            }
-            .status-fail {
-              color: #dc3545;
-              font-weight: bold;
-            }
-          `;
+           .metrics-panel {
+             font-family: Arial, sans-serif;
+           }
+           .metrics-summary {
+             display: flex;
+             justify-content: space-between;
+             gap: 15px;
+             margin-bottom: 30px;
+           }
+           .metric-card {
+             flex: 1;
+             background-color: #f8f9fa;
+             border-radius: 8px;
+             padding: 15px;
+             text-align: center;
+           }
+           .metric-card h4 {
+             font-size: 14px;
+             margin: 0 0 10px;
+             color: #495057;
+           }
+           .metric-value {
+             font-size: 24px;
+             font-weight: 600;
+             margin: 0;
+             color: #007bff;
+           }
+           .metrics-table-container {
+             background-color: #fff;
+             border-radius: 8px;
+             box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+             padding: 15px;
+           }
+           .metrics-table-container h4 {
+             margin-top: 0;
+             margin-bottom: 15px;
+             color: #495057;
+           }
+           .metrics-table-container table {
+             width: 100%;
+             border-collapse: collapse;
+           }
+           .metrics-table-container th, 
+           .metrics-table-container td {
+             padding: 8px 12px;
+             text-align: left;
+             border-bottom: 1px solid #dee2e6;
+           }
+           .metrics-table-container th {
+             font-weight: 600;
+             background-color: #f8f9fa;
+           }
+           .status-ok {
+             color: #28a745;
+             font-weight: bold;
+           }
+           .status-fail {
+             color: #dc3545;
+             font-weight: bold;
+           }
+         `;
           document.head.appendChild(style);
         },
       });
@@ -2107,6 +2171,10 @@ export function TransferTasks() {
             <FaSync className={tasksRefreshing ? "spinning" : ""} />
             {tasksRefreshing ? "Actualizando..." : "Refrescar"}
           </RefreshButton>
+
+          <GroupsManagerButton onClick={() => setShowGroupsManager(true)}>
+            <FaLink /> Gestionar Grupos
+          </GroupsManagerButton>
 
           {/* Botón para métricas */}
           <MetricsButton onClick={showTaskMetricsPanel}>
@@ -2579,6 +2647,29 @@ export function TransferTasks() {
           </TableContainer>
         )}
       </div>
+      {showGroupsManager && (
+        <GroupsManagerModal>
+          <ModalOverlay onClick={() => setShowGroupsManager(false)} />
+          <ModalContent>
+            <ModalHeader>
+              <h2>🔗 Gestión de Grupos Vinculados</h2>
+              <CloseButton onClick={() => setShowGroupsManager(false)}>
+                ✕
+              </CloseButton>
+            </ModalHeader>
+            <ModalBody>
+              <LinkedGroupsManager
+                accessToken={accessToken}
+                onGroupDeleted={() => {
+                  // Refrescar las tareas cuando se elimine un grupo
+                  fetchTasks();
+                }}
+                onClose={() => setShowGroupsManager(false)}
+              />
+            </ModalBody>
+          </ModalContent>
+        </GroupsManagerModal>
+      )}
     </>
   );
 }
@@ -2687,28 +2778,6 @@ const AddButton = styled.button`
     width: 100%;
   }
 `;
-
-// const RefreshButton = styled.button`
-//   background-color: #17a2b8;
-//   color: white;
-//   border: none;
-//   border-radius: 4px;
-//   padding: 10px 15px;
-//   font-size: 14px;
-//   cursor: pointer;
-//   display: flex;
-//   align-items: center;
-//   gap: 8px;
-//   transition: background-color 0.3s;
-
-//   &:hover {
-//     background-color: #138496;
-//   }
-
-//   @media (max-width: 480px) {
-//     width: 100%;
-//   }
-// `;
 
 const MetricsButton = styled.button`
   background-color: #6f42c1;
@@ -3437,7 +3506,6 @@ const RefreshContent = styled.div`
   flex-direction: column;
   align-items: center;
   gap: 10px;
-
   .refresh-icon-spin {
     font-size: 24px;
     animation: spin 1s linear infinite;
@@ -3514,5 +3582,145 @@ const RefreshButton = styled.button`
 
   @media (max-width: 480px) {
     width: 100%;
+  }
+`;
+// ===== ESTILOS PARA EL BOTÓN DE GESTIÓN DE GRUPOS =====
+const GroupsManagerButton = styled.button`
+  background-color: #6f42c1;
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 10px 15px;
+  font-size: 14px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  transition: all 0.3s ease;
+  font-weight: 500;
+
+  &:hover {
+    background-color: #5e35b1;
+    transform: translateY(-1px);
+  }
+
+  &:active {
+    transform: translateY(0);
+  }
+
+  @media (max-width: 480px) {
+    width: 100%;
+    justify-content: center;
+  }
+`;
+
+// ===== ESTILOS PARA EL MODAL =====
+const GroupsManagerModal = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 20px;
+`;
+
+const ModalOverlay = styled.div`
+  position: absolute;
+  top: 0;
+  left: 0;
+  right: 0;
+  bottom: 0;
+  background: rgba(0, 0, 0, 0.5);
+  backdrop-filter: blur(4px);
+`;
+
+const ModalContent = styled.div`
+  position: relative;
+  background: white;
+  border-radius: 12px;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+  max-width: 95vw;
+  max-height: 90vh;
+  width: 100%;
+  max-width: 1000px;
+  overflow: hidden;
+  display: flex;
+  flex-direction: column;
+  animation: modalSlideIn 0.3s ease-out;
+
+  @keyframes modalSlideIn {
+    from {
+      opacity: 0;
+      transform: translateY(-50px) scale(0.95);
+    }
+    to {
+      opacity: 1;
+      transform: translateY(0) scale(1);
+    }
+  }
+`;
+
+const ModalHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 20px 25px;
+  border-bottom: 1px solid #eee;
+  background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+  color: white;
+
+  h2 {
+    margin: 0;
+    font-size: 1.5rem;
+    font-weight: 600;
+  }
+`;
+
+const CloseButton = styled.button`
+  background: rgba(255, 255, 255, 0.2);
+  border: none;
+  color: white;
+  font-size: 20px;
+  width: 32px;
+  height: 32px;
+  border-radius: 50%;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  transition: all 0.2s ease;
+
+  &:hover {
+    background: rgba(255, 255, 255, 0.3);
+    transform: scale(1.1);
+  }
+`;
+
+const ModalBody = styled.div`
+  flex: 1;
+  overflow-y: auto;
+  padding: 0;
+
+  /* Personalizar scrollbar */
+  &::-webkit-scrollbar {
+    width: 8px;
+  }
+
+  &::-webkit-scrollbar-track {
+    background: #f1f1f1;
+    border-radius: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb {
+    background: #c1c1c1;
+    border-radius: 4px;
+  }
+
+  &::-webkit-scrollbar-thumb:hover {
+    background: #a1a1a1;
   }
 `;

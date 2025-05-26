@@ -83,10 +83,50 @@ const getTransferTask = async (req, res) => {
  */
 const upsertTransferTaskController = async (req, res) => {
   console.log(
-    "Una tarea no puede tener tanto grupo vinculado como tareas vinculadas directas. Use solo uno de los dos métodos."
+    "🚀 ~ file: transferTaskController.js ~ line 108 ~ upsertTransferTaskController ~ req.body",
+    req.body
   );
   try {
-    // Extraer todos los campos necesarios del req.body
+    // ✅ VALIDACIÓN Y SANITIZACIÓN TEMPRANA DE TIPOS
+    const sanitizedBody = { ...req.body };
+
+    // ✅ CORRECCIÓN PRINCIPAL: Sanitizar executeLinkedTasks antes de usar
+    if (sanitizedBody.executeLinkedTasks !== undefined) {
+      // Convertir string a boolean si es necesario
+      if (typeof sanitizedBody.executeLinkedTasks === "string") {
+        console.warn(
+          `⚠️ Convirtiendo executeLinkedTasks de string a boolean: "${sanitizedBody.executeLinkedTasks}"`
+        );
+        sanitizedBody.executeLinkedTasks =
+          sanitizedBody.executeLinkedTasks === "true" ||
+          (sanitizedBody.executeLinkedTasks !== "" &&
+            sanitizedBody.executeLinkedTasks !== "false" &&
+            sanitizedBody.executeLinkedTasks !== "0");
+      }
+    }
+
+    // ✅ Sanitizar linkedGroup
+    if (
+      sanitizedBody.linkedGroup !== undefined &&
+      typeof sanitizedBody.linkedGroup !== "string"
+    ) {
+      if (
+        sanitizedBody.linkedGroup === null ||
+        sanitizedBody.linkedGroup === undefined
+      ) {
+        sanitizedBody.linkedGroup = null;
+      } else {
+        sanitizedBody.linkedGroup = String(sanitizedBody.linkedGroup);
+      }
+    }
+
+    // ✅ Sanitizar linkedExecutionOrder
+    if (sanitizedBody.linkedExecutionOrder !== undefined) {
+      sanitizedBody.linkedExecutionOrder =
+        parseInt(sanitizedBody.linkedExecutionOrder) || 0;
+    }
+
+    // Extraer todos los campos necesarios del req.body sanitizado
     const {
       name,
       type,
@@ -101,18 +141,30 @@ const upsertTransferTaskController = async (req, res) => {
       clearBeforeInsert,
       fieldMapping,
       nextTasks,
-      targetTable, // ✅ AGREGADO: para transferencias internas
-      // 🔗 CAMPOS DE VINCULACIÓN - Con valores por defecto
+      targetTable, // Para transferencias internas
+      // 🔗 CAMPOS DE VINCULACIÓN - Con validación mejorada
       linkedTasks = [], // ← Valor por defecto
       linkedGroup,
       executeLinkedTasks = false, // ← Valor por defecto
       linkedExecutionOrder = 0, // ← Valor por defecto
-      delayPostUpdate = false, // ← Valor por defecto
+      delayPostUpdate = false, // ← Valor por defecto (deprecated)
       coordinationConfig,
       linkingMetadata,
       _id, // Para manejar ediciones correctamente
-    } = req.body;
+    } = sanitizedBody;
 
+    // ===== VALIDACIÓN ADICIONAL DE TIPOS =====
+    console.log("📝 Datos extraídos y tipos:", {
+      name: typeof name,
+      linkedGroup: typeof linkedGroup,
+      executeLinkedTasks: typeof executeLinkedTasks,
+      linkedExecutionOrder: typeof linkedExecutionOrder,
+      linkedTasksLength: Array.isArray(linkedTasks)
+        ? linkedTasks.length
+        : "no es array",
+    });
+
+    // ===== VALIDACIONES BÁSICAS =====
     if (!name || !query) {
       return res.status(400).json({
         success: false,
@@ -120,66 +172,212 @@ const upsertTransferTaskController = async (req, res) => {
       });
     }
 
-    // Validaciones específicas para tareas vinculadas
-    if (linkedGroup && linkedGroup.trim() !== "") {
-      // Si especifica un grupo, verificar que no tenga también linkedTasks directas
-      if (linkedTasks && linkedTasks.length > 0) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Una tarea no puede tener tanto grupo vinculado como tareas vinculadas directas. Use solo uno de los dos métodos.",
-        });
-      }
+    // Validar que el nombre no contenga caracteres especiales problemáticos
+    if (!/^[a-zA-Z0-9_\-\.]+$/.test(name)) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "El nombre de la tarea solo puede contener letras, números, guiones, puntos y guiones bajos.",
+      });
+    }
+
+    console.log(`[ADD-EDIT] Creando/editando tarea: ${name}`);
+    console.log(`[ADD-EDIT] Datos de vinculación recibidos:`, {
+      linkedGroup: linkedGroup || "null",
+      executeLinkedTasks: executeLinkedTasks,
+      linkedTasks: Array.isArray(linkedTasks)
+        ? linkedTasks.length
+        : "no es array",
+      linkedTasksContent: linkedTasks,
+    });
+
+    // ===== LIMPIAR Y NORMALIZAR DATOS DE VINCULACIÓN =====
+    let cleanLinkedTasks = [];
+    let cleanLinkedGroup = null;
+    let cleanExecuteLinkedTasks = false; // ✅ Variable específica para boolean
+
+    // Limpiar linkedTasks - solo incluir IDs válidos
+    if (Array.isArray(linkedTasks)) {
+      cleanLinkedTasks = linkedTasks.filter(
+        (id) =>
+          id &&
+          typeof id === "string" &&
+          id.trim() !== "" &&
+          mongoose.Types.ObjectId.isValid(id)
+      );
+    }
+
+    // Limpiar linkedGroup - solo si tiene contenido real
+    if (
+      linkedGroup &&
+      typeof linkedGroup === "string" &&
+      linkedGroup.trim() !== ""
+    ) {
+      cleanLinkedGroup = linkedGroup.trim();
+    }
+
+    // ✅ LÓGICA CORREGIDA PARA executeLinkedTasks
+    // Determinar executeLinkedTasks basado en la presencia de vinculaciones
+    cleanExecuteLinkedTasks = !!(
+      cleanLinkedGroup || cleanLinkedTasks.length > 0
+    );
+
+    console.log(`[ADD-EDIT] Datos limpiados:`, {
+      cleanLinkedGroup,
+      cleanLinkedTasks: cleanLinkedTasks.length,
+      cleanExecuteLinkedTasks,
+    });
+
+    // ===== VALIDACIONES ESPECÍFICAS PARA TAREAS VINCULADAS =====
+
+    // REGLA 1: No puede tener ambos métodos al mismo tiempo
+    if (cleanLinkedGroup && cleanLinkedTasks.length > 0) {
+      console.log(`[ADD-EDIT] ERROR: Conflicto de vinculación para ${name}`);
+      return res.status(400).json({
+        success: false,
+        message:
+          "Una tarea no puede tener tanto grupo vinculado como tareas vinculadas directas. Use solo uno de los dos métodos.",
+      });
+    }
+
+    // REGLA 2: Validaciones específicas para grupos vinculados
+    if (cleanLinkedGroup) {
+      console.log(`[ADD-EDIT] Validando grupo vinculado: ${cleanLinkedGroup}`);
 
       // Si es coordinadora (tiene postUpdateQuery), validar que sea la única en el grupo
       if (postUpdateQuery && postUpdateQuery.trim() !== "") {
         const existingCoordinators = await TransferTask.find({
-          linkedGroup: linkedGroup.trim(),
+          linkedGroup: cleanLinkedGroup,
           postUpdateQuery: { $exists: true, $ne: null, $ne: "" },
           _id: { $ne: _id }, // Excluir la tarea actual en caso de edición
+          active: true, // Solo considerar tareas activas
         });
 
         if (existingCoordinators.length > 0) {
+          console.log(
+            `[ADD-EDIT] ERROR: Ya existe coordinadora en grupo ${cleanLinkedGroup}:`,
+            existingCoordinators[0].name
+          );
           return res.status(400).json({
             success: false,
-            message: `Ya existe una tarea coordinadora en el grupo "${linkedGroup}": ${existingCoordinators[0].name}. Solo una tarea por grupo puede tener post-update query.`,
+            message: `Ya existe una tarea coordinadora en el grupo "${cleanLinkedGroup}": ${existingCoordinators[0].name}. Solo una tarea por grupo puede tener post-update query.`,
           });
+        }
+      }
+
+      // Validar que el orden de ejecución no se duplique en el grupo
+      if (linkedExecutionOrder !== undefined && linkedExecutionOrder !== null) {
+        const duplicateOrder = await TransferTask.find({
+          linkedGroup: cleanLinkedGroup,
+          linkedExecutionOrder: linkedExecutionOrder,
+          _id: { $ne: _id }, // Excluir la tarea actual
+          active: true,
+        });
+
+        if (duplicateOrder.length > 0) {
+          console.log(
+            `[ADD-EDIT] ADVERTENCIA: Orden duplicado en grupo ${cleanLinkedGroup}, orden ${linkedExecutionOrder}`
+          );
+          // No fallar, solo advertir en logs
         }
       }
     }
 
-    // Construir el objeto con todos los campos
+    // REGLA 3: Validaciones para tareas vinculadas directas
+    if (cleanLinkedTasks.length > 0) {
+      console.log(
+        `[ADD-EDIT] Validando tareas vinculadas directas: ${cleanLinkedTasks.length} tareas`
+      );
+
+      // Verificar que todas las tareas vinculadas existan y estén activas
+      const linkedTasksExist = await TransferTask.find({
+        _id: { $in: cleanLinkedTasks },
+        active: true,
+      });
+
+      if (linkedTasksExist.length !== cleanLinkedTasks.length) {
+        const foundIds = linkedTasksExist.map((t) => t._id.toString());
+        const missingIds = cleanLinkedTasks.filter(
+          (id) => !foundIds.includes(id)
+        );
+
+        return res.status(400).json({
+          success: false,
+          message: `Algunas tareas vinculadas no existen o están inactivas: ${missingIds.join(
+            ", "
+          )}`,
+        });
+      }
+
+      // Verificar referencias circulares
+      const hasCircularReference = cleanLinkedTasks.includes(_id);
+      if (hasCircularReference) {
+        return res.status(400).json({
+          success: false,
+          message: "Una tarea no puede vincularse a sí misma.",
+        });
+      }
+    }
+
+    // ===== VALIDACIONES DE POST-UPDATE PARA COORDINADORAS =====
+    const isCoordinator = !!(postUpdateQuery && postUpdateQuery.trim() !== "");
+
+    if (isCoordinator && cleanLinkedGroup) {
+      // Si es coordinadora de grupo, validar campos obligatorios
+      if (!postUpdateMapping?.viewKey || !postUpdateMapping?.tableKey) {
+        return res.status(400).json({
+          success: false,
+          message:
+            "Una tarea coordinadora debe tener definidas las claves 'viewKey' y 'tableKey' en postUpdateMapping.",
+        });
+      }
+    }
+
+    // ===== CONSTRUIR OBJETO DE TAREA CON TIPOS CORRECTOS =====
     const taskData = {
       name,
-      type,
-      active,
+      type: type || "both",
+      active: active !== undefined ? Boolean(active) : true, // ✅ Asegurar boolean
       query,
       parameters: parameters || [],
-      transferType,
-      validationRules: validationRules || {},
+      transferType: transferType || "",
+      validationRules: validationRules || {
+        requiredFields: [],
+        existenceCheck: { table: "", key: "" },
+      },
       executionMode: executionMode || "normal",
       postUpdateQuery: postUpdateQuery || null,
-      postUpdateMapping: postUpdateMapping || {},
-      clearBeforeInsert: clearBeforeInsert || false,
-      fieldMapping: fieldMapping || {},
-      nextTasks: nextTasks || [],
-      // ✅ AGREGADO: Tabla destino para transferencias internas
-      targetTable: targetTable || null,
-      // 🔗 CAMPOS DE VINCULACIÓN
-      linkedTasks: linkedTasks || [],
-      linkedGroup: linkedGroup ? linkedGroup.trim() : null,
-      executeLinkedTasks: executeLinkedTasks || false,
-      linkedExecutionOrder: linkedExecutionOrder || 0,
-      delayPostUpdate: delayPostUpdate || false,
-      coordinationConfig: coordinationConfig || {
-        waitForLinkedTasks: false,
-        maxWaitTime: 300000,
-        postUpdateStrategy: "individual",
+      postUpdateMapping: postUpdateMapping || { viewKey: null, tableKey: null },
+      clearBeforeInsert: Boolean(clearBeforeInsert || false), // ✅ Asegurar boolean
+      fieldMapping: fieldMapping || {
+        sourceTable: "",
+        targetTable: "",
+        sourceFields: [],
+        targetFields: [],
+        defaultValues: [],
       },
-      linkingMetadata: linkingMetadata || {
-        isCoordinator: postUpdateQuery && postUpdateQuery.trim() !== "",
-        lastGroupExecution: null,
-        lastGroupExecutionId: null,
+      nextTasks: nextTasks || [],
+      targetTable: targetTable || null, // Para transferencias internas
+
+      // 🔗 CAMPOS DE VINCULACIÓN LIMPIOS CON TIPOS CORRECTOS
+      linkedTasks: cleanLinkedTasks,
+      linkedGroup: cleanLinkedGroup,
+      executeLinkedTasks: cleanExecuteLinkedTasks, // ✅ Boolean limpio
+      linkedExecutionOrder: Number(linkedExecutionOrder || 0), // ✅ Asegurar Number
+      delayPostUpdate: false, // Deprecated - siempre false
+
+      // 🔗 CONFIGURACIÓN DE COORDINACIÓN
+      coordinationConfig: coordinationConfig || {
+        waitForLinkedTasks: cleanLinkedGroup ? true : false,
+        maxWaitTime: 300000, // 5 minutos
+        postUpdateStrategy: cleanLinkedGroup ? "coordinated" : "individual",
+      },
+
+      // 🔗 METADATOS DE VINCULACIÓN
+      linkingMetadata: {
+        isCoordinator: Boolean(isCoordinator), // ✅ Asegurar boolean
+        lastGroupExecution: linkingMetadata?.lastGroupExecution || null,
+        lastGroupExecutionId: linkingMetadata?.lastGroupExecutionId || null,
       },
     };
 
@@ -188,109 +386,130 @@ const upsertTransferTaskController = async (req, res) => {
       taskData._id = _id;
     }
 
-    // ✅ VALIDACIONES ESPECÍFICAS POR TIPO DE TRANSFERENCIA
-    if (transferType === "down") {
-      // Validar que tenga fieldMapping completo
-      if (
-        !fieldMapping ||
-        !fieldMapping.sourceTable ||
-        !fieldMapping.targetTable
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Las transferencias DOWN requieren configuración completa de mapeo de campos (tabla origen y destino).",
-        });
-      }
+    console.log(`[ADD-EDIT] Datos finales para ${name}:`, {
+      linkedGroup: taskData.linkedGroup,
+      linkedTasks: taskData.linkedTasks.length,
+      isCoordinator: taskData.linkingMetadata.isCoordinator,
+      executeLinkedTasks: taskData.executeLinkedTasks,
+      executeLinkedTasksType: typeof taskData.executeLinkedTasks, // ✅ Debug
+    });
 
-      // IMPORTANTE: Configurar validationRules para transferencias DOWN
-      if (fieldMapping.targetTable) {
-        // Si no hay tabla de validación especificada, usar la tabla destino
-        if (
-          !taskData.validationRules.existenceCheck ||
-          !taskData.validationRules.existenceCheck.table
-        ) {
-          taskData.validationRules.existenceCheck =
-            taskData.validationRules.existenceCheck || {};
-          taskData.validationRules.existenceCheck.table =
-            fieldMapping.targetTable;
-        }
-
-        // Si no hay clave especificada y hay campos destino, usar el primero
-        if (
-          !taskData.validationRules.existenceCheck.key &&
-          fieldMapping.targetFields &&
-          fieldMapping.targetFields.length > 0
-        ) {
-          taskData.validationRules.existenceCheck.key =
-            fieldMapping.targetFields[0];
-          taskData.validationRules.requiredFields = taskData.validationRules
-            .requiredFields || [fieldMapping.targetFields[0]];
-        }
-      }
-    } else if (transferType === "internal") {
-      // Validar que tenga tabla destino
-      if (!targetTable) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Las transferencias internas requieren especificar la tabla destino.",
-        });
-      }
-
-      // Verificar que haya al menos una clave primaria o campo requerido
-      if (
-        (!taskData.validationRules.existenceCheck ||
-          !taskData.validationRules.existenceCheck.key) &&
-        (!taskData.validationRules.requiredFields ||
-          taskData.validationRules.requiredFields.length === 0)
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Debe especificar al menos una clave primaria o un campo obligatorio para identificar registros en transferencias internas.",
-        });
-      }
-    } else {
-      // Para otros tipos (up, general), verificar validationRules básicas
-      if (
-        (!taskData.validationRules.existenceCheck ||
-          !taskData.validationRules.existenceCheck.key) &&
-        (!taskData.validationRules.requiredFields ||
-          taskData.validationRules.requiredFields.length === 0)
-      ) {
-        return res.status(400).json({
-          success: false,
-          message:
-            "Debe especificar al menos una clave primaria o un campo obligatorio para identificar registros.",
-        });
-      }
+    // ✅ VALIDACIÓN FINAL DE TIPOS ANTES DE GUARDAR
+    if (typeof taskData.executeLinkedTasks !== "boolean") {
+      console.error(
+        `❌ ERROR: executeLinkedTasks no es boolean: ${typeof taskData.executeLinkedTasks}`,
+        taskData.executeLinkedTasks
+      );
+      return res.status(400).json({
+        success: false,
+        message: "Error interno: executeLinkedTasks debe ser un valor booleano",
+      });
     }
 
-    // Llamar al servicio
-    const result = await upsertTransferTaskService(taskData);
+    // ===== LLAMAR AL SERVICIO =====
+    const result = await transferService.upsertTransferTask(taskData);
 
     if (result.success) {
-      // Si la tarea tiene vinculaciones, actualizar automáticamente executeLinkedTasks
-      if (
-        taskData.linkedGroup ||
-        (taskData.linkedTasks && taskData.linkedTasks.length > 0)
-      ) {
+      console.log(
+        `[ADD-EDIT] Tarea ${name} guardada exitosamente con ID: ${result.task._id}`
+      );
+
+      // ===== POST-PROCESAMIENTO PARA TAREAS VINCULADAS =====
+
+      // Si es una nueva tarea con vinculaciones, actualizar automáticamente executeLinkedTasks
+      if (taskData.linkedGroup || taskData.linkedTasks.length > 0) {
         await TransferTask.findByIdAndUpdate(result.task._id, {
           executeLinkedTasks: true,
         });
+        console.log(
+          `[ADD-EDIT] executeLinkedTasks habilitado automáticamente para ${name}`
+        );
       }
 
-      return res.json({ success: true, task: result.task });
+      // Si es una tarea vinculada directa, actualizar las tareas vinculadas para que la incluyan
+      if (cleanLinkedTasks.length > 0) {
+        try {
+          await TransferTask.updateMany(
+            { _id: { $in: cleanLinkedTasks } },
+            { $addToSet: { linkedTasks: result.task._id } }
+          );
+          console.log(
+            `[ADD-EDIT] Vinculación bidireccional establecida para ${name}`
+          );
+        } catch (bidirectionalError) {
+          console.warn(
+            `[ADD-EDIT] No se pudo establecer vinculación bidireccional: ${bidirectionalError.message}`
+          );
+          // No fallar la operación por esto
+        }
+      }
+
+      return res.json({
+        success: true,
+        task: result.task,
+        message: `Tarea ${_id ? "actualizada" : "creada"} correctamente`,
+      });
     } else {
-      return res.status(500).json({ success: false, message: result.message });
+      console.log(
+        `[ADD-EDIT] Error al guardar tarea ${name}: ${result.message}`
+      );
+      return res.status(500).json({
+        success: false,
+        message: result.message || "Error al guardar la tarea",
+      });
     }
   } catch (error) {
-    logger.error("Error en upsertTransferTaskController:", error);
+    console.error("Error en upsertTransferTaskController:", error);
+
+    // ✅ MANEJO ESPECÍFICO DEL ERROR DE CAST
+    if (error.name === "CastError" && error.path === "executeLinkedTasks") {
+      console.error(
+        `❌ ERROR DE CAST: executeLinkedTasks recibió valor inválido:`,
+        error.value
+      );
+      return res.status(400).json({
+        success: false,
+        message:
+          "Error de validación: el campo executeLinkedTasks debe ser verdadero o falso",
+        debug:
+          process.env.NODE_ENV === "development"
+            ? {
+                receivedValue: error.value,
+                receivedType: typeof error.value,
+              }
+            : undefined,
+      });
+    }
+
+    // Errores específicos de MongoDB
+    if (error.code === 11000) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Ya existe una tarea con ese nombre. Los nombres deben ser únicos.",
+      });
+    }
+
+    // Errores de validación de Mongoose
+    if (error.name === "ValidationError") {
+      const validationErrors = Object.values(error.errors).map(
+        (e) => e.message
+      );
+      return res.status(400).json({
+        success: false,
+        message: "Error de validación",
+        errors: validationErrors,
+      });
+    }
+
+    // Error genérico
     return res.status(500).json({
       success: false,
-      message: "Error al guardar la tarea",
-      error: error.message,
+      message: "Error interno del servidor",
+      error:
+        process.env.NODE_ENV === "development"
+          ? error.message
+          : "Error desconocido",
     });
   }
 };
