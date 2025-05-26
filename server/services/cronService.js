@@ -33,7 +33,6 @@ const startCronJob = (hour) => {
   if (task) {
     logger.info("🛑 Deteniendo trabajo cron existente...");
     task.stop();
-    task.destroy(); // Asegurar limpieza completa
     task = null;
   }
 
@@ -403,7 +402,7 @@ const stopCronJob = () => {
   if (task) {
     logger.info("🛑 Deteniendo planificador...");
     task.stop();
-    task.destroy();
+    // task.destroy();
     task = null;
     logger.info("✅ Planificador detenido");
     return true;
