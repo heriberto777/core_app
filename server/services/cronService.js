@@ -82,7 +82,7 @@ const startCronJob = (hour) => {
       },
       {
         scheduled: true,
-        timezone: "America/Bogota",
+        timezone: "America/Santo_Domingo",
       }
     );
 
