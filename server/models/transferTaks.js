@@ -253,7 +253,7 @@ const transferTaskSchema = new mongoose.Schema(
 transferTaskSchema.index({ linkedGroup: 1, active: 1 });
 transferTaskSchema.index({ linkedTasks: 1 });
 transferTaskSchema.index({ status: 1, type: 1 });
-transferTaskSchema.index({ name: 1, active: 1 });
+// transferTaskSchema.index({ name: 1, active: 1 });
 
 // Métodos de instancia
 transferTaskSchema.methods.hasLinkedTasks = function () {

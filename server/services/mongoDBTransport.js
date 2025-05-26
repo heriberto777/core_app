@@ -9,12 +9,15 @@ class MongoDBTransport extends Transport {
     this.level = opts.level || "info";
     this.silent = opts.silent || false;
 
+    // NUEVA BANDERA para shutdown
+    this.isShuttingDown = false;
+
     // Estado del transporte
     this.isReady = false;
     this.errorCount = 0;
     this.maxErrors = 10;
     this.lastError = 0;
-    this.cooldownTime = 60000; // 1 minuto de cooldown
+    this.cooldownTime = 60000;
     this.reconnectAttempts = 0;
     this.maxReconnectAttempts = 5;
 
@@ -24,8 +27,6 @@ class MongoDBTransport extends Transport {
     this.isProcessingBuffer = false;
 
     console.log("🔗 MongoDB Transport inicializado");
-
-    // Verificar conexión con delay mayor
     setTimeout(() => this.initializeConnection(), 5000);
 
     // Limpiar buffer periódicamente
@@ -111,7 +112,15 @@ class MongoDBTransport extends Transport {
   }
 
   log(info, callback) {
-    // Siempre llamar callback inmediatamente y de forma segura
+    // MEJORA: Verificar shutdown temprano
+    if (this.isShuttingDown) {
+      if (callback && typeof callback === "function") {
+        setImmediate(callback);
+      }
+      return;
+    }
+
+    // Siempre llamar callback inmediatamente
     if (callback && typeof callback === "function") {
       setImmediate(() => {
         try {
@@ -127,31 +136,34 @@ class MongoDBTransport extends Transport {
       return;
     }
 
-    // Si MongoDB no está conectado, usar buffer
+    // Si MongoDB no está conectado, usar buffer (solo si no estamos cerrando)
     if (!this.isReady || !this._isMongoConnected()) {
-      this.addToBuffer(info);
+      if (!this.isShuttingDown) {
+        this.addToBuffer(info);
+      }
       return;
     }
 
-    // Procesar log de forma asíncrona sin bloquear
+    // Procesar log de forma asíncrona
     setImmediate(() => {
       this.saveLogSafe(info).catch((error) => {
-        this.handleError(error);
-        // Guardar en buffer como respaldo
-        this.addToBuffer(info);
+        if (!this.isShuttingDown) {
+          this.handleError(error);
+          this.addToBuffer(info);
+        }
       });
     });
   }
 
   async saveLogSafe(info) {
-    if (!this._isMongoConnected()) {
-      throw new Error("MongoDB desconectado");
+    // MEJORA: No intentar guardar si estamos cerrando
+    if (this.isShuttingDown || !this._isMongoConnected()) {
+      throw new Error("MongoDB desconectado o cerrando");
     }
 
     try {
       const { level, message, timestamp, source, stack, ...rest } = info;
 
-      // Preparar datos del log de forma más robusta
       const logOptions = {
         source: source || rest.source || "app",
         stack: stack || rest.stack,
@@ -167,41 +179,41 @@ class MongoDBTransport extends Transport {
         }
       });
 
-      // ✅ USAR EL MÉTODO createLog DE TU MODELO
-      const log = await Log.createLog(
-        level || "info",
-        message || "",
-        logOptions
-      );
+      // USAR EL MÉTODO createLog CON TIMEOUT
+      const Log = require("../models/loggerModel");
+
+      // TIMEOUT más corto durante shutdown
+      const timeoutMs = this.isShuttingDown ? 1000 : 5000;
+
+      const log = await Promise.race([
+        Log.createLog(level || "info", message || "", logOptions),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Timeout guardando log")),
+            timeoutMs
+          )
+        ),
+      ]);
 
       if (log) {
-        // Éxito - resetear contador de errores gradualmente
         this.errorCount = Math.max(0, this.errorCount - 1);
         return log;
       } else {
-        // Log.createLog devolvió null (ya manejó el error internamente)
         throw new Error("No se pudo crear el log - modelo devolvió null");
       }
     } catch (error) {
-      // Clasificar y relanzar errores
+      // Clasificar errores
       if (this.isConnectionError(error)) {
         throw new Error(`Conexión MongoDB: ${error.message}`);
       } else if (this.isSessionError(error)) {
         throw new Error(`Sesión MongoDB: ${error.message}`);
       } else if (error.name === "ValidationError") {
-        // Error de validación de Mongoose - ser más específico
         const validationErrors =
           Object.values(error.errors || {})
             .map((e) => e.message)
             .join(", ") || error.message;
         throw new Error(`Validación: ${validationErrors}`);
-      } else if (
-        error.name === "MongoError" ||
-        error.name === "MongoServerError"
-      ) {
-        throw new Error(`MongoDB: ${error.message}`);
       } else {
-        // Error genérico
         throw new Error(`Log creation: ${error.message}`);
       }
     }
@@ -284,29 +296,34 @@ class MongoDBTransport extends Transport {
   }
 
   handleError(error) {
+    // MEJORA: No manejar errores durante shutdown
+    if (this.isShuttingDown) {
+      return;
+    }
+
     this.errorCount++;
     this.lastError = Date.now();
 
-    // Emitir error de forma segura
+    // Solo emitir error si no estamos cerrando
     try {
       this.emit("error", error);
     } catch (emitError) {
-      // Si no se puede emitir, al menos loguear en consola como último recurso
       console.warn("MongoDB Transport Error:", error.message);
     }
 
-    // Si hay muchos errores consecutivos, entrar en modo cooldown
-    if (this.errorCount >= this.maxErrors) {
+    // Cooldown solo si no estamos cerrando
+    if (this.errorCount >= this.maxErrors && !this.isShuttingDown) {
       this.isReady = false;
       console.warn(
         `⚠️ MongoDB Transport: demasiados errores (${this.errorCount}), entrando en cooldown...`
       );
 
-      // Programar reconexión
       setTimeout(() => {
-        this.errorCount = Math.floor(this.maxErrors / 2);
-        this.reconnectAttempts = 0;
-        this.initializeConnection();
+        if (!this.isShuttingDown) {
+          this.errorCount = Math.floor(this.maxErrors / 2);
+          this.reconnectAttempts = 0;
+          this.initializeConnection();
+        }
       }, this.cooldownTime);
     }
   }
@@ -403,26 +420,52 @@ class MongoDBTransport extends Transport {
   close() {
     console.log("🔄 Cerrando MongoDB Transport...");
 
+    // MARCAR COMO CERRANDO
+    this.isShuttingDown = true;
+    this.isReady = false;
+
+    // Limpiar interval
     if (this.bufferCleanupInterval) {
       clearInterval(this.bufferCleanupInterval);
       this.bufferCleanupInterval = null;
     }
 
-    // Procesar logs pendientes una última vez
-    if (this.logBuffer.length > 0) {
+    // PROCESAR LOGS PENDIENTES RÁPIDAMENTE
+    if (this.logBuffer.length > 0 && this._isMongoConnected()) {
       console.log(
-        `📝 Procesando ${this.logBuffer.length} logs pendientes antes de cerrar...`
+        `📝 Intentando procesar ${this.logBuffer.length} logs pendientes...`
       );
-      // Dar tiempo para procesar algunos logs pendientes
-      setTimeout(() => {
+
+      // Procesar máximo 10 logs pendientes con timeout corto
+      const quickProcess = async () => {
+        const logsToProcess = this.logBuffer.splice(0, 10);
+        for (const logInfo of logsToProcess) {
+          try {
+            await Promise.race([
+              this.saveLogSafe(logInfo),
+              new Promise((_, reject) =>
+                setTimeout(() => reject(new Error("Timeout")), 500)
+              ),
+            ]);
+          } catch (error) {
+            // Ignorar errores durante cierre rápido
+            break;
+          }
+        }
+      };
+
+      // Ejecutar con timeout global
+      Promise.race([
+        quickProcess(),
+        new Promise((resolve) => setTimeout(resolve, 2000)),
+      ]).finally(() => {
         this.logBuffer = [];
-      }, 1000);
+        console.log("✅ MongoDB Transport cerrado");
+      });
     } else {
       this.logBuffer = [];
+      console.log("✅ MongoDB Transport cerrado");
     }
-
-    this.isReady = false;
-    console.log("✅ MongoDB Transport cerrado");
   }
 }
 
