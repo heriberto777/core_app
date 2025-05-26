@@ -14,6 +14,7 @@ const RetryService = require("./RetryService");
 const MemoryManager = require("./MemoryManager");
 const Telemetry = require("./Telemetry");
 const TaskExecution = require("../models/taskExecutionModel");
+const LinkedTasksService = require("./LinkedTasksService");
 
 /**
  * Clase que maneja la transferencia de datos entre servidores
@@ -380,9 +381,8 @@ class TransferService {
    * Crea o actualiza una tarea de transferencia en MongoDB (upsert).
    */
   async upsertTransferTask(taskData) {
-
     console.log("taskData", taskData);
-    
+
     try {
       let task = await TransferTask.findOne({ name: taskData.name });
       if (task) {
