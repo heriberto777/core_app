@@ -93,6 +93,10 @@ app.use(
   require("./routes/consecutiveRoutes")
 );
 app.use(`/api/${API_VERSION}/transfer`, require("./routes/progressRoutes"));
+app.use(
+  `/api/${API_VERSION}/linked-groups`,
+  require("./routes/linkedGroupsRoutes")
+);
 
 // Ruta para health check mejorada
 app.get("/health", async (req, res) => {

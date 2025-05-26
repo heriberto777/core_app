@@ -158,7 +158,7 @@ router.post(
  */
 // POST /api/v1/tasks/addEdit
 router.post(
-  "/addEdit",
+  "/accion/addEdit",
   (req, res, next) => {
     console.log(
       `[ADD-EDIT] Creando/editando tarea:`,
@@ -176,7 +176,7 @@ router.post(
  */
 // GET /api/v1/tasks/
 router.get(
-  "/",
+  "/accion",
   (req, res, next) => {
     console.log(`[GET-ALL] Obteniendo todas las tareas`);
     next();
@@ -190,7 +190,7 @@ router.get(
  */
 // GET /api/v1/tasks/:name
 router.get(
-  "/:name",
+  "/accion/:name",
   (req, res, next) => {
     console.log(
       `[GET-BY-NAME] Obteniendo tarea por nombre: ${req.params.name}`
@@ -202,7 +202,7 @@ router.get(
 
 // DELETE /api/v1/tasks/:name
 router.delete(
-  "/:name",
+  "/accion/:name",
   (req, res, next) => {
     console.log(`[DELETE] Eliminando tarea: ${req.params.name}`);
     next();
