@@ -75,11 +75,16 @@ logSchema.statics.createLog = async function (level, message, options = {}) {
   try {
     const { source, stack, metadata, user, ip } = options;
 
-    // Validar y sanitizar datos
-    const sanitizedLevel = ["error", "warn", "info", "debug"].includes(level)
-      ? level
-      : "info";
-    const sanitizedMessage = String(message || "").substring(0, 1000); // Limitar longitud
+    // Validar nivel
+    const validLevels = ["error", "warn", "info", "debug"];
+    const sanitizedLevel = validLevels.includes(level) ? level : "info";
+
+    // Validar y sanitizar mensaje
+    if (!message || typeof message !== "string") {
+      message = String(message || "Empty log message");
+    }
+    const sanitizedMessage = message.substring(0, 1000);
+
     const sanitizedSource = String(source || "app").substring(0, 100);
 
     const logData = {
@@ -87,20 +92,47 @@ logSchema.statics.createLog = async function (level, message, options = {}) {
       message: sanitizedMessage,
       timestamp: new Date(),
       source: sanitizedSource,
-      stack: stack ? String(stack).substring(0, 2000) : undefined,
-      metadata: this.sanitizeMetadata(metadata),
-      user: user ? String(user).substring(0, 100) : undefined,
-      ip: ip ? String(ip).substring(0, 45) : undefined, // IPv6 máximo
     };
+
+    // Agregar campos opcionales solo si tienen valor
+    if (stack && typeof stack === "string") {
+      logData.stack = stack.substring(0, 2000);
+    }
+
+    if (metadata) {
+      logData.metadata = this.sanitizeMetadata(metadata);
+    }
+
+    if (user && typeof user === "string") {
+      logData.user = user.substring(0, 100);
+    }
+
+    if (ip && typeof ip === "string") {
+      logData.ip = ip.substring(0, 45);
+    }
 
     const log = new this(logData);
 
-    // ✅ Guardar sin sesión para evitar errores de sesión expirada
-    return await log.save({ session: null });
+    // ✅ Usar save con opciones específicas para evitar problemas de sesión
+    return await log.save({
+      session: null,
+      validateBeforeSave: true,
+      // Usar writeConcern menos estricto para mejor rendimiento
+      writeConcern: { w: 1, j: false },
+    });
   } catch (error) {
-    // No usar console.error aquí para evitar loops infinitos
-    // Solo emitir un evento si es necesario
-    process.emit("logError", error);
+    // Solo emitir evento si no es un error de validación simple
+    if (error.name !== "ValidationError") {
+      process.emit("logError", {
+        originalError: error,
+        context: "createLog",
+        level,
+        message:
+          typeof message === "string"
+            ? message.substring(0, 100)
+            : "Invalid message",
+      });
+    }
     return null;
   }
 };
