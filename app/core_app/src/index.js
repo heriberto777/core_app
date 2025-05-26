@@ -1,4 +1,5 @@
 export * from './App';
+export * from './api/EmailConfigApi';
 export { default as TransferSummaryApi } from './api/TransferSummaryApi';
 export * from './api/authApi';
 export * from './api/emailRecipientApi';
@@ -20,6 +21,7 @@ export { default as Spinner } from './components/organismos/Spinner';
 export * from './components/organismos/UIComponents';
 export * from './components/templates/ConsecutiveDashboard';
 export * from './components/templates/ConsecutiveManager';
+export * from './components/templates/ControlEmailConfig';
 export * from './components/templates/ControlPlanilla';
 export * from './components/templates/CustomerEditor';
 export * from './components/templates/Dashboard';

@@ -61,12 +61,12 @@ export const LinkArray = [
     to: "/consecutives",
     roles: ["admin"],
   },
-  // {
-  //   label: "Usuarios",
-  //   icon: <v.iconoUser />,
-  //   to: "/usuarios",
-  //   roles: ["admin"],
-  // },
+  {
+    label: "Configuracion",
+    icon: <v.iconoUser />,
+    to: "/email-config",
+    roles: ["admin"],
+  },
 ];
 
 export const SecondarylinksArray = [
