@@ -24,35 +24,66 @@ class TaskTracker {
 
       // CORRECCIÓN: Verificar si taskId es un ObjectId válido de MongoDB
       const mongoose = require("mongoose");
-      const isValidObjectId =
-        mongoose.Types.ObjectId.isValid(taskId) &&
-        taskId.length === 24 &&
-        /^[0-9a-fA-F]{24}$/.test(taskId);
+      let isValidObjectId = false;
+
+      // Verificar que sea string y tenga el formato correcto
+      if (typeof taskId === "string") {
+        try {
+          // Verificar si es un ObjectId válido usando mongoose
+          isValidObjectId =
+            mongoose.Types.ObjectId.isValid(taskId) &&
+            taskId.length === 24 &&
+            /^[0-9a-fA-F]{24}$/i.test(taskId);
+        } catch (validationError) {
+          logger.debug(
+            `Error en validación de ObjectId para ${taskId}: ${validationError.message}`
+          );
+          isValidObjectId = false;
+        }
+      }
+
+      logger.debug(
+        `TaskId: ${taskId}, tipo: ${typeof taskId}, longitud: ${
+          taskId?.length
+        }, esValidObjectId: ${isValidObjectId}`
+      );
 
       if (isValidObjectId) {
-        // Solo actualizar la base de datos si es un ObjectId válido de MongoDB
-        if (status === "completed") {
-          await TransferTask.findByIdAndUpdate(taskId, {
-            status: "completed",
-            progress: 100,
-          });
-          logger.debug(
-            `Estado actualizado en BD para tarea ${taskId}: completed`
+        // Es un ObjectId válido de MongoDB, actualizar la base de datos
+        logger.debug(
+          `Actualizando tarea en BD: ${taskId} con estado: ${status}`
+        );
+
+        try {
+          if (status === "completed") {
+            await TransferTask.findByIdAndUpdate(taskId, {
+              status: "completed",
+              progress: 100,
+            });
+            logger.debug(
+              `Estado actualizado en BD para tarea ${taskId}: completed`
+            );
+          } else if (status === "cancelled") {
+            await TransferTask.findByIdAndUpdate(taskId, {
+              status: "cancelled",
+              progress: -1,
+            });
+            logger.debug(
+              `Estado actualizado en BD para tarea ${taskId}: cancelled`
+            );
+          } else if (status === "failed") {
+            await TransferTask.findByIdAndUpdate(taskId, {
+              status: "error",
+              progress: -1,
+            });
+            logger.debug(
+              `Estado actualizado en BD para tarea ${taskId}: failed`
+            );
+          }
+        } catch (updateError) {
+          logger.error(
+            `Error al actualizar tarea ${taskId} en BD: ${updateError.message}`
           );
-        } else if (status === "cancelled") {
-          await TransferTask.findByIdAndUpdate(taskId, {
-            status: "cancelled",
-            progress: -1,
-          });
-          logger.debug(
-            `Estado actualizado en BD para tarea ${taskId}: cancelled`
-          );
-        } else if (status === "failed") {
-          await TransferTask.findByIdAndUpdate(taskId, {
-            status: "error",
-            progress: -1,
-          });
-          logger.debug(`Estado actualizado en BD para tarea ${taskId}: failed`);
         }
       } else {
         // Para IDs compuestos como "runTask_...", solo hacer logging
@@ -60,51 +91,61 @@ class TaskTracker {
           `Tarea con ID compuesto ${taskId} completada con estado: ${status} (no se actualiza BD)`
         );
 
-        // Si el ID compuesto contiene un ObjectId real, intentar extraerlo
-        const extractedId = this.extractObjectIdFromCompositeId(taskId);
-        if (extractedId) {
-          logger.info(
-            `Intentando actualizar tarea real ${extractedId} extraída de ${taskId}`
-          );
-          try {
-            if (status === "completed") {
-              await TransferTask.findByIdAndUpdate(extractedId, {
-                status: "completed",
-                progress: 100,
-              });
-            } else if (status === "cancelled") {
-              await TransferTask.findByIdAndUpdate(extractedId, {
-                status: "cancelled",
-                progress: -1,
-              });
-            } else if (status === "failed") {
-              await TransferTask.findByIdAndUpdate(extractedId, {
-                status: "error",
-                progress: -1,
-              });
-            }
-          } catch (extractError) {
-            logger.warn(
-              `No se pudo actualizar la tarea extraída ${extractedId}: ${extractError.message}`
+        // Si el ID compuesto contiene información de tarea, intentar extraerla
+        if (typeof taskId === "string" && taskId.includes("_")) {
+          const extractedInfo = this.extractTaskInfoFromCompositeId(taskId);
+          if (extractedInfo) {
+            logger.info(
+              `Información extraída de ${taskId}: ${JSON.stringify(
+                extractedInfo
+              )}`
             );
+
+            try {
+              const realTaskId = await this.updateTaskByName(
+                extractedInfo.taskName,
+                status
+              );
+              if (realTaskId) {
+                logger.info(
+                  `Tarea real ${realTaskId} actualizada basada en nombre ${extractedInfo.taskName}`
+                );
+              }
+            } catch (extractError) {
+              logger.warn(
+                `No se pudo actualizar la tarea por nombre: ${extractError.message}`
+              );
+            }
           }
         }
       }
 
       // Enviar progreso final vía SSE si está disponible (funciona con cualquier tipo de ID)
       if (typeof sendProgress === "function") {
-        if (status === "completed") {
-          sendProgress(taskId, 100, "completed");
-        } else if (status === "cancelled") {
-          sendProgress(taskId, -1, "cancelled");
-        } else if (status === "failed") {
-          sendProgress(taskId, -1, "error");
+        try {
+          if (status === "completed") {
+            sendProgress(taskId, 100, "completed");
+          } else if (status === "cancelled") {
+            sendProgress(taskId, -1, "cancelled");
+          } else if (status === "failed") {
+            sendProgress(taskId, -1, "error");
+          }
+        } catch (progressError) {
+          logger.debug(
+            `Error enviando progreso para ${taskId}: ${progressError.message}`
+          );
         }
       }
 
       // Confirmar la cancelación en el servicio unificado si fue cancelada
       if (status === "cancelled") {
-        this.cancellationService.confirmCancellation(taskId, { status });
+        try {
+          this.cancellationService.confirmCancellation(taskId, { status });
+        } catch (confirmError) {
+          logger.debug(
+            `Error confirmando cancelación para ${taskId}: ${confirmError.message}`
+          );
+        }
       }
 
       logger.info(`Tarea ${taskId} completada con estado: ${status}`);
@@ -116,43 +157,59 @@ class TaskTracker {
   }
 
   /**
-   * Intenta extraer un ObjectId válido de un ID compuesto
+   * Intenta extraer información de la tarea de un ID compuesto
    * @param {string} compositeId - ID compuesto como "runTask_IMPLT_Carga_Pedidos_1748318836078"
-   * @returns {string|null} - ObjectId extraído o null si no se encuentra
+   * @returns {Object|null} - Información extraída o null si no se encuentra
    */
-  extractObjectIdFromCompositeId(compositeId) {
+  extractTaskInfoFromCompositeId(compositeId) {
     try {
-      const mongoose = require("mongoose");
-
-      // Buscar patrones que podrían ser ObjectIds en el ID compuesto
-      const parts = compositeId.split("_");
-
-      for (const part of parts) {
-        if (
-          mongoose.Types.ObjectId.isValid(part) &&
-          part.length === 24 &&
-          /^[0-9a-fA-F]{24}$/.test(part)
-        ) {
-          return part;
-        }
-      }
-
-      // Si no encontramos un ObjectId en las partes, intentar buscar la tarea por nombre
-      // Extraer el nombre de la tarea del ID compuesto
-      const taskNameMatch = compositeId.match(/runTask_(.+)_\d+$/);
-      if (taskNameMatch) {
-        const taskName = taskNameMatch[1];
-        logger.debug(`Intentando buscar tarea por nombre: ${taskName}`);
-
-        // Esta búsqueda debe ser síncrona para el contexto actual
-        // En su lugar, devolvemos null y dejamos que el llamador maneje la búsqueda
+      if (typeof compositeId !== "string") {
+        logger.debug(`ID no es string: ${typeof compositeId}`);
         return null;
       }
 
+      // Buscar patrones de nombres de tarea en el ID compuesto
+      const patterns = [
+        /^runTask_(.+)_\d+$/, // runTask_TASKNAME_timestamp
+        /^batch_insert_(.+)_\d+$/, // batch_insert_TASKID_timestamp
+        /^transfer_(.+)_\d+$/, // transfer_TASKNAME_timestamp
+        /^(.+)_\d{13,}$/, // TASKNAME_timestamp (13+ dígitos para timestamp)
+      ];
+
+      for (const pattern of patterns) {
+        const match = compositeId.match(pattern);
+        if (match) {
+          const extractedName = match[1];
+
+          // Verificar si el nombre extraído parece ser un ObjectId
+          const mongoose = require("mongoose");
+          if (
+            mongoose.Types.ObjectId.isValid(extractedName) &&
+            extractedName.length === 24 &&
+            /^[0-9a-fA-F]{24}$/i.test(extractedName)
+          ) {
+            return {
+              type: "objectId",
+              taskId: extractedName,
+              taskName: null,
+            };
+          } else {
+            return {
+              type: "taskName",
+              taskId: null,
+              taskName: extractedName,
+            };
+          }
+        }
+      }
+
+      logger.debug(
+        `No se pudo extraer información del ID compuesto: ${compositeId}`
+      );
       return null;
     } catch (error) {
       logger.debug(
-        `Error al extraer ObjectId de ${compositeId}: ${error.message}`
+        `Error al extraer información de ${compositeId}: ${error.message}`
       );
       return null;
     }
@@ -165,6 +222,11 @@ class TaskTracker {
    */
   async updateTaskByName(taskName, status) {
     try {
+      if (!taskName || typeof taskName !== "string") {
+        logger.debug(`Nombre de tarea inválido: ${taskName}`);
+        return null;
+      }
+
       const updateData = {};
 
       if (status === "completed") {
@@ -190,7 +252,7 @@ class TaskTracker {
         );
         return result._id.toString();
       } else {
-        logger.warn(`No se encontró tarea con nombre: ${taskName}`);
+        logger.debug(`No se encontró tarea con nombre: ${taskName}`);
         return null;
       }
     } catch (error) {
@@ -213,27 +275,39 @@ class TaskTracker {
       return await this.completeTask(taskId, status);
     } catch (error) {
       if (error.name === "CastError" && error.path === "_id") {
-        // Si es un error de casting de ObjectId, intentar extraer información útil
+        // Si es un error de casting de ObjectId, intentar métodos alternativos
         logger.info(
           `Error de casting para ${taskId}, intentando métodos alternativos`
         );
 
-        // Intentar extraer el nombre de la tarea del ID compuesto
-        const taskNameMatch = taskId.match(/runTask_(.+)_\d+$/);
-        if (taskNameMatch) {
-          const taskName = taskNameMatch[1];
-          const realTaskId = await this.updateTaskByName(taskName, status);
-
-          if (realTaskId) {
-            // Enviar progreso con el ID real
-            if (typeof sendProgress === "function") {
-              if (status === "completed") {
-                sendProgress(realTaskId, 100, "completed");
-              } else if (status === "cancelled") {
-                sendProgress(realTaskId, -1, "cancelled");
-              } else if (status === "failed") {
-                sendProgress(realTaskId, -1, "error");
-              }
+        // Intentar extraer información del ID
+        const extractedInfo = this.extractTaskInfoFromCompositeId(taskId);
+        if (extractedInfo) {
+          if (extractedInfo.type === "objectId" && extractedInfo.taskId) {
+            // Intentar actualizar con el ObjectId extraído
+            try {
+              await this.completeTask(extractedInfo.taskId, status);
+              logger.info(
+                `Tarea actualizada usando ObjectId extraído: ${extractedInfo.taskId}`
+              );
+            } catch (extractedError) {
+              logger.warn(
+                `Error actualizando con ObjectId extraído: ${extractedError.message}`
+              );
+            }
+          } else if (
+            extractedInfo.type === "taskName" &&
+            extractedInfo.taskName
+          ) {
+            // Intentar actualizar por nombre
+            const realTaskId = await this.updateTaskByName(
+              extractedInfo.taskName,
+              status
+            );
+            if (realTaskId) {
+              logger.info(
+                `Tarea actualizada por nombre: ${extractedInfo.taskName} -> ${realTaskId}`
+              );
             }
           }
         }
