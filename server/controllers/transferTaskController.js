@@ -1009,7 +1009,7 @@ async function runTask(req, res) {
         );
 
         // Completar la tarea de cancelación
-        TaskTracker.completeTask(cancelTaskId, "completed");
+        TaskTracker.safeCompleteTask(cancelTaskId, "completed");
 
         return res.json({
           success: true,
@@ -1022,7 +1022,7 @@ async function runTask(req, res) {
           logger.info(`Tarea ${taskName} cancelada por el usuario`);
 
           // Completar la tarea de cancelación
-          TaskTracker.completeTask(cancelTaskId, "cancelled");
+          TaskTracker.safeCompleteTask(cancelTaskId, "cancelled");
 
           return res.status(499).json({
             // 499 es "Client Closed Request"
@@ -1034,7 +1034,7 @@ async function runTask(req, res) {
         logger.error(`Error al ejecutar tarea:`, error);
 
         // Completar la tarea como fallida
-        TaskTracker.completeTask(cancelTaskId, "failed");
+        TaskTracker.safeCompleteTask(cancelTaskId, "failed");
 
         return res.status(500).json({
           success: false,
