@@ -247,15 +247,6 @@ export function TransferHistoryLogs() {
 
   return (
     <Container>
-      <header className="header">
-        <Header
-          stateConfig={{
-            openstate: openstate,
-            setOpenState: () => setOpenState(!openstate),
-          }}
-        />
-      </header>
-
       <section className="area1">
         <ToolbarContainer>
           <InfoSection>

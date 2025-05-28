@@ -1614,7 +1614,15 @@ export function DocumentsVisualization() {
   );
 }
 
-// Estilos para el overlay de refresco
+const ContainerDiv = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  height: 100vh;
+  background-color: #f5f5f5;
+`;
+
 const RefreshOverlay = styled.div`
   position: absolute;
   top: 0;

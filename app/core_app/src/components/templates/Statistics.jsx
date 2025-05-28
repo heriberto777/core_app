@@ -179,15 +179,6 @@ export function Statistics() {
 
   return (
     <Container>
-      <header className="header">
-        <Header
-          stateConfig={{
-            openstate: openstate,
-            setOpenState: () => setOpenState(!openstate),
-          }}
-        />
-      </header>
-
       <section className="area1">
         <PageHeader>
           <PageTitle>Estadísticas del Sistema</PageTitle>
