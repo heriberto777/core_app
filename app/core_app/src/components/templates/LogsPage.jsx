@@ -303,23 +303,23 @@ export function LogsPage() {
         {summary && (
           <StatsSummary>
             <StatItem>
-              <StatValue color="#dc3545">{stats.errorCount}</StatValue>
+              <StatValue color="#dc3545">{stats.error}</StatValue>
               <StatLabel>Errores</StatLabel>
             </StatItem>
             <StatItem>
-              <StatValue color="#ffc107">{stats.warnCount}</StatValue>
+              <StatValue color="#ffc107">{stats.warn}</StatValue>
               <StatLabel>Advertencias</StatLabel>
             </StatItem>
             <StatItem>
-              <StatValue color="#17a2b8">{stats.infoCount}</StatValue>
+              <StatValue color="#17a2b8">{stats.info}</StatValue>
               <StatLabel>Info</StatLabel>
             </StatItem>
             <StatItem>
-              <StatValue color="#6c757d">{stats.debugCount}</StatValue>
+              <StatValue color="#6c757d">{stats.debug}</StatValue>
               <StatLabel>Debug</StatLabel>
             </StatItem>
             <StatItem>
-              <StatValue>{stats.totalLogs}</StatValue>
+              <StatValue>{stats.total}</StatValue>
               <StatLabel>Total</StatLabel>
             </StatItem>
           </StatsSummary>
