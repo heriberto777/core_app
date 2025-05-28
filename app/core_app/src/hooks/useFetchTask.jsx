@@ -1,28 +1,16 @@
 import { useState, useEffect, useRef, useCallback, useMemo } from "react";
 
-/**
- * Hook personalizado mejorado para realizar peticiones de datos con soporte para auto-refresh,
- * cancelación, caché y feedback visual
- *
- * @param {Function} fetchFunction - Función asíncrona que realiza la petición
- * @param {Array} dependencies - Dependencias que provocan refetch
- * @param {Object} options - Opciones del hook
- * @returns {Object} Estados y funciones para gestionar la petición
- */
 export function useFetchData(fetchFunction, dependencies = [], options = {}) {
   const {
     autoRefresh = false,
     refreshInterval = 5000,
     initialData = [],
     enableCache = false,
-    cacheTime = 60000, // 1 minuto
+    cacheTime = 60000,
   } = options;
 
-  // Estados principales
   const [data, setData] = useState(initialData);
   const [error, setError] = useState(null);
-
-  // Estados de carga detallados
   const [loadingState, setLoadingState] = useState({
     initialLoad: true,
     refreshing: false,
@@ -31,7 +19,6 @@ export function useFetchData(fetchFunction, dependencies = [], options = {}) {
     estimatedTime: null,
   });
 
-  // Referencias para gestión interna
   const abortControllerRef = useRef(null);
   const timerRef = useRef(null);
   const isFirstRender = useRef(true);
@@ -40,131 +27,76 @@ export function useFetchData(fetchFunction, dependencies = [], options = {}) {
   const lastFetchTime = useRef(0);
   const cacheKey = useRef("");
   const cacheData = useRef({});
+  const lastDepsRef = useRef(null);
 
-  // Helper para actualizar estado de loading
   const updateLoadingState = useCallback((updates) => {
     if (isMounted.current) {
       setLoadingState((prev) => ({ ...prev, ...updates }));
     }
   }, []);
 
-  // Hacer key de dependencias para efecto
+  // Memoizar dependencias para evitar cambios innecesarios
   const depsKey = useMemo(() => {
-    return JSON.stringify(dependencies);
+    const newDepsKey = JSON.stringify(dependencies);
+
+    // Solo actualizar si realmente cambió
+    if (lastDepsRef.current !== newDepsKey) {
+      console.log("Dependencias cambiaron:", newDepsKey);
+      lastDepsRef.current = newDepsKey;
+    }
+
+    return newDepsKey;
   }, [dependencies]);
 
-  // Función principal para cargar datos
-  const fetchData = useCallback(
-    async (options = {}) => {
-      const { isManualRefresh = false, forceRefresh = false } = options;
-
-      try {
-        // Determinar si usamos caché
-        const now = Date.now();
-        const shouldUseCache =
-          enableCache &&
-          !forceRefresh &&
-          cacheData.current[cacheKey.current] &&
-          now - lastFetchTime.current < cacheTime;
-
-        // Si podemos usar caché y no es refresco manual, devolvemos caché
-        if (shouldUseCache && !isManualRefresh) {
-          setData(cacheData.current[cacheKey.current]);
-
-          // Revalidar en segundo plano si los datos son antiguos
-          if (now - lastFetchTime.current > cacheTime / 2) {
-            fetchDataFromSource({ silent: true });
-          }
-
-          return;
-        }
-
-        // Si no usamos caché, traemos datos de la fuente
-        fetchDataFromSource({ isManualRefresh });
-      } catch (error) {
-        console.error("Error en fetchData:", error);
-        if (isMounted.current) {
-          setError(error.message || "Error al obtener los datos");
-          updateLoadingState({
-            initialLoad: false,
-            refreshing: false,
-            progress: 0,
-          });
-        }
-      }
-    },
-    [enableCache, cacheTime, fetchFunction]
-  );
-
-  // Función que hace la petición real a la fuente de datos
   const fetchDataFromSource = useCallback(
     async (options = {}) => {
       const { isManualRefresh = false, silent = false } = options;
 
+      // Evitar múltiples llamadas simultáneas
+      if (abortControllerRef.current && !isManualRefresh) {
+        console.log("Petición en curso, saltando...");
+        return;
+      }
+
       try {
-        // Cancelar petición previa si existe
+        console.log("Iniciando fetch:", { isManualRefresh, silent });
+
         if (abortControllerRef.current) {
           abortControllerRef.current.abort();
         }
 
-        // Crear nuevo controlador
         abortControllerRef.current = new AbortController();
 
-        // Actualizar estado solo si no es petición silenciosa
         if (!silent) {
           if (isFirstRender.current) {
             updateLoadingState({ initialLoad: true });
           } else if (isManualRefresh) {
-            updateLoadingState({
-              refreshing: true,
-              progress: 10, // Iniciar progreso
-            });
-
-            // Simulación de progreso (para dar feedback)
-            const progressInterval = setInterval(() => {
-              updateLoadingState((prev) => ({
-                ...prev,
-                progress: Math.min(prev.progress + 5, 90),
-              }));
-            }, 300);
-
-            // Limpiar intervalo después de tiempo máximo
-            setTimeout(() => {
-              clearInterval(progressInterval);
-            }, 10000);
+            updateLoadingState({ refreshing: true, progress: 10 });
           }
         }
 
         isAutoRefreshing.current = !isManualRefresh;
 
-        // Tiempo de inicio para mediciones
-        const startTime = Date.now();
-
-        // Ejecutar la petición
         const result = await fetchFunction({
           signal: abortControllerRef.current.signal,
         });
 
-        // Actualizar caché si corresponde
         if (enableCache) {
           cacheData.current[cacheKey.current] = result;
           lastFetchTime.current = Date.now();
         }
 
-        // Actualizar datos solo si componente sigue montado
         if (isMounted.current) {
           setData(result);
           setError(null);
 
-          // Actualizar estado de carga
           if (!silent) {
             updateLoadingState({
               initialLoad: false,
               refreshing: false,
-              progress: 100, // Completar progreso
+              progress: 100,
             });
 
-            // Resetear progreso después de 500ms
             setTimeout(() => {
               if (isMounted.current) {
                 updateLoadingState({ progress: 0 });
@@ -173,15 +105,24 @@ export function useFetchData(fetchFunction, dependencies = [], options = {}) {
           }
         }
 
-        // Configurar próximo auto-refresco si aplica
-        if (autoRefresh && isMounted.current) {
+        // Limpiar referencia del controller
+        abortControllerRef.current = null;
+
+        // Auto-refresh solo si está habilitado y no es manual
+        if (autoRefresh && isMounted.current && !isManualRefresh) {
           timerRef.current = setTimeout(() => {
-            fetchData({ isManualRefresh: false });
+            if (isMounted.current) {
+              fetchDataFromSource({ isManualRefresh: false, silent: true });
+            }
           }, refreshInterval);
         }
+
+        return result;
       } catch (error) {
-        // Ignorar errores de cancelación
-        if (error.name === "AbortError") return;
+        if (error.name === "AbortError") {
+          console.log("Petición cancelada");
+          return;
+        }
 
         if (isMounted.current && !silent) {
           console.error("Error en fetchDataFromSource:", error);
@@ -192,62 +133,90 @@ export function useFetchData(fetchFunction, dependencies = [], options = {}) {
             progress: 0,
           });
         }
+
+        abortControllerRef.current = null;
+        throw error;
       }
     },
-    [fetchFunction, updateLoadingState, enableCache]
+    [
+      fetchFunction,
+      updateLoadingState,
+      enableCache,
+      autoRefresh,
+      refreshInterval,
+    ]
   );
 
-  // Función de refresco manual expuesta
+  const fetchData = useCallback(
+    async (options = {}) => {
+      const { isManualRefresh = false, forceRefresh = false } = options;
+
+      try {
+        const now = Date.now();
+        const shouldUseCache =
+          enableCache &&
+          !forceRefresh &&
+          cacheData.current[cacheKey.current] &&
+          now - lastFetchTime.current < cacheTime;
+
+        if (shouldUseCache && !isManualRefresh) {
+          setData(cacheData.current[cacheKey.current]);
+          return;
+        }
+
+        return await fetchDataFromSource({ isManualRefresh });
+      } catch (error) {
+        console.error("Error en fetchData:", error);
+      }
+    },
+    [enableCache, cacheTime, fetchDataFromSource]
+  );
+
   const refetch = useCallback(
     (options = {}) => {
-      const { forceRefresh = true } = options;
-      return fetchData({ isManualRefresh: true, forceRefresh });
+      console.log("Refetch manual disparado");
+      return fetchData({ isManualRefresh: true, forceRefresh: true });
     },
     [fetchData]
   );
 
-  // Efecto para inicialización y limpieza
+  // Efecto principal - solo se ejecuta cuando cambian las dependencias reales
   useEffect(() => {
-    isMounted.current = true;
-    isFirstRender.current = true;
+    console.log("useEffect principal ejecutado - depsKey:", depsKey);
 
-    // Generar clave de caché basada en función y dependencias
+    isMounted.current = true;
     cacheKey.current = `${fetchFunction.name || "anonymous"}-${depsKey}`;
 
-    // Hacer fetch inicial
+    // Solo hacer fetch si es la primera vez o las dependencias cambiaron
     fetchData();
-
-    // Marcar que ya no es primer render
     isFirstRender.current = false;
 
-    // Limpieza al desmontar
     return () => {
+      console.log("Limpieza del hook");
       isMounted.current = false;
 
-      // Cancelar peticiones pendientes
       if (abortControllerRef.current) {
         abortControllerRef.current.abort();
+        abortControllerRef.current = null;
       }
 
-      // Cancelar timers pendientes
       if (timerRef.current) {
         clearTimeout(timerRef.current);
+        timerRef.current = null;
       }
     };
-  }, [depsKey, autoRefresh, refreshInterval, fetchFunction, fetchData]);
+  }, [depsKey]); // Solo depsKey, no fetchData
 
-  // Simplificar estado loading para retrocompatibilidad
   const loading = loadingState.initialLoad;
   const refreshing = loadingState.refreshing;
 
-  // Devolver todos los estados y funciones útiles
   return {
     data,
     loading,
     refreshing,
-    loadingState, // Estado detallado para UI avanzada
+    loadingState,
     error,
-    setData, // Por compatibilidad, aunque no es recomendable usar directamente
+    setData,
     refetch,
     isFirstLoad: isFirstRender.current,
     isAutoRefreshing: isAutoRefreshing.current,

@@ -1,5 +1,5 @@
 import styled from "styled-components";
-import { useState, useEffect } from "react";
+import { useState, useEffect, useCallback, useMemo } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import Swal from "sweetalert2";
 import {
@@ -36,55 +36,75 @@ export function LoadsResumen() {
 
   const FETCH_INTERVAL = 5000;
 
-  // If loadId is provided from URL params, use it in the initial filters
-  useEffect(() => {
-    if (loadId) {
-      setFilters((prev) => ({ ...prev, loadId }));
-    }
-  }, [loadId]);
+  // // If loadId is provided from URL params, use it in the initial filters
+  // useEffect(() => {
+  //   if (loadId) {
+  //     setFilters((prev) => ({ ...prev, loadId }));
+  //   }
+  // }, [loadId]);
 
-  const fetchSummaries = async () => {
+  // Memoizar los parámetros de la consulta para evitar re-creaciones
+  const queryParams = useMemo(
+    () => ({
+      ...filters,
+      page: currentPage,
+    }),
+    [filters, currentPage]
+  );
+
+  const fetchSummaries = useCallback(async () => {
     try {
-      const result = await summaryApi.getSummaries(accessToken, {
-        ...filters,
-        page: currentPage,
-      });
+      console.log("Ejecutando fetchSummaries con params:", queryParams);
+
+      const result = await summaryApi.getSummaries(accessToken, queryParams);
 
       if (result.success) {
-        setSummaries(result.data);
-        setTotalPages(result.pagination.pages);
+        // Actualizar totalPages solo si es necesario
+        if (result.pagination.pages !== totalPages) {
+          setTotalPages(result.pagination.pages);
+        }
+        return result.data;
       } else {
         throw new Error(result.message || "Error al obtener resúmenes");
       }
-
-      return result.data;
     } catch (error) {
-      console.error("Error fetching summaries:", error);
-      Swal.fire("Error", error.message, "error");
-      return [];
+      console.error("Error al obtener resúmenes:", error);
+      throw error;
     }
-  };
+  }, [accessToken, queryParams]);
 
   const {
     data: summaries,
-    setData: setSummaries,
     loading,
     refreshing: tasksRefreshing,
     loadingState: tasksLoadingState,
     error,
     refetch: refreshSummaries,
-  } = useFetchData(fetchSummaries, [filters, currentPage, accessToken], {
-    autoRefresh: true,
-    refreshInterval: FETCH_INTERVAL,
-    enableCache: true,
-    cacheTime: 60000, // 1 minuto
-    initialData: [],
-  });
+  } = useFetchData(
+    fetchSummaries,
+    [accessToken, queryParams], // Dependencias memoizadas
+    {
+      autoRefresh: true,
+      refreshInterval: FETCH_INTERVAL,
+      enableCache: true,
+      cacheTime: 60000,
+      initialData: [],
+    }
+  );
 
-  const handleSearch = () => {
+  useEffect(() => {
+    if (loadId && loadId !== filters.loadId) {
+      setFilters((prev) => ({ ...prev, loadId }));
+    }
+  }, [loadId]);
+
+  const handleSearch = useCallback(() => {
     setCurrentPage(1);
-    refreshSummaries();
-  };
+    // El refresh se disparará automáticamente por el cambio en currentPage
+    setTimeout(() => refreshSummaries(), 100);
+  }, [refreshSummaries]);
+
+  console.log("Summaries:", summaries);
 
   const clearFilters = () => {
     setFilters({

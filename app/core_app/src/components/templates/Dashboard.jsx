@@ -1,6 +1,11 @@
 import styled from "styled-components";
-import { Header, useAuth, TransferApi } from "../../index";
-import { useState, useEffect } from "react";
+import {
+  Header,
+  useAuth,
+  TransferApi,
+  ScheduleConfigButton,
+} from "../../index";
+import { useState, useEffect, useCallback } from "react";
 import {
   FaServer,
   FaExchangeAlt,
@@ -39,6 +44,36 @@ export function Dashboard() {
   const [error, setError] = useState(null);
   const [nextScheduled, setNextScheduled] = useState(null);
   const [refreshing, setRefreshing] = useState(false);
+
+  // ✅ ESTADOS PARA LA PROGRAMACIÓN (simplificados)
+  const [executionTime, setExecutionTime] = useState("02:00");
+  const [scheduleLoading, setScheduleLoading] = useState(false);
+
+  // ✅ FUNCIÓN PARA OBTENER HORA PROGRAMADA
+  const fetchScheduleTime = useCallback(async () => {
+    try {
+      setScheduleLoading(true);
+      const response = await cnnApi.getSchuledTime(accessToken);
+      if (response?.hour) {
+        setExecutionTime(response.hour);
+
+        // También actualizar nextScheduled para el display
+        const [hour, minute] = response.hour.split(":");
+        const nextRun = new Date();
+        nextRun.setHours(Number(hour), Number(minute), 0, 0);
+
+        if (nextRun < new Date()) {
+          nextRun.setDate(nextRun.getDate() + 1);
+        }
+
+        setNextScheduled(nextRun);
+      }
+    } catch (error) {
+      console.error("Error al obtener hora programada:", error);
+    } finally {
+      setScheduleLoading(false);
+    }
+  }, [accessToken]);
 
   const fetchDashboardData = async () => {
     try {
@@ -140,6 +175,7 @@ export function Dashboard() {
         }
 
         setNextScheduled(nextRun);
+        setExecutionTime(scheduledResponse.hour);
       } else {
         // Establecer un valor por defecto si no se pudo obtener
         const defaultNextRun = new Date();
@@ -165,11 +201,17 @@ export function Dashboard() {
   // Cargar datos al iniciar
   useEffect(() => {
     fetchDashboardData();
+    // También cargar la hora programada separadamente
+    fetchScheduleTime();
 
     // Refrescar cada 60 segundos
-    const interval = setInterval(fetchDashboardData, 60000);
+    const interval = setInterval(() => {
+      fetchDashboardData();
+      fetchScheduleTime();
+    }, 60000);
+
     return () => clearInterval(interval);
-  }, [accessToken]);
+  }, [accessToken, fetchScheduleTime]);
 
   // Función para refrescar manualmente
   const handleRefresh = () => {
@@ -177,6 +219,20 @@ export function Dashboard() {
 
     setRefreshing(true);
     fetchDashboardData();
+  };
+
+  // ✅ CALLBACK PARA CUANDO SE ACTUALIZA LA PROGRAMACIÓN
+  const handleScheduleSuccess = (result) => {
+    console.log("Configuración de programación actualizada:", result);
+
+    // Actualizar el estado local
+    if (result.hour) {
+      setExecutionTime(result.hour);
+    }
+
+    // Refrescar todos los datos del dashboard
+    fetchDashboardData();
+    fetchScheduleTime();
   };
 
   // Determinar el texto y estilo según el estado del servidor
@@ -370,9 +426,10 @@ export function Dashboard() {
                 </NextRunInfo>
               </CardContent>
               <CardFooter>
-                <Link to="/transfer-tasks">
-                  <ActionButton>Gestionar programación</ActionButton>
-                </Link>
+                <ScheduleConfigButton
+                  disabled={loading || scheduleLoading}
+                  onSuccess={handleScheduleSuccess}
+                />
               </CardFooter>
             </DashboardCard>
 
@@ -430,7 +487,7 @@ export function Dashboard() {
                 )}
               </CardContent>
               <CardFooter>
-                <Link to="/transfer-history">
+                <Link to="/historys">
                   <ActionButton>Ver historial completo</ActionButton>
                 </Link>
               </CardFooter>
@@ -457,7 +514,7 @@ export function Dashboard() {
                     <QuickActionText>Ver Logs</QuickActionText>
                   </QuickActionItem>
 
-                  <QuickActionItem to="/transfer-history">
+                  <QuickActionItem to="/historys">
                     <QuickActionIcon>
                       <FaHistory />
                     </QuickActionIcon>
@@ -658,21 +715,6 @@ const CardFooter = styled.div`
   border-top: 1px solid ${({ theme }) => theme.border || "#eee"};
   display: flex;
   justify-content: flex-end;
-`;
-
-const ActionButton = styled.button`
-  background-color: ${({ theme }) => theme.primary || "#007bff"};
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 8px 15px;
-  cursor: pointer;
-  font-size: 13px;
-  transition: background-color 0.2s;
-
-  &:hover {
-    background-color: ${({ theme }) => theme.primaryHover || "#0056b3"};
-  }
 `;
 
 const ServerStatusGrid = styled.div`
@@ -990,6 +1032,39 @@ const RetryButton = styled.button`
   border-radius: 4px;
   padding: 8px 15px;
   cursor: pointer;
+
+  &:hover {
+    background-color: ${({ theme }) => theme.primaryHover || "#0056b3"};
+  }
+`;
+const ScheduleButtonGroup = styled.div`
+  /* background-color: ${({ theme }) => theme.primary || "#007bff"}; */
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 15px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.2s;
+
+  &:hover {
+    background-color: ${({ theme }) => theme.primaryHover || "#0056b3"};
+  }
+
+  @media (max-width: 480px) {
+    flex-direction: column;
+  }
+`;
+
+const ActionButton = styled.button`
+  background-color: ${({ theme }) => theme.primary || "#007bff"};
+  color: white;
+  border: none;
+  border-radius: 4px;
+  padding: 8px 15px;
+  cursor: pointer;
+  font-size: 13px;
+  transition: background-color 0.2s;
 
   &:hover {
     background-color: ${({ theme }) => theme.primaryHover || "#0056b3"};
