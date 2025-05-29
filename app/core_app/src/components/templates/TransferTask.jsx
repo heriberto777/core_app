@@ -1404,7 +1404,7 @@ export function TransferTasks() {
       });
 
       // Llamada a la API para eliminar
-      await cnnApi.deleteTask(accessToken, taskId);
+      await cnnApi.deleteTask(accessToken, taskToDelete.name);
 
       // Refrescar la lista
       await fetchTasks();

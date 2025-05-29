@@ -53,6 +53,36 @@ export class TransferApi {
   }
 
   /**
+   * Elimina tarea especifica
+   *
+   */
+  async deleteTask(accessToken, name) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/accion/${name}`;
+      const params = {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ name }),
+      };
+
+      console.log(`🗑️ Eliminando tarea ${name}`);
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+
+      return result;
+    } catch (error) {
+      console.error("Error obtener la tarea:", error);
+      throw error;
+    }
+  }
+
+  /**
    * 📌 Ejecutar una tarea manualmente
    */
   async executeTask(accessToken, taskId) {
