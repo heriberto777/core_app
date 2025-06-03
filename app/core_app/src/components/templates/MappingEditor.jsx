@@ -447,6 +447,60 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           </div>
         </div>
         
+        <!-- NUEVA SECCIÓN: Configuración de conversión de unidades -->
+        <div class="unit-conversion-section">
+          <h4 style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">Conversión de Unidades</h4>
+          
+          <div class="form-check">
+            <input type="checkbox" id="enableUnitConversion" class="swal2-checkbox">
+            <label for="enableUnitConversion"><strong>¿Habilitar conversión de unidades?</strong></label>
+            <small style="display: block; margin-top: 5px;">Convierte automáticamente entre diferentes unidades de medida (ej: Cajas a Unidades)</small>
+          </div>
+          
+          <div id="unitConversionConfig" class="unit-conversion-config" style="display: none; margin-top: 15px; padding: 15px; background-color: #f8f9fa; border-radius: 5px;">
+            <div style="display: flex; flex-wrap: wrap; gap: 15px;">
+              <div class="form-group" style="flex: 1 1 200px;">
+                <label for="unitMeasureField">Campo Unidad de Medida</label>
+                <input id="unitMeasureField" class="swal2-input" value="Unit_Measure" placeholder="Ej: Unit_Measure">
+                <small>Campo que indica la unidad actual del producto</small>
+              </div>
+              
+              <div class="form-group" style="flex: 1 1 200px;">
+                <label for="conversionFactorField">Campo Factor de Conversión</label>
+                <input id="conversionFactorField" class="swal2-input" value="Factor_Conversion" placeholder="Ej: Factor_Conversion">
+                <small>Campo que contiene el factor numérico para la conversión</small>
+              </div>
+            </div>
+            
+            <div style="display: flex; flex-wrap: wrap; gap: 15px; margin-top: 15px;">
+              <div class="form-group" style="flex: 1 1 200px;">
+                <label for="fromUnit">Unidad Origen (convertir desde)</label>
+                <input id="fromUnit" class="swal2-input" value="Caja" placeholder="Ej: Caja, CJA">
+                <small>Unidad que requiere conversión</small>
+              </div>
+              
+              <div class="form-group" style="flex: 1 1 200px;">
+                <label for="toUnit">Unidad Destino (convertir a)</label>
+                <input id="toUnit" class="swal2-input" value="Und" placeholder="Ej: Und, Unidad">
+                <small>Unidad final después de la conversión</small>
+              </div>
+            </div>
+            
+            <div class="form-group" style="margin-top: 15px;">
+              <label for="conversionOperation">Operación de Conversión</label>
+              <select id="conversionOperation" class="swal2-select">
+                <option value="multiply">Multiplicar (para cantidades: cajas × factor = unidades)</option>
+                <option value="divide">Dividir (para precios: precio_caja ÷ factor = precio_unitario)</option>
+              </select>
+              <small style="display: block; margin-top: 5px;">
+                <strong>Ejemplo:</strong><br>
+                • Cantidad: 10 Cajas × 144 = 1440 Unidades<br>
+                • Precio: $1000 por Caja ÷ 144 = $6.94 por Unidad
+              </small>
+            </div>
+          </div>
+        </div>
+        
         <!-- Sección de eliminación de prefijos - Destacada visualmente -->
         <div class="form-group">
           <div class="field-container">
@@ -560,6 +614,14 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           "defaultValueSection"
         );
 
+        // NUEVO: Control de conversión de unidades
+        const enableConversionCheckbox = document.getElementById(
+          "enableUnitConversion"
+        );
+        const conversionConfigDiv = document.getElementById(
+          "unitConversionConfig"
+        );
+
         // Selector de tipo de campo
         const fieldTypeSelect = document.getElementById("fieldType");
         const selectOptionsContainer = document.getElementById(
@@ -577,11 +639,17 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           // Actualizar mostrar/ocultar opciones de select
           selectOptionsContainer.style.display =
             fieldTypeSelect.value === "select" ? "block" : "none";
+
+          // NUEVO: Mostrar/ocultar configuración de conversión
+          conversionConfigDiv.style.display = enableConversionCheckbox.checked
+            ? "block"
+            : "none";
         };
 
         // Asignar eventos
         lookupFromTargetCheckbox.addEventListener("change", updateUI);
         fieldTypeSelect.addEventListener("change", updateUI);
+        enableConversionCheckbox.addEventListener("change", updateUI); // NUEVO
 
         // Inicializar UI
         updateUI();
@@ -672,6 +740,11 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         const lookupFromTarget =
           document.getElementById("lookupFromTarget").checked;
 
+        // NUEVO: Valores para conversión de unidades
+        const enableUnitConversion = document.getElementById(
+          "enableUnitConversion"
+        ).checked;
+
         // Propiedades de visualización
         const isEditable = document.getElementById("isEditable").checked;
         const showInList = document.getElementById("showInList").checked;
@@ -687,10 +760,16 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           return false;
         }
 
-        // Validar que tengamos origen de datos (source, lookup o valor default)
-        if (!sourceField && !lookupFromTarget && !defaultValue && isRequired) {
+        // Validar que tengamos origen de datos (source, lookup, conversion o valor default)
+        if (
+          !sourceField &&
+          !lookupFromTarget &&
+          !enableUnitConversion &&
+          !defaultValue &&
+          isRequired
+        ) {
           Swal.showValidationMessage(
-            "Los campos obligatorios deben tener un origen de datos (campo origen, consulta o valor por defecto)"
+            "Los campos obligatorios deben tener un origen de datos (campo origen, consulta, conversión o valor por defecto)"
           );
           return false;
         }
@@ -775,6 +854,45 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           }
         }
 
+        // NUEVO: Propiedades de conversión de unidades
+        let unitConversion = { enabled: false };
+
+        if (enableUnitConversion) {
+          const unitMeasureField = document
+            .getElementById("unitMeasureField")
+            .value.trim();
+          const conversionFactorField = document
+            .getElementById("conversionFactorField")
+            .value.trim();
+          const fromUnit = document.getElementById("fromUnit").value.trim();
+          const toUnit = document.getElementById("toUnit").value.trim();
+          const operation = document.getElementById(
+            "conversionOperation"
+          ).value;
+
+          // Validar campos requeridos para conversión
+          if (
+            !unitMeasureField ||
+            !conversionFactorField ||
+            !fromUnit ||
+            !toUnit
+          ) {
+            Swal.showValidationMessage(
+              "Para habilitar conversión de unidades, todos los campos son obligatorios"
+            );
+            return false;
+          }
+
+          unitConversion = {
+            enabled: true,
+            unitMeasureField,
+            conversionFactorField,
+            fromUnit,
+            toUnit,
+            operation,
+          };
+        }
+
         // Crear objeto completo con todas las propiedades
         return {
           sourceField: sourceField || null,
@@ -791,7 +909,10 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           validateExistence: lookupFromTarget ? validateExistence : false,
           failIfNotFound: lookupFromTarget ? failIfNotFound : false,
 
-          // Propiedades de visualización - ASEGÚRATE DE QUE ESTAS PROPIEDADES ESTÉN CORRECTAMENTE DEFINIDAS
+          // NUEVO: Propiedades de conversión de unidades
+          unitConversion,
+
+          // Propiedades de visualización
           isEditable,
           showInList,
           displayName: displayName || null,
@@ -819,6 +940,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           "lookupParams",
           "validateExistence",
           "failIfNotFound",
+          "unitConversion", // NUEVO
           "isEditable",
           "showInList",
           "displayName",
@@ -856,6 +978,751 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
 
         // Log del nuevo estado para verificar
         console.log("Tabla actualizada:", newTableConfigs[tableIndex]);
+      }
+    });
+  };
+
+  // Función editFieldMapping completa
+  const editFieldMapping = (tableIndex, fieldIndex) => {
+    const field = mapping.tableConfigs[tableIndex].fieldMappings[fieldIndex];
+
+    // Verificar que el campo existe y tiene todas las propiedades necesarias
+    if (!field) {
+      console.error(
+        `Campo no encontrado en posición ${tableIndex}-${fieldIndex}`
+      );
+      return;
+    }
+
+    console.log("Campo a editar:", field);
+
+    Swal.fire({
+      title: "Editar Mapeo de Campo",
+      html: `
+     <div class="mapping-form">
+       <div class="field-section">
+         <div class="form-group">
+           <div class="field-container">
+             <div class="field-header">Campo origen (opcional)</div>
+             <input id="sourceField" class="swal2-input" value="${
+               field.sourceField || ""
+             }" placeholder="Ej: COD_CLT">
+           </div>
+         </div>
+         
+         <div class="form-group">
+           <div class="field-container">
+             <div class="field-header">Campo destino (obligatorio)</div>
+             <input id="targetField" class="swal2-input" value="${
+               field.targetField
+             }" placeholder="Ej: CODIGO">
+           </div>
+         </div>
+       </div>
+       
+       <!-- Opciones para especificar el origen de datos -->
+       <div class="data-source-options">
+         <div class="form-check">
+           <input type="checkbox" id="lookupFromTarget" class="swal2-checkbox" ${
+             field.lookupFromTarget ? "checked" : ""
+           }>
+           <label for="lookupFromTarget"><strong>¿Consultar en BD destino?</strong></label>
+         </div>
+       </div>
+       
+       <!-- Opciones para valor por defecto -->
+       <div id="defaultValueSection" class="form-group" style="display:${
+         field.lookupFromTarget ? "none" : "block"
+       }">
+         <div class="field-container">
+           <div id="defaultValueLabel" class="field-header">Valor por defecto</div>
+           <textarea id="defaultValue" class="swal2-textarea" rows="3" placeholder="Ingrese valor por defecto o función SQL nativa (GETDATE(), etc.)">${
+             field.defaultValue !== undefined && field.defaultValue !== null
+               ? field.defaultValue
+               : ""
+           }</textarea>
+           <div class="form-info">
+             <strong>Nota:</strong> Para usar funciones SQL nativas como GETDATE(), NEWID(), etc. ingréselas directamente en el valor por defecto.
+           </div>
+         </div>
+       </div>
+       
+       <!-- SECCIÓN: Opciones para consulta en BD destino -->
+       <div id="lookupSection" class="lookup-section" style="display:${
+         field.lookupFromTarget ? "block" : "none"
+       }">
+         <div class="form-group">
+           <div class="field-container">
+             <div class="field-header">Consulta SQL en destino</div>
+             <textarea id="lookupQuery" class="swal2-textarea" rows="3" placeholder="Ej: SELECT nombre FROM clientes WHERE codigo = @codigo">${
+               field.lookupQuery || ""
+             }</textarea>
+             <div class="form-info" style="margin-top: 8px;">
+               <strong>Nota:</strong> Use @parametro en la consulta para referenciar valores.
+             </div>
+           </div>
+         </div>
+         
+         <div class="lookup-params-container">
+           <div class="lookup-params-header">
+             <h4>Parámetros para la consulta</h4>
+             <button type="button" id="addLookupParam" class="btn-add-param">
+               <i class="fa fa-plus"></i> Añadir
+             </button>
+           </div>
+           
+           <div id="lookupParamsContainer">
+             ${(field.lookupParams || [])
+               .map(
+                 (param, idx) => `
+               <div class="lookup-param-row" data-index="${idx}">
+                 <input type="text" class="swal2-input param-name" placeholder="Nombre parámetro" value="${
+                   param.paramName || ""
+                 }">
+                 <input type="text" class="swal2-input source-field" placeholder="Campo origen" value="${
+                   param.sourceField || ""
+                 }">
+                 <button type="button" class="btn-remove-param">
+                   <i class="fa fa-trash"></i>
+                 </button>
+               </div>
+             `
+               )
+               .join("")}
+           </div>
+         </div>
+         
+         <div class="validation-options">
+           <div class="form-check">
+             <input type="checkbox" id="validateExistence" class="swal2-checkbox" ${
+               field.validateExistence ? "checked" : ""
+             }>
+             <label for="validateExistence"><strong>Validar existencia</strong></label>
+           </div>
+           
+           <div class="form-check">
+             <input type="checkbox" id="failIfNotFound" class="swal2-checkbox" ${
+               field.failIfNotFound ? "checked" : ""
+             }>
+             <label for="failIfNotFound"><strong>Fallar si no existe</strong></label>
+             <small>Si está marcado, el procesamiento fallará si no se encuentra un valor. De lo contrario, usará NULL.</small>
+           </div>
+         </div>
+       </div>
+       
+       <!-- NUEVA SECCIÓN: Configuración de conversión de unidades -->
+       <div class="unit-conversion-section">
+         <h4 style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">Conversión de Unidades</h4>
+         
+         <div class="form-check">
+           <input type="checkbox" id="enableUnitConversion" class="swal2-checkbox" ${
+             field.unitConversion?.enabled ? "checked" : ""
+           }>
+           <label for="enableUnitConversion"><strong>¿Habilitar conversión de unidades?</strong></label>
+           <small style="display: block; margin-top: 5px;">Convierte automáticamente entre diferentes unidades de medida (ej: Cajas a Unidades)</small>
+         </div>
+         
+         <div id="unitConversionConfig" class="unit-conversion-config" style="display: ${
+           field.unitConversion?.enabled ? "block" : "none"
+         }; margin-top: 15px; padding: 15px; background-color: #f8f9fa; border-radius: 5px;">
+           <div style="display: flex; flex-wrap: wrap; gap: 15px;">
+             <div class="form-group" style="flex: 1 1 200px;">
+               <label for="unitMeasureField">Campo Unidad de Medida</label>
+               <input id="unitMeasureField" class="swal2-input" value="${
+                 field.unitConversion?.unitMeasureField || "Unit_Measure"
+               }" placeholder="Ej: Unit_Measure">
+               <small>Campo que indica la unidad actual del producto</small>
+             </div>
+             
+             <div class="form-group" style="flex: 1 1 200px;">
+               <label for="conversionFactorField">Campo Factor de Conversión</label>
+               <input id="conversionFactorField" class="swal2-input" value="${
+                 field.unitConversion?.conversionFactorField ||
+                 "Factor_Conversion"
+               }" placeholder="Ej: Factor_Conversion">
+               <small>Campo que contiene el factor numérico para la conversión</small>
+             </div>
+           </div>
+           
+           <div style="display: flex; flex-wrap: wrap; gap: 15px; margin-top: 15px;">
+             <div class="form-group" style="flex: 1 1 200px;">
+               <label for="fromUnit">Unidad Origen (convertir desde)</label>
+               <input id="fromUnit" class="swal2-input" value="${
+                 field.unitConversion?.fromUnit || "Caja"
+               }" placeholder="Ej: Caja, CJA">
+               <small>Unidad que requiere conversión</small>
+             </div>
+             
+             <div class="form-group" style="flex: 1 1 200px;">
+               <label for="toUnit">Unidad Destino (convertir a)</label>
+               <input id="toUnit" class="swal2-input" value="${
+                 field.unitConversion?.toUnit || "Und"
+               }" placeholder="Ej: Und, Unidad">
+               <small>Unidad final después de la conversión</small>
+             </div>
+           </div>
+           
+           <div class="form-group" style="margin-top: 15px;">
+             <label for="conversionOperation">Operación de Conversión</label>
+             <select id="conversionOperation" class="swal2-select">
+               <option value="multiply" ${
+                 field.unitConversion?.operation === "multiply"
+                   ? "selected"
+                   : ""
+               }>Multiplicar (para cantidades: cajas × factor = unidades)</option>
+               <option value="divide" ${
+                 field.unitConversion?.operation === "divide" ? "selected" : ""
+               }>Dividir (para precios: precio_caja ÷ factor = precio_unitario)</option>
+             </select>
+             <small style="display: block; margin-top: 5px;">
+               <strong>Ejemplo:</strong><br>
+               • Cantidad: 10 Cajas × 144 = 1440 Unidades<br>
+               • Precio: $1000 por Caja ÷ 144 = $6.94 por Unidad
+             </small>
+           </div>
+         </div>
+       </div>
+       
+       <!-- Sección de eliminación de prefijos -->
+       <div class="form-group">
+         <div class="field-container">
+           <div class="field-header">Eliminar prefijo específico</div>
+           <input id="removePrefix" class="swal2-input" value="${
+             field.removePrefix || ""
+           }" placeholder="Ej: CN">
+           <div class="form-info" style="margin-top: 8px;">
+             <strong>Ejemplo de uso de prefijos:</strong><br>
+             <span style="display: block; margin-top: 5px;">
+               Si el valor en origen es <code>CN10133</code> y el prefijo es <code>CN</code>, 
+               el valor en destino será <code>10133</code>
+             </span>
+           </div>
+         </div>
+       </div>
+       
+       <div class="form-check">
+         <input type="checkbox" id="isRequired" class="swal2-checkbox" ${
+           field.isRequired ? "checked" : ""
+         }>
+         <label for="isRequired"><strong>¿Campo obligatorio en destino?</strong></label>
+       </div>
+       
+       <!-- SECCIÓN: Opciones de visualización -->
+       <div class="display-options-section">
+         <h4 style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">Opciones de visualización</h4>
+         
+         <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 10px;">
+           <div class="form-check" style="flex: 1 1 200px;">
+             <input type="checkbox" id="isEditable" class="swal2-checkbox" ${
+               field.isEditable !== false ? "checked" : ""
+             }>
+             <label for="isEditable"><strong>¿Permitir edición?</strong></label>
+             <small style="display: block; margin-top: 5px;">Si está marcado, este campo podrá editarse en formularios.</small>
+           </div>
+           
+           <div class="form-check" style="flex: 1 1 200px;">
+             <input type="checkbox" id="showInList" class="swal2-checkbox" ${
+               field.showInList ? "checked" : ""
+             }>
+             <label for="showInList"><strong>¿Mostrar en listas?</strong></label>
+             <small style="display: block; margin-top: 5px;">Si está marcado, este campo aparecerá en vistas de lista.</small>
+           </div>
+         </div>
+         
+         <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 15px;">
+           <div class="form-group" style="flex: 1 1 200px;">
+             <label for="displayName">Nombre para mostrar</label>
+             <input id="displayName" class="swal2-input" value="${
+               field.displayName || ""
+             }" placeholder="Ej: Código de Cliente">
+             <small style="display: block; margin-top: 5px;">Nombre amigable para mostrar en la interfaz.</small>
+           </div>
+           
+           <div class="form-group" style="flex: 1 1 200px;">
+             <label for="displayOrder">Orden de visualización</label>
+             <input id="displayOrder" type="number" class="swal2-input" value="${
+               field.displayOrder || 0
+             }" placeholder="0">
+             <small style="display: block; margin-top: 5px;">Posición de este campo en listas y formularios (menor = primero).</small>
+           </div>
+         </div>
+         
+         <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 15px;">
+           <div class="form-group" style="flex: 1 1 200px;">
+             <label for="fieldGroup">Grupo de campos</label>
+             <input id="fieldGroup" class="swal2-input" value="${
+               field.fieldGroup || ""
+             }" placeholder="Ej: Información General">
+             <small style="display: block; margin-top: 5px;">Grupo donde aparecerá en formularios de edición.</small>
+           </div>
+           
+           <div class="form-group" style="flex: 1 1 200px;">
+             <label for="fieldType">Tipo de campo</label>
+             <select id="fieldType" class="swal2-select">
+               <option value="text" ${
+                 !field.fieldType || field.fieldType === "text"
+                   ? "selected"
+                   : ""
+               }>Texto</option>
+               <option value="number" ${
+                 field.fieldType === "number" ? "selected" : ""
+               }>Número</option>
+               <option value="date" ${
+                 field.fieldType === "date" ? "selected" : ""
+               }>Fecha</option>
+               <option value="boolean" ${
+                 field.fieldType === "boolean" ? "selected" : ""
+               }>Sí/No</option>
+               <option value="select" ${
+                 field.fieldType === "select" ? "selected" : ""
+               }>Lista desplegable</option>
+               <option value="textarea" ${
+                 field.fieldType === "textarea" ? "selected" : ""
+               }>Texto largo</option>
+               <option value="email" ${
+                 field.fieldType === "email" ? "selected" : ""
+               }>Correo electrónico</option>
+               <option value="tel" ${
+                 field.fieldType === "tel" ? "selected" : ""
+               }>Teléfono</option>
+               <option value="hidden" ${
+                 field.fieldType === "hidden" ? "selected" : ""
+               }>Oculto</option>
+             </select>
+             <small style="display: block; margin-top: 5px;">Tipo de entrada para formularios.</small>
+           </div>
+         </div>
+         
+         <!-- Opciones para tipo "select" -->
+         <div id="selectOptionsContainer" style="margin-top: 15px; display: ${
+           field.fieldType === "select" ? "block" : "none"
+         };">
+           <label>Opciones para lista desplegable</label>
+           <div id="optionsContainer">
+             ${
+               (field.options || [])
+                 .map(
+                   (option, idx) => `
+                 <div class="option-row" style="display: flex; gap: 10px; margin-bottom: 10px;">
+                   <input type="text" class="swal2-input option-label" placeholder="Etiqueta" value="${
+                     option.label || ""
+                   }" style="flex: 1;">
+                   <input type="text" class="swal2-input option-value" placeholder="Valor" value="${
+                     option.value || ""
+                   }" style="flex: 1;">
+                   <button type="button" class="btn-remove-option" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 0 10px;">✕</button>
+                 </div>
+               `
+                 )
+                 .join("") ||
+               `
+                 <div class="option-row" style="display: flex; gap: 10px; margin-bottom: 10px;">
+                   <input type="text" class="swal2-input option-label" placeholder="Etiqueta" style="flex: 1;">
+                   <input type="text" class="swal2-input option-value" placeholder="Valor" style="flex: 1;">
+                   <button type="button" class="btn-remove-option" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 0 10px;">✕</button>
+                 </div>
+               `
+             }
+           </div>
+           <button type="button" id="addOption" style="background: #28a745; color: white; border: none; border-radius: 4px; padding: 5px 10px; margin-top: 10px;">+ Añadir Opción</button>
+         </div>
+       </div>
+     </div>
+   `,
+      showCancelButton: true,
+      confirmButtonText: "Guardar",
+      cancelButtonText: "Cancelar",
+      customClass: {
+        popup: "mapping-editor-modal",
+      },
+      didOpen: () => {
+        // Control de visibilidad de secciones según selección
+        const lookupFromTargetCheckbox =
+          document.getElementById("lookupFromTarget");
+        const lookupSection = document.getElementById("lookupSection");
+        const defaultValueSection = document.getElementById(
+          "defaultValueSection"
+        );
+
+        // NUEVO: Control de conversión de unidades
+        const enableConversionCheckbox = document.getElementById(
+          "enableUnitConversion"
+        );
+        const conversionConfigDiv = document.getElementById(
+          "unitConversionConfig"
+        );
+
+        // Selector de tipo de campo
+        const fieldTypeSelect = document.getElementById("fieldType");
+        const selectOptionsContainer = document.getElementById(
+          "selectOptionsContainer"
+        );
+
+        // Función para actualizar la UI según selección
+        const updateUI = () => {
+          const isLookup = lookupFromTargetCheckbox.checked;
+
+          // Mostrar/ocultar secciones según corresponda
+          if (lookupSection) {
+            lookupSection.style.display = isLookup ? "block" : "none";
+          }
+          defaultValueSection.style.display = isLookup ? "none" : "block";
+
+          // Actualizar mostrar/ocultar opciones de select
+          selectOptionsContainer.style.display =
+            fieldTypeSelect.value === "select" ? "block" : "none";
+
+          // NUEVO: Mostrar/ocultar configuración de conversión
+          conversionConfigDiv.style.display = enableConversionCheckbox.checked
+            ? "block"
+            : "none";
+        };
+
+        // Asignar eventos
+        lookupFromTargetCheckbox.addEventListener("change", updateUI);
+        fieldTypeSelect.addEventListener("change", updateUI);
+        enableConversionCheckbox.addEventListener("change", updateUI); // NUEVO
+
+        // Inicializar UI
+        updateUI();
+
+        // Manejar botón para añadir opciones
+        const addOptionBtn = document.getElementById("addOption");
+        const optionsContainer = document.getElementById("optionsContainer");
+
+        addOptionBtn.addEventListener("click", () => {
+          const optionRow = document.createElement("div");
+          optionRow.className = "option-row";
+          optionRow.style = "display: flex; gap: 10px; margin-bottom: 10px;";
+
+          optionRow.innerHTML = `
+         <input type="text" class="swal2-input option-label" placeholder="Etiqueta" style="flex: 1;">
+         <input type="text" class="swal2-input option-value" placeholder="Valor" style="flex: 1;">
+         <button type="button" class="btn-remove-option" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 0 10px;">✕</button>
+       `;
+
+          optionsContainer.appendChild(optionRow);
+
+          // Añadir evento para eliminar
+          optionRow
+            .querySelector(".btn-remove-option")
+            .addEventListener("click", () => {
+              optionRow.remove();
+            });
+        });
+
+        // Añadir eventos a los botones de eliminar existentes
+        document.querySelectorAll(".btn-remove-option").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            btn.closest(".option-row").remove();
+          });
+        });
+
+        // Manejar parámetros de consulta
+        const addLookupParamButton = document.getElementById("addLookupParam");
+        if (addLookupParamButton) {
+          const lookupParamsContainer = document.getElementById(
+            "lookupParamsContainer"
+          );
+
+          // Función para añadir una fila de parámetro
+          const addLookupParamRow = (paramName = "", sourceField = "") => {
+            const index = document.querySelectorAll(".lookup-param-row").length;
+            const row = document.createElement("div");
+            row.className = "lookup-param-row";
+            row.dataset.index = index;
+
+            row.innerHTML = `
+           <input type="text" class="swal2-input param-name" placeholder="Nombre parámetro" value="${paramName}">
+           <input type="text" class="swal2-input source-field" placeholder="Campo origen" value="${sourceField}">
+           <button type="button" class="btn-remove-param" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 0 10px;">
+             ✕
+           </button>
+         `;
+
+            // Añadir evento para eliminar parámetro
+            const removeBtn = row.querySelector(".btn-remove-param");
+            removeBtn.addEventListener("click", () => {
+              row.remove();
+            });
+
+            lookupParamsContainer.appendChild(row);
+          };
+
+          // Evento para añadir parámetro
+          addLookupParamButton.addEventListener("click", () => {
+            addLookupParamRow();
+          });
+
+          // Añadir eventos a los botones de eliminar existentes
+          document.querySelectorAll(".btn-remove-param").forEach((btn) => {
+            btn.addEventListener("click", () => {
+              btn.closest(".lookup-param-row").remove();
+            });
+          });
+
+          // Añadir un parámetro inicial si no hay parámetros y está en modo lookup
+          if (
+            lookupFromTargetCheckbox.checked &&
+            lookupParamsContainer.children.length === 0
+          ) {
+            addLookupParamRow();
+          }
+        }
+      },
+      preConfirm: () => {
+        // Recopilar todos los valores
+        const sourceField = document.getElementById("sourceField").value.trim();
+        const targetField = document.getElementById("targetField").value.trim();
+        const defaultValue = document.getElementById("defaultValue").value;
+        const removePrefix = document
+          .getElementById("removePrefix")
+          .value.trim();
+        const isRequired = document.getElementById("isRequired").checked;
+        const lookupFromTarget =
+          document.getElementById("lookupFromTarget").checked;
+
+        // NUEVO: Recopilar configuración de conversión
+        const enableUnitConversion = document.getElementById(
+          "enableUnitConversion"
+        ).checked;
+
+        // Propiedades de visualización
+        const isEditable = document.getElementById("isEditable").checked;
+        const showInList = document.getElementById("showInList").checked;
+        const displayName = document.getElementById("displayName").value.trim();
+        const displayOrder =
+          parseInt(document.getElementById("displayOrder").value) || 0;
+        const fieldGroup = document.getElementById("fieldGroup").value.trim();
+        const fieldType = document.getElementById("fieldType").value;
+        // Validaciones básicas
+        if (!targetField) {
+          Swal.showValidationMessage("El campo destino es obligatorio");
+          return false;
+        }
+
+        // Validar que los campos obligatorios tengan origen de datos
+        if (
+          !sourceField &&
+          !lookupFromTarget &&
+          !enableUnitConversion &&
+          !defaultValue &&
+          isRequired
+        ) {
+          Swal.showValidationMessage(
+            "Los campos obligatorios deben tener un origen de datos (campo origen, consulta, conversión o valor por defecto)"
+          );
+          return false;
+        }
+
+        // Procesar el valor por defecto
+        let processedDefaultValue;
+        if (defaultValue === "NULL") {
+          processedDefaultValue = null;
+        } else if (defaultValue === "") {
+          processedDefaultValue = undefined;
+        } else {
+          processedDefaultValue = defaultValue;
+        }
+
+        // Recopilar opciones para tipo "select"
+        const options = [];
+        if (fieldType === "select") {
+          document.querySelectorAll(".option-row").forEach((row) => {
+            const label = row.querySelector(".option-label").value.trim();
+            const value = row.querySelector(".option-value").value.trim();
+
+            if (label || value) {
+              options.push({ label, value });
+            }
+          });
+        }
+
+        // Propiedades de lookup
+        let lookupQuery = "";
+        let lookupParams = [];
+        let validateExistence = false;
+        let failIfNotFound = false;
+
+        if (lookupFromTarget) {
+          const lookupQueryElem = document.getElementById("lookupQuery");
+          if (lookupQueryElem) {
+            lookupQuery = lookupQueryElem.value.trim();
+          }
+
+          const validateExistenceElem =
+            document.getElementById("validateExistence");
+          if (validateExistenceElem) {
+            validateExistence = validateExistenceElem.checked;
+          }
+
+          const failIfNotFoundElem = document.getElementById("failIfNotFound");
+          if (failIfNotFoundElem) {
+            failIfNotFound = failIfNotFoundElem.checked;
+          }
+
+          // Recopilar parámetros
+          document.querySelectorAll(".lookup-param-row").forEach((row) => {
+            const paramName = row.querySelector(".param-name").value.trim();
+            const paramSourceField = row
+              .querySelector(".source-field")
+              .value.trim();
+
+            if (paramName && paramSourceField) {
+              lookupParams.push({ paramName, sourceField: paramSourceField });
+            }
+          });
+
+          // Validar consulta
+          if (!lookupQuery && lookupFromTarget) {
+            Swal.showValidationMessage(
+              "Debe proporcionar una consulta SQL para el lookup"
+            );
+            return false;
+          }
+
+          // Validar parámetros
+          if (
+            lookupQuery &&
+            lookupQuery.includes("@") &&
+            lookupParams.length === 0
+          ) {
+            Swal.showValidationMessage(
+              "La consulta usa parámetros pero no se han definido"
+            );
+            return false;
+          }
+        }
+
+        // NUEVO: Recopilar configuración de conversión de unidades
+        let unitConversion = field.unitConversion || { enabled: false };
+
+        if (enableUnitConversion) {
+          const unitMeasureField = document
+            .getElementById("unitMeasureField")
+            .value.trim();
+          const conversionFactorField = document
+            .getElementById("conversionFactorField")
+            .value.trim();
+          const fromUnit = document.getElementById("fromUnit").value.trim();
+          const toUnit = document.getElementById("toUnit").value.trim();
+          const operation = document.getElementById(
+            "conversionOperation"
+          ).value;
+
+          // Validar campos requeridos para conversión
+          if (
+            !unitMeasureField ||
+            !conversionFactorField ||
+            !fromUnit ||
+            !toUnit
+          ) {
+            Swal.showValidationMessage(
+              "Todos los campos de conversión son obligatorios"
+            );
+            return false;
+          }
+
+          unitConversion = {
+            enabled: true,
+            unitMeasureField,
+            conversionFactorField,
+            fromUnit,
+            toUnit,
+            operation,
+          };
+        } else {
+          unitConversion = { enabled: false };
+        }
+
+        // Objeto final con todos los valores
+        const updatedField = {
+          sourceField: sourceField || null,
+          targetField,
+          defaultValue: processedDefaultValue,
+          removePrefix: removePrefix || null,
+          isRequired,
+          valueMappings: field.valueMappings || [],
+
+          // Propiedades de lookup
+          lookupFromTarget,
+          lookupQuery: lookupFromTarget ? lookupQuery : null,
+          lookupParams: lookupFromTarget ? lookupParams : [],
+          validateExistence: lookupFromTarget ? validateExistence : false,
+          failIfNotFound: lookupFromTarget ? failIfNotFound : false,
+
+          // NUEVO: Propiedades de conversión de unidades
+          unitConversion,
+
+          // Propiedades de visualización
+          isEditable,
+          showInList,
+          displayName: displayName || null,
+          displayOrder,
+          fieldGroup: fieldGroup || null,
+          fieldType,
+          options: options.length > 0 ? options : null,
+        };
+
+        return updatedField;
+      },
+    }).then((result) => {
+      if (result.isConfirmed && result.value) {
+        // Agregar log para depuración
+        console.log("Campo actualizado:", result.value);
+
+        // Verificar que el objeto result.value tiene todas las propiedades
+        const expectedProps = [
+          "sourceField",
+          "targetField",
+          "defaultValue",
+          "removePrefix",
+          "isRequired",
+          "valueMappings",
+          "lookupFromTarget",
+          "lookupQuery",
+          "lookupParams",
+          "validateExistence",
+          "failIfNotFound",
+          "unitConversion", // NUEVO
+          "isEditable",
+          "showInList",
+          "displayName",
+          "displayOrder",
+          "fieldGroup",
+          "fieldType",
+          "options",
+        ];
+
+        const missingProps = expectedProps.filter(
+          (prop) => result.value[prop] === undefined
+        );
+        if (missingProps.length > 0) {
+          console.warn(
+            "⚠️ Propiedades faltantes en el campo actualizado:",
+            missingProps
+          );
+        }
+
+        // Crear copia profunda de las tablas para evitar referencias mutables
+        const newTableConfigs = JSON.parse(
+          JSON.stringify(mapping.tableConfigs)
+        );
+
+        // Actualizar el campo con el objeto completo result.value
+        newTableConfigs[tableIndex].fieldMappings[fieldIndex] = result.value;
+
+        // Actualizar el estado del mapping con las configuraciones actualizadas
+        setMapping({
+          ...mapping,
+          tableConfigs: newTableConfigs,
+        });
+
+        // Log del nuevo estado para verificar
+        console.log(
+          "Campo después de la actualización:",
+          newTableConfigs[tableIndex].fieldMappings[fieldIndex]
+        );
       }
     });
   };
@@ -1494,609 +2361,6 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           ...mapping,
           tableConfigs: newTableConfigs,
         });
-      }
-    });
-  };
-
-  const editFieldMapping = (tableIndex, fieldIndex) => {
-    const field = mapping.tableConfigs[tableIndex].fieldMappings[fieldIndex];
-
-    // Verificar que el campo existe y tiene todas las propiedades necesarias
-    if (!field) {
-      console.error(
-        `Campo no encontrado en posición ${tableIndex}-${fieldIndex}`
-      );
-      return;
-    }
-
-    console.log("Campo a editar:", field);
-
-    Swal.fire({
-      title: "Editar Mapeo de Campo",
-      html: `
-      <div class="mapping-form">
-        <div class="field-section">
-          <div class="form-group">
-            <div class="field-container">
-              <div class="field-header">Campo origen (opcional)</div>
-              <input id="sourceField" class="swal2-input" value="${
-                field.sourceField || ""
-              }" placeholder="Ej: COD_CLT">
-            </div>
-          </div>
-          
-          <div class="form-group">
-            <div class="field-container">
-              <div class="field-header">Campo destino (obligatorio)</div>
-              <input id="targetField" class="swal2-input" value="${
-                field.targetField
-              }" placeholder="Ej: CODIGO">
-            </div>
-          </div>
-        </div>
-        
-        <!-- Opciones para especificar el origen de datos -->
-        <div class="data-source-options">
-          <!-- NUEVA OPCIÓN: Consulta en base de datos destino -->
-          <div class="form-check">
-            <input type="checkbox" id="lookupFromTarget" class="swal2-checkbox" ${
-              field.lookupFromTarget ? "checked" : ""
-            }>
-            <label for="lookupFromTarget"><strong>¿Consultar en BD destino?</strong></label>
-          </div>
-        </div>
-        
-        <!-- Opciones para valor por defecto -->
-        <div id="defaultValueSection" class="form-group" style="display:${
-          field.lookupFromTarget ? "none" : "block"
-        }">
-          <div class="field-container">
-            <div id="defaultValueLabel" class="field-header">Valor por defecto</div>
-            <textarea id="defaultValue" class="swal2-textarea" rows="3" placeholder="Ingrese valor por defecto o función SQL nativa (GETDATE(), etc.)">${
-              field.defaultValue !== undefined && field.defaultValue !== null
-                ? field.defaultValue
-                : ""
-            }</textarea>
-            <div class="form-info">
-              <strong>Nota:</strong> Para usar funciones SQL nativas como GETDATE(), NEWID(), etc. ingréselas directamente en el valor por defecto.
-            </div>
-          </div>
-        </div>
-        
-        <!-- NUEVA SECCIÓN: Opciones para consulta en BD destino -->
-        <div id="lookupSection" class="lookup-section" style="display:${
-          field.lookupFromTarget ? "block" : "none"
-        }">
-          <div class="form-group">
-            <div class="field-container">
-              <div class="field-header">Consulta SQL en destino</div>
-              <textarea id="lookupQuery" class="swal2-textarea" rows="3" placeholder="Ej: SELECT nombre FROM clientes WHERE codigo = @codigo">${
-                field.lookupQuery || ""
-              }</textarea>
-              <div class="form-info" style="margin-top: 8px;">
-                <strong>Nota:</strong> Use @parametro en la consulta para referenciar valores.
-              </div>
-            </div>
-          </div>
-          
-          <div class="lookup-params-container">
-            <div class="lookup-params-header">
-              <h4>Parámetros para la consulta</h4>
-              <button type="button" id="addLookupParam" class="btn-add-param">
-                <i class="fa fa-plus"></i> Añadir
-              </button>
-            </div>
-            
-            <div id="lookupParamsContainer">
-              <!-- Los parámetros se generarán dinámicamente aquí -->
-              ${(field.lookupParams || [])
-                .map(
-                  (param, idx) => `
-                <div class="lookup-param-row" data-index="${idx}">
-                  <input type="text" class="swal2-input param-name" placeholder="Nombre parámetro" value="${
-                    param.paramName || ""
-                  }">
-                  <input type="text" class="swal2-input source-field" placeholder="Campo origen" value="${
-                    param.sourceField || ""
-                  }">
-                  <button type="button" class="btn-remove-param">
-                    <i class="fa fa-trash"></i>
-                  </button>
-                </div>
-              `
-                )
-                .join("")}
-            </div>
-          </div>
-          
-          <div class="validation-options">
-            <div class="form-check">
-              <input type="checkbox" id="validateExistence" class="swal2-checkbox" ${
-                field.validateExistence ? "checked" : ""
-              }>
-              <label for="validateExistence"><strong>Validar existencia</strong></label>
-            </div>
-            
-            <div class="form-check">
-              <input type="checkbox" id="failIfNotFound" class="swal2-checkbox" ${
-                field.failIfNotFound ? "checked" : ""
-              }>
-              <label for="failIfNotFound"><strong>Fallar si no existe</strong></label>
-              <small>Si está marcado, el procesamiento fallará si no se encuentra un valor. De lo contrario, usará NULL.</small>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Sección de eliminación de prefijos - Destacada visualmente -->
-        <div class="form-group">
-          <div class="field-container">
-            <div class="field-header">Eliminar prefijo específico</div>
-            <input id="removePrefix" class="swal2-input" value="${
-              field.removePrefix || ""
-            }" placeholder="Ej: CN">
-            <div class="form-info" style="margin-top: 8px;">
-              <strong>Ejemplo de uso de prefijos:</strong><br>
-              <span style="display: block; margin-top: 5px;">
-                Si el valor en origen es <code>CN10133</code> y el prefijo es <code>CN</code>, 
-                el valor en destino será <code>10133</code>
-              </span>
-            </div>
-          </div>
-        </div>
-        
-        <div class="form-check">
-          <input type="checkbox" id="isRequired" class="swal2-checkbox" ${
-            field.isRequired ? "checked" : ""
-          }>
-          <label for="isRequired"><strong>¿Campo obligatorio en destino?</strong></label>
-        </div>
-        
-        <!-- NUEVA SECCIÓN: Opciones de visualización -->
-        <div class="display-options-section">
-          <h4 style="margin-top: 20px; border-top: 1px solid #eee; padding-top: 15px;">Opciones de visualización</h4>
-          
-          <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 10px;">
-            <div class="form-check" style="flex: 1 1 200px;">
-              <input type="checkbox" id="isEditable" class="swal2-checkbox" ${
-                field.isEditable !== false ? "checked" : ""
-              }>
-              <label for="isEditable"><strong>¿Permitir edición?</strong></label>
-              <small style="display: block; margin-top: 5px;">Si está marcado, este campo podrá editarse en formularios.</small>
-            </div>
-            
-            <div class="form-check" style="flex: 1 1 200px;">
-              <input type="checkbox" id="showInList" class="swal2-checkbox" ${
-                field.showInList ? "checked" : ""
-              }>
-              <label for="showInList"><strong>¿Mostrar en listas?</strong></label>
-              <small style="display: block; margin-top: 5px;">Si está marcado, este campo aparecerá en vistas de lista.</small>
-            </div>
-          </div>
-          
-          <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 15px;">
-            <div class="form-group" style="flex: 1 1 200px;">
-              <label for="displayName">Nombre para mostrar</label>
-              <input id="displayName" class="swal2-input" value="${
-                field.displayName || ""
-              }" placeholder="Ej: Código de Cliente">
-              <small style="display: block; margin-top: 5px;">Nombre amigable para mostrar en la interfaz.</small>
-            </div>
-            
-            <div class="form-group" style="flex: 1 1 200px;">
-              <label for="displayOrder">Orden de visualización</label>
-              <input id="displayOrder" type="number" class="swal2-input" value="${
-                field.displayOrder || 0
-              }" placeholder="0">
-              <small style="display: block; margin-top: 5px;">Posición de este campo en listas y formularios (menor = primero).</small>
-            </div>
-          </div>
-          
-          <div style="display: flex; flex-wrap: wrap; gap: 20px; margin-top: 15px;">
-            <div class="form-group" style="flex: 1 1 200px;">
-              <label for="fieldGroup">Grupo de campos</label>
-              <input id="fieldGroup" class="swal2-input" value="${
-                field.fieldGroup || ""
-              }" placeholder="Ej: Información General">
-              <small style="display: block; margin-top: 5px;">Grupo donde aparecerá en formularios de edición.</small>
-            </div>
-            
-            <div class="form-group" style="flex: 1 1 200px;">
-              <label for="fieldType">Tipo de campo</label>
-              <select id="fieldType" class="swal2-select">
-                <option value="text" ${
-                  !field.fieldType || field.fieldType === "text"
-                    ? "selected"
-                    : ""
-                }>Texto</option>
-                <option value="number" ${
-                  field.fieldType === "number" ? "selected" : ""
-                }>Número</option>
-                <option value="date" ${
-                  field.fieldType === "date" ? "selected" : ""
-                }>Fecha</option>
-                <option value="boolean" ${
-                  field.fieldType === "boolean" ? "selected" : ""
-                }>Sí/No</option>
-                <option value="select" ${
-                  field.fieldType === "select" ? "selected" : ""
-                }>Lista desplegable</option>
-                <option value="textarea" ${
-                  field.fieldType === "textarea" ? "selected" : ""
-                }>Texto largo</option>
-                <option value="email" ${
-                  field.fieldType === "email" ? "selected" : ""
-                }>Correo electrónico</option>
-                <option value="tel" ${
-                  field.fieldType === "tel" ? "selected" : ""
-                }>Teléfono</option>
-                <option value="hidden" ${
-                  field.fieldType === "hidden" ? "selected" : ""
-                }>Oculto</option>
-              </select>
-              <small style="display: block; margin-top: 5px;">Tipo de entrada para formularios.</small>
-            </div>
-          </div>
-          
-          <!-- Opciones para tipo "select" -->
-          <div id="selectOptionsContainer" style="margin-top: 15px; display: ${
-            field.fieldType === "select" ? "block" : "none"
-          };">
-            <label>Opciones para lista desplegable</label>
-            <div id="optionsContainer">
-              ${
-                (field.options || [])
-                  .map(
-                    (option, idx) => `
-                  <div class="option-row" style="display: flex; gap: 10px; margin-bottom: 10px;">
-                    <input type="text" class="swal2-input option-label" placeholder="Etiqueta" value="${
-                      option.label || ""
-                    }" style="flex: 1;">
-                    <input type="text" class="swal2-input option-value" placeholder="Valor" value="${
-                      option.value || ""
-                    }" style="flex: 1;">
-                    <button type="button" class="btn-remove-option" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 0 10px;">✕</button>
-                  </div>
-                `
-                  )
-                  .join("") ||
-                `
-                  <div class="option-row" style="display: flex; gap: 10px; margin-bottom: 10px;">
-                    <input type="text" class="swal2-input option-label" placeholder="Etiqueta" style="flex: 1;">
-                    <input type="text" class="swal2-input option-value" placeholder="Valor" style="flex: 1;">
-                    <button type="button" class="btn-remove-option" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 0 10px;">✕</button>
-                  </div>
-                `
-              }
-            </div>
-            <button type="button" id="addOption" style="background: #28a745; color: white; border: none; border-radius: 4px; padding: 5px 10px; margin-top: 10px;">+ Añadir Opción</button>
-          </div>
-        </div>
-      </div>
-    `,
-      showCancelButton: true,
-      confirmButtonText: "Guardar",
-      cancelButtonText: "Cancelar",
-      customClass: {
-        popup: "mapping-editor-modal",
-      },
-      didOpen: () => {
-        // Control de visibilidad de secciones según selección
-        const lookupFromTargetCheckbox =
-          document.getElementById("lookupFromTarget");
-        const lookupSection = document.getElementById("lookupSection");
-        const defaultValueSection = document.getElementById(
-          "defaultValueSection"
-        );
-
-        // Selector de tipo de campo
-        const fieldTypeSelect = document.getElementById("fieldType");
-        const selectOptionsContainer = document.getElementById(
-          "selectOptionsContainer"
-        );
-
-        // Función para actualizar la UI según selección
-        const updateUI = () => {
-          const isLookup = lookupFromTargetCheckbox.checked;
-
-          // Mostrar/ocultar secciones según corresponda
-          if (lookupSection) {
-            lookupSection.style.display = isLookup ? "block" : "none";
-          }
-          defaultValueSection.style.display = isLookup ? "none" : "block";
-
-          // Actualizar mostrar/ocultar opciones de select
-          selectOptionsContainer.style.display =
-            fieldTypeSelect.value === "select" ? "block" : "none";
-        };
-
-        // Asignar eventos
-        lookupFromTargetCheckbox.addEventListener("change", updateUI);
-        fieldTypeSelect.addEventListener("change", updateUI);
-
-        // Inicializar UI
-        updateUI();
-
-        // Manejar botón para añadir opciones
-        const addOptionBtn = document.getElementById("addOption");
-        const optionsContainer = document.getElementById("optionsContainer");
-
-        addOptionBtn.addEventListener("click", () => {
-          const optionRow = document.createElement("div");
-          optionRow.className = "option-row";
-          optionRow.style = "display: flex; gap: 10px; margin-bottom: 10px;";
-
-          optionRow.innerHTML = `
-          <input type="text" class="swal2-input option-label" placeholder="Etiqueta" style="flex: 1;">
-          <input type="text" class="swal2-input option-value" placeholder="Valor" style="flex: 1;">
-          <button type="button" class="btn-remove-option" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 0 10px;">✕</button>
-        `;
-
-          optionsContainer.appendChild(optionRow);
-
-          // Añadir evento para eliminar
-          optionRow
-            .querySelector(".btn-remove-option")
-            .addEventListener("click", () => {
-              optionRow.remove();
-            });
-        });
-
-        // Añadir eventos a los botones de eliminar existentes
-        document.querySelectorAll(".btn-remove-option").forEach((btn) => {
-          btn.addEventListener("click", () => {
-            btn.closest(".option-row").remove();
-          });
-        });
-
-        // Manejar parámetros de consulta
-        const addLookupParamButton = document.getElementById("addLookupParam");
-        if (addLookupParamButton) {
-          const lookupParamsContainer = document.getElementById(
-            "lookupParamsContainer"
-          );
-
-          // Función para añadir una fila de parámetro
-          const addLookupParamRow = (paramName = "", sourceField = "") => {
-            const index = document.querySelectorAll(".lookup-param-row").length;
-            const row = document.createElement("div");
-            row.className = "lookup-param-row";
-            row.dataset.index = index;
-
-            row.innerHTML = `
-            <input type="text" class="swal2-input param-name" placeholder="Nombre parámetro" value="${paramName}">
-            <input type="text" class="swal2-input source-field" placeholder="Campo origen" value="${sourceField}">
-            <button type="button" class="btn-remove-param" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 0 10px;">
-              ✕
-            </button>
-          `;
-
-            // Añadir evento para eliminar parámetro
-            const removeBtn = row.querySelector(".btn-remove-param");
-            removeBtn.addEventListener("click", () => {
-              row.remove();
-            });
-
-            lookupParamsContainer.appendChild(row);
-          };
-
-          // Evento para añadir parámetro
-          addLookupParamButton.addEventListener("click", () => {
-            addLookupParamRow();
-          });
-
-          // Añadir eventos a los botones de eliminar existentes
-          document.querySelectorAll(".btn-remove-param").forEach((btn) => {
-            btn.addEventListener("click", () => {
-              btn.closest(".lookup-param-row").remove();
-            });
-          });
-
-          // Añadir un parámetro inicial si no hay parámetros y está en modo lookup
-          if (
-            lookupFromTargetCheckbox.checked &&
-            lookupParamsContainer.children.length === 0
-          ) {
-            addLookupParamRow();
-          }
-        }
-      },
-      preConfirm: () => {
-        // Recopilar todos los valores
-        const sourceField = document.getElementById("sourceField").value.trim();
-        const targetField = document.getElementById("targetField").value.trim();
-        const defaultValue = document.getElementById("defaultValue").value;
-        const removePrefix = document
-          .getElementById("removePrefix")
-          .value.trim();
-        const isRequired = document.getElementById("isRequired").checked;
-        const lookupFromTarget =
-          document.getElementById("lookupFromTarget").checked;
-
-        // Propiedades de visualización
-        const isEditable = document.getElementById("isEditable").checked;
-        const showInList = document.getElementById("showInList").checked;
-        const displayName = document.getElementById("displayName").value.trim();
-        const displayOrder =
-          parseInt(document.getElementById("displayOrder").value) || 0;
-        const fieldGroup = document.getElementById("fieldGroup").value.trim();
-        const fieldType = document.getElementById("fieldType").value;
-
-        // Validaciones básicas
-        if (!targetField) {
-          Swal.showValidationMessage("El campo destino es obligatorio");
-          return false;
-        }
-
-        // Validar que los campos obligatorios tengan origen de datos
-        if (!sourceField && !lookupFromTarget && !defaultValue && isRequired) {
-          Swal.showValidationMessage(
-            "Los campos obligatorios deben tener un origen de datos (campo origen, consulta o valor por defecto)"
-          );
-          return false;
-        }
-
-        // Procesar el valor por defecto
-        let processedDefaultValue;
-        if (defaultValue === "NULL") {
-          processedDefaultValue = null;
-        } else if (defaultValue === "") {
-          processedDefaultValue = undefined;
-        } else {
-          processedDefaultValue = defaultValue;
-        }
-
-        // Recopilar opciones para tipo "select"
-        const options = [];
-        if (fieldType === "select") {
-          document.querySelectorAll(".option-row").forEach((row) => {
-            const label = row.querySelector(".option-label").value.trim();
-            const value = row.querySelector(".option-value").value.trim();
-
-            if (label || value) {
-              options.push({ label, value });
-            }
-          });
-        }
-
-        // Propiedades de lookup
-        let lookupQuery = "";
-        let lookupParams = [];
-        let validateExistence = false;
-        let failIfNotFound = false;
-
-        if (lookupFromTarget) {
-          const lookupQueryElem = document.getElementById("lookupQuery");
-          if (lookupQueryElem) {
-            lookupQuery = lookupQueryElem.value.trim();
-          }
-
-          const validateExistenceElem =
-            document.getElementById("validateExistence");
-          if (validateExistenceElem) {
-            validateExistence = validateExistenceElem.checked;
-          }
-
-          const failIfNotFoundElem = document.getElementById("failIfNotFound");
-          if (failIfNotFoundElem) {
-            failIfNotFound = failIfNotFoundElem.checked;
-          }
-
-          // Recopilar parámetros
-          document.querySelectorAll(".lookup-param-row").forEach((row) => {
-            const paramName = row.querySelector(".param-name").value.trim();
-            const paramSourceField = row
-              .querySelector(".source-field")
-              .value.trim();
-
-            if (paramName && paramSourceField) {
-              lookupParams.push({ paramName, sourceField: paramSourceField });
-            }
-          });
-
-          // Validar consulta
-          if (!lookupQuery && lookupFromTarget) {
-            Swal.showValidationMessage(
-              "Debe proporcionar una consulta SQL para el lookup"
-            );
-            return false;
-          }
-
-          // Validar parámetros
-          if (
-            lookupQuery &&
-            lookupQuery.includes("@") &&
-            lookupParams.length === 0
-          ) {
-            Swal.showValidationMessage(
-              "La consulta usa parámetros pero no se han definido"
-            );
-            return false;
-          }
-        }
-
-        // Objeto final con todos los valores
-        const updatedField = {
-          sourceField: sourceField || null,
-          targetField,
-          defaultValue: processedDefaultValue,
-          removePrefix: removePrefix || null,
-          isRequired,
-          valueMappings: field.valueMappings || [],
-          // Propiedades de lookup
-          lookupFromTarget,
-          lookupQuery: lookupFromTarget ? lookupQuery : null,
-          lookupParams: lookupFromTarget ? lookupParams : [],
-          validateExistence: lookupFromTarget ? validateExistence : false,
-          failIfNotFound: lookupFromTarget ? failIfNotFound : false,
-
-          // Propiedades de visualización
-          isEditable,
-          showInList,
-          displayName: displayName || null,
-          displayOrder,
-          fieldGroup: fieldGroup || null,
-          fieldType,
-          options: options.length > 0 ? options : null,
-        };
-
-        return updatedField;
-      },
-    }).then((result) => {
-      if (result.isConfirmed && result.value) {
-        // Agregar log para depuración
-        console.log("Campo actualizado:", result.value);
-
-        // Verificar que el objeto result.value tiene todas las propiedades
-        const expectedProps = [
-          "sourceField",
-          "targetField",
-          "defaultValue",
-          "removePrefix",
-          "isRequired",
-          "valueMappings",
-          "lookupFromTarget",
-          "lookupQuery",
-          "lookupParams",
-          "validateExistence",
-          "failIfNotFound",
-          "isEditable",
-          "showInList",
-          "displayName",
-          "displayOrder",
-          "fieldGroup",
-          "fieldType",
-          "options",
-        ];
-
-        const missingProps = expectedProps.filter(
-          (prop) => result.value[prop] === undefined
-        );
-        if (missingProps.length > 0) {
-          console.warn(
-            "⚠️ Propiedades faltantes en el campo actualizado:",
-            missingProps
-          );
-        }
-
-        // Crear copia profunda de las tablas para evitar referencias mutables
-        const newTableConfigs = JSON.parse(
-          JSON.stringify(mapping.tableConfigs)
-        );
-
-        // Actualizar el campo con el objeto completo result.value
-        newTableConfigs[tableIndex].fieldMappings[fieldIndex] = result.value;
-
-        // Actualizar el estado del mapping con las configuraciones actualizadas
-        setMapping({
-          ...mapping,
-          tableConfigs: newTableConfigs,
-        });
-
-        // Log del nuevo estado para verificar
-        console.log(
-          "Campo después de la actualización:",
-          newTableConfigs[tableIndex].fieldMappings[fieldIndex]
-        );
       }
     });
   };
