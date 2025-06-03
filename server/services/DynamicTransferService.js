@@ -9,6 +9,334 @@ const ConsecutiveService = require("./ConsecutiveService");
 
 class DynamicTransferService {
   /**
+   * Aplica conversión de unidades a un valor específico - VERSIÓN MEJORADA
+   * @param {Object} sourceData - Datos completos del registro
+   * @param {Object} fieldMapping - Configuración del campo con conversión
+   * @param {any} originalValue - Valor original del campo
+   * @returns {any} - Valor convertido
+   */
+  applyUnitConversion(sourceData, fieldMapping, originalValue) {
+    try {
+      logger.info(
+        `🔄 Iniciando conversión para campo: ${fieldMapping.targetField}`
+      );
+
+      // Validación inicial
+      if (
+        !fieldMapping.unitConversion ||
+        !fieldMapping.unitConversion.enabled
+      ) {
+        logger.debug(
+          `❌ Conversión no habilitada para ${fieldMapping.targetField}`
+        );
+        return originalValue;
+      }
+
+      const config = fieldMapping.unitConversion;
+
+      // MEJORA: Validar configuración completa
+      if (
+        !config.unitMeasureField ||
+        !config.conversionFactorField ||
+        !config.fromUnit ||
+        !config.toUnit
+      ) {
+        logger.error(
+          `⚠️ Configuración de conversión incompleta para ${fieldMapping.targetField}:`,
+          {
+            unitMeasureField: config.unitMeasureField,
+            conversionFactorField: config.conversionFactorField,
+            fromUnit: config.fromUnit,
+            toUnit: config.toUnit,
+            operation: config.operation,
+          }
+        );
+        return originalValue;
+      }
+
+      // MEJORA: Logging detallado de datos disponibles
+      logger.info(
+        `📊 Datos de origen disponibles: ${Object.keys(sourceData).join(", ")}`
+      );
+      logger.info(
+        `📦 Valor original: ${originalValue} (tipo: ${typeof originalValue})`
+      );
+
+      // MEJORA: Validar que existen los campos necesarios en sourceData
+      const unitMeasureValue = sourceData[config.unitMeasureField];
+      const conversionFactorValue = sourceData[config.conversionFactorField];
+
+      if (unitMeasureValue === undefined || unitMeasureValue === null) {
+        logger.warn(
+          `⚠️ Campo de unidad de medida '${config.unitMeasureField}' no encontrado en datos de origen`
+        );
+        logger.debug(
+          `Campos disponibles: ${Object.keys(sourceData).join(", ")}`
+        );
+        return originalValue;
+      }
+
+      if (
+        conversionFactorValue === undefined ||
+        conversionFactorValue === null
+      ) {
+        logger.warn(
+          `⚠️ Campo de factor de conversión '${config.conversionFactorField}' no encontrado en datos de origen`
+        );
+        logger.debug(
+          `Campos disponibles: ${Object.keys(sourceData).join(", ")}`
+        );
+        return originalValue;
+      }
+
+      // MEJORA: Validación del factor de conversión
+      const conversionFactor = parseFloat(conversionFactorValue);
+      if (isNaN(conversionFactor)) {
+        logger.error(
+          `❌ Factor de conversión no es un número válido: '${conversionFactorValue}' en campo '${config.conversionFactorField}'`
+        );
+        return originalValue;
+      }
+
+      if (conversionFactor <= 0) {
+        logger.error(
+          `❌ Factor de conversión debe ser mayor que cero: ${conversionFactor}`
+        );
+        return originalValue;
+      }
+
+      // MEJORA: Logging detallado de valores
+      logger.info(
+        `📏 Unidad actual: '${unitMeasureValue}', Unidad origen configurada: '${config.fromUnit}'`
+      );
+      logger.info(
+        `🔢 Factor de conversión: ${conversionFactor} (origen: '${conversionFactorValue}')`
+      );
+      logger.info(`⚙️ Operación: ${config.operation}`);
+      logger.info(`🎯 Convertir de '${config.fromUnit}' a '${config.toUnit}'`);
+
+      // Verificar si necesita conversión con logging mejorado
+      const shouldConvert = this.shouldApplyUnitConversion(
+        unitMeasureValue,
+        config.fromUnit
+      );
+      if (!shouldConvert) {
+        logger.info(
+          `❌ No se aplica conversión: unidad actual '${unitMeasureValue}' no requiere conversión desde '${config.fromUnit}'`
+        );
+        return originalValue;
+      }
+
+      logger.info(
+        `✅ Se aplicará conversión: unidad '${unitMeasureValue}' coincide con patrón '${config.fromUnit}'`
+      );
+
+      // MEJORA: Validación del valor original
+      const numericValue = parseFloat(originalValue);
+      if (isNaN(numericValue)) {
+        logger.warn(
+          `⚠️ Valor original no es numérico: '${originalValue}', usando 0`
+        );
+        return originalValue; // Mantener valor original si no es numérico
+      }
+
+      // Realizar conversión
+      let convertedValue;
+      if (config.operation === "multiply") {
+        // Para cantidades: cantidad_en_cajas * factor = cantidad_en_unidades
+        convertedValue = numericValue * conversionFactor;
+        logger.info(
+          `🔢 Conversión (multiplicar): ${numericValue} × ${conversionFactor} = ${convertedValue}`
+        );
+      } else if (config.operation === "divide") {
+        // Para precios: precio_por_caja / factor = precio_por_unidad
+        if (conversionFactor === 0) {
+          logger.error(
+            `❌ No se puede dividir por cero (factor: ${conversionFactor})`
+          );
+          return originalValue;
+        }
+        convertedValue = numericValue / conversionFactor;
+        logger.info(
+          `🔢 Conversión (dividir): ${numericValue} ÷ ${conversionFactor} = ${convertedValue}`
+        );
+      } else {
+        logger.error(
+          `❌ Operación de conversión no válida: '${config.operation}'. Debe ser 'multiply' o 'divide'`
+        );
+        return originalValue;
+      }
+
+      // MEJORA: Redondeo opcional para evitar decimales excesivos
+      const roundedValue = Math.round(convertedValue * 100) / 100; // 2 decimales
+
+      logger.info(`🎉 Conversión completada exitosamente:`);
+      logger.info(`   📦 Valor original: ${originalValue} ${config.fromUnit}`);
+      logger.info(`   🔄 Factor: ${conversionFactor}`);
+      logger.info(`   📊 Valor convertido: ${roundedValue} ${config.toUnit}`);
+      logger.info(`   ⚙️ Operación: ${config.operation}`);
+
+      return roundedValue;
+    } catch (error) {
+      logger.error(
+        `💥 Error en conversión de unidades para campo ${fieldMapping.targetField}:`,
+        {
+          error: error.message,
+          stack: error.stack,
+          originalValue,
+          config: fieldMapping.unitConversion,
+        }
+      );
+      return originalValue; // Devolver valor original si hay error
+    }
+  }
+
+  /**
+   * Verifica si debe aplicarse conversión basado en la unidad de medida - VERSIÓN MEJORADA
+   * @param {string} currentUnit - Unidad actual
+   * @param {string} fromUnit - Unidad que requiere conversión
+   * @returns {boolean}
+   */
+  shouldApplyUnitConversion(currentUnit, fromUnit) {
+    try {
+      if (!currentUnit || !fromUnit) {
+        logger.debug(
+          `❌ Unidades faltantes: actual='${currentUnit}', configurada='${fromUnit}'`
+        );
+        return false;
+      }
+
+      const normalizedCurrent = String(currentUnit).toUpperCase().trim();
+      const normalizedFrom = String(fromUnit).toUpperCase().trim();
+
+      logger.debug(
+        `🔍 Comparando unidades: '${normalizedCurrent}' vs '${normalizedFrom}'`
+      );
+
+      // MEJORA: Más variaciones y mejor cobertura
+      const unitVariations = {
+        CAJA: [
+          "CAJA",
+          "CJA",
+          "CAJAS",
+          "CJ",
+          "CAJ",
+          "BOX",
+          "BOXES",
+          "CJTA",
+          "CAJITA",
+        ],
+        UNIDAD: [
+          "UNIDAD",
+          "UND",
+          "UNIDADES",
+          "U",
+          "UN",
+          "UNIT",
+          "UNITS",
+          "PCS",
+          "PIEZAS",
+          "PZ",
+          "PIEZA",
+        ],
+        KILO: ["KILO", "KG", "KILOS", "K", "KILOGRAMO", "KILOGRAMOS", "KGR"],
+        LITRO: ["LITRO", "LT", "LITROS", "L", "LTR", "LITR"],
+        METRO: ["METRO", "M", "METROS", "MTS", "MT"],
+        GRAMO: ["GRAMO", "G", "GRAMOS", "GR", "GRM"],
+        DOCENA: ["DOCENA", "DOC", "DOCENAS", "DZ"],
+        PAR: ["PAR", "PARES", "PR"],
+        ROLLO: ["ROLLO", "ROLLOS", "RL", "ROLL"],
+        PAQUETE: ["PAQUETE", "PAQUETES", "PAQ", "PACK", "PKG"],
+      };
+
+      // Buscar en variaciones predefinidas
+      for (const [baseUnit, variations] of Object.entries(unitVariations)) {
+        if (variations.includes(normalizedFrom)) {
+          const isMatch = variations.includes(normalizedCurrent);
+          logger.debug(
+            `🔍 Verificación por variaciones '${baseUnit}': ${
+              isMatch ? "✅" : "❌"
+            }`
+          );
+          if (isMatch) return true;
+        }
+      }
+
+      // MEJORA: Comparación de contenido (más flexible)
+      if (
+        normalizedCurrent.includes(normalizedFrom) ||
+        normalizedFrom.includes(normalizedCurrent)
+      ) {
+        logger.debug(
+          `🔍 Verificación por contenido: ✅ (una contiene a la otra)`
+        );
+        return true;
+      }
+
+      // MEJORA: Comparación sin espacios y caracteres especiales
+      const cleanCurrent = normalizedCurrent.replace(/[^A-Z0-9]/g, "");
+      const cleanFrom = normalizedFrom.replace(/[^A-Z0-9]/g, "");
+
+      if (cleanCurrent === cleanFrom) {
+        logger.debug(
+          `🔍 Verificación limpia: ✅ ('${cleanCurrent}' === '${cleanFrom}')`
+        );
+        return true;
+      }
+
+      // MEJORA: Verificación de abreviaciones comunes
+      const abbreviationMap = {
+        CAJA: ["CJ", "CJA", "CAJ"],
+        UNIDAD: ["UN", "UND", "U"],
+        KILO: ["K", "KG"],
+        LITRO: ["L", "LT"],
+        METRO: ["M", "MT"],
+        GRAMO: ["G", "GR"],
+      };
+
+      for (const [full, abbrevs] of Object.entries(abbreviationMap)) {
+        if (
+          (full === normalizedCurrent && abbrevs.includes(normalizedFrom)) ||
+          (full === normalizedFrom && abbrevs.includes(normalizedCurrent)) ||
+          (abbrevs.includes(normalizedCurrent) &&
+            abbrevs.includes(normalizedFrom))
+        ) {
+          logger.debug(`🔍 Verificación por abreviación '${full}': ✅`);
+          return true;
+        }
+      }
+
+      // Comparación exacta final
+      const exactMatch = normalizedCurrent === normalizedFrom;
+      logger.debug(
+        `🔍 Verificación exacta: ${
+          exactMatch ? "✅" : "❌"
+        } ('${normalizedCurrent}' === '${normalizedFrom}')`
+      );
+
+      if (!exactMatch) {
+        logger.info(
+          `❌ Unidad '${currentUnit}' no coincide con patrón '${fromUnit}' para conversión`
+        );
+        logger.debug(`   Normalizada actual: '${normalizedCurrent}'`);
+        logger.debug(`   Normalizada configurada: '${normalizedFrom}'`);
+        logger.debug(
+          `   Sugerencia: Verifique la configuración de unidades o añada variaciones`
+        );
+      }
+
+      return exactMatch;
+    } catch (error) {
+      logger.error(`💥 Error en verificación de unidades: ${error.message}`, {
+        currentUnit,
+        fromUnit,
+        error: error.stack,
+      });
+      return false;
+    }
+  }
+
+  /**
    * Procesa documentos según una configuración de mapeo
    * @param {Array} documentIds - IDs de los documentos a procesar
    * @param {string} mappingId - ID de la configuración de mapeo
@@ -644,383 +972,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Aplica conversión de unidades a un valor específico
-   * @param {Object} sourceData - Datos completos del registro
-   * @param {Object} fieldMapping - Configuración del campo con conversión
-   * @param {any} originalValue - Valor original del campo
-   * @returns {any} - Valor convertido
-   */
-  applyUnitConversion(sourceData, fieldMapping, originalValue) {
-    try {
-      if (
-        !fieldMapping.unitConversion ||
-        !fieldMapping.unitConversion.enabled
-      ) {
-        return originalValue;
-      }
-
-      const config = fieldMapping.unitConversion;
-
-      // Obtener valores de los campos de control
-      const unitMeasureValue = sourceData[config.unitMeasureField];
-      const conversionFactor =
-        parseFloat(sourceData[config.conversionFactorField]) || 1;
-
-      // Verificar si necesita conversión
-      if (!this.shouldApplyUnitConversion(unitMeasureValue, config.fromUnit)) {
-        logger.debug(
-          `No se aplica conversión para ${fieldMapping.targetField}: unidad actual es ${unitMeasureValue}`
-        );
-        return originalValue;
-      }
-
-      const numericValue = parseFloat(originalValue) || 0;
-      let convertedValue;
-
-      if (config.operation === "multiply") {
-        // Para cantidades: cantidad_en_cajas * factor = cantidad_en_unidades
-        convertedValue = numericValue * conversionFactor;
-        logger.debug(
-          `Conversión cantidad: ${numericValue} ${unitMeasureValue} * ${conversionFactor} = ${convertedValue} ${config.toUnit}`
-        );
-      } else if (config.operation === "divide") {
-        // Para precios: precio_por_caja / factor = precio_por_unidad
-        convertedValue =
-          conversionFactor !== 0 ? numericValue / conversionFactor : 0;
-        logger.debug(
-          `Conversión precio: ${numericValue} / ${conversionFactor} = ${convertedValue} (precio unitario)`
-        );
-      } else {
-        return originalValue;
-      }
-
-      logger.info(
-        `Campo ${fieldMapping.targetField} convertido: ${originalValue} -> ${convertedValue}`
-      );
-      return convertedValue;
-    } catch (error) {
-      logger.error(
-        `Error en conversión de unidades para campo ${fieldMapping.targetField}: ${error.message}`
-      );
-      return originalValue; // Devolver valor original si hay error
-    }
-  }
-
-  /**
-   * Verifica si debe aplicarse conversión basado en la unidad de medida
-   * @param {string} currentUnit - Unidad actual
-   * @param {string} fromUnit - Unidad que requiere conversión
-   * @returns {boolean}
-   */
-  shouldApplyUnitConversion(currentUnit, fromUnit) {
-    if (!currentUnit || !fromUnit) return false;
-
-    const normalizedCurrent = String(currentUnit).toUpperCase().trim();
-    const normalizedFrom = String(fromUnit).toUpperCase().trim();
-
-    // Variaciones comunes de unidades
-    const unitVariations = {
-      CAJA: ["CAJA", "CJA", "CAJAS", "CJ"],
-      UNIDAD: ["UNIDAD", "UND", "UNIDADES", "U", "UN"],
-      KILO: ["KILO", "KG", "KILOS", "K"],
-      LITRO: ["LITRO", "LT", "LITROS", "L"],
-    };
-
-    // Buscar variaciones de la unidad origen
-    for (const [baseUnit, variations] of Object.entries(unitVariations)) {
-      if (variations.includes(normalizedFrom)) {
-        return variations.includes(normalizedCurrent);
-      }
-    }
-
-    // Comparación directa si no se encuentra en variaciones
-    return normalizedCurrent === normalizedFrom;
-  }
-
-  /**
-   * Realiza consultas de lookup en la base de datos destino para enriquecer los datos
-   * @param {Object} tableConfig - Configuración de la tabla
-   * @param {Object} sourceData - Datos de origen
-   * @param {Object} targetConnection - Conexión a la base de datos destino
-   * @returns {Promise<Object>} - Objeto con los valores obtenidos del lookup
-   */
-  async lookupValuesFromTarget(tableConfig, sourceData, targetConnection) {
-    try {
-      logger.info(
-        `Realizando consultas de lookup en base de datos destino para tabla ${tableConfig.name}`
-      );
-
-      const lookupResults = {};
-      const failedLookups = [];
-
-      // Identificar todos los campos que requieren lookup
-      const lookupFields = tableConfig.fieldMappings.filter(
-        (fm) => fm.lookupFromTarget && fm.lookupQuery
-      );
-
-      if (lookupFields.length === 0) {
-        logger.debug(
-          `No se encontraron campos que requieran lookup en tabla ${tableConfig.name}`
-        );
-        return { results: {}, success: true };
-      }
-
-      logger.info(
-        `Encontrados ${lookupFields.length} campos con lookupFromTarget para procesar`
-      );
-
-      // Ejecutar cada consulta de lookup
-      for (const fieldMapping of lookupFields) {
-        try {
-          let lookupQuery = fieldMapping.lookupQuery;
-          logger.debug(
-            `Procesando lookup para campo ${fieldMapping.targetField}: ${lookupQuery}`
-          );
-
-          // Preparar parámetros para la consulta
-          const params = {};
-          const missingParams = [];
-
-          // Registrar todos los parámetros que se esperan en la consulta
-          const expectedParams = [];
-          const paramRegex = /@(\w+)/g;
-          let match;
-          while ((match = paramRegex.exec(lookupQuery)) !== null) {
-            expectedParams.push(match[1]);
-          }
-
-          logger.debug(
-            `Parámetros esperados en la consulta: ${expectedParams.join(", ")}`
-          );
-
-          // Si hay parámetros definidos, extraerlos de los datos de origen
-          if (
-            fieldMapping.lookupParams &&
-            fieldMapping.lookupParams.length > 0
-          ) {
-            for (const param of fieldMapping.lookupParams) {
-              if (!param.sourceField || !param.paramName) {
-                logger.warn(
-                  `Parámetro mal configurado para ${fieldMapping.targetField}. Debe tener sourceField y paramName.`
-                );
-                continue;
-              }
-
-              // Obtener el valor del campo origen
-              let paramValue = sourceData[param.sourceField];
-
-              // Registrar si el valor está presente
-              logger.debug(
-                `Parámetro ${param.paramName} (desde campo ${
-                  param.sourceField
-                }): ${
-                  paramValue !== undefined && paramValue !== null
-                    ? "PRESENTE"
-                    : "NO ENCONTRADO"
-                }`
-              );
-
-              // Comprobar si el parámetro es requerido en la consulta
-              if (
-                expectedParams.includes(param.paramName) &&
-                (paramValue === undefined || paramValue === null)
-              ) {
-                missingParams.push(
-                  `@${param.paramName} (campo: ${param.sourceField})`
-                );
-              }
-
-              // Aplicar eliminación de prefijo si está configurado
-              if (
-                fieldMapping.removePrefix &&
-                typeof paramValue === "string" &&
-                paramValue.startsWith(fieldMapping.removePrefix)
-              ) {
-                const originalValue = paramValue;
-                paramValue = paramValue.substring(
-                  fieldMapping.removePrefix.length
-                );
-                logger.debug(
-                  `Prefijo '${fieldMapping.removePrefix}' eliminado del parámetro ${param.paramName}: '${originalValue}' → '${paramValue}'`
-                );
-              }
-
-              params[param.paramName] = paramValue;
-            }
-          }
-
-          // Verificar si faltan parámetros requeridos
-          if (missingParams.length > 0) {
-            const errorMessage = `Faltan parámetros requeridos para la consulta: ${missingParams.join(
-              ", "
-            )}`;
-            logger.error(errorMessage);
-
-            if (fieldMapping.failIfNotFound) {
-              throw new Error(errorMessage);
-            } else {
-              // No es obligatorio, usar null y continuar
-              lookupResults[fieldMapping.targetField] = null;
-              failedLookups.push({
-                field: fieldMapping.targetField,
-                error: errorMessage,
-              });
-              continue;
-            }
-          }
-
-          logger.debug(`Parámetros para lookup: ${JSON.stringify(params)}`);
-
-          // Ejecutar la consulta
-          try {
-            // Asegurar que es una consulta SELECT
-            if (!lookupQuery.trim().toUpperCase().startsWith("SELECT")) {
-              lookupQuery = `SELECT ${lookupQuery} AS result`;
-            }
-
-            // Verificar que los parámetros esperados tengan valor asignado
-            for (const expectedParam of expectedParams) {
-              if (params[expectedParam] === undefined) {
-                logger.warn(
-                  `El parámetro @${expectedParam} en la consulta no está definido en los parámetros proporcionados. Se usará NULL.`
-                );
-                params[expectedParam] = null;
-              }
-            }
-
-            const result = await SqlService.query(
-              targetConnection,
-              lookupQuery,
-              params
-            );
-
-            // Verificar resultados
-            if (result.recordset && result.recordset.length > 0) {
-              // Extraer el valor del resultado (primera columna o columna 'result')
-              const value =
-                result.recordset[0].result !== undefined
-                  ? result.recordset[0].result
-                  : Object.values(result.recordset[0])[0];
-
-              // Validar existencia si es requerido
-              if (
-                fieldMapping.validateExistence &&
-                (value === null || value === undefined) &&
-                fieldMapping.failIfNotFound
-              ) {
-                throw new Error(
-                  `No se encontró valor para el campo ${fieldMapping.targetField} con los parámetros proporcionados`
-                );
-              }
-
-              // Guardar el valor obtenido
-              lookupResults[fieldMapping.targetField] = value;
-              logger.debug(
-                `Lookup exitoso para ${fieldMapping.targetField}: ${value}`
-              );
-            } else if (fieldMapping.failIfNotFound) {
-              // No se encontraron resultados y es obligatorio
-              throw new Error(
-                `No se encontraron resultados para el campo ${fieldMapping.targetField}`
-              );
-            } else {
-              // No se encontraron resultados pero no es obligatorio
-              lookupResults[fieldMapping.targetField] = null;
-              logger.debug(
-                `No se encontraron resultados para lookup de ${fieldMapping.targetField}, usando NULL`
-              );
-            }
-          } catch (queryError) {
-            // Error en la consulta SQL
-            const errorMessage = `Error ejecutando consulta SQL para ${fieldMapping.targetField}: ${queryError.message}`;
-            logger.error(errorMessage, {
-              sql: lookupQuery,
-              params: params,
-              error: queryError,
-            });
-
-            if (fieldMapping.failIfNotFound) {
-              throw new Error(errorMessage);
-            } else {
-              // Registrar fallo pero continuar
-              failedLookups.push({
-                field: fieldMapping.targetField,
-                error: `Error en consulta SQL: ${queryError.message}`,
-              });
-              lookupResults[fieldMapping.targetField] = null; // Usar null como valor por defecto
-            }
-          }
-        } catch (fieldError) {
-          // Error al procesar el campo
-          logger.error(
-            `Error al realizar lookup para campo ${fieldMapping.targetField}: ${fieldError.message}`
-          );
-
-          if (fieldMapping.failIfNotFound) {
-            // Si es obligatorio, añadir a los errores pero seguir con otros campos
-            failedLookups.push({
-              field: fieldMapping.targetField,
-              error: fieldError.message,
-            });
-          } else {
-            // No es obligatorio, usar null y continuar
-            lookupResults[fieldMapping.targetField] = null;
-          }
-        }
-      }
-
-      // Verificar si hay errores críticos (campos que fallan y son obligatorios)
-      const criticalFailures = failedLookups.filter((fail) => {
-        // Buscar si el campo que falló está marcado como obligatorio
-        const field = lookupFields.find((f) => f.targetField === fail.field);
-        return field && field.failIfNotFound;
-      });
-
-      if (criticalFailures.length > 0) {
-        const failuresMsg = criticalFailures
-          .map((f) => `${f.field}: ${f.error}`)
-          .join(", ");
-
-        logger.error(`Fallos críticos en lookup: ${failuresMsg}`);
-
-        return {
-          results: lookupResults,
-          success: false,
-          failedFields: criticalFailures,
-          error: `Error en validación de datos: ${failuresMsg}`,
-        };
-      }
-
-      logger.info(
-        `Lookup completado. Obtenidos ${
-          Object.keys(lookupResults).length
-        } valores.`
-      );
-
-      return {
-        results: lookupResults,
-        success: true,
-        failedFields: failedLookups, // Incluir fallos no críticos para información
-      };
-    } catch (error) {
-      logger.error(
-        `Error general al ejecutar lookup en destino: ${error.message}`,
-        {
-          error,
-          stack: error.stack,
-        }
-      );
-
-      return {
-        results: {},
-        success: false,
-        error: error.message,
-      };
-    }
-  }
-
-  /**
-   * Procesa un único documento según la configuración (sin transacciones)
+   * Procesa un único documento según la configuración (sin transacciones) - VERSIÓN MEJORADA
    * @param {string} documentId - ID del documento
    * @param {Object} mapping - Configuración de mapeo
    * @param {Object} sourceConnection - Conexión a servidor origen
@@ -1090,39 +1042,37 @@ class DynamicTransferService {
             // Construir consulta básica con alias para evitar ambigüedad
             const tableAlias = "t1";
             const query = `
-         SELECT ${tableAlias}.* FROM ${tableConfig.sourceTable} ${tableAlias}
-         WHERE ${tableAlias}.${
-              tableConfig.primaryKey || "NUM_PED"
-            } = @documentId
-         ${
-           tableConfig.filterCondition
-             ? ` AND ${tableConfig.filterCondition.replace(
-                 /\b(\w+)\b/g,
-                 (m, field) => {
-                   if (
-                     !field.includes(".") &&
-                     !field.match(/^[\d.]+$/) &&
-                     ![
-                       "AND",
-                       "OR",
-                       "NULL",
-                       "IS",
-                       "NOT",
-                       "IN",
-                       "LIKE",
-                       "BETWEEN",
-                       "TRUE",
-                       "FALSE",
-                     ].includes(field.toUpperCase())
-                   ) {
-                     return `${tableAlias}.${field}`;
-                   }
-                   return m;
+       SELECT ${tableAlias}.* FROM ${tableConfig.sourceTable} ${tableAlias}
+       WHERE ${tableAlias}.${tableConfig.primaryKey || "NUM_PED"} = @documentId
+       ${
+         tableConfig.filterCondition
+           ? ` AND ${tableConfig.filterCondition.replace(
+               /\b(\w+)\b/g,
+               (m, field) => {
+                 if (
+                   !field.includes(".") &&
+                   !field.match(/^[\d.]+$/) &&
+                   ![
+                     "AND",
+                     "OR",
+                     "NULL",
+                     "IS",
+                     "NOT",
+                     "IN",
+                     "LIKE",
+                     "BETWEEN",
+                     "TRUE",
+                     "FALSE",
+                   ].includes(field.toUpperCase())
+                 ) {
+                   return `${tableAlias}.${field}`;
                  }
-               )}`
-             : ""
-         }
-       `;
+                 return m;
+               }
+             )}`
+           : ""
+       }
+     `;
             logger.debug(`Ejecutando consulta principal: ${query}`);
             const result = await SqlService.query(sourceConnection, query, {
               documentId,
@@ -1194,9 +1144,9 @@ class DynamicTransferService {
 
         // 4. Verificar si el documento ya existe en destino
         const checkQuery = `
-     SELECT TOP 1 1 FROM ${tableConfig.targetTable}
-     WHERE ${targetPrimaryKey} = @documentId
-   `;
+   SELECT TOP 1 1 FROM ${tableConfig.targetTable}
+   WHERE ${targetPrimaryKey} = @documentId
+ `;
 
         logger.debug(`Verificando existencia en destino: ${checkQuery}`);
         const checkResult = await SqlService.query(
@@ -1352,30 +1302,52 @@ class DynamicTransferService {
                 }
               }
 
-              // PASO 3: **APLICAR CONVERSIÓN DE UNIDADES ANTES DE OTROS PROCESAMIENTOS**
+              // PASO 3: **APLICAR CONVERSIÓN DE UNIDADES MEJORADA - ANTES DE OTROS PROCESAMIENTOS**
               if (
                 fieldMapping.unitConversion &&
                 fieldMapping.unitConversion.enabled
               ) {
+                logger.info(
+                  `🔄 Iniciando conversión de unidades para campo: ${fieldMapping.targetField}`
+                );
+                logger.info(
+                  `📦 Valor antes de conversión: ${value} (tipo: ${typeof value})`
+                );
+                logger.info(
+                  `📊 Datos de origen disponibles: ${Object.keys(
+                    sourceData
+                  ).join(", ")}`
+                );
+
                 const originalValue = value;
                 value = this.applyUnitConversion(
                   sourceData,
                   fieldMapping,
                   value
                 );
+
                 if (originalValue !== value) {
                   logger.info(
-                    `🔄 Conversión aplicada en ${fieldMapping.targetField}: ${originalValue} → ${value}`
+                    `🎉 Conversión aplicada exitosamente en ${fieldMapping.targetField}:`
+                  );
+                  logger.info(
+                    `   📦 Antes: ${originalValue} (${typeof originalValue})`
+                  );
+                  logger.info(`   📊 Después: ${value} (${typeof value})`);
+                } else {
+                  logger.info(
+                    `ℹ️ No se aplicó conversión en ${fieldMapping.targetField}: ${value}`
                   );
                 }
               }
 
-              // PASO 4: Formatear fechas si es necesario
+              // PASO 4: Formatear fechas si es necesario (solo si no es numérico)
               if (
-                value instanceof Date ||
-                (typeof value === "string" &&
-                  value.includes("T") &&
-                  !isNaN(new Date(value).getTime()))
+                typeof value !== "number" &&
+                (value instanceof Date ||
+                  (typeof value === "string" &&
+                    value.includes("T") &&
+                    !isNaN(new Date(value).getTime())))
               ) {
                 logger.debug(
                   `Convirtiendo fecha a formato SQL Server: ${value}`
@@ -1384,14 +1356,14 @@ class DynamicTransferService {
                 logger.debug(`Fecha convertida: ${value}`);
               }
 
-              // PASO 5: Aplicar consecutivo si corresponde a esta tabla y campo
+              // PASO 5: Aplicar consecutivo si corresponde (CUIDADO: no sobrescribir conversiones numéricas)
               if (
                 currentConsecutive &&
                 mapping.consecutiveConfig &&
                 mapping.consecutiveConfig.enabled
               ) {
                 // Verificar si este campo debe recibir el consecutivo (en tabla principal)
-                if (
+                const shouldReceiveConsecutive =
                   mapping.consecutiveConfig.fieldName ===
                     fieldMapping.targetField ||
                   (mapping.consecutiveConfig.applyToTables &&
@@ -1399,13 +1371,25 @@ class DynamicTransferService {
                       (t) =>
                         t.tableName === tableConfig.name &&
                         t.fieldName === fieldMapping.targetField
-                    ))
-                ) {
-                  // Asignar el consecutivo al campo correspondiente
-                  value = currentConsecutive.formatted;
-                  logger.debug(
-                    `Asignando consecutivo ${currentConsecutive.formatted} a campo ${fieldMapping.targetField} en tabla ${tableConfig.name}`
-                  );
+                    ));
+
+                if (shouldReceiveConsecutive) {
+                  // MEJORA: Solo aplicar consecutivo si no hubo conversión numérica
+                  if (
+                    fieldMapping.unitConversion &&
+                    fieldMapping.unitConversion.enabled &&
+                    typeof value === "number"
+                  ) {
+                    logger.warn(
+                      `⚠️ No se aplicará consecutivo a ${fieldMapping.targetField} porque se aplicó conversión numérica (valor: ${value})`
+                    );
+                  } else {
+                    // Asignar el consecutivo al campo correspondiente
+                    value = currentConsecutive.formatted;
+                    logger.debug(
+                      `Asignando consecutivo ${currentConsecutive.formatted} a campo ${fieldMapping.targetField} en tabla ${tableConfig.name}`
+                    );
+                  }
                 }
               }
 
@@ -1419,7 +1403,7 @@ class DynamicTransferService {
                 );
               }
 
-              // PASO 7: Aplicar mapeo de valores si existe
+              // PASO 7: Aplicar mapeo de valores si existe (después de conversión)
               if (
                 value !== null &&
                 value !== undefined &&
@@ -1461,7 +1445,9 @@ class DynamicTransferService {
 
               // Log final del valor que se va a insertar
               logger.debug(
-                `✅ Campo ${fieldMapping.targetField} preparado para inserción: ${value}`
+                `✅ Campo ${
+                  fieldMapping.targetField
+                } preparado para inserción: ${value} (tipo: ${typeof value})`
               );
             }
           }
@@ -1474,9 +1460,9 @@ class DynamicTransferService {
         });
 
         const insertQuery = `
-     INSERT INTO ${tableConfig.targetTable} (${insertFieldsList.join(", ")})
-     VALUES (${insertValuesList.join(", ")})
-   `;
+   INSERT INTO ${tableConfig.targetTable} (${insertFieldsList.join(", ")})
+   VALUES (${insertValuesList.join(", ")})
+ `;
 
         logger.debug(
           `Ejecutando inserción en tabla principal ${tableConfig.name}: ${insertQuery}`
@@ -1578,40 +1564,40 @@ class DynamicTransferService {
             }
 
             const query = `
-         SELECT ${selectFields} FROM ${parentTable.sourceTable} ${tableAlias}
-         WHERE ${tableAlias}.${
+       SELECT ${selectFields} FROM ${parentTable.sourceTable} ${tableAlias}
+       WHERE ${tableAlias}.${
               detailConfig.primaryKey || parentTable.primaryKey || "NUM_PED"
             } = @documentId
-         ${
-           detailConfig.filterCondition
-             ? ` AND ${detailConfig.filterCondition.replace(
-                 /\b(\w+)\b/g,
-                 (m, field) => {
-                   if (
-                     !field.includes(".") &&
-                     !field.match(/^[\d.]+$/) &&
-                     ![
-                       "AND",
-                       "OR",
-                       "NULL",
-                       "IS",
-                       "NOT",
-                       "IN",
-                       "LIKE",
-                       "BETWEEN",
-                       "TRUE",
-                       "FALSE",
-                     ].includes(field.toUpperCase())
-                   ) {
-                     return `${tableAlias}.${field}`;
-                   }
-                   return m;
+       ${
+         detailConfig.filterCondition
+           ? ` AND ${detailConfig.filterCondition.replace(
+               /\b(\w+)\b/g,
+               (m, field) => {
+                 if (
+                   !field.includes(".") &&
+                   !field.match(/^[\d.]+$/) &&
+                   ![
+                     "AND",
+                     "OR",
+                     "NULL",
+                     "IS",
+                     "NOT",
+                     "IN",
+                     "LIKE",
+                     "BETWEEN",
+                     "TRUE",
+                     "FALSE",
+                   ].includes(field.toUpperCase())
+                 ) {
+                   return `${tableAlias}.${field}`;
                  }
-               )}`
-             : ""
-         }
-         ${orderByColumn ? ` ORDER BY ${tableAlias}.${orderByColumn}` : ""}
-       `;
+                 return m;
+               }
+             )}`
+           : ""
+       }
+       ${orderByColumn ? ` ORDER BY ${tableAlias}.${orderByColumn}` : ""}
+     `;
             logger.debug(`Ejecutando consulta para detalles: ${query}`);
             const result = await SqlService.query(sourceConnection, query, {
               documentId,
@@ -1638,15 +1624,15 @@ class DynamicTransferService {
             }
 
             const query = `
-         SELECT ${selectFields} FROM ${detailConfig.sourceTable} 
-         WHERE ${detailConfig.primaryKey || "NUM_PED"} = @documentId
-         ${
-           detailConfig.filterCondition
-             ? ` AND ${detailConfig.filterCondition}`
-             : ""
-         }
-         ${orderByColumn ? ` ORDER BY ${orderByColumn}` : ""}
-       `;
+       SELECT ${selectFields} FROM ${detailConfig.sourceTable} 
+       WHERE ${detailConfig.primaryKey || "NUM_PED"} = @documentId
+       ${
+         detailConfig.filterCondition
+           ? ` AND ${detailConfig.filterCondition}`
+           : ""
+       }
+       ${orderByColumn ? ` ORDER BY ${orderByColumn}` : ""}
+     `;
             logger.debug(`Ejecutando consulta para detalles: ${query}`);
             const result = await SqlService.query(sourceConnection, query, {
               documentId,
@@ -1799,25 +1785,47 @@ class DynamicTransferService {
                   ) {
                     // Para detalles, usar combinedSourceData que incluye tanto header como detail
                     const combinedData = { ...sourceData, ...detailRow };
+                    logger.info(
+                      `🔄 Iniciando conversión de unidades para campo de detalle: ${fieldMapping.targetField}`
+                    );
+                    logger.info(
+                      `📦 Valor antes de conversión (detalle): ${value} (tipo: ${typeof value})`
+                    );
+                    logger.info(
+                      `📊 Datos combinados disponibles: ${Object.keys(
+                        combinedData
+                      ).join(", ")}`
+                    );
+
                     const originalValue = value;
                     value = this.applyUnitConversion(
                       combinedData,
                       fieldMapping,
                       value
                     );
+
                     if (originalValue !== value) {
                       logger.info(
-                        `🔄 Conversión aplicada en detalle ${fieldMapping.targetField}: ${originalValue} → ${value}`
+                        `🎉 Conversión aplicada en detalle ${fieldMapping.targetField}:`
+                      );
+                      logger.info(
+                        `   📦 Antes: ${originalValue} (${typeof originalValue})`
+                      );
+                      logger.info(`   📊 Después: ${value} (${typeof value})`);
+                    } else {
+                      logger.info(
+                        `ℹ️ No se aplicó conversión en detalle ${fieldMapping.targetField}: ${value}`
                       );
                     }
                   }
 
                   // PASO 4: Formatear fechas si es necesario
                   if (
-                    value instanceof Date ||
-                    (typeof value === "string" &&
-                      value.includes("T") &&
-                      !isNaN(new Date(value).getTime()))
+                    typeof value !== "number" &&
+                    (value instanceof Date ||
+                      (typeof value === "string" &&
+                        value.includes("T") &&
+                        !isNaN(new Date(value).getTime())))
                   ) {
                     logger.debug(
                       `Convirtiendo fecha de detalle a formato SQL Server: ${value}`
@@ -1833,7 +1841,7 @@ class DynamicTransferService {
                     mapping.consecutiveConfig.enabled
                   ) {
                     // Verificar si este campo debe recibir el consecutivo (en tabla de detalle)
-                    if (
+                    const shouldReceiveConsecutive =
                       mapping.consecutiveConfig.detailFieldName ===
                         fieldMapping.targetField ||
                       (mapping.consecutiveConfig.applyToTables &&
@@ -1841,13 +1849,25 @@ class DynamicTransferService {
                           (t) =>
                             t.tableName === detailConfig.name &&
                             t.fieldName === fieldMapping.targetField
-                        ))
-                    ) {
-                      // Asignar el consecutivo al campo correspondiente en el detalle
-                      value = currentConsecutive.formatted;
-                      logger.debug(
-                        `Asignando consecutivo ${currentConsecutive.formatted} a campo ${fieldMapping.targetField} en tabla de detalle ${detailConfig.name}`
-                      );
+                        ));
+
+                    if (shouldReceiveConsecutive) {
+                      // MEJORA: Solo aplicar consecutivo si no hubo conversión numérica
+                      if (
+                        fieldMapping.unitConversion &&
+                        fieldMapping.unitConversion.enabled &&
+                        typeof value === "number"
+                      ) {
+                        logger.warn(
+                          `⚠️ No se aplicará consecutivo a ${fieldMapping.targetField} en detalle porque se aplicó conversión numérica (valor: ${value})`
+                        );
+                      } else {
+                        // Asignar el consecutivo al campo correspondiente en el detalle
+                        value = currentConsecutive.formatted;
+                        logger.debug(
+                          `Asignando consecutivo ${currentConsecutive.formatted} a campo ${fieldMapping.targetField} en tabla de detalle ${detailConfig.name}`
+                        );
+                      }
                     }
                   }
 
@@ -1902,7 +1922,9 @@ class DynamicTransferService {
 
                   // Log final del valor que se va a insertar en detalle
                   logger.debug(
-                    `✅ Campo detalle ${fieldMapping.targetField} preparado para inserción: ${value}`
+                    `✅ Campo detalle ${
+                      fieldMapping.targetField
+                    } preparado para inserción: ${value} (tipo: ${typeof value})`
                   );
                 }
               }
@@ -1917,11 +1939,11 @@ class DynamicTransferService {
             });
 
             const insertDetailQuery = `
-        INSERT INTO ${detailConfig.targetTable} (${insertDetailFieldsList.join(
+      INSERT INTO ${detailConfig.targetTable} (${insertDetailFieldsList.join(
               ", "
             )})
-        VALUES (${insertDetailValuesList.join(", ")})
-      `;
+      VALUES (${insertDetailValuesList.join(", ")})
+    `;
 
             logger.debug(
               `Ejecutando inserción en tabla de detalle: ${insertDetailQuery}`
