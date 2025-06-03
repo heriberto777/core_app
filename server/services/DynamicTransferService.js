@@ -642,7 +642,6 @@ class DynamicTransferService {
       }
     }
   }
-
   /**
    * Procesa un único documento según la configuración (sin transacciones)
    * @param {string} documentId - ID del documento
@@ -971,6 +970,24 @@ class DynamicTransferService {
                   value = null; // Convertir la cadena "NULL" a null real
                 } else {
                   value = defaultValue;
+                }
+              }
+
+              // NUEVO: Aplicar conversión de unidades si está configurada
+              if (
+                fieldMapping.unitConversion &&
+                fieldMapping.unitConversion.enabled
+              ) {
+                const originalValue = value;
+                value = this.applyUnitConversion(
+                  sourceData,
+                  fieldMapping,
+                  value
+                );
+                if (originalValue !== value) {
+                  logger.info(
+                    `Conversión aplicada en ${fieldMapping.targetField}: ${originalValue} → ${value}`
+                  );
                 }
               }
 
@@ -1382,6 +1399,26 @@ class DynamicTransferService {
                     }
                   }
 
+                  // NUEVO: Aplicar conversión de unidades para detalles
+                  if (
+                    fieldMapping.unitConversion &&
+                    fieldMapping.unitConversion.enabled
+                  ) {
+                    // Para detalles, usar combinedSourceData que incluye tanto header como detail
+                    const combinedData = { ...sourceData, ...detailRow };
+                    const originalValue = value;
+                    value = this.applyUnitConversion(
+                      combinedData,
+                      fieldMapping,
+                      value
+                    );
+                    if (originalValue !== value) {
+                      logger.info(
+                        `Conversión aplicada en detalle ${fieldMapping.targetField}: ${originalValue} → ${value}`
+                      );
+                    }
+                  }
+
                   // Formatear fechas si es necesario
                   if (
                     value instanceof Date ||
@@ -1484,9 +1521,8 @@ class DynamicTransferService {
             const insertDetailQuery = `
          INSERT INTO ${detailConfig.targetTable} (${insertDetailFieldsList.join(
               ", "
-            )})
-         VALUES (${insertDetailValuesList.join(", ")})
-       `;
+            )}) VALUES (${insertDetailValuesList.join(", ")})
+      `;
 
             logger.debug(
               `Ejecutando inserción en tabla de detalle: ${insertDetailQuery}`
@@ -1755,6 +1791,100 @@ class DynamicTransferService {
         consecutiveValue: null,
       };
     }
+  }
+
+  /**
+   * Aplica conversión de unidades a un valor específico
+   * @param {Object} sourceData - Datos completos del registro
+   * @param {Object} fieldMapping - Configuración del campo con conversión
+   * @param {any} originalValue - Valor original del campo
+   * @returns {any} - Valor convertido
+   */
+  applyUnitConversion(sourceData, fieldMapping, originalValue) {
+    try {
+      if (
+        !fieldMapping.unitConversion ||
+        !fieldMapping.unitConversion.enabled
+      ) {
+        return originalValue;
+      }
+
+      const config = fieldMapping.unitConversion;
+
+      // Obtener valores de los campos de control
+      const unitMeasureValue = sourceData[config.unitMeasureField];
+      const conversionFactor =
+        parseFloat(sourceData[config.conversionFactorField]) || 1;
+
+      // Verificar si necesita conversión
+      if (!this.shouldApplyUnitConversion(unitMeasureValue, config.fromUnit)) {
+        logger.debug(
+          `No se aplica conversión para ${fieldMapping.targetField}: unidad actual es ${unitMeasureValue}`
+        );
+        return originalValue;
+      }
+
+      const numericValue = parseFloat(originalValue) || 0;
+      let convertedValue;
+
+      if (config.operation === "multiply") {
+        // Para cantidades: cantidad_en_cajas * factor = cantidad_en_unidades
+        convertedValue = numericValue * conversionFactor;
+        logger.debug(
+          `Conversión cantidad: ${numericValue} ${unitMeasureValue} * ${conversionFactor} = ${convertedValue} ${config.toUnit}`
+        );
+      } else if (config.operation === "divide") {
+        // Para precios: precio_por_caja / factor = precio_por_unidad
+        convertedValue =
+          conversionFactor !== 0 ? numericValue / conversionFactor : 0;
+        logger.debug(
+          `Conversión precio: ${numericValue} / ${conversionFactor} = ${convertedValue} (precio unitario)`
+        );
+      } else {
+        return originalValue;
+      }
+
+      logger.info(
+        `Campo ${fieldMapping.targetField} convertido: ${originalValue} -> ${convertedValue}`
+      );
+      return convertedValue;
+    } catch (error) {
+      logger.error(
+        `Error en conversión de unidades para campo ${fieldMapping.targetField}: ${error.message}`
+      );
+      return originalValue; // Devolver valor original si hay error
+    }
+  }
+
+  /**
+   * Verifica si debe aplicarse conversión basado en la unidad de medida
+   * @param {string} currentUnit - Unidad actual
+   * @param {string} fromUnit - Unidad que requiere conversión
+   * @returns {boolean}
+   */
+  shouldApplyUnitConversion(currentUnit, fromUnit) {
+    if (!currentUnit || !fromUnit) return false;
+
+    const normalizedCurrent = String(currentUnit).toUpperCase().trim();
+    const normalizedFrom = String(fromUnit).toUpperCase().trim();
+
+    // Variaciones comunes de unidades
+    const unitVariations = {
+      CAJA: ["CAJA", "CJA", "CAJAS", "CJ"],
+      UNIDAD: ["UNIDAD", "UND", "UNIDADES", "U", "UN"],
+      KILO: ["KILO", "KG", "KILOS", "K"],
+      LITRO: ["LITRO", "LT", "LITROS", "L"],
+    };
+
+    // Buscar variaciones de la unidad origen
+    for (const [baseUnit, variations] of Object.entries(unitVariations)) {
+      if (variations.includes(normalizedFrom)) {
+        return variations.includes(normalizedCurrent);
+      }
+    }
+
+    // Comparación directa si no se encuentra en variaciones
+    return normalizedCurrent === normalizedFrom;
   }
 
   /**

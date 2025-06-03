@@ -45,6 +45,22 @@ const FieldMappingSchema = new Schema({
   ],
   validateExistence: { type: Boolean, default: false }, // Si debe validarse que existe el registro
   failIfNotFound: { type: Boolean, default: false }, // Si debe fallar el proceso si no se encuentra
+
+  // NUEVO: Configuración de conversión de unidades
+  unitConversion: {
+    enabled: { type: Boolean, default: false },
+    unitMeasureField: { type: String }, // Campo que indica la unidad (ej: "Unit_Measure")
+    conversionFactorField: { type: String }, // Campo con factor (ej: "Factor_Conversion")
+    fromUnit: { type: String }, // Unidad origen (ej: "Caja")
+    toUnit: { type: String }, // Unidad destino (ej: "Und")
+    operation: {
+      type: String,
+      enum: ["multiply", "divide"],
+      default: "multiply",
+    },
+    // Para campos de precio usar "divide", para cantidad "multiply"
+  },
+
   // Nuevos campos para controlar la visualización y edición
   isEditable: { type: Boolean, default: true }, // Si el campo se puede editar en formularios
   showInList: { type: Boolean, default: false }, // Si el campo aparece en vistas de lista
