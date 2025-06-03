@@ -337,6 +337,288 @@ class DynamicTransferService {
   }
 
   /**
+   * Realiza consultas de lookup en la base de datos destino para enriquecer los datos
+   * @param {Object} tableConfig - Configuración de la tabla
+   * @param {Object} sourceData - Datos de origen
+   * @param {Object} targetConnection - Conexión a la base de datos destino
+   * @returns {Promise<Object>} - Objeto con los valores obtenidos del lookup
+   */
+  async lookupValuesFromTarget(tableConfig, sourceData, targetConnection) {
+    try {
+      logger.info(
+        `Realizando consultas de lookup en base de datos destino para tabla ${tableConfig.name}`
+      );
+
+      const lookupResults = {};
+      const failedLookups = [];
+
+      // Identificar todos los campos que requieren lookup
+      const lookupFields = tableConfig.fieldMappings.filter(
+        (fm) => fm.lookupFromTarget && fm.lookupQuery
+      );
+
+      if (lookupFields.length === 0) {
+        logger.debug(
+          `No se encontraron campos que requieran lookup en tabla ${tableConfig.name}`
+        );
+        return { results: {}, success: true };
+      }
+
+      logger.info(
+        `Encontrados ${lookupFields.length} campos con lookupFromTarget para procesar`
+      );
+
+      // Ejecutar cada consulta de lookup
+      for (const fieldMapping of lookupFields) {
+        try {
+          let lookupQuery = fieldMapping.lookupQuery;
+          logger.debug(
+            `Procesando lookup para campo ${fieldMapping.targetField}: ${lookupQuery}`
+          );
+
+          // Preparar parámetros para la consulta
+          const params = {};
+          const missingParams = [];
+
+          // Registrar todos los parámetros que se esperan en la consulta
+          const expectedParams = [];
+          const paramRegex = /@(\w+)/g;
+          let match;
+          while ((match = paramRegex.exec(lookupQuery)) !== null) {
+            expectedParams.push(match[1]);
+          }
+
+          logger.debug(
+            `Parámetros esperados en la consulta: ${expectedParams.join(", ")}`
+          );
+
+          // Si hay parámetros definidos, extraerlos de los datos de origen
+          if (
+            fieldMapping.lookupParams &&
+            fieldMapping.lookupParams.length > 0
+          ) {
+            for (const param of fieldMapping.lookupParams) {
+              if (!param.sourceField || !param.paramName) {
+                logger.warn(
+                  `Parámetro mal configurado para ${fieldMapping.targetField}. Debe tener sourceField y paramName.`
+                );
+                continue;
+              }
+
+              // Obtener el valor del campo origen
+              let paramValue = sourceData[param.sourceField];
+
+              // Registrar si el valor está presente
+              logger.debug(
+                `Parámetro ${param.paramName} (desde campo ${
+                  param.sourceField
+                }): ${
+                  paramValue !== undefined && paramValue !== null
+                    ? "PRESENTE"
+                    : "NO ENCONTRADO"
+                }`
+              );
+
+              // Comprobar si el parámetro es requerido en la consulta
+              if (
+                expectedParams.includes(param.paramName) &&
+                (paramValue === undefined || paramValue === null)
+              ) {
+                missingParams.push(
+                  `@${param.paramName} (campo: ${param.sourceField})`
+                );
+              }
+
+              // Aplicar eliminación de prefijo si está configurado
+              if (
+                fieldMapping.removePrefix &&
+                typeof paramValue === "string" &&
+                paramValue.startsWith(fieldMapping.removePrefix)
+              ) {
+                const originalValue = paramValue;
+                paramValue = paramValue.substring(
+                  fieldMapping.removePrefix.length
+                );
+                logger.debug(
+                  `Prefijo '${fieldMapping.removePrefix}' eliminado del parámetro ${param.paramName}: '${originalValue}' → '${paramValue}'`
+                );
+              }
+
+              params[param.paramName] = paramValue;
+            }
+          }
+
+          // Verificar si faltan parámetros requeridos
+          if (missingParams.length > 0) {
+            const errorMessage = `Faltan parámetros requeridos para la consulta: ${missingParams.join(
+              ", "
+            )}`;
+            logger.error(errorMessage);
+
+            if (fieldMapping.failIfNotFound) {
+              throw new Error(errorMessage);
+            } else {
+              // No es obligatorio, usar null y continuar
+              lookupResults[fieldMapping.targetField] = null;
+              failedLookups.push({
+                field: fieldMapping.targetField,
+                error: errorMessage,
+              });
+              continue;
+            }
+          }
+
+          logger.debug(`Parámetros para lookup: ${JSON.stringify(params)}`);
+
+          // Ejecutar la consulta
+          try {
+            // Asegurar que es una consulta SELECT
+            if (!lookupQuery.trim().toUpperCase().startsWith("SELECT")) {
+              lookupQuery = `SELECT ${lookupQuery} AS result`;
+            }
+
+            // Verificar que los parámetros esperados tengan valor asignado
+            for (const expectedParam of expectedParams) {
+              if (params[expectedParam] === undefined) {
+                logger.warn(
+                  `El parámetro @${expectedParam} en la consulta no está definido en los parámetros proporcionados. Se usará NULL.`
+                );
+                params[expectedParam] = null;
+              }
+            }
+
+            const result = await SqlService.query(
+              targetConnection,
+              lookupQuery,
+              params
+            );
+
+            // Verificar resultados
+            if (result.recordset && result.recordset.length > 0) {
+              // Extraer el valor del resultado (primera columna o columna 'result')
+              const value =
+                result.recordset[0].result !== undefined
+                  ? result.recordset[0].result
+                  : Object.values(result.recordset[0])[0];
+
+              // Validar existencia si es requerido
+              if (
+                fieldMapping.validateExistence &&
+                (value === null || value === undefined) &&
+                fieldMapping.failIfNotFound
+              ) {
+                throw new Error(
+                  `No se encontró valor para el campo ${fieldMapping.targetField} con los parámetros proporcionados`
+                );
+              }
+
+              // Guardar el valor obtenido
+              lookupResults[fieldMapping.targetField] = value;
+              logger.debug(
+                `Lookup exitoso para ${fieldMapping.targetField}: ${value}`
+              );
+            } else if (fieldMapping.failIfNotFound) {
+              // No se encontraron resultados y es obligatorio
+              throw new Error(
+                `No se encontraron resultados para el campo ${fieldMapping.targetField}`
+              );
+            } else {
+              // No se encontraron resultados pero no es obligatorio
+              lookupResults[fieldMapping.targetField] = null;
+              logger.debug(
+                `No se encontraron resultados para lookup de ${fieldMapping.targetField}, usando NULL`
+              );
+            }
+          } catch (queryError) {
+            // Error en la consulta SQL
+            const errorMessage = `Error ejecutando consulta SQL para ${fieldMapping.targetField}: ${queryError.message}`;
+            logger.error(errorMessage, {
+              sql: lookupQuery,
+              params: params,
+              error: queryError,
+            });
+
+            if (fieldMapping.failIfNotFound) {
+              throw new Error(errorMessage);
+            } else {
+              // Registrar fallo pero continuar
+              failedLookups.push({
+                field: fieldMapping.targetField,
+                error: `Error en consulta SQL: ${queryError.message}`,
+              });
+              lookupResults[fieldMapping.targetField] = null; // Usar null como valor por defecto
+            }
+          }
+        } catch (fieldError) {
+          // Error al procesar el campo
+          logger.error(
+            `Error al realizar lookup para campo ${fieldMapping.targetField}: ${fieldError.message}`
+          );
+
+          if (fieldMapping.failIfNotFound) {
+            // Si es obligatorio, añadir a los errores pero seguir con otros campos
+            failedLookups.push({
+              field: fieldMapping.targetField,
+              error: fieldError.message,
+            });
+          } else {
+            // No es obligatorio, usar null y continuar
+            lookupResults[fieldMapping.targetField] = null;
+          }
+        }
+      }
+
+      // Verificar si hay errores críticos (campos que fallan y son obligatorios)
+      const criticalFailures = failedLookups.filter((fail) => {
+        // Buscar si el campo que falló está marcado como obligatorio
+        const field = lookupFields.find((f) => f.targetField === fail.field);
+        return field && field.failIfNotFound;
+      });
+
+      if (criticalFailures.length > 0) {
+        const failuresMsg = criticalFailures
+          .map((f) => `${f.field}: ${f.error}`)
+          .join(", ");
+
+        logger.error(`Fallos críticos en lookup: ${failuresMsg}`);
+
+        return {
+          results: lookupResults,
+          success: false,
+          failedFields: criticalFailures,
+          error: `Error en validación de datos: ${failuresMsg}`,
+        };
+      }
+
+      logger.info(
+        `Lookup completado. Obtenidos ${
+          Object.keys(lookupResults).length
+        } valores.`
+      );
+
+      return {
+        results: lookupResults,
+        success: true,
+        failedFields: failedLookups, // Incluir fallos no críticos para información
+      };
+    } catch (error) {
+      logger.error(
+        `Error general al ejecutar lookup en destino: ${error.message}`,
+        {
+          error,
+          stack: error.stack,
+        }
+      );
+
+      return {
+        results: {},
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
    * Procesa documentos según una configuración de mapeo
    * @param {Array} documentIds - IDs de los documentos a procesar
    * @param {string} mappingId - ID de la configuración de mapeo
