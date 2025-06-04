@@ -49,6 +49,20 @@ class DynamicTransferService {
         throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
       }
 
+      // Asegurar configuración por defecto para mappings existentes
+      if (!mapping.markProcessedStrategy) {
+        mapping.markProcessedStrategy = "individual"; // Mantener comportamiento actual
+      }
+
+      if (!mapping.markProcessedConfig) {
+        mapping.markProcessedConfig = {
+          batchSize: 100,
+          includeTimestamp: true,
+          timestampField: "LAST_PROCESSED_DATE",
+          allowRollback: false,
+        };
+      }
+
       // 2. Verificar si se debe usar consecutivos centralizados
       if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
         try {
@@ -74,12 +88,10 @@ class DynamicTransferService {
           logger.warn(
             `Error al verificar consecutivos centralizados: ${consecError.message}. Usando sistema local.`
           );
-          // Continuar con el sistema local si hay error al verificar el centralizado
         }
       }
 
       // 3. Registrar en TaskTracker para permitir cancelación
-
       TaskTracker.registerTask(
         cancelTaskId,
         localAbortController || { abort: () => {} },
@@ -105,11 +117,10 @@ class DynamicTransferService {
       await taskExecution.save();
       executionId = taskExecution._id;
 
-      // 5. Establecer conexiones con mejor manejo de errores
+      // 5. Establecer conexiones
       const sourceServerName = mapping.sourceServer;
       const targetServerName = mapping.targetServer;
 
-      // Usar un patrón de retry más agresivo para conexiones
       const getConnection = async (serverName, retries = 3) => {
         for (let attempt = 0; attempt < retries; attempt++) {
           try {
@@ -129,16 +140,14 @@ class DynamicTransferService {
               logger.warn(`Intento ${attempt + 1} falló: ${error.message}`);
 
               if (attempt === retries - 1) {
-                throw error; // Último intento, propagar error
+                throw error;
               }
 
-              // Esperar antes del siguiente intento (backoff exponencial)
-              const delay = Math.pow(2, attempt) * 1000; // 1s, 2s, 4s...
+              const delay = Math.pow(2, attempt) * 1000;
               await new Promise((resolve) => setTimeout(resolve, delay));
               continue;
             }
 
-            // Verificar que la conexión sea válida
             await SqlService.query(
               connectionResult.connection,
               "SELECT 1 AS test"
@@ -154,22 +163,19 @@ class DynamicTransferService {
             );
 
             if (attempt === retries - 1) {
-              throw error; // Último intento, propagar error
+              throw error;
             }
 
-            // Esperar antes del siguiente intento
             const delay = Math.pow(2, attempt) * 1000;
             await new Promise((resolve) => setTimeout(resolve, delay));
           }
         }
 
-        // No deberíamos llegar aquí, pero por si acaso
         throw new Error(
           `No se pudo establecer conexión a ${serverName} después de ${retries} intentos`
         );
       };
 
-      // Establecer conexiones en paralelo para mayor eficiencia
       try {
         logger.info(
           `Estableciendo conexiones a ${sourceServerName} y ${targetServerName}...`
@@ -186,10 +192,7 @@ class DynamicTransferService {
         );
       }
 
-      // 6. Configuración para usar o no transacciones
-      const useTransactions = false; // Cambiamos a false para evitar problemas con transacciones
-
-      // 7. Procesar documentos - AHORA CON GENERACIÓN INDIVIDUAL DE CONSECUTIVOS
+      // 6. Procesar documentos - NUEVA LÓGICA CON ESTRATEGIAS DE MARCADO
       const results = {
         processed: 0,
         failed: 0,
@@ -199,6 +202,9 @@ class DynamicTransferService {
         consecutivesUsed: [],
       };
 
+      // NUEVO: Arrays para recopilar documentos exitosos y fallidos
+      const successfulDocuments = [];
+      const failedDocuments = [];
       let hasErrors = false;
 
       // Procesar cada documento individualmente
@@ -213,16 +219,15 @@ class DynamicTransferService {
         let currentConsecutive = null;
 
         try {
-          // GENERACIÓN INDIVIDUAL DE CONSECUTIVOS PARA CADA DOCUMENTO
+          // Generación de consecutivos (código existente)
           if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
             if (useCentralizedConsecutives) {
               try {
-                // Generar consecutivo individual para este documento
                 const reservation =
                   await ConsecutiveService.reserveConsecutiveValues(
                     centralizedConsecutiveId,
-                    1, // Solo un valor para este documento
-                    { segment: null }, // Configurar según necesidad
+                    1,
+                    { segment: null },
                     { id: mapping._id.toString(), name: "mapping" }
                   );
 
@@ -236,93 +241,11 @@ class DynamicTransferService {
                 logger.info(
                   `Consecutivo centralizado generado para documento ${documentId}: ${currentConsecutive.formatted}`
                 );
-
-                // Procesar documento con el consecutivo asignado
-                const docResult = await this.processSingleDocumentSimple(
-                  documentId,
-                  mapping,
-                  sourceConnection,
-                  targetConnection,
-                  currentConsecutive
-                );
-
-                // Si el procesamiento fue exitoso, confirmar la reserva
-                if (docResult.success) {
-                  await ConsecutiveService.commitReservation(
-                    centralizedConsecutiveId,
-                    reservation.reservationId,
-                    reservation.values
-                  );
-                  logger.info(
-                    `Reserva confirmada para documento ${documentId}: ${currentConsecutive.formatted}`
-                  );
-                } else {
-                  // Si falló, cancelar la reserva
-                  await ConsecutiveService.cancelReservation(
-                    centralizedConsecutiveId,
-                    reservation.reservationId
-                  );
-                  logger.info(
-                    `Reserva cancelada para documento fallido ${documentId}: ${currentConsecutive.formatted}`
-                  );
-                }
-
-                // Actualizar estadísticas
-                if (docResult.success) {
-                  results.processed++;
-                  if (!results.byType[docResult.documentType]) {
-                    results.byType[docResult.documentType] = {
-                      processed: 0,
-                      failed: 0,
-                    };
-                  }
-                  results.byType[docResult.documentType].processed++;
-
-                  // Registrar consecutivo si se utilizó
-                  if (docResult.consecutiveUsed) {
-                    results.consecutivesUsed.push({
-                      documentId,
-                      consecutive: docResult.consecutiveUsed,
-                    });
-                  }
-
-                  // Marcar como procesado si está configurado
-                  if (mapping.markProcessedField) {
-                    await this.markAsProcessed(
-                      documentId,
-                      mapping,
-                      sourceConnection
-                    );
-                  }
-                } else {
-                  hasErrors = true;
-                  results.failed++;
-                  if (docResult.documentType) {
-                    if (!results.byType[docResult.documentType]) {
-                      results.byType[docResult.documentType] = {
-                        processed: 0,
-                        failed: 0,
-                      };
-                    }
-                    results.byType[docResult.documentType].failed++;
-                  }
-                }
-
-                results.details.push({
-                  documentId,
-                  ...docResult,
-                });
-
-                logger.info(
-                  `Documento ${documentId} procesado: ${
-                    docResult.success ? "Éxito" : "Error"
-                  }`
-                );
               } catch (consecError) {
                 logger.error(
                   `Error generando consecutivo centralizado para documento ${documentId}: ${consecError.message}`
                 );
-                // Continuar con el siguiente documento
+                failedDocuments.push(documentId);
                 results.failed++;
                 results.details.push({
                   documentId,
@@ -330,9 +253,9 @@ class DynamicTransferService {
                   error: `Error generando consecutivo: ${consecError.message}`,
                   errorDetails: consecError.stack,
                 });
+                continue;
               }
             } else {
-              // Sistema local - Generar consecutivo individualmente
               try {
                 currentConsecutive = await this.generateConsecutive(mapping);
                 if (currentConsecutive) {
@@ -340,70 +263,11 @@ class DynamicTransferService {
                     `Consecutivo local generado para documento ${documentId}: ${currentConsecutive.formatted}`
                   );
                 }
-
-                // Procesar documento con el consecutivo asignado
-                const docResult = await this.processSingleDocumentSimple(
-                  documentId,
-                  mapping,
-                  sourceConnection,
-                  targetConnection,
-                  currentConsecutive
-                );
-
-                // Actualizar estadísticas (mismo código que arriba)
-                if (docResult.success) {
-                  results.processed++;
-                  if (!results.byType[docResult.documentType]) {
-                    results.byType[docResult.documentType] = {
-                      processed: 0,
-                      failed: 0,
-                    };
-                  }
-                  results.byType[docResult.documentType].processed++;
-
-                  if (docResult.consecutiveUsed) {
-                    results.consecutivesUsed.push({
-                      documentId,
-                      consecutive: docResult.consecutiveUsed,
-                    });
-                  }
-
-                  if (mapping.markProcessedField) {
-                    await this.markAsProcessed(
-                      documentId,
-                      mapping,
-                      sourceConnection
-                    );
-                  }
-                } else {
-                  hasErrors = true;
-                  results.failed++;
-                  if (docResult.documentType) {
-                    if (!results.byType[docResult.documentType]) {
-                      results.byType[docResult.documentType] = {
-                        processed: 0,
-                        failed: 0,
-                      };
-                    }
-                    results.byType[docResult.documentType].failed++;
-                  }
-                }
-
-                results.details.push({
-                  documentId,
-                  ...docResult,
-                });
-
-                logger.info(
-                  `Documento ${documentId} procesado: ${
-                    docResult.success ? "Éxito" : "Error"
-                  }`
-                );
               } catch (consecError) {
                 logger.error(
                   `Error generando consecutivo local para documento ${documentId}: ${consecError.message}`
                 );
-                // Continuar con el siguiente documento
+                failedDocuments.push(documentId);
                 results.failed++;
                 results.details.push({
                   documentId,
@@ -411,61 +275,119 @@ class DynamicTransferService {
                   error: `Error generando consecutivo: ${consecError.message}`,
                   errorDetails: consecError.stack,
                 });
+                continue;
+              }
+            }
+          }
+
+          // Procesar documento
+          const docResult = await this.processSingleDocumentSimple(
+            documentId,
+            mapping,
+            sourceConnection,
+            targetConnection,
+            currentConsecutive
+          );
+
+          // Confirmar o cancelar reserva de consecutivo centralizado
+          if (
+            useCentralizedConsecutives &&
+            currentConsecutive &&
+            currentConsecutive.reservationId
+          ) {
+            if (docResult.success) {
+              await ConsecutiveService.commitReservation(
+                centralizedConsecutiveId,
+                currentConsecutive.reservationId,
+                [
+                  {
+                    numeric: currentConsecutive.value,
+                    formatted: currentConsecutive.formatted,
+                  },
+                ]
+              );
+              logger.info(
+                `Reserva confirmada para documento ${documentId}: ${currentConsecutive.formatted}`
+              );
+            } else {
+              await ConsecutiveService.cancelReservation(
+                centralizedConsecutiveId,
+                currentConsecutive.reservationId
+              );
+              logger.info(
+                `Reserva cancelada para documento fallido ${documentId}: ${currentConsecutive.formatted}`
+              );
+            }
+          }
+
+          // NUEVA LÓGICA: Recopilar documentos exitosos y fallidos
+          if (docResult.success) {
+            successfulDocuments.push(documentId);
+            results.processed++;
+
+            if (!results.byType[docResult.documentType]) {
+              results.byType[docResult.documentType] = {
+                processed: 0,
+                failed: 0,
+              };
+            }
+            results.byType[docResult.documentType].processed++;
+
+            if (docResult.consecutiveUsed) {
+              results.consecutivesUsed.push({
+                documentId,
+                consecutive: docResult.consecutiveUsed,
+              });
+            }
+
+            // NUEVA LÓGICA: Marcado individual solo si está configurado así
+            if (
+              mapping.markProcessedStrategy === "individual" &&
+              mapping.markProcessedField
+            ) {
+              try {
+                await this.markDocumentsAsProcessed(
+                  [documentId],
+                  mapping,
+                  sourceConnection,
+                  true
+                );
+                logger.debug(
+                  `✅ Documento ${documentId} marcado individualmente como procesado`
+                );
+              } catch (markError) {
+                logger.warn(
+                  `⚠️ Error al marcar documento ${documentId}: ${markError.message}`
+                );
+                // No detener el proceso por errores de marcado
               }
             }
           } else {
-            // Sin consecutivos configurados
-            const docResult = await this.processSingleDocumentSimple(
-              documentId,
-              mapping,
-              sourceConnection,
-              targetConnection,
-              null
-            );
+            hasErrors = true;
+            failedDocuments.push(documentId);
+            results.failed++;
 
-            // Actualizar estadísticas
-            if (docResult.success) {
-              results.processed++;
+            if (docResult.documentType) {
               if (!results.byType[docResult.documentType]) {
                 results.byType[docResult.documentType] = {
                   processed: 0,
                   failed: 0,
                 };
               }
-              results.byType[docResult.documentType].processed++;
-
-              if (mapping.markProcessedField) {
-                await this.markAsProcessed(
-                  documentId,
-                  mapping,
-                  sourceConnection
-                );
-              }
-            } else {
-              hasErrors = true;
-              results.failed++;
-              if (docResult.documentType) {
-                if (!results.byType[docResult.documentType]) {
-                  results.byType[docResult.documentType] = {
-                    processed: 0,
-                    failed: 0,
-                  };
-                }
-                results.byType[docResult.documentType].failed++;
-              }
+              results.byType[docResult.documentType].failed++;
             }
-
-            results.details.push({
-              documentId,
-              ...docResult,
-            });
-
-            logger.info(
-              `Documento ${documentId} procesado: ${
-                docResult.success ? "Éxito" : "Error"
-              }`
-            );
           }
+
+          results.details.push({
+            documentId,
+            ...docResult,
+          });
+
+          logger.info(
+            `Documento ${documentId} procesado: ${
+              docResult.success ? "Éxito" : "Error"
+            }`
+          );
         } catch (docError) {
           // Verificar si fue cancelado
           if (signal?.aborted) {
@@ -474,6 +396,7 @@ class DynamicTransferService {
           }
 
           hasErrors = true;
+          failedDocuments.push(documentId);
           logger.error(
             `Error procesando documento ${documentId}: ${docError.message}`
           );
@@ -487,15 +410,76 @@ class DynamicTransferService {
         }
       }
 
+      // NUEVA LÓGICA: Marcado en lotes al final si está configurado así
+      if (
+        mapping.markProcessedStrategy === "batch" &&
+        successfulDocuments.length > 0
+      ) {
+        logger.info(
+          `📦 Iniciando marcado en lotes para ${successfulDocuments.length} documentos exitosos`
+        );
+
+        try {
+          const markResult = await this.markDocumentsAsProcessed(
+            successfulDocuments,
+            mapping,
+            sourceConnection,
+            true
+          );
+
+          logger.info(
+            `📦 Resultado del marcado en lotes: ${markResult.message}`
+          );
+
+          // Agregar información del marcado al resultado final
+          results.markingResult = markResult;
+
+          if (markResult.failed > 0) {
+            logger.warn(
+              `⚠️ ${markResult.failed} documentos exitosos no se pudieron marcar como procesados`
+            );
+          }
+        } catch (markError) {
+          logger.error(`❌ Error en marcado por lotes: ${markError.message}`);
+          results.markingError = markError.message;
+        }
+      }
+
+      // NUEVA LÓGICA: Rollback si está habilitado y hay fallos críticos
+      if (
+        mapping.markProcessedConfig?.allowRollback &&
+        failedDocuments.length > 0 &&
+        mapping.markProcessedStrategy === "batch" &&
+        successfulDocuments.length > 0
+      ) {
+        logger.warn(
+          `🔄 Rollback habilitado: desmarcando ${successfulDocuments.length} documentos debido a fallos`
+        );
+
+        try {
+          await this.markDocumentsAsProcessed(
+            successfulDocuments,
+            mapping,
+            sourceConnection,
+            false
+          );
+          logger.info(`🔄 Rollback completado: documentos desmarcados`);
+          results.rollbackExecuted = true;
+        } catch (rollbackError) {
+          logger.error(`❌ Error en rollback: ${rollbackError.message}`);
+          results.rollbackError = rollbackError.message;
+        }
+      }
+
       // Actualizar registro de ejecución y tarea
       const executionTime = Date.now() - startTime;
 
       // Determinar el estado correcto basado en los resultados
       let finalStatus = "completed";
       if (results.processed === 0 && results.failed > 0) {
-        finalStatus = "failed"; // Si todos fallaron
+        finalStatus = "failed";
       } else if (results.failed > 0) {
-        finalStatus = "partial"; // Si algunos fallaron y otros tuvieron éxito
+        finalStatus = "partial";
       }
 
       // Actualizar el registro de ejecución
@@ -514,7 +498,7 @@ class DynamicTransferService {
         progress: 100,
         lastExecutionDate: new Date(),
         lastExecutionResult: {
-          success: !hasErrors, // Solo es éxito total si no hubo errores
+          success: !hasErrors,
           message: hasErrors
             ? `Procesamiento completado con errores: ${results.processed} éxitos, ${results.failed} fallos`
             : "Procesamiento completado con éxito",
@@ -533,15 +517,13 @@ class DynamicTransferService {
         },
       });
 
-      // Limpiar timeout ya que la operación terminó correctamente
       clearTimeout(timeoutId);
-
       TaskTracker.completeTask(cancelTaskId, finalStatus);
 
       return {
-        success: true, // La operación en sí fue exitosa aunque algunos documentos fallaron
+        success: true,
         executionId,
-        status: finalStatus, // Añadimos el status para que el frontend pueda mostrarlo correctamente
+        status: finalStatus,
         ...results,
       };
     } catch (error) {
@@ -636,7 +618,6 @@ class DynamicTransferService {
           );
         }
 
-        // Esperar a que ambas conexiones se liberen
         await Promise.allSettled(releasePromises);
         logger.info("Conexiones liberadas correctamente");
       }
@@ -1525,7 +1506,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Obtiene datos de la tabla de origen
+   * Obtiene datos de la tabla de origen - VERSIÓN CORREGIDA
    * @private
    */
   async getSourceData(documentId, tableConfig, sourceConnection) {
@@ -1536,50 +1517,16 @@ class DynamicTransferService {
       const result = await SqlService.query(sourceConnection, query);
       return result.recordset[0];
     } else {
-      // CAMBIO CRÍTICO: Para encabezados también necesitamos incluir campos adicionales
+      // CAMBIO: Usar la función centralizada para obtener campos requeridos
+      const requiredFields = this.getRequiredFieldsFromTableConfig(tableConfig);
       const tableAlias = "t1";
 
-      // Recopilar campos necesarios para conversión de unidades y lookup
-      let selectFields = new Set();
+      // Construir la lista de campos con alias de tabla
+      const finalSelectFields = requiredFields
+        .map((field) => `${tableAlias}.${field}`)
+        .join(", ");
 
-      if (tableConfig.fieldMappings && tableConfig.fieldMappings.length > 0) {
-        tableConfig.fieldMappings.forEach((fm) => {
-          if (fm.sourceField) {
-            selectFields.add(fm.sourceField);
-          }
-
-          // Agregar campos para conversión de unidades
-          if (fm.unitConversion && fm.unitConversion.enabled) {
-            if (fm.unitConversion.unitMeasureField) {
-              selectFields.add(fm.unitConversion.unitMeasureField);
-            }
-            if (fm.unitConversion.conversionFactorField) {
-              selectFields.add(fm.unitConversion.conversionFactorField);
-            }
-          }
-
-          // Agregar campos para lookup
-          if (fm.lookupFromTarget && fm.lookupParams) {
-            fm.lookupParams.forEach((param) => {
-              if (param.sourceField) {
-                selectFields.add(param.sourceField);
-              }
-            });
-          }
-        });
-      }
-
-      // Agregar clave primaria
       const primaryKey = tableConfig.primaryKey || "NUM_PED";
-      selectFields.add(primaryKey);
-
-      // Si no hay campos específicos, seleccionar todo
-      const finalSelectFields =
-        selectFields.size > 0
-          ? Array.from(selectFields)
-              .map((field) => `${tableAlias}.${field}`)
-              .join(", ")
-          : `${tableAlias}.*`;
 
       const query = `
       SELECT ${finalSelectFields} FROM ${tableConfig.sourceTable} ${tableAlias}
@@ -1595,9 +1542,7 @@ class DynamicTransferService {
     `;
 
       console.log(`🔍 CONSULTA ENCABEZADO CORREGIDA: ${query}`);
-      console.log(
-        `🔍 Campos seleccionados: ${Array.from(selectFields).join(", ")}`
-      );
+      console.log(`🔍 Campos seleccionados: ${requiredFields.join(", ")}`);
 
       logger.debug(`Ejecutando consulta principal: ${query}`);
       const result = await SqlService.query(sourceConnection, query, {
@@ -2224,57 +2169,16 @@ class DynamicTransferService {
     const tableAlias = "d1";
     const orderByColumn = detailConfig.orderByColumn || "";
 
-    // CAMBIO CRÍTICO: Recopilar todos los campos necesarios, no solo los mapeados
-    let selectFields = new Set();
+    // CAMBIO: Usar la función centralizada para obtener campos requeridos
+    const requiredFields = this.getRequiredFieldsFromTableConfig(detailConfig);
 
-    // 1. Agregar campos mapeados
-    if (detailConfig.fieldMappings && detailConfig.fieldMappings.length > 0) {
-      detailConfig.fieldMappings.forEach((fm) => {
-        if (fm.sourceField) {
-          selectFields.add(fm.sourceField);
-        }
+    // Construir la lista de campos con alias de tabla
+    const finalSelectFields = requiredFields
+      .map((field) => `${tableAlias}.${field}`)
+      .join(", ");
 
-        // NUEVO: Agregar campos requeridos para conversión de unidades
-        if (fm.unitConversion && fm.unitConversion.enabled) {
-          if (fm.unitConversion.unitMeasureField) {
-            selectFields.add(fm.unitConversion.unitMeasureField);
-            console.log(
-              `🔧 Agregando campo unitMeasureField: ${fm.unitConversion.unitMeasureField}`
-            );
-          }
-          if (fm.unitConversion.conversionFactorField) {
-            selectFields.add(fm.unitConversion.conversionFactorField);
-            console.log(
-              `🔧 Agregando campo conversionFactorField: ${fm.unitConversion.conversionFactorField}`
-            );
-          }
-        }
-
-        // NUEVO: Agregar campos requeridos para lookup
-        if (fm.lookupFromTarget && fm.lookupParams) {
-          fm.lookupParams.forEach((param) => {
-            if (param.sourceField) {
-              selectFields.add(param.sourceField);
-              console.log(`🔧 Agregando campo lookup: ${param.sourceField}`);
-            }
-          });
-        }
-      });
-    }
-
-    // 2. Agregar campos adicionales necesarios para el procesamiento general
-    // Clave primaria
     const primaryKey =
       detailConfig.primaryKey || parentTableConfig.primaryKey || "NUM_PED";
-    selectFields.add(primaryKey);
-
-    // 3. Si no tenemos campos, seleccionar todo
-    const finalSelectFields =
-      selectFields.size > 0
-        ? Array.from(selectFields)
-            .map((field) => `${tableAlias}.${field}`)
-            .join(", ")
-        : `${tableAlias}.*`;
 
     const query = `
     SELECT ${finalSelectFields} FROM ${
@@ -2293,9 +2197,7 @@ class DynamicTransferService {
   `;
 
     console.log(`🔍 CONSULTA DETALLE CORREGIDA: ${query}`);
-    console.log(
-      `🔍 Campos seleccionados: ${Array.from(selectFields).join(", ")}`
-    );
+    console.log(`🔍 Campos seleccionados: ${requiredFields.join(", ")}`);
 
     logger.debug(`Ejecutando consulta para detalles: ${query}`);
     const result = await SqlService.query(sourceConnection, query, {
@@ -2321,51 +2223,13 @@ class DynamicTransferService {
   async getDetailDataFromOwnTable(detailConfig, documentId, sourceConnection) {
     const orderByColumn = detailConfig.orderByColumn || "";
 
-    // CAMBIO CRÍTICO: Recopilar todos los campos necesarios, no solo los mapeados
-    let selectFields = new Set();
+    // CAMBIO: Usar la función centralizada para obtener campos requeridos
+    const requiredFields = this.getRequiredFieldsFromTableConfig(detailConfig);
 
-    // 1. Agregar campos mapeados
-    if (detailConfig.fieldMappings && detailConfig.fieldMappings.length > 0) {
-      detailConfig.fieldMappings.forEach((fm) => {
-        if (fm.sourceField) {
-          selectFields.add(fm.sourceField);
-        }
+    // Construir la lista de campos (sin alias porque es tabla única)
+    const finalSelectFields = requiredFields.join(", ");
 
-        // NUEVO: Agregar campos requeridos para conversión de unidades
-        if (fm.unitConversion && fm.unitConversion.enabled) {
-          if (fm.unitConversion.unitMeasureField) {
-            selectFields.add(fm.unitConversion.unitMeasureField);
-            console.log(
-              `🔧 Agregando campo unitMeasureField: ${fm.unitConversion.unitMeasureField}`
-            );
-          }
-          if (fm.unitConversion.conversionFactorField) {
-            selectFields.add(fm.unitConversion.conversionFactorField);
-            console.log(
-              `🔧 Agregando campo conversionFactorField: ${fm.unitConversion.conversionFactorField}`
-            );
-          }
-        }
-
-        // NUEVO: Agregar campos requeridos para lookup
-        if (fm.lookupFromTarget && fm.lookupParams) {
-          fm.lookupParams.forEach((param) => {
-            if (param.sourceField) {
-              selectFields.add(param.sourceField);
-              console.log(`🔧 Agregando campo lookup: ${param.sourceField}`);
-            }
-          });
-        }
-      });
-    }
-
-    // 2. Agregar campos adicionales necesarios
     const primaryKey = detailConfig.primaryKey || "NUM_PED";
-    selectFields.add(primaryKey);
-
-    // 3. Si no tenemos campos, seleccionar todo
-    const finalSelectFields =
-      selectFields.size > 0 ? Array.from(selectFields).join(", ") : "*";
 
     const query = `
     SELECT ${finalSelectFields} FROM ${detailConfig.sourceTable} 
@@ -2377,9 +2241,7 @@ class DynamicTransferService {
   `;
 
     console.log(`🔍 CONSULTA DETALLE PROPIA CORREGIDA: ${query}`);
-    console.log(
-      `🔍 Campos seleccionados: ${Array.from(selectFields).join(", ")}`
-    );
+    console.log(`🔍 Campos seleccionados: ${requiredFields.join(", ")}`);
 
     logger.debug(`Ejecutando consulta para detalles: ${query}`);
     const result = await SqlService.query(sourceConnection, query, {
@@ -2682,42 +2544,6 @@ class DynamicTransferService {
         `Error al obtener longitud máxima para ${columnName}: ${error.message}`
       );
       return 0; // En caso de error, retornar 0 (no truncar)
-    }
-  }
-
-  /**
-   * Marca un documento como procesado
-   * @param {string} documentId - ID del documento
-   * @param {Object} mapping - Configuración de mapeo
-   * @param {Object} connection - Conexión a servidor
-   * @returns {Promise<boolean>} - true si se marcó correctamente
-   */
-  async markAsProcessed(documentId, mapping, connection) {
-    if (!mapping.markProcessedField) return false;
-
-    try {
-      // Determinar la tabla principal (primera no detalle)
-      const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
-      if (!mainTable) return false;
-
-      const query = `
-    UPDATE ${mainTable.sourceTable} 
-    SET ${mapping.markProcessedField} = @processedValue
-    WHERE ${mainTable.primaryKey || "NUM_PED"} = @documentId
-  `;
-
-      const params = {
-        documentId,
-        processedValue: mapping.markProcessedValue,
-      };
-
-      const result = await SqlService.query(connection, query, params);
-      return result.rowsAffected > 0;
-    } catch (error) {
-      logger.error(
-        `Error al marcar documento ${documentId} como procesado: ${error.message}`
-      );
-      return false;
     }
   }
 
@@ -3473,6 +3299,285 @@ class DynamicTransferService {
     orderedTables.push(...orphanDetails);
 
     return orderedTables;
+  }
+
+  /**
+   * Marca documentos como procesados según la estrategia configurada
+   * @param {Array|string} documentIds - ID(s) de documentos
+   * @param {Object} mapping - Configuración de mapeo
+   * @param {Object} connection - Conexión a la base de datos
+   * @param {boolean} shouldMark - true para marcar, false para desmarcar
+   * @returns {Promise<Object>} - Resultado del marcado
+   */
+  async markDocumentsAsProcessed(
+    documentIds,
+    mapping,
+    connection,
+    shouldMark = true
+  ) {
+    // Normalizar documentIds a array
+    const docArray = Array.isArray(documentIds) ? documentIds : [documentIds];
+
+    if (!mapping.markProcessedField || docArray.length === 0) {
+      return {
+        success: 0,
+        failed: 0,
+        strategy: "none",
+        message: "No hay campo de marcado configurado",
+      };
+    }
+
+    const strategy = mapping.markProcessedStrategy || "individual";
+
+    logger.info(
+      `Ejecutando estrategia de marcado: ${strategy} para ${docArray.length} documento(s)`
+    );
+
+    switch (strategy) {
+      case "individual":
+        return await this.markIndividualDocuments(
+          docArray,
+          mapping,
+          connection,
+          shouldMark
+        );
+
+      case "batch":
+        return await this.markBatchDocuments(
+          docArray,
+          mapping,
+          connection,
+          shouldMark
+        );
+
+      case "none":
+        return {
+          success: 0,
+          failed: 0,
+          strategy: "none",
+          message: "Marcado deshabilitado por configuración",
+        };
+
+      default:
+        logger.warn(`Estrategia desconocida: ${strategy}, usando individual`);
+        return await this.markIndividualDocuments(
+          docArray,
+          mapping,
+          connection,
+          shouldMark
+        );
+    }
+  }
+
+  /**
+   * Marcado individual - uno por uno
+   * @private
+   */
+  async markIndividualDocuments(documentIds, mapping, connection, shouldMark) {
+    let success = 0;
+    let failed = 0;
+    const details = [];
+
+    for (const documentId of documentIds) {
+      try {
+        const result = await this.markSingleDocument(
+          documentId,
+          mapping,
+          connection,
+          shouldMark
+        );
+        if (result) {
+          success++;
+          details.push({ documentId, success: true });
+          logger.debug(`✅ Documento ${documentId} marcado individualmente`);
+        } else {
+          failed++;
+          details.push({
+            documentId,
+            success: false,
+            error: "No se encontró el documento",
+          });
+          logger.warn(`⚠️ Documento ${documentId} no se pudo marcar`);
+        }
+      } catch (error) {
+        failed++;
+        details.push({ documentId, success: false, error: error.message });
+        logger.error(
+          `❌ Error marcando documento ${documentId}: ${error.message}`
+        );
+      }
+    }
+
+    return {
+      success,
+      failed,
+      strategy: "individual",
+      total: documentIds.length,
+      details,
+      message: `Marcado individual: ${success} éxitos, ${failed} fallos`,
+    };
+  }
+
+  /**
+   * Marcado en lotes - todos de una vez
+   * @private
+   */
+  async markBatchDocuments(documentIds, mapping, connection, shouldMark) {
+    try {
+      const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
+      if (!mainTable) {
+        return {
+          success: 0,
+          failed: documentIds.length,
+          strategy: "batch",
+          error: "No se encontró tabla principal",
+        };
+      }
+
+      const config = mapping.markProcessedConfig || {};
+      const batchSize = config.batchSize || 100;
+
+      let totalSuccess = 0;
+      let totalFailed = 0;
+      const batchDetails = [];
+
+      // Procesar en lotes del tamaño configurado
+      for (let i = 0; i < documentIds.length; i += batchSize) {
+        const batch = documentIds.slice(i, i + batchSize);
+
+        try {
+          const result = await this.executeBatchUpdate(
+            batch,
+            mapping,
+            connection,
+            shouldMark
+          );
+          totalSuccess += result.success;
+          totalFailed += result.failed;
+          batchDetails.push({
+            batchNumber: Math.floor(i / batchSize) + 1,
+            size: batch.length,
+            success: result.success,
+            failed: result.failed,
+          });
+
+          logger.info(
+            `📦 Lote ${Math.floor(i / batchSize) + 1}: ${result.success}/${
+              batch.length
+            } documentos marcados`
+          );
+        } catch (batchError) {
+          totalFailed += batch.length;
+          batchDetails.push({
+            batchNumber: Math.floor(i / batchSize) + 1,
+            size: batch.length,
+            success: 0,
+            failed: batch.length,
+            error: batchError.message,
+          });
+          logger.error(
+            `❌ Error en lote ${Math.floor(i / batchSize) + 1}: ${
+              batchError.message
+            }`
+          );
+        }
+      }
+
+      return {
+        success: totalSuccess,
+        failed: totalFailed,
+        strategy: "batch",
+        total: documentIds.length,
+        batchDetails,
+        message: `Marcado en lotes: ${totalSuccess} éxitos, ${totalFailed} fallos en ${batchDetails.length} lote(s)`,
+      };
+    } catch (error) {
+      logger.error(`❌ Error general en marcado por lotes: ${error.message}`);
+      return {
+        success: 0,
+        failed: documentIds.length,
+        strategy: "batch",
+        error: error.message,
+        message: `Error en marcado por lotes: ${error.message}`,
+      };
+    }
+  }
+
+  /**
+   * Ejecuta la actualización SQL para un lote
+   * @private
+   */
+  async executeBatchUpdate(documentIds, mapping, connection, shouldMark) {
+    const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
+    const config = mapping.markProcessedConfig || {};
+    const primaryKey = mainTable.primaryKey || "NUM_PED";
+
+    // Construir campos a actualizar
+    let updateFields = `${mapping.markProcessedField} = @processedValue`;
+
+    if (config.includeTimestamp && config.timestampField) {
+      updateFields += `, ${config.timestampField} = GETDATE()`;
+    }
+
+    // Crear placeholders para IN clause
+    const placeholders = documentIds
+      .map((_, index) => `@doc${index}`)
+      .join(", ");
+    const params = {
+      processedValue: shouldMark ? mapping.markProcessedValue : null,
+    };
+
+    documentIds.forEach((id, index) => {
+      params[`doc${index}`] = id;
+    });
+
+    const query = `
+   UPDATE ${mainTable.sourceTable} 
+   SET ${updateFields}
+   WHERE ${primaryKey} IN (${placeholders})
+ `;
+
+    logger.debug(`Ejecutando actualización en lote: ${query}`);
+
+    const result = await SqlService.query(connection, query, params);
+
+    return {
+      success: result.rowsAffected || 0,
+      failed: documentIds.length - (result.rowsAffected || 0),
+    };
+  }
+
+  /**
+   * Marca un documento individual
+   * @private
+   */
+  async markSingleDocument(documentId, mapping, connection, shouldMark) {
+    const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
+    if (!mainTable) return false;
+
+    const config = mapping.markProcessedConfig || {};
+    const primaryKey = mainTable.primaryKey || "NUM_PED";
+
+    // Construir campos a actualizar
+    let updateFields = `${mapping.markProcessedField} = @processedValue`;
+
+    if (config.includeTimestamp && config.timestampField) {
+      updateFields += `, ${config.timestampField} = GETDATE()`;
+    }
+
+    const query = `
+   UPDATE ${mainTable.sourceTable} 
+   SET ${updateFields}
+   WHERE ${primaryKey} = @documentId
+ `;
+
+    const params = {
+      documentId,
+      processedValue: shouldMark ? mapping.markProcessedValue : null,
+    };
+
+    const result = await SqlService.query(connection, query, params);
+    return result.rowsAffected > 0;
   }
 }
 

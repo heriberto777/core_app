@@ -45,23 +45,20 @@ const FieldMappingSchema = new Schema({
   ],
   validateExistence: { type: Boolean, default: false }, // Si debe validarse que existe el registro
   failIfNotFound: { type: Boolean, default: false }, // Si debe fallar el proceso si no se encuentra
-
-  // NUEVO: Configuración de conversión de unidades
+  // Campos para conversión de unidades
   unitConversion: {
     enabled: { type: Boolean, default: false },
     unitMeasureField: { type: String }, // Campo que indica la unidad (ej: "Unit_Measure")
-    conversionFactorField: { type: String }, // Campo con factor (ej: "Factor_Conversion")
+    conversionFactorField: { type: String }, // Campo con el factor de conversión (ej: "Factor_Conversion")
     fromUnit: { type: String }, // Unidad origen (ej: "Caja")
     toUnit: { type: String }, // Unidad destino (ej: "Und")
     operation: {
       type: String,
       enum: ["multiply", "divide"],
       default: "multiply",
-    },
-    // Para campos de precio usar "divide", para cantidad "multiply"
+    }, // Operación a realizar
   },
-
-  // Nuevos campos para controlar la visualización y edición
+  // Campos para controlar la visualización y edición
   isEditable: { type: Boolean, default: true }, // Si el campo se puede editar en formularios
   showInList: { type: Boolean, default: false }, // Si el campo aparece en vistas de lista
   displayOrder: { type: Number, default: 0 }, // Orden de visualización (menor número = primero)
@@ -134,6 +131,14 @@ const ConsecutiveConfigSchema = new Schema({
   ],
 });
 
+// NUEVO: Schema para configuración de marcado procesado
+const MarkProcessedConfigSchema = new Schema({
+  batchSize: { type: Number, default: 100 }, // Para lotes grandes
+  includeTimestamp: { type: Boolean, default: true }, // Si agregar fecha de procesamiento
+  timestampField: { type: String, default: "LAST_PROCESSED_DATE" }, // Campo de fecha
+  allowRollback: { type: Boolean, default: false }, // Si permitir rollback en errores
+});
+
 // Schema principal para el mapeo
 const TransferMappingSchema = new Schema({
   name: { type: String, required: true, unique: true },
@@ -147,6 +152,13 @@ const TransferMappingSchema = new Schema({
   tableConfigs: [TableConfigSchema],
   markProcessedField: { type: String },
   markProcessedValue: { type: Schema.Types.Mixed, default: 1 },
+  // NUEVO: Configuración de estrategia de marcado
+  markProcessedStrategy: {
+    type: String,
+    enum: ["individual", "batch", "none"],
+    default: "individual",
+  },
+  markProcessedConfig: MarkProcessedConfigSchema,
   createdBy: { type: String },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
