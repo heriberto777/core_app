@@ -1536,11 +1536,54 @@ class DynamicTransferService {
       const result = await SqlService.query(sourceConnection, query);
       return result.recordset[0];
     } else {
-      // Construir consulta básica con alias para evitar ambigüedad
+      // CAMBIO CRÍTICO: Para encabezados también necesitamos incluir campos adicionales
       const tableAlias = "t1";
+
+      // Recopilar campos necesarios para conversión de unidades y lookup
+      let selectFields = new Set();
+
+      if (tableConfig.fieldMappings && tableConfig.fieldMappings.length > 0) {
+        tableConfig.fieldMappings.forEach((fm) => {
+          if (fm.sourceField) {
+            selectFields.add(fm.sourceField);
+          }
+
+          // Agregar campos para conversión de unidades
+          if (fm.unitConversion && fm.unitConversion.enabled) {
+            if (fm.unitConversion.unitMeasureField) {
+              selectFields.add(fm.unitConversion.unitMeasureField);
+            }
+            if (fm.unitConversion.conversionFactorField) {
+              selectFields.add(fm.unitConversion.conversionFactorField);
+            }
+          }
+
+          // Agregar campos para lookup
+          if (fm.lookupFromTarget && fm.lookupParams) {
+            fm.lookupParams.forEach((param) => {
+              if (param.sourceField) {
+                selectFields.add(param.sourceField);
+              }
+            });
+          }
+        });
+      }
+
+      // Agregar clave primaria
+      const primaryKey = tableConfig.primaryKey || "NUM_PED";
+      selectFields.add(primaryKey);
+
+      // Si no hay campos específicos, seleccionar todo
+      const finalSelectFields =
+        selectFields.size > 0
+          ? Array.from(selectFields)
+              .map((field) => `${tableAlias}.${field}`)
+              .join(", ")
+          : `${tableAlias}.*`;
+
       const query = `
-      SELECT ${tableAlias}.* FROM ${tableConfig.sourceTable} ${tableAlias}
-      WHERE ${tableAlias}.${tableConfig.primaryKey || "NUM_PED"} = @documentId
+      SELECT ${finalSelectFields} FROM ${tableConfig.sourceTable} ${tableAlias}
+      WHERE ${tableAlias}.${primaryKey} = @documentId
       ${
         tableConfig.filterCondition
           ? ` AND ${this.processFilterCondition(
@@ -1550,12 +1593,70 @@ class DynamicTransferService {
           : ""
       }
     `;
+
+      console.log(`🔍 CONSULTA ENCABEZADO CORREGIDA: ${query}`);
+      console.log(
+        `🔍 Campos seleccionados: ${Array.from(selectFields).join(", ")}`
+      );
+
       logger.debug(`Ejecutando consulta principal: ${query}`);
       const result = await SqlService.query(sourceConnection, query, {
         documentId,
       });
+
+      // DEBUG: Mostrar qué campos tenemos disponibles en el resultado
+      if (result.recordset && result.recordset.length > 0) {
+        console.log(
+          `🔍 CAMPOS DISPONIBLES EN ENCABEZADO: ${Object.keys(
+            result.recordset[0]
+          ).join(", ")}`
+        );
+      }
+
       return result.recordset[0];
     }
+  }
+
+  /**
+   * NUEVO: Método auxiliar para recopilar todos los campos necesarios de una configuración de tabla
+   * @private
+   */
+  getRequiredFieldsFromTableConfig(tableConfig) {
+    const requiredFields = new Set();
+
+    if (tableConfig.fieldMappings && tableConfig.fieldMappings.length > 0) {
+      tableConfig.fieldMappings.forEach((fm) => {
+        // Campo de origen mapeado
+        if (fm.sourceField) {
+          requiredFields.add(fm.sourceField);
+        }
+
+        // Campos para conversión de unidades
+        if (fm.unitConversion && fm.unitConversion.enabled) {
+          if (fm.unitConversion.unitMeasureField) {
+            requiredFields.add(fm.unitConversion.unitMeasureField);
+          }
+          if (fm.unitConversion.conversionFactorField) {
+            requiredFields.add(fm.unitConversion.conversionFactorField);
+          }
+        }
+
+        // Campos para lookup
+        if (fm.lookupFromTarget && fm.lookupParams) {
+          fm.lookupParams.forEach((param) => {
+            if (param.sourceField) {
+              requiredFields.add(param.sourceField);
+            }
+          });
+        }
+      });
+    }
+
+    // Agregar clave primaria
+    const primaryKey = tableConfig.primaryKey || "NUM_PED";
+    requiredFields.add(primaryKey);
+
+    return Array.from(requiredFields);
   }
 
   /**
@@ -2111,7 +2212,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Obtiene datos de detalle de la misma tabla que el encabezado
+   * Obtiene datos de detalle de la misma tabla que el encabezado - CORREGIDO
    * @private
    */
   async getDetailDataFromSameTable(
@@ -2123,24 +2224,63 @@ class DynamicTransferService {
     const tableAlias = "d1";
     const orderByColumn = detailConfig.orderByColumn || "";
 
-    // Construir la lista de campos a seleccionar basada en los mappings
-    let selectFields = "*"; // Default to all fields
-    if (detailConfig.fieldMappings && detailConfig.fieldMappings.length > 0) {
-      const fieldList = detailConfig.fieldMappings
-        .filter((fm) => fm.sourceField) // Solo campos con origen definido
-        .map((fm) => `${tableAlias}.${fm.sourceField}`)
-        .join(", ");
+    // CAMBIO CRÍTICO: Recopilar todos los campos necesarios, no solo los mapeados
+    let selectFields = new Set();
 
-      if (fieldList) {
-        selectFields = fieldList;
-      }
+    // 1. Agregar campos mapeados
+    if (detailConfig.fieldMappings && detailConfig.fieldMappings.length > 0) {
+      detailConfig.fieldMappings.forEach((fm) => {
+        if (fm.sourceField) {
+          selectFields.add(fm.sourceField);
+        }
+
+        // NUEVO: Agregar campos requeridos para conversión de unidades
+        if (fm.unitConversion && fm.unitConversion.enabled) {
+          if (fm.unitConversion.unitMeasureField) {
+            selectFields.add(fm.unitConversion.unitMeasureField);
+            console.log(
+              `🔧 Agregando campo unitMeasureField: ${fm.unitConversion.unitMeasureField}`
+            );
+          }
+          if (fm.unitConversion.conversionFactorField) {
+            selectFields.add(fm.unitConversion.conversionFactorField);
+            console.log(
+              `🔧 Agregando campo conversionFactorField: ${fm.unitConversion.conversionFactorField}`
+            );
+          }
+        }
+
+        // NUEVO: Agregar campos requeridos para lookup
+        if (fm.lookupFromTarget && fm.lookupParams) {
+          fm.lookupParams.forEach((param) => {
+            if (param.sourceField) {
+              selectFields.add(param.sourceField);
+              console.log(`🔧 Agregando campo lookup: ${param.sourceField}`);
+            }
+          });
+        }
+      });
     }
 
+    // 2. Agregar campos adicionales necesarios para el procesamiento general
+    // Clave primaria
+    const primaryKey =
+      detailConfig.primaryKey || parentTableConfig.primaryKey || "NUM_PED";
+    selectFields.add(primaryKey);
+
+    // 3. Si no tenemos campos, seleccionar todo
+    const finalSelectFields =
+      selectFields.size > 0
+        ? Array.from(selectFields)
+            .map((field) => `${tableAlias}.${field}`)
+            .join(", ")
+        : `${tableAlias}.*`;
+
     const query = `
-    SELECT ${selectFields} FROM ${parentTableConfig.sourceTable} ${tableAlias}
-    WHERE ${tableAlias}.${
-      detailConfig.primaryKey || parentTableConfig.primaryKey || "NUM_PED"
-    } = @documentId
+    SELECT ${finalSelectFields} FROM ${
+      parentTableConfig.sourceTable
+    } ${tableAlias}
+    WHERE ${tableAlias}.${primaryKey} = @documentId
     ${
       detailConfig.filterCondition
         ? ` AND ${this.processFilterCondition(
@@ -2152,46 +2292,109 @@ class DynamicTransferService {
     ${orderByColumn ? ` ORDER BY ${tableAlias}.${orderByColumn}` : ""}
   `;
 
+    console.log(`🔍 CONSULTA DETALLE CORREGIDA: ${query}`);
+    console.log(
+      `🔍 Campos seleccionados: ${Array.from(selectFields).join(", ")}`
+    );
+
     logger.debug(`Ejecutando consulta para detalles: ${query}`);
     const result = await SqlService.query(sourceConnection, query, {
       documentId,
     });
+
+    // DEBUG: Mostrar qué campos tenemos disponibles en el resultado
+    if (result.recordset && result.recordset.length > 0) {
+      console.log(
+        `🔍 CAMPOS DISPONIBLES EN RESULTADO: ${Object.keys(
+          result.recordset[0]
+        ).join(", ")}`
+      );
+    }
+
     return result.recordset;
   }
 
   /**
-   * Obtiene datos de detalle de su propia tabla
+   * Obtiene datos de detalle de su propia tabla - CORREGIDO
    * @private
    */
   async getDetailDataFromOwnTable(detailConfig, documentId, sourceConnection) {
     const orderByColumn = detailConfig.orderByColumn || "";
 
-    // Construir la lista de campos a seleccionar
-    let selectFields = "*"; // Default to all fields
-    if (detailConfig.fieldMappings && detailConfig.fieldMappings.length > 0) {
-      const fieldList = detailConfig.fieldMappings
-        .filter((fm) => fm.sourceField) // Solo campos con origen definido
-        .map((fm) => fm.sourceField)
-        .join(", ");
+    // CAMBIO CRÍTICO: Recopilar todos los campos necesarios, no solo los mapeados
+    let selectFields = new Set();
 
-      if (fieldList) {
-        selectFields = fieldList;
-      }
+    // 1. Agregar campos mapeados
+    if (detailConfig.fieldMappings && detailConfig.fieldMappings.length > 0) {
+      detailConfig.fieldMappings.forEach((fm) => {
+        if (fm.sourceField) {
+          selectFields.add(fm.sourceField);
+        }
+
+        // NUEVO: Agregar campos requeridos para conversión de unidades
+        if (fm.unitConversion && fm.unitConversion.enabled) {
+          if (fm.unitConversion.unitMeasureField) {
+            selectFields.add(fm.unitConversion.unitMeasureField);
+            console.log(
+              `🔧 Agregando campo unitMeasureField: ${fm.unitConversion.unitMeasureField}`
+            );
+          }
+          if (fm.unitConversion.conversionFactorField) {
+            selectFields.add(fm.unitConversion.conversionFactorField);
+            console.log(
+              `🔧 Agregando campo conversionFactorField: ${fm.unitConversion.conversionFactorField}`
+            );
+          }
+        }
+
+        // NUEVO: Agregar campos requeridos para lookup
+        if (fm.lookupFromTarget && fm.lookupParams) {
+          fm.lookupParams.forEach((param) => {
+            if (param.sourceField) {
+              selectFields.add(param.sourceField);
+              console.log(`🔧 Agregando campo lookup: ${param.sourceField}`);
+            }
+          });
+        }
+      });
     }
 
+    // 2. Agregar campos adicionales necesarios
+    const primaryKey = detailConfig.primaryKey || "NUM_PED";
+    selectFields.add(primaryKey);
+
+    // 3. Si no tenemos campos, seleccionar todo
+    const finalSelectFields =
+      selectFields.size > 0 ? Array.from(selectFields).join(", ") : "*";
+
     const query = `
-    SELECT ${selectFields} FROM ${detailConfig.sourceTable} 
-    WHERE ${detailConfig.primaryKey || "NUM_PED"} = @documentId
+    SELECT ${finalSelectFields} FROM ${detailConfig.sourceTable} 
+    WHERE ${primaryKey} = @documentId
     ${
       detailConfig.filterCondition ? ` AND ${detailConfig.filterCondition}` : ""
     }
     ${orderByColumn ? ` ORDER BY ${orderByColumn}` : ""}
   `;
 
+    console.log(`🔍 CONSULTA DETALLE PROPIA CORREGIDA: ${query}`);
+    console.log(
+      `🔍 Campos seleccionados: ${Array.from(selectFields).join(", ")}`
+    );
+
     logger.debug(`Ejecutando consulta para detalles: ${query}`);
     const result = await SqlService.query(sourceConnection, query, {
       documentId,
     });
+
+    // DEBUG: Mostrar qué campos tenemos disponibles en el resultado
+    if (result.recordset && result.recordset.length > 0) {
+      console.log(
+        `🔍 CAMPOS DISPONIBLES EN RESULTADO: ${Object.keys(
+          result.recordset[0]
+        ).join(", ")}`
+      );
+    }
+
     return result.recordset;
   }
 
