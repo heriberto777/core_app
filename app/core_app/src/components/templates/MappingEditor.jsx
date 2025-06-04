@@ -2435,7 +2435,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
               />
             </FormGroup>
 
-            {/* Nuevo campo: Tipo de Entidad */}
+            {/* Campo: Tipo de Entidad */}
             <FormGroup>
               <Label>Tipo de Entidad</Label>
               <Select
@@ -2446,7 +2446,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                 <option value="orders">Pedidos</option>
                 <option value="customers">Clientes</option>
                 <option value="invoices">Facturas</option>
-                {/* <option value="other">Otros</option> */}
+                <option value="other">Otros</option>
               </Select>
             </FormGroup>
 
@@ -2525,6 +2525,262 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                 />
               </FormGroup>
             </FormRow>
+
+            {/* NUEVA SECCIÓN: Estrategia de Marcado */}
+            <FormGroup>
+              <Label>Estrategia de Marcado</Label>
+              <Select
+                name="markProcessedStrategy"
+                value={mapping.markProcessedStrategy || "individual"}
+                onChange={handleChange}
+              >
+                <option value="individual">
+                  Individual (marcar inmediatamente)
+                </option>
+                <option value="batch">En Lotes (marcar al final)</option>
+                <option value="none">No Marcar</option>
+              </Select>
+              <small
+                style={{
+                  color: "#666",
+                  fontSize: "12px",
+                  marginTop: "4px",
+                  display: "block",
+                  lineHeight: "1.4",
+                }}
+              >
+                <strong>Individual:</strong> Marca cada documento inmediatamente
+                después de procesarlo.
+                <br />
+                <strong>Lotes:</strong> Marca todos los documentos exitosos al
+                final del procesamiento.
+                <br />
+                <strong>Ninguno:</strong> No marca documentos (útil para
+                pruebas).
+              </small>
+            </FormGroup>
+
+            {/* NUEVA SECCIÓN: Configuración Avanzada de Marcado */}
+            {(mapping.markProcessedStrategy === "batch" ||
+              mapping.markProcessedStrategy === "individual") && (
+              <div
+                style={{
+                  marginTop: "20px",
+                  padding: "20px",
+                  backgroundColor: "#f8f9fa",
+                  borderRadius: "8px",
+                  border: "1px solid #dee2e6",
+                  borderLeft: "4px solid #007bff",
+                }}
+              >
+                <h4
+                  style={{
+                    marginTop: "0",
+                    marginBottom: "15px",
+                    color: "#495057",
+                    fontSize: "1.1rem",
+                    fontWeight: "600",
+                    paddingBottom: "8px",
+                    borderBottom: "1px solid #dee2e6",
+                  }}
+                >
+                  Configuración Avanzada de Marcado
+                </h4>
+
+                <FormRow>
+                  <FormGroup>
+                    <Label>Tamaño de Lote</Label>
+                    <Input
+                      type="number"
+                      value={mapping.markProcessedConfig?.batchSize || 100}
+                      onChange={(e) => {
+                        const value = parseInt(e.target.value) || 100;
+                        setMapping((prev) => ({
+                          ...prev,
+                          markProcessedConfig: {
+                            ...prev.markProcessedConfig,
+                            batchSize: value,
+                          },
+                        }));
+                      }}
+                      min="1"
+                      max="1000"
+                      placeholder="100"
+                    />
+                    <small
+                      style={{
+                        color: "#6c757d",
+                        fontSize: "12px",
+                        marginTop: "4px",
+                        display: "block",
+                      }}
+                    >
+                      Número de documentos a marcar por lote (solo para
+                      estrategia "En Lotes")
+                    </small>
+                  </FormGroup>
+
+                  <FormGroup>
+                    <Label>Campo de Timestamp</Label>
+                    <Input
+                      type="text"
+                      value={
+                        mapping.markProcessedConfig?.timestampField ||
+                        "LAST_PROCESSED_DATE"
+                      }
+                      onChange={(e) => {
+                        setMapping((prev) => ({
+                          ...prev,
+                          markProcessedConfig: {
+                            ...prev.markProcessedConfig,
+                            timestampField: e.target.value,
+                          },
+                        }));
+                      }}
+                      placeholder="LAST_PROCESSED_DATE"
+                    />
+                    <small
+                      style={{
+                        color: "#6c757d",
+                        fontSize: "12px",
+                        marginTop: "4px",
+                        display: "block",
+                      }}
+                    >
+                      Campo donde se guardará la fecha de procesamiento
+                    </small>
+                  </FormGroup>
+                </FormRow>
+
+                <CheckboxGroup style={{ marginBottom: "12px" }}>
+                  <Checkbox
+                    type="checkbox"
+                    checked={
+                      mapping.markProcessedConfig?.includeTimestamp !== false
+                    }
+                    onChange={(e) => {
+                      setMapping((prev) => ({
+                        ...prev,
+                        markProcessedConfig: {
+                          ...prev.markProcessedConfig,
+                          includeTimestamp: e.target.checked,
+                        },
+                      }));
+                    }}
+                    id="includeTimestamp"
+                  />
+                  <CheckboxLabel htmlFor="includeTimestamp">
+                    Incluir fecha de procesamiento
+                  </CheckboxLabel>
+                </CheckboxGroup>
+
+                <CheckboxGroup style={{ marginBottom: "12px" }}>
+                  <Checkbox
+                    type="checkbox"
+                    checked={
+                      mapping.markProcessedConfig?.allowRollback || false
+                    }
+                    onChange={(e) => {
+                      setMapping((prev) => ({
+                        ...prev,
+                        markProcessedConfig: {
+                          ...prev.markProcessedConfig,
+                          allowRollback: e.target.checked,
+                        },
+                      }));
+                    }}
+                    id="allowRollback"
+                  />
+                  <CheckboxLabel htmlFor="allowRollback">
+                    Permitir rollback en caso de errores (solo para lotes)
+                  </CheckboxLabel>
+                </CheckboxGroup>
+
+                {/* Información adicional sobre rollback */}
+                {mapping.markProcessedConfig?.allowRollback && (
+                  <div
+                    style={{
+                      marginTop: "15px",
+                      padding: "12px",
+                      backgroundColor: "#fff3e0",
+                      border: "1px solid #ffcc80",
+                      borderLeft: "4px solid #ff9800",
+                      borderRadius: "6px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontWeight: "600",
+                        color: "#e65100",
+                        marginBottom: "8px",
+                        fontSize: "0.95rem",
+                      }}
+                    >
+                      ⚠️ Rollback Habilitado
+                    </div>
+                    <div
+                      style={{
+                        color: "#424242",
+                        fontSize: "0.85rem",
+                        lineHeight: "1.4",
+                      }}
+                    >
+                      Si algún documento falla durante el procesamiento por
+                      lotes, todos los documentos exitosos serán desmarcados
+                      automáticamente. Esto mantiene la consistencia pero puede
+                      requerir reprocesamiento.
+                    </div>
+                  </div>
+                )}
+
+                {/* Información sobre estrategias */}
+                <div
+                  style={{
+                    marginTop: "15px",
+                    padding: "12px",
+                    backgroundColor: "#e3f2fd",
+                    border: "1px solid #bbdefb",
+                    borderLeft: "4px solid #2196f3",
+                    borderRadius: "6px",
+                  }}
+                >
+                  <div
+                    style={{
+                      fontWeight: "600",
+                      color: "#1565c0",
+                      marginBottom: "8px",
+                      fontSize: "0.95rem",
+                    }}
+                  >
+                    💡 Recomendaciones de Uso
+                  </div>
+                  <ul
+                    style={{
+                      margin: "0",
+                      paddingLeft: "20px",
+                      color: "#424242",
+                      fontSize: "0.85rem",
+                      lineHeight: "1.4",
+                    }}
+                  >
+                    <li style={{ marginBottom: "4px" }}>
+                      <strong>Individual:</strong> Ideal para documentos
+                      críticos o volúmenes pequeños (menos de 50 documentos)
+                    </li>
+                    <li style={{ marginBottom: "4px" }}>
+                      <strong>Lotes:</strong> Recomendado para volúmenes grandes
+                      (más de 100 documentos) por mejor rendimiento
+                    </li>
+                    <li style={{ marginBottom: "4px" }}>
+                      <strong>Ninguno:</strong> Útil para pruebas o cuando se
+                      requiere reprocesamiento múltiple
+                    </li>
+                  </ul>
+                </div>
+              </div>
+            )}
+
+            {/* Sección de Consecutivos */}
             <FormGroup>
               <ConsecutiveConfigSection
                 mapping={mapping}
