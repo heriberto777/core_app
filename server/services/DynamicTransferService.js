@@ -1628,6 +1628,7 @@ class DynamicTransferService {
                 fieldMapping.unitConversion &&
                 fieldMapping.unitConversion.enabled
               ) {
+                const combinedData = { ...sourceData, ...detailRow };
                 logger.info(
                   `🔄 Iniciando conversión de unidades para campo: ${fieldMapping.targetField}`
                 );
@@ -1642,7 +1643,7 @@ class DynamicTransferService {
 
                 const originalValue = value;
                 value = this.applyUnitConversion(
-                  sourceData,
+                  combinedData,
                   fieldMapping,
                   value
                 );
