@@ -1,6 +1,7 @@
 import { createContext, useContext, useEffect, useState } from "react";
 import { AdminRouter, AuthContext, ReloadProvider, Light, Dark } from "./index";
 import { ThemeProvider } from "styled-components";
+import { HelmetProvider } from "react-helmet-async";
 
 export const ThemeContext = createContext(null);
 
@@ -19,12 +20,14 @@ export function App() {
     setTheme((curr) => (curr === "light" ? "dark" : "light"));
   };
   return (
-    <ThemeContext.Provider value={{ toggleTheme, theme }}>
-      <ThemeProvider theme={themeStyle}>
-        <ReloadProvider>
-          <AdminRouter />
-        </ReloadProvider>
-      </ThemeProvider>
-    </ThemeContext.Provider>
+    <HelmetProvider>
+      <ThemeContext.Provider value={{ toggleTheme, theme }}>
+        <ThemeProvider theme={themeStyle}>
+          <ReloadProvider>
+            <AdminRouter />
+          </ReloadProvider>
+        </ThemeProvider>
+      </ThemeContext.Provider>
+    </HelmetProvider>
   );
 }
