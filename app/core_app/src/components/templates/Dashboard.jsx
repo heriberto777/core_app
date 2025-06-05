@@ -19,6 +19,7 @@ import {
   FaSync,
 } from "react-icons/fa";
 import { Link } from "react-router-dom";
+import { Helmet } from "react-helmet-async";
 
 const cnnApi = new TransferApi();
 
@@ -253,6 +254,9 @@ export function Dashboard() {
 
   return (
     <>
+      <Helmet>
+        <title>Dashboard - Sistema Core ERP </title>
+      </Helmet>
       <section className="main-content">
         <WelcomeSection>
           <WelcomeTitle>Panel de Control</WelcomeTitle>

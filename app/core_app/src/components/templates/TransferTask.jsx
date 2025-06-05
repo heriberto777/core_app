@@ -24,6 +24,7 @@ import {
   FaSync,
   FaLink,
 } from "react-icons/fa";
+import { Helmet } from "react-helmet-async";
 
 const cnnApi = new TransferApi();
 
@@ -2062,6 +2063,9 @@ export function TransferTasks() {
 
   return (
     <>
+      <Helmet>
+        <title>Tareas - Sistema Core ERP </title>
+      </Helmet>
       <ToolbarContainer>
         <InfoSection>
           <h2>Gestor de Tareas de Transferencia</h2>

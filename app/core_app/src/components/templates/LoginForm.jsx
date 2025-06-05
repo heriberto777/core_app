@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import styled from "styled-components";
 import { useForm, validateForm, AuthApi, useAuth } from "../../index";
 import Swal from "sweetalert2";
+import { Helmet } from "react-helmet-async";
 
 const authController = new AuthApi();
 
@@ -59,6 +60,9 @@ export function LoginForm() {
 
   return (
     <Container>
+      <Helmet>
+        <title>Login - Sistema Core ERP </title>
+      </Helmet>
       <FormWrapper>
         <Title>Iniciar Sesión</Title>
         {message && <Message>{message}</Message>}
