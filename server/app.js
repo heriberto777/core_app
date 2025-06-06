@@ -30,7 +30,7 @@ try {
 // Middleware de CORS mejorado
 
 const corsOptions = {
-  origin: ["http://localhost:5173", "http://localhost:3000"], // Agrega todos los origins que necesites
+  origin: process.env.CORS_ORIGIN || "*", // Agrega todos los origins que necesites
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], // ✅ Asegúrate de incluir PATCH
   allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
   credentials: true,
