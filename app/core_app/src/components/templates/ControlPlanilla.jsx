@@ -132,7 +132,7 @@ export function ControlPlanilla() {
           });
 
           // Crear el destinatario usando la API
-          const response = await recipientApi.createRecipient(
+          const response = await cnnApi.createRecipient(
             accessToken,
             result.value
           );
@@ -248,7 +248,7 @@ export function ControlPlanilla() {
           });
 
           // Actualizar el destinatario usando la API
-          await recipientApi.updateRecipient(
+          await cnnApi.updateRecipient(
             accessToken,
             recipient._id,
             result.value
@@ -298,7 +298,7 @@ export function ControlPlanilla() {
           });
 
           // Eliminar usando la API
-          await recipientApi.deleteRecipient(accessToken, id);
+          await cnnApi.deleteRecipient(accessToken, id);
 
           // Refrescar la lista
           await fetchRecipients();
@@ -333,7 +333,7 @@ export function ControlPlanilla() {
       });
 
       // Cambiar estado usando la API
-      await recipientApi.toggleSendStatus(accessToken, id);
+      await cnnApi.toggleSendStatus(accessToken, id);
 
       // Refrescar la lista
       await fetchRecipients();
@@ -380,7 +380,7 @@ export function ControlPlanilla() {
       });
 
       // Llamar a la API
-      await recipientApi.initializeDefaults(accessToken);
+      await cnnApi.initializeDefaults(accessToken);
 
       // Refrescar la lista
       await fetchRecipients();

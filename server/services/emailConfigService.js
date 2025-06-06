@@ -85,6 +85,30 @@ class EmailConfigService {
   }
 
   /**
+   * Obtiene una configuración específica por ID
+   * @param {string} id - ID de la configuración
+   * @returns {Promise<Object|null>} Configuración de email
+   */
+  static async getConfigById(id) {
+    try {
+      const config = await EmailConfig.findById(id);
+
+      if (!config) {
+        logger.warn(`No se encontró configuración de email con ID: ${id}`);
+        return null;
+      }
+
+      return config;
+    } catch (error) {
+      logger.error(
+        `Error al obtener configuración de email con ID '${id}':`,
+        error
+      );
+      return null;
+    }
+  }
+
+  /**
    * Crea una nueva configuración de email
    * @param {Object} configData - Datos de la configuración
    * @returns {Promise<Object>} Configuración creada

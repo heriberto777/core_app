@@ -37,6 +37,9 @@ async function login(req, res) {
   try {
     const { email, password } = req.body;
 
+    console.log("Correo", email);
+    console.log("Contraseña", password);
+
     // 📌 Validaciones iniciales
     if (!email || !password) {
       return res.status(400).json({
@@ -58,6 +61,8 @@ async function login(req, res) {
         state: false,
       });
     }
+
+    console.log("Usuario encontrado en la base de datos:", userStore);
 
     // console.log(
     //   "Password",

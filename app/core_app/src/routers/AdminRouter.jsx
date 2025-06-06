@@ -15,6 +15,9 @@ import {
   ConsecutiveManager,
   TransferHistoryLogs,
   ControlEmailConfig,
+  ConsecutiveDashboard,
+  ConfigurationPage,
+  UserProfile,
 } from "../index";
 
 // Componente de envoltura para aplicar el AdminLayout a todas las rutas
@@ -75,10 +78,7 @@ export function AdminRouter() {
         path="/loads"
         element={<ProtectedRoute component={LoadsTasks} />}
       />
-      <Route
-        path="/email-recipients"
-        element={<ProtectedRoute component={ControlPlanilla} />}
-      />
+
       <Route
         path="/summaries"
         element={<ProtectedRoute component={LoadsResumen} />}
@@ -94,18 +94,18 @@ export function AdminRouter() {
       />
 
       <Route
-        path="/consecutives"
-        element={<ProtectedRoute component={ConsecutiveManager} />}
-      />
-
-      <Route
         path="/historys"
         element={<ProtectedRoute component={TransferHistoryLogs} />}
       />
 
       <Route
-        path="/email-config"
-        element={<ProtectedRoute component={ControlEmailConfig} />}
+        path="/configuraciones"
+        element={<ProtectedRoute component={ConfigurationPage} />}
+      />
+
+      <Route
+        path="/perfil"
+        element={<ProtectedRoute component={UserProfile} />}
       />
 
       {/* Opcionalmente, puedes tener rutas secundarias o que no requieran el AdminLayout */}

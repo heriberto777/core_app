@@ -3,7 +3,7 @@ export const DesplegableUser = [
   {
     text: "Mi perfil",
     icono: v.iconoUser,
-    tipo: "miperfil",
+    tipo: "perfil",
   },
   // {
   //   text: "Configuracion",
@@ -37,12 +37,7 @@ export const LinkArray = [
     to: "/loads",
     roles: ["admin"],
   },
-  {
-    label: "Receptores de correo",
-    icon: <v.iconoCorreo />,
-    to: "/email-recipients",
-    roles: ["admin"],
-  },
+
   {
     label: "Resumen de Carga",
     icon: <v.iconoResumen />,
@@ -56,15 +51,9 @@ export const LinkArray = [
     roles: ["admin"],
   },
   {
-    label: "Consecutivos",
-    icon: <v.iconoDocument />, // Necesitarás añadir este icono en variables
-    to: "/consecutives",
-    roles: ["admin"],
-  },
-  {
     label: "Configuracion",
-    icon: <v.iconoUser />,
-    to: "/email-config",
+    icon: <v.iconSetting />,
+    to: "/configuraciones",
     roles: ["admin"],
   },
 ];

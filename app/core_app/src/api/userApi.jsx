@@ -48,7 +48,7 @@ export class User {
   async getUsers(accessToken, datos) {
     // console.log(datos);
     try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.USERS}`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.USERS}/lists`;
       const params = {
         method: "POST",
         headers: {
@@ -60,6 +60,8 @@ export class User {
 
       const response = await fetch(url, params);
       const result = await response.json();
+
+      console.log(result);
 
       if (response.status != 200) throw result;
       return result;
@@ -135,26 +137,42 @@ export class User {
 
   async updateUser(accessToken, idUser, userData) {
     try {
-      console.log("Actualizando");
-      const data = userData;
-      if (!data.password) {
-        delete data.password;
-      }
+      console.log("🔄 Actualizando usuario...");
 
       const formData = new FormData();
-      Object.keys(data).forEach((key) => {
-        formData.append(key, data[key]);
+
+      // Agregar todos los campos normales
+      Object.keys(userData).forEach((key) => {
+        if (key !== "fileAvatar") {
+          // Excluir el archivo para manejarlo por separado
+          formData.append(key, userData[key]);
+        }
       });
 
-      if (data.fileAvatar) {
-        formData.append("avatar", data.fileAvatar);
+      // ⭐ AGREGAR EL ARCHIVO CON EL NOMBRE CORRECTO 'avatar' ⭐
+      if (userData.fileAvatar) {
+        formData.append("avatar", userData.fileAvatar);
+        console.log(
+          "📎 Archivo agregado al FormData:",
+          userData.fileAvatar.name
+        );
       }
 
-      const url = `${ENV.BASE_API}/${ENV.API_ROUTERS.USER}/${idUser}`;
+      // Debug: Ver contenido del FormData
+      console.log("📦 Contenido del FormData:");
+      for (let [key, value] of formData.entries()) {
+        console.log(
+          `${key}:`,
+          value instanceof File ? `Archivo: ${value.name}` : value
+        );
+      }
+
+      const url = `${ENV.BASE_API}/${ENV.API_ROUTERS.USER}/update/${idUser}`;
       const params = {
         method: "PATCH",
         headers: {
           Authorization: `Bearer ${accessToken}`,
+          // ⭐ NO incluir Content-Type, dejar que el navegador lo maneje automáticamente
         },
         body: formData,
       };
@@ -162,10 +180,40 @@ export class User {
       const response = await fetch(url, params);
       const result = await response.json();
 
-      if (response.status !== 200) throw result;
+      if (response.status !== 200 && response.status !== 201) {
+        throw result;
+      }
 
       return result;
     } catch (error) {
+      console.error("❌ Error en updateUser:", error);
+      return error;
+    }
+  }
+
+  async deleteUser(accessToken, userId) {
+    try {
+      console.log("🗑️ Eliminando usuario:", userId);
+
+      const url = `${ENV.BASE_API}/${ENV.API_ROUTERS.USER}/delete/${userId}`;
+      const params = {
+        method: "DELETE",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) {
+        throw result;
+      }
+
+      return result;
+    } catch (error) {
+      console.error("❌ Error en deleteUser:", error);
       return error;
     }
   }

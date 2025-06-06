@@ -29,8 +29,15 @@ function createRefreshToken(user) {
   return jwt.sign(payload, JWT_SECRET_KEY);
 }
 
+// ⭐ CAMBIAR jwt.decode por jwt.verify ⭐
 function decoded(token) {
-  return jwt.decode(token, JWT_SECRET_KEY, true);
+  try {
+    // jwt.verify decodifica Y verifica la firma del token
+    return jwt.verify(token, JWT_SECRET_KEY);
+  } catch (error) {
+    console.log("❌ Error verificando token:", error.message);
+    throw error;
+  }
 }
 
 module.exports = {
