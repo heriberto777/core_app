@@ -30,17 +30,44 @@ try {
 // Middleware de CORS mejorado
 
 const corsOptions = {
-  origin: process.env.CORS_ORIGIN || "*", // Agrega todos los origins que necesites
-  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], // ✅ Asegúrate de incluir PATCH
+  origin: function (origin, callback) {
+    // Lista de orígenes permitidos
+    const allowedOrigins = [
+      "http://localhost:3000",
+      "http://localhost:3001",
+      "http://localhost:5173",
+      "https://localhost:3000",
+      "https://catelli.ddns.net",
+      "https://catelli.ddns.net:3979",
+      "http://catelli.ddns.net",
+      "http://catelli.ddns.net:3979",
+    ];
+
+    // Permitir peticiones sin origin (Postman, apps móviles, etc.)
+    if (!origin) return callback(null, true);
+
+    // Verificar si el origin está en la lista permitida
+    if (allowedOrigins.indexOf(origin) !== -1) {
+      callback(null, true);
+    } else {
+      console.log("CORS blocked origin:", origin);
+      callback(new Error("No permitido por política CORS"));
+    }
+  },
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"],
   allowedHeaders: [
     "Content-Type",
     "Authorization",
     "X-Requested-With",
     "Accept",
+    "Origin",
+    "Cache-Control",
+    "X-File-Name",
   ],
   credentials: true,
   optionsSuccessStatus: 200,
-  maxAge: 86400, // Caché de preflight por 24 horas
+  maxAge: 86400, // Cache preflight por 24 horas
+  preflightContinue: false,
 };
 
 app.use(cors(corsOptions));
