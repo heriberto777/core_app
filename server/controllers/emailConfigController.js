@@ -314,16 +314,28 @@ const toggleStatus = async (req, res) => {
   try {
     const { id } = req.params;
 
+    console.log("🔄 Alternando estado para ID:", id);
+
     // Obtener configuración actual
     const currentConfig = await EmailConfigService.getConfigById(id);
     if (!currentConfig) {
+      console.log("❌ Configuración no encontrada");
       return res.status(404).json({ message: "Configuración no encontrada" });
     }
+
+    console.log(
+      "📋 Configuración actual encontrada:",
+      currentConfig.name,
+      "- Estado:",
+      currentConfig.isActive
+    );
 
     // Alternar estado
     const updatedConfig = await EmailConfigService.updateConfig(id, {
       isActive: !currentConfig.isActive,
     });
+
+    console.log("✅ Estado actualizado:", updatedConfig.isActive);
 
     // No enviar la contraseña en la respuesta
     const safeConfig = updatedConfig.toObject();
@@ -338,6 +350,7 @@ const toggleStatus = async (req, res) => {
       config: safeConfig,
     });
   } catch (error) {
+    console.error("❌ Error completo:", error);
     logger.error(
       `Error al alternar estado de configuración con ID ${req.params.id}:`,
       error

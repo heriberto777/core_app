@@ -1543,6 +1543,7 @@ const checkServerStatus = async (req, res) => {
       const server1Result = await ConnectionDiagnostic.testDirectConnection(
         await DBConfig.findOne({ serverName: "server1" })
       );
+
       const endTime = Date.now();
 
       serverStatus.server1.status = "online";

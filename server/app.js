@@ -2,11 +2,12 @@
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
+const path = require("path");
 const app = express();
 const errorHandler = require("./middlewares/errorHandler");
 const logRequests = require("./middlewares/loggerMiddleware");
 const simpleLoggerMiddleware = require("./middlewares/simpleLoggerMiddleware");
-const AppBootstrap = require("./services/AppBootstrap");
+
 const logger = require("./services/logger");
 
 // Configuración dinámica
@@ -28,24 +29,42 @@ try {
 }
 
 // Middleware de CORS mejorado
-app.use(
-  cors({
-    origin: process.env.CORS_ORIGIN || "*",
-    methods: ["GET", "POST", "PUT", "DELETE", "OPTIONS"],
-    allowedHeaders: [
-      "Content-Type",
-      "Authorization",
-      "X-Requested-With",
-      "Accept",
-    ],
-    credentials: true,
-    maxAge: 86400, // Caché de preflight por 24 horas
-  })
-);
+
+const corsOptions = {
+  origin: ["http://localhost:5173", "http://localhost:3000"], // Agrega todos los origins que necesites
+  methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], // ✅ Asegúrate de incluir PATCH
+  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  credentials: true,
+  optionsSuccessStatus: 200,
+};
+
+app.use(cors(corsOptions));
 
 // Middleware para JSON y datos URL-encoded
 app.use(express.json({ limit: MAX_REQUEST_SIZE }));
 app.use(express.urlencoded({ limit: MAX_REQUEST_SIZE, extended: true }));
+
+// ⭐ AÑADIR ESTAS LÍNEAS PARA SERVIR ARCHIVOS ESTÁTICOS ⭐
+// Servir archivos estáticos desde la carpeta uploads
+app.use("/uploads", express.static(path.join(__dirname, "uploads")));
+console.log(
+  "📁 Sirviendo archivos estáticos desde:",
+  path.join(__dirname, "uploads")
+);
+
+// Crear directorio de uploads si no existe
+const fs = require("fs");
+const uploadDirs = [
+  path.join(__dirname, "uploads"),
+  path.join(__dirname, "uploads/avatar"),
+];
+
+uploadDirs.forEach((dir) => {
+  if (!fs.existsSync(dir)) {
+    fs.mkdirSync(dir, { recursive: true });
+    console.log(`📁 Directorio creado: ${dir}`);
+  }
+});
 
 // Middleware para manejar errores de parsing JSON
 app.use((err, req, res, next) => {
@@ -61,10 +80,10 @@ app.use((err, req, res, next) => {
 });
 
 // Rutas
-app.use(`/api/${API_VERSION}/`, require("./routes/auth"));
+app.use(`/api/${API_VERSION}/auth`, require("./routes/auth"));
 app.use(`/api/${API_VERSION}/task`, require("./routes/transferTaskRoutes"));
-app.use(`/api/${API_VERSION}/`, require("./routes/userRoutes"));
-app.use(`/api/${API_VERSION}/`, require("./routes/dbRoutes"));
+app.use(`/api/${API_VERSION}/users`, require("./routes/userRoutes"));
+app.use(`/api/${API_VERSION}/config`, require("./routes/dbRoutes"));
 app.use(
   `/api/${API_VERSION}/email-recipients`,
   require("./routes/emailRecipientRoutes")

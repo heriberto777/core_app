@@ -15,9 +15,17 @@ const UserSchema = Schema(
     telefono: String,
     avatar: String,
     theme: String,
-    activo: Boolean,
+    activo: {
+      type: Boolean,
+      default: true,
+    },
+    lastLogin: Date,
+    createdBy: {
+      type: Schema.Types.ObjectId,
+      ref: "Usuario",
+    },
   },
-  { timestamps: {} }
+  { timestamps: true }
 );
 
 UserSchema.plugin(mongoosePaginate);

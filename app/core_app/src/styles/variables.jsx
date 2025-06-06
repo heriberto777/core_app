@@ -23,6 +23,7 @@ import {
   FaTruckLoading,
   FaCheckSquare,
   FaFileAlt,
+  FaCog,
 } from "react-icons/fa";
 import { BsArrowDown, BsArrowUpShort } from "react-icons/bs";
 import { FaBalanceScale } from "react-icons/fa";
@@ -79,6 +80,7 @@ export const v = {
   iconoFlechabajo: IoIosArrowDown,
   iconocorona: RiVipCrownFill,
   iconoUser: BiUserCircle,
+  iconSetting: FaCog,
   iconoSettings: RiSettings3Line,
   iconoCerrarSesion: MdExitToApp,
   iconoContabilidad: MdOutlineAttachMoney,

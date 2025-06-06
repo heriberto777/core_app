@@ -4,15 +4,19 @@ const {
   getDBConfigs,
   upsertDBConfig,
   deleteDBConfig,
+  testDBConnection,
 } = require("../controllers/dbConfigController");
 
 // 📌 Obtener todas las configuraciones de base de datos
-router.get("/config/db", getDBConfigs);
+router.get("/db", getDBConfigs);
 
 // 📌 Crear o actualizar una configuración de base de datos
-router.post("/config/db", upsertDBConfig);
+router.post("/create/db", upsertDBConfig);
 
 // 📌 Eliminar una configuración de base de datos
-router.delete("/config/db/:serverName", deleteDBConfig);
+router.delete("/delete/db/:serverName", deleteDBConfig);
+
+// ⭐ 📌 Probar conexión a base de datos
+router.post("/test/db", testDBConnection);
 
 module.exports = router;

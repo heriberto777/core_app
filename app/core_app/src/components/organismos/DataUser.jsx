@@ -5,9 +5,11 @@ import {
   v,
   ListaMenuDesplegable,
   DesplegableUser,
+  ENV,
 } from "../../index";
 import { useNavigate } from "react-router-dom";
 import { memo, useCallback } from "react";
+import { FaUser } from "react-icons/fa";
 
 // 🔹 Función para obtener el Avatar según el rol
 const getAvatarByRole = (role) => {
@@ -33,27 +35,32 @@ export const DataUser = memo(({ stateConfig }) => {
       if (action === "cerrarsesion") {
         logout();
         navigate("/");
+      } else if (action === "perfil") {
+        // ✅ Agregar navegación al perfil
+        navigate("/perfil");
+        stateConfig.setOpenState(false); // Cerrar el menú
       }
     },
-    [logout, navigate]
+    [logout, navigate, stateConfig]
   );
 
   return (
     <Container onClick={stateConfig.setOpenState}>
       <div className="imgContainer">
-        <img
-          src={user?.picture || getAvatarByRole(user?.role?.[0])}
-          alt="User Avatar"
-        />
+        {user.avatar ? (
+          <img src={`${ENV.BASE_PATH}/${user.avatar}`} alt="Avatar" />
+        ) : (
+          <FaUser />
+        )}
       </div>
 
       {user?.role?.includes("admin") && (
         <BotonCircular
           icono={<v.iconocorona />}
-          width="25px"
-          height="25px"
-          bgcolor="#ffffff"
-          textColor="#181616"
+          width="15px"
+          height="15px"
+          bgcolor="#f7cf4d"
+          textColor="#f15309"
           fontsize="11px"
           translateX="-50px"
           translateY="-12px"
