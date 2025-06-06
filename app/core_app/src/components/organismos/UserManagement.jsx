@@ -303,7 +303,7 @@ export function UserManagement() {
           telefono: telefono.trim(),
           password: password.trim(),
           role: roles,
-          activo,
+          active,
           fileAvatar: avatarFile,
         };
       },
