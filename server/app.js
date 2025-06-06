@@ -41,6 +41,7 @@ const corsOptions = {
       "https://catelli.ddns.net:3979",
       "http://catelli.ddns.net",
       "http://catelli.ddns.net:3979",
+      "https://catelli.ddns.net:8085",
     ];
 
     // Permitir peticiones sin origin (Postman, apps móviles, etc.)
