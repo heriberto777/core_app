@@ -72,6 +72,24 @@ const corsOptions = {
 
 app.use(cors(corsOptions));
 
+// Middleware adicional para manejar preflight requests
+app.use((req, res, next) => {
+  if (req.method === "OPTIONS") {
+    res.header("Access-Control-Allow-Origin", req.headers.origin);
+    res.header(
+      "Access-Control-Allow-Methods",
+      "GET,PUT,POST,DELETE,PATCH,OPTIONS"
+    );
+    res.header(
+      "Access-Control-Allow-Headers",
+      "Content-Type, Authorization, X-Requested-With, Accept, Origin, Cache-Control, X-File-Name"
+    );
+    res.header("Access-Control-Allow-Credentials", "true");
+    return res.status(200).end();
+  }
+  next();
+});
+
 // Middleware para JSON y datos URL-encoded
 app.use(express.json({ limit: MAX_REQUEST_SIZE }));
 app.use(express.urlencoded({ limit: MAX_REQUEST_SIZE, extended: true }));
