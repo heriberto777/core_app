@@ -32,9 +32,15 @@ try {
 const corsOptions = {
   origin: process.env.CORS_ORIGIN || "*", // Agrega todos los origins que necesites
   methods: ["GET", "POST", "PUT", "PATCH", "DELETE", "OPTIONS"], // ✅ Asegúrate de incluir PATCH
-  allowedHeaders: ["Content-Type", "Authorization", "X-Requested-With"],
+  allowedHeaders: [
+    "Content-Type",
+    "Authorization",
+    "X-Requested-With",
+    "Accept",
+  ],
   credentials: true,
   optionsSuccessStatus: 200,
+  maxAge: 86400, // Caché de preflight por 24 horas
 };
 
 app.use(cors(corsOptions));
