@@ -5,7 +5,7 @@ export class User {
 
   async getMe(accessToken) {
     try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.USER_ME}`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.USERS}/user/me`;
       const params = {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -70,29 +70,6 @@ export class User {
     }
   }
 
-  // async getUsers(accessToken, datos) {
-  //   console.log(datos);
-  //   try {
-  //     const url = `${this.baseApi}/${ENV.API_ROUTERS.USERS}`;
-  //     const params = {
-  //       method: "POST",
-  //       headers: {
-  //         "Content-Type": "application/json",
-  //         Authorization: `Bearer ${accessToken}`,
-  //       },
-  //       body: JSON.stringify(datos),
-  //     };
-
-  //     const response = await fetch(url, params);
-  //     const result = await response.json();
-
-  //     if (response.status != 200) throw result;
-  //     return result;
-  //   } catch (error) {
-  //     console.log(error);
-  //   }
-  // }
-
   async createUser(accessToken, data) {
     try {
       const formData = new FormData();
@@ -115,7 +92,7 @@ export class User {
       //   console.log(`${key}:`, value);
       // }
 
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.USER}`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.USERS}/user/create`;
       const params = {
         method: "POST",
         headers: {
@@ -167,7 +144,7 @@ export class User {
         );
       }
 
-      const url = `${ENV.BASE_API}/${ENV.API_ROUTERS.USER}/update/${idUser}`;
+      const url = `${ENV.BASE_API}/${ENV.API_ROUTERS.USERS}/user/update/${idUser}`;
       const params = {
         method: "PATCH",
         headers: {
@@ -195,7 +172,7 @@ export class User {
     try {
       console.log("🗑️ Eliminando usuario:", userId);
 
-      const url = `${ENV.BASE_API}/${ENV.API_ROUTERS.USER}/delete/${userId}`;
+      const url = `${ENV.BASE_API}/${ENV.API_ROUTERS.USERS}/user/delete/${userId}`;
       const params = {
         method: "DELETE",
         headers: {
@@ -222,7 +199,7 @@ export class User {
     try {
       console.log("Eliminando", userData);
 
-      const url = `${ENV.BASE_API}/${ENV.API_ROUTERS.USER}/active/${idUser}`;
+      const url = `${ENV.BASE_API}/${ENV.API_ROUTERS.USERS}/user/active/${idUser}`;
       const params = {
         method: "PATCH",
         headers: {
