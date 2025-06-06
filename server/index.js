@@ -1,4 +1,4 @@
-// index.js - Versión optimizada
+// index.js - Versión optimizada con HTTPS forzado
 require("dotenv").config();
 const app = require("./app");
 const fs = require("fs");
@@ -101,6 +101,13 @@ const startServerWithPort = async (serverPort) => {
   try {
     console.log(`Intentando iniciar servidor en puerto ${serverPort}...`);
 
+    // ⭐ DEBUGGING MEJORADO ⭐
+    console.log("🔍 DEBUG - Variables de entorno:");
+    console.log("NODE_ENV:", process.env.NODE_ENV);
+    console.log("SSL_PATH:", process.env.SSL_PATH);
+    console.log("isDev:", isDev);
+    console.log("isWindows:", isWindows);
+
     // Inicializar todos los servicios a través del bootstrap
     console.log("Inicializando servicios...");
     const bootstrapResult = await AppBootstrap.initialize();
@@ -116,10 +123,23 @@ const startServerWithPort = async (serverPort) => {
     // Determinar si podemos usar SSL
     const sslPath =
       process.env.SSL_PATH || "/etc/letsencrypt/live/catelli.ddns.net";
+
+    // ⭐ DEBUGGING SSL ⭐
+    console.log("🔍 DEBUG - Estado SSL:");
+    console.log("sslPath:", sslPath);
+    console.log("privkey.pem exists:", fs.existsSync(`${sslPath}/privkey.pem`));
+    console.log(
+      "fullchain.pem exists:",
+      fs.existsSync(`${sslPath}/fullchain.pem`)
+    );
+    console.log("chain.pem exists:", fs.existsSync(`${sslPath}/chain.pem`));
+
     const hasSSLCerts =
       !isWindows &&
       fs.existsSync(`${sslPath}/privkey.pem`) &&
       fs.existsSync(`${sslPath}/fullchain.pem`);
+
+    console.log("hasSSLCerts:", hasSSLCerts);
 
     console.log(
       `Modo: ${isDev ? "desarrollo" : "producción"}, Sistema: ${
@@ -131,47 +151,68 @@ const startServerWithPort = async (serverPort) => {
     // Iniciar el servidor HTTP o HTTPS
     let server;
 
-    if (isDev || isWindows || !hasSSLCerts) {
-      // HTTP para desarrollo, Windows, o sin SSL
-      console.log("Iniciando servidor HTTP...");
-      server = http.createServer(app);
-    } else {
-      // HTTPS para producción en Linux con SSL
+    // ⭐ LÓGICA MEJORADA PARA FORZAR HTTPS ⭐
+    if (hasSSLCerts) {
+      // SIEMPRE usar HTTPS si hay certificados SSL disponibles
       try {
-        console.log("Cargando certificados SSL para producción...");
+        console.log("🔒 Cargando certificados SSL para HTTPS...");
 
         const privateKey = fs.readFileSync(`${sslPath}/privkey.pem`, "utf8");
         const certificate = fs.readFileSync(`${sslPath}/fullchain.pem`, "utf8");
-        const ca = fs.readFileSync(`${sslPath}/chain.pem`, "utf8");
 
-        const credentials = { key: privateKey, cert: certificate, ca };
+        // chain.pem es opcional, algunos setups no lo necesitan
+        let ca = null;
+        if (fs.existsSync(`${sslPath}/chain.pem`)) {
+          ca = fs.readFileSync(`${sslPath}/chain.pem`, "utf8");
+        }
+
+        const credentials = {
+          key: privateKey,
+          cert: certificate,
+          ...(ca && { ca }), // Solo agregar ca si existe
+        };
 
         console.log("✅ Certificados SSL cargados correctamente");
-        console.log("Creando servidor HTTPS...");
+        console.log("🚀 Creando servidor HTTPS...");
 
         server = https.createServer(credentials, app);
+
+        console.log("🔒 Servidor HTTPS configurado exitosamente");
       } catch (sslError) {
         // Fallback a HTTP si falla SSL
         console.error("❌ Error al configurar HTTPS:", sslError.message);
+        console.log("📋 Detalles del error SSL:", sslError);
         console.log("⚠️ Fallback a HTTP debido a error en SSL...");
         server = http.createServer(app);
       }
+    } else {
+      // HTTP solo si no hay certificados SSL o estamos en Windows
+      if (isWindows) {
+        console.log("🌐 Iniciando servidor HTTP (Windows detectado)...");
+      } else {
+        console.log("🌐 Iniciando servidor HTTP (sin certificados SSL)...");
+      }
+      server = http.createServer(app);
     }
 
     // Configurar eventos del servidor
     server.on("error", (err) => {
       if (err.code === "EADDRINUSE") {
-        console.error(`Puerto ${serverPort} en uso, intentando otro puerto...`);
+        console.error(
+          `❌ Puerto ${serverPort} en uso, intentando otro puerto...`
+        );
         setTimeout(() => startServerWithPort(serverPort + 1), 1000);
       } else {
-        console.error("Error en servidor:", err);
+        console.error("❌ Error en servidor:", err);
+        logger.error("Error en servidor:", err);
       }
     });
 
-    // Iniciar escucha
+    // ⭐ MEJORAR LOGGING AL INICIAR ⭐
     return new Promise((resolve, reject) => {
       server.listen(serverPort, () => {
         const protocol = server instanceof https.Server ? "https" : "http";
+        const isSSL = server instanceof https.Server;
 
         console.log("******************************");
         console.log("****** API REST CATELLI ******");
@@ -180,13 +221,30 @@ const startServerWithPort = async (serverPort) => {
           `🚀 Servidor ${protocol.toUpperCase()} iniciado en puerto ${serverPort}: ${protocol}://localhost:${serverPort}/`
         );
 
-        // Registrar información en el sistema
-        logger.info(
-          `Servidor iniciado en ${protocol}://localhost:${serverPort}/`
+        // ⭐ INFORMACIÓN ADICIONAL ⭐
+        console.log(`🔒 SSL/TLS: ${isSSL ? "ACTIVADO" : "DESACTIVADO"}`);
+        console.log(
+          `🌍 Accesible en: ${protocol}://catelli.ddns.net:${serverPort}/`
         );
 
-        resolve({ server, port: serverPort, protocol });
+        if (!isSSL && hasSSLCerts) {
+          console.log("⚠️ ADVERTENCIA: SSL disponible pero no se está usando");
+        }
+
+        // Registrar información en el sistema
+        logger.info(
+          `Servidor iniciado en ${protocol}://localhost:${serverPort}/ (SSL: ${isSSL})`
+        );
+
+        resolve({ server, port: serverPort, protocol, ssl: isSSL });
       });
+
+      // ⭐ TIMEOUT PARA EVITAR BLOQUEOS ⭐
+      setTimeout(() => {
+        reject(
+          new Error(`Timeout al iniciar servidor en puerto ${serverPort}`)
+        );
+      }, 30000); // 30 segundos timeout
     });
   } catch (error) {
     console.error("❌ Error general al iniciar el servidor:", error);
@@ -210,6 +268,15 @@ const startServer = async () => {
 
     // Iniciar con el puerto apropiado
     const serverInfo = await startServerWithPort(startPort);
+
+    // ⭐ LOG FINAL DE ESTADO ⭐
+    console.log("✅ Servidor iniciado exitosamente:");
+    console.log(`   - Puerto: ${serverInfo.port}`);
+    console.log(`   - Protocolo: ${serverInfo.protocol.toUpperCase()}`);
+    console.log(`   - SSL: ${serverInfo.ssl ? "Sí" : "No"}`);
+    console.log(
+      `   - URL: ${serverInfo.protocol}://catelli.ddns.net:${serverInfo.port}/`
+    );
 
     // Manejar señales para cierre graceful
     setupGracefulShutdown(serverInfo.server);
@@ -287,8 +354,16 @@ function isProcessCompromised(error) {
   return false;
 }
 
+// ⭐ LOGGING MEJORADO AL INICIO ⭐
+console.log("🚀 Iniciando servidor Catelli...");
+console.log("📋 Configuración:");
+console.log(`   - NODE_ENV: ${process.env.NODE_ENV || "development"}`);
+console.log(`   - Puerto por defecto: ${defaultPort}`);
+console.log(`   - Plataforma: ${process.platform}`);
+console.log(`   - Versión Node.js: ${process.version}`);
+
 // Iniciar el servidor
-console.log("Iniciando servidor Catelli...");
 startServer().catch((err) => {
-  console.error("Error fatal en startServer():", err);
+  console.error("❌ Error fatal en startServer():", err);
+  process.exit(1);
 });
