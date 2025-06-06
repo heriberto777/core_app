@@ -1,4 +1,3 @@
-// services/mongoDBTransport.js - Versión corregida para trabajar con tu loggerModel
 const Transport = require("winston-transport");
 const Log = require("../models/loggerModel");
 

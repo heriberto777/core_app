@@ -1,4 +1,3 @@
-// app.js - Versión optimizada
 require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
@@ -120,7 +119,7 @@ app.use(
   `/api/${API_VERSION}/email-config`,
   require("./routes/emailConfigRoutes")
 );
-
+//Comentario
 // Ruta para health check mejorada
 app.get("/health", async (req, res) => {
   try {
@@ -174,14 +173,14 @@ app.get("/health", async (req, res) => {
   }
 });
 
-// Ruta para mantenimiento y diagnóstico (protegida en producción)
-if (
-  process.env.NODE_ENV !== "production" ||
-  process.env.ENABLE_ADMIN_ROUTES === "true"
-) {
-  app.use(`/api/${API_VERSION}/admin`, require("./routes/adminRoutes"));
-  logger.info("✅ Rutas de administración habilitadas");
-}
+// // Ruta para mantenimiento y diagnóstico (protegida en producción)
+// if (
+//   process.env.NODE_ENV !== "production" ||
+//   process.env.ENABLE_ADMIN_ROUTES === "true"
+// ) {
+//   app.use(`/api/${API_VERSION}/admin`, require("./routes/adminRoutes"));
+//   logger.info("✅ Rutas de administración habilitadas");
+// }
 
 // Middleware 404 para rutas no encontradas
 app.use((req, res, next) => {
