@@ -13,7 +13,7 @@ const api = express.Router();
 api.get("/user/me", [md_auth.asureAuth], UserController.getMe);
 api.post("/lists", [md_auth.asureAuth], UserController.getUsers);
 api.get("/responsable", UserController.getUsers);
-api.post("/user", [md_auth.asureAuth], UserController.createUser);
+api.post("/user/create", [md_auth.asureAuth], UserController.createUser);
 
 api.patch(
   "/user/update/:id",
