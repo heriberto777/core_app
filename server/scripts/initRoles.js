@@ -2,7 +2,6 @@
 const User = require("../models/userModel");
 const Role = require("../models/roleModel");
 
-// ⭐ IMPORTAR CONFIGURACIÓN DE BD ⭐
 const {
   connectToDatabase,
   disconnectFromDatabase,
@@ -11,6 +10,21 @@ const {
 const initializeSystem = async () => {
   try {
     console.log("🎭 Inicializando sistema de roles...");
+
+    // ⭐ LIMPIAR ROLES EXISTENTES DUPLICADOS ⭐
+    console.log("🧹 Limpiando roles duplicados...");
+    const duplicateRoles = await Role.aggregate([
+      { $group: { _id: "$name", count: { $sum: 1 }, ids: { $push: "$_id" } } },
+      { $match: { count: { $gt: 1 } } },
+    ]);
+
+    for (const duplicate of duplicateRoles) {
+      const idsToDelete = duplicate.ids.slice(1); // Mantener el primero
+      await Role.deleteMany({ _id: { $in: idsToDelete } });
+      console.log(
+        `🗑️ Eliminados ${idsToDelete.length} roles duplicados: ${duplicate._id}`
+      );
+    }
 
     // ⭐ DEFINICIÓN DE ROLES DEL SISTEMA ⭐
     const systemRoles = [
@@ -36,6 +50,8 @@ const initializeSystem = async () => {
               "delete",
               "execute",
               "manage",
+              "assign",
+              "approve",
             ],
           },
           {
@@ -44,16 +60,28 @@ const initializeSystem = async () => {
           },
           {
             resource: "reports",
-            actions: ["create", "read", "update", "delete"],
+            actions: ["create", "read", "update", "delete", "export"],
           },
-          { resource: "analytics", actions: ["read"] },
+          {
+            resource: "analytics",
+            actions: ["read", "export"],
+          },
           {
             resource: "documents",
-            actions: ["create", "read", "update", "delete"],
+            actions: ["create", "read", "update", "delete", "manage"],
           },
-          { resource: "history", actions: ["read"] },
-          { resource: "settings", actions: ["read", "update"] },
-          { resource: "profile", actions: ["read", "update"] },
+          {
+            resource: "history",
+            actions: ["read", "export"],
+          },
+          {
+            resource: "settings",
+            actions: ["read", "update", "manage"],
+          },
+          {
+            resource: "profile",
+            actions: ["read", "update"],
+          },
           {
             resource: "modules",
             actions: ["create", "read", "update", "delete", "manage"],
@@ -61,6 +89,7 @@ const initializeSystem = async () => {
         ],
         isSystem: true,
         isActive: true,
+        priority: 10,
       },
 
       {
@@ -72,28 +101,57 @@ const initializeSystem = async () => {
             resource: "users",
             actions: ["create", "read", "update", "delete"],
           },
-          { resource: "roles", actions: ["read", "update"] },
+          {
+            resource: "roles",
+            actions: ["read", "update"],
+          },
           {
             resource: "tasks",
-            actions: ["create", "read", "update", "delete", "execute"],
+            actions: [
+              "create",
+              "read",
+              "update",
+              "delete",
+              "execute",
+              "assign",
+            ],
           },
           {
             resource: "loads",
             actions: ["create", "read", "update", "delete"],
           },
-          { resource: "reports", actions: ["create", "read", "update"] },
-          { resource: "analytics", actions: ["read"] },
+          {
+            resource: "reports",
+            actions: ["create", "read", "update", "export"],
+          },
+          {
+            resource: "analytics",
+            actions: ["read"],
+          },
           {
             resource: "documents",
             actions: ["create", "read", "update", "delete"],
           },
-          { resource: "history", actions: ["read"] },
-          { resource: "settings", actions: ["read", "update"] },
-          { resource: "profile", actions: ["read", "update"] },
-          { resource: "modules", actions: ["read", "update"] },
+          {
+            resource: "history",
+            actions: ["read"],
+          },
+          {
+            resource: "settings",
+            actions: ["read", "update"],
+          },
+          {
+            resource: "profile",
+            actions: ["read", "update"],
+          },
+          {
+            resource: "modules",
+            actions: ["read", "update"],
+          },
         ],
         isSystem: true,
         isActive: true,
+        priority: 9,
       },
 
       {
@@ -101,47 +159,38 @@ const initializeSystem = async () => {
         displayName: "Coordinador de Operaciones",
         description: "Coordina tareas y cargas",
         permissions: [
-          { resource: "tasks", actions: ["create", "read", "update"] },
-          { resource: "loads", actions: ["create", "read", "update"] },
-          { resource: "reports", actions: ["create", "read"] },
-          { resource: "documents", actions: ["create", "read", "update"] },
-          { resource: "history", actions: ["read"] },
-          { resource: "profile", actions: ["read", "update"] },
-          { resource: "modules", actions: ["read", "update"] },
+          {
+            resource: "tasks",
+            actions: ["create", "read", "update", "assign"],
+          },
+          {
+            resource: "loads",
+            actions: ["create", "read", "update"],
+          },
+          {
+            resource: "reports",
+            actions: ["create", "read", "update"],
+          },
+          {
+            resource: "documents",
+            actions: ["create", "read", "update"],
+          },
+          {
+            resource: "history",
+            actions: ["read"],
+          },
+          {
+            resource: "profile",
+            actions: ["read", "update"],
+          },
+          {
+            resource: "modules",
+            actions: ["read"],
+          },
         ],
         isSystem: true,
         isActive: true,
-      },
-
-      {
-        name: "operador",
-        displayName: "Operador",
-        description: "Maneja tareas y cargas asignadas",
-        permissions: [
-          { resource: "tasks", actions: ["read", "update"] },
-          { resource: "loads", actions: ["read", "update"] },
-          { resource: "reports", actions: ["read"] },
-          { resource: "documents", actions: ["read", "create"] },
-          { resource: "history", actions: ["read"] },
-          { resource: "profile", actions: ["read", "update"] },
-        ],
-        isSystem: true,
-        isActive: true,
-      },
-
-      {
-        name: "analista",
-        displayName: "Analista de Datos",
-        description: "Análisis de datos y reportes",
-        permissions: [
-          { resource: "reports", actions: ["create", "read", "update"] },
-          { resource: "analytics", actions: ["read"] },
-          { resource: "documents", actions: ["read"] },
-          { resource: "history", actions: ["read"] },
-          { resource: "profile", actions: ["read", "update"] },
-        ],
-        isSystem: true,
-        isActive: true,
+        priority: 7,
       },
 
       {
@@ -149,16 +198,104 @@ const initializeSystem = async () => {
         displayName: "Supervisor",
         description: "Supervisa operaciones del sistema",
         permissions: [
-          { resource: "tasks", actions: ["read", "execute"] },
-          { resource: "loads", actions: ["read"] },
-          { resource: "reports", actions: ["read"] },
-          { resource: "analytics", actions: ["read"] },
-          { resource: "documents", actions: ["read"] },
-          { resource: "history", actions: ["read"] },
-          { resource: "profile", actions: ["read", "update"] },
+          {
+            resource: "tasks",
+            actions: ["read", "update", "execute", "approve"], // ✅ "execute" ahora válido
+          },
+          {
+            resource: "loads",
+            actions: ["read", "update"],
+          },
+          {
+            resource: "reports",
+            actions: ["read", "create"],
+          },
+          {
+            resource: "analytics",
+            actions: ["read"],
+          },
+          {
+            resource: "documents",
+            actions: ["read", "update"],
+          },
+          {
+            resource: "history",
+            actions: ["read"],
+          },
+          {
+            resource: "profile",
+            actions: ["read", "update"],
+          },
         ],
         isSystem: true,
         isActive: true,
+        priority: 6,
+      },
+
+      {
+        name: "operador",
+        displayName: "Operador",
+        description: "Maneja tareas y cargas asignadas",
+        permissions: [
+          {
+            resource: "tasks",
+            actions: ["read", "update", "execute"], // ✅ "execute" ahora válido
+          },
+          {
+            resource: "loads",
+            actions: ["read", "update"],
+          },
+          {
+            resource: "reports",
+            actions: ["read"],
+          },
+          {
+            resource: "documents",
+            actions: ["read", "create"],
+          },
+          {
+            resource: "history",
+            actions: ["read"],
+          },
+          {
+            resource: "profile",
+            actions: ["read", "update"],
+          },
+        ],
+        isSystem: true,
+        isActive: true,
+        priority: 5,
+      },
+
+      {
+        name: "analista",
+        displayName: "Analista de Datos",
+        description: "Análisis de datos y reportes",
+        permissions: [
+          {
+            resource: "reports",
+            actions: ["create", "read", "update", "export"],
+          },
+          {
+            resource: "analytics",
+            actions: ["read", "export"],
+          },
+          {
+            resource: "documents",
+            actions: ["read"],
+          },
+          {
+            resource: "history",
+            actions: ["read"],
+          },
+          {
+            resource: "profile",
+            actions: ["read", "update"],
+          },
+        ],
+        isSystem: true,
+        isActive: true,
+        priority: 4,
       },
 
       {
@@ -166,14 +303,30 @@ const initializeSystem = async () => {
         displayName: "Empleado",
         description: "Acceso básico al sistema",
         permissions: [
-          { resource: "tasks", actions: ["read"] },
-          { resource: "loads", actions: ["read"] },
-          { resource: "reports", actions: ["read"] },
-          { resource: "documents", actions: ["read"] },
-          { resource: "profile", actions: ["read", "update"] },
+          {
+            resource: "tasks",
+            actions: ["read"],
+          },
+          {
+            resource: "loads",
+            actions: ["read"],
+          },
+          {
+            resource: "reports",
+            actions: ["read"],
+          },
+          {
+            resource: "documents",
+            actions: ["read"],
+          },
+          {
+            resource: "profile",
+            actions: ["read", "update"],
+          },
         ],
         isSystem: true,
         isActive: true,
+        priority: 2,
       },
 
       {
@@ -181,82 +334,118 @@ const initializeSystem = async () => {
         displayName: "Visualizador",
         description: "Solo lectura del sistema",
         permissions: [
-          { resource: "tasks", actions: ["read"] },
-          { resource: "loads", actions: ["read"] },
-          { resource: "reports", actions: ["read"] },
-          { resource: "analytics", actions: ["read"] },
-          { resource: "documents", actions: ["read"] },
-          { resource: "history", actions: ["read"] },
-          { resource: "profile", actions: ["read", "update"] },
+          {
+            resource: "tasks",
+            actions: ["read", "view"],
+          },
+          {
+            resource: "loads",
+            actions: ["read", "view"],
+          },
+          {
+            resource: "reports",
+            actions: ["read", "view"],
+          },
+          {
+            resource: "analytics",
+            actions: ["read", "view"],
+          },
+          {
+            resource: "documents",
+            actions: ["read", "view"],
+          },
+          {
+            resource: "history",
+            actions: ["read", "view"],
+          },
+          {
+            resource: "profile",
+            actions: ["read", "update"],
+          },
         ],
         isSystem: true,
         isActive: true,
+        priority: 1,
       },
     ];
 
     let createdCount = 0;
     let updatedCount = 0;
-    let existingCount = 0;
+    let errorCount = 0;
 
+    // ⭐ CREAR O ACTUALIZAR ROLES ⭐
     for (const roleData of systemRoles) {
-      const existingRole = await Role.findOne({ name: roleData.name });
+      try {
+        console.log(`📝 Procesando rol: ${roleData.name}...`);
 
-      if (existingRole) {
-        // Actualizar role existente si es del sistema
-        if (existingRole.isSystem) {
-          await Role.findByIdAndUpdate(existingRole._id, {
-            ...roleData,
-            updatedAt: new Date(),
-          });
+        let role = await Role.findOne({ name: roleData.name });
+
+        if (role) {
+          // Actualizar rol existente
+          Object.assign(role, roleData);
+          await role.save();
+          console.log(`✅ Rol ${roleData.name} actualizado`);
           updatedCount++;
-          console.log(`🔄 Rol '${roleData.displayName}' actualizado`);
         } else {
-          existingCount++;
-          console.log(
-            `ℹ️ Rol '${roleData.displayName}' ya existe (personalizado)`
-          );
+          // Crear nuevo rol
+          role = new Role(roleData);
+          await role.save();
+          console.log(`✅ Rol ${roleData.name} creado`);
+          createdCount++;
         }
-      } else {
-        // Crear nuevo rol
-        const newRole = new Role(roleData);
-        await newRole.save();
-        createdCount++;
-        console.log(`✅ Rol '${roleData.displayName}' creado`);
+      } catch (error) {
+        console.error(
+          `❌ Error procesando rol ${roleData.name}:`,
+          error.message
+        );
+        errorCount++;
       }
     }
 
     console.log("\n📊 Resumen de inicialización de roles:");
-    console.log(`   ✅ Creados: ${createdCount}`);
-    console.log(`   🔄 Actualizados: ${updatedCount}`);
-    console.log(`   ℹ️ Existentes: ${existingCount}`);
-    console.log(`   📁 Total procesados: ${systemRoles.length}`);
+    console.log(`   ✅ Roles creados: ${createdCount}`);
+    console.log(`   🔄 Roles actualizados: ${updatedCount}`);
+    console.log(`   ❌ Errores: ${errorCount}`);
+
+    const success = errorCount === 0;
+    if (success) {
+      console.log("🎉 Sistema de roles inicializado correctamente");
+    } else {
+      console.log("⚠️ Sistema inicializado con algunos errores");
+    }
 
     return {
-      success: true,
+      success,
       created: createdCount,
       updated: updatedCount,
-      existing: existingCount,
-      total: systemRoles.length,
+      errors: errorCount,
     };
   } catch (error) {
-    console.error("❌ Error inicializando roles:", error);
+    console.error("❌ Error inicializando sistema de roles:", error);
     throw error;
   }
 };
 
-// ⭐ FUNCIÓN PARA VERIFICAR SI EL SISTEMA ESTÁ INICIALIZADO ⭐
+// ⭐ FUNCIÓN PARA VERIFICAR ESTADO DEL SISTEMA ⭐
 const checkSystemInitialization = async () => {
   try {
-    const roleCount = await Role.countDocuments({ isSystem: true });
-    const userCount = await User.countDocuments({ isAdmin: true });
+    const systemRolesCount = await Role.countDocuments({
+      isSystem: true,
+      isActive: true,
+    });
+    const adminUsersCount = await User.countDocuments({ isAdmin: true });
 
     return {
-      rolesInitialized: roleCount > 0,
-      adminUsersExist: userCount > 0,
-      systemReady: roleCount > 0 && userCount > 0,
+      rolesInitialized: systemRolesCount >= 5,
+      adminUsersExist: adminUsersCount > 0,
+      systemReady: systemRolesCount >= 5 && adminUsersCount > 0,
+      stats: {
+        systemRoles: systemRolesCount,
+        adminUsers: adminUsersCount,
+      },
     };
   } catch (error) {
-    console.error("❌ Error verificando inicialización del sistema:", error);
+    console.error("Error verificando inicialización:", error);
     return {
       rolesInitialized: false,
       adminUsersExist: false,
