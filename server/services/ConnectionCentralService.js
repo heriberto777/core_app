@@ -195,9 +195,30 @@ class ConnectionCentralService {
       }
 
       const dbConfig = await DBConfig.findOne({ serverName: serverKey }).lean();
-      if (!dbConfig) return null;
+      if (!dbConfig) {
+        logger.error(
+          `No se encontró configuración en MongoDB para ${serverKey}`
+        );
+        return null;
+      }
 
-      return this._convertToTediousConfig(dbConfig);
+      logger.debug(`Configuración cargada desde MongoDB para ${serverKey}:`, {
+        serverName: dbConfig.serverName,
+        host: dbConfig.host,
+        instance: dbConfig.instance,
+        port: dbConfig.port,
+        database: dbConfig.database,
+      });
+
+      const tediousConfig = this._convertToTediousConfig(dbConfig);
+
+      // Validar que la configuración convertida es válida
+      if (!tediousConfig || !tediousConfig.server) {
+        logger.error(`Configuración Tedious inválida para ${serverKey}`);
+        return null;
+      }
+
+      return tediousConfig;
     } catch (error) {
       logger.error(`Error al cargar configuración para ${serverKey}:`, error);
       return null;
@@ -211,13 +232,31 @@ class ConnectionCentralService {
    * @returns {Object} - Configuración en formato Tedious
    */
   _convertToTediousConfig(dbConfig) {
+    if (!dbConfig) {
+      logger.error("dbConfig es null o undefined");
+      return null;
+    }
+
     logger.info(`Convertiendo configuración para: ${dbConfig.serverName}`);
     logger.info(
       `Host: ${dbConfig.host}, Instance: ${dbConfig.instance}, Port: ${dbConfig.port}`
     );
 
-    // Verificar si es una dirección IP
-    const isIpAddress = /^(\d{1,3}\.){3}\d{1,3}$/.test(dbConfig.host);
+    // Validar campos requeridos
+    if (
+      !dbConfig.host ||
+      !dbConfig.user ||
+      !dbConfig.password ||
+      !dbConfig.database
+    ) {
+      logger.error(`Configuración incompleta para ${dbConfig.serverName}`, {
+        hasHost: !!dbConfig.host,
+        hasUser: !!dbConfig.user,
+        hasPassword: !!dbConfig.password,
+        hasDatabase: !!dbConfig.database,
+      });
+      return null;
+    }
 
     const config = {
       server: dbConfig.host,
@@ -299,6 +338,7 @@ class ConnectionCentralService {
       `🔧 Configuración Tedious final:`,
       JSON.stringify(logConfig, null, 2)
     );
+
     return config;
   }
 
@@ -1674,8 +1714,10 @@ class ConnectionCentralService {
         throw new Error(`No se encontró configuración para ${serverKey}`);
       }
 
-      // Crear configuración de diagnóstico con timeouts más largos
-      const diagConfig = this._convertToTediousConfig(dbConfig);
+      // CRÍTICO: No modificar la configuración original, crear una copia
+      const diagConfig = JSON.parse(JSON.stringify(dbConfig));
+
+      // Ajustar timeouts para diagnóstico
       diagConfig.options.connectTimeout = 120000; // 2 minutos
       diagConfig.options.requestTimeout = 180000; // 3 minutos
 
@@ -1686,6 +1728,13 @@ class ConnectionCentralService {
         database: diagConfig.options.database,
         connectTimeout: diagConfig.options.connectTimeout,
       });
+
+      // Validar que la configuración es válida
+      if (!diagConfig.server || typeof diagConfig.server !== "string") {
+        throw new Error(
+          `Configuración inválida: server no está definido para ${serverKey}`
+        );
+      }
 
       // Intentar conexión directa
       return new Promise((resolve, reject) => {
