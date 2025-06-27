@@ -258,28 +258,38 @@ class ConnectionCentralService {
       return null;
     }
 
+    // CRÍTICO: Manejo especial para passwords con caracteres especiales
+    let cleanPassword = dbConfig.password;
+
+    // Log para debug (sin mostrar el password completo)
+    logger.debug(
+      `Password length: ${
+        cleanPassword.length
+      }, starts with: ${cleanPassword.substring(0, 2)}...`
+    );
+
     const config = {
-      server: dbConfig.host,
+      server: dbConfig.host.trim(), // Asegurar que no hay espacios
       authentication: {
         type: "default",
         options: {
-          userName: dbConfig.user,
-          password: dbConfig.password, // Tedious maneja caracteres especiales automáticamente
+          userName: dbConfig.user.trim(),
+          password: cleanPassword, // Tedious maneja caracteres especiales automáticamente
         },
       },
       options: {
         // CONFIGURACIÓN CRÍTICA para instancias nombradas
-        database: dbConfig.database,
-        encrypt: false, // IMPORTANTE: Desactivar para conexiones LAN
+        database: dbConfig.database.trim(),
+        encrypt: false, // IMPORTANTE: Desactivar para conexiones LAN/VPN
         trustServerCertificate: true,
         enableArithAbort: true,
 
-        // TIMEOUTS AUMENTADOS para instancias nombradas
-        connectTimeout: 90000, // 90 segundos (crítico para instancias)
-        requestTimeout: 120000, // 2 minutos
+        // TIMEOUTS AUMENTADOS para instancias nombradas y VPN
+        connectTimeout: 120000, // 2 minutos (crítico para VPN)
+        requestTimeout: 180000, // 3 minutos
         cancelTimeout: 30000,
 
-        // CONFIGURACIONES DE RED OPTIMIZADAS
+        // CONFIGURACIONES DE RED OPTIMIZADAS para VPN
         packetSize: 4096,
         useUTC: false,
         dateFormat: "mdy",
@@ -288,8 +298,8 @@ class ConnectionCentralService {
         useColumnNames: true,
 
         // CONFIGURACIONES ESPECÍFICAS PARA INSTANCIAS NOMBRADAS
-        connectionRetryInterval: 2000, // 2 segundos entre reintentos
-        maxRetriesOnConnectionError: 5, // Más reintentos
+        connectionRetryInterval: 3000, // 3 segundos entre reintentos (VPN puede ser lento)
+        maxRetriesOnConnectionError: 8, // Más reintentos para VPN
         multiSubnetFailover: false,
         appName: `NodeApp_${dbConfig.serverName}`,
         isolationLevel: 1, // READ_UNCOMMITTED
@@ -297,6 +307,10 @@ class ConnectionCentralService {
         // CONFIGURACIONES ADICIONALES PARA ESTABILIDAD
         abortTransactionOnError: true,
         enableNumericRoundabort: false,
+
+        // CONFIGURACIONES ESPECÍFICAS PARA VPN
+        keepAlive: true,
+        keepAliveInitialDelay: 30000, // 30 segundos
       },
     };
 
@@ -332,6 +346,7 @@ class ConnectionCentralService {
       encrypt: config.options.encrypt,
       connectTimeout: config.options.connectTimeout,
       requestTimeout: config.options.requestTimeout,
+      passwordLength: cleanPassword.length,
     };
 
     logger.info(
@@ -1770,9 +1785,9 @@ class ConnectionCentralService {
               phase: "connection_error",
             });
           } else {
-            // Probar una consulta simple
+            // CORRECCIÓN: Consulta SQL simplificada y válida
             const testRequest = new Request(
-              "SELECT @@SERVERNAME AS ServerName, DB_NAME() AS Database",
+              "SELECT @@SERVERNAME AS ServerName, DB_NAME() AS CurrentDatabase",
               (err, rowCount) => {
                 try {
                   connection.close();
