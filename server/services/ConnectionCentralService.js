@@ -236,6 +236,10 @@ class ConnectionCentralService {
     }
   }
 
+  async debugLoadConfig(serverKey) {
+    return await this._loadConfig(serverKey);
+  }
+
   /**
    * Carga la configuración de un servidor desde MongoDB
    * @private
