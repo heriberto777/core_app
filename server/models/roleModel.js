@@ -148,7 +148,7 @@ roleSchema.pre("save", function (next) {
 roleSchema.virtual("userCount", {
   ref: "Usuario",
   localField: "_id",
-  foreignField: "roles",
+  foreignField: "role",
   count: true,
 });
 
