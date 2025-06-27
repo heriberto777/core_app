@@ -106,7 +106,7 @@ const UserSchema = Schema(
 );
 
 // ⭐ ÍNDICES OPTIMIZADOS ⭐
-UserSchema.index({ email: 1 });
+// UserSchema.index({ email: 1 });
 UserSchema.index({ isActive: 1, isAdmin: 1 });
 UserSchema.index({ "metadata.department": 1 });
 
