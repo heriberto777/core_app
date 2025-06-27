@@ -1,9 +1,10 @@
-// scripts/setup.js
+// scripts/setup.js - USANDO TU DATABASE.JS EXISTENTE
 const {
   connectToDatabase,
   disconnectFromDatabase,
   checkDatabaseHealth,
-} = require("../utils/database");
+  gracefulShutdown,
+} = require("../utils/database"); // ⭐ CAMBIAR RUTA A config/database
 const { initializeSystem, checkSystemInitialization } = require("./initRoles");
 const {
   convertExistingAdminUser,
@@ -12,6 +13,8 @@ const {
 const { initializeSystemModules } = require("./initializeModules");
 
 async function setup() {
+  let exitCode = 0;
+
   try {
     console.log("🚀 CONFIGURANDO SISTEMA COMPLETO...");
     console.log("====================================");
@@ -43,218 +46,131 @@ async function setup() {
       `   🟢 Sistema listo: ${systemStatus.systemReady ? "Sí" : "No"}`
     );
 
-    // ⭐ PASO 3: ACTUALIZAR ESQUEMA DE USUARIOS EXISTENTES ⭐
+    // ⭐ PASO 3: ACTUALIZAR ESQUEMA DE USUARIOS ⭐
     console.log("\n📝 Paso 3: Actualizando esquema de usuarios...");
-    const User = require("../models/userModel");
-    const updateResult = await User.updateMany(
-      {
-        $or: [
-          { roles: { $exists: false } },
-          { permissions: { $exists: false } },
-          { isAdmin: { $exists: false } },
-        ],
-      },
-      {
-        $set: {
-          roles: [],
-          permissions: [],
-          isAdmin: false,
-        },
-      }
-    );
-    console.log(
-      `✅ ${updateResult.modifiedCount} usuarios actualizados con nuevos campos`
-    );
+    try {
+      const User = require("../models/userModel");
+      const usersToUpdate = await User.updateMany(
+        {},
+        {
+          $set: {
+            isAdmin: { $ifNull: ["$isAdmin", false] },
+            activo: { $ifNull: ["$activo", true] },
+          },
+        }
+      );
+      console.log(
+        `✅ ${usersToUpdate.modifiedCount} usuarios actualizados con nuevos campos`
+      );
+    } catch (userUpdateError) {
+      console.log(
+        `⚠️ No se pudieron actualizar usuarios: ${userUpdateError.message}`
+      );
+    }
 
     // ⭐ PASO 4: INICIALIZAR ROLES DEL SISTEMA ⭐
     console.log("\n🎭 Paso 4: Inicializando roles del sistema...");
-    const roleResult = await initializeSystem();
-    if (roleResult.success) {
-      console.log(
-        `✅ Roles inicializados: ${roleResult.created} creados, ${roleResult.updated} actualizados`
-      );
-    } else {
-      throw new Error("Error inicializando roles del sistema");
-    }
+    try {
+      const roleResult = await initializeSystem();
 
-    // ⭐ PASO 5: INICIALIZAR MÓDULOS DEL SISTEMA ⭐
-    console.log("\n🧩 Paso 5: Inicializando módulos del sistema...");
-    const moduleResult = await initializeSystemModules();
-    if (moduleResult.success) {
-      console.log(
-        `✅ Módulos inicializados: ${moduleResult.created} creados, ${moduleResult.updated} actualizados`
-      );
-    } else {
-      throw new Error("Error inicializando módulos del sistema");
-    }
-
-    // ⭐ PASO 6: CONFIGURAR USUARIO ADMINISTRADOR ⭐
-    console.log("\n👤 Paso 6: Configurando usuario administrador...");
-
-    // Listar usuarios existentes para información
-    const existingUsers = await listExistingUsers();
-
-    // Intentar convertir usuario existente o crear uno nuevo
-    const adminResult = await convertExistingAdminUser();
-    if (adminResult.success) {
-      console.log(`✅ Usuario administrador: ${adminResult.message}`);
-      console.log(`📧 Email: ${adminResult.user.email}`);
-      if (adminResult.wasCreated) {
-        console.log("🔑 Password por defecto: admin123");
-        console.log(
-          "⚠️ IMPORTANTE: Cambia la contraseña después del primer login"
-        );
+      if (roleResult.success) {
+        console.log("✅ Roles inicializados exitosamente");
+      } else {
+        console.log(`⚠️ Roles inicializados con ${roleResult.errors} errores`);
       }
-    } else {
-      throw new Error("Error configurando usuario administrador");
+    } catch (roleError) {
+      console.error("❌ Error inicializando roles:", roleError.message);
+      throw roleError;
+    }
+
+    // ⭐ PASO 5: VERIFICAR Y CONVERTIR USUARIOS ADMIN ⭐
+    console.log("\n👤 Paso 5: Configurando usuarios administradores...");
+    try {
+      const adminResult = await convertExistingAdminUser();
+      if (adminResult && adminResult.success) {
+        console.log("✅ Usuario administrador configurado correctamente");
+      }
+    } catch (adminError) {
+      console.log(`⚠️ Error configurando admin: ${adminError.message}`);
+    }
+
+    // ⭐ PASO 6: INICIALIZAR MÓDULOS DEL SISTEMA ⭐
+    console.log("\n🧩 Paso 6: Inicializando módulos del sistema...");
+    try {
+      const moduleResult = await initializeSystemModules();
+      if (moduleResult && moduleResult.success) {
+        console.log("✅ Módulos inicializados exitosamente");
+      }
+    } catch (moduleError) {
+      console.log(`⚠️ Error inicializando módulos: ${moduleError.message}`);
     }
 
     // ⭐ PASO 7: VERIFICACIÓN FINAL ⭐
     console.log("\n🔍 Paso 7: Verificación final del sistema...");
     const finalStatus = await checkSystemInitialization();
 
-    if (!finalStatus.systemReady) {
-      throw new Error("El sistema no está completamente configurado");
+    console.log("\n📊 ESTADO FINAL DEL SISTEMA:");
+    console.log("============================");
+    console.log(`🎭 Roles del sistema: ${finalStatus.stats?.systemRoles || 0}`);
+    console.log(`👤 Usuarios admin: ${finalStatus.stats?.adminUsers || 0}`);
+    console.log(
+      `🟢 Sistema operativo: ${finalStatus.systemReady ? "SÍ" : "NO"}`
+    );
+
+    if (finalStatus.systemReady) {
+      console.log("\n🎉 ¡CONFIGURACIÓN COMPLETADA EXITOSAMENTE!");
+      console.log("El sistema está listo para usar");
+    } else {
+      console.log("\n⚠️ CONFIGURACIÓN INCOMPLETA");
+      console.log("Revisa los errores anteriores y ejecuta nuevamente");
+      exitCode = 1;
     }
 
-    // ⭐ RESUMEN FINAL ⭐
-    console.log("\n🎉 ¡CONFIGURACIÓN COMPLETADA EXITOSAMENTE!");
-    console.log("==========================================");
-    console.log("✅ Base de datos conectada y saludable");
-    console.log("✅ Esquema de usuarios actualizado");
-    console.log("✅ Roles del sistema inicializados:");
-    console.log("   📋 superadmin: Control total del sistema");
-    console.log("   📋 admin: Administrador general");
-    console.log("   📋 coordinador: Coordina operaciones");
-    console.log("   📋 operador: Maneja tareas y cargas");
-    console.log("   📋 analista: Análisis y reportes");
-    console.log("   📋 supervisor: Supervisa operaciones");
-    console.log("   📋 employee: Acceso básico");
-    console.log("   📋 viewer: Solo lectura");
-    console.log("✅ Módulos del sistema inicializados:");
-    console.log("   🧩 dashboard: Panel de control");
-    console.log("   🧩 tasks: Gestión de tareas");
-    console.log("   🧩 loads: Gestión de cargas");
-    console.log("   🧩 documents: Gestión de documentos");
-    console.log("   🧩 reports: Reportes y análisis");
-    console.log("   🧩 analytics: Estadísticas avanzadas");
-    console.log("   🧩 history: Historial del sistema");
-    console.log("   🧩 users: Gestión de usuarios (admin)");
-    console.log("   🧩 roles: Gestión de roles (admin)");
-    console.log("   🧩 modules: Gestión de módulos (admin)");
-    console.log("   🧩 settings: Configuraciones");
-    console.log("   🧩 profile: Perfil de usuario");
-    console.log(
-      `✅ Usuario administrador configurado: ${adminResult.user.email}`
-    );
-    console.log("✅ Sistema completamente funcional");
-    console.log("\n🚀 ¡El sistema está listo para usar!");
-
-    // Información adicional
-    console.log("\n📋 INFORMACIÓN ADICIONAL:");
-    console.log("─────────────────────────");
-    console.log("🔧 Para gestionar módulos dinámicamente:");
-    console.log("   → Accede a /modules en el panel de administración");
-    console.log("🎭 Para gestionar roles y permisos:");
-    console.log("   → Accede a /roles en el panel de administración");
-    console.log("👥 Para gestionar usuarios:");
-    console.log("   → Accede a /users en el panel de administración");
-    console.log("⚙️ Configuración avanzada:");
-    console.log("   → Las APIs están disponibles en /api/v1/modules");
-    console.log("   → La configuración se actualiza dinámicamente");
-    console.log("   → El caché se invalida automáticamente");
+    return {
+      success: finalStatus.systemReady,
+      status: finalStatus,
+    };
   } catch (error) {
     console.error("\n❌ ERROR EN LA CONFIGURACIÓN:");
     console.error("===============================");
     console.error(`💥 ${error.message}`);
-    console.error(`📍 Stack: ${error.stack}`);
-
-    // Intentar desconectar limpiamente
-    try {
-      await disconnectFromDatabase();
-    } catch (disconnectError) {
-      console.error(
-        "❌ Error adicional desconectando:",
-        disconnectError.message
-      );
-    }
-
-    process.exit(1);
+    exitCode = 1;
+    throw error;
   } finally {
-    // Desconectar de la base de datos
+    // ⭐ DESCONEXIÓN SEGURA USANDO TU GRACEFUL SHUTDOWN ⭐
+    console.log("\n🔌 Cerrando conexiones...");
+
     try {
-      await disconnectFromDatabase();
-      console.log("\n🔌 Desconectado de la base de datos");
-    } catch (disconnectError) {
-      console.error("⚠️ Error desconectando:", disconnectError.message);
+      await gracefulShutdown("SETUP_COMPLETE");
+    } catch (shutdownError) {
+      console.error("⚠️ Error en cierre limpio:", shutdownError.message);
     }
+
+    // ⭐ SALIDA LIMPIA DEL PROCESO ⭐
+    setTimeout(() => {
+      console.log("🔄 Saliendo del proceso...");
+      process.exit(exitCode);
+    }, 1000);
   }
 }
 
-// ⭐ FUNCIÓN PARA SETUP RÁPIDO (SOLO MÓDULOS) ⭐
-async function quickModuleSetup() {
-  try {
-    console.log("🧩 CONFIGURACIÓN RÁPIDA DE MÓDULOS...");
-
-    await connectToDatabase();
-    const result = await initializeSystemModules();
-
-    if (result.success) {
-      console.log("✅ Módulos configurados exitosamente");
-    }
-
-    await disconnectFromDatabase();
-  } catch (error) {
-    console.error("❌ Error en configuración rápida:", error);
-    process.exit(1);
-  }
-}
-
-// ⭐ FUNCIÓN PARA SETUP RÁPIDO (SOLO ROLES) ⭐
-async function quickRoleSetup() {
-  try {
-    console.log("🎭 CONFIGURACIÓN RÁPIDA DE ROLES...");
-
-    await connectToDatabase();
-    const result = await initializeSystem();
-
-    if (result.success) {
-      console.log("✅ Roles configurados exitosamente");
-    }
-
-    await disconnectFromDatabase();
-  } catch (error) {
-    console.error("❌ Error en configuración rápida:", error);
-    process.exit(1);
-  }
-}
-
-// Ejecutar según argumentos de línea de comandos
+// Ejecutar según argumentos
 if (require.main === module) {
   const arg = process.argv[2];
 
   switch (arg) {
-    case "--modules":
-      quickModuleSetup();
-      break;
-    case "--roles":
-      quickRoleSetup();
-      break;
     case "--help":
       console.log("🚀 Script de configuración del sistema");
       console.log("=====================================");
       console.log("node setup.js           - Configuración completa");
-      console.log("node setup.js --modules - Solo módulos");
-      console.log("node setup.js --roles   - Solo roles");
       console.log("node setup.js --help    - Esta ayuda");
       break;
     default:
-      setup();
+      setup().catch((error) => {
+        console.error("❌ Setup falló:", error.message);
+        process.exit(1);
+      });
   }
 }
 
-module.exports = {
-  setup,
-  quickModuleSetup,
-  quickRoleSetup,
-};
+module.exports = { setup };
