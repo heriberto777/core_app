@@ -1,4 +1,5 @@
-import { ENV } from "../index";
+import { ENV, roleApi } from "../index";
+// const roleApi = new (await import("../index")).roleApi();
 
 export class User {
   baseApi = ENV.BASE_API;
@@ -654,7 +655,7 @@ export class User {
   // Obtener recursos disponibles para permisos
   async getAvailableResourcesForPermissions(accessToken) {
     try {
-      const roleApi = new (await import("../index")).roleApi();
+      // const roleApi = new (await import("../index")).roleApi();
       const response = await roleApi.getAvailableResources(accessToken);
       return response;
     } catch (error) {

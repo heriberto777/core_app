@@ -1,5 +1,4 @@
 // scripts/initRoles.js
-const bcrypt = require("bcryptjs");
 const User = require("../models/userModel");
 const Role = require("../models/roleModel");
 
