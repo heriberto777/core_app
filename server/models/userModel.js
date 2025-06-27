@@ -11,8 +11,10 @@ const UserSchema = Schema(
       unique: true,
     },
     password: String,
-    // ⭐ ROLES LEGACY (MANTENER COMPATIBILIDAD) ⭐
-    role: [String],
+
+    // ⭐ MANTENER ROLES LEGACY PARA COMPATIBILIDAD ⭐
+    role: [String], // Roles legacy como strings
+
     telefono: String,
     avatar: String,
     theme: String,
@@ -26,8 +28,18 @@ const UserSchema = Schema(
       ref: "Usuario",
     },
 
-    // ⭐ SISTEMA NUEVO DE ROLES ⭐
+    // ⭐ SISTEMA NUEVO DE ROLES (CORREGIDO) ⭐
     systemRoles: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Role", // ⭐ IMPORTANTE: Debe coincidir con el nombre del modelo
+        default: [],
+      },
+    ],
+
+    // ⭐ ALIAS PARA COMPATIBILIDAD ⭐
+    // Este campo ya no se usará directamente, pero lo mantenemos por compatibilidad
+    roles: [
       {
         type: mongoose.Schema.Types.ObjectId,
         ref: "Role",
@@ -35,7 +47,7 @@ const UserSchema = Schema(
       },
     ],
 
-    // ⭐ PERMISOS DIRECTOS (OVERRIDE) ⭐
+    // ⭐ PERMISOS DIRECTOS ⭐
     permissions: [
       {
         resource: {
@@ -65,37 +77,14 @@ const UserSchema = Schema(
       },
     ],
 
-    // ⭐ CAMPOS ADMINISTRATIVOS ⭐
     isAdmin: {
       type: Boolean,
       default: false,
     },
+
     isActive: {
       type: Boolean,
       default: true,
-    },
-
-    // ⭐ METADATOS ADICIONALES ⭐
-    metadata: {
-      department: String,
-      position: String,
-      employeeId: String,
-      hireDate: Date,
-      manager: {
-        type: Schema.Types.ObjectId,
-        ref: "Usuario",
-      },
-    },
-
-    // ⭐ CONFIGURACIONES PERSONALES ⭐
-    preferences: {
-      language: { type: String, default: "es" },
-      timezone: { type: String, default: "America/Santo_Domingo" },
-      notifications: {
-        email: { type: Boolean, default: true },
-        push: { type: Boolean, default: true },
-        sms: { type: Boolean, default: false },
-      },
     },
   },
   {
@@ -105,14 +94,29 @@ const UserSchema = Schema(
   }
 );
 
-// ⭐ ÍNDICES OPTIMIZADOS ⭐
-// UserSchema.index({ email: 1 });
-UserSchema.index({ isActive: 1, isAdmin: 1 });
-UserSchema.index({ "metadata.department": 1 });
+// ⭐ ÍNDICES (NO DUPLICAR email porque unique: true ya lo crea) ⭐
+UserSchema.index({ isAdmin: 1 });
+UserSchema.index({ activo: 1 });
+UserSchema.index({ isActive: 1 });
+UserSchema.index({ role: 1 }); // Para búsquedas por rol legacy
+UserSchema.index({ systemRoles: 1 }); // Para el nuevo sistema de roles
 
-// ⭐ MÉTODOS DE INSTANCIA ⭐
+// ⭐ VIRTUAL PARA COMPATIBILIDAD ENTRE SISTEMAS ⭐
+UserSchema.virtual("allRoles").get(function () {
+  // Combinar roles legacy y nuevos roles del sistema
+  const legacyRoles = this.role || [];
+  const systemRoleIds = this.systemRoles || [];
+
+  return {
+    legacy: legacyRoles,
+    system: systemRoleIds,
+    combined: [...legacyRoles, ...systemRoleIds],
+  };
+});
+
+// ⭐ MÉTODOS DE INSTANCIA MEJORADOS ⭐
 UserSchema.methods.hasPermission = async function (resource, action) {
-  // 1. Verificar si es admin (acceso total)
+  // 1. Si es admin, tiene todos los permisos
   if (this.isAdmin) return true;
 
   // 2. Verificar permisos directos
@@ -127,11 +131,15 @@ UserSchema.methods.hasPermission = async function (resource, action) {
     return true;
   }
 
-  // 3. Verificar permisos a través de roles
+  // 3. Verificar permisos a través de systemRoles
   if (this.systemRoles && this.systemRoles.length > 0) {
     await this.populate("systemRoles");
     for (const role of this.systemRoles) {
-      if (role.hasPermission(resource, action)) {
+      if (
+        role &&
+        typeof role.hasPermission === "function" &&
+        role.hasPermission(resource, action)
+      ) {
         return true;
       }
     }
@@ -140,43 +148,37 @@ UserSchema.methods.hasPermission = async function (resource, action) {
   return false;
 };
 
-UserSchema.methods.getAllPermissions = async function () {
-  const permissions = new Map();
-
-  // Permisos directos
-  this.permissions.forEach((perm) => {
-    permissions.set(perm.resource, [
-      ...(permissions.get(perm.resource) || []),
-      ...perm.actions,
-    ]);
-  });
-
-  // Permisos de roles
-  if (this.systemRoles && this.systemRoles.length > 0) {
-    await this.populate("systemRoles");
-    this.systemRoles.forEach((role) => {
-      role.permissions.forEach((perm) => {
-        const existing = permissions.get(perm.resource) || [];
-        permissions.set(perm.resource, [...existing, ...perm.actions]);
-      });
-    });
-  }
-
-  // Remover duplicados
-  const result = {};
-  permissions.forEach((actions, resource) => {
-    result[resource] = [...new Set(actions)];
-  });
-
-  return result;
-};
-
 UserSchema.methods.getFullName = function () {
   return `${this.name || ""} ${this.lastname || ""}`.trim();
 };
 
 UserSchema.methods.isActiveUser = function () {
   return this.activo && this.isActive;
+};
+
+// ⭐ MÉTODO PARA MIGRAR ROLES LEGACY A SISTEMA NUEVO ⭐
+UserSchema.methods.migrateToSystemRoles = async function () {
+  if (!this.role || this.role.length === 0) return;
+
+  const Role = require("./roleModel");
+
+  // Buscar roles del sistema que coincidan con los roles legacy
+  const matchingRoles = await Role.find({
+    name: { $in: this.role },
+    isActive: true,
+  });
+
+  // Agregar roles del sistema que no estén ya asignados
+  for (const role of matchingRoles) {
+    if (!this.systemRoles.includes(role._id)) {
+      this.systemRoles.push(role._id);
+    }
+  }
+
+  // También sincronizar el campo 'roles' por compatibilidad
+  this.roles = [...this.systemRoles];
+
+  return this.save();
 };
 
 // ⭐ MÉTODOS ESTÁTICOS ⭐
@@ -190,15 +192,13 @@ UserSchema.statics.findAdmins = function () {
 
 UserSchema.statics.findByRole = function (roleName) {
   return this.find({
-    $or: [{ role: roleName }, { "systemRoles.name": roleName }],
+    $or: [
+      { role: roleName }, // Roles legacy
+      { "systemRoles.name": roleName }, // Roles del sistema
+    ],
     isActive: true,
   }).populate("systemRoles");
 };
-
-// ⭐ VIRTUAL PARA COMPATIBILIDAD ⭐
-UserSchema.virtual("fullName").get(function () {
-  return this.getFullName();
-});
 
 // ⭐ HOOKS PRE-SAVE ⭐
 UserSchema.pre("save", function (next) {
@@ -209,7 +209,21 @@ UserSchema.pre("save", function (next) {
   if (this.isModified("isActive")) {
     this.activo = this.isActive;
   }
+
+  // Sincronizar systemRoles con roles para compatibilidad
+  if (this.isModified("systemRoles")) {
+    this.roles = [...this.systemRoles];
+  }
+
   next();
+});
+
+// ⭐ MIDDLEWARE PARA POPULATE AUTOMÁTICO ⭐
+UserSchema.pre(["find", "findOne", "findOneAndUpdate"], function () {
+  // Auto-populate systemRoles cuando sea necesario
+  if (this.getOptions().populateRoles !== false) {
+    this.populate("systemRoles", "name displayName permissions isActive");
+  }
 });
 
 UserSchema.plugin(mongoosePaginate);
