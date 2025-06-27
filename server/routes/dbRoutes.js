@@ -5,6 +5,7 @@ const {
   upsertDBConfig,
   deleteDBConfig,
   testDBConnection,
+  testConfiguredServer,
 } = require("../controllers/dbConfigController");
 
 // 📌 Obtener todas las configuraciones de base de datos
