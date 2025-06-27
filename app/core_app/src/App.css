@@ -1469,3 +1469,95 @@ table tr.disabled {
     padding: 12px 15px !important;
   }
 }
+
+/* Estilos para formularios de SweetAlert2 */
+.task-form-container {
+  text-align: left;
+  max-height: 600px;
+  overflow-y: auto;
+}
+
+.task-form-section {
+  margin-bottom: 25px;
+  padding: 15px;
+  background: #f8f9fa;
+  border-radius: 8px;
+  border-left: 4px solid #3498db;
+}
+
+.task-form-section-title {
+  margin: 0 0 15px 0;
+  color: #2c3e50;
+  font-size: 16px;
+  font-weight: 600;
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+
+.task-form-group {
+  margin-bottom: 15px;
+}
+
+.task-form-label {
+  display: block;
+  margin-bottom: 5px;
+  color: #2c3e50;
+  font-weight: 500;
+  font-size: 14px;
+}
+
+.task-form-input,
+.task-form-select {
+  width: 100%;
+  padding: 10px 12px;
+  border: 2px solid #e0e0e0;
+  border-radius: 6px;
+  font-size: 14px;
+  transition: border-color 0.3s ease;
+  box-sizing: border-box;
+}
+
+.task-form-input:focus,
+.task-form-select:focus {
+  outline: none;
+  border-color: #3498db;
+  box-shadow: 0 0 0 3px rgba(52, 152, 219, 0.1);
+}
+
+.task-form-help-text {
+  display: block;
+  margin-top: 5px;
+  color: #7f8c8d;
+  font-size: 12px;
+  line-height: 1.4;
+}
+
+.task-form-checkbox-container {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 10px;
+}
+
+.task-form-checkbox-label {
+  margin: 0;
+  color: #2c3e50;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+/* Animación para campos que aparecen/desaparecen */
+.task-form-group {
+  transition: all 0.3s ease;
+}
+
+/* Estilos específicos para warnings */
+#instanceWarning {
+  background: rgba(243, 156, 18, 0.1);
+  padding: 5px 8px;
+  border-radius: 4px;
+  border-left: 3px solid #f39c12;
+  margin-top: 5px;
+  display: block;
+}
