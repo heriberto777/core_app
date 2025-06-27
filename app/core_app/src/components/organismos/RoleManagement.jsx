@@ -120,7 +120,7 @@ const RoleManagement = () => {
               : "";
             return `
               <label style="display: flex; align-items: center; gap: 8px; margin: 4px 0;">
-                <input type="checkbox" value="${action}" ${isChecked} 
+                <input type="checkbox" value="${action}" ${isChecked}
                        data-resource="${resource.id}" style="margin: 0;">
                 <span style="font-size: 13px;">${action.toUpperCase()}</span>
               </label>
@@ -150,26 +150,26 @@ const RoleManagement = () => {
         <div style="text-align: left;">
           <div style="margin-bottom: 20px;">
             <label style="display: block; margin-bottom: 5px; font-weight: 500;">Nombre del rol *</label>
-            <input id="roleName" class="swal2-input" 
-                   placeholder="ej: analista-ventas" 
+            <input id="roleName" class="swal2-input"
+                   placeholder="ej: analista-ventas"
                    value="${role?.name || ""}"
                    style="margin: 0; width: 100%;"
                    ${role?.isSystem ? "disabled" : ""}>
             <small style="color: #6b7280; font-size: 12px;">Solo letras minúsculas, números y guiones</small>
           </div>
-          
+
           <div style="margin-bottom: 20px;">
             <label style="display: block; margin-bottom: 5px; font-weight: 500;">Nombre para mostrar *</label>
-            <input id="roleDisplayName" class="swal2-input" 
-                   placeholder="ej: Analista de Ventas" 
+            <input id="roleDisplayName" class="swal2-input"
+                   placeholder="ej: Analista de Ventas"
                    value="${role?.displayName || ""}"
                    style="margin: 0; width: 100%;"
                    ${role?.isSystem ? "disabled" : ""}>
           </div>
-          
+
           <div style="margin-bottom: 20px;">
             <label style="display: block; margin-bottom: 5px; font-weight: 500;">Descripción</label>
-            <textarea id="roleDescription" class="swal2-textarea" 
+            <textarea id="roleDescription" class="swal2-textarea"
                       placeholder="Descripción del rol..."
                       style="margin: 0; width: 100%; height: 60px;"
                       ${role?.isSystem ? "disabled" : ""}>${
@@ -189,7 +189,7 @@ const RoleManagement = () => {
           `
               : ""
           }
-          
+
           <div style="margin-bottom: 20px;">
             <label style="display: block; margin-bottom: 10px; font-weight: 500; font-size: 16px;">
               Permisos del Rol *
@@ -272,11 +272,11 @@ const RoleManagement = () => {
         didOpen: () => Swal.showLoading(),
       });
       console.log("🔄 Editando ...", isEdit);
-      const resp = isEdit
+      const result = isEdit
         ? (resp = await cnnApi.updateRole(accessToken, roleId, roleData))
         : (resp = await cnnApi.createRole(accessToken, roleData));
 
-      const result = await resp;
+      // const result = await resp;
 
       if (result.success) {
         Swal.fire("¡Éxito!", "Rol guardado correctamente", "success");
@@ -360,15 +360,15 @@ const RoleManagement = () => {
         <div style="text-align: left;">
           <div style="margin-bottom: 15px;">
             <label style="display: block; margin-bottom: 5px; font-weight: 500;">Nuevo nombre:</label>
-            <input id="newName" class="swal2-input" 
-                   placeholder="nuevo-nombre" 
+            <input id="newName" class="swal2-input"
+                   placeholder="nuevo-nombre"
                    value="${role.name}-copia"
                    style="margin: 0; width: 100%;">
           </div>
           <div style="margin-bottom: 15px;">
             <label style="display: block; margin-bottom: 5px; font-weight: 500;">Nuevo nombre para mostrar:</label>
-            <input id="newDisplayName" class="swal2-input" 
-                   placeholder="Nuevo Nombre" 
+            <input id="newDisplayName" class="swal2-input"
+                   placeholder="Nuevo Nombre"
                    value="${role.displayName} (Copia)"
                    style="margin: 0; width: 100%;">
           </div>
