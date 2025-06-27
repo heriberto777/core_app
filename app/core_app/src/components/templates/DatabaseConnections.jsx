@@ -781,11 +781,13 @@ export function DatabaseConnections() {
   };
 
   // Función para probar conexión existente
-  const testConnection = async (connection) => {
+  async function testConnection(connectionData) {
     try {
+      console.log("Probando conexión con datos:", connectionData);
+
       Swal.fire({
         title: "Probando conexión...",
-        text: `Verificando conexión a ${connection.serverName}`,
+        text: "Por favor espere mientras se verifica la conexión",
         allowOutsideClick: false,
         showConfirmButton: false,
         willOpen: () => {
@@ -793,20 +795,29 @@ export function DatabaseConnections() {
         },
       });
 
-      const result = await dbConfigApi.testConnection(connection, accessToken);
+      const result = await dbConfigApi.testConnection(
+        accessToken,
+        connectionData
+      );
+      console.log("Resultado de prueba:", result);
 
       if (result.success) {
         Swal.fire({
           icon: "success",
           title: "¡Conexión exitosa!",
-          text: `La conexión a ${connection.serverName} funciona correctamente`,
+          text:
+            result.message ||
+            "La configuración es correcta y la conexión funciona",
           timer: 3000,
         });
       } else {
         Swal.fire({
           icon: "error",
           title: "Error de conexión",
-          text: result.message || "No se pudo establecer la conexión",
+          text:
+            result.error ||
+            result.message ||
+            "No se pudo establecer la conexión",
         });
       }
     } catch (error) {
@@ -814,10 +825,12 @@ export function DatabaseConnections() {
       Swal.fire({
         icon: "error",
         title: "Error",
-        text: "Error al probar la conexión: " + error.message,
+        text:
+          "Error al probar la conexión: " +
+          (error.message || error.error || "Error desconocido"),
       });
     }
-  };
+  }
 
   // Función para eliminar conexión
   const deleteConnection = async (connection) => {

@@ -263,8 +263,15 @@ class ConnectionCentralService {
     }
   }
 
+  /**
+   * Convierte la configuración de MongoDB al formato requerido por Tedious
+   * @private
+   * @param {Object} dbConfig - Configuración de MongoDB
+   * @returns {Object} - Configuración en formato Tedious
+   */
   _convertToTediousConfig(dbConfig) {
-    logger.info(`Convertiendo configuración para: ${dbConfig.serverName}`);
+    // Verificar si es una dirección IP
+    const isIpAddress = /^(\d{1,3}\.){3}\d{1,3}$/.test(dbConfig.host);
 
     const config = {
       server: dbConfig.host,
@@ -276,65 +283,25 @@ class ConnectionCentralService {
         },
       },
       options: {
-        database: dbConfig.database,
-        encrypt: false,
+        encrypt: isIpAddress ? false : dbConfig.options?.encrypt || false,
         trustServerCertificate: true,
         enableArithAbort: true,
-        connectTimeout: 60000,
-        requestTimeout: 120000,
-        cancelTimeout: 30000,
-        packetSize: 4096,
-        useUTC: false,
-        dateFormat: "mdy",
-        language: "us_english",
+        database: dbConfig.database,
+        connectTimeout: 30000,
+        requestTimeout: 60000,
         rowCollectionOnRequestCompletion: true,
         useColumnNames: true,
-        connectionRetryInterval: 1000,
-        maxRetriesOnConnectionError: 3,
-        multiSubnetFailover: false,
-        appName: `NodeApp_${dbConfig.serverName}`,
-        isolationLevel: 1,
       },
     };
 
-    // MANEJO MEJORADO DE INSTANCIA Y PUERTO
-    if (dbConfig.instance && dbConfig.instance.trim() !== "") {
-      config.options.instanceName = dbConfig.instance.trim();
-      logger.info(
-        `Configurando instancia nombrada: ${config.options.instanceName}`
-      );
-
-      // Para instancias nombradas, el puerto es opcional
-      if (dbConfig.port && !isNaN(parseInt(dbConfig.port))) {
-        config.options.port = parseInt(dbConfig.port);
-        logger.info(`Puerto específico para instancia: ${config.options.port}`);
-      } else {
-        logger.info(
-          `Sin puerto especificado - usando puerto dinámico para instancia`
-        );
-      }
-    } else if (dbConfig.port && !isNaN(parseInt(dbConfig.port))) {
-      // Sin instancia, usar puerto específico
-      config.options.port = parseInt(dbConfig.port);
-      logger.info(`Configurando puerto específico: ${config.options.port}`);
-    } else {
-      // Sin instancia y sin puerto, usar por defecto
-      config.options.port = 1433;
-      logger.info(`Usando puerto por defecto: 1433`);
+    if (dbConfig.instance) {
+      config.options.instanceName = dbConfig.instance;
     }
 
-    // Log de configuración final
-    const logConfig = {
-      server: config.server,
-      instance: config.options.instanceName,
-      port: config.options.port,
-      database: config.options.database,
-      user: config.authentication.options.userName,
-      encrypt: config.options.encrypt,
-      connectTimeout: config.options.connectTimeout,
-    };
+    if (dbConfig.port) {
+      config.options.port = dbConfig.port;
+    }
 
-    logger.info(`Configuración Tedious final:`, logConfig);
     return config;
   }
 
@@ -348,88 +315,72 @@ class ConnectionCentralService {
   _createConnectionFactory(config, serverKey) {
     const configInfo = {
       server: config.server,
-      instance: config.options.instanceName,
       database: config.options.database,
       user: config.authentication.options.userName,
     };
 
-    logger.info(`Creando factory de conexión para ${serverKey}:`, configInfo);
+    logger.info(
+      `Creando factory de conexión para ${serverKey}: ${JSON.stringify(
+        configInfo
+      )}`
+    );
 
     return {
       create: () => {
         return new Promise((resolve, reject) => {
-          logger.debug(`Creando nueva conexión para ${serverKey}...`);
+          logger.debug(`Intentando crear nueva conexión a ${config.server}...`);
 
           const connection = new Connection(config);
-          let isResolved = false;
 
-          // Timeout de seguridad más largo para instancias nombradas
+          // Comprobar que la conexión tiene el método execSql
+          if (typeof connection.execSql !== "function") {
+            logger.error(`La conexión creada no tiene el método execSql`);
+            reject(new Error(`Conexión inválida: no tiene el método execSql`));
+            return;
+          }
+
+          // Timeout para la creación de conexión
           const timeout = setTimeout(() => {
-            if (!isResolved) {
-              isResolved = true;
-              connection.removeAllListeners();
-              try {
-                connection.close();
-              } catch (e) {}
-              reject(
-                new Error(
-                  `Timeout al crear conexión para ${serverKey} después de 65 segundos`
-                )
-              );
-            }
-          }, 65000);
+            connection.removeAllListeners();
+            try {
+              connection.close();
+            } catch (e) {}
+            reject(new Error(`Timeout al crear conexión a ${config.server}`));
+          }, config.options.connectTimeout || 30000);
 
-          // Evento de conexión exitosa
           connection.on("connect", (err) => {
             clearTimeout(timeout);
-            if (isResolved) return;
-            isResolved = true;
 
             if (err) {
-              logger.error(`Error de conexión para ${serverKey}:`, {
-                message: err.message,
-                code: err.code,
-                state: err.state,
-              });
+              logger.error(`Error conectando a ${config.server}:`, err);
               reject(err);
-            } else {
-              logger.info(
-                `✅ Conexión establecida exitosamente para ${serverKey}`
+              return;
+            }
+
+            // Verificar de nuevo que la conexión es válida después del evento connect
+            if (typeof connection.execSql !== "function") {
+              logger.error(
+                `La conexión después de connect no tiene el método execSql`
               );
-
-              // Marcar metadatos de la conexión
-              connection._poolOrigin = serverKey;
-              connection._serverKey = serverKey;
-              connection._acquiredAt = Date.now();
-              connection._operationCount = 0;
-
-              resolve(connection);
+              reject(new Error(`Conexión inválida después de connect`));
+              return;
             }
-          });
 
-          // Manejo de errores durante la conexión
-          connection.on("error", (err) => {
-            if (!isResolved) {
-              clearTimeout(timeout);
-              isResolved = true;
-              logger.error(`Error durante conexión para ${serverKey}:`, {
-                message: err.message,
-                code: err.code,
-                state: err.state,
-              });
-              reject(err);
-            }
-          });
+            // Añadir metadatos para seguimiento
+            connection._createdAt = Date.now();
+            connection._operationCount = 0;
+            connection._serverKey = serverKey;
 
-          // Log adicional para debugging
-          connection.on("infoMessage", (info) => {
-            logger.debug(`Info SQL Server (${serverKey}): ${info.message}`);
-          });
-
-          connection.on("errorMessage", (error) => {
-            logger.warn(
-              `Mensaje de error SQL Server (${serverKey}): ${error.message}`
+            logger.debug(
+              `Conexión establecida correctamente a ${config.server}`
             );
+            resolve(connection);
+          });
+
+          connection.on("error", (err) => {
+            clearTimeout(timeout);
+            logger.error(`Error en la conexión a ${config.server}:`, err);
+            reject(err);
           });
 
           // Iniciar conexión
@@ -437,53 +388,98 @@ class ConnectionCentralService {
             connection.connect();
           } catch (error) {
             clearTimeout(timeout);
-            if (!isResolved) {
-              isResolved = true;
-              logger.error(`Excepción al conectar ${serverKey}:`, error);
-              reject(error);
-            }
+            logger.error(
+              `Excepción al intentar conectar a ${config.server}:`,
+              error
+            );
+            reject(error);
           }
         });
       },
 
       destroy: (connection) => {
         return new Promise((resolve) => {
+          if (!connection) {
+            resolve();
+            return;
+          }
+
+          // Limpiar listeners de errores para evitar memory leaks
+          connection.removeAllListeners("error");
+
+          // Eliminar de mapas de seguimiento
+          if (this.stats.activeConnections.has(connection)) {
+            this.stats.activeConnections.delete(connection);
+          }
+
+          if (connectionPoolMap.has(connection)) {
+            connectionPoolMap.delete(connection);
+          }
+
+          if (CONNECTION_LIMITS.operationCounter.has(connection)) {
+            CONNECTION_LIMITS.operationCounter.delete(connection);
+          }
+
+          // Timeout para cierre
+          const timeout = setTimeout(() => {
+            logger.warn(`Timeout al cerrar conexión después de 5 segundos`);
+            resolve();
+          }, 5000);
+
           try {
-            if (connection && typeof connection.close === "function") {
-              connection.removeAllListeners();
+            connection.on("end", () => {
+              clearTimeout(timeout);
+              resolve();
+            });
 
-              // Limpiar metadatos
-              if (this.stats && this.stats.activeConnections) {
-                this.stats.activeConnections.delete(connection);
-              }
-
-              connection.close();
-            }
+            connection.close();
           } catch (error) {
-            logger.warn(`Error al cerrar conexión:`, error);
-          } finally {
+            clearTimeout(timeout);
+            logger.warn(`Error al cerrar conexión (ignorando):`, error);
             resolve();
           }
         });
       },
 
       validate: (connection) => {
-        return Promise.resolve(
-          connection &&
-            connection.state &&
-            connection.state.name === "LoggedIn" &&
-            typeof connection.execSql === "function"
-        );
+        return new Promise((resolve) => {
+          if (!connection || !connection.connected) {
+            logger.debug(`Conexión inválida (no conectada), desechando`);
+            resolve(false);
+            return;
+          }
+
+          try {
+            // Verificar edad de la conexión
+            const connectionAge = Date.now() - (connection._createdAt || 0);
+
+            if (connectionAge > CONNECTION_LIMITS.maxAge) {
+              logger.debug(
+                `Descartando conexión que lleva ${connectionAge}ms abierta`
+              );
+              resolve(false);
+              return;
+            }
+
+            // Verificar número de operaciones
+            if (connection._operationCount > CONNECTION_LIMITS.maxOperations) {
+              logger.debug(
+                `Descartando conexión que ha realizado ${connection._operationCount} operaciones`
+              );
+              resolve(false);
+              return;
+            }
+
+            resolve(true);
+          } catch (error) {
+            logger.error(`Error al validar conexión:`, error);
+            resolve(false);
+          }
+        });
       },
     };
   }
 
-  /**
-   * Obtener una conexión optimizada y robusta con manejo de errores y reintentos
-   * @param {string} serverKey - Clave del servidor (server1, server2, etc.)
-   * @param {Object} options - Opciones adicionales
-   * @returns {Promise<Connection>} - Conexión a la base de datos
-   */
   /**
    * Obtener una conexión del pool con verificación de estado
    * @param {string} serverKey - Clave del servidor
