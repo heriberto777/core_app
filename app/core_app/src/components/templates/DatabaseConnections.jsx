@@ -726,33 +726,30 @@ export function DatabaseConnections() {
     // Procesar resultado del formulario
     if (formValues) {
       try {
-        if (isEdit) {
-          await dbConfigApi.updateDBConfig(
-            connection._id,
-            formValues,
-            accessToken
-          );
+        // Usar createDBConfig tanto para crear como para editar
+        const result = await dbConfigApi.createDBConfig(
+          formValues,
+          accessToken
+        );
+
+        if (result.message) {
+          const message = isEdit ? "actualizada" : "creada";
           Swal.fire(
-            "¡Actualizado!",
-            "La conexión ha sido actualizada correctamente",
+            "¡Éxito!",
+            `La conexión ha sido ${message} correctamente`,
             "success"
           );
         } else {
-          await dbConfigApi.createDBConfig(formValues, accessToken);
-          Swal.fire(
-            "¡Creado!",
-            "La conexión ha sido creada correctamente",
-            "success"
-          );
+          throw new Error("Error desconocido al guardar");
         }
+
         await loadConnections();
       } catch (error) {
         console.error("Error al guardar conexión:", error);
+        const action = isEdit ? "actualizar" : "crear";
         Swal.fire(
           "Error",
-          `Error al ${isEdit ? "actualizar" : "crear"} la conexión: ${
-            error.message
-          }`,
+          `Error al ${action} la conexión: ${error.message}`,
           "error"
         );
       }
@@ -813,13 +810,22 @@ export function DatabaseConnections() {
 
     if (result.isConfirmed) {
       try {
-        await dbConfigApi.deleteDBConfig(connection._id, accessToken);
-        Swal.fire(
-          "¡Eliminado!",
-          "La conexión ha sido eliminada correctamente",
-          "success"
+        // Usar serverName en lugar de _id para eliminar
+        const deleteResult = await dbConfigApi.deleteDBConfig(
+          connection.serverName,
+          accessToken
         );
-        await loadConnections();
+
+        if (deleteResult.message) {
+          Swal.fire(
+            "¡Eliminado!",
+            "La conexión ha sido eliminada correctamente",
+            "success"
+          );
+          await loadConnections();
+        } else {
+          throw new Error("Error desconocido al eliminar");
+        }
       } catch (error) {
         console.error("Error al eliminar conexión:", error);
         Swal.fire(
