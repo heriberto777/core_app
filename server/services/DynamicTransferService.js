@@ -9,7 +9,164 @@ const ConsecutiveService = require("./ConsecutiveService");
 
 class DynamicTransferService {
   /**
-   * Procesa documentos según una configuración de mapeo
+   * 🟢 NUEVO: Procesa bonificaciones dinámicamente
+   * @param {Array} sourceData - Datos originales
+   * @param {Object} mapping - Configuración de mapeo
+   * @returns {Array} - Datos procesados con líneas de bonificación
+   */
+  async processBonifications(sourceData, mapping) {
+    if (!mapping.hasBonificationProcessing || !mapping.bonificationConfig) {
+      return sourceData; // Sin procesamiento especial
+    }
+
+    const config = mapping.bonificationConfig;
+    logger.info(`🎯 Procesando bonificaciones con configuración:`, {
+      sourceTable: config.sourceTable,
+      orderField: config.orderField,
+      totalRecords: sourceData.length,
+    });
+
+    // Agrupar por campo de orden (ej: NUM_PED)
+    const groupedData = this.groupByField(sourceData, config.orderField);
+    const processedData = [];
+    let globalLineCounter = 1;
+    let bonificationsProcessed = 0;
+    let regularArticlesProcessed = 0;
+
+    for (const [groupKey, records] of groupedData) {
+      const lineMapping = new Map(); // Mapear artículos regulares a líneas
+      const bonificationQueue = [];
+
+      logger.debug(
+        `📦 Procesando grupo ${config.orderField}=${groupKey} con ${records.length} registros`
+      );
+
+      // Primera pasada: procesar artículos regulares
+      records.forEach((record) => {
+        const isBonification =
+          record[config.bonificationIndicatorField] ===
+          config.bonificationIndicatorValue;
+
+        if (!isBonification) {
+          // Artículo regular
+          const processedRecord = {
+            ...record,
+            [config.lineNumberField]: globalLineCounter,
+            [config.bonificationLineReferenceField]: null,
+          };
+
+          lineMapping.set(
+            record[config.regularArticleField],
+            globalLineCounter
+          );
+          processedData.push(processedRecord);
+          globalLineCounter++;
+          regularArticlesProcessed++;
+
+          logger.debug(
+            `✅ Artículo regular procesado: ${
+              record[config.regularArticleField]
+            } -> Línea ${globalLineCounter - 1}`
+          );
+        } else {
+          // Es bonificación, agregar a cola
+          bonificationQueue.push(record);
+        }
+      });
+
+      // Segunda pasada: procesar bonificaciones
+      bonificationQueue.forEach((bonification) => {
+        const referencedArticle =
+          bonification[config.bonificationReferenceField];
+        const referencedLine = lineMapping.get(referencedArticle);
+
+        const processedBonification = {
+          ...bonification,
+          [config.lineNumberField]: globalLineCounter,
+          [config.bonificationLineReferenceField]: referencedLine || null,
+          [config.bonificationReferenceField]: null, // Limpiar referencia original
+        };
+
+        if (!referencedLine) {
+          logger.warn(
+            `⚠️ Bonificación huérfana en ${config.orderField}=${groupKey}: ${config.bonificationReferenceField}=${referencedArticle} no encontrado`
+          );
+        } else {
+          logger.debug(
+            `🎁 Bonificación procesada: ${
+              bonification[config.regularArticleField]
+            } -> Línea ${globalLineCounter}, referencia línea ${referencedLine}`
+          );
+        }
+
+        processedData.push(processedBonification);
+        globalLineCounter++;
+        bonificationsProcessed++;
+      });
+    }
+
+    logger.info(`✅ Procesamiento de bonificaciones completado:`, {
+      totalRecords: processedData.length,
+      regularArticles: regularArticlesProcessed,
+      bonifications: bonificationsProcessed,
+      groups: groupedData.size,
+    });
+
+    return processedData;
+  }
+
+  /**
+   * 🟢 NUEVO: Agrupa datos por un campo específico
+   * @param {Array} data - Datos a agrupar
+   * @param {string} field - Campo por el cual agrupar
+   * @returns {Map} - Map con datos agrupados
+   */
+  groupByField(data, field) {
+    const grouped = new Map();
+
+    data.forEach((record) => {
+      const key = record[field];
+      if (!grouped.has(key)) {
+        grouped.set(key, []);
+      }
+      grouped.get(key).push(record);
+    });
+
+    return grouped;
+  }
+
+  /**
+   * 🟢 NUEVO: Valida configuración de bonificaciones
+   * @param {Object} mapping - Configuración de mapeo
+   * @returns {Object} - Resultado de validación
+   */
+  validateBonificationConfig(mapping) {
+    if (!mapping.hasBonificationProcessing) {
+      return { valid: true };
+    }
+
+    const config = mapping.bonificationConfig;
+    const errors = [];
+
+    if (!config.sourceTable) errors.push("Tabla de origen requerida");
+    if (!config.bonificationIndicatorField)
+      errors.push("Campo indicador requerido");
+    if (!config.orderField) errors.push("Campo de agrupación requerido");
+    if (!config.regularArticleField)
+      errors.push("Campo de artículo regular requerido");
+    if (!config.bonificationReferenceField)
+      errors.push("Campo de referencia de bonificación requerido");
+    if (!config.lineNumberField)
+      errors.push("Campo de número de línea requerido");
+
+    return {
+      valid: errors.length === 0,
+      errors,
+    };
+  }
+
+  /**
+   * 🔄 MODIFICADO: Procesa documentos según una configuración de mapeo
    * @param {Array} documentIds - IDs de los documentos a procesar
    * @param {string} mappingId - ID de la configuración de mapeo
    * @param {Object} signal - Señal de AbortController para cancelación
@@ -49,6 +206,21 @@ class DynamicTransferService {
         throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
       }
 
+      // 🟢 NUEVO: Validar configuración de bonificaciones
+      if (mapping.hasBonificationProcessing) {
+        const validation = this.validateBonificationConfig(mapping);
+        if (!validation.valid) {
+          throw new Error(
+            `Configuración de bonificaciones inválida: ${validation.errors.join(
+              ", "
+            )}`
+          );
+        }
+        logger.info(
+          `✅ Configuración de bonificaciones validada para mapping: ${mapping.name}`
+        );
+      }
+
       // Asegurar configuración por defecto para mappings existentes
       if (!mapping.markProcessedStrategy) {
         mapping.markProcessedStrategy = "individual"; // Mantener comportamiento actual
@@ -63,565 +235,497 @@ class DynamicTransferService {
         };
       }
 
-      // 2. Verificar si se debe usar consecutivos centralizados
-      if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
-        try {
-          // Buscar consecutivos asignados a este mapeo específico
-          const assignedConsecutives =
-            await ConsecutiveService.getConsecutivesByEntity(
-              "mapping",
-              mappingId
-            );
-
-          if (assignedConsecutives && assignedConsecutives.length > 0) {
-            useCentralizedConsecutives = true;
-            centralizedConsecutiveId = assignedConsecutives[0]._id;
-            logger.info(
-              `Se usará consecutivo centralizado para mapeo ${mappingId}: ${centralizedConsecutiveId}`
-            );
-          } else {
-            logger.info(
-              `No se encontraron consecutivos centralizados asignados a ${mappingId}. Se usará el sistema local.`
-            );
-          }
-        } catch (consecError) {
-          logger.warn(
-            `Error al verificar consecutivos centralizados: ${consecError.message}. Usando sistema local.`
-          );
-        }
+      // 2. Configurar consecutivos centralizados si están habilitados
+      if (mapping.useCentralizedConsecutives) {
+        useCentralizedConsecutives = true;
+        centralizedConsecutiveId = mapping.centralizedConsecutiveId;
+        logger.info(
+          `📋 Usando consecutivos centralizados: ${centralizedConsecutiveId}`
+        );
       }
 
-      // 3. Registrar en TaskTracker para permitir cancelación
-      TaskTracker.registerTask(
-        cancelTaskId,
-        localAbortController || { abort: () => {} },
-        {
-          type: "dynamicProcess",
-          mappingName: mapping.name,
-          documentIds,
-        }
-      );
+      // 3. Obtener conexiones
+      logger.info(`🔗 Estableciendo conexiones para mapeo: ${mapping.name}`);
+
+      if (mapping.transferType === "down") {
+        sourceConnection = await ConnectionService.getConnection("server2");
+        targetConnection = await ConnectionService.getConnection("server1");
+      } else {
+        sourceConnection = await ConnectionService.getConnection("server1");
+        targetConnection = await ConnectionService.getConnection("server2");
+      }
 
       // 4. Crear registro de ejecución
-      const taskExecution = new TaskExecution({
+      const execution = new TaskExecution({
         taskId: mapping.taskId,
-        taskName: mapping.name,
-        date: new Date(),
+        mappingId: mappingId,
+        startTime: new Date(),
         status: "running",
-        details: {
-          documentIds,
-          mappingId,
-        },
+        documentIds: documentIds,
+        processedDocuments: 0,
+        totalDocuments: documentIds.length,
       });
 
-      await taskExecution.save();
-      executionId = taskExecution._id;
+      await execution.save();
+      executionId = execution._id;
 
-      // 5. Establecer conexiones
-      const sourceServerName = mapping.sourceServer;
-      const targetServerName = mapping.targetServer;
+      logger.info(
+        `📊 Ejecución iniciada: ${executionId}, Documentos a procesar: ${documentIds.length}`
+      );
 
-      const getConnection = async (serverName, retries = 3) => {
-        for (let attempt = 0; attempt < retries; attempt++) {
-          try {
-            logger.info(
-              `Intento ${
-                attempt + 1
-              }/${retries} para conectar a ${serverName}...`
-            );
+      // 5. 🟢 MODIFICADO: Obtener datos de origen con procesamiento especial
+      let sourceData = await this.getSourceDataForDocuments(
+        documentIds,
+        mapping,
+        sourceConnection
+      );
 
-            const connectionResult =
-              await ConnectionService.enhancedRobustConnect(serverName);
+      logger.info(
+        `📥 Datos de origen obtenidos: ${sourceData.length} registros`
+      );
 
-            if (!connectionResult.success || !connectionResult.connection) {
-              const error =
-                connectionResult.error ||
-                new Error(`Conexión inválida a ${serverName}`);
-              logger.warn(`Intento ${attempt + 1} falló: ${error.message}`);
-
-              if (attempt === retries - 1) {
-                throw error;
-              }
-
-              const delay = Math.pow(2, attempt) * 1000;
-              await new Promise((resolve) => setTimeout(resolve, delay));
-              continue;
-            }
-
-            await SqlService.query(
-              connectionResult.connection,
-              "SELECT 1 AS test"
-            );
-
-            logger.info(`Conexión a ${serverName} establecida exitosamente`);
-            return connectionResult.connection;
-          } catch (error) {
-            logger.error(
-              `Error al conectar a ${serverName} (intento ${attempt + 1}): ${
-                error.message
-              }`
-            );
-
-            if (attempt === retries - 1) {
-              throw error;
-            }
-
-            const delay = Math.pow(2, attempt) * 1000;
-            await new Promise((resolve) => setTimeout(resolve, delay));
-          }
-        }
-
-        throw new Error(
-          `No se pudo establecer conexión a ${serverName} después de ${retries} intentos`
-        );
-      };
-
-      try {
+      // 6. 🟢 NUEVO: Procesar bonificaciones si está configurado
+      if (mapping.hasBonificationProcessing) {
+        logger.info(`🎁 Iniciando procesamiento de bonificaciones...`);
+        sourceData = await this.processBonifications(sourceData, mapping);
         logger.info(
-          `Estableciendo conexiones a ${sourceServerName} y ${targetServerName}...`
-        );
-        [sourceConnection, targetConnection] = await Promise.all([
-          getConnection(sourceServerName),
-          getConnection(targetServerName),
-        ]);
-        logger.info(`Conexiones establecidas exitosamente`);
-      } catch (connectionError) {
-        clearTimeout(timeoutId);
-        throw new Error(
-          `Error al establecer conexiones: ${connectionError.message}`
+          `🎯 Bonificaciones procesadas: ${sourceData.length} registros finales`
         );
       }
 
-      // 6. Procesar documentos - NUEVA LÓGICA CON ESTRATEGIAS DE MARCADO
-      const results = {
-        processed: 0,
-        failed: 0,
-        skipped: 0,
-        byType: {},
-        details: [],
-        consecutivesUsed: [],
-      };
+      // 7. Verificar cancelación
+      if (signal.aborted) {
+        throw new Error("Operación cancelada por el usuario");
+      }
 
-      // NUEVO: Arrays para recopilar documentos exitosos y fallidos
-      const successfulDocuments = [];
-      const failedDocuments = [];
-      let hasErrors = false;
+      // 8. Procesar cada tabla configurada
+      const results = [];
+      let totalInserted = 0;
+      let totalErrors = 0;
 
-      // Procesar cada documento individualmente
-      for (let i = 0; i < documentIds.length; i++) {
-        // Verificar si se ha cancelado la tarea
-        if (signal.aborted) {
-          clearTimeout(timeoutId);
-          throw new Error("Tarea cancelada por el usuario");
-        }
-
-        const documentId = documentIds[i];
-        let currentConsecutive = null;
-
+      for (const tableConfig of mapping.tableConfigs) {
         try {
-          // Generación de consecutivos (código existente)
-          if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
-            if (useCentralizedConsecutives) {
-              try {
-                const reservation =
-                  await ConsecutiveService.reserveConsecutiveValues(
-                    centralizedConsecutiveId,
-                    1,
-                    { segment: null },
-                    { id: mapping._id.toString(), name: "mapping" }
-                  );
-
-                currentConsecutive = {
-                  value: reservation.values[0].numeric,
-                  formatted: reservation.values[0].formatted,
-                  isCentralized: true,
-                  reservationId: reservation.reservationId,
-                };
-
-                logger.info(
-                  `Consecutivo centralizado generado para documento ${documentId}: ${currentConsecutive.formatted}`
-                );
-              } catch (consecError) {
-                logger.error(
-                  `Error generando consecutivo centralizado para documento ${documentId}: ${consecError.message}`
-                );
-                failedDocuments.push(documentId);
-                results.failed++;
-                results.details.push({
-                  documentId,
-                  success: false,
-                  error: `Error generando consecutivo: ${consecError.message}`,
-                  errorDetails: consecError.stack,
-                });
-                continue;
-              }
-            } else {
-              try {
-                currentConsecutive = await this.generateConsecutive(mapping);
-                if (currentConsecutive) {
-                  logger.info(
-                    `Consecutivo local generado para documento ${documentId}: ${currentConsecutive.formatted}`
-                  );
-                }
-              } catch (consecError) {
-                logger.error(
-                  `Error generando consecutivo local para documento ${documentId}: ${consecError.message}`
-                );
-                failedDocuments.push(documentId);
-                results.failed++;
-                results.details.push({
-                  documentId,
-                  success: false,
-                  error: `Error generando consecutivo: ${consecError.message}`,
-                  errorDetails: consecError.stack,
-                });
-                continue;
-              }
-            }
-          }
-
-          // Procesar documento
-          const docResult = await this.processSingleDocumentSimple(
-            documentId,
-            mapping,
-            sourceConnection,
-            targetConnection,
-            currentConsecutive
-          );
-
-          // Confirmar o cancelar reserva de consecutivo centralizado
-          if (
-            useCentralizedConsecutives &&
-            currentConsecutive &&
-            currentConsecutive.reservationId
-          ) {
-            if (docResult.success) {
-              await ConsecutiveService.commitReservation(
-                centralizedConsecutiveId,
-                currentConsecutive.reservationId,
-                [
-                  {
-                    numeric: currentConsecutive.value,
-                    formatted: currentConsecutive.formatted,
-                  },
-                ]
-              );
-              logger.info(
-                `Reserva confirmada para documento ${documentId}: ${currentConsecutive.formatted}`
-              );
-            } else {
-              await ConsecutiveService.cancelReservation(
-                centralizedConsecutiveId,
-                currentConsecutive.reservationId
-              );
-              logger.info(
-                `Reserva cancelada para documento fallido ${documentId}: ${currentConsecutive.formatted}`
-              );
-            }
-          }
-
-          // NUEVA LÓGICA: Recopilar documentos exitosos y fallidos
-          if (docResult.success) {
-            successfulDocuments.push(documentId);
-            results.processed++;
-
-            if (!results.byType[docResult.documentType]) {
-              results.byType[docResult.documentType] = {
-                processed: 0,
-                failed: 0,
-              };
-            }
-            results.byType[docResult.documentType].processed++;
-
-            if (docResult.consecutiveUsed) {
-              results.consecutivesUsed.push({
-                documentId,
-                consecutive: docResult.consecutiveUsed,
-              });
-            }
-
-            // NUEVA LÓGICA: Marcado individual solo si está configurado así
-            if (
-              mapping.markProcessedStrategy === "individual" &&
-              mapping.markProcessedField
-            ) {
-              try {
-                await this.markDocumentsAsProcessed(
-                  [documentId],
-                  mapping,
-                  sourceConnection,
-                  true
-                );
-                logger.debug(
-                  `✅ Documento ${documentId} marcado individualmente como procesado`
-                );
-              } catch (markError) {
-                logger.warn(
-                  `⚠️ Error al marcar documento ${documentId}: ${markError.message}`
-                );
-                // No detener el proceso por errores de marcado
-              }
-            }
-          } else {
-            hasErrors = true;
-            failedDocuments.push(documentId);
-            results.failed++;
-
-            if (docResult.documentType) {
-              if (!results.byType[docResult.documentType]) {
-                results.byType[docResult.documentType] = {
-                  processed: 0,
-                  failed: 0,
-                };
-              }
-              results.byType[docResult.documentType].failed++;
-            }
-          }
-
-          results.details.push({
-            documentId,
-            ...docResult,
-          });
-
           logger.info(
-            `Documento ${documentId} procesado: ${
-              docResult.success ? "Éxito" : "Error"
-            }`
+            `📋 Procesando tabla: ${tableConfig.name} (${tableConfig.sourceTable} -> ${tableConfig.targetTable})`
           );
-        } catch (docError) {
-          // Verificar si fue cancelado
-          if (signal?.aborted) {
-            clearTimeout(timeoutId);
-            throw new Error("Tarea cancelada por el usuario");
+
+          // Filtrar datos para esta tabla específica
+          let tableData = sourceData;
+
+          // 🟢 NUEVO: Si es la tabla de bonificaciones, ya está procesada
+          if (
+            mapping.hasBonificationProcessing &&
+            tableConfig.sourceTable === mapping.bonificationConfig.sourceTable
+          ) {
+            logger.info(
+              `🎁 Usando datos procesados de bonificaciones para tabla ${tableConfig.name}`
+            );
           }
 
-          hasErrors = true;
-          failedDocuments.push(documentId);
-          logger.error(
-            `Error procesando documento ${documentId}: ${docError.message}`
+          // Aplicar filtros adicionales si los hay
+          if (tableConfig.filterCondition) {
+            // Para simplicidad, mantenemos todos los datos
+            // En una implementación más avanzada, podrías aplicar el filtro aquí
+            logger.debug(
+              `📝 Condición de filtro configurada: ${tableConfig.filterCondition}`
+            );
+          }
+
+          // 9. Aplicar mapeo de campos
+          const mappedData = this.applyFieldMapping(
+            tableData,
+            tableConfig.fieldMappings,
+            targetConnection
           );
-          results.failed++;
-          results.details.push({
-            documentId,
-            success: false,
-            error: docError.message,
-            errorDetails: docError.stack,
+
+          if (mappedData.length === 0) {
+            logger.warn(
+              `⚠️ No hay datos para procesar en tabla ${tableConfig.name}`
+            );
+            continue;
+          }
+
+          // 10. Insertar datos en tabla destino
+          const insertResult = await this.insertDataToTarget(
+            mappedData,
+            tableConfig,
+            targetConnection,
+            useCentralizedConsecutives,
+            centralizedConsecutiveId
+          );
+
+          results.push({
+            table: tableConfig.name,
+            inserted: insertResult.inserted,
+            errors: insertResult.errors,
+          });
+
+          totalInserted += insertResult.inserted;
+          totalErrors += insertResult.errors;
+
+          // Verificar cancelación entre tablas
+          if (signal.aborted) {
+            throw new Error("Operación cancelada por el usuario");
+          }
+        } catch (tableError) {
+          logger.error(
+            `❌ Error procesando tabla ${tableConfig.name}: ${tableError.message}`
+          );
+          totalErrors++;
+          results.push({
+            table: tableConfig.name,
+            inserted: 0,
+            errors: 1,
+            error: tableError.message,
           });
         }
       }
 
-      // NUEVA LÓGICA: Marcado en lotes al final si está configurado así
-      if (
-        mapping.markProcessedStrategy === "batch" &&
-        successfulDocuments.length > 0
-      ) {
-        logger.info(
-          `📦 Iniciando marcado en lotes para ${successfulDocuments.length} documentos exitosos`
-        );
-
+      // 11. Marcar documentos como procesados
+      if (mapping.markProcessedField && totalInserted > 0) {
         try {
-          const markResult = await this.markDocumentsAsProcessed(
-            successfulDocuments,
+          await this.markDocumentsAsProcessed(
+            documentIds,
             mapping,
             sourceConnection,
             true
           );
-
           logger.info(
-            `📦 Resultado del marcado en lotes: ${markResult.message}`
+            `✅ Documentos marcados como procesados: ${documentIds.length}`
           );
-
-          // Agregar información del marcado al resultado final
-          results.markingResult = markResult;
-
-          if (markResult.failed > 0) {
-            logger.warn(
-              `⚠️ ${markResult.failed} documentos exitosos no se pudieron marcar como procesados`
-            );
-          }
         } catch (markError) {
-          logger.error(`❌ Error en marcado por lotes: ${markError.message}`);
-          results.markingError = markError.message;
-        }
-      }
-
-      // NUEVA LÓGICA: Rollback si está habilitado y hay fallos críticos
-      if (
-        mapping.markProcessedConfig?.allowRollback &&
-        failedDocuments.length > 0 &&
-        mapping.markProcessedStrategy === "batch" &&
-        successfulDocuments.length > 0
-      ) {
-        logger.warn(
-          `🔄 Rollback habilitado: desmarcando ${successfulDocuments.length} documentos debido a fallos`
-        );
-
-        try {
-          await this.markDocumentsAsProcessed(
-            successfulDocuments,
-            mapping,
-            sourceConnection,
-            false
+          logger.error(
+            `⚠️ Error marcando documentos como procesados: ${markError.message}`
           );
-          logger.info(`🔄 Rollback completado: documentos desmarcados`);
-          results.rollbackExecuted = true;
-        } catch (rollbackError) {
-          logger.error(`❌ Error en rollback: ${rollbackError.message}`);
-          results.rollbackError = rollbackError.message;
+          // No detener la operación por este error
         }
       }
 
-      // Actualizar registro de ejecución y tarea
-      const executionTime = Date.now() - startTime;
-
-      // Determinar el estado correcto basado en los resultados
-      let finalStatus = "completed";
-      if (results.processed === 0 && results.failed > 0) {
-        finalStatus = "failed";
-      } else if (results.failed > 0) {
-        finalStatus = "partial";
-      }
-
-      // Actualizar el registro de ejecución
+      // 12. Actualizar registro de ejecución
       await TaskExecution.findByIdAndUpdate(executionId, {
-        status: finalStatus,
-        executionTime,
-        totalRecords: documentIds.length,
-        successfulRecords: results.processed,
-        failedRecords: results.failed,
-        details: results,
-      });
-
-      // Actualizar la tarea principal con el resultado
-      await TransferTask.findByIdAndUpdate(mapping.taskId, {
-        status: finalStatus,
-        progress: 100,
-        lastExecutionDate: new Date(),
-        lastExecutionResult: {
-          success: !hasErrors,
-          message: hasErrors
-            ? `Procesamiento completado con errores: ${results.processed} éxitos, ${results.failed} fallos`
-            : "Procesamiento completado con éxito",
-          affectedRecords: results.processed,
-          errorDetails: hasErrors
-            ? results.details
-                .filter((d) => !d.success)
-                .map(
-                  (d) =>
-                    `Documento ${d.documentId}: ${
-                      d.message || d.error || "Error no especificado"
-                    }`
-                )
-                .join("\n")
-            : null,
-        },
+        endTime: new Date(),
+        status: totalErrors === 0 ? "completed" : "completed_with_errors",
+        processedDocuments: totalInserted,
+        errorCount: totalErrors,
+        results: results,
       });
 
       clearTimeout(timeoutId);
-      TaskTracker.completeTask(cancelTaskId, finalStatus);
+
+      const executionTime = Date.now() - startTime;
+      logger.info(`🎉 Procesamiento completado en ${executionTime}ms:`, {
+        documentos: documentIds.length,
+        insertados: totalInserted,
+        errores: totalErrors,
+      });
 
       return {
         success: true,
         executionId,
-        status: finalStatus,
-        ...results,
+        totalDocuments: documentIds.length,
+        totalInserted,
+        totalErrors,
+        results,
+        executionTime,
       };
     } catch (error) {
-      // Limpiar timeout
       clearTimeout(timeoutId);
+      logger.error(`❌ Error en procesamiento: ${error.message}`);
 
-      // Verificar si fue cancelado
-      if (signal?.aborted) {
-        logger.info("Tarea cancelada por el usuario");
-
-        if (executionId) {
-          await TaskExecution.findByIdAndUpdate(executionId, {
-            status: "cancelled",
-            executionTime: Date.now() - startTime,
-            errorMessage: "Cancelada por el usuario",
-          });
-        }
-
-        if (mapping?.taskId) {
-          await TransferTask.findByIdAndUpdate(mapping.taskId, {
-            status: "cancelled",
-            progress: -1,
-            lastExecutionResult: {
-              success: false,
-              message: "Tarea cancelada por el usuario",
-            },
-          });
-        }
-
-        TaskTracker.completeTask(
-          cancelTaskId || `dynamic_process_${mappingId}`,
-          "cancelled"
-        );
-
-        return {
-          success: false,
-          message: "Tarea cancelada por el usuario",
-          executionId,
-        };
-      }
-
-      logger.error(`Error al procesar documentos: ${error.message}`);
-
-      // Actualizar el registro de ejecución en caso de error
+      // Actualizar registro de ejecución con error
       if (executionId) {
         await TaskExecution.findByIdAndUpdate(executionId, {
-          status: "failed",
-          executionTime: Date.now() - startTime,
+          endTime: new Date(),
+          status: "error",
           errorMessage: error.message,
         });
       }
 
-      // Actualizar la tarea principal con el error
-      if (mapping?.taskId) {
-        await TransferTask.findByIdAndUpdate(mapping.taskId, {
-          status: "failed",
-          progress: -1,
-          lastExecutionResult: {
-            success: false,
-            message: `Error: ${error.message}`,
-            errorDetails: error.stack,
-          },
-        });
+      // Intentar rollback del marcado si es posible
+      if (
+        mapping &&
+        mapping.markProcessedConfig?.allowRollback &&
+        documentIds.length > 0
+      ) {
+        try {
+          await this.markDocumentsAsProcessed(
+            documentIds,
+            mapping,
+            sourceConnection,
+            false
+          );
+          logger.info(`🔄 Rollback del marcado de documentos completado`);
+        } catch (rollbackError) {
+          logger.error(`❌ Error en rollback: ${rollbackError.message}`);
+        }
       }
-
-      TaskTracker.completeTask(
-        cancelTaskId || `dynamic_process_${mappingId}`,
-        "failed"
-      );
 
       throw error;
     } finally {
-      // Cerrar conexiones de forma segura
-      if (sourceConnection || targetConnection) {
-        logger.info("Liberando conexiones...");
-
-        const releasePromises = [];
-
-        if (sourceConnection) {
-          releasePromises.push(
-            ConnectionService.releaseConnection(sourceConnection).catch((e) =>
-              logger.error(`Error al liberar conexión origen: ${e.message}`)
-            )
-          );
+      // Liberar conexiones
+      if (sourceConnection) {
+        try {
+          await ConnectionService.releaseConnection(sourceConnection);
+        } catch (e) {
+          logger.error(`Error liberando conexión origen: ${e.message}`);
         }
+      }
 
-        if (targetConnection) {
-          releasePromises.push(
-            ConnectionService.releaseConnection(targetConnection).catch((e) =>
-              logger.error(`Error al liberar conexión destino: ${e.message}`)
-            )
-          );
+      if (targetConnection) {
+        try {
+          await ConnectionService.releaseConnection(targetConnection);
+        } catch (e) {
+          logger.error(`Error liberando conexión destino: ${e.message}`);
         }
-
-        await Promise.allSettled(releasePromises);
-        logger.info("Conexiones liberadas correctamente");
       }
     }
+  }
+
+  /**
+   * 🟢 NUEVO: Obtiene datos de origen para documentos específicos
+   * @param {Array} documentIds - IDs de documentos
+   * @param {Object} mapping - Configuración de mapeo
+   * @param {Object} connection - Conexión a base de datos
+   * @returns {Array} - Datos de origen
+   */
+  async getSourceDataForDocuments(documentIds, mapping, connection) {
+    try {
+      // Encontrar la tabla principal (no detalle)
+      const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
+      if (!mainTable) {
+        throw new Error("No se encontró tabla principal en la configuración");
+      }
+
+      const primaryKey = mainTable.primaryKey || "NUM_PED";
+
+      // Construir placeholders para los IDs
+      const placeholders = documentIds
+        .map((_, index) => `@doc${index}`)
+        .join(", ");
+
+      // Parámetros para la consulta
+      const params = {};
+      documentIds.forEach((id, index) => {
+        params[`doc${index}`] = id;
+      });
+
+      // Consulta para obtener todos los datos relacionados
+      let query = `
+        SELECT *
+        FROM ${mainTable.sourceTable}
+        WHERE ${primaryKey} IN (${placeholders})
+      `;
+
+      // Agregar condición adicional si existe
+      if (mainTable.filterCondition) {
+        query += ` AND ${mainTable.filterCondition}`;
+      }
+
+      // Agregar ordenamiento si existe
+      if (mainTable.orderByColumn) {
+        query += ` ORDER BY ${mainTable.orderByColumn}`;
+      }
+
+      logger.debug(`🔍 Ejecutando consulta de origen: ${query}`);
+
+      const result = await SqlService.query(connection, query, params);
+      return result.recordset || [];
+    } catch (error) {
+      logger.error(`❌ Error obteniendo datos de origen: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Inserta datos en la tabla destino
+   * @param {Array} data - Datos a insertar
+   * @param {Object} tableConfig - Configuración de la tabla
+   * @param {Object} connection - Conexión a base de datos
+   * @param {boolean} useCentralizedConsecutives - Usar consecutivos centralizados
+   * @param {string} centralizedConsecutiveId - ID del consecutivo centralizado
+   * @returns {Object} - Resultado de la inserción
+   */
+  async insertDataToTarget(
+    data,
+    tableConfig,
+    connection,
+    useCentralizedConsecutives = false,
+    centralizedConsecutiveId = null
+  ) {
+    let inserted = 0;
+    let errors = 0;
+
+    try {
+      for (const record of data) {
+        try {
+          // Procesar funciones SQL nativas
+          const processedRecord = {};
+          for (const [key, value] of Object.entries(record)) {
+            if (
+              typeof value === "string" &&
+              value.startsWith("__SQL_FUNCTION__")
+            ) {
+              processedRecord[key] = value.replace("__SQL_FUNCTION__", "");
+            } else {
+              processedRecord[key] = value;
+            }
+          }
+
+          // Generar consecutivo centralizado si es necesario
+          if (useCentralizedConsecutives && centralizedConsecutiveId) {
+            const consecutive = await ConsecutiveService.getNextValue(
+              centralizedConsecutiveId
+            );
+            processedRecord[tableConfig.targetPrimaryKey || "ID"] = consecutive;
+          }
+
+          // Construir query de inserción
+          const fields = Object.keys(processedRecord);
+          const values = fields.map((field) => {
+            const value = processedRecord[field];
+            if (
+              typeof value === "string" &&
+              (value.includes("GETDATE()") ||
+                value.includes("NEWID()") ||
+                value.includes("GETUTCDATE()"))
+            ) {
+              return value; // Función SQL nativa
+            }
+            return `@${field}`;
+          });
+
+          const query = `
+           INSERT INTO ${tableConfig.targetTable} (${fields.join(", ")})
+           VALUES (${values.join(", ")})
+         `;
+
+          // Preparar parámetros (excluir funciones SQL nativas)
+          const params = {};
+          fields.forEach((field) => {
+            const value = processedRecord[field];
+            if (
+              !(
+                typeof value === "string" &&
+                (value.includes("GETDATE()") ||
+                  value.includes("NEWID()") ||
+                  value.includes("GETUTCDATE()"))
+              )
+            ) {
+              params[field] = value;
+            }
+          });
+
+          await SqlService.query(connection, query, params);
+          inserted++;
+        } catch (recordError) {
+          logger.error(`❌ Error insertando registro: ${recordError.message}`);
+          errors++;
+        }
+      }
+
+      logger.info(
+        `✅ Inserción completada - Tabla: ${tableConfig.targetTable}, Insertados: ${inserted}, Errores: ${errors}`
+      );
+    } catch (error) {
+      logger.error(`❌ Error en inserción masiva: ${error.message}`);
+      errors = data.length;
+    }
+
+    return { inserted, errors };
+  }
+
+  /**
+   * Aplica el mapeo de campos configurado
+   * @param {Array} sourceData - Datos originales de server2
+   * @param {Array} fieldMappings - Configuraciones de mapeo de campos
+   * @param {Object} targetConnection - Conexión a la base de datos destino
+   * @returns {Array} - Datos transformados
+   */
+  applyFieldMapping(sourceData, fieldMappings = [], targetConnection = null) {
+    if (!Array.isArray(fieldMappings) || fieldMappings.length === 0) {
+      logger.warn("⚠️ No hay configuraciones de mapeo de campos");
+      return sourceData;
+    }
+
+    logger.debug(
+      `🔄 Aplicando mapeo de campos: ${fieldMappings.length} configuraciones`
+    );
+
+    return sourceData.map((record, index) => {
+      const mappedRecord = {};
+
+      fieldMappings.forEach((mapping) => {
+        const {
+          sourceField,
+          targetField,
+          defaultValue,
+          lookupFromTarget,
+          lookupQuery,
+          valueMappings,
+        } = mapping;
+
+        try {
+          let finalValue = null;
+
+          // 1. Obtener valor del campo origen
+          if (sourceField && record.hasOwnProperty(sourceField)) {
+            finalValue = record[sourceField];
+          }
+
+          // 2. Aplicar mapeo de valores si existe
+          if (
+            valueMappings &&
+            valueMappings.length > 0 &&
+            finalValue !== null
+          ) {
+            const valueMapping = valueMappings.find(
+              (vm) => vm.sourceValue === finalValue
+            );
+            if (valueMapping) {
+              finalValue = valueMapping.targetValue;
+              logger.debug(
+                `🔄 Valor mapeado: ${finalValue} -> ${valueMapping.targetValue}`
+              );
+            }
+          }
+
+          // 3. Usar valor por defecto si no hay valor
+          if (finalValue === null || finalValue === undefined) {
+            if (defaultValue !== undefined && defaultValue !== null) {
+              // Verificar si es una función SQL nativa
+              if (
+                typeof defaultValue === "string" &&
+                (defaultValue.toUpperCase().includes("GETDATE()") ||
+                  defaultValue.toUpperCase().includes("NEWID()") ||
+                  defaultValue.toUpperCase().includes("GETUTCDATE()"))
+              ) {
+                finalValue = `__SQL_FUNCTION__${defaultValue}`;
+              } else {
+                finalValue = defaultValue;
+              }
+            }
+          }
+
+          // 4. TODO: Implementar lookupFromTarget si es necesario
+          if (lookupFromTarget && lookupQuery && targetConnection) {
+            // Esta funcionalidad puede implementarse según necesidades específicas
+            logger.debug(
+              `🔍 Lookup desde BD destino configurado para campo ${targetField}`
+            );
+          }
+
+          // 5. Asignar valor final
+          mappedRecord[targetField] = finalValue;
+        } catch (fieldError) {
+          logger.error(
+            `❌ Error mapeando campo ${sourceField} -> ${targetField}: ${fieldError.message}`
+          );
+          mappedRecord[targetField] = defaultValue || null;
+        }
+      });
+
+      return mappedRecord;
+    });
   }
 
   /**
@@ -2232,7 +2336,7 @@ class DynamicTransferService {
     const primaryKey = detailConfig.primaryKey || "NUM_PED";
 
     const query = `
-    SELECT ${finalSelectFields} FROM ${detailConfig.sourceTable} 
+    SELECT ${finalSelectFields} FROM ${detailConfig.sourceTable}
     WHERE ${primaryKey} = @documentId
     ${
       detailConfig.filterCondition ? ` AND ${detailConfig.filterCondition}` : ""
@@ -2519,9 +2623,9 @@ class DynamicTransferService {
 
       // Consultar metadata de la columna
       const query = `
-    SELECT CHARACTER_MAXIMUM_LENGTH 
-    FROM INFORMATION_SCHEMA.COLUMNS 
-    WHERE TABLE_NAME = '${tableNameOnly}' 
+    SELECT CHARACTER_MAXIMUM_LENGTH
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = '${tableNameOnly}'
     AND COLUMN_NAME = '${columnName}'
   `;
 
@@ -2560,8 +2664,8 @@ class DynamicTransferService {
       try {
         logger.info("Listando tablas disponibles en la base de datos...");
         const listTablesQuery = `
-      SELECT TOP 50 TABLE_SCHEMA, TABLE_NAME 
-      FROM INFORMATION_SCHEMA.TABLES 
+      SELECT TOP 50 TABLE_SCHEMA, TABLE_NAME
+      FROM INFORMATION_SCHEMA.TABLES
       ORDER BY TABLE_SCHEMA, TABLE_NAME
     `;
 
@@ -2632,8 +2736,8 @@ class DynamicTransferService {
         );
 
         const checkTableQuery = `
-      SELECT COUNT(*) AS table_exists 
-      FROM INFORMATION_SCHEMA.TABLES 
+      SELECT COUNT(*) AS table_exists
+      FROM INFORMATION_SCHEMA.TABLES
       WHERE TABLE_SCHEMA = '${schema}' AND TABLE_NAME = '${tableName}'
     `;
 
@@ -2645,8 +2749,8 @@ class DynamicTransferService {
         ) {
           // Si no se encuentra, intentar buscar sin distinguir mayúsculas/minúsculas
           const searchTableQuery = `
-        SELECT TOP 5 TABLE_SCHEMA, TABLE_NAME 
-        FROM INFORMATION_SCHEMA.TABLES 
+        SELECT TOP 5 TABLE_SCHEMA, TABLE_NAME
+        FROM INFORMATION_SCHEMA.TABLES
         WHERE TABLE_NAME LIKE '%${tableName}%'
       `;
 
@@ -2672,8 +2776,8 @@ class DynamicTransferService {
 
         // Obtener todas las columnas de la tabla para validar los campos
         const columnsQuery = `
-      SELECT COLUMN_NAME, DATA_TYPE 
-      FROM INFORMATION_SCHEMA.COLUMNS 
+      SELECT COLUMN_NAME, DATA_TYPE
+      FROM INFORMATION_SCHEMA.COLUMNS
       WHERE TABLE_SCHEMA = '${schema}' AND TABLE_NAME = '${tableName}'
     `;
 
@@ -3532,7 +3636,7 @@ class DynamicTransferService {
     });
 
     const query = `
-   UPDATE ${mainTable.sourceTable} 
+   UPDATE ${mainTable.sourceTable}
    SET ${updateFields}
    WHERE ${primaryKey} IN (${placeholders})
  `;
@@ -3566,7 +3670,7 @@ class DynamicTransferService {
     }
 
     const query = `
-   UPDATE ${mainTable.sourceTable} 
+   UPDATE ${mainTable.sourceTable}
    SET ${updateFields}
    WHERE ${primaryKey} = @documentId
  `;
