@@ -120,7 +120,7 @@ async function checkSystemHealth() {
     // 2. Verificar estado de los pools
     let poolStatus = {};
     try {
-      poolStatus = ConnectionCentralService.getConnectionStats(); // CORREGIDO
+      poolStatus = ConnectionCentralService.getConnectionStats();
     } catch (error) {
       logger.warn("Error al obtener estado de pools:", error);
       poolStatus = {};
@@ -137,8 +137,8 @@ async function checkSystemHealth() {
 
       let initialized = false;
       try {
-        const init1 = await ConnectionCentralService.initPool("server1"); // CORREGIDO
-        const init2 = await ConnectionCentralService.initPool("server2"); // CORREGIDO
+        const init1 = await ConnectionCentralService.initPool("server1");
+        const init2 = await ConnectionCentralService.initPool("server2");
         initialized = init1 && init2;
       } catch (initError) {
         logger.error("Error al inicializar pools:", initError);
@@ -204,6 +204,7 @@ async function checkSystemHealth() {
       connected: mongoConnected,
     };
 
+    // CORRECCIÓN: Definir allOk correctamente
     const allOk =
       healthResults.mongodb?.connected &&
       healthResults.server1?.connected &&
@@ -223,6 +224,50 @@ async function checkSystemHealth() {
           `Umbral de errores de conexión alcanzado (${HEALTH_CONFIG.errorCounters.connection}), intentando recuperación...`
         );
         await attemptConnectionRecovery();
+      }
+
+      // NUEVO: Debug automático para server2 si falla
+      if (!healthResults.server2?.connected) {
+        logger.info("🔧 Server2 falló, ejecutando debug automático...");
+
+        try {
+          const debugResult =
+            await ConnectionCentralService.debugServer2Authentication();
+          logger.info(
+            "📋 Resultado del debug server2:",
+            JSON.stringify(debugResult, null, 2)
+          );
+
+          // Si el debug encontró una solución, reintentar diagnóstico
+          if (debugResult.success) {
+            logger.info(
+              "🎉 Debug encontró solución, reintentando diagnóstico server2..."
+            );
+
+            const retryResult =
+              await ConnectionCentralService.diagnoseConnection("server2");
+            if (retryResult.success) {
+              logger.info("✅ Server2 ahora funciona después del debug!");
+              healthResults.server2.connected = true;
+              healthResults.server2.error = null;
+              healthResults.server2.debugFixed = true;
+            } else {
+              logger.warn("⚠️ Server2 sigue fallando después del debug");
+              healthResults.server2.debugExecuted = true;
+              healthResults.server2.debugResult = debugResult;
+            }
+          } else {
+            logger.warn("⚠️ Debug no pudo resolver el problema de server2");
+            healthResults.server2.debugExecuted = true;
+            healthResults.server2.debugResult = debugResult;
+          }
+        } catch (debugError) {
+          logger.error(
+            "❌ Error ejecutando debug automático de server2:",
+            debugError
+          );
+          healthResults.server2.debugError = debugError.message;
+        }
       }
     } else {
       // Todo está bien, reiniciar contadores de error

@@ -1856,6 +1856,565 @@ class ConnectionCentralService {
 
     return row;
   }
+
+  /**
+   * Debug detallado para server2 - Investigar problema de autenticación
+   */
+  async debugServer2Authentication() {
+    try {
+      logger.info("🔍 Iniciando debug detallado de autenticación server2...");
+
+      // 1. Verificar configuración actual en MongoDB
+      if (!MongoDbService.isConnected()) {
+        await MongoDbService.connect();
+      }
+
+      const currentConfig = await DBConfig.findOne({
+        serverName: "server2",
+      }).lean();
+
+      if (!currentConfig) {
+        logger.error("❌ No se encontró configuración para server2 en MongoDB");
+        return { success: false, error: "Configuración no encontrada" };
+      }
+
+      // Log de configuración actual (sin password completo)
+      logger.info("📋 Configuración actual en MongoDB:", {
+        serverName: currentConfig.serverName,
+        host: currentConfig.host,
+        instance: currentConfig.instance,
+        port: currentConfig.port,
+        database: currentConfig.database,
+        user: currentConfig.user,
+        passwordLength: currentConfig.password
+          ? currentConfig.password.length
+          : 0,
+        passwordStart: currentConfig.password
+          ? currentConfig.password.substring(0, 3) + "..."
+          : "no password",
+        type: currentConfig.type,
+      });
+
+      // 2. Test con diferentes variaciones del password
+      const passwordVariations = [
+        currentConfig.password, // Original
+        "Smk1$kE[qVc%5fY", // Hardcoded correcto
+        currentConfig.password?.trim(), // Sin espacios
+      ].filter(Boolean);
+
+      for (let i = 0; i < passwordVariations.length; i++) {
+        const testPassword = passwordVariations[i];
+        if (!testPassword) continue;
+
+        logger.info(
+          `🧪 Test ${i + 1}: Probando password variación (longitud: ${
+            testPassword.length
+          })`
+        );
+
+        const testResult = await this.testServer2WithPassword(testPassword);
+
+        logger.info(`Resultado test ${i + 1}:`, {
+          success: testResult.success,
+          error: testResult.error || "ninguno",
+          phase: testResult.phase,
+        });
+
+        if (testResult.success) {
+          logger.info(
+            `✅ ¡Password correcto encontrado en variación ${i + 1}!`
+          );
+
+          // Actualizar en MongoDB con el password que funciona
+          await DBConfig.findOneAndUpdate(
+            { serverName: "server2" },
+            {
+              password: testPassword,
+              host: "sql-calidad.miami",
+              instance: "calidadstdb",
+              database: "stdb_gnd",
+              user: "cliente-catelli",
+            },
+            { new: true }
+          );
+
+          return {
+            success: true,
+            workingPassword: true,
+            passwordIndex: i + 1,
+            message: `Password funcional encontrado y actualizado`,
+          };
+        }
+      }
+
+      // 3. Test con diferentes usuarios
+      const userVariations = [
+        "cliente-catelli",
+        "cliente_catelli",
+        "CLIENTE-CATELLI",
+        "catelli\\cliente-catelli", // Con dominio
+      ];
+
+      for (let i = 0; i < userVariations.length; i++) {
+        const testUser = userVariations[i];
+
+        logger.info(`🧪 Test usuario ${i + 1}: ${testUser}`);
+
+        const testResult = await this.testServer2WithUser(
+          testUser,
+          "Smk1$kE[qVc%5fY"
+        );
+
+        logger.info(`Resultado test usuario ${i + 1}:`, {
+          success: testResult.success,
+          error: testResult.error || "ninguno",
+          phase: testResult.phase,
+        });
+
+        if (testResult.success) {
+          logger.info(`✅ ¡Usuario correcto encontrado: ${testUser}!`);
+
+          // Actualizar en MongoDB
+          await DBConfig.findOneAndUpdate(
+            { serverName: "server2" },
+            {
+              user: testUser,
+              password: "Smk1$kE[qVc%5fY",
+              host: "sql-calidad.miami",
+              instance: "calidadstdb",
+              database: "stdb_gnd",
+            },
+            { new: true }
+          );
+
+          return {
+            success: true,
+            workingUser: testUser,
+            message: `Usuario funcional encontrado y actualizado`,
+          };
+        }
+      }
+
+      // 4. Test sin instancia nombrada (usando puerto directo)
+      logger.info("🧪 Test sin instancia nombrada...");
+      const noInstanceResult = await this.testServer2WithoutInstance();
+      logger.info("Resultado sin instancia:", noInstanceResult);
+
+      return {
+        success: false,
+        error: "No se encontró combinación funcional",
+        testedPasswords: passwordVariations.length,
+        testedUsers: userVariations.length,
+      };
+    } catch (error) {
+      logger.error("❌ Error en debug de autenticación:", error);
+      return { success: false, error: error.message };
+    }
+  }
+
+  /**
+   * Test con password específico
+   */
+  async testServer2WithPassword(password) {
+    try {
+      const testConfig = {
+        server: "sql-calidad.miami",
+        authentication: {
+          type: "default",
+          options: {
+            userName: "cliente-catelli",
+            password: password,
+          },
+        },
+        options: {
+          database: "stdb_gnd",
+          instanceName: "calidadstdb",
+          encrypt: false,
+          trustServerCertificate: true,
+          enableArithAbort: true,
+          connectTimeout: 60000, // Reducir timeout para tests rápidos
+          requestTimeout: 30000,
+          useColumnNames: true,
+          rowCollectionOnRequestCompletion: true,
+          appName: "NodeApp_PasswordTest",
+        },
+      };
+
+      return new Promise((resolve) => {
+        const connection = new Connection(testConfig);
+        let resolved = false;
+
+        const timeout = setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            connection.removeAllListeners();
+            try {
+              connection.close();
+            } catch (e) {}
+            resolve({
+              success: false,
+              error: "Timeout en test de password",
+              phase: "connection_timeout",
+            });
+          }
+        }, 60000);
+
+        connection.on("connect", (err) => {
+          clearTimeout(timeout);
+          if (resolved) return;
+          resolved = true;
+
+          try {
+            connection.close();
+          } catch (e) {}
+
+          if (err) {
+            resolve({
+              success: false,
+              error: err.message,
+              code: err.code,
+              phase: "connection_error",
+            });
+          } else {
+            resolve({
+              success: true,
+              message: "Password funciona",
+              phase: "connection_success",
+            });
+          }
+        });
+
+        connection.on("error", (err) => {
+          clearTimeout(timeout);
+          if (!resolved) {
+            resolved = true;
+            resolve({
+              success: false,
+              error: err.message,
+              code: err.code,
+              phase: "connection_error",
+            });
+          }
+        });
+
+        connection.connect();
+      });
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        phase: "test_error",
+      };
+    }
+  }
+
+  /**
+   * Test con usuario específico
+   */
+  async testServer2WithUser(userName, password) {
+    try {
+      const testConfig = {
+        server: "sql-calidad.miami",
+        authentication: {
+          type: "default",
+          options: {
+            userName: userName,
+            password: password,
+          },
+        },
+        options: {
+          database: "stdb_gnd",
+          instanceName: "calidadstdb",
+          encrypt: false,
+          trustServerCertificate: true,
+          enableArithAbort: true,
+          connectTimeout: 60000,
+          requestTimeout: 30000,
+          useColumnNames: true,
+          rowCollectionOnRequestCompletion: true,
+          appName: "NodeApp_UserTest",
+        },
+      };
+
+      return new Promise((resolve) => {
+        const connection = new Connection(testConfig);
+        let resolved = false;
+
+        const timeout = setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            connection.removeAllListeners();
+            try {
+              connection.close();
+            } catch (e) {}
+            resolve({
+              success: false,
+              error: "Timeout en test de usuario",
+              phase: "connection_timeout",
+            });
+          }
+        }, 60000);
+
+        connection.on("connect", (err) => {
+          clearTimeout(timeout);
+          if (resolved) return;
+          resolved = true;
+
+          try {
+            connection.close();
+          } catch (e) {}
+
+          if (err) {
+            resolve({
+              success: false,
+              error: err.message,
+              code: err.code,
+              phase: "connection_error",
+            });
+          } else {
+            resolve({
+              success: true,
+              message: `Usuario ${userName} funciona`,
+              phase: "connection_success",
+            });
+          }
+        });
+
+        connection.on("error", (err) => {
+          clearTimeout(timeout);
+          if (!resolved) {
+            resolved = true;
+            resolve({
+              success: false,
+              error: err.message,
+              code: err.code,
+              phase: "connection_error",
+            });
+          }
+        });
+
+        connection.connect();
+      });
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        phase: "test_error",
+      };
+    }
+  }
+
+  /**
+   * Test sin instancia nombrada (usando puerto 1433)
+   */
+  async testServer2WithoutInstance() {
+    try {
+      const testConfig = {
+        server: "sql-calidad.miami",
+        authentication: {
+          type: "default",
+          options: {
+            userName: "cliente-catelli",
+            password: "Smk1$kE[qVc%5fY",
+          },
+        },
+        options: {
+          database: "stdb_gnd",
+          port: 1433, // Puerto directo en lugar de instancia
+          encrypt: false,
+          trustServerCertificate: true,
+          enableArithAbort: true,
+          connectTimeout: 60000,
+          requestTimeout: 30000,
+          useColumnNames: true,
+          rowCollectionOnRequestCompletion: true,
+          appName: "NodeApp_PortTest",
+        },
+      };
+
+      return new Promise((resolve) => {
+        const connection = new Connection(testConfig);
+        let resolved = false;
+
+        const timeout = setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            connection.removeAllListeners();
+            try {
+              connection.close();
+            } catch (e) {}
+            resolve({
+              success: false,
+              error: "Timeout en test sin instancia",
+              phase: "connection_timeout",
+            });
+          }
+        }, 60000);
+
+        connection.on("connect", (err) => {
+          clearTimeout(timeout);
+          if (resolved) return;
+          resolved = true;
+
+          try {
+            connection.close();
+          } catch (e) {}
+
+          if (err) {
+            resolve({
+              success: false,
+              error: err.message,
+              code: err.code,
+              phase: "connection_error",
+            });
+          } else {
+            resolve({
+              success: true,
+              message: "Conexión sin instancia funciona",
+              phase: "connection_success",
+            });
+          }
+        });
+
+        connection.on("error", (err) => {
+          clearTimeout(timeout);
+          if (!resolved) {
+            resolved = true;
+            resolve({
+              success: false,
+              error: err.message,
+              code: err.code,
+              phase: "connection_error",
+            });
+          }
+        });
+
+        connection.connect();
+      });
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        phase: "test_error",
+      };
+    }
+  }
+
+  /**
+   * Estado de salud mejorado del sistema
+   */
+  async performSystemHealthCheck() {
+    try {
+      logger.info("🏥 Iniciando chequeo completo de salud del sistema...");
+
+      const healthResults = {
+        timestamp: new Date().toISOString(),
+        mongodb: { connected: false },
+        server1: { connected: false },
+        server2: { connected: false },
+        pools: {},
+        system: {},
+      };
+
+      // 1. MongoDB
+      healthResults.mongodb.connected = MongoDbService.isConnected();
+      if (!healthResults.mongodb.connected) {
+        const mongoConnect = await MongoDbService.connect();
+        healthResults.mongodb.connected = mongoConnect;
+        healthResults.mongodb.reconnected = mongoConnect;
+      }
+
+      // 2. Estadísticas de pools
+      try {
+        const poolStats = this.getConnectionStats();
+        healthResults.pools = poolStats.pools || {};
+      } catch (poolError) {
+        healthResults.pools.error = poolError.message;
+      }
+
+      // 3. Server1
+      try {
+        const server1Result = await this.diagnoseConnection("server1");
+        healthResults.server1 = {
+          connected: server1Result.success,
+          error: server1Result.success ? null : server1Result.error,
+          phase: server1Result.phase,
+          data: server1Result.data || null,
+        };
+      } catch (error) {
+        healthResults.server1 = {
+          connected: false,
+          error: error.message,
+          phase: "diagnosis_error",
+        };
+      }
+
+      // 4. Server2 con debug
+      try {
+        const server2Result = await this.diagnoseConnection("server2");
+        healthResults.server2 = {
+          connected: server2Result.success,
+          error: server2Result.success ? null : server2Result.error,
+          phase: server2Result.phase,
+          data: server2Result.data || null,
+        };
+
+        // Si server2 falla, ejecutar debug automáticamente
+        if (!server2Result.success) {
+          logger.info("🔧 Server2 falló, ejecutando debug automático...");
+          const debugResult = await this.debugServer2Authentication();
+          healthResults.server2.debugExecuted = true;
+          healthResults.server2.debugResult = debugResult;
+        }
+      } catch (error) {
+        healthResults.server2 = {
+          connected: false,
+          error: error.message,
+          phase: "diagnosis_error",
+        };
+      }
+
+      // 5. Sistema
+      healthResults.system = {
+        uptime: process.uptime(),
+        memoryUsage: process.memoryUsage(),
+        nodeVersion: process.version,
+        platform: process.platform,
+      };
+
+      // 6. Resumen
+      const allOk =
+        healthResults.mongodb.connected &&
+        healthResults.server1.connected &&
+        healthResults.server2.connected;
+
+      healthResults.overall = {
+        healthy: allOk,
+        issues: [
+          !healthResults.mongodb.connected ? "MongoDB desconectado" : null,
+          !healthResults.server1.connected ? "Server1 no conecta" : null,
+          !healthResults.server2.connected ? "Server2 no conecta" : null,
+        ].filter(Boolean),
+      };
+
+      logger.info("📊 Resultado de salud del sistema:", {
+        overall: healthResults.overall.healthy ? "SALUDABLE" : "CON PROBLEMAS",
+        mongodb: healthResults.mongodb.connected ? "OK" : "ERROR",
+        server1: healthResults.server1.connected ? "OK" : "ERROR",
+        server2: healthResults.server2.connected ? "OK" : "ERROR",
+        issues: healthResults.overall.issues,
+      });
+
+      return healthResults;
+    } catch (error) {
+      logger.error("❌ Error en chequeo de salud del sistema:", error);
+      return {
+        timestamp: new Date().toISOString(),
+        overall: { healthy: false, error: error.message },
+        error: error.message,
+      };
+    }
+  }
 }
 
 // Exportar instancia singleton
