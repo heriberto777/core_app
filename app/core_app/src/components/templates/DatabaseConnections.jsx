@@ -684,6 +684,8 @@ export function DatabaseConnections() {
     // Función para probar conexión
     async function testConnection(connectionData) {
       try {
+        console.log("Probando conexión con datos:", connectionData);
+
         Swal.fire({
           title: "Probando conexión...",
           text: "Por favor espere mientras se verifica la conexión",
@@ -695,22 +697,28 @@ export function DatabaseConnections() {
         });
 
         const result = await dbConfigApi.testConnection(
-          connectionData,
-          accessToken
+          accessToken,
+          connectionData
         );
+        console.log("Resultado de prueba:", result);
 
         if (result.success) {
           Swal.fire({
             icon: "success",
             title: "¡Conexión exitosa!",
-            text: "La configuración es correcta y la conexión funciona",
+            text:
+              result.message ||
+              "La configuración es correcta y la conexión funciona",
             timer: 3000,
           });
         } else {
           Swal.fire({
             icon: "error",
             title: "Error de conexión",
-            text: result.message || "No se pudo establecer la conexión",
+            text:
+              result.error ||
+              result.message ||
+              "No se pudo establecer la conexión",
           });
         }
       } catch (error) {
@@ -718,7 +726,9 @@ export function DatabaseConnections() {
         Swal.fire({
           icon: "error",
           title: "Error",
-          text: "Error al probar la conexión: " + error.message,
+          text:
+            "Error al probar la conexión: " +
+            (error.message || error.error || "Error desconocido"),
         });
       }
     }
@@ -726,32 +736,46 @@ export function DatabaseConnections() {
     // Procesar resultado del formulario
     if (formValues) {
       try {
-        // Usar createDBConfig tanto para crear como para editar
+        console.log("Datos del formulario obtenidos:", formValues);
+
+        Swal.fire({
+          title: isEdit ? "Actualizando conexión..." : "Creando conexión...",
+          allowOutsideClick: false,
+          showConfirmButton: false,
+          willOpen: () => {
+            Swal.showLoading();
+          },
+        });
+
+        // AQUÍ ES DONDE CORREGIMOS LA LLAMADA
         const result = await dbConfigApi.createDBConfig(
-          formValues,
-          accessToken
+          accessToken,
+          formValues
         );
+        console.log("Respuesta del servidor:", result);
 
         if (result.message) {
-          const message = isEdit ? "actualizada" : "creada";
-          Swal.fire(
-            "¡Éxito!",
-            `La conexión ha sido ${message} correctamente`,
-            "success"
-          );
+          const action = isEdit ? "actualizada" : "creada";
+          Swal.fire({
+            icon: "success",
+            title: "¡Éxito!",
+            text: `La conexión ha sido ${action} correctamente`,
+            timer: 2000,
+          });
+          await loadConnections();
         } else {
           throw new Error("Error desconocido al guardar");
         }
-
-        await loadConnections();
       } catch (error) {
         console.error("Error al guardar conexión:", error);
         const action = isEdit ? "actualizar" : "crear";
-        Swal.fire(
-          "Error",
-          `Error al ${action} la conexión: ${error.message}`,
-          "error"
-        );
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text: `Error al ${action} la conexión: ${
+            error.message || error.error || "Error desconocido"
+          }`,
+        });
       }
     }
   };
@@ -810,29 +834,40 @@ export function DatabaseConnections() {
 
     if (result.isConfirmed) {
       try {
-        // Usar serverName en lugar de _id para eliminar
+        Swal.fire({
+          title: "Eliminando conexión...",
+          allowOutsideClick: false,
+          showConfirmButton: false,
+          willOpen: () => {
+            Swal.showLoading();
+          },
+        });
+
+        // Usar serverName según tu ruta /delete/db/:serverName
         const deleteResult = await dbConfigApi.deleteDBConfig(
-          connection.serverName,
-          accessToken
+          accessToken,
+          connection.serverName
         );
 
         if (deleteResult.message) {
-          Swal.fire(
-            "¡Eliminado!",
-            "La conexión ha sido eliminada correctamente",
-            "success"
-          );
+          Swal.fire({
+            icon: "success",
+            title: "¡Eliminado!",
+            text: "La conexión ha sido eliminada correctamente",
+            timer: 2000,
+          });
           await loadConnections();
         } else {
           throw new Error("Error desconocido al eliminar");
         }
       } catch (error) {
         console.error("Error al eliminar conexión:", error);
-        Swal.fire(
-          "Error",
-          "Error al eliminar la conexión: " + error.message,
-          "error"
-        );
+        Swal.fire({
+          icon: "error",
+          title: "Error",
+          text:
+            "Error al eliminar la conexión: " + (error.error || error.message),
+        });
       }
     }
   };

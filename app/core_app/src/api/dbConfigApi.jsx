@@ -30,6 +30,13 @@ export class DBConfigApi {
 
   async createDBConfig(accessToken, configData) {
     try {
+      // Validar que configData sea un objeto válido
+      if (!configData || typeof configData !== "object") {
+        throw new Error("Datos de configuración inválidos");
+      }
+
+      console.log("Datos:", JSON.stringify(configData, null, 2));
+
       const url = `${this.baseApi}/config/create/db`;
       const params = {
         method: "POST",
