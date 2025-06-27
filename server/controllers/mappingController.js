@@ -110,6 +110,8 @@ const updateMapping = async (req, res) => {
       });
     }
 
+    logger.info(`Se ha actualizando el mapping: ${mappingData}`);
+    console.log("Aqui estamos actualizando", mappingData);
     const mapping = await DynamicTransferService.updateMapping(
       mappingId,
       mappingData
@@ -449,7 +451,7 @@ const getDocumentDetailsByMapping = async (req, res) => {
         }
 
         query = `
-          SELECT ${selectFields} FROM ${detailConfig.sourceTable} 
+          SELECT ${selectFields} FROM ${detailConfig.sourceTable}
           WHERE ${detailConfig.primaryKey || "NUM_PED"} = @documentId
           ${
             detailConfig.filterCondition

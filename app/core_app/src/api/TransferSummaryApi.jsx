@@ -21,7 +21,7 @@ export class TransferSummaryApi {
       if (filters.status) queryParams.append("status", filters.status);
 
       const queryString = queryParams.toString();
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.SUMMARIES}/${
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.SUMMARIES}/get/${
         queryString ? `?${queryString}` : ""
       }`;
 
@@ -48,7 +48,7 @@ export class TransferSummaryApi {
    */
   async getSummaryById(accessToken, summaryId) {
     try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.SUMMARIES}/${summaryId}`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.SUMMARIES}/get/${summaryId}`;
 
       const params = {
         headers: {
@@ -129,7 +129,7 @@ export class TransferSummaryApi {
    */
   async processTransferReturn(accessToken, returnData) {
     try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.SUMMARIES}/summaries/return`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.SUMMARIES}/reverse/return`;
 
       const params = {
         method: "POST",

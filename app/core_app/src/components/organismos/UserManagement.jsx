@@ -1,639 +1,630 @@
-// UserManagement.jsx
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import styled from "styled-components";
-import { useAuth, User, ENV } from "../../index";
 import Swal from "sweetalert2";
 import {
+  FaPlus,
   FaEdit,
   FaTrash,
   FaToggleOn,
   FaToggleOff,
-  FaPlus,
-  FaSync,
-  FaSearch,
-  FaEye,
-  FaEyeSlash,
   FaUser,
   FaEnvelope,
-  FaPhone,
-  FaLock,
-  FaCamera,
+  FaShieldAlt,
+  FaCrown,
+  FaSearch,
+  FaEye,
 } from "react-icons/fa";
 
+import { User, useAuth, usePermissions, roleApi } from "../../index";
+
 const userApi = new User();
+const cnnRolApi = new roleApi();
 
-export function UserManagement() {
-  const { accessToken } = useAuth();
+const UserManagement = () => {
   const [users, setUsers] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-  const [activeFilter, setActiveFilter] = useState(true);
-  const [page, setPage] = useState(1);
-  const [totalUsers, setTotalUsers] = useState(0);
-  const pageSize = 10;
+  const [loading, setLoading] = useState(false);
+  const [searchTerm, setSearchTerm] = useState("");
+  const [availableRoles, setAvailableRoles] = useState([]);
+  const [pagination, setPagination] = useState({
+    currentPage: 1,
+    totalPages: 1,
+    totalUsers: 0,
+    limit: 10,
+  });
 
-  // Cargar usuarios
-  const loadUsers = useCallback(async () => {
+  const { user: currentUser, accessToken, reloadUserPermissions } = useAuth();
+  const { hasPermission } = usePermissions();
+
+  // Verificar permisos
+  const canCreate = hasPermission("users", "create");
+  const canUpdate = hasPermission("users", "update");
+  const canDelete = hasPermission("users", "delete");
+  const canRead = hasPermission("users", "read");
+
+  useEffect(() => {
+    if (canRead && accessToken) {
+      loadUsers();
+      loadAvailableRoles();
+    }
+  }, [canRead, accessToken, pagination.currentPage]);
+
+  // ⭐ CARGAR USUARIOS USANDO userApi ⭐
+  const loadUsers = async () => {
+    if (!accessToken) return;
+
+    setLoading(true);
     try {
-      setLoading(true);
-      const requestData = {
-        page,
-        pageSize,
-        active: activeFilter,
-        busqueda: search.trim() || undefined,
-      };
+      const response = await userApi.getUsersWithRoles(accessToken, {
+        page: pagination.currentPage,
+        limit: pagination.limit,
+        search: searchTerm,
+      });
 
-      const response = await userApi.getUsers(accessToken, requestData);
+      if (response && response.success) {
+        setUsers(response.data?.users || response.users || []);
 
-      if (response && response.code === 200) {
-        setUsers(response.datos || []);
-        setTotalUsers(response.totalUsuarios || 0);
+        // Actualizar paginación si viene en la respuesta
+        if (response.data?.pagination || response.pagination) {
+          setPagination((prev) => ({
+            ...prev,
+            ...(response.data?.pagination || response.pagination),
+          }));
+        }
       } else {
-        throw new Error("Error al cargar usuarios");
+        throw new Error(response?.message || "Error cargando usuarios");
       }
     } catch (error) {
-      console.error("Error al cargar usuarios:", error);
+      console.error("Error cargando usuarios:", error);
       Swal.fire("Error", "No se pudieron cargar los usuarios", "error");
     } finally {
       setLoading(false);
     }
-  }, [accessToken, page, pageSize, activeFilter, search]);
+  };
 
-  useEffect(() => {
-    if (accessToken) {
-      loadUsers();
+  // ⭐ CARGAR ROLES DISPONIBLES ⭐
+  const loadAvailableRoles = async () => {
+    if (!accessToken) return;
+
+    try {
+      const resp = await cnnRolApi.getAvailableRoles(accessToken);
+
+      const data = await resp;
+      if (data.success) {
+        setAvailableRoles(data.data);
+      }
+    } catch (error) {
+      console.error("Error cargando roles:", error);
     }
-  }, [loadUsers]);
+  };
 
-  // Buscar usuarios con debounce
-  useEffect(() => {
-    const timeoutId = setTimeout(() => {
-      setPage(1); // Reset page when searching
-      loadUsers();
-    }, 500);
-
-    return () => clearTimeout(timeoutId);
-  }, [search]);
-
-  // Formulario para crear/editar usuario
+  // ⭐ MOSTRAR FORMULARIO DE USUARIO ⭐
   const showUserForm = async (user = null) => {
     const isEdit = !!user;
-    const title = isEdit ? "Editar Usuario" : "Nuevo Usuario";
+
+    const rolesOptions = availableRoles
+      .map(
+        (role) => `
+        <option value="${role._id}" ${
+          user?.rolesInfo?.some((userRole) => userRole._id === role._id)
+            ? "selected"
+            : ""
+        }>
+          ${role.displayName}
+        </option>
+      `
+      )
+      .join("");
 
     const { value: formValues } = await Swal.fire({
-      title,
+      title: isEdit ? "Editar Usuario" : "Crear Usuario",
       html: `
-        <div class="task-form-container">
-          <div class="task-form-section">
-            <h4 class="task-form-section-title">Información Personal</h4>
-            
-            <div class="task-form-group">
-              <label class="task-form-label">Nombre *</label>
-              <input id="name" class="task-form-input" value="${
-                user?.name || ""
-              }" placeholder="Nombre del usuario">
-            </div>
-            
-            <div class="task-form-group">
-              <label class="task-form-label">Apellido *</label>
-              <input id="lastname" class="task-form-input" value="${
-                user?.lastname || ""
-              }" placeholder="Apellido del usuario">
-            </div>
-            
-            <div class="task-form-group">
-              <label class="task-form-label">Email *</label>
-              <input id="email" type="email" class="task-form-input" value="${
-                user?.email || ""
-              }" placeholder="correo@ejemplo.com">
-            </div>
-            
-            <div class="task-form-group">
-              <label class="task-form-label">Teléfono</label>
-              <input id="telefono" class="task-form-input" value="${
-                user?.telefono || ""
-              }" placeholder="Número de teléfono">
-            </div>
+        <div style="text-align: left;">
+          <div style="margin-bottom: 1rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Nombre:</label>
+            <input id="name" class="swal2-input" placeholder="Nombre" value="${
+              user?.name || ""
+            }" style="margin: 0;">
           </div>
-
-          <div class="task-form-section">
-            <h4 class="task-form-section-title">Configuración de Cuenta</h4>
-            
-            <div class="task-form-group">
-              <label class="task-form-label">Contraseña ${
-                isEdit ? "(dejar vacío para no cambiar)" : "*"
-              }</label>
-              <div style="position: relative;">
-                <input id="password" type="password" class="task-form-input" placeholder="${
-                  isEdit ? "Nueva contraseña (opcional)" : "Contraseña"
-                }">
-                <button type="button" id="togglePassword" style="position: absolute; right: 10px; top: 50%; transform: translateY(-50%); background: none; border: none; cursor: pointer;">
-                  <i class="fa fa-eye"></i>
-                </button>
-              </div>
+          
+          <div style="margin-bottom: 1rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Apellido:</label>
+            <input id="lastname" class="swal2-input" placeholder="Apellido" value="${
+              user?.lastname || ""
+            }" style="margin: 0;">
+          </div>
+          
+          <div style="margin-bottom: 1rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Email:</label>
+            <input id="email" class="swal2-input" type="email" placeholder="Email" value="${
+              user?.email || ""
+            }" style="margin: 0;">
+          </div>
+          
+          <div style="margin-bottom: 1rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Teléfono:</label>
+            <input id="telefono" class="swal2-input" placeholder="Teléfono" value="${
+              user?.telefono || ""
+            }" style="margin: 0;">
+          </div>
+          
+          ${
+            !isEdit
+              ? `
+            <div style="margin-bottom: 1rem;">
+              <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Contraseña:</label>
+              <input id="password" class="swal2-input" type="password" placeholder="Contraseña" style="margin: 0;">
             </div>
-            
-            <div class="task-form-group">
-              <label class="task-form-label">Roles *</label>
-              <div style="display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 10px; margin-top: 8px;">
-                <div class="task-form-checkbox-container">
-                  <input type="checkbox" id="role-admin" value="admin" ${
-                    user?.role?.includes("admin") ? "checked" : ""
-                  }>
-                  <label class="task-form-checkbox-label" for="role-admin">Administrador</label>
-                </div>
-                <div class="task-form-checkbox-container">
-                  <input type="checkbox" id="role-ventas" value="ventas" ${
-                    user?.role?.includes("ventas") ? "checked" : ""
-                  }>
-                  <label class="task-form-checkbox-label" for="role-ventas">Ventas</label>
-                </div>
-                <div class="task-form-checkbox-container">
-                  <input type="checkbox" id="role-almacen" value="almacen" ${
-                    user?.role?.includes("almacen") ? "checked" : ""
-                  }>
-                  <label class="task-form-checkbox-label" for="role-almacen">Almacén</label>
-                </div>
-                <div class="task-form-checkbox-container">
-                  <input type="checkbox" id="role-facturacion" value="facturacion" ${
-                    user?.role?.includes("facturacion") ? "checked" : ""
-                  }>
-                  <label class="task-form-checkbox-label" for="role-facturacion">Facturación</label>
-                </div>
-                <div class="task-form-checkbox-container">
-                  <input type="checkbox" id="role-contabilidad" value="contabilidad" ${
-                    user?.role?.includes("contabilidad") ? "checked" : ""
-                  }>
-                  <label class="task-form-checkbox-label" for="role-contabilidad">Contabilidad</label>
-                </div>
-                <div class="task-form-checkbox-container">
-                  <input type="checkbox" id="role-despacho" value="despacho" ${
-                    user?.role?.includes("despacho") ? "checked" : ""
-                  }>
-                  <label class="task-form-checkbox-label" for="role-despacho">Despacho</label>
-                </div>
-              </div>
-              <small class="task-form-help-text">Seleccione al menos un rol para el usuario</small>
-            </div>
-
-            <div class="task-form-group">
-              <label class="task-form-label">Avatar</label>
-              <input id="avatar" type="file" accept="image/*" class="task-form-input">
-              <small class="task-form-help-text">Formatos: JPG, PNG, GIF. Máximo 5MB</small>
-            </div>
-
-            <div class="task-form-checkbox-container">
-              <input type="checkbox" id="active" ${
-                user?.activo !== false ? "checked" : ""
+          `
+              : ""
+          }
+          
+          <div style="margin-bottom: 1rem;">
+            <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Roles:</label>
+            <select id="roles" class="swal2-input" multiple style="margin: 0; height: 120px;">
+              ${rolesOptions}
+            </select>
+            <small style="color: #666;">Mantén Ctrl/Cmd presionado para seleccionar múltiples roles</small>
+          </div>
+          
+          <div style="margin-bottom: 1rem;">
+            <label style="display: flex; align-items: center; gap: 0.5rem;">
+              <input id="isAdmin" type="checkbox" ${
+                user?.isAdmin ? "checked" : ""
               }>
-              <label class="task-form-checkbox-label" for="active">Usuario Activo</label>
-            </div>
+              <span style="font-weight: 600;">Administrador del sistema</span>
+            </label>
           </div>
         </div>
       `,
-      width: 700,
       showCancelButton: true,
-      confirmButtonText: isEdit ? "Actualizar Usuario" : "Crear Usuario",
+      confirmButtonText: isEdit ? "Actualizar" : "Crear",
       cancelButtonText: "Cancelar",
-      customClass: {
-        popup: "task-modal-popup",
-        title: "task-modal-title",
-        htmlContainer: "task-modal-html",
-        actions: "task-modal-actions",
-      },
-      didOpen: () => {
-        // Toggle password visibility
-        const toggleBtn = document.getElementById("togglePassword");
-        const passwordInput = document.getElementById("password");
-
-        toggleBtn?.addEventListener("click", () => {
-          const type = passwordInput.type === "password" ? "text" : "password";
-          passwordInput.type = type;
-          toggleBtn.innerHTML = `<i class="fa fa-${
-            type === "password" ? "eye" : "eye-slash"
-          }"></i>`;
-        });
-      },
+      width: "500px",
       preConfirm: () => {
         const name = document.getElementById("name").value;
         const lastname = document.getElementById("lastname").value;
         const email = document.getElementById("email").value;
         const telefono = document.getElementById("telefono").value;
-        const password = document.getElementById("password").value;
-        const active = document.getElementById("active").checked;
-        const avatarFile = document.getElementById("avatar").files[0];
+        const password = document.getElementById("password")?.value;
+        const roles = Array.from(
+          document.getElementById("roles").selectedOptions
+        ).map((option) => option.value);
+        const isAdmin = document.getElementById("isAdmin").checked;
 
-        // Validaciones
-        if (!name.trim()) {
-          Swal.showValidationMessage("El nombre es obligatorio");
+        if (!name || !lastname || !email) {
+          Swal.showValidationMessage("Nombre, apellido y email son requeridos");
           return false;
         }
 
-        if (!lastname.trim()) {
-          Swal.showValidationMessage("El apellido es obligatorio");
-          return false;
-        }
-
-        if (!email.trim()) {
-          Swal.showValidationMessage("El email es obligatorio");
-          return false;
-        }
-
-        const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-        if (!emailRegex.test(email)) {
-          Swal.showValidationMessage("Ingrese un email válido");
-          return false;
-        }
-
-        if (!isEdit && !password.trim()) {
+        if (!isEdit && !password) {
           Swal.showValidationMessage(
-            "La contraseña es obligatoria para nuevos usuarios"
+            "La contraseña es requerida para nuevos usuarios"
           );
           return false;
         }
 
-        if (password && password.length < 6) {
-          Swal.showValidationMessage(
-            "La contraseña debe tener al menos 6 caracteres"
-          );
-          return false;
-        }
-
-        // Obtener roles seleccionados
-        const roles = [];
-        const roleCheckboxes = document.querySelectorAll(
-          'input[type="checkbox"][id^="role-"]:checked'
-        );
-        roleCheckboxes.forEach((checkbox) => {
-          roles.push(checkbox.value);
-        });
-
-        if (roles.length === 0) {
-          Swal.showValidationMessage("Debe seleccionar al menos un rol");
-          return false;
-        }
-
-        // Validar archivo si se seleccionó
-        if (avatarFile) {
-          if (avatarFile.size > 5 * 1024 * 1024) {
-            Swal.showValidationMessage(
-              "El archivo de avatar no puede ser mayor a 5MB"
-            );
-            return false;
-          }
-
-          const allowedTypes = [
-            "image/jpeg",
-            "image/jpg",
-            "image/png",
-            "image/gif",
-          ];
-          if (!allowedTypes.includes(avatarFile.type)) {
-            Swal.showValidationMessage(
-              "Solo se permiten imágenes (JPG, PNG, GIF)"
-            );
-            return false;
-          }
-        }
-
-        return {
-          name: name.trim(),
-          lastname: lastname.trim(),
-          email: email.trim(),
-          telefono: telefono.trim(),
-          password: password.trim(),
-          role: roles,
-          active,
-          fileAvatar: avatarFile,
-        };
+        return { name, lastname, email, telefono, password, roles, isAdmin };
       },
     });
 
     if (formValues) {
-      await saveUser(formValues, user?._id);
+      if (isEdit) {
+        await updateUser(user._id, formValues);
+      } else {
+        await createUser(formValues);
+      }
     }
   };
 
-  // Guardar usuario (crear o actualizar)
-  const saveUser = async (userData, userId = null) => {
+  // ⭐ CREAR USUARIO USANDO userApi ⭐
+  const createUser = async (userData) => {
     try {
-      Swal.fire({
-        title: userId ? "Actualizando usuario..." : "Creando usuario...",
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading(),
-      });
+      setLoading(true);
 
-      let result;
-      if (userId) {
-        // Actualizar usuario existente
-        result = await userApi.updateUser(accessToken, userId, userData);
-      } else {
-        // Crear nuevo usuario
-        result = await userApi.createUser(accessToken, userData);
-      }
+      const response = await userApi.createUser(accessToken, userData);
 
-      if (result.success) {
-        Swal.fire(
-          "¡Éxito!",
-          `Usuario ${userId ? "actualizado" : "creado"} correctamente`,
-          "success"
-        );
-        loadUsers(); // Recargar lista
+      if (response && response.success) {
+        Swal.fire("¡Éxito!", "Usuario creado correctamente", "success");
+        await loadUsers();
       } else {
-        throw new Error(result.msg || result.message || "Error desconocido");
+        throw new Error(response?.message || "Error creando usuario");
       }
     } catch (error) {
-      console.error("Error al guardar usuario:", error);
+      console.error("Error creando usuario:", error);
       Swal.fire(
         "Error",
-        error.message ||
-          `No se pudo ${userId ? "actualizar" : "crear"} el usuario`,
+        error.message || "No se pudo crear el usuario",
         "error"
       );
+    } finally {
+      setLoading(false);
     }
   };
 
-  // Eliminar usuario
-  const handleDeleteUser = async (userId, userName) => {
+  // ⭐ ACTUALIZAR USUARIO USANDO userApi ⭐
+  const updateUser = async (userId, userData) => {
     try {
-      const result = await Swal.fire({
-        title: "¿Eliminar usuario?",
-        text: `¿Está seguro de eliminar al usuario "${userName}"? Esta acción no se puede deshacer.`,
-        icon: "warning",
-        showCancelButton: true,
-        confirmButtonColor: "#dc3545",
-        cancelButtonColor: "#6c757d",
-        confirmButtonText: "Sí, eliminar",
-        cancelButtonText: "Cancelar",
-      });
+      setLoading(true);
 
-      if (result.isConfirmed) {
-        Swal.fire({
-          title: "Eliminando usuario...",
-          allowOutsideClick: false,
-          didOpen: () => Swal.showLoading(),
+      // Separar roles del resto de datos
+      const { roles, ...userDataWithoutRoles } = userData;
+
+      // Actualizar datos básicos del usuario
+      const updateResponse = await userApi.updateUser(
+        accessToken,
+        userId,
+        userDataWithoutRoles
+      );
+
+      if (!updateResponse || !updateResponse.success) {
+        throw new Error(
+          updateResponse?.message || "Error actualizando usuario"
+        );
+      }
+
+      // Actualizar roles si se proporcionaron
+      if (roles && roles.length >= 0) {
+        const rolesResponse = await userApi.updateUserRoles(
+          accessToken,
+          userId,
+          roles
+        );
+
+        if (!rolesResponse || !rolesResponse.success) {
+          console.warn("Error actualizando roles:", rolesResponse?.message);
+        }
+      }
+
+      Swal.fire("¡Éxito!", "Usuario actualizado correctamente", "success");
+      await loadUsers();
+
+      // Recargar permisos si es el usuario actual
+      if (userId === currentUser._id) {
+        await reloadUserPermissions();
+      }
+    } catch (error) {
+      console.error("Error actualizando usuario:", error);
+      Swal.fire(
+        "Error",
+        error.message || "No se pudo actualizar el usuario",
+        "error"
+      );
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  // ⭐ TOGGLE ACTIVO/INACTIVO USANDO userApi ⭐
+  const toggleUserStatus = async (userId, currentStatus) => {
+    const action = currentStatus ? "desactivar" : "activar";
+
+    const result = await Swal.fire({
+      title: `¿${action.charAt(0).toUpperCase() + action.slice(1)} usuario?`,
+      text: `¿Estás seguro de que deseas ${action} este usuario?`,
+      icon: "question",
+      showCancelButton: true,
+      confirmButtonText: `Sí, ${action}`,
+      cancelButtonText: "Cancelar",
+    });
+
+    if (result.isConfirmed) {
+      try {
+        setLoading(true);
+
+        const response = await userApi.ActiveInactiveUser(accessToken, userId, {
+          activo: !currentStatus,
         });
+
+        if (response && response.success) {
+          Swal.fire("¡Éxito!", `Usuario ${action}do correctamente`, "success");
+          await loadUsers();
+        } else {
+          throw new Error(response?.message || `Error ${action}ndo usuario`);
+        }
+      } catch (error) {
+        console.error(`Error ${action}ndo usuario:`, error);
+        Swal.fire("Error", `No se pudo ${action} el usuario`, "error");
+      } finally {
+        setLoading(false);
+      }
+    }
+  };
+
+  // ⭐ ELIMINAR USUARIO USANDO userApi ⭐
+  const deleteUser = async (userId, userName) => {
+    const result = await Swal.fire({
+      title: "¿Eliminar usuario?",
+      text: `¿Estás seguro de que deseas eliminar a ${userName}? Esta acción no se puede deshacer.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonText: "Sí, eliminar",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#d33",
+    });
+
+    if (result.isConfirmed) {
+      try {
+        setLoading(true);
 
         const response = await userApi.deleteUser(accessToken, userId);
 
-        if (response.success) {
+        if (response && response.success) {
           Swal.fire(
-            "Eliminado",
-            "El usuario ha sido eliminado correctamente",
+            "¡Eliminado!",
+            "Usuario eliminado correctamente",
             "success"
           );
-          loadUsers(); // Recargar lista
+          await loadUsers();
         } else {
-          throw new Error(response.msg || "Error al eliminar usuario");
+          throw new Error(response?.message || "Error eliminando usuario");
         }
+      } catch (error) {
+        console.error("Error eliminando usuario:", error);
+        Swal.fire("Error", "No se pudo eliminar el usuario", "error");
+      } finally {
+        setLoading(false);
       }
-    } catch (error) {
-      console.error("Error al eliminar usuario:", error);
-      Swal.fire(
-        "Error",
-        error.message || "No se pudo eliminar el usuario",
-        "error"
-      );
     }
   };
 
-  // Activar/Desactivar usuario
-  const handleToggleUser = async (userId, currentStatus, userName) => {
-    try {
-      Swal.fire({
-        title: `${currentStatus ? "Desactivando" : "Activando"} usuario...`,
-        allowOutsideClick: false,
-        didOpen: () => Swal.showLoading(),
-      });
+  // ⭐ VER DETALLES DEL USUARIO ⭐
+  const viewUserDetails = async (user) => {
+    const rolesText =
+      user.roles && user.roles.length > 0
+        ? user.roles
+            .map(
+              (role) =>
+                `<span style="background: ${
+                  role.isActive ? "#28a745" : "#6c757d"
+                }; color: white; padding: 2px 8px; border-radius: 12px; font-size: 0.8rem; margin-right: 4px;">${
+                  role.displayName
+                }</span>`
+            )
+            .join(" ")
+        : "<em>Sin roles asignados</em>";
 
-      const response = await userApi.ActiveInactiveUser(accessToken, userId, {
-        userData: !currentStatus,
-      });
-
-      if (response.success) {
-        Swal.fire(
-          "Estado actualizado",
-          `El usuario "${userName}" ha sido ${
-            currentStatus ? "desactivado" : "activado"
-          }`,
-          "success"
-        );
-        loadUsers(); // Recargar lista
-      } else {
-        throw new Error(response.msg || "Error al cambiar estado");
-      }
-    } catch (error) {
-      console.error("Error al cambiar estado:", error);
-      Swal.fire(
-        "Error",
-        error.message || "No se pudo cambiar el estado del usuario",
-        "error"
-      );
-    }
+    await Swal.fire({
+      title: "Detalles del Usuario",
+      html: `
+        <div style="text-align: left; padding: 1rem;">
+          <div style="margin-bottom: 1rem;">
+            <strong>Nombre completo:</strong><br>
+            ${user.name} ${user.lastname}
+          </div>
+          
+          <div style="margin-bottom: 1rem;">
+            <strong>Email:</strong><br>
+            ${user.email}
+          </div>
+          
+          <div style="margin-bottom: 1rem;">
+            <strong>Teléfono:</strong><br>
+            ${user.telefono || "No especificado"}
+          </div>
+          
+          <div style="margin-bottom: 1rem;">
+            <strong>Estado:</strong><br>
+            <span style="color: ${user.activo ? "#28a745" : "#dc3545"};">
+              ${user.activo ? "✅ Activo" : "❌ Inactivo"}
+            </span>
+          </div>
+          
+          <div style="margin-bottom: 1rem;">
+            <strong>Administrador:</strong><br>
+            <span style="color: ${user.isAdmin ? "#f39c12" : "#6c757d"};">
+              ${user.isAdmin ? "👑 Sí" : "👤 No"}
+            </span>
+          </div>
+          
+          <div style="margin-bottom: 1rem;">
+            <strong>Roles asignados:</strong><br>
+            ${rolesText}
+          </div>
+          
+          <div>
+            <strong>Fecha de registro:</strong><br>
+            ${
+              user.createdAt
+                ? new Date(user.createdAt).toLocaleString()
+                : "No disponible"
+            }
+          </div>
+        </div>
+      `,
+      width: "500px",
+      confirmButtonText: "Cerrar",
+    });
   };
 
-  const totalPages = Math.ceil(totalUsers / pageSize);
+  // ⭐ FILTRAR USUARIOS ⭐
+  const filteredUsers = users.filter(
+    (user) =>
+      user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.lastname?.toLowerCase().includes(searchTerm.toLowerCase()) ||
+      user.email?.toLowerCase().includes(searchTerm.toLowerCase())
+  );
+
+  console.log("🎯 Usuarios filtrados:", filteredUsers);
+
+  if (!canRead) {
+    return (
+      <Container>
+        <ErrorMessage>
+          <FaShieldAlt />
+          <h3>Sin permisos</h3>
+          <p>No tienes permisos para gestionar usuarios.</p>
+        </ErrorMessage>
+      </Container>
+    );
+  }
 
   return (
     <Container>
       <Header>
-        <h1>Gestión de Usuarios</h1>
-        <p>Administra los usuarios del sistema</p>
+        <TitleSection>
+          <h2>
+            <FaUser /> Gestión de Usuarios
+          </h2>
+          <p>Administra los usuarios del sistema</p>
+        </TitleSection>
+
+        <ActionsSection>
+          {canCreate && (
+            <button onClick={() => showUserForm()} disabled={loading}>
+              <FaPlus /> Nuevo Usuario
+            </button>
+          )}
+        </ActionsSection>
       </Header>
 
-      <ActionsBar>
-        <SearchContainer>
+      <FilterSection>
+        <SearchBox>
           <FaSearch />
-          <SearchInput
+          <input
             type="text"
             placeholder="Buscar usuarios..."
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
+            value={searchTerm}
+            onChange={(e) => setSearchTerm(e.target.value)}
           />
-        </SearchContainer>
+        </SearchBox>
 
-        <FilterContainer>
-          <FilterButton
-            $active={activeFilter}
-            onClick={() => setActiveFilter(true)}
-          >
-            Activos ({users.filter((u) => u.activo).length})
-          </FilterButton>
-          <FilterButton
-            $active={!activeFilter}
-            onClick={() => setActiveFilter(false)}
-          >
-            Inactivos ({users.filter((u) => !u.activo).length})
-          </FilterButton>
-        </FilterContainer>
+        <StatsInfo>Total: {filteredUsers.length} usuario(s)</StatsInfo>
+      </FilterSection>
 
-        <ActionButtons>
-          <Button onClick={() => showUserForm()}>
-            <FaPlus /> Nuevo Usuario
-          </Button>
-          <RefreshButton onClick={loadUsers} disabled={loading}>
-            <FaSync className={loading ? "spinning" : ""} />
-          </RefreshButton>
-        </ActionButtons>
-      </ActionsBar>
+      <UsersTable>
+        <TableHeader>
+          <th>Usuario</th>
+          <th>Email</th>
+          <th>Roles</th>
+          <th>Estado</th>
+          <th>Acciones</th>
+        </TableHeader>
+        <tbody>
+          {filteredUsers.map((user) => (
+            <TableRow key={user._id}>
+              <UserCell>
+                <UserAvatar>
+                  {user.name?.charAt(0)?.toUpperCase() || "U"}
+                </UserAvatar>
+                <UserInfo>
+                  <UserName>
+                    {user.name} {user.lastname}
+                    {user.isAdmin && <FaCrown className="admin-icon" />}
+                  </UserName>
+                  <UserMeta>ID: {user._id}</UserMeta>
+                </UserInfo>
+              </UserCell>
 
-      {loading ? (
-        <LoadingMessage>Cargando usuarios...</LoadingMessage>
-      ) : (
-        <>
-          {users.length === 0 ? (
-            <EmptyMessage>
-              No se encontraron usuarios{" "}
-              {activeFilter ? "activos" : "inactivos"}.
-            </EmptyMessage>
-          ) : (
-            <>
-              <TableContainer>
-                <Table>
-                  <thead>
-                    <tr>
-                      <th>Usuario</th>
-                      <th>Email</th>
-                      <th>Teléfono</th>
-                      <th>Roles</th>
-                      <th>Estado</th>
-                      <th>Acciones</th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {users.map((user) => (
-                      <tr
-                        key={user._id}
-                        className={!user.activo ? "disabled" : ""}
-                      >
-                        <td>
-                          <UserInfo>
-                            <UserAvatar>
-                              {user.avatar ? (
-                                <img
-                                  src={`${ENV.BASE_PATH}/${user.avatar}`}
-                                  alt="Avatar"
-                                />
-                              ) : (
-                                <FaUser />
-                              )}
-                            </UserAvatar>
-                            <div>
-                              <UserName>
-                                {user.name} {user.lastname}
-                              </UserName>
-                              <UserId>ID: {user._id}</UserId>
-                            </div>
-                          </UserInfo>
-                        </td>
-                        <td>{user.email}</td>
-                        <td>{user.telefono || "-"}</td>
-                        <td>
-                          <RoleContainer>
-                            {user.role?.map((role) => (
-                              <RoleBadge key={role} $role={role}>
-                                {role}
-                              </RoleBadge>
-                            ))}
-                          </RoleContainer>
-                        </td>
-                        <td>
-                          <StatusBadge $active={user.activo}>
-                            {user.activo ? "Activo" : "Inactivo"}
-                          </StatusBadge>
-                        </td>
-                        <td>
-                          <ActionButtonsContainer>
-                            <ActionButton
-                              $color="#007bff"
-                              onClick={() => showUserForm(user)}
-                              title="Editar usuario"
-                            >
-                              <FaEdit />
-                            </ActionButton>
+              <td>{user.email}</td>
 
-                            <ActionButton
-                              $color={user.activo ? "#ffc107" : "#28a745"}
-                              onClick={() =>
-                                handleToggleUser(
-                                  user._id,
-                                  user.activo,
-                                  `${user.name} ${user.lastname}`
-                                )
-                              }
-                              title={
-                                user.activo
-                                  ? "Desactivar usuario"
-                                  : "Activar usuario"
-                              }
-                            >
-                              {user.activo ? <FaToggleOn /> : <FaToggleOff />}
-                            </ActionButton>
+              <RolesCell>
+                {user.roles && user.roles.length > 0 ? (
+                  user.roles.slice(0, 2).map((role) => (
+                    <RoleTag key={role._id} active={role.isActive}>
+                      {role.displayName}
+                    </RoleTag>
+                  ))
+                ) : (
+                  <EmptyRoles>Sin roles</EmptyRoles>
+                )}
+                {user.roles && user.roles.length > 2 && (
+                  <MoreRoles>+{user.roles.length - 2}</MoreRoles>
+                )}
+              </RolesCell>
 
-                            <ActionButton
-                              $color="#dc3545"
-                              onClick={() =>
-                                handleDeleteUser(
-                                  user._id,
-                                  `${user.name} ${user.lastname}`
-                                )
-                              }
-                              title="Eliminar usuario"
-                            >
-                              <FaTrash />
-                            </ActionButton>
-                          </ActionButtonsContainer>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </Table>
-              </TableContainer>
+              <StatusCell>
+                <StatusBadge active={user.activo}>
+                  {user.activo ? "Activo" : "Inactivo"}
+                </StatusBadge>
+              </StatusCell>
 
-              {totalPages > 1 && (
-                <Pagination>
-                  <PaginationButton
-                    onClick={() => setPage(page - 1)}
-                    disabled={page === 1}
+              <ActionsCell>
+                <ActionButton
+                  onClick={() => viewUserDetails(user)}
+                  title="Ver detalles"
+                >
+                  <FaEye />
+                </ActionButton>
+
+                {canUpdate && (
+                  <ActionButton
+                    onClick={() => showUserForm(user)}
+                    title="Editar"
                   >
-                    Anterior
-                  </PaginationButton>
+                    <FaEdit />
+                  </ActionButton>
+                )}
 
-                  <PaginationInfo>
-                    Página {page} de {totalPages} ({totalUsers} usuarios)
-                  </PaginationInfo>
-
-                  <PaginationButton
-                    onClick={() => setPage(page + 1)}
-                    disabled={page === totalPages}
+                {canUpdate && (
+                  <ActionButton
+                    onClick={() => toggleUserStatus(user._id, user.activo)}
+                    title={user.activo ? "Desactivar" : "Activar"}
+                    className={user.activo ? "warning" : "success"}
                   >
-                    Siguiente
-                  </PaginationButton>
-                </Pagination>
-              )}
-            </>
-          )}
-        </>
+                    {user.activo ? <FaToggleOn /> : <FaToggleOff />}
+                  </ActionButton>
+                )}
+
+                {canDelete && user._id !== currentUser._id && (
+                  <ActionButton
+                    onClick={() =>
+                      deleteUser(user._id, `${user.name} ${user.lastname}`)
+                    }
+                    title="Eliminar"
+                    className="danger"
+                  >
+                    <FaTrash />
+                  </ActionButton>
+                )}
+              </ActionsCell>
+            </TableRow>
+          ))}
+        </tbody>
+      </UsersTable>
+
+      {filteredUsers.length === 0 && !loading && (
+        <EmptyState>
+          <FaUser />
+          <h3>No se encontraron usuarios</h3>
+          <p>Intenta con otros términos de búsqueda o crea un nuevo usuario</p>
+        </EmptyState>
+      )}
+
+      {loading && (
+        <LoadingState>
+          <div>Cargando usuarios...</div>
+        </LoadingState>
       )}
     </Container>
   );
-}
+};
 
-// Estilos
+// ⭐ STYLED COMPONENTS ⭐
 const Container = styled.div`
-  padding: 20px;
-  background-color: ${({ theme }) => theme.bg};
-  color: ${({ theme }) => theme.text};
-  min-height: 100vh;
+  padding: 2rem;
+  max-width: 1400px;
+  margin: 0 auto;
 `;
 
 const Header = styled.div`
-  text-align: center;
-  margin-bottom: 30px;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  margin-bottom: 2rem;
 
-  h1 {
-    margin: 0 0 10px 0;
-    color: ${({ theme }) => theme.title};
+  @media (max-width: 768px) {
+    flex-direction: column;
+    gap: 1rem;
+  }
+`;
+
+const TitleSection = styled.div`
+  h2 {
+    margin: 0 0 0.5rem 0;
+    color: ${({ theme }) => theme.text};
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
   }
 
   p {
@@ -642,13 +633,36 @@ const Header = styled.div`
   }
 `;
 
-const ActionsBar = styled.div`
+const ActionsSection = styled.div`
+  button {
+    background: ${({ theme }) => theme.primary};
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    display: flex;
+    align-items: center;
+    gap: 0.5rem;
+    font-weight: 500;
+
+    &:hover:not(:disabled) {
+      background: ${({ theme }) => theme.primaryDark};
+    }
+
+    &:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+  }
+`;
+
+const FilterSection = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  gap: 20px;
-  margin-bottom: 30px;
-  flex-wrap: wrap;
+  margin-bottom: 1.5rem;
+  gap: 1rem;
 
   @media (max-width: 768px) {
     flex-direction: column;
@@ -656,288 +670,241 @@ const ActionsBar = styled.div`
   }
 `;
 
-const SearchContainer = styled.div`
+const SearchBox = styled.div`
   position: relative;
-  flex: 1;
-  max-width: 400px;
   display: flex;
   align-items: center;
+  flex: 1;
+  max-width: 400px;
 
   svg {
     position: absolute;
     left: 12px;
     color: ${({ theme }) => theme.textSecondary};
-    z-index: 1;
-  }
-`;
-
-const SearchInput = styled.input`
-  width: 100%;
-  padding: 10px 10px 10px 40px;
-  border: 1px solid ${({ theme }) => theme.border};
-  border-radius: 4px;
-  font-size: 14px;
-  color: ${({ theme }) => theme.text};
-  background-color: ${({ theme }) => theme.inputBg};
-
-  &:focus {
-    outline: none;
-    border-color: ${({ theme }) => theme.primary};
-  }
-`;
-
-const FilterContainer = styled.div`
-  display: flex;
-  gap: 10px;
-`;
-
-const FilterButton = styled.button`
-  padding: 8px 16px;
-  border: 1px solid ${({ theme }) => theme.border};
-  border-radius: 4px;
-  background-color: ${({ $active, theme }) =>
-    $active ? theme.primary : theme.cardBg};
-  color: ${({ $active, theme }) => ($active ? "white" : theme.text)};
-  cursor: pointer;
-  transition: all 0.3s;
-
-  &:hover {
-    background-color: ${({ theme }) => theme.primary};
-    color: white;
-  }
-`;
-
-const ActionButtons = styled.div`
-  display: flex;
-  gap: 10px;
-`;
-
-const Button = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  background-color: ${({ theme }) => theme.primary};
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.3s;
-
-  &:hover {
-    background-color: ${({ theme }) => theme.primaryHover};
-  }
-`;
-
-const RefreshButton = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 40px;
-  height: 40px;
-  background-color: ${({ theme }) => theme.secondary};
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.3s;
-
-  &:hover {
-    background-color: ${({ theme }) => theme.secondaryHover};
   }
 
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
+  input {
+    width: 100%;
+    padding: 0.75rem 0.75rem 0.75rem 2.5rem;
+    border: 1px solid ${({ theme }) => theme.border};
+    border-radius: 6px;
+    background: ${({ theme }) => theme.bg};
+    color: ${({ theme }) => theme.text};
+    font-size: 0.9rem;
 
-  .spinning {
-    animation: spin 1s linear infinite;
-  }
-
-  @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
+    &:focus {
+      outline: none;
+      border-color: ${({ theme }) => theme.primary};
     }
   }
 `;
 
-const TableContainer = styled.div`
-  width: 100%;
-  overflow-x: auto;
-  border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+const StatsInfo = styled.div`
+  color: ${({ theme }) => theme.textSecondary};
+  font-size: 0.9rem;
+  font-weight: 500;
 `;
 
-const Table = styled.table`
+const UsersTable = styled.table`
   width: 100%;
   border-collapse: collapse;
-  background-color: ${({ theme }) => theme.cardBg};
+  background: ${({ theme }) => theme.cardBg || theme.bg};
+  border-radius: 8px;
+  overflow: hidden;
+  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+`;
 
-  th,
-  td {
-    padding: 12px 15px;
-    text-align: left;
-    border-bottom: 1px solid ${({ theme }) => theme.border};
-  }
+const TableHeader = styled.thead`
+  background: ${({ theme }) => theme.headerBg || theme.primary};
+  color: white;
 
   th {
-    background-color: ${({ theme }) => theme.tableHeader};
-    color: ${({ theme }) => theme.tableHeaderText};
+    padding: 1rem;
+    text-align: left;
     font-weight: 600;
-  }
-
-  tr:hover td {
-    background-color: ${({ theme }) => theme.tableHover};
-  }
-
-  tr.disabled {
-    opacity: 0.6;
-    background-color: ${({ theme }) => theme.tableDisabled};
+    font-size: 0.9rem;
   }
 `;
 
-const UserInfo = styled.div`
+const TableRow = styled.tr`
+  border-bottom: 1px solid ${({ theme }) => theme.border};
+
+  &:hover {
+    background: ${({ theme }) => theme.hoverBg || "#f8f9fa"};
+  }
+
+  td {
+    padding: 1rem;
+    vertical-align: middle;
+  }
+`;
+
+const UserCell = styled.td`
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 0.75rem;
 `;
 
 const UserAvatar = styled.div`
   width: 40px;
   height: 40px;
   border-radius: 50%;
-  background-color: ${({ theme }) => theme.primary};
+  background: ${({ theme }) => theme.primary};
   color: white;
   display: flex;
   align-items: center;
   justify-content: center;
   font-weight: 600;
-  font-size: 14px;
+  font-size: 1rem;
+`;
+
+const UserInfo = styled.div`
+  display: flex;
+  flex-direction: column;
 `;
 
 const UserName = styled.div`
-  font-weight: 500;
+  font-weight: 600;
   color: ${({ theme }) => theme.text};
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+
+  .admin-icon {
+    color: #f39c12;
+    font-size: 0.9rem;
+  }
 `;
 
-const UserId = styled.div`
-  font-size: 12px;
+const UserMeta = styled.div`
+  font-size: 0.75rem;
   color: ${({ theme }) => theme.textSecondary};
 `;
 
-const RoleContainer = styled.div`
+const RolesCell = styled.td`
   display: flex;
   flex-wrap: wrap;
-  gap: 4px;
+  gap: 0.25rem;
+  align-items: center;
 `;
 
-const RoleBadge = styled.span`
-  padding: 2px 6px;
-  border-radius: 10px;
-  font-size: 10px;
-  font-weight: 500;
-  text-transform: uppercase;
+const RoleTag = styled.span`
+  padding: 0.2rem 0.6rem;
+  background: ${({ active, theme }) =>
+    active ? theme.primary || "#007bff" : theme.textSecondary || "#6c757d"};
   color: white;
-  background-color: ${({ $role }) => {
-    const colors = {
-      admin: "#dc3545",
-      ventas: "#28a745",
-      almacen: "#007bff",
-      facturacion: "#ffc107",
-      contabilidad: "#6f42c1",
-      despacho: "#17a2b8",
-    };
-    return colors[$role] || "#6c757d";
-  }};
+  border-radius: 10px;
+  font-size: 0.7rem;
+  font-weight: 500;
+  opacity: ${({ active }) => (active ? 1 : 0.6)};
 `;
+
+const EmptyRoles = styled.span`
+  color: ${({ theme }) => theme.textSecondary};
+  font-style: italic;
+  font-size: 0.8rem;
+`;
+
+const MoreRoles = styled.span`
+  color: ${({ theme }) => theme.textSecondary};
+  font-size: 0.75rem;
+  font-weight: 500;
+`;
+
+const StatusCell = styled.td``;
 
 const StatusBadge = styled.span`
-  padding: 4px 8px;
+  padding: 0.25rem 0.75rem;
   border-radius: 12px;
-  font-size: 12px;
+  font-size: 0.8rem;
   font-weight: 500;
+  background: ${({ active, theme }) =>
+    active ? theme.success || "#28a745" : theme.danger || "#dc3545"};
   color: white;
-  background-color: ${({ $active }) => ($active ? "#28a745" : "#dc3545")};
 `;
 
-const ActionButtonsContainer = styled.div`
+const ActionsCell = styled.td`
   display: flex;
-  gap: 8px;
+  gap: 0.5rem;
 `;
 
 const ActionButton = styled.button`
-  background: none;
+  background: ${({ theme }) => theme.secondary || "#6c757d"};
+  color: white;
   border: none;
-  color: ${({ $color }) => $color};
-  font-size: 16px;
-  cursor: pointer;
-  padding: 5px;
+  padding: 0.5rem;
   border-radius: 4px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  width: 32px;
+  height: 32px;
   transition: all 0.2s;
 
   &:hover {
-    background-color: rgba(0, 0, 0, 0.05);
-    transform: scale(1.1);
+    transform: translateY(-1px);
+    box-shadow: 0 2px 4px rgba(0, 0, 0, 0.2);
+  }
+
+  &.success {
+    background: ${({ theme }) => theme.success || "#28a745"};
+  }
+
+  &.warning {
+    background: ${({ theme }) => theme.warning || "#ffc107"};
+  }
+
+  &.danger {
+    background: ${({ theme }) => theme.danger || "#dc3545"};
   }
 `;
 
-const LoadingMessage = styled.div`
+const EmptyState = styled.div`
   text-align: center;
-  padding: 40px;
+  padding: 3rem 1rem;
   color: ${({ theme }) => theme.textSecondary};
-  font-size: 16px;
+
+  svg {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    opacity: 0.5;
+  }
+
+  h3 {
+    margin: 0 0 0.5rem 0;
+  }
+
+  p {
+    margin: 0;
+  }
 `;
 
-const EmptyMessage = styled.div`
+const LoadingState = styled.div`
   text-align: center;
-  padding: 40px;
-  background-color: ${({ theme }) => theme.cardBg};
-  border-radius: 8px;
+  padding: 2rem;
   color: ${({ theme }) => theme.textSecondary};
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
 `;
 
-const Pagination = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-top: 20px;
-  padding: 20px;
-  background-color: ${({ theme }) => theme.cardBg};
-  border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+const ErrorMessage = styled.div`
+  text-align: center;
+  padding: 3rem 1rem;
+  color: ${({ theme }) => theme.textSecondary};
 
-  @media (max-width: 768px) {
-    flex-direction: column;
-    gap: 10px;
+  svg {
+    font-size: 3rem;
+    margin-bottom: 1rem;
+    color: ${({ theme }) => theme.danger || "#dc3545"};
+  }
+
+  h3 {
+    margin: 0 0 0.5rem 0;
+    color: ${({ theme }) => theme.text};
+  }
+
+  p {
+    margin: 0;
   }
 `;
 
-const PaginationButton = styled.button`
-  padding: 8px 16px;
-  background-color: ${({ theme }) => theme.primary};
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  transition: background-color 0.3s;
-
-  &:hover:not(:disabled) {
-    background-color: ${({ theme }) => theme.primaryHover};
-  }
-
-  &:disabled {
-    background-color: ${({ theme }) => theme.secondary};
-    cursor: not-allowed;
-    opacity: 0.6;
-  }
-`;
-
-const PaginationInfo = styled.div`
-  color: ${({ theme }) => theme.text};
-  font-weight: 500;
-`;
+export default UserManagement;

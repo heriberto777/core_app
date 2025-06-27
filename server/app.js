@@ -132,6 +132,7 @@ app.use((err, req, res, next) => {
 
 // Rutas
 app.use(`/api/${API_VERSION}/auth`, require("./routes/auth"));
+app.use(`/api/${API_VERSION}/modules`, require("./routes/moduleRoutes"));
 app.use(`/api/${API_VERSION}/task`, require("./routes/transferTaskRoutes"));
 app.use(`/api/${API_VERSION}/users`, require("./routes/userRoutes"));
 app.use(`/api/${API_VERSION}/config`, require("./routes/dbRoutes"));
@@ -143,6 +144,7 @@ app.use(
   `/api/${API_VERSION}/summaries`,
   require("./routes/transferSummaryRoutes")
 );
+app.use(`/api/${API_VERSION}/roles`, require("./routes/roleRoutes"));
 
 // Nueva ruta para pruebas de conexión y diagnóstico
 app.use(

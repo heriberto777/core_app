@@ -12,12 +12,14 @@ export function LoginForm() {
     { email: "", password: "" },
     validateForm
   );
+
+  console.log(formData);
   const [loading, setLoading] = useState(false);
   const [message, setMessage] = useState("");
 
   const handleSubmit = async (e) => {
     e.preventDefault();
-    // console.log(formData);
+
     const validationErrors = validateForm(formData);
     setErrors(validationErrors);
 
@@ -31,30 +33,25 @@ export function LoginForm() {
     }
 
     try {
-      // setLoading(true);
-      const response = await authController.login(formData);
-      // console.log(response.state);
+      setLoading(true);
 
-      if (response.state) {
-        // ✅ Login exitoso
-        authController.setAccessToken(response.access);
-        authController.setRefreshToken(response.refresh);
-        login(response.access);
-      } else {
-        // ❌ Error en credenciales o usuario inactivo
-        Swal.fire({
-          icon: "error",
-          title: "Error en inicio de sesión",
-          text: response.msg,
-        });
-      }
+      console.log("🎯 Iniciando login desde formulario...");
+
+      // ⭐ USAR LA FUNCIÓN LOGIN DEL CONTEXTO DIRECTAMENTE ⭐
+      await login(formData);
+
+      console.log("✅ Login exitoso desde formulario");
+      // El usuario será redirigido automáticamente por el AdminRouter
     } catch (error) {
-      console.log(error);
+      console.error("❌ Error en login desde formulario:", error);
+
       Swal.fire({
         icon: "error",
-        title: "Error de servidor",
-        text: `${error}`,
+        title: "Error en inicio de sesión",
+        text: error.message || "Error al iniciar sesión",
       });
+    } finally {
+      setLoading(false);
     }
   };
 

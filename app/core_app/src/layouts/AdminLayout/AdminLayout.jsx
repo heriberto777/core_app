@@ -1,59 +1,142 @@
-// AdminLayout.jsx (Optimizado)
-import React, { useState, useEffect, createContext } from "react";
+import React, { useState, useEffect, createContext, useCallback } from "react";
 import styled from "styled-components";
-import { Sidebar, Header } from "../../index";
+import { Sidebar, Header, useAuth } from "../../index";
 import { Device } from "../../styles/breakpoints";
 
-// Contexto para compartir el estado del layout entre componentes
+// ⭐ CONTEXTO MEJORADO PARA EL LAYOUT ⭐
 export const LayoutContext = createContext();
 
-export function AdminLayout({ children, toolbar, actions, title, subtitle }) {
-  // Estado para el sidebar
+export function AdminLayout({
+  children,
+  title,
+  subtitle,
+  actions,
+  toolbar,
+  loading = false,
+  error = null,
+}) {
+  const { user, reloadUserPermissions } = useAuth();
+
+  // Estados del layout
   const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
-
-  // Estado para el menú de usuario en el header
   const [userMenuOpen, setUserMenuOpen] = useState(false);
+  const [pageLoading, setPageLoading] = useState(loading);
 
-  // Manejar responsive para la barra lateral
+  // ⭐ MANEJO RESPONSIVO MEJORADO ⭐
   useEffect(() => {
     const handleResize = () => {
-      // En dispositivos móviles, cerrar automáticamente el sidebar
-      if (window.innerWidth <= 768) {
+      const isMobile = window.innerWidth <= 768;
+      const isTablet = window.innerWidth <= 992 && window.innerWidth > 768;
+      const isDesktop = window.innerWidth > 992;
+
+      if (isMobile) {
         setSidebarOpen(false);
-      } else if (window.innerWidth > 992) {
-        // En dispositivos grandes, mantener abierto el sidebar
+      } else if (isDesktop) {
         setSidebarOpen(true);
       }
+      // En tablet, mantener el estado actual
     };
 
-    // Inicializar y agregar event listener
+    // Configuración inicial y listener
     handleResize();
     window.addEventListener("resize", handleResize);
 
-    // Limpiar event listener al desmontar
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // Toggle función para la barra lateral
-  const toggleSidebar = () => {
-    setSidebarOpen(!sidebarOpen);
-  };
+  // ⭐ RECARGAR PERMISOS PERIÓDICAMENTE ⭐
+  useEffect(() => {
+    if (!user || !reloadUserPermissions) return;
 
-  // Cerrar el menú de usuario al hacer clic fuera
-  const handleOutsideClick = (e) => {
-    if (userMenuOpen) {
-      setUserMenuOpen(false);
-    }
-  };
+    // Recargar permisos cada 10 minutos
+    const permissionsInterval = setInterval(() => {
+      reloadUserPermissions();
+    }, 10 * 60 * 1000);
 
-  // Valores del contexto para compartir
+    // Recargar al enfocar la ventana
+    const handleFocus = () => {
+      reloadUserPermissions();
+    };
+
+    window.addEventListener("focus", handleFocus);
+
+    return () => {
+      clearInterval(permissionsInterval);
+      window.removeEventListener("focus", handleFocus);
+    };
+  }, [user, reloadUserPermissions]);
+
+  // ⭐ FUNCIONES DEL LAYOUT ⭐
+  const toggleSidebar = useCallback(() => {
+    setSidebarOpen((prev) => !prev);
+  }, []);
+
+  const closeSidebar = useCallback(() => {
+    setSidebarOpen(false);
+  }, []);
+
+  const toggleUserMenu = useCallback(() => {
+    setUserMenuOpen((prev) => !prev);
+  }, []);
+
+  const closeUserMenu = useCallback(() => {
+    setUserMenuOpen(false);
+  }, []);
+
+  // ⭐ MANEJAR CLICS FUERA DE ELEMENTOS ⭐
+  const handleOutsideClick = useCallback(
+    (e) => {
+      // Cerrar menú de usuario si está abierto
+      if (userMenuOpen) {
+        closeUserMenu();
+      }
+
+      // Cerrar sidebar en móvil si se hace clic en el overlay
+      if (window.innerWidth <= 768 && sidebarOpen) {
+        const sidebar = e.target.closest(".sidebar-wrapper");
+        const toggleButton = e.target.closest(".sidebar-toggle");
+
+        if (!sidebar && !toggleButton) {
+          closeSidebar();
+        }
+      }
+    },
+    [userMenuOpen, sidebarOpen, closeUserMenu, closeSidebar]
+  );
+
+  // ⭐ VALORES DEL CONTEXTO ⭐
   const layoutContextValue = {
     sidebarOpen,
     setSidebarOpen,
     toggleSidebar,
+    closeSidebar,
     userMenuOpen,
     setUserMenuOpen,
+    toggleUserMenu,
+    closeUserMenu,
+    pageLoading,
+    setPageLoading,
   };
+
+  // ⭐ RENDERIZAR CONTENIDO DE ERROR ⭐
+  if (error) {
+    return (
+      <LayoutContext.Provider value={layoutContextValue}>
+        <Container>
+          <ErrorContainer>
+            <ErrorIcon>⚠️</ErrorIcon>
+            <ErrorTitle>Error en la aplicación</ErrorTitle>
+            <ErrorMessage>{error}</ErrorMessage>
+            <ErrorActions>
+              <button onClick={() => window.location.reload()}>
+                Recargar página
+              </button>
+            </ErrorActions>
+          </ErrorContainer>
+        </Container>
+      </LayoutContext.Provider>
+    );
+  }
 
   return (
     <LayoutContext.Provider value={layoutContextValue}>
@@ -61,7 +144,8 @@ export function AdminLayout({ children, toolbar, actions, title, subtitle }) {
         className={sidebarOpen ? "sidebar-open" : "sidebar-closed"}
         onClick={handleOutsideClick}
       >
-        <header className="header">
+        {/* ⭐ HEADER ⭐ */}
+        <HeaderWrapper className="header">
           <Header
             stateConfig={{
               openstate: userMenuOpen,
@@ -72,62 +156,72 @@ export function AdminLayout({ children, toolbar, actions, title, subtitle }) {
               toggleSidebar: toggleSidebar,
             }}
           />
-        </header>
+        </HeaderWrapper>
 
-        <div className="sidebar-wrapper">
-          <Sidebar state={sidebarOpen} setState={toggleSidebar} />
-        </div>
+        {/* ⭐ SIDEBAR ⭐ */}
+        <SidebarWrapper className="sidebar-wrapper">
+          <Sidebar />
+        </SidebarWrapper>
 
-        <main className="content">
-          {/* Área de título y herramientas */}
+        {/* ⭐ CONTENIDO PRINCIPAL ⭐ */}
+        <MainContent className="content">
+          {/* Área de título y toolbar */}
           {(title || toolbar) && (
-            <section className="area1">
-              <ToolbarContainer>
-                <InfoSection>
-                  {title && <h2>{title}</h2>}
-                  {subtitle && <p>{subtitle}</p>}
-                  {toolbar}
-                </InfoSection>
-              </ToolbarContainer>
-            </section>
+            <TitleSection className="title-area">
+              <TitleContainer>
+                {title && <PageTitle>{title}</PageTitle>}
+                {subtitle && <PageSubtitle>{subtitle}</PageSubtitle>}
+              </TitleContainer>
+              {toolbar && <ToolbarContainer>{toolbar}</ToolbarContainer>}
+            </TitleSection>
           )}
 
-          {/* Área de acciones (filtros, botones, etc.) */}
+          {/* Área de acciones */}
           {actions && (
-            <section className="area2">
+            <ActionsSection className="actions-area">
               <ActionsContainer>{actions}</ActionsContainer>
-            </section>
+            </ActionsSection>
           )}
 
           {/* Área de contenido principal */}
-          <section className="main">{children}</section>
-        </main>
+          <ContentSection className="main-content">
+            {pageLoading ? (
+              <LoadingContainer>
+                <LoadingSpinner>🔄</LoadingSpinner>
+                <LoadingText>Cargando contenido...</LoadingText>
+              </LoadingContainer>
+            ) : (
+              children
+            )}
+          </ContentSection>
+        </MainContent>
 
-        {/* Overlay para cuando el sidebar está abierto en móvil */}
+        {/* ⭐ OVERLAY PARA MÓVIL ⭐ */}
         {sidebarOpen && window.innerWidth <= 768 && (
-          <SidebarOverlay onClick={toggleSidebar} />
+          <SidebarOverlay onClick={closeSidebar} />
         )}
       </Container>
     </LayoutContext.Provider>
   );
 }
 
+// ⭐ STYLED COMPONENTS OPTIMIZADOS ⭐
 const Container = styled.div`
   display: grid;
   min-height: 100vh;
   width: 100%;
   background-color: ${({ theme }) => theme.bg};
   color: ${({ theme }) => theme.text};
-  transition: all 0.3s ease-in-out;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
 
-  /* Grid layout para mobile (por defecto) */
+  /* Layout para móvil */
   grid-template-areas:
     "header"
     "content";
   grid-template-columns: 1fr;
   grid-template-rows: auto 1fr;
 
-  /* Para tablet y desktop, añadimos la barra lateral */
+  /* Layout para tablet y desktop */
   @media ${Device.tablet} {
     grid-template-areas:
       "header header"
@@ -135,152 +229,202 @@ const Container = styled.div`
     grid-template-columns: auto 1fr;
     grid-template-rows: auto 1fr;
 
-    @media ${Device.tablet} {
-      grid-template-areas:
-        "header header"
-        "sidebar content";
+    &.sidebar-open {
+      grid-template-columns: 260px 1fr;
+    }
 
-      /* Cuando el sidebar está abierto, le damos exactamente el ancho que necesita */
-      &.sidebar-open {
-        grid-template-columns: 220px 1fr; /* Ancho exacto del sidebar */
-      }
-
-      /* Cuando está cerrado, solo el espacio para los iconos */
-      &.sidebar-closed {
-        grid-template-columns: 65px 1fr; /* Ancho exacto del sidebar colapsado */
-      }
+    &.sidebar-closed {
+      grid-template-columns: 65px 1fr;
     }
   }
+`;
 
-  .header {
-    grid-area: header;
-    position: sticky;
+const HeaderWrapper = styled.header`
+  grid-area: header;
+  position: sticky;
+  top: 0;
+  z-index: 100;
+  background-color: ${({ theme }) => theme.headerBg || theme.bg};
+  border-bottom: 1px solid ${({ theme }) => theme.border};
+  height: 70px;
+  display: flex;
+  align-items: center;
+  backdrop-filter: blur(10px);
+
+  @media (max-width: 768px) {
+    height: 60px;
+  }
+`;
+
+const SidebarWrapper = styled.div`
+  grid-area: sidebar;
+
+  @media (max-width: 768px) {
+    position: fixed;
+    left: 0;
     top: 0;
-    z-index: 100;
-    background-color: ${({ theme }) => theme.headerBg || theme.bg};
-    border-bottom: 1px solid ${({ theme }) => theme.border || "#eee"};
-    height: 90px;
-    display: flex;
-    align-items: center;
-
-    @media (max-width: 768px) {
-      height: 70px;
-    }
-
-    @media (max-width: 480px) {
-      height: 60px;
-    }
+    height: 100vh;
+    z-index: 999;
   }
+`;
 
-  .sidebar-wrapper {
-    grid-area: sidebar;
+const MainContent = styled.main`
+  grid-area: content;
+  display: grid;
+  grid-template-areas:
+    "title-area"
+    "actions-area"
+    "main-content";
+  grid-template-rows: auto auto 1fr;
+  overflow: hidden;
+  background-color: ${({ theme }) => theme.contentBg || theme.bg};
+`;
 
-    @media (max-width: 768px) {
-      position: fixed;
-      left: 0;
-      top: 0;
-      height: 100%;
-      z-index: 99;
-    }
+const TitleSection = styled.section`
+  grid-area: title-area;
+  padding: 1.5rem;
+  border-bottom: 1px solid ${({ theme }) => theme.border};
+  background-color: ${({ theme }) => theme.titleBg || "transparent"};
+
+  @media (max-width: 768px) {
+    padding: 1rem;
   }
+`;
 
-  .content {
-    grid-area: content;
-    padding: 0;
-    display: grid;
-    grid-template-areas:
-      "area1"
-      "area2"
-      "main";
-    grid-template-rows: auto auto 1fr;
-    overflow-x: hidden;
-    /* transition: margin-left 0.3s ease-in-out; */
+const TitleContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin-bottom: 1rem;
+`;
 
-    margin-left: 0;
+const PageTitle = styled.h1`
+  margin: 0;
+  font-size: 1.8rem;
+  font-weight: 600;
+  color: ${({ theme }) => theme.titleColor || theme.text};
+
+  @media (max-width: 768px) {
+    font-size: 1.5rem;
   }
+`;
 
-  .area1 {
-    grid-area: area1;
-    padding: 15px;
-    margin-bottom: 10px;
-
-    @media (max-width: 768px) {
-      padding: 10px;
-    }
-
-    @media (max-width: 480px) {
-      padding: 5px;
-    }
-  }
-
-  .area2 {
-    grid-area: area2;
-    padding: 0 15px;
-    margin-bottom: 20px;
-
-    @media (max-width: 768px) {
-      padding: 0 10px;
-      margin-top: 15px;
-      margin-bottom: 10px;
-    }
-
-    @media (max-width: 480px) {
-      padding: 0 5px;
-      margin-top: 10px;
-      margin-bottom: 5px;
-    }
-  }
-
-  .main {
-    grid-area: main;
-    /* padding: 0 15px 15px 15px; */
-    overflow-x: auto;
-    width: 100%;
-
-    @media (max-width: 768px) {
-      padding: 0 10px 10px 10px;
-    }
-
-    @media (max-width: 480px) {
-      padding: 0 5px 5px 5px;
-    }
-  }
+const PageSubtitle = styled.p`
+  margin: 0;
+  font-size: 1rem;
+  color: ${({ theme }) => theme.textSecondary};
+  opacity: 0.8;
 `;
 
 const ToolbarContainer = styled.div`
   display: flex;
-  flex-direction: column;
-  width: 100%;
+  flex-wrap: wrap;
+  gap: 1rem;
+  align-items: center;
 `;
 
-const InfoSection = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 5px;
-  text-align: center;
+const ActionsSection = styled.section`
+  grid-area: actions-area;
+  padding: 0 1.5rem 1rem 1.5rem;
 
-  h2 {
-    margin: 0;
-    font-size: 1.5rem;
-    color: ${({ theme }) => theme.title || theme.text};
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.textSecondary || "#666"};
+  @media (max-width: 768px) {
+    padding: 0 1rem 1rem 1rem;
   }
 `;
 
 const ActionsContainer = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 15px;
+  gap: 1rem;
   width: 100%;
   max-width: 1200px;
   margin: 0 auto;
 
+  @media ${Device.tablet} {
+    flex-direction: row;
+    justify-content: space-between;
+    align-items: center;
+  }
+`;
+
+const ContentSection = styled.section`
+  grid-area: main-content;
+  overflow: auto;
+  padding: 0 1.5rem 1.5rem 1.5rem;
+
   @media (max-width: 768px) {
-    justify-content: center;
+    padding: 0 1rem 1rem 1rem;
+  }
+`;
+
+const LoadingContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+  gap: 1rem;
+`;
+
+const LoadingSpinner = styled.div`
+  font-size: 2rem;
+  animation: spin 1s linear infinite;
+
+  @keyframes spin {
+    from {
+      transform: rotate(0deg);
+    }
+    to {
+      transform: rotate(360deg);
+    }
+  }
+`;
+
+const LoadingText = styled.div`
+  color: ${({ theme }) => theme.textSecondary};
+  font-size: 0.9rem;
+`;
+
+const ErrorContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  justify-content: center;
+  align-items: center;
+  height: 100vh;
+  gap: 1rem;
+  padding: 2rem;
+  text-align: center;
+`;
+
+const ErrorIcon = styled.div`
+  font-size: 3rem;
+`;
+
+const ErrorTitle = styled.h2`
+  margin: 0;
+  color: ${({ theme }) => theme.danger || "#e74c3c"};
+`;
+
+const ErrorMessage = styled.p`
+  margin: 0;
+  color: ${({ theme }) => theme.textSecondary};
+  max-width: 400px;
+`;
+
+const ErrorActions = styled.div`
+  button {
+    background: ${({ theme }) => theme.primary || "#4a90e2"};
+    color: white;
+    border: none;
+    padding: 0.75rem 1.5rem;
+    border-radius: 6px;
+    cursor: pointer;
+    font-size: 0.9rem;
+    transition: background-color 0.2s;
+
+    &:hover {
+      background: ${({ theme }) => theme.primaryDark || "#357abd"};
+    }
   }
 `;
 
@@ -291,14 +435,11 @@ const SidebarOverlay = styled.div`
   right: 0;
   bottom: 0;
   background-color: rgba(0, 0, 0, 0.5);
-  z-index: 98;
-  display: none;
+  z-index: 998;
+  backdrop-filter: blur(2px);
 
-  /* Mejorar para móviles */
-  touch-action: none; /* Prevenir desplazamiento cuando overlay está activo */
-
-  @media (max-width: 768px) {
-    display: ${(props) => (props.isOpen ? "block" : "none")};
+  @media (min-width: 769px) {
+    display: none;
   }
 `;
 

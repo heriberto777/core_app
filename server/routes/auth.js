@@ -1,13 +1,22 @@
 const express = require("express");
-const AuthController = require("../controllers/auth");
-const md = require("../middlewares/authenticated");
+const router = express.Router();
 const { upload } = require("../utils/images");
 
-const api = express.Router();
+const {
+  login,
+  refreshAccessToken,
+  register,
+  checkUserPermissions,
+} = require("../controllers/auth");
 
-// api.post("/refresh-access-token", AuthController.refreshAccessToken);
-api.post("/register", upload.single("avatar"), AuthController.register);
-api.post("/login", AuthController.login);
-api.post("/refresh_access_token", AuthController.refreshAccessToken);
+const { verifyToken } = require("../middlewares/authMiddleware");
 
-module.exports = api;
+// Rutas públicas
+router.post("/login", login);
+router.post("/register", upload.single("avatar"), register);
+router.post("/refresh_access_token", refreshAccessToken);
+
+// Rutas protegidas
+router.get("/me/permissions", verifyToken, checkUserPermissions);
+
+module.exports = router;

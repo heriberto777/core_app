@@ -45,7 +45,7 @@ export const DataUser = memo(({ stateConfig }) => {
   );
 
   return (
-    <Container onClick={stateConfig.setOpenState}>
+    <Container onClick={stateConfig?.setOpenState}>
       <div className="imgContainer">
         {user.avatar ? (
           <img src={`${ENV.BASE_PATH}/${user.avatar}`} alt="Avatar" />
@@ -71,7 +71,7 @@ export const DataUser = memo(({ stateConfig }) => {
         {user?.name} {user?.lastname}
       </span>
 
-      {stateConfig.openstate && (
+      {stateConfig?.openstate && (
         <ListaMenuDesplegable
           data={DesplegableUser}
           top="55px"

@@ -6,8 +6,9 @@ import {
   useFetchData,
   progressClient,
   LinkedGroupsManager,
+  usePermissions,
 } from "../../index";
-import { useEffect, useState, useRef, useCallback } from "react";
+import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import Swal from "sweetalert2";
 import {
   FaEdit,
@@ -29,6 +30,24 @@ import { Helmet } from "react-helmet-async";
 const cnnApi = new TransferApi();
 
 export function TransferTasks() {
+  const {
+    hasPermission,
+    canCreate,
+    canRead,
+    canUpdate,
+    canDelete,
+    canExecute,
+    canManage,
+    isAdmin,
+    getModulePermissions,
+    getPermissionsSummary,
+  } = usePermissions();
+
+  // ⭐ OBTENER PERMISOS ESPECÍFICOS PARA TASKS ⭐
+  const taskPermissions = useMemo(() => {
+    return getModulePermissions("tasks");
+  }, [getModulePermissions]);
+
   const [search, setSearch] = useState("");
   const [selectedTask, setSelectedTask] = useState(null);
   const { accessToken, user } = useAuth();
@@ -42,6 +61,7 @@ export function TransferTasks() {
   const [notificationsEnabled, setNotificationsEnabled] = useState(false);
   const previousTasksRef = useRef(null);
   const FETCH_INTERVAL = 5000;
+  const { canAccessRoute } = usePermissions();
 
   // Estados para filtros
   const [filters, setFilters] = useState({
@@ -50,6 +70,9 @@ export function TransferTasks() {
     transferType: "all", // "all", "general", "up", "down", "internal"
     status: "all", // "all", "active", "inactive"
   });
+
+  console.log("filters", canAccessRoute("/tasks"));
+  console.log("canAccessRoute", taskPermissions);
 
   // Usamos useCallback para crear funciones estables para fetchData
   const fetchTasksCallback = useCallback(
@@ -326,6 +349,16 @@ export function TransferTasks() {
 
   const addOrEditTask = async (task = null) => {
     const isEdit = Boolean(task);
+
+    if (!taskPermissions.canCreate && !taskPermissions.canUpdate) {
+      Swal.fire({
+        icon: "warning",
+        title: "Acceso Denegado",
+        text: "No tienes permisos para crear/editar tareas.",
+        confirmButtonText: "Entendido",
+      });
+      return;
+    }
 
     // ✅ OBTENER INFORMACIÓN DE VINCULACIÓN ANTES DEL HTML
     let linkingInfo = null;
