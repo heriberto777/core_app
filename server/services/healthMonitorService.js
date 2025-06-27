@@ -1,6 +1,6 @@
 // services/healthMonitorService.js
 const logger = require("./logger");
-const ConnectionService = require("./ConnectionCentralService");
+const ConnectionCentralService = require("./ConnectionCentralService"); // CORREGIDO: Import unificado
 const MongoDbService = require("./mongoDbService");
 const ConnectionDiagnostic = require("./connectionDiagnostic");
 
@@ -120,22 +120,26 @@ async function checkSystemHealth() {
     // 2. Verificar estado de los pools
     let poolStatus = {};
     try {
-      poolStatus = ConnectionService.getConnectionStats();
+      poolStatus = ConnectionCentralService.getConnectionStats(); // CORREGIDO
     } catch (error) {
       logger.warn("Error al obtener estado de pools:", error);
       poolStatus = {};
     }
 
-    if (Object.keys(poolStatus).length === 0) {
+    // Verificar si hay pools activos
+    const hasActivePools =
+      poolStatus.pools && Object.keys(poolStatus.pools).length > 0;
+
+    if (!hasActivePools) {
       logger.warn(
         "No hay pools de conexión activos, intentando inicializar..."
       );
 
       let initialized = false;
       try {
-        await ConnectionManager.initPool("server1");
-        await ConnectionManager.initPool("server2");
-        initialized = true;
+        const init1 = await ConnectionCentralService.initPool("server1"); // CORREGIDO
+        const init2 = await ConnectionCentralService.initPool("server2"); // CORREGIDO
+        initialized = init1 && init2;
       } catch (initError) {
         logger.error("Error al inicializar pools:", initError);
         initialized = false;
@@ -160,17 +164,54 @@ async function checkSystemHealth() {
       }
     }
 
-    // 3. Verificar conexiones a SQL Server
-    const healthCheck = await ConnectionDiagnostic.checkConnectionHealth();
+    // 3. Verificar conexiones a SQL Server usando diagnóstico directo
+    const healthResults = {};
+
+    // Verificar server1
+    try {
+      const server1Result = await ConnectionCentralService.diagnoseConnection(
+        "server1"
+      );
+      healthResults.server1 = {
+        connected: server1Result.success,
+        error: server1Result.success ? null : server1Result.error,
+      };
+    } catch (error) {
+      healthResults.server1 = {
+        connected: false,
+        error: error.message,
+      };
+    }
+
+    // Verificar server2
+    try {
+      const server2Result = await ConnectionCentralService.diagnoseConnection(
+        "server2"
+      );
+      healthResults.server2 = {
+        connected: server2Result.success,
+        error: server2Result.success ? null : server2Result.error,
+      };
+    } catch (error) {
+      healthResults.server2 = {
+        connected: false,
+        error: error.message,
+      };
+    }
+
+    // Agregar estado de MongoDB
+    healthResults.mongodb = {
+      connected: mongoConnected,
+    };
 
     const allOk =
-      healthCheck.mongodb?.connected &&
-      healthCheck.server1?.connected &&
-      healthCheck.server2?.connected;
+      healthResults.mongodb?.connected &&
+      healthResults.server1?.connected &&
+      healthResults.server2?.connected;
 
     if (!allOk) {
       logger.warn("Problemas detectados en la comprobación de conexiones:");
-      logger.warn(JSON.stringify(healthCheck, null, 2));
+      logger.warn(JSON.stringify(healthResults, null, 2));
 
       HEALTH_CONFIG.errorCounters.connection++;
 
@@ -191,6 +232,12 @@ async function checkSystemHealth() {
       HEALTH_CONFIG.errorCounters.database = 0;
       HEALTH_CONFIG.errorCounters.connection = 0;
     }
+
+    // Log del estado actual
+    logger.info(
+      "Estado de salud del sistema:",
+      JSON.stringify(healthResults, null, 2)
+    );
   } catch (error) {
     logger.error("Error durante comprobación de salud:", error);
   }
@@ -243,7 +290,7 @@ async function attemptDatabaseRecovery() {
 
     // 2. Reiniciar pools de conexión
     try {
-      await ConnectionService.closePools();
+      await ConnectionCentralService.closePools(); // CORREGIDO
       logger.info("Pools cerrados correctamente");
     } catch (closeError) {
       logger.error("Error al cerrar pools:", closeError);
@@ -251,9 +298,9 @@ async function attemptDatabaseRecovery() {
 
     let poolsInitialized = false;
     try {
-      await ConnectionManager.initPool("server1");
-      await ConnectionManager.initPool("server2");
-      poolsInitialized = true;
+      const init1 = await ConnectionCentralService.initPool("server1"); // CORREGIDO
+      const init2 = await ConnectionCentralService.initPool("server2"); // CORREGIDO
+      poolsInitialized = init1 && init2;
     } catch (initError) {
       logger.error("Error al inicializar pools:", initError);
       poolsInitialized = false;
@@ -262,12 +309,18 @@ async function attemptDatabaseRecovery() {
     if (poolsInitialized) {
       logger.info("Pools reinicializados correctamente");
 
-      // Verificar si la recuperación fue exitosa
-      const healthCheck = await ConnectionDiagnostic.checkConnectionHealth();
+      // Verificar si la recuperación fue exitosa usando diagnóstico directo
+      const server1Result = await ConnectionCentralService.diagnoseConnection(
+        "server1"
+      );
+      const server2Result = await ConnectionCentralService.diagnoseConnection(
+        "server2"
+      );
+
       const allOk =
-        healthCheck.mongodb?.connected &&
-        healthCheck.server1?.connected &&
-        healthCheck.server2?.connected;
+        server1Result.success &&
+        server2Result.success &&
+        MongoDbService.isConnected();
 
       if (allOk) {
         logger.info("✅ Recuperación completada con éxito");
@@ -326,7 +379,7 @@ async function attemptConnectionRecovery() {
   try {
     // 1. Cerrar pools existentes
     try {
-      await ConnectionService.closePools();
+      await ConnectionCentralService.closePools(); // CORREGIDO
       logger.info("Pools cerrados correctamente");
     } catch (closeError) {
       logger.error("Error al cerrar pools:", closeError);
@@ -338,9 +391,9 @@ async function attemptConnectionRecovery() {
     // 3. Reinicializar pools
     let poolsInitialized = false;
     try {
-      await ConnectionManager.initPool("server1");
-      await ConnectionManager.initPool("server2");
-      poolsInitialized = true;
+      const init1 = await ConnectionCentralService.initPool("server1"); // CORREGIDO
+      const init2 = await ConnectionCentralService.initPool("server2"); // CORREGIDO
+      poolsInitialized = init1 && init2;
     } catch (initError) {
       logger.error("Error al inicializar pools:", initError);
       poolsInitialized = false;
@@ -349,10 +402,15 @@ async function attemptConnectionRecovery() {
     if (poolsInitialized) {
       logger.info("Pools reinicializados correctamente");
 
-      // 4. Verificar si la recuperación fue exitosa
-      const healthCheck = await ConnectionDiagnostic.checkConnectionHealth();
-      const connectionsOk =
-        healthCheck.server1?.connected && healthCheck.server2?.connected;
+      // 4. Verificar si la recuperación fue exitosa usando diagnóstico directo
+      const server1Result = await ConnectionCentralService.diagnoseConnection(
+        "server1"
+      );
+      const server2Result = await ConnectionCentralService.diagnoseConnection(
+        "server2"
+      );
+
+      const connectionsOk = server1Result.success && server2Result.success;
 
       if (connectionsOk) {
         logger.info("✅ Recuperación de conexiones completada con éxito");
@@ -363,6 +421,8 @@ async function attemptConnectionRecovery() {
         logger.warn(
           "La recuperación no resolvió todos los problemas de conexión"
         );
+        logger.warn("Server1:", server1Result);
+        logger.warn("Server2:", server2Result);
       }
     } else {
       logger.error(
@@ -397,10 +457,10 @@ async function performFullDiagnostic() {
       mongoDiag.reconnectAttempt = connected ? "SUCCESS" : "FAILED";
     }
 
-    // 2. Diagnóstico de Server1
+    // 2. Diagnóstico de Server1 usando método directo
     let server1Diag;
     try {
-      server1Diag = await ConnectionDiagnostic.diagnoseServerConnection(
+      server1Diag = await ConnectionCentralService.diagnoseConnection(
         "server1"
       );
     } catch (error) {
@@ -410,10 +470,10 @@ async function performFullDiagnostic() {
       };
     }
 
-    // 3. Diagnóstico de Server2
+    // 3. Diagnóstico de Server2 usando método directo
     let server2Diag;
     try {
-      server2Diag = await ConnectionDiagnostic.diagnoseServerConnection(
+      server2Diag = await ConnectionCentralService.diagnoseConnection(
         "server2"
       );
     } catch (error) {
@@ -426,7 +486,7 @@ async function performFullDiagnostic() {
     // 4. Verificar estado de pools
     let poolStatus = {};
     try {
-      poolStatus = ConnectionService.getConnectionStats();
+      poolStatus = ConnectionCentralService.getConnectionStats(); // CORREGIDO
     } catch (poolError) {
       logger.warn("Error al obtener estado de pools:", poolError);
       poolStatus = { error: poolError.message };

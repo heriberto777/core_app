@@ -19,4 +19,7 @@ router.delete("/delete/db/:serverName", deleteDBConfig);
 // ⭐ 📌 Probar conexión a base de datos
 router.post("/test/db", testDBConnection);
 
+// 📌 Probar conexión a servidor configurado (server1 o server2)
+router.get("/test/db/:serverName", testConfiguredServer);
+
 module.exports = router;

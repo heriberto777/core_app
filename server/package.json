@@ -13,7 +13,11 @@
     "init-user-permissions": "node scripts/updateUserPermissions.js",
     "init-user-routes": "node scripts/initializeRoutes.js",
     "setup": "node scripts/setup.js",
-    "setup-roles": "node scripts/initRoles.js"
+    "setup-roles": "node scripts/initRoles.js",
+    "test:server2": "node test-server2.js",
+    "diagnostic": "node diagnostic-complete.js",
+    "test:quick": "node quick-test.js",
+    "test:connections": "node diagnostic-complete.js"
   },
   "keywords": [
     "nodejs",

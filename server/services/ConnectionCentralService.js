@@ -1156,7 +1156,18 @@ class ConnectionCentralService {
     try {
       logger.info(`Cerrando pool para ${serverKey}...`);
 
-      // Mark the pool as in closing process
+      // VERIFICAR SI YA ESTÁ EN PROCESO DE CIERRE
+      if (this._closingPools && this._closingPools.has(serverKey)) {
+        logger.info(
+          `Pool para ${serverKey} ya está en proceso de cierre, esperando...`
+        );
+        // Esperar a que termine el cierre en proceso
+        while (this._closingPools.has(serverKey)) {
+          await new Promise((resolve) => setTimeout(resolve, 1000));
+        }
+        return true;
+      }
+
       if (!this._closingPools) this._closingPools = new Set();
       this._closingPools.add(serverKey);
 
@@ -1164,23 +1175,22 @@ class ConnectionCentralService {
       if (!pool) {
         logger.warn(`No existe un pool para ${serverKey} que cerrar`);
         this._closingPools.delete(serverKey);
-        return true; // Already closed
+        return true;
       }
 
-      // Clear renewal timer
+      // Limpiar timer de renovación
       if (this.renewalTimers && this.renewalTimers[serverKey]) {
         clearTimeout(this.renewalTimers[serverKey]);
         this.renewalTimers[serverKey] = null;
       }
 
-      // Set up a more robust timeout mechanism with forced cleanup
+      // TIMEOUT MÁS LARGO para instancias nombradas
       let forcedCleanup = false;
       const drainPromise = pool.drain().catch((err) => {
         logger.error(`Error during pool drain: ${err.message}`);
         throw err;
       });
 
-      // Use Promise.race with a timeout
       try {
         await Promise.race([
           drainPromise,
@@ -1188,7 +1198,7 @@ class ConnectionCentralService {
             setTimeout(() => {
               forcedCleanup = true;
               reject(new Error("Drain timeout"));
-            }, 15000);
+            }, 30000); // 30 segundos en lugar de 15
           }),
         ]);
       } catch (timeoutError) {
@@ -1197,7 +1207,6 @@ class ConnectionCentralService {
         );
       }
 
-      // If we got here either by successful drain or timeout, proceed with cleanup
       try {
         if (!forcedCleanup) {
           await pool.clear();
@@ -1206,7 +1215,6 @@ class ConnectionCentralService {
         logger.error(`Error durante clear del pool: ${clearError.message}`);
       }
 
-      // Force cleanup in either case
       delete this.pools[serverKey];
       this._closingPools.delete(serverKey);
 
@@ -1221,15 +1229,12 @@ class ConnectionCentralService {
         `Error externo al cerrar pool para ${serverKey}: ${outerError.message}`
       );
 
-      // Ensure cleanup even on errors
       if (this._closingPools) {
         this._closingPools.delete(serverKey);
       }
-
       if (this.pools[serverKey]) {
         delete this.pools[serverKey];
       }
-
       return false;
     }
   }
@@ -1709,6 +1714,141 @@ class ConnectionCentralService {
     });
 
     logger.info("Servicio central de conexiones detenido");
+  }
+
+  /**
+   * Diagnostica problemas de conexión específicos para instancias nombradas
+   * @param {string} serverKey - Clave del servidor
+   * @returns {Promise<Object>} - Resultado del diagnóstico
+   */
+  async diagnoseConnection(serverKey) {
+    try {
+      logger.info(`🔍 Iniciando diagnóstico de conexión para ${serverKey}...`);
+
+      // Cargar configuración
+      const dbConfig = await this._loadConfig(serverKey);
+      if (!dbConfig) {
+        throw new Error(`No se encontró configuración para ${serverKey}`);
+      }
+
+      // Crear configuración de diagnóstico con timeouts más largos
+      const diagConfig = this._convertToTediousConfig(dbConfig);
+      diagConfig.options.connectTimeout = 120000; // 2 minutos
+      diagConfig.options.requestTimeout = 180000; // 3 minutos
+
+      logger.info(`🔧 Configuración de diagnóstico:`, {
+        server: diagConfig.server,
+        instance: diagConfig.options.instanceName,
+        port: diagConfig.options.port,
+        database: diagConfig.options.database,
+        connectTimeout: diagConfig.options.connectTimeout,
+      });
+
+      // Intentar conexión directa
+      return new Promise((resolve, reject) => {
+        const connection = new Connection(diagConfig);
+        let resolved = false;
+
+        const timeout = setTimeout(() => {
+          if (!resolved) {
+            resolved = true;
+            connection.removeAllListeners();
+            try {
+              connection.close();
+            } catch (e) {}
+            resolve({
+              success: false,
+              error: "Timeout en diagnóstico después de 2 minutos",
+              phase: "connection_timeout",
+            });
+          }
+        }, 120000);
+
+        connection.on("connect", (err) => {
+          clearTimeout(timeout);
+          if (resolved) return;
+          resolved = true;
+
+          if (err) {
+            resolve({
+              success: false,
+              error: err.message,
+              code: err.code,
+              state: err.state,
+              phase: "connection_error",
+            });
+          } else {
+            // Probar una consulta simple
+            const testRequest = new Request(
+              "SELECT @@SERVERNAME AS ServerName, DB_NAME() AS Database",
+              (err, rowCount) => {
+                try {
+                  connection.close();
+                } catch (e) {}
+
+                if (err) {
+                  resolve({
+                    success: false,
+                    error: err.message,
+                    phase: "query_error",
+                  });
+                } else {
+                  resolve({
+                    success: true,
+                    message: "Conexión y consulta exitosas",
+                    rowCount: rowCount,
+                  });
+                }
+              }
+            );
+
+            let queryData = [];
+            testRequest.on("row", (columns) => {
+              const row = {};
+              columns.forEach((column) => {
+                row[column.metadata.colName] = column.value;
+              });
+              queryData.push(row);
+            });
+
+            testRequest.on("done", () => {
+              try {
+                connection.close();
+              } catch (e) {}
+              resolve({
+                success: true,
+                message: "Diagnóstico exitoso",
+                data: queryData,
+              });
+            });
+
+            connection.execSql(testRequest);
+          }
+        });
+
+        connection.on("error", (err) => {
+          clearTimeout(timeout);
+          if (!resolved) {
+            resolved = true;
+            resolve({
+              success: false,
+              error: err.message,
+              code: err.code,
+              phase: "connection_error",
+            });
+          }
+        });
+
+        logger.info(`🚀 Iniciando diagnóstico de conexión...`);
+        connection.connect();
+      });
+    } catch (error) {
+      return {
+        success: false,
+        error: error.message,
+        phase: "diagnosis_error",
+      };
+    }
   }
 }
 
