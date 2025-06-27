@@ -1258,6 +1258,8 @@ export class TransferApi {
 
       if (response.status !== 200) throw result;
 
+      console.log("Esto es lo que obtenemos del mapping id", result.data);
+
       return result.data;
     } catch (error) {
       console.error("Error al obtener configuración de mapeo:", error);
@@ -1284,6 +1286,8 @@ export class TransferApi {
           applyToTables: mappingData.consecutiveConfig.applyToTables || [],
         };
       }
+
+      console.log("Guardando...", mappingData);
       const url = `${this.baseApi}/mappings`;
       const params = {
         method: "POST",
@@ -1446,6 +1450,38 @@ export class TransferApi {
       return result.data || { details: {} };
     } catch (error) {
       console.error("Error al obtener detalles del documento:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * 🟢 NUEVO: Valida configuración de bonificaciones
+   */
+  async validateBonificationConfig(accessToken, mappingId) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/mappings/${mappingId}/validate-bonifications`;
+      const params = {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      console.log(
+        `🔍 Validando configuración de bonificaciones para mapping ${mappingId}`
+      );
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+
+      return result;
+    } catch (error) {
+      console.error(
+        "❌ Error validando configuración de bonificaciones:",
+        error
+      );
       throw error;
     }
   }

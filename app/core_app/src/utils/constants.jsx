@@ -15,6 +15,8 @@ export const ENV = {
     USER_ME: "users/user/me",
     USER: "users/user",
     USERS: "users",
+    ROLES: "roles",
+    MODULE: "modules",
     TRANSFERS: "tasks",
     TRANSFER: "task",
     TRANSFER_PROGRESS: "transfer",
@@ -31,4 +33,38 @@ export const ENV = {
     ACCESS: "access",
     REFRESH: "refresh",
   },
+};
+
+// Constantes para permisos
+export const PERMISSIONS = {
+  USERS: {
+    CREATE: "create",
+    READ: "read",
+    UPDATE: "update",
+    DELETE: "delete",
+    MANAGE: "manage",
+  },
+  ROLES: {
+    CREATE: "create",
+    READ: "read",
+    UPDATE: "update",
+    DELETE: "delete",
+    MANAGE: "manage",
+  },
+  REPORTS: {
+    CREATE: "create",
+    READ: "read",
+    UPDATE: "update",
+    DELETE: "delete",
+    MANAGE: "manage",
+  },
+};
+
+export const RESOURCES = {
+  USERS: "users",
+  ROLES: "roles",
+  REPORTS: "reports",
+  SYSTEM: "system",
+  SETTINGS: "settings",
+  PROFILE: "profile",
 };

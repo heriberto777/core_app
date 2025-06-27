@@ -24,6 +24,34 @@ const UserSchema = Schema(
       type: Schema.Types.ObjectId,
       ref: "Usuario",
     },
+    roles: [
+      {
+        type: mongoose.Schema.Types.ObjectId,
+        ref: "Role",
+        default: [],
+      },
+    ],
+
+    permissions: [
+      {
+        resource: {
+          type: String,
+          required: true,
+        },
+        actions: [
+          {
+            type: String,
+            enum: ["create", "read", "update", "delete", "manage"],
+            required: true,
+          },
+        ],
+      },
+    ],
+
+    isAdmin: {
+      type: Boolean,
+      default: false,
+    },
   },
   { timestamps: true }
 );

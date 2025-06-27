@@ -10,15 +10,36 @@ const {
   checkInventoryForReturns,
 } = require("../controllers/transferSummaryController");
 
-// Authentication middleware (assuming you're using the same middleware as other routes)
-const { asureAuth } = require("../middlewares/authenticated");
+const {
+  verifyToken,
+  checkPermission,
+} = require("../middlewares/authMiddleware");
+
+// ⭐ MIDDLEWARE GLOBAL ⭐
+router.use(verifyToken);
 
 // Routes
-router.post("/", asureAuth, createTransferSummary);
-router.get("/", asureAuth, getTransferSummaries);
-router.get("/:id", asureAuth, getTransferSummaryById);
-router.get("/load/:loadId", asureAuth, getTransferSummaryByLoadId);
-router.post("/return", asureAuth, processTransferReturn);
-router.get("/inventory-check/:summaryId", asureAuth, checkInventoryForReturns);
+router.post("/create", checkPermission("roles", "read"), createTransferSummary);
+router.get("/get", checkPermission("roles", "read"), getTransferSummaries);
+router.get(
+  "/get/:id",
+  checkPermission("roles", "read"),
+  getTransferSummaryById
+);
+router.get(
+  "/load/:loadId",
+  checkPermission("roles", "read"),
+  getTransferSummaryByLoadId
+);
+router.post(
+  "/reverse/return",
+  checkPermission("roles", "read"),
+  processTransferReturn
+);
+router.get(
+  "/inventory-check/:summaryId",
+  checkPermission("roles", "read"),
+  checkInventoryForReturns
+);
 
 module.exports = router;

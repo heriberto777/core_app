@@ -1,57 +1,114 @@
-// AdminRouter.jsx (Optimizado)
+import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
 import {
   AdminLayout,
   Auth,
   useAuth,
+  usePermissions,
   Dashboard,
   TransferTasks,
   LoadsTasks,
-  ControlPlanilla,
   LoadsResumen,
   Statistics,
-  LogsPage,
   DocumentsVisualization,
-  ConsecutiveManager,
   TransferHistoryLogs,
-  ControlEmailConfig,
-  ConsecutiveDashboard,
+  UserManagement,
+  RoleManagement,
   ConfigurationPage,
   UserProfile,
+  ModuleManager,
 } from "../index";
 
-// Componente de envoltura para aplicar el AdminLayout a todas las rutas
-const ProtectedRoute = ({ component: Component }) => {
-  const { user } = useAuth();
+// ⭐ COMPONENTE DE LOADING MEJORADO ⭐
+const AuthLoader = () => (
+  <div
+    style={{
+      display: "flex",
+      flexDirection: "column",
+      justifyContent: "center",
+      alignItems: "center",
+      height: "100vh",
+      gap: "1rem",
+      fontSize: "18px",
+      color: "#666",
+    }}
+  >
+    <div style={{ fontSize: "2rem" }}>🔄</div>
+    <div>Cargando aplicación...</div>
+  </div>
+);
 
-  // Verificar si el usuario está autenticado
+// ⭐ REDIRECCIÓN INTELIGENTE MEJORADA ⭐
+const SmartRedirect = () => {
+  const { getDefaultRoute } = usePermissions();
+  const defaultRoute = getDefaultRoute();
+
+  console.log("🎯 Redirigiendo a ruta por defecto:", defaultRoute);
+  return <Navigate to={defaultRoute} replace />;
+};
+
+// ⭐ COMPONENTE DE RUTA PROTEGIDA OPTIMIZADO ⭐
+const ProtectedRoute = ({
+  children,
+  resource,
+  action,
+  requireAdmin = false,
+  fallbackRoute = null,
+}) => {
+  const { user } = useAuth();
+  const { hasPermission, isAdmin } = usePermissions();
+
+  // Verificar autenticación
   if (!user) {
+    console.log("❌ Usuario no autenticado, redirigiendo a login");
     return <Navigate to="/" replace />;
   }
 
-  // Verificar acceso a la ruta (puedes personalizarlo según tus necesidades)
-  const hasAccess = (requiredRoles) => {
-    if (!user || !user.role) return false;
-    return requiredRoles.some((role) => user.role.includes(role));
-  };
-
-  // Si el usuario no tiene acceso, redirigir a unauthorized
-  if (!hasAccess(["admin", "dashboard"])) {
-    return <Navigate to="/unauthorized" replace />;
+  // Verificar si requiere privilegios de admin
+  if (requireAdmin && !isAdmin) {
+    console.log("❌ Se requieren privilegios de administrador");
+    return fallbackRoute ? (
+      <Navigate to={fallbackRoute} replace />
+    ) : (
+      <SmartRedirect />
+    );
   }
 
-  // Aplicar el AdminLayout y renderizar el componente
-  return (
-    <AdminLayout>
-      <Component />
-    </AdminLayout>
-  );
+  // Verificar permisos específicos
+  if (resource && action && !hasPermission(resource, action)) {
+    console.log(`❌ Sin permisos: ${resource}.${action}`);
+    return fallbackRoute ? (
+      <Navigate to={fallbackRoute} replace />
+    ) : (
+      <SmartRedirect />
+    );
+  }
+
+  return children;
 };
 
-export function AdminRouter() {
-  const { user } = useAuth();
+// ⭐ WRAPPER PARA COMPONENTES CON LAYOUT ⭐
+const LayoutWrapper = ({ component: Component, title, ...props }) => (
+  <AdminLayout title={title}>
+    <Component {...props} />
+  </AdminLayout>
+);
 
-  // Si no hay usuario autenticado, mostrar la pantalla de autenticación
+// ⭐ COMPONENTE PRINCIPAL DEL ROUTER ⭐
+export function AdminRouter() {
+  const { user, loading, error } = useAuth();
+
+  // Estado de carga
+  if (loading) {
+    return <AuthLoader />;
+  }
+
+  // Error en autenticación
+  if (error) {
+    console.error("❌ Error de autenticación:", error);
+  }
+
+  // Usuario no autenticado
   if (!user) {
     return (
       <Routes>
@@ -62,58 +119,145 @@ export function AdminRouter() {
 
   return (
     <Routes>
-      {/* Redirigir automáticamente al Dashboard después del login */}
-      <Route path="/" element={<Navigate to="/dashboard" replace />} />
+      {/* ⭐ REDIRECCIÓN INICIAL ⭐ */}
+      <Route path="/" element={<SmartRedirect />} />
 
-      {/* Aplicar AdminLayout a todas las rutas protegidas */}
+      {/* ⭐ DASHBOARD - ACCESO UNIVERSAL ⭐ */}
       <Route
         path="/dashboard"
-        element={<ProtectedRoute component={Dashboard} />}
+        element={
+          <LayoutWrapper component={Dashboard} title="Panel de Control" />
+        }
       />
+
+      {/* ⭐ RUTAS DE OPERACIONES ⭐ */}
       <Route
         path="/tasks"
-        element={<ProtectedRoute component={TransferTasks} />}
-      />
-      <Route
-        path="/loads"
-        element={<ProtectedRoute component={LoadsTasks} />}
+        element={
+          <ProtectedRoute resource="tasks" action="read">
+            <LayoutWrapper
+              component={TransferTasks}
+              title="Gestión de Tareas"
+            />
+          </ProtectedRoute>
+        }
       />
 
       <Route
-        path="/summaries"
-        element={<ProtectedRoute component={LoadsResumen} />}
+        path="/loads"
+        element={
+          <ProtectedRoute resource="loads" action="read">
+            <LayoutWrapper component={LoadsTasks} title="Cargas de Datos" />
+          </ProtectedRoute>
+        }
       />
-      <Route
-        path="/analytics"
-        element={<ProtectedRoute component={Statistics} />}
-      />
-      <Route path="/logs" element={<ProtectedRoute component={LogsPage} />} />
+
       <Route
         path="/documents"
-        element={<ProtectedRoute component={DocumentsVisualization} />}
+        element={
+          <ProtectedRoute resource="documents" action="read">
+            <LayoutWrapper
+              component={DocumentsVisualization}
+              title="Gestión de Documentos"
+            />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* ⭐ RUTAS DE ANÁLISIS ⭐ */}
+      <Route
+        path="/summaries"
+        element={
+          <ProtectedRoute resource="reports" action="read">
+            <LayoutWrapper
+              component={LoadsResumen}
+              title="Resúmenes y Reportes"
+            />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/analytics"
+        element={
+          <ProtectedRoute resource="analytics" action="read">
+            <LayoutWrapper
+              component={Statistics}
+              title="Análisis y Estadísticas"
+            />
+          </ProtectedRoute>
+        }
       />
 
       <Route
         path="/historys"
-        element={<ProtectedRoute component={TransferHistoryLogs} />}
+        element={
+          <ProtectedRoute resource="history" action="read">
+            <LayoutWrapper
+              component={TransferHistoryLogs}
+              title="Historial de Transferencias"
+            />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* ⭐ RUTAS DE ADMINISTRACIÓN ⭐ */}
+      <Route
+        path="/users"
+        element={
+          <ProtectedRoute resource="users" action="read" requireAdmin>
+            <LayoutWrapper
+              component={UserManagement}
+              title="Gestión de Usuarios"
+            />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/roles"
+        element={
+          <ProtectedRoute resource="roles" action="read" requireAdmin>
+            <LayoutWrapper
+              component={RoleManagement}
+              title="Gestión de Roles"
+            />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/modules"
+        element={
+          <ProtectedRoute resource="modules" action="read" requireAdmin>
+            <LayoutWrapper
+              component={ModuleManager}
+              title="Gestión de Modulos"
+            />
+          </ProtectedRoute>
+        }
       />
 
       <Route
         path="/configuraciones"
-        element={<ProtectedRoute component={ConfigurationPage} />}
+        element={
+          <ProtectedRoute resource="settings" action="read">
+            <LayoutWrapper
+              component={ConfigurationPage}
+              title="Configuraciones"
+            />
+          </ProtectedRoute>
+        }
       />
 
+      {/* ⭐ PERFIL DE USUARIO - ACCESO UNIVERSAL ⭐ */}
       <Route
         path="/perfil"
-        element={<ProtectedRoute component={UserProfile} />}
+        element={<LayoutWrapper component={UserProfile} title="Mi Perfil" />}
       />
 
-      {/* Opcionalmente, puedes tener rutas secundarias o que no requieran el AdminLayout */}
-      <Route
-        path="/unauthorized"
-        element={<div>No tienes permisos para acceder a esta página</div>}
-      />
-      <Route path="*" element={<div>Página no encontrada</div>} />
+      {/* ⭐ RUTA CATCH-ALL ⭐ */}
+      <Route path="*" element={<SmartRedirect />} />
     </Routes>
   );
 }

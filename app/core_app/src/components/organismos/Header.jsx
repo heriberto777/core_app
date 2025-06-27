@@ -32,7 +32,7 @@ export function Header({ stateConfig, sidebarConfig }) {
     return () => {
       document.removeEventListener("click", handleClickOutside);
     };
-  }, [stateConfig.openstate]);
+  }, [stateConfig?.openstate]);
 
   return (
     <HeaderContainer ref={headerRef}>

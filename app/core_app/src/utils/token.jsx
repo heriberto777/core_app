@@ -1,30 +1,26 @@
-import { jwtDecode } from "jwt-decode";
-
-export const hasExpiredToken = (token) => {
+export function hasExpiredToken(token) {
   try {
-    const { exp } = jwtDecode(token);
-    const currentDate = new Date().getTime();
-
-    // ⭐ CONVERTIR exp a milisegundos (viene en segundos) ⭐
-    const expInMs = exp * 1000;
-
-    console.log("🕒 Verificación de expiración:", {
-      exp: exp,
-      expInMs: expInMs,
-      currentDate: currentDate,
-      isExpired: expInMs <= currentDate,
-      timeUntilExp: Math.round((expInMs - currentDate) / 1000 / 60), // minutos
-    });
-
-    if (expInMs <= currentDate) {
-      console.log("❌ Token expirado");
+    if (!token || typeof token !== "string") {
       return true;
     }
 
-    console.log("✅ Token válido");
-    return false;
+    const parts = token.split(".");
+    if (parts.length !== 3) {
+      return true;
+    }
+
+    // Decodificar el payload (segunda parte)
+    const payload = JSON.parse(atob(parts[1]));
+
+    if (!payload.exp) {
+      return false; // Si no tiene expiración, considerarlo válido
+    }
+
+    // Verificar si ha expirado (exp está en segundos)
+    const currentTime = Math.floor(Date.now() / 1000);
+    return payload.exp < currentTime;
   } catch (error) {
-    console.error("❌ Error decodificando token:", error);
-    return true; // Si hay error, considerar como expirado
+    console.error("Error verificando expiración:", error);
+    return true; // Si hay error, considerar expirado
   }
-};
+}
