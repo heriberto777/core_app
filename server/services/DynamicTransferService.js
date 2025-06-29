@@ -105,6 +105,7 @@ class DynamicTransferService {
       const execution = new TaskExecution({
         taskId: mapping.taskId,
         mappingId: mappingId,
+        taskName: mapping.name || `Mapping ${mappingId}`, // ✅ CAMPO REQUERIDO AGREGADO
         startTime: new Date(),
         status: "running",
         documentIds: documentIds,
