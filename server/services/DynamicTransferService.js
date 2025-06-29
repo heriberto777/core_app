@@ -93,10 +93,37 @@ class DynamicTransferService {
       // 3. Obtener conexiones
       logger.info(`🔗 Estableciendo conexiones para mapeo: ${mapping.name}`);
 
+      // if (mapping.transferType === "down") {
+      //   sourceConnection = await ConnectionService.getConnection("server2");
+      //   targetConnection = await ConnectionService.getConnection("server1");
+      // } else {
+      //   sourceConnection = await ConnectionService.getConnection("server1");
+      //   targetConnection = await ConnectionService.getConnection("server2");
+      // }
       if (mapping.transferType === "down") {
-        sourceConnection = await ConnectionService.getConnection("server2");
-        targetConnection = await ConnectionService.getConnection("server1");
+        try {
+          sourceConnection = await ConnectionService.getConnection("server2");
+          if (!sourceConnection) {
+            throw new Error("No se pudo obtener conexión a server2");
+          }
+          logger.info("✅ Conexión a server2 establecida correctamente");
+        } catch (connError) {
+          logger.error(`❌ Error conectando a server2: ${connError.message}`);
+          throw new Error(`Error de conexión a server2: ${connError.message}`);
+        }
+
+        try {
+          targetConnection = await ConnectionService.getConnection("server1");
+          if (!targetConnection) {
+            throw new Error("No se pudo obtener conexión a server1");
+          }
+          logger.info("✅ Conexión a server1 establecida correctamente");
+        } catch (connError) {
+          logger.error(`❌ Error conectando a server1: ${connError.message}`);
+          throw new Error(`Error de conexión a server1: ${connError.message}`);
+        }
       } else {
+        // Lógica similar para transferType "up"
         sourceConnection = await ConnectionService.getConnection("server1");
         targetConnection = await ConnectionService.getConnection("server2");
       }
@@ -134,6 +161,17 @@ class DynamicTransferService {
       // 6. Verificar cancelación
       if (signal.aborted) {
         throw new Error("Operación cancelada por el usuario");
+      }
+
+      // ✅ VALIDACIÓN AGREGADA: Verificar que tableConfigs existe y es un array
+      if (
+        !mapping.tableConfigs ||
+        !Array.isArray(mapping.tableConfigs) ||
+        mapping.tableConfigs.length === 0
+      ) {
+        throw new Error(
+          `La configuración de mapeo no tiene tablas configuradas. Mapping: ${mapping.name}`
+        );
       }
 
       // 7. Procesar cada tabla configurada
@@ -322,7 +360,19 @@ class DynamicTransferService {
    */
   async getSourceDataForDocuments(documentIds, mapping, connection) {
     try {
+      if (!connection || connection.destroyed || connection.closed) {
+        throw new Error(
+          `La conexión a ${mapping.sourceServer} no está disponible`
+        );
+      }
+
       logger.info(`📥 Obteniendo datos para ${documentIds.length} documentos`);
+
+      // ✅ VALIDAR DOCUMENTIDS
+      if (!Array.isArray(documentIds) || documentIds.length === 0) {
+        logger.warn("No hay documentos para procesar");
+        return [];
+      }
 
       // 🟢 AGREGADO ÚNICAMENTE: Si tiene bonificaciones, usar BonificationService
       if (mapping.hasBonificationProcessing && mapping.bonificationConfig) {
