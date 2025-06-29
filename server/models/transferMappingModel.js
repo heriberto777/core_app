@@ -207,10 +207,15 @@ const TransferMappingSchema = new Schema({
       default: "NUM_PED",
       description: "Campo para agrupar registros (ej: número de pedido)",
     },
+    lineOrderField: {
+      type: String,
+      default: "NUM_LN",
+      description: "Campo de orden de líneas en tabla origen (ej: NUM_LN)",
+    },
     lineNumberField: {
       type: String,
       default: "PEDIDO_LINEA",
-      description: "Campo donde se asigna el número de línea",
+      description: "Campo donde se asigna el número de línea en destino",
     },
     bonificationLineReferenceField: {
       type: String,

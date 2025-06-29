@@ -841,27 +841,35 @@ class DynamicTransferService {
    */
   async getSourceDataForDocuments(documentIds, mapping, connection) {
     try {
-      // Determinar tabla principal para la consulta
-      let sourceTable = "FAC_ENCABEZADO_PED"; // Tabla por defecto
+      logger.info(`📥 Obteniendo datos para ${documentIds.length} documentos`);
 
-      // Si hay configuración de bonificaciones, usar esa tabla
-      if (
-        mapping.hasBonificationProcessing &&
-        mapping.bonificationConfig.sourceTable
-      ) {
-        sourceTable = mapping.bonificationConfig.sourceTable;
-        logger.info(`🎁 Usando tabla de bonificaciones: ${sourceTable}`);
-      } else {
-        // Usar la primera tabla configurada
-        const mainTableConfig = mapping.tableConfigs.find(
-          (tc) => !tc.isDetailTable
+      // Si tiene bonificaciones, usar lógica especial
+      if (mapping.hasBonificationProcessing && mapping.bonificationConfig) {
+        return await this.getSourceDataWithBonifications(
+          documentIds,
+          mapping,
+          connection
         );
-        if (mainTableConfig && mainTableConfig.sourceTable) {
-          sourceTable = mainTableConfig.sourceTable;
-        }
       }
 
-      // Crear placeholders para los IDs
+      // Lógica normal sin bonificaciones - PERO CON SOPORTE DINÁMICO
+      let sourceTable = "FAC_ENC_PED";
+      let orderField = "NUM_PED"; // ✅ Campo por defecto
+      let lineField = "NUM_LN"; // ✅ Campo por defecto
+
+      const mainTableConfig = mapping.tableConfigs.find(
+        (tc) => !tc.isDetailTable
+      );
+      if (mainTableConfig && mainTableConfig.sourceTable) {
+        sourceTable = mainTableConfig.sourceTable;
+      }
+
+      // ✅ Si hay configuración de bonificaciones, usar esos campos dinámicamente
+      if (mapping.bonificationConfig) {
+        orderField = mapping.bonificationConfig.orderField || "NUM_PED";
+        // Para lineField, podrías agregar un campo en bonificationConfig si es necesario
+      }
+
       const placeholders = documentIds
         .map((_, index) => `@doc${index}`)
         .join(", ");
@@ -870,21 +878,15 @@ class DynamicTransferService {
         params[`doc${index}`] = id;
       });
 
-      // Construir consulta
+      // ✅ CORREGIDO: Completamente dinámico
       const query = `
-        SELECT * FROM ${sourceTable}
-        WHERE NUM_PED IN (${placeholders})
-        ORDER BY NUM_PED, PEDIDO_LINEA
-      `;
-
-      logger.debug(`Ejecutando consulta de origen: ${query}`);
-      logger.debug(`Parámetros: ${JSON.stringify(params)}`);
+      SELECT * FROM ${sourceTable}
+      WHERE ${orderField} IN (${placeholders})
+      ORDER BY ${orderField}, ${lineField}
+    `;
 
       const result = await SqlService.query(connection, query, params);
-
-      logger.info(
-        `📥 Obtenidos ${result.recordset.length} registros de ${sourceTable}`
-      );
+      logger.info(`📥 Obtenidos ${result.recordset.length} registros normales`);
 
       return result.recordset || [];
     } catch (error) {
@@ -1136,6 +1138,129 @@ class DynamicTransferService {
         }
       );
       return originalValue;
+    }
+  }
+
+  async getSourceDataWithBonifications(documentIds, mapping, connection) {
+    try {
+      const config = mapping.bonificationConfig;
+      logger.info(
+        `🎁 Procesando ${documentIds.length} documentos con bonificaciones`
+      );
+
+      const placeholders = documentIds
+        .map((_, index) => `@doc${index}`)
+        .join(", ");
+      const params = {};
+      documentIds.forEach((id, index) => {
+        params[`doc${index}`] = id;
+      });
+
+      // ✅ CORREGIDO: Usar NUM_LN (campo origen) en lugar de PEDIDO_LINEA (campo destino)
+      const detailQuery = `
+      SELECT * FROM ${config.sourceTable}
+      WHERE ${config.orderField} IN (${placeholders})
+      ORDER BY ${config.orderField}, NUM_LN  -- ✅ NUM_LN existe en FAC_DET_PED
+    `;
+
+      const detailResult = await SqlService.query(
+        connection,
+        detailQuery,
+        params
+      );
+      const allDetails = detailResult.recordset || [];
+
+      logger.info(
+        `📦 Obtenidos ${allDetails.length} registros de detalle para procesamiento`
+      );
+
+      if (allDetails.length === 0) {
+        return [];
+      }
+
+      // Procesar cada pedido por separado
+      const processedData = [];
+      const groupedByOrder = this.groupByField(allDetails, config.orderField);
+
+      for (const [orderNumber, orderDetails] of groupedByOrder) {
+        logger.debug(
+          `📋 Procesando pedido ${orderNumber} con ${orderDetails.length} líneas`
+        );
+
+        // Paso 1: Mapear artículos regulares a sus posiciones finales
+        const articleToFinalLineMap = new Map();
+        let finalLineCounter = 1;
+
+        // Primer recorrido: asignar líneas finales a artículos regulares
+        orderDetails.forEach((detail) => {
+          const isBonification =
+            detail[config.bonificationIndicatorField] ===
+            config.bonificationIndicatorValue;
+
+          if (!isBonification) {
+            const articleCode = detail[config.regularArticleField];
+            articleToFinalLineMap.set(articleCode, finalLineCounter);
+            logger.debug(
+              `📍 Artículo regular ${articleCode} → línea final ${finalLineCounter}`
+            );
+            finalLineCounter++;
+          }
+        });
+
+        // Segundo recorrido: procesar todos los registros manteniendo orden de NUM_LN
+        finalLineCounter = 1;
+
+        orderDetails.forEach((detail) => {
+          const isBonification =
+            detail[config.bonificationIndicatorField] ===
+            config.bonificationIndicatorValue;
+
+          const processedDetail = { ...detail };
+
+          if (isBonification) {
+            const referencedArticle = detail[config.bonificationReferenceField];
+            const referencedFinalLine =
+              articleToFinalLineMap.get(referencedArticle);
+
+            // ✅ Campos calculados para el DESTINO
+            processedDetail.CALCULATED_PEDIDO_LINEA = finalLineCounter;
+            processedDetail.CALCULATED_PEDIDO_LINEA_BONIF =
+              referencedFinalLine || null;
+            processedDetail[config.bonificationReferenceField] = null; // Limpiar COD_ART_RFR
+
+            if (!referencedFinalLine) {
+              logger.warn(
+                `⚠️ Bonificación huérfana en pedido ${orderNumber}: artículo ${referencedArticle} no encontrado`
+              );
+            } else {
+              logger.debug(
+                `🎁 Bonificación línea ${finalLineCounter} → referencia línea ${referencedFinalLine}`
+              );
+            }
+          } else {
+            processedDetail.CALCULATED_PEDIDO_LINEA = finalLineCounter;
+            processedDetail.CALCULATED_PEDIDO_LINEA_BONIF = null;
+            logger.debug(
+              `✅ Artículo regular línea ${finalLineCounter}: ${
+                detail[config.regularArticleField]
+              }`
+            );
+          }
+
+          processedData.push(processedDetail);
+          finalLineCounter++;
+        });
+      }
+
+      logger.info(
+        `✅ Procesamiento completado: ${processedData.length} registros con líneas calculadas`
+      );
+      return processedData;
+    } catch (error) {
+      logger.error(
+        `Error en procesamiento de bonificaciones: ${error.message}`
+      );
+      throw error;
     }
   }
 
