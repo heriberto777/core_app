@@ -351,6 +351,13 @@ class DynamicTransferService {
     }
   }
 
+  /**
+   * 🟢 MODIFICADO ÚNICAMENTE: Obtener datos de origen para documentos específicos
+   * @param {Array} documentIds - IDs de documentos
+   * @param {Object} mapping - Configuración de mapeo
+   * @param {Object} connection - Conexión a la base de datos
+   * @returns {Promise<Array>} - Datos obtenidos
+   */
   async getSourceDataForDocuments(documentIds, mapping, connection) {
     try {
       // ✅ VALIDACIONES INICIALES
@@ -383,31 +390,6 @@ class DynamicTransferService {
           "La configuración de mapeo no tiene tablas configuradas"
         );
       }
-
-      // Resto del método igual...
-      // [mantener la lógica existente pero con las validaciones agregadas]
-    } catch (error) {
-      logger.error(`❌ Error en getSourceDataForDocuments: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * 🟢 MODIFICADO ÚNICAMENTE: Obtener datos de origen para documentos específicos
-   * @param {Array} documentIds - IDs de documentos
-   * @param {Object} mapping - Configuración de mapeo
-   * @param {Object} connection - Conexión a la base de datos
-   * @returns {Promise<Array>} - Datos obtenidos
-   */
-  async getSourceDataForDocuments(documentIds, mapping, connection) {
-    try {
-      if (!connection || connection.destroyed || connection.closed) {
-        throw new Error(
-          `La conexión a ${mapping.sourceServer} no está disponible`
-        );
-      }
-
-      logger.info(`📥 Obteniendo datos para ${documentIds.length} documentos`);
 
       // ✅ VALIDAR DOCUMENTIDS
       if (!Array.isArray(documentIds) || documentIds.length === 0) {
@@ -1501,342 +1483,267 @@ class DynamicTransferService {
   }
 
   /**
-   * 🔧 Debug automático de autenticación para server2
-   * @returns {Promise<Object>} - Resultado del debug
+   * 📋 Obtiene documentos con filtros aplicados
+   * @param {Object} mapping - Configuración de mapeo
+   * @param {Object} filters - Filtros a aplicar
+   * @param {Object} connection - Conexión a la base de datos
+   * @returns {Promise<Array>} - Lista de documentos
    */
-  async debugServer2Authentication() {
+  async getDocuments(mapping, filters, connection) {
     try {
-      logger.info("🔧 Iniciando debug de autenticación para server2...");
+      logger.info("📋 Obteniendo documentos con filtros:", filters);
 
-      // 1. Obtener configuración actual de server2
-      let currentConfig;
-      try {
-        currentConfig = await this._loadConfig("server2");
-        if (!currentConfig) {
-          logger.warn("⚠️ No se encontró configuración para server2");
-        }
-      } catch (configError) {
-        logger.warn(
-          `⚠️ Error cargando configuración server2: ${configError.message}`
+      // ✅ VALIDACIONES INICIALES
+      if (!mapping) {
+        throw new Error("Mapping es requerido");
+      }
+
+      if (!connection) {
+        throw new Error("Conexión a base de datos es requerida");
+      }
+
+      if (
+        !mapping.tableConfigs ||
+        !Array.isArray(mapping.tableConfigs) ||
+        mapping.tableConfigs.length === 0
+      ) {
+        throw new Error(
+          "La configuración de mapeo no tiene tablas configuradas"
         );
       }
 
-      // 2. Intentar actualizar con configuración conocida buena
-      try {
-        const DBConfig = require("../models/dbConfigModel");
-
-        const knownGoodConfig = {
-          serverName: "server2",
-          type: "mssql",
-          host: "sql-calidad.miami",
-          port: null,
-          database: "stdb_gnd",
-          instance: "calidadstdb",
-          user: "cliente-catelli",
-          password: "Smk1$kE[qVc%5fY",
-          options: {
-            encrypt: false,
-            trustServerCertificate: true,
-            enableArithAbort: true,
-          },
-        };
-
-        await DBConfig.findOneAndUpdate(
-          { serverName: "server2" },
-          knownGoodConfig,
-          { upsert: true, new: true }
-        );
-
-        logger.info(
-          "✅ Configuración de server2 actualizada con valores conocidos"
-        );
-      } catch (updateError) {
-        logger.error(
-          `❌ Error actualizando configuración: ${updateError.message}`
-        );
-        return {
-          success: false,
-          phase: "config_update_error",
-          error: updateError.message,
-          timestamp: new Date().toISOString(),
-        };
-      }
-
-      // 3. Reinicializar pool con nueva configuración
-      try {
-        logger.info("🔄 Reinicializando pool de server2...");
-
-        await this.closePool("server2");
-        await new Promise((resolve) => setTimeout(resolve, 2000)); // Esperar 2 segundos
-
-        const initResult = await this.initPool("server2");
-        if (!initResult) {
-          throw new Error("No se pudo reinicializar el pool");
-        }
-
-        logger.info("✅ Pool de server2 reinicializado");
-      } catch (poolError) {
-        logger.error(`❌ Error reinicializando pool: ${poolError.message}`);
-        return {
-          success: false,
-          phase: "pool_reinit_error",
-          error: poolError.message,
-          timestamp: new Date().toISOString(),
-        };
-      }
-
-      // 4. Probar la conexión
-      try {
-        logger.info("🧪 Probando conexión a server2...");
-
-        const testResult = await this.diagnoseConnection("server2");
-
-        if (testResult.success) {
-          logger.info(
-            "🎉 Debug exitoso - server2 ahora funciona correctamente"
-          );
-          return {
-            success: true,
-            phase: "debug_complete",
-            message: "Configuración corregida y conexión exitosa",
-            testResult: testResult,
-            timestamp: new Date().toISOString(),
-          };
-        } else {
-          logger.warn("⚠️ Debug completado pero la conexión aún falla");
-          return {
-            success: false,
-            phase: "test_failed",
-            error: testResult.error || "Conexión aún falla después del debug",
-            testResult: testResult,
-            timestamp: new Date().toISOString(),
-          };
-        }
-      } catch (testError) {
-        logger.error(`❌ Error probando conexión: ${testError.message}`);
-        return {
-          success: false,
-          phase: "test_error",
-          error: testError.message,
-          timestamp: new Date().toISOString(),
-        };
-      }
-    } catch (error) {
-      logger.error(`❌ Error general en debug de server2: ${error.message}`);
-      return {
-        success: false,
-        phase: "general_error",
-        error: error.message,
-        timestamp: new Date().toISOString(),
-      };
-    }
-  }
-
-  /**
-   * 🔍 Método diagnoseConnection mejorado (si no existe)
-   * @param {string} serverKey - Clave del servidor a diagnosticar
-   * @returns {Promise<Object>} - Resultado del diagnóstico
-   */
-  async diagnoseConnection(serverKey) {
-    try {
-      logger.info(`🔍 Diagnosticando conexión a ${serverKey}...`);
-
-      const startTime = Date.now();
-
-      // Intentar obtener una conexión
-      const connection = await this.getConnection(serverKey, {
-        timeout: 15000, // 15 segundos timeout
-      });
-
-      // Si llegamos aquí, la conexión básica funciona
-      let testQueryResult = null;
-
-      try {
-        // Intentar ejecutar una consulta simple
-        testQueryResult = await this.executeTestQuery(
-          connection,
-          "SELECT 1 as test_value, GETDATE() as server_time"
-        );
-      } catch (queryError) {
-        logger.warn(
-          `⚠️ Conexión obtenida pero query falló: ${queryError.message}`
+      // Buscar la tabla principal (no de detalle)
+      const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
+      if (!mainTable) {
+        throw new Error(
+          "No se encontró tabla principal en la configuración de mapeo"
         );
       }
 
-      // Liberar la conexión
-      await this.releaseConnection(connection);
-
-      const executionTime = Date.now() - startTime;
-
-      return {
-        success: true,
-        serverKey: serverKey,
-        message: "Conexión exitosa",
-        executionTime: `${executionTime}ms`,
-        testQuery: testQueryResult,
-        timestamp: new Date().toISOString(),
-      };
-    } catch (error) {
-      logger.error(`❌ Error diagnosticando ${serverKey}: ${error.message}`);
-
-      return {
-        success: false,
-        serverKey: serverKey,
-        error: error.message,
-        phase: "connection_error",
-        timestamp: new Date().toISOString(),
-      };
-    }
-  }
-
-  /**
-   * 🏥 Verificación completa de salud del sistema
-   * @returns {Promise<Object>} - Resultado completo del health check
-   */
-  async performSystemHealthCheck() {
-    try {
-      logger.info("🏥 Iniciando verificación completa de salud del sistema...");
-
-      const healthResults = {
-        timestamp: new Date().toISOString(),
-        overall: {
-          healthy: false,
-          issues: [],
-          executionTime: 0,
-        },
-      };
-
-      const startTime = Date.now();
-
-      // 1. Verificar MongoDB
-      try {
-        const MongoDbService = require("./mongoDbService");
-        const mongoConnected = MongoDbService.isConnected();
-
-        healthResults.mongodb = {
-          connected: mongoConnected,
-          status: mongoConnected ? "OK" : "ERROR",
-        };
-
-        if (!mongoConnected) {
-          healthResults.overall.issues.push("MongoDB desconectado");
-        }
-      } catch (mongoError) {
-        healthResults.mongodb = {
-          connected: false,
-          status: "ERROR",
-          error: mongoError.message,
-        };
-        healthResults.overall.issues.push("Error verificando MongoDB");
-      }
-
-      // 2. Verificar Server1
-      try {
-        const server1Result = await this.diagnoseConnection("server1");
-        healthResults.server1 = {
-          connected: server1Result.success,
-          error: server1Result.success ? null : server1Result.error,
-          executionTime: server1Result.executionTime,
-        };
-
-        if (!server1Result.success) {
-          healthResults.overall.issues.push("Server1 no conecta");
-        }
-      } catch (server1Error) {
-        healthResults.server1 = {
-          connected: false,
-          error: server1Error.message,
-        };
-        healthResults.overall.issues.push("Error verificando Server1");
-      }
-
-      // 3. Verificar Server2 con debug automático si es necesario
-      try {
-        const server2Result = await this.diagnoseConnection("server2");
-        healthResults.server2 = {
-          connected: server2Result.success,
-          error: server2Result.success ? null : server2Result.error,
-          executionTime: server2Result.executionTime,
-        };
-
-        // Si server2 falla, intentar debug automático
-        if (!server2Result.success) {
-          logger.info("🔧 Server2 falló, ejecutando debug automático...");
-
-          const debugResult = await this.debugServer2Authentication();
-          healthResults.server2.debugExecuted = true;
-          healthResults.server2.debugResult = debugResult;
-
-          if (debugResult.success) {
-            // Reintentar diagnóstico después del debug
-            const retryResult = await this.diagnoseConnection("server2");
-            if (retryResult.success) {
-              healthResults.server2.connected = true;
-              healthResults.server2.error = null;
-              healthResults.server2.fixedByDebug = true;
-            }
-          }
-        }
-
-        if (!healthResults.server2.connected) {
-          healthResults.overall.issues.push("Server2 no conecta");
-        }
-      } catch (server2Error) {
-        healthResults.server2 = {
-          connected: false,
-          error: server2Error.message,
-        };
-        healthResults.overall.issues.push("Error verificando Server2");
-      }
-
-      // 4. Verificar estado de pools
-      try {
-        const poolStats = this.getConnectionStats();
-        healthResults.pools = poolStats.pools || {};
-        healthResults.poolStats = {
-          totalPools: Object.keys(healthResults.pools).length,
-          activeConnections: poolStats.stats?.activeConnections?.size || 0,
-          totalAcquired: poolStats.stats?.acquired || 0,
-          totalReleased: poolStats.stats?.released || 0,
-          totalErrors: poolStats.stats?.errors || 0,
-        };
-      } catch (poolError) {
-        healthResults.pools = { error: poolError.message };
-        healthResults.overall.issues.push("Error obteniendo estado de pools");
-      }
-
-      // 5. Información del sistema
-      healthResults.system = {
-        uptime: process.uptime(),
-        memoryUsage: process.memoryUsage(),
-        nodeVersion: process.version,
-        platform: process.platform,
-      };
-
-      // 6. Resultado final
-      const executionTime = Date.now() - startTime;
-      healthResults.overall.healthy = healthResults.overall.issues.length === 0;
-      healthResults.overall.executionTime = `${executionTime}ms`;
-
-      logger.info(
-        `🏥 Verificación de salud completada en ${executionTime}ms - ${
-          healthResults.overall.healthy ? "SALUDABLE" : "CON PROBLEMAS"
-        }`
+      logger.debug(
+        `📋 Tabla principal encontrada: ${mainTable.name}, sourceTable: ${mainTable.sourceTable}`
       );
 
-      return healthResults;
-    } catch (error) {
-      logger.error(`❌ Error en verificación de salud: ${error.message}`);
+      // ✅ VERIFICAR TABLA DISPONIBLE
+      try {
+        logger.info("🔍 Verificando disponibilidad de tabla...");
+        const listTablesQuery = `
+        SELECT TOP 50 TABLE_SCHEMA, TABLE_NAME
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_NAME = @tableName
+        ORDER BY TABLE_SCHEMA, TABLE_NAME
+      `;
 
-      return {
-        timestamp: new Date().toISOString(),
-        overall: {
-          healthy: false,
-          issues: ["Error general en verificación de salud"],
-          executionTime: "0ms",
-        },
-        error: error.message,
-      };
+        const tablesResult = await SqlService.query(
+          connection,
+          listTablesQuery,
+          {
+            tableName: mainTable.sourceTable,
+          }
+        );
+
+        if (!tablesResult.recordset || tablesResult.recordset.length === 0) {
+          throw new Error(
+            `Tabla ${mainTable.sourceTable} no encontrada en la base de datos`
+          );
+        }
+
+        logger.info(
+          `✅ Tabla ${mainTable.sourceTable} verificada exitosamente`
+        );
+      } catch (tableError) {
+        logger.error(`❌ Error verificando tabla: ${tableError.message}`);
+        throw new Error(`Error verificando tabla: ${tableError.message}`);
+      }
+
+      // ✅ VERIFICAR COLUMNAS DISPONIBLES
+      let availableColumns = [];
+      try {
+        const columnsQuery = `
+        SELECT COLUMN_NAME
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_NAME = @tableName
+        ORDER BY ORDINAL_POSITION
+      `;
+
+        const columnsResult = await SqlService.query(connection, columnsQuery, {
+          tableName: mainTable.sourceTable,
+        });
+
+        availableColumns = columnsResult.recordset.map(
+          (row) => row.COLUMN_NAME
+        );
+        logger.debug(
+          `📋 Columnas disponibles en ${
+            mainTable.sourceTable
+          }: ${availableColumns.join(", ")}`
+        );
+
+        if (availableColumns.length === 0) {
+          throw new Error(
+            `No se pudieron obtener columnas de la tabla ${mainTable.sourceTable}`
+          );
+        }
+      } catch (columnsError) {
+        logger.error(`❌ Error obteniendo columnas: ${columnsError.message}`);
+        throw new Error(`Error obteniendo columnas: ${columnsError.message}`);
+      }
+
+      // ✅ CONSTRUIR CONSULTA BASE
+      const primaryKey = mainTable.primaryKey || "NUM_PED";
+      let baseQuery = `SELECT ${primaryKey}`;
+
+      // Agregar campos adicionales si están configurados y existen
+      const additionalFields = [];
+
+      // Campo de fecha
+      const dateField = filters.dateField || "FECHA_PEDIDO";
+      if (
+        dateField &&
+        dateField !== primaryKey &&
+        availableColumns.includes(dateField)
+      ) {
+        additionalFields.push(dateField);
+      }
+
+      // Campo de estado
+      const statusField = filters.statusField || "ESTADO";
+      if (
+        statusField &&
+        statusField !== primaryKey &&
+        availableColumns.includes(statusField)
+      ) {
+        additionalFields.push(statusField);
+      }
+
+      // Campo de bodega
+      const warehouseField = filters.warehouseField || "COD_BOD";
+      if (
+        warehouseField &&
+        warehouseField !== primaryKey &&
+        availableColumns.includes(warehouseField)
+      ) {
+        additionalFields.push(warehouseField);
+      }
+
+      // Campo de procesado
+      if (
+        mapping.markProcessedField &&
+        mapping.markProcessedField !== primaryKey &&
+        availableColumns.includes(mapping.markProcessedField)
+      ) {
+        additionalFields.push(mapping.markProcessedField);
+      }
+
+      // Agregar campos únicos
+      const uniqueFields = [...new Set(additionalFields)];
+      if (uniqueFields.length > 0) {
+        baseQuery += `, ${uniqueFields.join(", ")}`;
+      }
+
+      baseQuery += ` FROM ${mainTable.sourceTable}`;
+
+      // ✅ CONSTRUIR CONDICIONES WHERE
+      const whereConditions = [];
+      const params = {};
+
+      // Filtro por fechas
+      if (
+        filters.dateFrom &&
+        filters.dateTo &&
+        availableColumns.includes(dateField)
+      ) {
+        whereConditions.push(`${dateField} BETWEEN @dateFrom AND @dateTo`);
+        params.dateFrom = filters.dateFrom;
+        params.dateTo = filters.dateTo;
+        logger.debug(
+          `📅 Filtro de fecha aplicado: ${filters.dateFrom} - ${filters.dateTo}`
+        );
+      }
+
+      // Filtro por estado
+      if (
+        filters.status &&
+        filters.status !== "all" &&
+        availableColumns.includes(statusField)
+      ) {
+        whereConditions.push(`${statusField} = @status`);
+        params.status = filters.status;
+        logger.debug(`📋 Filtro de estado aplicado: ${filters.status}`);
+      }
+
+      // Filtro por bodega
+      if (
+        filters.warehouse &&
+        filters.warehouse !== "all" &&
+        availableColumns.includes(warehouseField)
+      ) {
+        whereConditions.push(`${warehouseField} = @warehouse`);
+        params.warehouse = filters.warehouse;
+        logger.debug(`🏪 Filtro de bodega aplicado: ${filters.warehouse}`);
+      }
+
+      // Filtro por procesados/no procesados
+      if (
+        !filters.showProcessed &&
+        mapping.markProcessedField &&
+        availableColumns.includes(mapping.markProcessedField)
+      ) {
+        whereConditions.push(
+          `(${mapping.markProcessedField} IS NULL OR ${mapping.markProcessedField} = 0)`
+        );
+        logger.debug(`🔄 Filtro de no procesados aplicado`);
+      }
+
+      // Agregar condición de filtro de tabla si existe
+      if (mainTable.filterCondition) {
+        whereConditions.push(`(${mainTable.filterCondition})`);
+        logger.debug(
+          `🔍 Condición adicional aplicada: ${mainTable.filterCondition}`
+        );
+      }
+
+      // ✅ ENSAMBLAR CONSULTA FINAL
+      let finalQuery = baseQuery;
+      if (whereConditions.length > 0) {
+        finalQuery += ` WHERE ${whereConditions.join(" AND ")}`;
+      }
+
+      // Ordenamiento
+      if (availableColumns.includes(dateField)) {
+        finalQuery += ` ORDER BY ${dateField} DESC`;
+      } else {
+        finalQuery += ` ORDER BY ${primaryKey} DESC`;
+      }
+
+      // Limitar resultados para evitar sobrecarga
+      finalQuery = `SELECT TOP 1000 ${finalQuery.substring(
+        finalQuery.indexOf("SELECT ") + 7
+      )}`;
+
+      logger.debug(`🔍 Consulta final: ${finalQuery}`);
+      logger.debug(`📋 Parámetros: ${JSON.stringify(params)}`);
+
+      // ✅ EJECUTAR CONSULTA
+      try {
+        const result = await SqlService.query(connection, finalQuery, params);
+        const documents = result.recordset || [];
+
+        logger.info(
+          `📋 Documentos obtenidos exitosamente: ${documents.length} registros`
+        );
+
+        return documents;
+      } catch (queryError) {
+        logger.error(`❌ Error ejecutando consulta: ${queryError.message}`);
+        logger.error(`Query problemática: ${finalQuery}`);
+        logger.error(`Parámetros: ${JSON.stringify(params)}`);
+        throw new Error(`Error ejecutando consulta: ${queryError.message}`);
+      }
+    } catch (error) {
+      logger.error(`❌ Error en getDocuments: ${error.message}`);
+      logger.error(`Stack trace: ${error.stack}`);
+      throw error;
     }
   }
 }
