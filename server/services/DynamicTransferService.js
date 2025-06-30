@@ -6,103 +6,118 @@ const TaskExecution = require("../models/taskExecutionModel");
 const TaskTracker = require("./TaskTracker");
 const TransferTask = require("../models/transferTaks");
 const ConsecutiveService = require("./ConsecutiveService");
+const BonificationService = require("./BonificationService"); // 🟢 NUEVO: Importar servicio especializado
 
 class DynamicTransferService {
+  // 🔥 CAMBIO 1: AGREGAR CONSTRUCTOR
+  constructor() {
+    this.bonificationService = new BonificationService({ debug: true });
+  }
+
   /**
-   * 🟢 NUEVO: Procesa bonificaciones dinámicamente
+   * 🟢 NUEVO: Procesa bonificaciones usando el servicio especializado
    * @param {Array} sourceData - Datos originales
    * @param {Object} mapping - Configuración de mapeo
    * @returns {Array} - Datos procesados con líneas de bonificación
    */
   async processBonifications(sourceData, mapping) {
+    // 🔥 FIX: Validar que sourceData sea un array
+    if (!Array.isArray(sourceData)) {
+      logger.warn(
+        `processBonifications: sourceData no es un array, recibido: ${typeof sourceData}`
+      );
+      return Array.isArray(sourceData) ? sourceData : [];
+    }
+
     if (!mapping.hasBonificationProcessing || !mapping.bonificationConfig) {
       return sourceData; // Sin procesamiento especial
     }
 
+    // 🟢 DELEGAR AL SERVICIO ESPECIALIZADO: Usar BonificationService para el procesamiento
+    logger.info(
+      `🎁 Delegando procesamiento de bonificaciones al BonificationService`
+    );
+
+    try {
+      // El BonificationService espera documentIds, pero aquí tenemos datos ya cargados
+      // Extraer los IDs de documentos de los datos existentes
+      const config = mapping.bonificationConfig;
+      const documentIds = [
+        ...new Set(sourceData.map((record) => record[config.orderField])),
+      ];
+
+      logger.info(
+        `🎯 Procesando bonificaciones para ${documentIds.length} documentos únicos con ${sourceData.length} registros totales`
+      );
+
+      // Como ya tenemos los datos, vamos a usar la lógica interna del servicio
+      // pero adaptada para trabajar con datos ya cargados
+      const processedData = await this.processBonificationsWithLoadedData(
+        sourceData,
+        mapping
+      );
+
+      return processedData;
+    } catch (error) {
+      logger.error(
+        `❌ Error en procesamiento de bonificaciones: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * 🟢 NUEVO: Procesa bonificaciones con datos ya cargados
+   * Adaptación de la lógica del BonificationService para datos pre-cargados
+   */
+  async processBonificationsWithLoadedData(sourceData, mapping) {
     const config = mapping.bonificationConfig;
-    logger.info(`🎯 Procesando bonificaciones con configuración:`, {
+
+    // Validar configuración
+    const validation = this.validateBonificationConfig(mapping);
+    if (!validation.valid) {
+      throw new Error(
+        `Configuración de bonificaciones inválida: ${validation.errors.join(
+          ", "
+        )}`
+      );
+    }
+
+    logger.info(`🎯 Procesando bonificaciones con datos pre-cargados:`, {
       sourceTable: config.sourceTable,
       orderField: config.orderField,
       totalRecords: sourceData.length,
     });
 
-    // Agrupar por campo de orden (ej: NUM_PED)
+    // 🔥 CAMBIO 4: Agrupar por campo de orden
     const groupedData = this.groupByField(sourceData, config.orderField);
     const processedData = [];
-    let globalLineCounter = 1;
     let bonificationsProcessed = 0;
     let regularArticlesProcessed = 0;
 
     for (const [groupKey, records] of groupedData) {
-      const lineMapping = new Map(); // Mapear artículos regulares a líneas
-      const bonificationQueue = [];
-
       logger.debug(
         `📦 Procesando grupo ${config.orderField}=${groupKey} con ${records.length} registros`
       );
 
-      // Primera pasada: procesar artículos regulares
-      records.forEach((record) => {
-        const isBonification =
-          record[config.bonificationIndicatorField] ===
-          config.bonificationIndicatorValue;
+      // 🔥 CAMBIO 5: Usar la lógica del BonificationService para procesar un pedido individual
+      const processedOrder = await this.processSingleOrder(
+        records,
+        config,
+        groupKey
+      );
+      processedData.push(...processedOrder);
 
-        if (!isBonification) {
-          // Artículo regular
-          const processedRecord = {
-            ...record,
-            [config.lineNumberField]: globalLineCounter,
-            [config.bonificationLineReferenceField]: null,
-          };
+      // Contar estadísticas
+      const orderBonifications = processedOrder.filter(
+        (r) =>
+          r[config.bonificationIndicatorField] ===
+          config.bonificationIndicatorValue
+      ).length;
+      const orderRegulars = processedOrder.length - orderBonifications;
 
-          lineMapping.set(
-            record[config.regularArticleField],
-            globalLineCounter
-          );
-          processedData.push(processedRecord);
-          globalLineCounter++;
-          regularArticlesProcessed++;
-
-          logger.debug(
-            `✅ Artículo regular procesado: ${
-              record[config.regularArticleField]
-            } -> Línea ${globalLineCounter - 1}`
-          );
-        } else {
-          // Es bonificación, agregar a cola
-          bonificationQueue.push(record);
-        }
-      });
-
-      // Segunda pasada: procesar bonificaciones
-      bonificationQueue.forEach((bonification) => {
-        const referencedArticle =
-          bonification[config.bonificationReferenceField];
-        const referencedLine = lineMapping.get(referencedArticle);
-
-        const processedBonification = {
-          ...bonification,
-          [config.lineNumberField]: globalLineCounter,
-          [config.bonificationLineReferenceField]: referencedLine || null,
-          [config.bonificationReferenceField]: null, // Limpiar referencia original
-        };
-
-        if (!referencedLine) {
-          logger.warn(
-            `⚠️ Bonificación huérfana en ${config.orderField}=${groupKey}: ${config.bonificationReferenceField}=${referencedArticle} no encontrado`
-          );
-        } else {
-          logger.debug(
-            `🎁 Bonificación procesada: ${
-              bonification[config.regularArticleField]
-            } -> Línea ${globalLineCounter}, referencia línea ${referencedLine}`
-          );
-        }
-
-        processedData.push(processedBonification);
-        globalLineCounter++;
-        bonificationsProcessed++;
-      });
+      bonificationsProcessed += orderBonifications;
+      regularArticlesProcessed += orderRegulars;
     }
 
     logger.info(`✅ Procesamiento de bonificaciones completado:`, {
@@ -113,6 +128,75 @@ class DynamicTransferService {
     });
 
     return processedData;
+  }
+
+  /**
+   * 🟢 NUEVO: Procesa un pedido individual para bonificaciones
+   */
+  async processSingleOrder(records, config, groupKey) {
+    const lineMapping = new Map(); // Mapear artículos regulares a líneas
+    const bonificationQueue = [];
+    const processedOrder = [];
+    let lineCounter = 1;
+
+    // Primera pasada: procesar artículos regulares
+    records.forEach((record) => {
+      const isBonification =
+        record[config.bonificationIndicatorField] ===
+        config.bonificationIndicatorValue;
+
+      if (!isBonification) {
+        // Artículo regular
+        const processedRecord = {
+          ...record,
+          [config.lineNumberField]: lineCounter,
+          [config.bonificationLineReferenceField]: null,
+        };
+
+        lineMapping.set(record[config.regularArticleField], lineCounter);
+        processedOrder.push(processedRecord);
+        lineCounter++;
+
+        logger.debug(
+          `✅ Artículo regular procesado: ${
+            record[config.regularArticleField]
+          } -> Línea ${lineCounter - 1}`
+        );
+      } else {
+        // Es bonificación, agregar a cola
+        bonificationQueue.push(record);
+      }
+    });
+
+    // Segunda pasada: procesar bonificaciones
+    bonificationQueue.forEach((bonification) => {
+      const referencedArticle = bonification[config.bonificationReferenceField];
+      const referencedLine = lineMapping.get(referencedArticle);
+
+      const processedBonification = {
+        ...bonification,
+        [config.lineNumberField]: lineCounter,
+        [config.bonificationLineReferenceField]: referencedLine || null,
+        [config.bonificationReferenceField]: null, // Limpiar referencia original
+      };
+
+      if (!referencedLine) {
+        logger.warn(
+          `⚠️ Bonificación huérfana en ${config.orderField}=${groupKey}: ${config.bonificationReferenceField}=${referencedArticle} no encontrado`
+        );
+      } else {
+        logger.debug(
+          `🎁 Bonificación procesada: ${
+            bonification[config.regularArticleField]
+          } -> Línea ${lineCounter}, referencia línea ${referencedLine}`
+        );
+      }
+
+      processedOrder.push(processedBonification);
+      lineCounter++;
+    });
+
+    return processedOrder;
   }
 
   /**
@@ -381,7 +465,7 @@ class DynamicTransferService {
         );
       }
 
-      // 6. Procesar documentos - NUEVA LÓGICA CON ESTRATEGIAS DE MARCADO
+      // 6. Procesar documentos - NUEVA LÓGICA CON ESTRATEGIAS DE MARCADO Y BONIFICACIONES
       const results = {
         processed: 0,
         failed: 0,
@@ -396,225 +480,459 @@ class DynamicTransferService {
       const failedDocuments = [];
       let hasErrors = false;
 
-      // Procesar cada documento individualmente
-      for (let i = 0; i < documentIds.length; i++) {
-        // Verificar si se ha cancelado la tarea
-        if (signal.aborted) {
-          clearTimeout(timeoutId);
-          throw new Error("Tarea cancelada por el usuario");
-        }
-
-        const documentId = documentIds[i];
-        let currentConsecutive = null;
+      // 🟢 OPTIMIZACIÓN: Procesar con BonificationService si está habilitado
+      if (mapping.hasBonificationProcessing && mapping.bonificationConfig) {
+        logger.info(
+          `🎁 Procesamiento unificado de bonificaciones habilitado para ${documentIds.length} documentos`
+        );
 
         try {
-          // Generación de consecutivos (código existente)
-          if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
-            if (useCentralizedConsecutives) {
-              try {
-                const reservation =
-                  await ConsecutiveService.reserveConsecutiveValues(
-                    centralizedConsecutiveId,
-                    1,
-                    { segment: null },
-                    { id: mapping._id.toString(), name: "mapping" }
-                  );
-
-                currentConsecutive = {
-                  value: reservation.values[0].numeric,
-                  formatted: reservation.values[0].formatted,
-                  isCentralized: true,
-                  reservationId: reservation.reservationId,
-                };
-
-                logger.info(
-                  `Consecutivo centralizado generado para documento ${documentId}: ${currentConsecutive.formatted}`
-                );
-              } catch (consecError) {
-                logger.error(
-                  `Error generando consecutivo centralizado para documento ${documentId}: ${consecError.message}`
-                );
-                failedDocuments.push(documentId);
-                results.failed++;
-                results.details.push({
-                  documentId,
-                  success: false,
-                  error: `Error generando consecutivo: ${consecError.message}`,
-                  errorDetails: consecError.stack,
-                });
-                continue;
-              }
-            } else {
-              try {
-                currentConsecutive = await this.generateConsecutive(mapping);
-                if (currentConsecutive) {
-                  logger.info(
-                    `Consecutivo local generado para documento ${documentId}: ${currentConsecutive.formatted}`
-                  );
-                }
-              } catch (consecError) {
-                logger.error(
-                  `Error generando consecutivo local para documento ${documentId}: ${consecError.message}`
-                );
-                failedDocuments.push(documentId);
-                results.failed++;
-                results.details.push({
-                  documentId,
-                  success: false,
-                  error: `Error generando consecutivo: ${consecError.message}`,
-                  errorDetails: consecError.stack,
-                });
-                continue;
-              }
-            }
-          }
-
-          // 🟢 MODIFICADO: Obtener datos de origen con procesamiento especial
-          let sourceData = await this.getSourceDataForDocuments(
-            [documentId],
+          // Obtener datos unificados con bonificaciones procesadas
+          const unifiedProcessedData = await this.getSourceDataForDocuments(
+            documentIds,
             mapping,
             sourceConnection
           );
 
-          // 🟢 NUEVO: Procesar bonificaciones si está configurado
-          if (mapping.hasBonificationProcessing && sourceData.length > 0) {
-            logger.info(
-              `🎁 Iniciando procesamiento de bonificaciones para documento ${documentId}...`
-            );
-            sourceData = await this.processBonifications(sourceData, mapping);
-            logger.info(
-              `🎯 Bonificaciones procesadas: ${sourceData.length} registros finales`
-            );
-          }
-
-          // Procesar documento
-          const docResult = await this.processSingleDocumentSimple(
-            documentId,
-            mapping,
-            sourceConnection,
-            targetConnection,
-            currentConsecutive,
-            sourceData // Pasar los datos ya procesados
-          );
-
-          // Confirmar o cancelar reserva de consecutivo centralizado
-          if (
-            useCentralizedConsecutives &&
-            currentConsecutive &&
-            currentConsecutive.reservationId
-          ) {
-            if (docResult.success) {
-              await ConsecutiveService.commitReservation(
-                centralizedConsecutiveId,
-                currentConsecutive.reservationId,
-                [
-                  {
-                    numeric: currentConsecutive.value,
-                    formatted: currentConsecutive.formatted,
-                  },
-                ]
-              );
-              logger.info(
-                `Reserva confirmada para documento ${documentId}: ${currentConsecutive.formatted}`
-              );
-            } else {
-              await ConsecutiveService.cancelReservation(
-                centralizedConsecutiveId,
-                currentConsecutive.reservationId
-              );
-              logger.info(
-                `Reserva cancelada para documento fallido ${documentId}: ${currentConsecutive.formatted}`
-              );
+          // Procesar todos los documentos de una vez con los datos unificados
+          for (let i = 0; i < documentIds.length; i++) {
+            if (signal.aborted) {
+              clearTimeout(timeoutId);
+              throw new Error("Tarea cancelada por el usuario");
             }
-          }
 
-          // NUEVA LÓGICA: Recopilar documentos exitosos y fallidos
-          if (docResult.success) {
-            successfulDocuments.push(documentId);
-            results.processed++;
+            const documentId = documentIds[i];
+            let currentConsecutive = null;
 
-            if (!results.byType[docResult.documentType]) {
-              results.byType[docResult.documentType] = {
-                processed: 0,
-                failed: 0,
-              };
-            }
-            results.byType[docResult.documentType].processed++;
+            try {
+              // Generación de consecutivos
+              if (
+                mapping.consecutiveConfig &&
+                mapping.consecutiveConfig.enabled
+              ) {
+                if (useCentralizedConsecutives) {
+                  try {
+                    const reservation =
+                      await ConsecutiveService.reserveConsecutiveValues(
+                        centralizedConsecutiveId,
+                        1,
+                        { segment: null },
+                        { id: mapping._id.toString(), name: "mapping" }
+                      );
 
-            if (docResult.consecutiveUsed) {
-              results.consecutivesUsed.push({
+                    currentConsecutive = {
+                      value: reservation.values[0].numeric,
+                      formatted: reservation.values[0].formatted,
+                      isCentralized: true,
+                      reservationId: reservation.reservationId,
+                    };
+
+                    logger.info(
+                      `Consecutivo centralizado generado para documento ${documentId}: ${currentConsecutive.formatted}`
+                    );
+                  } catch (consecutiveError) {
+                    logger.error(
+                      `Error reservando consecutivo centralizado: ${consecutiveError.message}`
+                    );
+                    failedDocuments.push(documentId);
+                    results.failed++;
+                    results.details.push({
+                      documentId,
+                      success: false,
+                      error: `Error generando consecutivo: ${consecutiveError.message}`,
+                      errorDetails: consecutiveError.stack,
+                    });
+                    continue;
+                  }
+                } else {
+                  try {
+                    currentConsecutive = await this.generateConsecutive(
+                      mapping
+                    );
+                    if (currentConsecutive) {
+                      logger.info(
+                        `Consecutivo local generado para documento ${documentId}: ${currentConsecutive.formatted}`
+                      );
+                    }
+                  } catch (consecError) {
+                    logger.error(
+                      `Error generando consecutivo local para documento ${documentId}: ${consecError.message}`
+                    );
+                    failedDocuments.push(documentId);
+                    results.failed++;
+                    results.details.push({
+                      documentId,
+                      success: false,
+                      error: `Error generando consecutivo: ${consecError.message}`,
+                      errorDetails: consecError.stack,
+                    });
+                    continue;
+                  }
+                }
+              }
+
+              // Filtrar datos para este documento específico
+              const documentData = unifiedProcessedData.filter(
+                (record) =>
+                  record[mapping.bonificationConfig.orderField] === documentId
+              );
+
+              if (documentData.length === 0) {
+                logger.warn(
+                  `No se encontraron datos procesados para documento ${documentId}`
+                );
+                results.skipped++;
+                continue;
+              }
+
+              const docResult = await this.processSingleDocumentSimple(
                 documentId,
-                consecutive: docResult.consecutiveUsed,
+                mapping,
+                sourceConnection,
+                targetConnection,
+                currentConsecutive,
+                documentData // Pasar los datos ya procesados
+              );
+
+              // Confirmar o cancelar reserva de consecutivo centralizado
+              if (
+                useCentralizedConsecutives &&
+                currentConsecutive &&
+                currentConsecutive.reservationId
+              ) {
+                if (docResult.success) {
+                  await ConsecutiveService.commitReservation(
+                    centralizedConsecutiveId,
+                    currentConsecutive.reservationId,
+                    [
+                      {
+                        numeric: currentConsecutive.value,
+                        formatted: currentConsecutive.formatted,
+                      },
+                    ]
+                  );
+                  logger.info(
+                    `Reserva confirmada para documento ${documentId}: ${currentConsecutive.formatted}`
+                  );
+                } else {
+                  await ConsecutiveService.cancelReservation(
+                    centralizedConsecutiveId,
+                    currentConsecutive.reservationId
+                  );
+                  logger.info(
+                    `Reserva cancelada para documento fallido ${documentId}: ${currentConsecutive.formatted}`
+                  );
+                }
+              }
+
+              // NUEVA LÓGICA: Recopilar documentos exitosos y fallidos
+              if (docResult.success) {
+                successfulDocuments.push(documentId);
+                results.processed++;
+
+                if (!results.byType[docResult.documentType]) {
+                  results.byType[docResult.documentType] = {
+                    processed: 0,
+                    failed: 0,
+                  };
+                }
+                results.byType[docResult.documentType].processed++;
+
+                if (docResult.consecutiveUsed) {
+                  results.consecutivesUsed.push({
+                    documentId,
+                    consecutive: docResult.consecutiveUsed,
+                  });
+                }
+
+                // NUEVA LÓGICA: Marcado individual solo si está configurado así
+                if (
+                  mapping.markProcessedStrategy === "individual" &&
+                  mapping.markProcessedField
+                ) {
+                  try {
+                    await this.markDocumentsAsProcessed(
+                      [documentId],
+                      mapping,
+                      sourceConnection,
+                      true
+                    );
+                    logger.debug(
+                      `✅ Documento ${documentId} marcado individualmente como procesado`
+                    );
+                  } catch (markError) {
+                    logger.warn(
+                      `⚠️ Error al marcar documento ${documentId}: ${markError.message}`
+                    );
+                    // No detener el proceso por errores de marcado
+                  }
+                }
+              } else {
+                hasErrors = true;
+                failedDocuments.push(documentId);
+                results.failed++;
+
+                if (docResult.documentType) {
+                  if (!results.byType[docResult.documentType]) {
+                    results.byType[docResult.documentType] = {
+                      processed: 0,
+                      failed: 0,
+                    };
+                  }
+                  results.byType[docResult.documentType].failed++;
+                }
+              }
+
+              results.details.push({
+                documentId,
+                ...docResult,
+              });
+
+              logger.info(
+                `Documento ${documentId} procesado: ${
+                  docResult.success ? "Éxito" : "Error"
+                }`
+              );
+            } catch (docError) {
+              // Verificar si fue cancelado
+              if (signal?.aborted) {
+                clearTimeout(timeoutId);
+                throw new Error("Tarea cancelada por el usuario");
+              }
+
+              hasErrors = true;
+              failedDocuments.push(documentId);
+              logger.error(
+                `Error procesando documento ${documentId}: ${docError.message}`
+              );
+              results.failed++;
+              results.details.push({
+                documentId,
+                success: false,
+                error: docError.message,
+                errorDetails: docError.stack,
               });
             }
+          }
+        } catch (bonifError) {
+          logger.error(
+            `❌ Error en procesamiento unificado de bonificaciones: ${bonifError.message}`
+          );
+          throw bonifError;
+        }
+      } else {
+        // Procesamiento individual estándar (código existente)
+        for (let i = 0; i < documentIds.length; i++) {
+          // Verificar si se ha cancelado la tarea
+          if (signal.aborted) {
+            clearTimeout(timeoutId);
+            throw new Error("Tarea cancelada por el usuario");
+          }
 
-            // NUEVA LÓGICA: Marcado individual solo si está configurado así
+          const documentId = documentIds[i];
+          let currentConsecutive = null;
+
+          try {
+            // Generación de consecutivos (código existente)
             if (
-              mapping.markProcessedStrategy === "individual" &&
-              mapping.markProcessedField
+              mapping.consecutiveConfig &&
+              mapping.consecutiveConfig.enabled
             ) {
-              try {
-                await this.markDocumentsAsProcessed(
-                  [documentId],
-                  mapping,
-                  sourceConnection,
-                  true
-                );
-                logger.debug(
-                  `✅ Documento ${documentId} marcado individualmente como procesado`
-                );
-              } catch (markError) {
-                logger.warn(
-                  `⚠️ Error al marcar documento ${documentId}: ${markError.message}`
-                );
-                // No detener el proceso por errores de marcado
+              if (useCentralizedConsecutives) {
+                try {
+                  const reservation =
+                    await ConsecutiveService.reserveConsecutiveValues(
+                      centralizedConsecutiveId,
+                      1,
+                      { segment: null },
+                      { id: mapping._id.toString(), name: "mapping" }
+                    );
+
+                  currentConsecutive = {
+                    value: reservation.values[0].numeric,
+                    formatted: reservation.values[0].formatted,
+                    isCentralized: true,
+                    reservationId: reservation.reservationId,
+                  };
+
+                  logger.info(
+                    `Consecutivo centralizado generado para documento ${documentId}: ${currentConsecutive.formatted}`
+                  );
+                } catch (consecError) {
+                  logger.error(
+                    `Error generando consecutivo centralizado para documento ${documentId}: ${consecError.message}`
+                  );
+                  failedDocuments.push(documentId);
+                  results.failed++;
+                  results.details.push({
+                    documentId,
+                    success: false,
+                    error: `Error generando consecutivo: ${consecError.message}`,
+                    errorDetails: consecError.stack,
+                  });
+                  continue;
+                }
+              } else {
+                try {
+                  currentConsecutive = await this.generateConsecutive(mapping);
+                  if (currentConsecutive) {
+                    logger.info(
+                      `Consecutivo local generado para documento ${documentId}: ${currentConsecutive.formatted}`
+                    );
+                  }
+                } catch (consecError) {
+                  logger.error(
+                    `Error generando consecutivo local para documento ${documentId}: ${consecError.message}`
+                  );
+                  failedDocuments.push(documentId);
+                  results.failed++;
+                  results.details.push({
+                    documentId,
+                    success: false,
+                    error: `Error generando consecutivo: ${consecError.message}`,
+                    errorDetails: consecError.stack,
+                  });
+                  continue;
+                }
               }
             }
-          } else {
-            hasErrors = true;
-            failedDocuments.push(documentId);
-            results.failed++;
 
-            if (docResult.documentType) {
+            // Obtener datos de origen normalmente (sin bonificaciones)
+            let sourceData = await this.getSourceDataForDocuments(
+              [documentId],
+              mapping,
+              sourceConnection
+            );
+
+            // Procesar documento
+            const docResult = await this.processSingleDocumentSimple(
+              documentId,
+              mapping,
+              sourceConnection,
+              targetConnection,
+              currentConsecutive,
+              sourceData
+            );
+
+            // Confirmar o cancelar reserva de consecutivo centralizado
+            if (
+              useCentralizedConsecutives &&
+              currentConsecutive &&
+              currentConsecutive.reservationId
+            ) {
+              if (docResult.success) {
+                await ConsecutiveService.commitReservation(
+                  centralizedConsecutiveId,
+                  currentConsecutive.reservationId,
+                  [
+                    {
+                      numeric: currentConsecutive.value,
+                      formatted: currentConsecutive.formatted,
+                    },
+                  ]
+                );
+                logger.info(
+                  `Reserva confirmada para documento ${documentId}: ${currentConsecutive.formatted}`
+                );
+              } else {
+                await ConsecutiveService.cancelReservation(
+                  centralizedConsecutiveId,
+                  currentConsecutive.reservationId
+                );
+                logger.info(
+                  `Reserva cancelada para documento fallido ${documentId}: ${currentConsecutive.formatted}`
+                );
+              }
+            }
+
+            // NUEVA LÓGICA: Recopilar documentos exitosos y fallidos
+            if (docResult.success) {
+              successfulDocuments.push(documentId);
+              results.processed++;
+
               if (!results.byType[docResult.documentType]) {
                 results.byType[docResult.documentType] = {
                   processed: 0,
                   failed: 0,
                 };
               }
-              results.byType[docResult.documentType].failed++;
+              results.byType[docResult.documentType].processed++;
+
+              if (docResult.consecutiveUsed) {
+                results.consecutivesUsed.push({
+                  documentId,
+                  consecutive: docResult.consecutiveUsed,
+                });
+              }
+
+              // NUEVA LÓGICA: Marcado individual solo si está configurado así
+              if (
+                mapping.markProcessedStrategy === "individual" &&
+                mapping.markProcessedField
+              ) {
+                try {
+                  await this.markDocumentsAsProcessed(
+                    [documentId],
+                    mapping,
+                    sourceConnection,
+                    true
+                  );
+                  logger.debug(
+                    `✅ Documento ${documentId} marcado individualmente como procesado`
+                  );
+                } catch (markError) {
+                  logger.warn(
+                    `⚠️ Error al marcar documento ${documentId}: ${markError.message}`
+                  );
+                  // No detener el proceso por errores de marcado
+                }
+              }
+            } else {
+              hasErrors = true;
+              failedDocuments.push(documentId);
+              results.failed++;
+
+              if (docResult.documentType) {
+                if (!results.byType[docResult.documentType]) {
+                  results.byType[docResult.documentType] = {
+                    processed: 0,
+                    failed: 0,
+                  };
+                }
+                results.byType[docResult.documentType].failed++;
+              }
             }
+
+            results.details.push({
+              documentId,
+              ...docResult,
+            });
+
+            logger.info(
+              `Documento ${documentId} procesado: ${
+                docResult.success ? "Éxito" : "Error"
+              }`
+            );
+          } catch (docError) {
+            // Verificar si fue cancelado
+            if (signal?.aborted) {
+              clearTimeout(timeoutId);
+              throw new Error("Tarea cancelada por el usuario");
+            }
+
+            hasErrors = true;
+            failedDocuments.push(documentId);
+            logger.error(
+              `Error procesando documento ${documentId}: ${docError.message}`
+            );
+            results.failed++;
+            results.details.push({
+              documentId,
+              success: false,
+              error: docError.message,
+              errorDetails: docError.stack,
+            });
           }
-
-          results.details.push({
-            documentId,
-            ...docResult,
-          });
-
-          logger.info(
-            `Documento ${documentId} procesado: ${
-              docResult.success ? "Éxito" : "Error"
-            }`
-          );
-        } catch (docError) {
-          // Verificar si fue cancelado
-          if (signal?.aborted) {
-            clearTimeout(timeoutId);
-            throw new Error("Tarea cancelada por el usuario");
-          }
-
-          hasErrors = true;
-          failedDocuments.push(documentId);
-          logger.error(
-            `Error procesando documento ${documentId}: ${docError.message}`
-          );
-          results.failed++;
-          results.details.push({
-            documentId,
-            success: false,
-            error: docError.message,
-            errorDetails: docError.stack,
-          });
         }
       }
 
@@ -834,17 +1152,24 @@ class DynamicTransferService {
 
   /**
    * 🟢 MODIFICADO: Obtener datos de origen para documentos específicos
-   * @param {Array} documentIds - IDs de documentos
-   * @param {Object} mapping - Configuración de mapeo
-   * @param {Object} connection - Conexión a la base de datos
-   * @returns {Promise<Array>} - Datos obtenidos
+   * Ahora puede usar BonificationService si está configurado
    */
   async getSourceDataForDocuments(documentIds, mapping, connection) {
     try {
       logger.info(`📥 Obteniendo datos para ${documentIds.length} documentos`);
 
-      // Si tiene bonificaciones, usar lógica especial
+      if (!Array.isArray(documentIds)) {
+        logger.warn(
+          `getSourceDataForDocuments: documentIds no es un array, recibido: ${typeof documentIds}`
+        );
+        documentIds = [documentIds];
+      }
+
+      // 🔥 CAMBIO 2: OPTIMIZACIÓN: Si hay bonificaciones, usar BonificationService directamente
       if (mapping.hasBonificationProcessing && mapping.bonificationConfig) {
+        logger.info(
+          `🎁 Usando BonificationService para obtener datos con bonificaciones`
+        );
         return await this.getSourceDataWithBonifications(
           documentIds,
           mapping,
@@ -891,6 +1216,61 @@ class DynamicTransferService {
       return result.recordset || [];
     } catch (error) {
       logger.error(`Error al obtener datos de origen: ${error.message}`);
+      throw error;
+    }
+  }
+
+  async getSourceDataWithBonifications(documentIds, mapping, connection) {
+    try {
+      const config = mapping.bonificationConfig;
+      logger.info(
+        `🎁 Procesando ${documentIds.length} documentos con bonificaciones`
+      );
+
+      const placeholders = documentIds
+        .map((_, index) => `@doc${index}`)
+        .join(", ");
+      const params = {};
+      documentIds.forEach((id, index) => {
+        params[`doc${index}`] = id;
+      });
+
+      // ✅ CORREGIDO: Usar NUM_LN (campo origen) en lugar de PEDIDO_LINEA (campo destino)
+      const detailQuery = `
+      SELECT * FROM ${config.sourceTable}
+      WHERE ${config.orderField} IN (${placeholders})
+      ORDER BY ${config.orderField}, NUM_LN  -- ✅ NUM_LN existe en FAC_DET_PED
+    `;
+
+      const detailResult = await SqlService.query(
+        connection,
+        detailQuery,
+        params
+      );
+      const allDetails = detailResult.recordset || [];
+
+      logger.info(
+        `📦 Obtenidos ${allDetails.length} registros de detalle para procesamiento`
+      );
+
+      if (allDetails.length === 0) {
+        return [];
+      }
+
+      // Procesar bonificaciones usando el servicio especializado
+      const processedData = await this.processBonifications(
+        allDetails,
+        mapping
+      );
+
+      logger.info(
+        `✅ Procesamiento completado: ${processedData.length} registros con líneas calculadas`
+      );
+      return processedData;
+    } catch (error) {
+      logger.error(
+        `Error en procesamiento de bonificaciones: ${error.message}`
+      );
       throw error;
     }
   }
@@ -1138,129 +1518,6 @@ class DynamicTransferService {
         }
       );
       return originalValue;
-    }
-  }
-
-  async getSourceDataWithBonifications(documentIds, mapping, connection) {
-    try {
-      const config = mapping.bonificationConfig;
-      logger.info(
-        `🎁 Procesando ${documentIds.length} documentos con bonificaciones`
-      );
-
-      const placeholders = documentIds
-        .map((_, index) => `@doc${index}`)
-        .join(", ");
-      const params = {};
-      documentIds.forEach((id, index) => {
-        params[`doc${index}`] = id;
-      });
-
-      // ✅ CORREGIDO: Usar NUM_LN (campo origen) en lugar de PEDIDO_LINEA (campo destino)
-      const detailQuery = `
-      SELECT * FROM ${config.sourceTable}
-      WHERE ${config.orderField} IN (${placeholders})
-      ORDER BY ${config.orderField}, NUM_LN  -- ✅ NUM_LN existe en FAC_DET_PED
-    `;
-
-      const detailResult = await SqlService.query(
-        connection,
-        detailQuery,
-        params
-      );
-      const allDetails = detailResult.recordset || [];
-
-      logger.info(
-        `📦 Obtenidos ${allDetails.length} registros de detalle para procesamiento`
-      );
-
-      if (allDetails.length === 0) {
-        return [];
-      }
-
-      // Procesar cada pedido por separado
-      const processedData = [];
-      const groupedByOrder = this.groupByField(allDetails, config.orderField);
-
-      for (const [orderNumber, orderDetails] of groupedByOrder) {
-        logger.debug(
-          `📋 Procesando pedido ${orderNumber} con ${orderDetails.length} líneas`
-        );
-
-        // Paso 1: Mapear artículos regulares a sus posiciones finales
-        const articleToFinalLineMap = new Map();
-        let finalLineCounter = 1;
-
-        // Primer recorrido: asignar líneas finales a artículos regulares
-        orderDetails.forEach((detail) => {
-          const isBonification =
-            detail[config.bonificationIndicatorField] ===
-            config.bonificationIndicatorValue;
-
-          if (!isBonification) {
-            const articleCode = detail[config.regularArticleField];
-            articleToFinalLineMap.set(articleCode, finalLineCounter);
-            logger.debug(
-              `📍 Artículo regular ${articleCode} → línea final ${finalLineCounter}`
-            );
-            finalLineCounter++;
-          }
-        });
-
-        // Segundo recorrido: procesar todos los registros manteniendo orden de NUM_LN
-        finalLineCounter = 1;
-
-        orderDetails.forEach((detail) => {
-          const isBonification =
-            detail[config.bonificationIndicatorField] ===
-            config.bonificationIndicatorValue;
-
-          const processedDetail = { ...detail };
-
-          if (isBonification) {
-            const referencedArticle = detail[config.bonificationReferenceField];
-            const referencedFinalLine =
-              articleToFinalLineMap.get(referencedArticle);
-
-            // ✅ Campos calculados para el DESTINO
-            processedDetail.CALCULATED_PEDIDO_LINEA = finalLineCounter;
-            processedDetail.CALCULATED_PEDIDO_LINEA_BONIF =
-              referencedFinalLine || null;
-            processedDetail[config.bonificationReferenceField] = null; // Limpiar COD_ART_RFR
-
-            if (!referencedFinalLine) {
-              logger.warn(
-                `⚠️ Bonificación huérfana en pedido ${orderNumber}: artículo ${referencedArticle} no encontrado`
-              );
-            } else {
-              logger.debug(
-                `🎁 Bonificación línea ${finalLineCounter} → referencia línea ${referencedFinalLine}`
-              );
-            }
-          } else {
-            processedDetail.CALCULATED_PEDIDO_LINEA = finalLineCounter;
-            processedDetail.CALCULATED_PEDIDO_LINEA_BONIF = null;
-            logger.debug(
-              `✅ Artículo regular línea ${finalLineCounter}: ${
-                detail[config.regularArticleField]
-              }`
-            );
-          }
-
-          processedData.push(processedDetail);
-          finalLineCounter++;
-        });
-      }
-
-      logger.info(
-        `✅ Procesamiento completado: ${processedData.length} registros con líneas calculadas`
-      );
-      return processedData;
-    } catch (error) {
-      logger.error(
-        `Error en procesamiento de bonificaciones: ${error.message}`
-      );
-      throw error;
     }
   }
 
@@ -2175,7 +2432,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa un campo individual - MÉTODO UNIFICADO
+   * Procesa un campo individual - MÉTODO UNIFICADO CON FIX PARA BONIFICACIONES
    * @private
    */
   async processField(
@@ -2190,6 +2447,29 @@ class DynamicTransferService {
     columnLengthCache
   ) {
     let value;
+
+    // 🔥 CAMBIO 3: NUEVO: Solo agregar estas 4 líneas para bonificaciones
+    if (mapping.hasBonificationProcessing && mapping.bonificationConfig) {
+      const config = mapping.bonificationConfig;
+      if (
+        fieldMapping.targetField === config.lineNumberField &&
+        sourceData[config.lineNumberField]
+      ) {
+        return {
+          value: sourceData[config.lineNumberField],
+          isDirectSql: false,
+        };
+      }
+      if (
+        fieldMapping.targetField === config.bonificationLineReferenceField &&
+        sourceData[config.bonificationLineReferenceField] !== undefined
+      ) {
+        return {
+          value: sourceData[config.bonificationLineReferenceField],
+          isDirectSql: false,
+        };
+      }
+    }
 
     // PRIORIDAD 1: Usar valores obtenidos por lookup si existen
     if (
@@ -2384,7 +2664,6 @@ class DynamicTransferService {
 
     return { value, isDirectSql: false };
   }
-
   /**
    * Verifica si un campo debe recibir el consecutivo
    * @private
@@ -2506,8 +2785,25 @@ class DynamicTransferService {
         `Procesando ${detailsData.length} registros de detalle en ${detailConfig.name}`
       );
 
+      // 🟢 NUEVO: Si hay bonificaciones, usar datos procesados
+      let detailDataToProcess = detailsData;
+      if (
+        mapping.hasBonificationProcessing &&
+        mapping.bonificationConfig &&
+        Array.isArray(sourceData)
+      ) {
+        // Filtrar los datos de bonificaciones que corresponden a este documento
+        detailDataToProcess = sourceData.filter(
+          (record) =>
+            record[mapping.bonificationConfig.orderField] === documentId
+        );
+        logger.info(
+          `🎁 Usando ${detailDataToProcess.length} registros procesados de bonificaciones para detalles`
+        );
+      }
+
       // Insertar detalles
-      for (const detailRow of detailsData) {
+      for (const detailRow of detailDataToProcess) {
         await this.processTable(
           detailConfig,
           sourceData,
