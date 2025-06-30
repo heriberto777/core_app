@@ -9,6 +9,10 @@ const ConsecutiveService = require("./ConsecutiveService");
 const BonificationService = require("./BonificationService"); // 🟢 NUEVO: Importar servicio especializado
 
 class DynamicTransferService {
+  constructor() {
+    // 🔥 SOLUCIÓN: Crear instancia de BonificationService
+    this.bonificationService = new BonificationService({ debug: true });
+  }
   /**
    * 🟢 NUEVO: Procesa bonificaciones usando el servicio especializado
    * @param {Array} sourceData - Datos originales
@@ -490,7 +494,7 @@ class DynamicTransferService {
         try {
           // Usar BonificationService para el procesamiento unificado
           const unifiedProcessedData =
-            await BonificationService.processBonificationsUnified(
+            await this.bonificationService.processBonificationsUnified(
               documentIds,
               mapping,
               sourceConnection
@@ -1210,7 +1214,7 @@ class DynamicTransferService {
         logger.info(
           `🎁 Usando BonificationService para obtener datos con bonificaciones`
         );
-        return await BonificationService.processBonificationsUnified(
+        return await this.bonificationService.processBonificationsUnified(
           documentIds,
           mapping,
           connection
