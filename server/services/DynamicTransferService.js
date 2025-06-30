@@ -966,7 +966,7 @@ class DynamicTransferService {
       try {
         // Conexión a servidor origen
         logger.info(`🔗 Conectando a servidor origen: ${mapping.sourceServer}`);
-        const sourceResult = await ConnectionManager.enhancedRobustConnect(
+        const sourceResult = await ConnectionService.enhancedRobustConnect(
           mapping.sourceServer
         );
         if (!sourceResult.success) {
