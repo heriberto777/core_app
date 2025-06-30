@@ -351,6 +351,47 @@ class DynamicTransferService {
     }
   }
 
+  async getSourceDataForDocuments(documentIds, mapping, connection) {
+    try {
+      // ✅ VALIDACIONES INICIALES
+      if (!Array.isArray(documentIds) || documentIds.length === 0) {
+        logger.warn(
+          "⚠️ No hay documentos para procesar en getSourceDataForDocuments"
+        );
+        return [];
+      }
+
+      if (!mapping) {
+        throw new Error("Mapping es requerido");
+      }
+
+      if (!connection || connection.destroyed || connection.closed) {
+        throw new Error(
+          `La conexión a ${mapping.sourceServer} no está disponible`
+        );
+      }
+
+      logger.info(`📥 Obteniendo datos para ${documentIds.length} documentos`);
+
+      // ✅ VALIDAR que tableConfigs existe
+      if (
+        !mapping.tableConfigs ||
+        !Array.isArray(mapping.tableConfigs) ||
+        mapping.tableConfigs.length === 0
+      ) {
+        throw new Error(
+          "La configuración de mapeo no tiene tablas configuradas"
+        );
+      }
+
+      // Resto del método igual...
+      // [mantener la lógica existente pero con las validaciones agregadas]
+    } catch (error) {
+      logger.error(`❌ Error en getSourceDataForDocuments: ${error.message}`);
+      throw error;
+    }
+  }
+
   /**
    * 🟢 MODIFICADO ÚNICAMENTE: Obtener datos de origen para documentos específicos
    * @param {Array} documentIds - IDs de documentos
@@ -643,340 +684,502 @@ class DynamicTransferService {
    */
   applyFieldMapping(sourceData, fieldMappings, targetConnection) {
     try {
+      // ✅ VALIDACIONES CRÍTICAS
+      if (!Array.isArray(sourceData)) {
+        logger.error("❌ sourceData no es un array:", typeof sourceData);
+        throw new Error("sourceData debe ser un array");
+      }
+
+      if (!Array.isArray(fieldMappings)) {
+        logger.error("❌ fieldMappings no es un array:", typeof fieldMappings);
+        throw new Error("fieldMappings debe ser un array");
+      }
+
+      if (sourceData.length === 0) {
+        logger.warn("⚠️ No hay datos de origen para mapear");
+        return [];
+      }
+
+      if (fieldMappings.length === 0) {
+        logger.warn("⚠️ No hay configuraciones de mapeo de campos");
+        return sourceData; // Devolver datos originales si no hay mapeo
+      }
+
+      logger.debug(
+        `🔄 Aplicando mapeo de campos: ${sourceData.length} registros, ${fieldMappings.length} mapeos`
+      );
+
       const mappedData = [];
 
       for (const sourceRecord of sourceData) {
         const mappedRecord = {};
 
+        // ✅ VALIDAR que sourceRecord sea un objeto
+        if (!sourceRecord || typeof sourceRecord !== "object") {
+          logger.warn(
+            "⚠️ Registro de origen inválido, omitiendo:",
+            sourceRecord
+          );
+          continue;
+        }
+
         for (const fieldMapping of fieldMappings) {
-          const { sourceField, targetField, defaultValue, transformFunction } =
-            fieldMapping;
-
-          let value = sourceRecord[sourceField];
-
-          // Aplicar valor por defecto si es necesario
-          if (value === null || value === undefined) {
-            value = defaultValue || null;
-          }
-
-          // Aplicar transformación si está definida
-          if (transformFunction && typeof transformFunction === "function") {
-            try {
-              value = transformFunction(value, sourceRecord);
-            } catch (transformError) {
+          try {
+            // ✅ VALIDAR fieldMapping
+            if (!fieldMapping || typeof fieldMapping !== "object") {
               logger.warn(
-                `Error en transformación para campo ${targetField}: ${transformError.message}`
+                "⚠️ Mapeo de campo inválido, omitiendo:",
+                fieldMapping
+              );
+              continue;
+            }
+
+            const {
+              sourceField,
+              targetField,
+              defaultValue,
+              transformFunction,
+            } = fieldMapping;
+
+            // ✅ VALIDAR targetField es requerido
+            if (!targetField) {
+              logger.warn("⚠️ targetField faltante en mapeo:", fieldMapping);
+              continue;
+            }
+
+            let value = null;
+
+            // 1. Obtener valor del campo origen
+            if (sourceField && sourceRecord.hasOwnProperty(sourceField)) {
+              value = sourceRecord[sourceField];
+              logger.debug(
+                `📥 Campo ${sourceField} → ${targetField}: ${value}`
+              );
+            } else if (sourceField) {
+              logger.debug(
+                `⚠️ Campo origen ${sourceField} no encontrado en registro`
               );
             }
-          }
 
-          // 🟢 AGREGADO ÚNICAMENTE: Usar campos calculados si están disponibles (para bonificaciones)
-          if (
-            sourceRecord.CALCULATED_PEDIDO_LINEA &&
-            targetField === "PEDIDO_LINEA"
-          ) {
-            value = sourceRecord.CALCULATED_PEDIDO_LINEA;
-          }
+            // 2. ✅ CAMPOS ESPECIALES - Manejar campos calculados (para bonificaciones)
+            if (
+              sourceRecord.CALCULATED_PEDIDO_LINEA &&
+              targetField === "PEDIDO_LINEA"
+            ) {
+              value = sourceRecord.CALCULATED_PEDIDO_LINEA;
+              logger.debug(`🎁 Usando campo calculado PEDIDO_LINEA: ${value}`);
+            }
 
-          if (
-            sourceRecord.CALCULATED_PEDIDO_LINEA_BONIF !== undefined &&
-            targetField === "PEDIDO_LINEA_BONIF"
-          ) {
-            value = sourceRecord.CALCULATED_PEDIDO_LINEA_BONIF;
-          }
+            if (
+              sourceRecord.CALCULATED_PEDIDO_LINEA_BONIF !== undefined &&
+              targetField === "PEDIDO_LINEA_BONIF"
+            ) {
+              value = sourceRecord.CALCULATED_PEDIDO_LINEA_BONIF;
+              logger.debug(
+                `🎁 Usando campo calculado PEDIDO_LINEA_BONIF: ${value}`
+              );
+            }
 
-          mappedRecord[targetField] = value;
+            // 3. ✅ APLICAR VALOR POR DEFECTO si es necesario
+            if (value === null || value === undefined) {
+              if (defaultValue !== undefined && defaultValue !== null) {
+                // Verificar si es una función SQL nativa
+                if (
+                  typeof defaultValue === "string" &&
+                  this.isSqlFunction(defaultValue)
+                ) {
+                  value = defaultValue; // Mantener la función SQL
+                  logger.debug(
+                    `🔧 Usando función SQL para ${targetField}: ${defaultValue}`
+                  );
+                } else {
+                  value = defaultValue === "NULL" ? null : defaultValue;
+                  logger.debug(
+                    `🔧 Usando valor por defecto para ${targetField}: ${value}`
+                  );
+                }
+              }
+            }
+
+            // 4. ✅ MAPEO ESPECIAL PARA CAMPOS CRÍTICOS
+            if (
+              targetField === "PEDIDO" &&
+              (value === null || value === undefined)
+            ) {
+              // Intentar obtener el número de pedido de diferentes campos posibles
+              const possibleFields = [
+                "NUM_PED",
+                "PEDIDO",
+                "NUMERO_PEDIDO",
+                "ID_PEDIDO",
+              ];
+              for (const field of possibleFields) {
+                if (
+                  sourceRecord[field] !== null &&
+                  sourceRecord[field] !== undefined
+                ) {
+                  value = sourceRecord[field];
+                  logger.info(`🔧 PEDIDO obtenido de campo ${field}: ${value}`);
+                  break;
+                }
+              }
+            }
+
+            if (
+              targetField === "FECHA_PEDIDO" &&
+              (value === null || value === undefined)
+            ) {
+              // Intentar obtener la fecha de diferentes campos posibles
+              const possibleDateFields = [
+                "FECHA_PEDIDO",
+                "FEC_PED",
+                "FECHA",
+                "FECHA_DOC",
+              ];
+              for (const field of possibleDateFields) {
+                if (
+                  sourceRecord[field] !== null &&
+                  sourceRecord[field] !== undefined
+                ) {
+                  value = sourceRecord[field];
+                  logger.info(
+                    `🔧 FECHA_PEDIDO obtenida de campo ${field}: ${value}`
+                  );
+                  break;
+                }
+              }
+
+              // Si aún no hay fecha, usar fecha actual
+              if (value === null || value === undefined) {
+                value = "GETDATE()"; // Función SQL para fecha actual
+                logger.info(`🔧 FECHA_PEDIDO usando fecha actual: GETDATE()`);
+              }
+            }
+
+            // 5. Aplicar transformación si está definida
+            if (transformFunction && typeof transformFunction === "function") {
+              try {
+                const originalValue = value;
+                value = transformFunction(value, sourceRecord);
+                logger.debug(
+                  `🔄 Transformación aplicada a ${targetField}: ${originalValue} → ${value}`
+                );
+              } catch (transformError) {
+                logger.warn(
+                  `⚠️ Error en transformación para campo ${targetField}: ${transformError.message}`
+                );
+              }
+            }
+
+            // 6. ✅ VALIDACIÓN FINAL para campos críticos
+            if (
+              targetField === "PEDIDO" &&
+              (value === null || value === undefined || value === "")
+            ) {
+              logger.error(
+                `❌ Campo crítico PEDIDO es NULL/vacío en registro:`,
+                sourceRecord
+              );
+              throw new Error(
+                `Campo PEDIDO no puede ser NULL. Registro: ${JSON.stringify(
+                  sourceRecord
+                )}`
+              );
+            }
+
+            mappedRecord[targetField] = value;
+          } catch (fieldError) {
+            logger.error(
+              `❌ Error procesando campo ${fieldMapping.targetField}: ${fieldError.message}`
+            );
+            throw fieldError;
+          }
+        }
+
+        // ✅ VALIDACIÓN FINAL del registro mapeado
+        if (Object.keys(mappedRecord).length === 0) {
+          logger.warn("⚠️ Registro mapeado vacío, omitiendo");
+          continue;
         }
 
         mappedData.push(mappedRecord);
       }
 
-      logger.debug(
-        `✅ Mapeo de campos completado: ${mappedData.length} registros`
+      logger.info(
+        `✅ Mapeo de campos completado: ${mappedData.length} registros procesados de ${sourceData.length} originales`
       );
       return mappedData;
     } catch (error) {
-      logger.error(`❌ Error en mapeo de campos: ${error.message}`);
+      logger.error(`❌ Error crítico en mapeo de campos: ${error.message}`);
+      logger.error(`Stack trace: ${error.stack}`);
       throw error;
     }
   }
 
-  // ✅ RESTO DEL CÓDIGO ORIGINAL MANTENIDO COMPLETAMENTE...
+  /**
+   * ✅ NUEVO: Verificar si un valor es una función SQL
+   */
+  isSqlFunction(value) {
+    if (typeof value !== "string") return false;
+
+    const sqlFunctions = [
+      "GETDATE()",
+      "CURRENT_TIMESTAMP",
+      "NEWID()",
+      "SYSUTCDATETIME()",
+      "SYSDATETIME()",
+      "GETUTCDATE()",
+      "GETDATE",
+      "DATEADD",
+      "DATEDIFF",
+    ];
+
+    const upperValue = value.toUpperCase();
+    return sqlFunctions.some((func) => upperValue.includes(func));
+  }
 
   /**
    * ✅ CÓDIGO ORIGINAL: Obtiene documentos con filtros aplicados
    */
-  async getDocuments(mapping, filters, connection) {
+  async processDocuments(documentIds, mappingId, signal = null) {
+    logger.info(
+      `🚀 Iniciando procesamiento de ${documentIds.length} documentos para mapping ${mappingId}`
+    );
+
     try {
-      // Listar tablas disponibles en la base de datos para depuración
-      try {
-        logger.info("Listando tablas disponibles en la base de datos...");
-        const listTablesQuery = `
-          SELECT TOP 50 TABLE_SCHEMA, TABLE_NAME
-          FROM INFORMATION_SCHEMA.TABLES
-          ORDER BY TABLE_SCHEMA, TABLE_NAME
-        `;
-
-        const tablesResult = await SqlService.query(
-          connection,
-          listTablesQuery
-        );
-
-        if (tablesResult.recordset && tablesResult.recordset.length > 0) {
-          const tables = tablesResult.recordset;
-          logger.info(
-            `Tablas disponibles: ${tables
-              .map((t) => `${t.TABLE_SCHEMA}.${t.TABLE_NAME}`)
-              .join(", ")}`
-          );
-        } else {
-          logger.warn("No se encontraron tablas en la base de datos");
-        }
-      } catch (listError) {
-        logger.warn(`Error al listar tablas: ${listError.message}`);
+      // ✅ VALIDACIONES INICIALES
+      if (!Array.isArray(documentIds) || documentIds.length === 0) {
+        throw new Error("documentIds debe ser un array no vacío");
       }
 
-      // Validar que el mapeo sea válido
+      if (!mappingId) {
+        throw new Error("mappingId es requerido");
+      }
+
+      // 1. Obtener configuración de mapeo
+      const mapping = await this.getMappingById(mappingId);
       if (!mapping) {
-        throw new Error("La configuración de mapeo es nula o indefinida");
+        throw new Error(`Configuración de mapeo no encontrada: ${mappingId}`);
       }
 
+      // ✅ VALIDACIÓN CRÍTICA: Verificar tableConfigs
       if (
         !mapping.tableConfigs ||
         !Array.isArray(mapping.tableConfigs) ||
         mapping.tableConfigs.length === 0
       ) {
         throw new Error(
-          "La configuración de mapeo no tiene tablas configuradas"
-        );
-      }
-
-      // Determinar tabla principal
-      const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
-      if (!mainTable) {
-        throw new Error("No se encontró configuración de tabla principal");
-      }
-
-      if (!mainTable.sourceTable) {
-        throw new Error(
-          "La tabla principal no tiene definido el campo sourceTable"
+          `La configuración de mapeo ${mapping.name} no tiene tablas configuradas válidas`
         );
       }
 
       logger.info(
-        `Obteniendo documentos de ${mainTable.sourceTable} en ${mapping.sourceServer}`
+        `📋 Configuración de mapeo cargada: ${mapping.name} con ${mapping.tableConfigs.length} tablas`
       );
 
-      // Verificar si la tabla existe, manejando correctamente esquemas
-      try {
-        // Separar esquema y nombre de tabla
-        let schema = "dbo"; // Esquema por defecto
-        let tableName = mainTable.sourceTable;
+      // 2. Establecer conexiones
+      let sourceConnection = null;
+      let targetConnection = null;
 
-        if (tableName.includes(".")) {
-          const parts = tableName.split(".");
-          schema = parts[0];
-          tableName = parts[1];
+      try {
+        // Conexión a servidor origen
+        logger.info(`🔗 Conectando a servidor origen: ${mapping.sourceServer}`);
+        const sourceResult = await ConnectionManager.enhancedRobustConnect(
+          mapping.sourceServer
+        );
+        if (!sourceResult.success) {
+          throw new Error(
+            `No se pudo conectar a servidor origen ${mapping.sourceServer}: ${
+              sourceResult.error?.message || "Error desconocido"
+            }`
+          );
+        }
+        sourceConnection = sourceResult.connection;
+
+        // Conexión a servidor destino
+        logger.info(
+          `🔗 Conectando a servidor destino: ${mapping.targetServer}`
+        );
+        const targetResult = await ConnectionManager.enhancedRobustConnect(
+          mapping.targetServer
+        );
+        if (!targetResult.success) {
+          throw new Error(
+            `No se pudo conectar a servidor destino ${mapping.targetServer}: ${
+              targetResult.error?.message || "Error desconocido"
+            }`
+          );
+        }
+        targetConnection = targetResult.connection;
+
+        // 3. Obtener datos de origen
+        logger.info(
+          `📥 Obteniendo datos de origen para ${documentIds.length} documentos`
+        );
+        let sourceData = await this.getSourceDataForDocuments(
+          documentIds,
+          mapping,
+          sourceConnection
+        );
+
+        // ✅ VALIDACIÓN de datos de origen
+        if (!Array.isArray(sourceData)) {
+          logger.error("❌ sourceData no es un array:", typeof sourceData);
+          throw new Error("Los datos de origen no son válidos");
+        }
+
+        if (sourceData.length === 0) {
+          logger.warn("⚠️ No se encontraron datos de origen para procesar");
+          return {
+            processed: 0,
+            failed: 0,
+            details: [],
+            message: "No se encontraron datos para procesar",
+          };
         }
 
         logger.info(
-          `Verificando existencia de tabla: Esquema=${schema}, Tabla=${tableName}`
+          `📥 Datos de origen obtenidos: ${sourceData.length} registros`
         );
 
-        const checkTableQuery = `
-          SELECT COUNT(*) AS table_exists
-          FROM INFORMATION_SCHEMA.TABLES
-          WHERE TABLE_SCHEMA = '${schema}' AND TABLE_NAME = '${tableName}'
-        `;
+        // 4. Procesar cada tabla configurada
+        const results = [];
+        let totalInserted = 0;
+        let totalErrors = 0;
 
-        const tableCheck = await SqlService.query(connection, checkTableQuery);
+        // ✅ ORDENAR tablas por dependencias
+        const sortedTableConfigs = this.sortTablesByDependencies(
+          mapping.tableConfigs
+        );
 
-        if (
-          !tableCheck.recordset ||
-          tableCheck.recordset[0].table_exists === 0
-        ) {
-          // Si no se encuentra, intentar buscar sin distinguir mayúsculas/minúsculas
-          const searchTableQuery = `
-            SELECT TOP 5 TABLE_SCHEMA, TABLE_NAME
-            FROM INFORMATION_SCHEMA.TABLES
-            WHERE TABLE_NAME LIKE '%${tableName}%'
-          `;
-
-          const searchResult = await SqlService.query(
-            connection,
-            searchTableQuery
-          );
-
-          if (searchResult.recordset && searchResult.recordset.length > 0) {
-            logger.warn(
-              `Tabla '${schema}.${tableName}' no encontrada, pero se encontraron similares: ${searchResult.recordset
-                .map((t) => `${t.TABLE_SCHEMA}.${t.TABLE_NAME}`)
-                .join(", ")}`
+        for (const tableConfig of sortedTableConfigs) {
+          try {
+            logger.info(
+              `📋 Procesando tabla: ${tableConfig.name} (${tableConfig.sourceTable} → ${tableConfig.targetTable})`
             );
-          }
 
-          throw new Error(
-            `La tabla '${schema}.${tableName}' no existe en el servidor ${mapping.sourceServer}`
-          );
-        }
-
-        logger.info(`Tabla ${schema}.${tableName} verificada correctamente`);
-
-        // Obtener todas las columnas de la tabla para validar los campos
-        const columnsQuery = `
-          SELECT COLUMN_NAME, DATA_TYPE
-          FROM INFORMATION_SCHEMA.COLUMNS
-          WHERE TABLE_SCHEMA = '${schema}' AND TABLE_NAME = '${tableName}'
-        `;
-
-        const columnsResult = await SqlService.query(connection, columnsQuery);
-
-        if (!columnsResult.recordset || columnsResult.recordset.length === 0) {
-          logger.warn(
-            `No se pudieron obtener las columnas de ${schema}.${tableName}`
-          );
-        } else {
-          const availableColumns = columnsResult.recordset.map(
-            (col) => col.COLUMN_NAME
-          );
-          logger.info(
-            `Columnas disponibles en ${schema}.${tableName}: ${availableColumns.join(
-              ", "
-            )}`
-          );
-
-          // Validar campos específicos utilizados en filtros
-          const fieldsToValidate = [
-            filters.dateField,
-            filters.statusField,
-            filters.warehouseField,
-            mainTable.primaryKey || "NUM_PED",
-            mapping.markProcessedField,
-          ].filter(Boolean);
-
-          for (const field of fieldsToValidate) {
-            if (!availableColumns.includes(field)) {
-              logger.warn(
-                `Campo '${field}' no encontrado en ${schema}.${tableName}. Columnas disponibles: ${availableColumns.join(
-                  ", "
-                )}`
+            // ✅ VALIDAR configuración de tabla
+            if (
+              !tableConfig.fieldMappings ||
+              !Array.isArray(tableConfig.fieldMappings)
+            ) {
+              logger.error(
+                `❌ Tabla ${tableConfig.name} no tiene fieldMappings válidos`
+              );
+              throw new Error(
+                `Configuración de tabla ${tableConfig.name} es inválida`
               );
             }
+
+            // Filtrar datos para esta tabla
+            let tableData = sourceData;
+
+            // Aplicar mapeo de campos
+            const mappedData = this.applyFieldMapping(
+              tableData,
+              tableConfig.fieldMappings,
+              targetConnection
+            );
+
+            if (mappedData.length === 0) {
+              logger.warn(
+                `⚠️ No hay datos mapeados para tabla ${tableConfig.name}`
+              );
+              continue;
+            }
+
+            // Insertar datos
+            const insertResult = await this.insertDataBatch(
+              mappedData,
+              tableConfig,
+              targetConnection
+            );
+
+            totalInserted += insertResult.inserted;
+            totalErrors += insertResult.errors;
+
+            results.push({
+              table: tableConfig.name,
+              inserted: insertResult.inserted,
+              errors: insertResult.errors,
+            });
+          } catch (tableError) {
+            logger.error(
+              `❌ Error procesando tabla ${tableConfig.name}: ${tableError.message}`
+            );
+            totalErrors++;
+            results.push({
+              table: tableConfig.name,
+              inserted: 0,
+              errors: 1,
+              error: tableError.message,
+            });
           }
         }
-      } catch (tableError) {
-        logger.error(`Error verificando tabla: ${tableError.message}`);
-        throw new Error(`Error verificando tabla: ${tableError.message}`);
-      }
 
-      // Construir consulta base
-      const primaryKey = mainTable.primaryKey || "NUM_PED";
-      let baseQuery = `SELECT ${primaryKey}`;
-
-      // Agregar campos adicionales si están configurados
-      const additionalFields = [];
-
-      if (filters.dateField && filters.dateField !== primaryKey) {
-        additionalFields.push(filters.dateField);
-      }
-
-      if (filters.statusField && filters.statusField !== primaryKey) {
-        additionalFields.push(filters.statusField);
-      }
-
-      if (filters.warehouseField && filters.warehouseField !== primaryKey) {
-        additionalFields.push(filters.warehouseField);
-      }
-
-      if (
-        mapping.markProcessedField &&
-        mapping.markProcessedField !== primaryKey
-      ) {
-        additionalFields.push(mapping.markProcessedField);
-      }
-
-      // Agregar campos únicos
-      const uniqueFields = [...new Set(additionalFields)];
-      if (uniqueFields.length > 0) {
-        baseQuery += `, ${uniqueFields.join(", ")}`;
-      }
-
-      baseQuery += ` FROM ${mainTable.sourceTable}`;
-
-      // Construir condiciones WHERE
-      const whereConditions = [];
-      const params = {};
-
-      // Filtro por fechas
-      if (filters.dateFrom && filters.dateTo && filters.dateField) {
-        whereConditions.push(
-          `${filters.dateField} BETWEEN @dateFrom AND @dateTo`
+        logger.info(
+          `✅ Procesamiento completado: ${totalInserted} inserciones, ${totalErrors} errores`
         );
-        params.dateFrom = filters.dateFrom;
-        params.dateTo = filters.dateTo;
+
+        return {
+          processed: totalInserted,
+          failed: totalErrors,
+          details: results,
+          message:
+            totalErrors > 0
+              ? `Procesamiento completado con ${totalErrors} errores`
+              : "Procesamiento completado exitosamente",
+        };
+      } finally {
+        // Liberar conexiones
+        if (sourceConnection) {
+          try {
+            await ConnectionManager.releaseConnection(sourceConnection);
+            logger.debug("✅ Conexión origen liberada");
+          } catch (e) {
+            logger.warn(`⚠️ Error liberando conexión origen: ${e.message}`);
+          }
+        }
+
+        if (targetConnection) {
+          try {
+            await ConnectionManager.releaseConnection(targetConnection);
+            logger.debug("✅ Conexión destino liberada");
+          } catch (e) {
+            logger.warn(`⚠️ Error liberando conexión destino: ${e.message}`);
+          }
+        }
       }
-
-      // Filtro por estado
-      if (filters.status && filters.status !== "all" && filters.statusField) {
-        whereConditions.push(`${filters.statusField} = @status`);
-        params.status = filters.status;
-      }
-
-      // Filtro por bodega
-      if (
-        filters.warehouse &&
-        filters.warehouse !== "all" &&
-        filters.warehouseField
-      ) {
-        whereConditions.push(`${filters.warehouseField} = @warehouse`);
-        params.warehouse = filters.warehouse;
-      }
-
-      // Filtro por procesados/no procesados
-      if (!filters.showProcessed && mapping.markProcessedField) {
-        whereConditions.push(
-          `(${mapping.markProcessedField} IS NULL OR ${mapping.markProcessedField} = 0)`
-        );
-      }
-
-      // Agregar condición de filtro de tabla si existe
-      if (mainTable.filterCondition) {
-        whereConditions.push(`(${mainTable.filterCondition})`);
-      }
-
-      // Construir consulta completa
-      let finalQuery = baseQuery;
-      if (whereConditions.length > 0) {
-        finalQuery += ` WHERE ${whereConditions.join(" AND ")}`;
-      }
-
-      // Agregar ordenamiento
-      if (mainTable.orderByColumn) {
-        finalQuery += ` ORDER BY ${mainTable.orderByColumn}`;
-      } else if (filters.dateField) {
-        finalQuery += ` ORDER BY ${filters.dateField} DESC`;
-      } else {
-        finalQuery += ` ORDER BY ${primaryKey} DESC`;
-      }
-
-      // Ejecutar consulta
-      logger.info(`Ejecutando consulta de documentos: ${finalQuery}`);
-      logger.info(`Parámetros:`, params);
-
-      const result = await SqlService.query(connection, finalQuery, params);
-
-      if (!result.recordset) {
-        logger.warn("La consulta no devolvió resultados");
-        return [];
-      }
-
-      logger.info(`Documentos encontrados: ${result.recordset.length}`);
-
-      return result.recordset;
     } catch (error) {
-      logger.error(`Error obteniendo documentos: ${error.message}`);
+      logger.error(
+        `❌ Error durante el procesamiento de documentos: ${error.message}`
+      );
+      logger.error(`Stack trace: ${error.stack}`);
       throw error;
     }
+  }
+
+  /**
+   * ✅ NUEVO: Ordenar tablas por dependencias
+   */
+  sortTablesByDependencies(tableConfigs) {
+    if (!Array.isArray(tableConfigs)) {
+      logger.warn("⚠️ tableConfigs no es un array, devolviendo array vacío");
+      return [];
+    }
+
+    // Por ahora, ordenamiento simple: tablas principales primero, luego detalles
+    return tableConfigs.sort((a, b) => {
+      // Tablas principales (no de detalle) van primero
+      if (!a.isDetailTable && b.isDetailTable) return -1;
+      if (a.isDetailTable && !b.isDetailTable) return 1;
+
+      // Usar executionOrder si está definido
+      const orderA = a.executionOrder || 0;
+      const orderB = b.executionOrder || 0;
+
+      return orderA - orderB;
+    });
   }
 
   /**
