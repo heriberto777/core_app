@@ -28,14 +28,47 @@ class ConnectionAdapter {
    * @param {string} serverKey - Clave del servidor
    * @returns {Promise<Object>} - Resultado con conexión
    */
-  async enhancedRobustConnect(serverKey) {
+  async enhancedRobustConnect(serverKey, options = {}) {
     try {
-      return await ConnectionCentralService.enhancedRobustConnect(serverKey);
+      // Verificar que el método existe en ConnectionCentralService
+      if (
+        typeof ConnectionCentralService.enhancedRobustConnect === "function"
+      ) {
+        return await ConnectionCentralService.enhancedRobustConnect(
+          serverKey,
+          options
+        );
+      } else {
+        // Fallback usando getConnection
+        logger.warn(
+          `[Adapter] enhancedRobustConnect no disponible, usando getConnection para ${serverKey}`
+        );
+
+        const connection = await ConnectionCentralService.getConnection(
+          serverKey,
+          options
+        );
+
+        return {
+          success: true,
+          connection: connection,
+          serverKey: serverKey,
+          timestamp: new Date().toISOString(),
+        };
+      }
     } catch (error) {
       logger.error(
         `[Adapter] Error en enhancedRobustConnect para ${serverKey}: ${error.message}`
       );
-      throw error;
+
+      return {
+        success: false,
+        connection: null,
+        error: {
+          message: error.message,
+          serverKey: serverKey,
+        },
+      };
     }
   }
 
@@ -114,6 +147,26 @@ class ConnectionAdapter {
         `[Adapter] Error al obtener estado de pools: ${error.message}`
       );
       return {};
+    }
+  }
+
+  /**
+   * ✅ NUEVO: Método de diagnóstico
+   * @param {string} serverKey - Clave del servidor
+   * @returns {Promise<Object>} - Resultado del diagnóstico
+   */
+  async diagnoseConnection(serverKey) {
+    try {
+      return await ConnectionCentralService.diagnoseConnection(serverKey);
+    } catch (error) {
+      logger.error(
+        `[Adapter] Error en diagnóstico para ${serverKey}: ${error.message}`
+      );
+      return {
+        success: false,
+        error: error.message,
+        serverKey: serverKey,
+      };
     }
   }
 }

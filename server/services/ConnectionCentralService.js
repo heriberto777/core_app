@@ -7,17 +7,31 @@ const MongoDbService = require("./mongoDbService");
 const Telemetry = require("./Telemetry");
 const MemoryManager = require("./MemoryManager");
 
-// Configuración global para pools de conexiones
+// ✅ CONFIGURACIÓN OPTIMIZADA - Timeouts aumentados
 const DEFAULT_POOL_CONFIG = {
-  min: 0, // Empezar sin conexiones mínimas para evitar errores iniciales
-  max: 5, // Reducir máximo inicialmente
-  acquireTimeoutMillis: 120000, // 2 minutos para instancias nombradas
-  idleTimeoutMillis: 300000, // 5 minutos
-  evictionRunIntervalMillis: 60000, // 1 minuto
-  softIdleTimeoutMillis: 180000, // 3 minutos
+  min: 0,
+  max: 5,
+  acquireTimeoutMillis: 180000, // ✅ 3 minutos (era muy corto)
+  idleTimeoutMillis: 300000,
+  evictionRunIntervalMillis: 60000,
+  softIdleTimeoutMillis: 180000,
   testOnBorrow: false,
   testOnReturn: false,
-  fifo: true, // Cambiar a FIFO para mejor consistencia con instancias
+  fifo: true,
+};
+
+// ✅ NUEVA CONFIGURACIÓN TEDIOUS OPTIMIZADA
+const TEDIOUS_CONFIG_OPTIMIZED = {
+  connectTimeout: 180000, // 3 minutos para conexión inicial
+  requestTimeout: 300000, // 5 minutos para consultas
+  cancelTimeout: 30000,
+  connectionRetryInterval: 5000,
+  maxRetriesOnConnectionError: 3,
+  packetSize: 4096,
+  enableArithAbort: true,
+  useUTC: false,
+  rowCollectionOnRequestCompletion: true,
+  useColumnNames: true,
 };
 
 // Límites y contadores para operaciones
@@ -54,134 +68,54 @@ class ConnectionCentralService {
     // Mapa de transacciones activas
     this.activeTransactions = new Map();
 
-    // Flag de inicialización para evitar múltiples inicializaciones
-    this._initializingPools = new Map();
-    this._closingPools = new Set();
+    // ✅ NUEVOS CONTADORES para evitar reinicializaciones excesivas
+    this._consecutiveInvalidConnections = {};
+    this._timeoutCounts = {};
 
-    // Intervalo para verificación de salud
+    // ✅ ELIMINAR: _closingPools que causaba problemas
+    // this._closingPools = new Set(); // ELIMINADO
+
     this.healthCheckInterval = null;
+    this.telemetryInterval = null;
   }
 
-  /**
-   * Inicializa el servicio central de conexiones
-   */
   initialize() {
-    if (this.healthCheckInterval) {
-      return; // Ya inicializado
-    }
+    if (this.healthCheckInterval) return;
 
-    // Configurar verificación periódica de salud
-    this.healthCheckInterval = setInterval(() => {
-      this._checkPoolsHealth();
+    logger.info("🚀 Inicializando ConnectionCentralService...");
+
+    this.healthCheckInterval = setInterval(async () => {
+      try {
+        await this.performHealthCheck();
+      } catch (error) {
+        logger.error("Error en health check:", error);
+      }
     }, POOL_HEALTH.checkInterval);
 
-    logger.info("✅ Servicio central de conexiones inicializado");
+    this.telemetryInterval = setInterval(() => {
+      try {
+        this.logTelemetry();
+      } catch (error) {
+        logger.debug("Error en telemetría:", error);
+      }
+    }, 60000);
+
+    logger.info("✅ ConnectionCentralService inicializado");
   }
 
-  /**
-   * Inicializa un pool de conexiones para un servidor específico
-   */
-  async initPool(serverKey, customConfig = {}) {
-    if (!this._initializingPools) this._initializingPools = new Map();
-
-    if (this._initializingPools.has(serverKey)) {
-      try {
-        logger.info(
-          `Esperando inicialización en curso de pool para ${serverKey}...`
-        );
-        await this._initializingPools.get(serverKey);
-        return true;
-      } catch (error) {
-        logger.error(
-          `Error esperando inicialización de pool: ${error.message}`
-        );
-        return false;
-      }
-    }
-
-    const initPromise = new Promise(async (resolve, reject) => {
-      try {
-        logger.info(`Inicializando pool para ${serverKey}...`);
-
-        if (this.pools[serverKey]) {
-          if (!this._closingPools || !this._closingPools.has(serverKey)) {
-            await this.closePool(serverKey);
-          } else {
-            logger.info(
-              `Esperando a que termine el cierre del pool para ${serverKey}...`
-            );
-            while (this._closingPools && this._closingPools.has(serverKey)) {
-              await new Promise((resolve) => setTimeout(resolve, 500));
-            }
-          }
-        }
-
-        POOL_HEALTH.lastCheck[serverKey] = Date.now();
-        POOL_HEALTH.errorCount[serverKey] = 0;
-
-        const dbConfig = await this._loadConfig(serverKey);
-        if (!dbConfig) {
-          reject(
-            new Error(
-              `No se encontró configuración para ${serverKey} en MongoDB`
-            )
-          );
-          return;
-        }
-
-        const factory = this._createConnectionFactory(dbConfig, serverKey);
-
-        const poolConfig = {
-          ...DEFAULT_POOL_CONFIG,
-          ...customConfig,
-          acquireTimeoutMillis: 120000,
-        };
-
-        this.pools[serverKey] = createPool(factory, poolConfig);
-
-        logger.info(`Pool de conexiones inicializado para ${serverKey}`);
-
-        this._setupAutoRenewal(serverKey);
-
-        resolve(true);
-      } catch (error) {
-        logger.error(`Error al inicializar pool para ${serverKey}:`, error);
-        reject(error);
-      }
-    });
-
-    this._initializingPools.set(serverKey, initPromise);
-
+  async initPool(serverKey) {
     try {
-      const result = await initPromise;
-      this._initializingPools.delete(serverKey);
-      return result;
-    } catch (error) {
-      this._initializingPools.delete(serverKey);
-      throw error;
-    }
-  }
+      logger.info(`Inicializando pool para ${serverKey}...`);
 
-  /**
-   * Carga la configuración de un servidor desde MongoDB
-   */
-  async _loadConfig(serverKey) {
-    try {
-      if (!MongoDbService.isConnected()) {
-        await MongoDbService.connect();
-        if (!MongoDbService.isConnected()) {
-          throw new Error(
-            "No se pudo conectar a MongoDB para cargar configuraciones"
-          );
-        }
+      if (this.pools[serverKey]) {
+        logger.info(`Pool ya existe para ${serverKey}, cerrando primero...`);
+        await this.closePool(serverKey);
       }
 
-      const dbConfig = await DBConfig.findOne({ serverName: serverKey }).lean();
+      const dbConfig = await this._loadConfig(serverKey);
       if (!dbConfig) {
-        logger.error(
-          `No se encontró configuración en MongoDB para ${serverKey}`
-        );
-        return null;
+        logger.error(`No se encontró configuración para ${serverKey}`);
+        return false;
       }
 
       logger.debug(`Configuración cargada desde MongoDB para ${serverKey}:`, {
@@ -192,168 +126,116 @@ class ConnectionCentralService {
         database: dbConfig.database,
       });
 
-      const tediousConfig = this._convertToTediousConfig(dbConfig);
+      const factory = this._createConnectionFactory(dbConfig, serverKey);
+      const pool = createPool(factory, DEFAULT_POOL_CONFIG);
 
-      if (!tediousConfig || !tediousConfig.server) {
-        logger.error(`Configuración Tedious inválida para ${serverKey}`);
+      pool.on("factoryCreateError", (err) => {
+        logger.error(`Error en factory para ${serverKey}:`, err);
+        this._registerConnectionError(serverKey, err);
+      });
+
+      pool.on("factoryDestroyError", (err) => {
+        logger.warn(`Error destruyendo conexión en ${serverKey}:`, err);
+      });
+
+      this.pools[serverKey] = pool;
+
+      this._schedulePoolRenewal(serverKey);
+
+      logger.info(`Pool de conexiones inicializado para ${serverKey}`);
+      return true;
+    } catch (error) {
+      logger.error(`Error inicializando pool para ${serverKey}:`, error);
+      return false;
+    }
+  }
+
+  async _loadConfig(serverKey) {
+    try {
+      if (MongoDbService.isConnected()) {
+        const config = await DBConfig.findOne({ serverName: serverKey });
+        return config;
+      } else {
+        logger.warn("MongoDB no conectado, usando configuración por defecto");
         return null;
       }
-
-      return tediousConfig;
     } catch (error) {
-      logger.error(`Error al cargar configuración para ${serverKey}:`, error);
+      logger.error(`Error cargando configuración para ${serverKey}:`, error);
       return null;
     }
   }
 
-  /**
-   * Convierte la configuración de MongoDB al formato requerido por Tedious
-   */
-  _convertToTediousConfig(dbConfig) {
-    if (!dbConfig) {
-      logger.error("dbConfig es null o undefined");
-      return null;
-    }
-
-    logger.info(`Convertiendo configuración para: ${dbConfig.serverName}`);
-    logger.info(
-      `Host: ${dbConfig.host}, Instance: ${dbConfig.instance}, Port: ${dbConfig.port}`
-    );
-
-    if (
-      !dbConfig.host ||
-      !dbConfig.user ||
-      !dbConfig.password ||
-      !dbConfig.database
-    ) {
-      logger.error(`Configuración incompleta para ${dbConfig.serverName}`, {
-        hasHost: !!dbConfig.host,
-        hasUser: !!dbConfig.user,
-        hasPassword: !!dbConfig.password,
-        hasDatabase: !!dbConfig.database,
-      });
-      return null;
-    }
-
-    // CRÍTICO: Manejo especial para passwords con caracteres especiales
-    let cleanPassword = dbConfig.password;
-
-    // Log para debug (sin mostrar el password completo)
-    logger.debug(
-      `Password length: ${
-        cleanPassword.length
-      }, starts with: ${cleanPassword.substring(0, 2)}...`
-    );
-
-    const config = {
-      server: dbConfig.host.trim(), // Asegurar que no hay espacios
-      authentication: {
-        type: "default",
-        options: {
-          userName: dbConfig.user.trim(),
-          password: cleanPassword, // Tedious maneja caracteres especiales automáticamente
-        },
-      },
-      options: {
-        // CONFIGURACIÓN CRÍTICA para instancias nombradas
-        database: dbConfig.database.trim(),
-        encrypt: false, // IMPORTANTE: Desactivar para conexiones LAN/VPN
-        trustServerCertificate: true,
-        enableArithAbort: true,
-
-        // TIMEOUTS AUMENTADOS para instancias nombradas y VPN
-        connectTimeout: 120000, // 2 minutos (crítico para VPN)
-        requestTimeout: 180000, // 3 minutos
-        cancelTimeout: 30000,
-
-        // CONFIGURACIONES DE RED OPTIMIZADAS para VPN
-        packetSize: 4096,
-        useUTC: false,
-        dateFormat: "mdy",
-        language: "us_english",
-        rowCollectionOnRequestCompletion: true,
-        useColumnNames: true,
-
-        // CONFIGURACIONES ESPECÍFICAS PARA INSTANCIAS NOMBRADAS
-        connectionRetryInterval: 3000, // 3 segundos entre reintentos (VPN puede ser lento)
-        maxRetriesOnConnectionError: 8, // Más reintentos para VPN
-        multiSubnetFailover: false,
-        appName: `NodeApp_${dbConfig.serverName}`,
-        isolationLevel: 1, // READ_UNCOMMITTED
-
-        // CONFIGURACIONES ADICIONALES PARA ESTABILIDAD
-        abortTransactionOnError: true,
-        enableNumericRoundabort: false,
-
-        // CONFIGURACIONES ESPECÍFICAS PARA VPN
-        keepAlive: true,
-        keepAliveInitialDelay: 30000, // 30 segundos
-      },
-    };
-
-    // MANEJO CRÍTICO DE INSTANCIA NOMBRADA
-    if (dbConfig.instance && dbConfig.instance.trim() !== "") {
-      config.options.instanceName = dbConfig.instance.trim();
-      logger.info(
-        `✅ Configurando instancia nombrada: ${config.options.instanceName}`
-      );
-
-      logger.info(
-        `⚠️ Puerto omitido para instancia nombrada (usa puerto dinámico)`
-      );
-    } else if (dbConfig.port && !isNaN(parseInt(dbConfig.port))) {
-      config.options.port = parseInt(dbConfig.port);
-      logger.info(`✅ Configurando puerto específico: ${config.options.port}`);
-    } else {
-      config.options.port = 1433;
-      logger.info(`✅ Usando puerto por defecto: 1433`);
-    }
-
-    // LOG FINAL (sin contraseña por seguridad)
-    const logConfig = {
-      server: config.server,
-      instance: config.options.instanceName,
-      port: config.options.port,
-      database: config.options.database,
-      user: config.authentication.options.userName,
-      encrypt: config.options.encrypt,
-      connectTimeout: config.options.connectTimeout,
-      requestTimeout: config.options.requestTimeout,
-      passwordLength: cleanPassword.length,
-    };
-
-    logger.info(
-      `🔧 Configuración Tedious final:`,
-      JSON.stringify(logConfig, null, 2)
-    );
-
-    return config;
-  }
-
-  /**
-   * Crea un factory de conexiones para el pool
-   */
-  _createConnectionFactory(config, serverKey) {
-    const configInfo = {
-      server: config.server,
-      instance: config.options.instanceName,
-      database: config.options.database,
-      user: config.authentication.options.userName,
-    };
-
-    logger.info(
-      `🏭 Creando factory de conexión para ${serverKey}:`,
-      JSON.stringify(configInfo, null, 2)
-    );
-
+  _createConnectionFactory(dbConfig, serverKey) {
     return {
-      create: () => {
+      create: async () => {
         return new Promise((resolve, reject) => {
-          logger.info(`🔄 Creando nueva conexión para ${serverKey}...`);
+          if (!dbConfig || !dbConfig.host) {
+            logger.error(`Configuración inválida para ${serverKey}:`, {
+              hasHost: !!dbConfig?.host,
+              hasUser: !!dbConfig?.user,
+              hasPassword: !!dbConfig?.password,
+              hasDatabase: !!dbConfig?.database,
+            });
+            return reject(
+              new Error(
+                `Configuración de base de datos incompleta para ${serverKey}`
+              )
+            );
+          }
+
+          let cleanPassword = dbConfig.password;
+
+          logger.debug(
+            `Password length: ${
+              cleanPassword.length
+            }, starts with: ${cleanPassword.substring(0, 2)}...`
+          );
+
+          // ✅ CONFIGURACIÓN OPTIMIZADA
+          const config = {
+            server: dbConfig.host.trim(),
+            authentication: {
+              type: "default",
+              options: {
+                userName: dbConfig.user.trim(),
+                password: cleanPassword,
+              },
+            },
+            options: {
+              database: dbConfig.database.trim(),
+              encrypt: false, // Para redes internas
+              trustServerCertificate: true,
+
+              // ✅ USAR CONFIGURACIÓN OPTIMIZADA
+              ...TEDIOUS_CONFIG_OPTIMIZED,
+
+              appName: `NodeApp_${Date.now()}`,
+              readOnlyIntent: false,
+              multiSubnetFailover: false,
+            },
+          };
+
+          if (dbConfig.instance && dbConfig.instance.trim() !== "") {
+            config.options.instanceName = dbConfig.instance.trim();
+            logger.info(
+              `🏷️ Configurando instancia nombrada: ${config.options.instanceName}`
+            );
+          } else if (dbConfig.port) {
+            config.options.port = parseInt(dbConfig.port);
+            logger.info(
+              `✅ Configurando puerto específico: ${config.options.port}`
+            );
+          } else {
+            config.options.port = 1433;
+          }
+
+          logger.info("🔧 Configuración Tedious final:");
+          logger.info(`🏭 Creando factory de conexión para ${serverKey}:`);
 
           const connection = new Connection(config);
           let isResolved = false;
 
+          // ✅ TIMEOUT MÁS LARGO
           const timeout = setTimeout(() => {
             if (!isResolved) {
               isResolved = true;
@@ -361,16 +243,17 @@ class ConnectionCentralService {
               try {
                 connection.close();
               } catch (e) {}
-
-              const errorMsg = `❌ Timeout al crear conexión para ${serverKey} después de ${config.options.connectTimeout}ms`;
-              logger.error(errorMsg);
-              reject(new Error(errorMsg));
+              reject(
+                new Error(
+                  `Timeout de conexión después de ${config.options.connectTimeout}ms`
+                )
+              );
             }
-          }, config.options.connectTimeout + 5000);
+          }, config.options.connectTimeout);
 
           connection.on("connect", (err) => {
-            clearTimeout(timeout);
             if (isResolved) return;
+            clearTimeout(timeout);
             isResolved = true;
 
             if (err) {
@@ -378,9 +261,6 @@ class ConnectionCentralService {
                 message: err.message,
                 code: err.code,
                 state: err.state,
-                serverName: err.serverName,
-                procName: err.procName,
-                lineNumber: err.lineNumber,
               });
               reject(err);
             } else {
@@ -435,499 +315,76 @@ class ConnectionCentralService {
             logger.info(
               `🚀 Iniciando conexión a ${config.server}${
                 config.options.instanceName
-                  ? "\\" + config.options.instanceName
-                  : ""
-              }:${config.options.port || "dinámico"}...`
+                  ? `\\${config.options.instanceName}`
+                  : `:${config.options.port}`
+              }`
             );
             connection.connect();
           } catch (error) {
             clearTimeout(timeout);
             if (!isResolved) {
               isResolved = true;
-              logger.error(`💥 Excepción al conectar ${serverKey}:`, error);
               reject(error);
             }
           }
         });
       },
 
-      destroy: (connection) => {
+      destroy: async (connection) => {
         return new Promise((resolve) => {
           try {
-            if (connection && typeof connection.close === "function") {
-              connection.removeAllListeners();
-
-              if (this.stats && this.stats.activeConnections) {
-                this.stats.activeConnections.delete(connection);
-              }
-
-              connectionPoolMap.delete(connection);
-              CONNECTION_LIMITS.operationCounter.delete(connection);
-
-              logger.debug(
-                `🗑️ Cerrando conexión para ${
-                  connection._serverKey || "unknown"
-                }`
-              );
+            if (connection && connection.connected) {
+              connection.on("end", () => resolve());
               connection.close();
+            } else {
+              resolve();
             }
           } catch (error) {
-            logger.warn(`⚠️ Error al cerrar conexión:`, error.message);
-          } finally {
+            logger.debug(`Error cerrando conexión: ${error.message}`);
             resolve();
           }
         });
       },
 
-      validate: (connection) => {
-        return Promise.resolve(
-          connection &&
-            connection.state &&
-            connection.state.name === "LoggedIn" &&
-            typeof connection.execSql === "function"
-        );
+      validate: async (connection) => {
+        return new Promise((resolve) => {
+          try {
+            if (!connection || !connection.connected || !connection.loggedIn) {
+              resolve(false);
+              return;
+            }
+
+            if (typeof connection.execSql !== "function") {
+              resolve(false);
+              return;
+            }
+
+            const now = Date.now();
+            if (
+              connection._createdAt &&
+              now - connection._createdAt > CONNECTION_LIMITS.maxAge
+            ) {
+              resolve(false);
+              return;
+            }
+
+            const operationCount =
+              CONNECTION_LIMITS.operationCounter.get(connection) || 0;
+            if (operationCount > CONNECTION_LIMITS.maxOperations) {
+              resolve(false);
+              return;
+            }
+
+            resolve(true);
+          } catch (error) {
+            resolve(false);
+          }
+        });
       },
     };
   }
 
-  /**
-   * Test específico para server2 con caracteres especiales
-   */
-  async testServer2WithSpecialChars(serverKey = "server2") {
-    try {
-      logger.info(
-        `🧪 Test específico para server2 con caracteres especiales...`
-      );
-
-      const testConfig = {
-        server: "sql-calidad.miami",
-        authentication: {
-          type: "default",
-          options: {
-            userName: "cliente-catelli",
-            password: "Smk1$kE[qVc%5fY",
-          },
-        },
-        options: {
-          database: "stdb_gnd",
-          instanceName: "calidadstdb",
-          encrypt: false,
-          trustServerCertificate: true,
-          enableArithAbort: true,
-          connectTimeout: 120000,
-          requestTimeout: 180000,
-          connectionRetryInterval: 3000,
-          maxRetriesOnConnectionError: 8,
-          keepAlive: true,
-          keepAliveInitialDelay: 30000,
-          useColumnNames: true,
-          rowCollectionOnRequestCompletion: true,
-          appName: "NodeApp_Test_Server2",
-        },
-      };
-
-      logger.info(`🔧 Test config:`, {
-        server: testConfig.server,
-        instance: testConfig.options.instanceName,
-        database: testConfig.options.database,
-        user: testConfig.authentication.options.userName,
-        passwordLength: testConfig.authentication.options.password.length,
-      });
-
-      return new Promise((resolve, reject) => {
-        const connection = new Connection(testConfig);
-        let resolved = false;
-
-        const timeout = setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            connection.removeAllListeners();
-            try {
-              connection.close();
-            } catch (e) {}
-            resolve({
-              success: false,
-              error: "Timeout en test server2 después de 2 minutos",
-              phase: "connection_timeout",
-            });
-          }
-        }, 120000);
-
-        connection.on("connect", (err) => {
-          clearTimeout(timeout);
-          if (resolved) return;
-          resolved = true;
-
-          if (err) {
-            logger.error(`❌ Error de conexión server2:`, {
-              message: err.message,
-              code: err.code,
-              state: err.state,
-              serverName: err.serverName,
-            });
-
-            resolve({
-              success: false,
-              error: err.message,
-              code: err.code,
-              state: err.state,
-              phase: "connection_error",
-            });
-          } else {
-            logger.info(`✅ Conexión exitosa a server2`);
-
-            const testRequest = new Request(
-              "SELECT @@SERVERNAME AS ServerName, DB_NAME() AS CurrentDatabase, GETDATE() AS CurrentTime",
-              (err, rowCount) => {
-                try {
-                  connection.close();
-                } catch (e) {}
-
-                if (err) {
-                  resolve({
-                    success: false,
-                    error: err.message,
-                    phase: "query_error",
-                  });
-                } else {
-                  resolve({
-                    success: true,
-                    message: "Conexión y consulta exitosas",
-                    rowCount: rowCount,
-                  });
-                }
-              }
-            );
-
-            let queryData = [];
-
-            // CORRECCIÓN: Manejo compatible de columnas para diferentes versiones de Tedious
-            testRequest.on("row", (columns) => {
-              const row = {};
-
-              try {
-                // Verificar si columns es un array (versión antigua) o un objeto (versión nueva)
-                if (Array.isArray(columns)) {
-                  // Versión antigua de Tedious
-                  columns.forEach((column) => {
-                    if (column && column.metadata && column.metadata.colName) {
-                      row[column.metadata.colName] = column.value;
-                    }
-                  });
-                } else if (columns && typeof columns === "object") {
-                  // Versión nueva de Tedious - columns es un objeto
-                  Object.keys(columns).forEach((key) => {
-                    if (key !== "meta" && columns[key] !== undefined) {
-                      // Puede ser que el valor esté directamente o en una propiedad value
-                      const column = columns[key];
-                      if (
-                        column &&
-                        typeof column === "object" &&
-                        "value" in column
-                      ) {
-                        row[key] = column.value;
-                      } else {
-                        row[key] = column;
-                      }
-                    }
-                  });
-                } else {
-                  // Fallback: intentar convertir a string
-                  logger.warn(
-                    "Formato de columnas no reconocido:",
-                    typeof columns
-                  );
-                  row.result = String(columns);
-                }
-
-                queryData.push(row);
-              } catch (rowError) {
-                logger.error("Error procesando fila:", rowError);
-                // Continuar con la siguiente fila
-              }
-            });
-
-            testRequest.on("done", () => {
-              try {
-                connection.close();
-              } catch (e) {}
-              resolve({
-                success: true,
-                message: "Test server2 exitoso",
-                data: queryData,
-              });
-            });
-
-            connection.execSql(testRequest);
-          }
-        });
-
-        connection.on("error", (err) => {
-          clearTimeout(timeout);
-          if (!resolved) {
-            resolved = true;
-            logger.error(`❌ Error durante conexión server2:`, err);
-            resolve({
-              success: false,
-              error: err.message,
-              code: err.code,
-              phase: "connection_error",
-            });
-          }
-        });
-
-        connection.on("infoMessage", (info) => {
-          logger.debug(`📋 Info server2: ${info.message}`);
-        });
-
-        connection.on("errorMessage", (error) => {
-          logger.warn(`⚠️ Mensaje de error server2: ${error.message}`);
-        });
-
-        logger.info(`🚀 Iniciando test de conexión server2...`);
-        connection.connect();
-      });
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message,
-        phase: "test_error",
-      };
-    }
-  }
-
-  /**
-   * Verifica y actualiza las credenciales de server2
-   */
-  async updateServer2Credentials() {
-    try {
-      if (!MongoDbService.isConnected()) {
-        await MongoDbService.connect();
-      }
-
-      // Buscar configuración actual
-      const currentConfig = await DBConfig.findOne({ serverName: "server2" });
-
-      if (!currentConfig) {
-        logger.error("❌ No se encontró configuración para server2");
-        return { success: false, error: "Configuración no encontrada" };
-      }
-
-      // Configuración correcta para server2
-      const correctConfig = {
-        serverName: "server2",
-        type: "mssql",
-        host: "sql-calidad.miami",
-        instance: "calidadstdb",
-        port: null, // No usar puerto para instancia nombrada
-        database: "stdb_gnd",
-        user: "cliente-catelli",
-        password: "Smk1$kE[qVc%5fY", // Con caracteres especiales
-        options: {
-          encrypt: false,
-          trustServerCertificate: true,
-          enableArithAbort: true,
-        },
-      };
-
-      // Actualizar configuración
-      const updated = await DBConfig.findOneAndUpdate(
-        { serverName: "server2" },
-        correctConfig,
-        { new: true, upsert: true }
-      );
-
-      logger.info("✅ Configuración server2 actualizada:", {
-        serverName: updated.serverName,
-        host: updated.host,
-        instance: updated.instance,
-        database: updated.database,
-        user: updated.user,
-        passwordLength: updated.password.length,
-      });
-
-      return { success: true, updated: true };
-    } catch (error) {
-      logger.error("❌ Error actualizando configuración server2:", error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  /**
-   * Diagnostica problemas de conexión específicos para instancias nombradas
-   */
-  async diagnoseConnection(serverKey) {
-    try {
-      logger.info(`🔍 Iniciando diagnóstico de conexión para ${serverKey}...`);
-
-      const dbConfig = await this._loadConfig(serverKey);
-      if (!dbConfig) {
-        throw new Error(`No se encontró configuración para ${serverKey}`);
-      }
-
-      const diagConfig = JSON.parse(JSON.stringify(dbConfig));
-
-      diagConfig.options.connectTimeout = 120000;
-      diagConfig.options.requestTimeout = 180000;
-
-      logger.info(`🔧 Configuración de diagnóstico:`, {
-        server: diagConfig.server,
-        instance: diagConfig.options.instanceName,
-        port: diagConfig.options.port,
-        database: diagConfig.options.database,
-        connectTimeout: diagConfig.options.connectTimeout,
-      });
-
-      if (!diagConfig.server || typeof diagConfig.server !== "string") {
-        throw new Error(
-          `Configuración inválida: server no está definido para ${serverKey}`
-        );
-      }
-
-      return new Promise((resolve, reject) => {
-        const connection = new Connection(diagConfig);
-        let resolved = false;
-
-        const timeout = setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            connection.removeAllListeners();
-            try {
-              connection.close();
-            } catch (e) {}
-            resolve({
-              success: false,
-              error: "Timeout en diagnóstico después de 2 minutos",
-              phase: "connection_timeout",
-            });
-          }
-        }, 120000);
-
-        connection.on("connect", (err) => {
-          clearTimeout(timeout);
-          if (resolved) return;
-          resolved = true;
-
-          if (err) {
-            resolve({
-              success: false,
-              error: err.message,
-              code: err.code,
-              state: err.state,
-              phase: "connection_error",
-            });
-          } else {
-            const testRequest = new Request(
-              "SELECT @@SERVERNAME AS ServerName, DB_NAME() AS CurrentDatabase",
-              (err, rowCount) => {
-                try {
-                  connection.close();
-                } catch (e) {}
-
-                if (err) {
-                  resolve({
-                    success: false,
-                    error: err.message,
-                    phase: "query_error",
-                  });
-                } else {
-                  resolve({
-                    success: true,
-                    message: "Conexión y consulta exitosas",
-                    rowCount: rowCount,
-                  });
-                }
-              }
-            );
-
-            let queryData = [];
-
-            // CORRECCIÓN: Manejo compatible de columnas
-            testRequest.on("row", (columns) => {
-              const row = {};
-
-              try {
-                if (Array.isArray(columns)) {
-                  // Versión antigua de Tedious
-                  columns.forEach((column) => {
-                    if (column && column.metadata && column.metadata.colName) {
-                      row[column.metadata.colName] = column.value;
-                    }
-                  });
-                } else if (columns && typeof columns === "object") {
-                  // Versión nueva de Tedious
-                  Object.keys(columns).forEach((key) => {
-                    if (key !== "meta" && columns[key] !== undefined) {
-                      const column = columns[key];
-                      if (
-                        column &&
-                        typeof column === "object" &&
-                        "value" in column
-                      ) {
-                        row[key] = column.value;
-                      } else {
-                        row[key] = column;
-                      }
-                    }
-                  });
-                } else {
-                  logger.warn(
-                    "Formato de columnas no reconocido en diagnóstico:",
-                    typeof columns
-                  );
-                  row.result = String(columns);
-                }
-
-                if (Object.keys(row).length > 0) {
-                  queryData.push(row);
-                }
-              } catch (rowError) {
-                logger.error("Error procesando fila en diagnóstico:", rowError);
-              }
-            });
-
-            testRequest.on("done", () => {
-              try {
-                connection.close();
-              } catch (e) {}
-              resolve({
-                success: true,
-                message: "Diagnóstico exitoso",
-                data: queryData,
-              });
-            });
-
-            connection.execSql(testRequest);
-          }
-        });
-
-        connection.on("error", (err) => {
-          clearTimeout(timeout);
-          if (!resolved) {
-            resolved = true;
-            resolve({
-              success: false,
-              error: err.message,
-              code: err.code,
-              phase: "connection_error",
-            });
-          }
-        });
-
-        logger.info(`🚀 Iniciando diagnóstico de conexión...`);
-        connection.connect();
-      });
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message,
-        phase: "diagnosis_error",
-      };
-    }
-  }
-
-  // ... [Resto de métodos como getConnection, releaseConnection, etc. - manteniendo los originales]
-
+  // ✅ MÉTODO getConnection CORREGIDO
   async getConnection(serverKey, options = {}) {
     const startTime = Date.now();
     Telemetry.startTimer(`connection_acquire_${Date.now()}`);
@@ -937,11 +394,10 @@ class ConnectionCentralService {
         this.initialize();
       }
 
-      if (this._closingPools && this._closingPools.has(serverKey)) {
-        throw new Error(
-          `El pool para ${serverKey} está en proceso de cierre y no puede aceptar trabajo`
-        );
-      }
+      // ✅ ELIMINAR: Verificación problemática de _closingPools
+      // if (this._closingPools && this._closingPools.has(serverKey)) {
+      //   throw new Error(`El pool para ${serverKey} está en proceso de cierre...`);
+      // }
 
       if (!this.pools[serverKey]) {
         const initialized = await this.initPool(serverKey);
@@ -960,7 +416,9 @@ class ConnectionCentralService {
         );
       }
 
-      const timeout = options.timeout || 30000;
+      // ✅ TIMEOUT AUMENTADO
+      const timeout = options.timeout || 60000; // 60 segundos (era 30)
+
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => {
           reject(
@@ -978,6 +436,7 @@ class ConnectionCentralService {
         throw new Error(`Se obtuvo una conexión nula para ${serverKey}`);
       }
 
+      // ✅ VALIDACIÓN MEJORADA
       if (typeof connection.execSql !== "function") {
         logger.error(
           `Se obtuvo una conexión sin método execSql para ${serverKey}`
@@ -985,12 +444,29 @@ class ConnectionCentralService {
 
         try {
           await this.pools[serverKey].destroy(connection);
-        } catch (e) {}
+        } catch (e) {
+          logger.warn(`Error destruyendo conexión inválida: ${e.message}`);
+        }
 
-        await this.closePool(serverKey);
-        await this.initPool(serverKey);
+        // ✅ CONTADOR PARA EVITAR REINICIALIZACIONES EXCESIVAS
+        this._consecutiveInvalidConnections[serverKey] =
+          (this._consecutiveInvalidConnections[serverKey] || 0) + 1;
+
+        if (this._consecutiveInvalidConnections[serverKey] >= 3) {
+          logger.warn(
+            `Múltiples conexiones inválidas para ${serverKey}, reinicializando pool...`
+          );
+          await this.closePool(serverKey);
+          await this.initPool(serverKey);
+          this._consecutiveInvalidConnections[serverKey] = 0;
+        }
 
         return this.getConnection(serverKey, options);
+      }
+
+      // ✅ RESETEAR contador en éxito
+      if (this._consecutiveInvalidConnections[serverKey]) {
+        this._consecutiveInvalidConnections[serverKey] = 0;
       }
 
       connection._poolOrigin = serverKey;
@@ -1000,7 +476,6 @@ class ConnectionCentralService {
 
       connectionPoolMap.set(connection, serverKey);
       this.stats.activeConnections.add(connection);
-
       this.stats.acquired++;
 
       const acquireTime = Date.now() - startTime;
@@ -1024,7 +499,6 @@ class ConnectionCentralService {
       const criticalErrors = [
         "draining",
         "cannot accept work",
-        "timeout",
         "connection limit exceeded",
         "econnreset",
         "etimedout",
@@ -1034,18 +508,19 @@ class ConnectionCentralService {
         error.message.toLowerCase().includes(term)
       );
 
-      if (isCriticalError) {
+      // ✅ REINICIALIZACIÓN INTELIGENTE para timeouts
+      if (
+        error.message.includes("Timeout al obtener conexión") &&
+        this._shouldReinitializePool(serverKey)
+      ) {
         logger.warn(
-          `Error crítico de pool para ${serverKey}: ${error.message}. Reinicializando pool...`
+          `Múltiples timeouts para ${serverKey}, reinicializando pool...`
         );
 
         try {
           await this.closePool(serverKey);
           await this.initPool(serverKey);
-
-          logger.info(
-            `Reintentando obtener conexión después de reinicializar pool para ${serverKey}`
-          );
+          logger.info(`Pool reinicializado para ${serverKey}`);
           return await this.getConnection(serverKey, options);
         } catch (reinitError) {
           logger.error(`Error al reinicializar pool: ${reinitError.message}`);
@@ -1059,6 +534,19 @@ class ConnectionCentralService {
     }
   }
 
+  // ✅ NUEVO: Método para determinar reinicialización inteligente
+  _shouldReinitializePool(serverKey) {
+    this._timeoutCounts[serverKey] = (this._timeoutCounts[serverKey] || 0) + 1;
+
+    // Solo reinicializar después de 3 timeouts consecutivos
+    if (this._timeoutCounts[serverKey] >= 3) {
+      this._timeoutCounts[serverKey] = 0;
+      return true;
+    }
+
+    return false;
+  }
+
   async releaseConnection(connection) {
     if (!connection) {
       logger.debug(`Intento de liberar una conexión nula, ignorando`);
@@ -1068,7 +556,6 @@ class ConnectionCentralService {
     try {
       if (!connection.connected && !connection.loggedIn) {
         logger.debug(`Conexión ya cerrada, solo limpiando referencias`);
-
         this.stats.activeConnections.delete(connection);
         connectionPoolMap.delete(connection);
         CONNECTION_LIMITS.operationCounter.delete(connection);
@@ -1180,187 +667,23 @@ class ConnectionCentralService {
     CONNECTION_LIMITS.operationCounter.set(connection, count);
 
     if (count % 10 === 0) {
-      MemoryManager.trackOperation("connection_operation");
+      MemoryManager.checkMemory(
+        `Conexión ${connection._serverKey} - ${count} operaciones`
+      );
     }
 
     return count;
   }
 
-  async enhancedRobustConnect(serverKey, maxAttempts = 5, baseDelay = 3000) {
-    let attempt = 0;
-    let delay = baseDelay;
-    let existingPool = false;
-
-    if (!this.healthCheckInterval) {
-      this.initialize();
-    }
-
-    try {
-      if (this.pools && this.pools[serverKey]) {
-        try {
-          const testConnection = await this.getConnection(serverKey);
-          if (testConnection) {
-            const testRequest = new Request(
-              "SELECT 1 AS test",
-              (err, rowCount, rows) => {
-                if (err) throw err;
-              }
-            );
-
-            await new Promise((resolve, reject) => {
-              const timeout = setTimeout(() => {
-                reject(new Error("Timeout during connection test"));
-              }, 10000);
-
-              testRequest.on("done", () => {
-                clearTimeout(timeout);
-                resolve();
-              });
-
-              testRequest.on("error", (err) => {
-                clearTimeout(timeout);
-                reject(err);
-              });
-
-              testConnection.execSql(testRequest);
-            });
-          }
-        } catch (poolTestError) {
-          logger.warn(
-            `Error al verificar pool existente: ${poolTestError.message}`
-          );
-          existingPool = true;
-        }
-      }
-    } catch (checkError) {
-      logger.warn(`Error al verificar estado de pools: ${checkError.message}`);
-    }
-
-    if (existingPool) {
-      try {
-        logger.info(
-          `Cerrando pool con problemas para ${serverKey} antes de reconectar`
-        );
-        await this.closePool(serverKey);
-      } catch (closeError) {
-        logger.warn(`Error al cerrar pool existente: ${closeError.message}`);
-      }
-    }
-
-    while (attempt < maxAttempts) {
-      attempt++;
-
-      try {
-        logger.info(
-          `Intento ${attempt}/${maxAttempts} para conectar a ${serverKey}...`
-        );
-
-        const initialized = await this.initPool(serverKey);
-        if (!initialized) {
-          throw new Error(`No se pudo inicializar el pool para ${serverKey}`);
-        }
-
-        const connection = await this.getConnection(serverKey);
-        if (!connection) {
-          throw new Error(`No se pudo obtener una conexión a ${serverKey}`);
-        }
-
-        await new Promise((resolve, reject) => {
-          const testRequest = new Request(
-            "SELECT 1 AS test",
-            (err, rowCount) => {
-              if (err) {
-                reject(err);
-              } else {
-                resolve(rowCount);
-              }
-            }
-          );
-
-          const timeout = setTimeout(() => {
-            reject(new Error(`Timeout al verificar conexión a ${serverKey}`));
-          }, 10000);
-
-          testRequest.on("done", () => {
-            clearTimeout(timeout);
-            resolve();
-          });
-
-          testRequest.on("error", (err) => {
-            clearTimeout(timeout);
-            reject(err);
-          });
-
-          connection.execSql(testRequest);
-        });
-
-        logger.info(
-          `Conexión a ${serverKey} establecida y verificada (intento ${attempt})`
-        );
-        return { success: true, connection };
-      } catch (error) {
-        logger.warn(
-          `Error en intento ${attempt} para ${serverKey}: ${error.message}`
-        );
-
-        if (attempt >= maxAttempts) {
-          return {
-            success: false,
-            error: new Error(
-              `No se pudo establecer conexión a ${serverKey} después de ${attempt} intentos: ${error.message}`
-            ),
-          };
-        }
-
-        try {
-          if (
-            error.message &&
-            (error.message.includes("timeout") ||
-              error.message.includes("network") ||
-              error.message.includes("state"))
-          ) {
-            await this.closePool(serverKey);
-          }
-        } catch (cleanupError) {
-          logger.warn(
-            `Error al limpiar recursos antes de reintento: ${cleanupError.message}`
-          );
-        }
-
-        await new Promise((resolve) => setTimeout(resolve, delay));
-        delay = Math.min(delay * 1.5, 30000);
-      }
-    }
-
-    return {
-      success: false,
-      error: new Error(
-        `No se pudo establecer conexión a ${serverKey} después de ${maxAttempts} intentos`
-      ),
-    };
-  }
-
+  // ✅ MÉTODO closePool SIMPLIFICADO
   async closePool(serverKey) {
     try {
       logger.info(`Cerrando pool para ${serverKey}...`);
 
-      if (this._closingPools && this._closingPools.has(serverKey)) {
-        logger.info(
-          `Pool para ${serverKey} ya está en proceso de cierre, esperando...`
-        );
-        while (this._closingPools.has(serverKey)) {
-          await new Promise((resolve) => setTimeout(resolve, 1000));
-        }
-        return true;
-      }
-
-      if (!this._closingPools) this._closingPools = new Set();
-      this._closingPools.add(serverKey);
-
+      // ✅ ELIMINAR lógica problemática de _closingPools
       const pool = this.pools[serverKey];
       if (!pool) {
         logger.warn(`No existe un pool para ${serverKey} que cerrar`);
-        this._closingPools.delete(serverKey);
         return true;
       }
 
@@ -1369,104 +692,272 @@ class ConnectionCentralService {
         this.renewalTimers[serverKey] = null;
       }
 
-      let forcedCleanup = false;
-      const drainPromise = pool.drain().catch((err) => {
-        logger.error(`Error during pool drain: ${err.message}`);
-        throw err;
-      });
-
       try {
+        // ✅ CIERRE SIMPLIFICADO con timeout
         await Promise.race([
-          drainPromise,
-          new Promise((_, reject) => {
-            setTimeout(() => {
-              forcedCleanup = true;
-              reject(new Error("Drain timeout"));
-            }, 30000);
-          }),
+          pool.drain(),
+          new Promise((_, reject) =>
+            setTimeout(() => reject(new Error("Drain timeout")), 30000)
+          ),
         ]);
+
+        await pool.clear();
+        logger.info(`✅ Pool drenado y limpiado para ${serverKey}`);
       } catch (timeoutError) {
         logger.warn(
-          `Timeout durante drain para ${serverKey}, forzando limpieza`
+          `⚠️ Timeout durante cierre de ${serverKey}, forzando limpieza`
         );
       }
 
-      try {
-        if (!forcedCleanup) {
-          await pool.clear();
-        }
-      } catch (clearError) {
-        logger.error(`Error durante clear del pool: ${clearError.message}`);
-      }
-
       delete this.pools[serverKey];
-      this._closingPools.delete(serverKey);
-
-      logger.info(
-        `Pool para ${serverKey} cerrado ${
-          forcedCleanup ? "forzosamente" : "correctamente"
-        }`
-      );
+      logger.info(`Pool para ${serverKey} cerrado correctamente`);
       return true;
-    } catch (outerError) {
-      logger.error(
-        `Error externo al cerrar pool para ${serverKey}: ${outerError.message}`
-      );
-
-      if (this._closingPools) {
-        this._closingPools.delete(serverKey);
-      }
-      if (this.pools[serverKey]) {
-        delete this.pools[serverKey];
-      }
+    } catch (error) {
+      logger.error(`Error cerrando pool para ${serverKey}: ${error.message}`);
       return false;
     }
   }
 
   async closePools() {
     const results = {};
+    const serverKeys = Object.keys(this.pools);
 
-    for (const [serverKey, pool] of Object.entries(this.pools)) {
+    logger.info(`Cerrando ${serverKeys.length} pools...`);
+
+    for (const serverKey of serverKeys) {
       try {
-        logger.info(`Cerrando pool para ${serverKey}...`);
-
-        if (this.renewalTimers[serverKey]) {
-          clearTimeout(this.renewalTimers[serverKey]);
-          this.renewalTimers[serverKey] = null;
-        }
-
-        await pool.drain();
-        await pool.clear();
-
-        delete this.pools[serverKey];
-        results[serverKey] = true;
-
-        logger.info(`Pool para ${serverKey} cerrado correctamente`);
+        results[serverKey] = await this.closePool(serverKey);
       } catch (error) {
-        logger.error(`Error al cerrar pool para ${serverKey}:`, error);
         results[serverKey] = false;
+        logger.error(`Error cerrando pool ${serverKey}: ${error.message}`);
       }
     }
 
-    connectionPoolMap.clear();
-    CONNECTION_LIMITS.operationCounter.clear();
-    this.stats.activeConnections.clear();
+    if (this.healthCheckInterval) {
+      clearInterval(this.healthCheckInterval);
+      this.healthCheckInterval = null;
+    }
 
+    if (this.telemetryInterval) {
+      clearInterval(this.telemetryInterval);
+      this.telemetryInterval = null;
+    }
+
+    logger.info(`Pools cerrados. Resultados:`, results);
     return results;
   }
 
-  _setupAutoRenewal(serverKey) {
+  async beginTransaction(connection, options = {}) {
+    return new Promise((resolve, reject) => {
+      const transaction = connection.beginTransaction((err) => {
+        if (err) {
+          reject(err);
+        } else {
+          this.activeTransactions.set(connection, transaction);
+          transaction._connection = connection;
+          resolve(transaction);
+        }
+      });
+    });
+  }
+
+  async commitTransaction(transaction) {
+    return new Promise((resolve, reject) => {
+      transaction.commitTransaction((err) => {
+        if (err) {
+          reject(err);
+        } else {
+          this.activeTransactions.delete(transaction._connection);
+          resolve();
+        }
+      });
+    });
+  }
+
+  async rollbackTransaction(transaction) {
+    return new Promise((resolve, reject) => {
+      transaction.rollbackTransaction((err) => {
+        if (err) {
+          reject(err);
+        } else {
+          this.activeTransactions.delete(transaction._connection);
+          resolve();
+        }
+      });
+    });
+  }
+
+  async diagnoseConnection(serverKey) {
+    try {
+      logger.info(`🔍 Diagnosticando ${serverKey}...`);
+
+      const connection = await this.getConnection(serverKey, {
+        timeout: 15000,
+      });
+
+      const testQuery = "SELECT 1 as test_value, GETDATE() as server_time";
+      const testResult = await this.executeTestQuery(connection, testQuery);
+
+      await this.releaseConnection(connection);
+
+      return {
+        success: true,
+        serverKey,
+        message: "Conexión exitosa",
+        testResult,
+        timestamp: new Date().toISOString(),
+      };
+    } catch (error) {
+      return {
+        success: false,
+        serverKey,
+        error: error.message,
+        phase: "connection_test",
+        timestamp: new Date().toISOString(),
+      };
+    }
+  }
+
+  executeTestQuery(connection, sql) {
+    return new Promise((resolve, reject) => {
+      const rows = [];
+
+      const request = new Request(sql, (err, rowCount) => {
+        if (err) {
+          reject(err);
+        } else {
+          resolve({
+            rows,
+            rowCount,
+            success: true,
+          });
+        }
+      });
+
+      // ✅ CORREGIDO: Manejo robusto del evento "row"
+      request.on("row", (columns) => {
+        const row = {};
+
+        try {
+          // Verificar si columns es un array (versiones anteriores de Tedious)
+          if (Array.isArray(columns)) {
+            columns.forEach((column) => {
+              if (column && column.metadata && column.metadata.colName) {
+                row[column.metadata.colName] = column.value;
+              }
+            });
+          }
+          // Verificar si columns es un objeto (versiones más recientes)
+          else if (columns && typeof columns === "object") {
+            // Si tiene propiedades que parecen columnas
+            for (const [key, value] of Object.entries(columns)) {
+              if (
+                value &&
+                typeof value === "object" &&
+                value.metadata &&
+                value.metadata.colName
+              ) {
+                row[value.metadata.colName] = value.value;
+              } else if (key !== "meta" && value !== undefined) {
+                row[key] = value;
+              }
+            }
+          }
+          // Fallback para casos no esperados
+          else {
+            logger.warn(
+              "Formato de columnas no reconocido en executeTestQuery"
+            );
+            row["unknown_result"] = String(columns);
+          }
+
+          // Solo agregar si la fila tiene datos
+          if (Object.keys(row).length > 0) {
+            rows.push(row);
+          }
+        } catch (parseError) {
+          logger.warn(
+            `Error parseando fila en executeTestQuery: ${parseError.message}`
+          );
+          // En caso de error, agregar información básica
+          rows.push({
+            error: "Error parseando fila",
+            raw_data: String(columns),
+          });
+        }
+      });
+
+      // Manejar errores en la request
+      request.on("error", (err) => {
+        reject(err);
+      });
+
+      // Ejecutar la consulta
+      try {
+        connection.execSql(request);
+      } catch (execError) {
+        reject(
+          new Error(`Error ejecutando consulta de prueba: ${execError.message}`)
+        );
+      }
+    });
+  }
+
+  async performHealthCheck() {
+    try {
+      logger.debug("Realizando health check...");
+
+      const poolKeys = Object.keys(this.pools);
+      const results = {};
+
+      for (const poolKey of poolKeys) {
+        try {
+          const pool = this.pools[poolKey];
+          if (pool) {
+            results[poolKey] = {
+              size: pool.size,
+              available: pool.available,
+              borrowed: pool.borrowed,
+              pending: pool.pending,
+              status: pool._draining ? "draining" : "active",
+            };
+          }
+        } catch (error) {
+          results[poolKey] = {
+            status: "error",
+            error: error.message,
+          };
+        }
+      }
+
+      POOL_HEALTH.lastCheck[Date.now()] = results;
+
+      if (Object.keys(POOL_HEALTH.lastCheck).length > 10) {
+        const oldestKey = Math.min(...Object.keys(POOL_HEALTH.lastCheck));
+        delete POOL_HEALTH.lastCheck[oldestKey];
+      }
+
+      logger.debug("Health check completado:", results);
+    } catch (error) {
+      logger.error("Error en health check:", error);
+    }
+  }
+
+  _schedulePoolRenewal(serverKey) {
     if (this.renewalTimers[serverKey]) {
       clearTimeout(this.renewalTimers[serverKey]);
     }
 
     this.renewalTimers[serverKey] = setTimeout(async () => {
-      logger.info(
-        `Iniciando renovación programada del pool para ${serverKey}...`
-      );
-      await this._renewPool(serverKey);
-
-      this._setupAutoRenewal(serverKey);
+      try {
+        logger.info(`Renovando pool automáticamente para ${serverKey}...`);
+        await this._renewPool(serverKey);
+      } catch (error) {
+        logger.error(
+          `Error en renovación automática para ${serverKey}:`,
+          error
+        );
+      }
     }, POOL_HEALTH.renewalTimeout);
   }
 
@@ -1474,7 +965,7 @@ class ConnectionCentralService {
     try {
       const currentPool = this.pools[serverKey];
 
-      if (currentPool) {
+      if (currentPool && !currentPool._draining) {
         logger.info(`Creando nuevo pool para ${serverKey}...`);
 
         const dbConfig = await this._loadConfig(serverKey);
@@ -1531,891 +1022,224 @@ class ConnectionCentralService {
         `Umbral de errores alcanzado para ${serverKey}, iniciando renovación de pool...`
       );
       this._renewPool(serverKey);
-
       POOL_HEALTH.errorCount[serverKey] = 0;
-    }
-  }
-
-  async _checkPoolsHealth() {
-    try {
-      logger.debug("Verificando salud de pools de conexión...");
-
-      for (const [serverKey, pool] of Object.entries(this.pools)) {
-        try {
-          const now = Date.now();
-          const lastCheck = POOL_HEALTH.lastCheck[serverKey] || 0;
-          const timeSinceLastCheck = now - lastCheck;
-
-          if (
-            timeSinceLastCheck > POOL_HEALTH.checkInterval * 2 ||
-            POOL_HEALTH.errorCount[serverKey] >
-              POOL_HEALTH.maxErrorThreshold / 2
-          ) {
-            logger.info(
-              `Realizando verificación de salud para pool ${serverKey}...`
-            );
-
-            try {
-              const testConnection = await this.getConnection(serverKey, {
-                timeout: 10000,
-              });
-              await this.releaseConnection(testConnection);
-
-              POOL_HEALTH.errorCount[serverKey] = 0;
-              logger.info(`Verificación de salud exitosa para ${serverKey}`);
-            } catch (testError) {
-              logger.warn(
-                `Falló verificación de salud para ${serverKey}: ${testError.message}`
-              );
-              this._registerConnectionError(serverKey, testError);
-            }
-          }
-
-          POOL_HEALTH.lastCheck[serverKey] = now;
-        } catch (poolError) {
-          logger.error(
-            `Error verificando pool ${serverKey}: ${poolError.message}`
-          );
-        }
-      }
-    } catch (error) {
-      logger.error(`Error general en verificación de salud: ${error.message}`);
-    }
-  }
-
-  async checkPoolsHealth() {
-    const results = {};
-
-    try {
-      for (const [serverKey, pool] of Object.entries(this.pools)) {
-        results[serverKey] = {
-          healthy: false,
-          error: null,
-          size: pool.size,
-          borrowed: pool.borrowed,
-        };
-
-        try {
-          const testConnection = await this.getConnection(serverKey, {
-            timeout: 5000,
-          });
-
-          const testRequest = new Request(
-            "SELECT 1 AS test",
-            (err, rowCount, rows) => {
-              if (err) throw err;
-            }
-          );
-
-          await new Promise((resolve, reject) => {
-            const timeout = setTimeout(() => {
-              reject(new Error("Query timeout"));
-            }, 5000);
-
-            testRequest.on("done", () => {
-              clearTimeout(timeout);
-              resolve();
-            });
-
-            testRequest.on("error", (err) => {
-              clearTimeout(timeout);
-              reject(err);
-            });
-
-            testConnection.execSql(testRequest);
-          });
-
-          await this.releaseConnection(testConnection);
-
-          results[serverKey].healthy = true;
-
-          POOL_HEALTH.errorCount[serverKey] = 0;
-        } catch (error) {
-          results[serverKey].error = error.message;
-
-          this._registerConnectionError(serverKey, error);
-        }
-      }
-
-      logger.debug(`Health check results: ${JSON.stringify(results)}`);
-      return results;
-    } catch (error) {
-      logger.error(`Error during pools health check: ${error.message}`);
-      return { error: error.message, results };
     }
   }
 
   getConnectionStats() {
     const poolStats = {};
 
-    for (const [serverKey, pool] of Object.entries(this.pools)) {
-      poolStats[serverKey] = {
+    for (const [key, pool] of Object.entries(this.pools)) {
+      poolStats[key] = {
         size: pool.size,
         available: pool.available,
         borrowed: pool.borrowed,
         pending: pool.pending,
-        max: pool.max,
-        min: pool.min,
-        errors: POOL_HEALTH.errorCount[serverKey] || 0,
-        lastCheck: new Date(
-          POOL_HEALTH.lastCheck[serverKey] || Date.now()
-        ).toISOString(),
+        status: pool._draining ? "draining" : "active",
       };
     }
 
     return {
-      ...this.stats,
-      activeCount: this.stats.activeConnections.size,
-      timestamp: new Date().toISOString(),
       pools: poolStats,
+      stats: this.stats,
+      activeTransactions: this.activeTransactions.size,
+      healthChecks: Object.keys(POOL_HEALTH.lastCheck).length,
+      errorCounts: POOL_HEALTH.errorCount,
     };
   }
 
-  async beginTransaction(connection, options = {}) {
-    if (!connection) {
-      throw new Error(
-        "Se requiere una conexión válida para iniciar transacción"
+  logTelemetry() {
+    try {
+      const stats = this.getConnectionStats();
+      const memInfo = MemoryManager.getMemoryInfo();
+
+      logger.debug("📊 Telemetría de conexiones:", {
+        pools: Object.keys(stats.pools).length,
+        totalAcquired: stats.stats.acquired,
+        totalReleased: stats.stats.released,
+        totalErrors: stats.stats.errors,
+        activeConnections: stats.stats.activeConnections.size,
+        activeTransactions: stats.activeTransactions,
+        memory: {
+          used: `${Math.round(memInfo.used / 1024 / 1024)}MB`,
+          total: `${Math.round(memInfo.total / 1024 / 1024)}MB`,
+        },
+      });
+
+      Telemetry.updateGauge(
+        "activeConnections",
+        stats.stats.activeConnections.size
       );
+      Telemetry.updateGauge("activePools", Object.keys(stats.pools).length);
+      Telemetry.updateGauge("activeTransactions", stats.activeTransactions);
+    } catch (error) {
+      logger.debug("Error en telemetría:", error);
     }
+  }
 
-    if (this.activeTransactions.has(connection)) {
-      logger.warn(
-        "Intento de iniciar transacción en una conexión que ya tiene una transacción activa"
+  /**
+   * 🔗 Método de conexión robusta mejorada (compatibilidad con código existente)
+   * @param {string} serverKey - Clave del servidor
+   * @param {Object} options - Opciones de conexión
+   * @returns {Promise<Object>} - Resultado con conexión
+   */
+  async enhancedRobustConnect(serverKey, options = {}) {
+    try {
+      logger.info(`🔗 Iniciando conexión robusta para ${serverKey}...`);
+
+      const startTime = Date.now();
+      const connection = await this.getConnection(serverKey, {
+        ...options,
+        timeout: options.timeout || 90000,
+      });
+
+      const connectionTime = Date.now() - startTime;
+
+      // ✅ QUITAR validación adicional - getConnection ya valida
+      // Si getConnection devuelve una conexión, asumimos que es válida
+
+      logger.info(
+        `✅ Conexión robusta establecida para ${serverKey} en ${connectionTime}ms`
       );
-      return {
-        connection,
-        transaction: this.activeTransactions.get(connection),
-      };
-    }
-
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error("Timeout al iniciar transacción"));
-      }, options.timeout || 30000);
-
-      connection.transaction((err, transaction) => {
-        clearTimeout(timeout);
-
-        if (err) {
-          logger.error(`Error al iniciar transacción: ${err.message}`);
-          reject(err);
-        } else {
-          this.activeTransactions.set(connection, transaction);
-
-          transaction._startTime = Date.now();
-          transaction._connection = connection;
-
-          logger.debug("Transacción iniciada correctamente");
-          resolve({ connection, transaction });
-        }
-      });
-    });
-  }
-
-  async commitTransaction(transaction) {
-    if (!transaction) {
-      throw new Error("Se requiere una transacción válida para confirmar");
-    }
-
-    return new Promise((resolve, reject) => {
-      const timeout = setTimeout(() => {
-        reject(new Error("Timeout al confirmar transacción"));
-      }, 30000);
-
-      transaction.commit((err) => {
-        clearTimeout(timeout);
-
-        if (err) {
-          logger.error(`Error al confirmar transacción: ${err.message}`);
-          reject(err);
-        } else {
-          if (transaction._connection) {
-            this.activeTransactions.delete(transaction._connection);
-          }
-
-          logger.debug("Transacción confirmada correctamente");
-          resolve();
-        }
-      });
-    });
-  }
-
-  async rollbackTransaction(transaction) {
-    if (!transaction) return;
-
-    return new Promise((resolve, reject) => {
-      try {
-        const timeout = setTimeout(() => {
-          if (transaction._connection) {
-            this.activeTransactions.delete(transaction._connection);
-          }
-
-          logger.warn("Timeout en rollback de transacción, continuando...");
-          resolve();
-        }, 30000);
-
-        if (typeof transaction.rollback === "function") {
-          transaction.rollback((err) => {
-            clearTimeout(timeout);
-
-            if (transaction._connection) {
-              this.activeTransactions.delete(transaction._connection);
-            }
-
-            if (err) {
-              logger.error(`Error en rollback: ${err.message}`);
-              reject(err);
-            } else {
-              logger.debug("Rollback completado correctamente");
-              resolve();
-            }
-          });
-        } else {
-          clearTimeout(timeout);
-
-          if (transaction._connection) {
-            this.activeTransactions.delete(transaction._connection);
-          }
-
-          logger.warn(
-            "No se encontró método rollback en el objeto de transacción"
-          );
-          resolve();
-        }
-      } catch (error) {
-        logger.error(`Error general en rollback: ${error.message}`);
-
-        if (transaction._connection) {
-          this.activeTransactions.delete(transaction._connection);
-        }
-
-        reject(error);
-      }
-    });
-  }
-
-  shutdown() {
-    logger.info("Deteniendo servicio central de conexiones...");
-
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-      this.healthCheckInterval = null;
-    }
-
-    for (const timer of Object.values(this.renewalTimers)) {
-      if (timer) clearTimeout(timer);
-    }
-    this.renewalTimers = {};
-
-    this.closePools().catch((err) => {
-      logger.error(`Error al cerrar pools durante shutdown: ${err.message}`);
-    });
-
-    logger.info("Servicio central de conexiones detenido");
-  }
-
-  /**
-   * Función auxiliar para procesar filas de Tedious de manera compatible
-   * @param {Array|Object} columns - Columnas de Tedious
-   * @returns {Object} - Fila procesada
-   */
-  _processRowColumns(columns) {
-    const row = {};
-
-    try {
-      if (Array.isArray(columns)) {
-        // Versión antigua de Tedious - columns es un array
-        columns.forEach((column) => {
-          if (column && column.metadata && column.metadata.colName) {
-            row[column.metadata.colName] = column.value;
-          }
-        });
-      } else if (columns && typeof columns === "object") {
-        // Versión nueva de Tedious - columns es un objeto
-        Object.keys(columns).forEach((key) => {
-          if (key !== "meta" && columns[key] !== undefined) {
-            const column = columns[key];
-            if (column && typeof column === "object" && "value" in column) {
-              // El valor está en column.value
-              row[key] = column.value;
-            } else {
-              // El valor está directamente
-              row[key] = column;
-            }
-          }
-        });
-      } else {
-        // Fallback para casos raros
-        logger.warn("Formato de columnas no reconocido:", typeof columns);
-        row.result = String(columns);
-      }
-    } catch (error) {
-      logger.error("Error procesando columnas:", error);
-      row.error = "Error procesando datos";
-    }
-
-    return row;
-  }
-
-  /**
-   * Debug detallado para server2 - Investigar problema de autenticación
-   */
-  async debugServer2Authentication() {
-    try {
-      logger.info("🔍 Iniciando debug detallado de autenticación server2...");
-
-      // 1. Verificar configuración actual en MongoDB
-      if (!MongoDbService.isConnected()) {
-        await MongoDbService.connect();
-      }
-
-      const currentConfig = await DBConfig.findOne({
-        serverName: "server2",
-      }).lean();
-
-      if (!currentConfig) {
-        logger.error("❌ No se encontró configuración para server2 en MongoDB");
-        return { success: false, error: "Configuración no encontrada" };
-      }
-
-      // Log de configuración actual (sin password completo)
-      logger.info("📋 Configuración actual en MongoDB:", {
-        serverName: currentConfig.serverName,
-        host: currentConfig.host,
-        instance: currentConfig.instance,
-        port: currentConfig.port,
-        database: currentConfig.database,
-        user: currentConfig.user,
-        passwordLength: currentConfig.password
-          ? currentConfig.password.length
-          : 0,
-        passwordStart: currentConfig.password
-          ? currentConfig.password.substring(0, 3) + "..."
-          : "no password",
-        type: currentConfig.type,
-      });
-
-      // 2. Test con diferentes variaciones del password
-      const passwordVariations = [
-        currentConfig.password, // Original
-        "Smk1$kE[qVc%5fY", // Hardcoded correcto
-        currentConfig.password?.trim(), // Sin espacios
-      ].filter(Boolean);
-
-      for (let i = 0; i < passwordVariations.length; i++) {
-        const testPassword = passwordVariations[i];
-        if (!testPassword) continue;
-
-        logger.info(
-          `🧪 Test ${i + 1}: Probando password variación (longitud: ${
-            testPassword.length
-          })`
-        );
-
-        const testResult = await this.testServer2WithPassword(testPassword);
-
-        logger.info(`Resultado test ${i + 1}:`, {
-          success: testResult.success,
-          error: testResult.error || "ninguno",
-          phase: testResult.phase,
-        });
-
-        if (testResult.success) {
-          logger.info(
-            `✅ ¡Password correcto encontrado en variación ${i + 1}!`
-          );
-
-          // Actualizar en MongoDB con el password que funciona
-          await DBConfig.findOneAndUpdate(
-            { serverName: "server2" },
-            {
-              password: testPassword,
-              host: "sql-calidad.miami",
-              instance: "calidadstdb",
-              database: "stdb_gnd",
-              user: "cliente-catelli",
-            },
-            { new: true }
-          );
-
-          return {
-            success: true,
-            workingPassword: true,
-            passwordIndex: i + 1,
-            message: `Password funcional encontrado y actualizado`,
-          };
-        }
-      }
-
-      // 3. Test con diferentes usuarios
-      const userVariations = [
-        "cliente-catelli",
-        "cliente_catelli",
-        "CLIENTE-CATELLI",
-        "catelli\\cliente-catelli", // Con dominio
-      ];
-
-      for (let i = 0; i < userVariations.length; i++) {
-        const testUser = userVariations[i];
-
-        logger.info(`🧪 Test usuario ${i + 1}: ${testUser}`);
-
-        const testResult = await this.testServer2WithUser(
-          testUser,
-          "Smk1$kE[qVc%5fY"
-        );
-
-        logger.info(`Resultado test usuario ${i + 1}:`, {
-          success: testResult.success,
-          error: testResult.error || "ninguno",
-          phase: testResult.phase,
-        });
-
-        if (testResult.success) {
-          logger.info(`✅ ¡Usuario correcto encontrado: ${testUser}!`);
-
-          // Actualizar en MongoDB
-          await DBConfig.findOneAndUpdate(
-            { serverName: "server2" },
-            {
-              user: testUser,
-              password: "Smk1$kE[qVc%5fY",
-              host: "sql-calidad.miami",
-              instance: "calidadstdb",
-              database: "stdb_gnd",
-            },
-            { new: true }
-          );
-
-          return {
-            success: true,
-            workingUser: testUser,
-            message: `Usuario funcional encontrado y actualizado`,
-          };
-        }
-      }
-
-      // 4. Test sin instancia nombrada (usando puerto directo)
-      logger.info("🧪 Test sin instancia nombrada...");
-      const noInstanceResult = await this.testServer2WithoutInstance();
-      logger.info("Resultado sin instancia:", noInstanceResult);
 
       return {
-        success: false,
-        error: "No se encontró combinación funcional",
-        testedPasswords: passwordVariations.length,
-        testedUsers: userVariations.length,
-      };
-    } catch (error) {
-      logger.error("❌ Error en debug de autenticación:", error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  /**
-   * Test con password específico
-   */
-  async testServer2WithPassword(password) {
-    try {
-      const testConfig = {
-        server: "sql-calidad.miami",
-        authentication: {
-          type: "default",
-          options: {
-            userName: "cliente-catelli",
-            password: password,
-          },
-        },
-        options: {
-          database: "stdb_gnd",
-          instanceName: "calidadstdb",
-          encrypt: false,
-          trustServerCertificate: true,
-          enableArithAbort: true,
-          connectTimeout: 60000, // Reducir timeout para tests rápidos
-          requestTimeout: 30000,
-          useColumnNames: true,
-          rowCollectionOnRequestCompletion: true,
-          appName: "NodeApp_PasswordTest",
-        },
-      };
-
-      return new Promise((resolve) => {
-        const connection = new Connection(testConfig);
-        let resolved = false;
-
-        const timeout = setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            connection.removeAllListeners();
-            try {
-              connection.close();
-            } catch (e) {}
-            resolve({
-              success: false,
-              error: "Timeout en test de password",
-              phase: "connection_timeout",
-            });
-          }
-        }, 60000);
-
-        connection.on("connect", (err) => {
-          clearTimeout(timeout);
-          if (resolved) return;
-          resolved = true;
-
-          try {
-            connection.close();
-          } catch (e) {}
-
-          if (err) {
-            resolve({
-              success: false,
-              error: err.message,
-              code: err.code,
-              phase: "connection_error",
-            });
-          } else {
-            resolve({
-              success: true,
-              message: "Password funciona",
-              phase: "connection_success",
-            });
-          }
-        });
-
-        connection.on("error", (err) => {
-          clearTimeout(timeout);
-          if (!resolved) {
-            resolved = true;
-            resolve({
-              success: false,
-              error: err.message,
-              code: err.code,
-              phase: "connection_error",
-            });
-          }
-        });
-
-        connection.connect();
-      });
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message,
-        phase: "test_error",
-      };
-    }
-  }
-
-  /**
-   * Test con usuario específico
-   */
-  async testServer2WithUser(userName, password) {
-    try {
-      const testConfig = {
-        server: "sql-calidad.miami",
-        authentication: {
-          type: "default",
-          options: {
-            userName: userName,
-            password: password,
-          },
-        },
-        options: {
-          database: "stdb_gnd",
-          instanceName: "calidadstdb",
-          encrypt: false,
-          trustServerCertificate: true,
-          enableArithAbort: true,
-          connectTimeout: 60000,
-          requestTimeout: 30000,
-          useColumnNames: true,
-          rowCollectionOnRequestCompletion: true,
-          appName: "NodeApp_UserTest",
-        },
-      };
-
-      return new Promise((resolve) => {
-        const connection = new Connection(testConfig);
-        let resolved = false;
-
-        const timeout = setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            connection.removeAllListeners();
-            try {
-              connection.close();
-            } catch (e) {}
-            resolve({
-              success: false,
-              error: "Timeout en test de usuario",
-              phase: "connection_timeout",
-            });
-          }
-        }, 60000);
-
-        connection.on("connect", (err) => {
-          clearTimeout(timeout);
-          if (resolved) return;
-          resolved = true;
-
-          try {
-            connection.close();
-          } catch (e) {}
-
-          if (err) {
-            resolve({
-              success: false,
-              error: err.message,
-              code: err.code,
-              phase: "connection_error",
-            });
-          } else {
-            resolve({
-              success: true,
-              message: `Usuario ${userName} funciona`,
-              phase: "connection_success",
-            });
-          }
-        });
-
-        connection.on("error", (err) => {
-          clearTimeout(timeout);
-          if (!resolved) {
-            resolved = true;
-            resolve({
-              success: false,
-              error: err.message,
-              code: err.code,
-              phase: "connection_error",
-            });
-          }
-        });
-
-        connection.connect();
-      });
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message,
-        phase: "test_error",
-      };
-    }
-  }
-
-  /**
-   * Test sin instancia nombrada (usando puerto 1433)
-   */
-  async testServer2WithoutInstance() {
-    try {
-      const testConfig = {
-        server: "sql-calidad.miami",
-        authentication: {
-          type: "default",
-          options: {
-            userName: "cliente-catelli",
-            password: "Smk1$kE[qVc%5fY",
-          },
-        },
-        options: {
-          database: "stdb_gnd",
-          port: 1433, // Puerto directo en lugar de instancia
-          encrypt: false,
-          trustServerCertificate: true,
-          enableArithAbort: true,
-          connectTimeout: 60000,
-          requestTimeout: 30000,
-          useColumnNames: true,
-          rowCollectionOnRequestCompletion: true,
-          appName: "NodeApp_PortTest",
-        },
-      };
-
-      return new Promise((resolve) => {
-        const connection = new Connection(testConfig);
-        let resolved = false;
-
-        const timeout = setTimeout(() => {
-          if (!resolved) {
-            resolved = true;
-            connection.removeAllListeners();
-            try {
-              connection.close();
-            } catch (e) {}
-            resolve({
-              success: false,
-              error: "Timeout en test sin instancia",
-              phase: "connection_timeout",
-            });
-          }
-        }, 60000);
-
-        connection.on("connect", (err) => {
-          clearTimeout(timeout);
-          if (resolved) return;
-          resolved = true;
-
-          try {
-            connection.close();
-          } catch (e) {}
-
-          if (err) {
-            resolve({
-              success: false,
-              error: err.message,
-              code: err.code,
-              phase: "connection_error",
-            });
-          } else {
-            resolve({
-              success: true,
-              message: "Conexión sin instancia funciona",
-              phase: "connection_success",
-            });
-          }
-        });
-
-        connection.on("error", (err) => {
-          clearTimeout(timeout);
-          if (!resolved) {
-            resolved = true;
-            resolve({
-              success: false,
-              error: err.message,
-              code: err.code,
-              phase: "connection_error",
-            });
-          }
-        });
-
-        connection.connect();
-      });
-    } catch (error) {
-      return {
-        success: false,
-        error: error.message,
-        phase: "test_error",
-      };
-    }
-  }
-
-  /**
-   * Estado de salud mejorado del sistema
-   */
-  async performSystemHealthCheck() {
-    try {
-      logger.info("🏥 Iniciando chequeo completo de salud del sistema...");
-
-      const healthResults = {
+        success: true,
+        connection: connection,
+        connectionTime: `${connectionTime}ms`,
+        serverKey: serverKey,
         timestamp: new Date().toISOString(),
-        mongodb: { connected: false },
-        server1: { connected: false },
-        server2: { connected: false },
-        pools: {},
-        system: {},
       };
-
-      // 1. MongoDB
-      healthResults.mongodb.connected = MongoDbService.isConnected();
-      if (!healthResults.mongodb.connected) {
-        const mongoConnect = await MongoDbService.connect();
-        healthResults.mongodb.connected = mongoConnect;
-        healthResults.mongodb.reconnected = mongoConnect;
-      }
-
-      // 2. Estadísticas de pools
-      try {
-        const poolStats = this.getConnectionStats();
-        healthResults.pools = poolStats.pools || {};
-      } catch (poolError) {
-        healthResults.pools.error = poolError.message;
-      }
-
-      // 3. Server1
-      try {
-        const server1Result = await this.diagnoseConnection("server1");
-        healthResults.server1 = {
-          connected: server1Result.success,
-          error: server1Result.success ? null : server1Result.error,
-          phase: server1Result.phase,
-          data: server1Result.data || null,
-        };
-      } catch (error) {
-        healthResults.server1 = {
-          connected: false,
-          error: error.message,
-          phase: "diagnosis_error",
-        };
-      }
-
-      // 4. Server2 con debug
-      try {
-        const server2Result = await this.diagnoseConnection("server2");
-        healthResults.server2 = {
-          connected: server2Result.success,
-          error: server2Result.success ? null : server2Result.error,
-          phase: server2Result.phase,
-          data: server2Result.data || null,
-        };
-
-        // Si server2 falla, ejecutar debug automáticamente
-        if (!server2Result.success) {
-          logger.info("🔧 Server2 falló, ejecutando debug automático...");
-          const debugResult = await this.debugServer2Authentication();
-          healthResults.server2.debugExecuted = true;
-          healthResults.server2.debugResult = debugResult;
-        }
-      } catch (error) {
-        healthResults.server2 = {
-          connected: false,
-          error: error.message,
-          phase: "diagnosis_error",
-        };
-      }
-
-      // 5. Sistema
-      healthResults.system = {
-        uptime: process.uptime(),
-        memoryUsage: process.memoryUsage(),
-        nodeVersion: process.version,
-        platform: process.platform,
-      };
-
-      // 6. Resumen
-      const allOk =
-        healthResults.mongodb.connected &&
-        healthResults.server1.connected &&
-        healthResults.server2.connected;
-
-      healthResults.overall = {
-        healthy: allOk,
-        issues: [
-          !healthResults.mongodb.connected ? "MongoDB desconectado" : null,
-          !healthResults.server1.connected ? "Server1 no conecta" : null,
-          !healthResults.server2.connected ? "Server2 no conecta" : null,
-        ].filter(Boolean),
-      };
-
-      logger.info("📊 Resultado de salud del sistema:", {
-        overall: healthResults.overall.healthy ? "SALUDABLE" : "CON PROBLEMAS",
-        mongodb: healthResults.mongodb.connected ? "OK" : "ERROR",
-        server1: healthResults.server1.connected ? "OK" : "ERROR",
-        server2: healthResults.server2.connected ? "OK" : "ERROR",
-        issues: healthResults.overall.issues,
-      });
-
-      return healthResults;
     } catch (error) {
-      logger.error("❌ Error en chequeo de salud del sistema:", error);
+      logger.error(
+        `❌ Error en conexión robusta para ${serverKey}: ${error.message}`
+      );
+
       return {
+        success: false,
+        connection: null,
+        error: {
+          message: error.message,
+          code: error.code || "CONNECTION_ERROR",
+          serverKey: serverKey,
+        },
         timestamp: new Date().toISOString(),
-        overall: { healthy: false, error: error.message },
+      };
+    }
+  }
+
+  /**
+   * 🔍 Validar que una conexión esté en buen estado (versión simplificada)
+   * @param {Object} connection - Conexión a validar
+   * @returns {boolean} - true si la conexión es válida
+   */
+  validateConnection(connection) {
+    try {
+      // Verificaciones básicas y esenciales únicamente
+      if (!connection) {
+        logger.debug("Validación falló: conexión es null/undefined");
+        return false;
+      }
+
+      // Lo más importante: que tenga el método execSql
+      if (typeof connection.execSql !== "function") {
+        logger.debug("Validación falló: no tiene método execSql");
+        return false;
+      }
+
+      // Verificar que esté conectada (propiedad básica de Tedious)
+      if (!connection.connected) {
+        logger.debug("Validación falló: not connected");
+        return false;
+      }
+
+      // ✅ RELAJAR: No verificar loggedIn ya que puede variar según el estado
+      // Solo verificar si existe la propiedad y es true, pero no fallar si no existe
+      if (connection.hasOwnProperty("loggedIn") && !connection.loggedIn) {
+        logger.debug("Validación falló: not logged in");
+        return false;
+      }
+
+      // Todo bien - conexión válida
+      logger.debug(
+        `Validación exitosa para conexión ${connection._serverKey || "unknown"}`
+      );
+      return true;
+    } catch (error) {
+      logger.warn(`Error validando conexión: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * 🔍 Validar conexión de forma asíncrona (más completa)
+   * @param {Object} connection - Conexión a validar
+   * @returns {Promise<boolean>} - true si la conexión es válida
+   */
+  async validateConnectionAsync(connection) {
+    try {
+      // Primero hacer validación básica
+      if (!this.validateConnection(connection)) {
+        return false;
+      }
+
+      // Test opcional con consulta simple (solo si es necesario)
+      if (connection._needsValidation) {
+        try {
+          const testResult = await this.executeTestQuery(
+            connection,
+            "SELECT 1"
+          );
+          return testResult.success && testResult.rows.length > 0;
+        } catch (testError) {
+          logger.warn(`Test de validación falló: ${testError.message}`);
+          return false;
+        }
+      }
+
+      return true;
+    } catch (error) {
+      logger.warn(`Error en validación asíncrona: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * 🔗 Método alternativo para obtener conexión con diagnóstico
+   * @param {string} serverKey - Clave del servidor
+   * @returns {Promise<Object>} - Resultado con conexión y diagnóstico
+   */
+  async getConnectionWithDiagnostic(serverKey) {
+    try {
+      // Primero realizar diagnóstico
+      const diagnostic = await this.diagnoseConnection(serverKey);
+
+      if (!diagnostic.success) {
+        return {
+          success: false,
+          connection: null,
+          error: diagnostic.error,
+          diagnostic: diagnostic,
+        };
+      }
+
+      // Si el diagnóstico es exitoso, obtener conexión
+      const connection = await this.getConnection(serverKey);
+
+      return {
+        success: true,
+        connection: connection,
+        diagnostic: diagnostic,
+        serverKey: serverKey,
+      };
+    } catch (error) {
+      return {
+        success: false,
+        connection: null,
         error: error.message,
+        serverKey: serverKey,
       };
     }
   }
 }
 
-// Exportar instancia singleton
 module.exports = new ConnectionCentralService();

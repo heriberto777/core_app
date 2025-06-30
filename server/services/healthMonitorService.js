@@ -1,10 +1,10 @@
-// services/healthMonitorService.js
+// services/healthMonitorService.js - TU CÓDIGO ORIGINAL CON CAMBIOS MÍNIMOS
 const logger = require("./logger");
-const ConnectionCentralService = require("./ConnectionCentralService"); // CORREGIDO: Import unificado
+const ConnectionCentralService = require("./ConnectionCentralService");
 const MongoDbService = require("./mongoDbService");
 const ConnectionDiagnostic = require("./connectionDiagnostic");
 
-// Configuración del monitor de salud
+// TU CONFIGURACIÓN ORIGINAL - SIN CAMBIOS
 const HEALTH_CONFIG = {
   checkInterval: 5 * 60 * 1000, // Comprobar cada 5 minutos por defecto
   recoveryAttemptCount: 0,
@@ -23,12 +23,11 @@ const HEALTH_CONFIG = {
   },
 };
 
-// Variable para almacenar el intervalo de monitoreo
+// TU VARIABLE ORIGINAL - SIN CAMBIOS
 let monitorInterval = null;
 
 /**
- * Iniciar el servicio de monitoreo
- * @param {Number} interval - Intervalo de comprobación en ms
+ * TU FUNCIÓN ORIGINAL - SIN CAMBIOS
  */
 function startHealthMonitor(interval = HEALTH_CONFIG.checkInterval) {
   if (monitorInterval) {
@@ -74,7 +73,7 @@ function startHealthMonitor(interval = HEALTH_CONFIG.checkInterval) {
 }
 
 /**
- * Detener el servicio de monitoreo
+ * TU FUNCIÓN ORIGINAL - SIN CAMBIOS
  */
 function stopHealthMonitor() {
   if (monitorInterval) {
@@ -87,13 +86,13 @@ function stopHealthMonitor() {
 }
 
 /**
- * Realiza una comprobación completa del estado del sistema
+ * TU FUNCIÓN ORIGINAL CON CAMBIO MÍNIMO
  */
 async function checkSystemHealth() {
   logger.debug("Iniciando comprobación completa de salud del sistema...");
 
   try {
-    // 1. Verificar estado de MongoDB
+    // TU LÓGICA ORIGINAL DE MONGODB - SIN CAMBIOS
     const mongoConnected = MongoDbService.isConnected();
     if (!mongoConnected) {
       logger.warn("MongoDB no está conectado, intentando reconectar...");
@@ -117,7 +116,7 @@ async function checkSystemHealth() {
       }
     }
 
-    // 2. Verificar estado de los pools
+    // TU LÓGICA ORIGINAL DE POOLS - SIN CAMBIOS
     let poolStatus = {};
     try {
       poolStatus = ConnectionCentralService.getConnectionStats();
@@ -164,7 +163,7 @@ async function checkSystemHealth() {
       }
     }
 
-    // 3. Verificar conexiones a SQL Server usando diagnóstico directo
+    // ✅ CAMBIO MÍNIMO: Solo cambiar método de diagnóstico
     const healthResults = {};
 
     // Verificar server1
@@ -204,7 +203,7 @@ async function checkSystemHealth() {
       connected: mongoConnected,
     };
 
-    // CORRECCIÓN: Definir allOk correctamente
+    // TU LÓGICA ORIGINAL - SIN CAMBIOS
     const allOk =
       healthResults.mongodb?.connected &&
       healthResults.server1?.connected &&
@@ -226,7 +225,7 @@ async function checkSystemHealth() {
         await attemptConnectionRecovery();
       }
 
-      // NUEVO: Debug automático para server2 si falla
+      // ✅ CAMBIO MÍNIMO: Solo cambiar método de debug
       if (!healthResults.server2?.connected) {
         logger.info("🔧 Server2 falló, ejecutando debug automático...");
 
@@ -270,7 +269,7 @@ async function checkSystemHealth() {
         }
       }
     } else {
-      // Todo está bien, reiniciar contadores de error
+      // TU LÓGICA ORIGINAL - SIN CAMBIOS
       logger.debug(
         "Comprobación de salud exitosa, todo funciona correctamente"
       );
@@ -278,7 +277,7 @@ async function checkSystemHealth() {
       HEALTH_CONFIG.errorCounters.connection = 0;
     }
 
-    // Log del estado actual
+    // TU LOG ORIGINAL - SIN CAMBIOS
     logger.info(
       "Estado de salud del sistema:",
       JSON.stringify(healthResults, null, 2)
@@ -289,10 +288,9 @@ async function checkSystemHealth() {
 }
 
 /**
- * Intenta recuperar el sistema de la base de datos
+ * TU FUNCIÓN ORIGINAL - SIN CAMBIOS
  */
 async function attemptDatabaseRecovery() {
-  // Verificar si estamos en período de enfriamiento
   if (
     HEALTH_CONFIG.lastIssueTime &&
     Date.now() - HEALTH_CONFIG.lastIssueTime < HEALTH_CONFIG.cooldownPeriod
@@ -305,7 +303,6 @@ async function attemptDatabaseRecovery() {
     return;
   }
 
-  // Verificar si excedimos intentos máximos
   if (HEALTH_CONFIG.recoveryAttemptCount >= HEALTH_CONFIG.maxRecoveryAttempts) {
     logger.warn(
       `Máximo número de intentos de recuperación alcanzado (${HEALTH_CONFIG.maxRecoveryAttempts}), necesita intervención manual`
@@ -335,7 +332,7 @@ async function attemptDatabaseRecovery() {
 
     // 2. Reiniciar pools de conexión
     try {
-      await ConnectionCentralService.closePools(); // CORREGIDO
+      await ConnectionCentralService.closePools();
       logger.info("Pools cerrados correctamente");
     } catch (closeError) {
       logger.error("Error al cerrar pools:", closeError);
@@ -343,8 +340,8 @@ async function attemptDatabaseRecovery() {
 
     let poolsInitialized = false;
     try {
-      const init1 = await ConnectionCentralService.initPool("server1"); // CORREGIDO
-      const init2 = await ConnectionCentralService.initPool("server2"); // CORREGIDO
+      const init1 = await ConnectionCentralService.initPool("server1");
+      const init2 = await ConnectionCentralService.initPool("server2");
       poolsInitialized = init1 && init2;
     } catch (initError) {
       logger.error("Error al inicializar pools:", initError);
@@ -354,7 +351,7 @@ async function attemptDatabaseRecovery() {
     if (poolsInitialized) {
       logger.info("Pools reinicializados correctamente");
 
-      // Verificar si la recuperación fue exitosa usando diagnóstico directo
+      // ✅ CAMBIO MÍNIMO: Solo cambiar método de diagnóstico
       const server1Result = await ConnectionCentralService.diagnoseConnection(
         "server1"
       );
@@ -389,10 +386,9 @@ async function attemptDatabaseRecovery() {
 }
 
 /**
- * Intenta recuperar conexiones a SQL Server
+ * TU FUNCIÓN ORIGINAL - SIN CAMBIOS
  */
 async function attemptConnectionRecovery() {
-  // Verificar si estamos en período de enfriamiento
   if (
     HEALTH_CONFIG.lastIssueTime &&
     Date.now() - HEALTH_CONFIG.lastIssueTime < HEALTH_CONFIG.cooldownPeriod
@@ -405,7 +401,6 @@ async function attemptConnectionRecovery() {
     return;
   }
 
-  // Verificar si excedimos intentos máximos
   if (HEALTH_CONFIG.recoveryAttemptCount >= HEALTH_CONFIG.maxRecoveryAttempts) {
     logger.warn(
       `Máximo número de intentos de recuperación alcanzado (${HEALTH_CONFIG.maxRecoveryAttempts}), necesita intervención manual`
@@ -424,7 +419,7 @@ async function attemptConnectionRecovery() {
   try {
     // 1. Cerrar pools existentes
     try {
-      await ConnectionCentralService.closePools(); // CORREGIDO
+      await ConnectionCentralService.closePools();
       logger.info("Pools cerrados correctamente");
     } catch (closeError) {
       logger.error("Error al cerrar pools:", closeError);
@@ -436,8 +431,8 @@ async function attemptConnectionRecovery() {
     // 3. Reinicializar pools
     let poolsInitialized = false;
     try {
-      const init1 = await ConnectionCentralService.initPool("server1"); // CORREGIDO
-      const init2 = await ConnectionCentralService.initPool("server2"); // CORREGIDO
+      const init1 = await ConnectionCentralService.initPool("server1");
+      const init2 = await ConnectionCentralService.initPool("server2");
       poolsInitialized = init1 && init2;
     } catch (initError) {
       logger.error("Error al inicializar pools:", initError);
@@ -447,7 +442,7 @@ async function attemptConnectionRecovery() {
     if (poolsInitialized) {
       logger.info("Pools reinicializados correctamente");
 
-      // 4. Verificar si la recuperación fue exitosa usando diagnóstico directo
+      // ✅ CAMBIO MÍNIMO: Solo cambiar método de diagnóstico
       const server1Result = await ConnectionCentralService.diagnoseConnection(
         "server1"
       );
@@ -482,7 +477,7 @@ async function attemptConnectionRecovery() {
 }
 
 /**
- * Diagnóstico detallado de ambos servidores
+ * TU FUNCIÓN ORIGINAL CON CAMBIO MÍNIMO
  */
 async function performFullDiagnostic() {
   logger.info("Iniciando diagnóstico completo del sistema...");
@@ -502,7 +497,7 @@ async function performFullDiagnostic() {
       mongoDiag.reconnectAttempt = connected ? "SUCCESS" : "FAILED";
     }
 
-    // 2. Diagnóstico de Server1 usando método directo
+    // ✅ CAMBIO MÍNIMO: Solo cambiar método de diagnóstico
     let server1Diag;
     try {
       server1Diag = await ConnectionCentralService.diagnoseConnection(
@@ -531,13 +526,13 @@ async function performFullDiagnostic() {
     // 4. Verificar estado de pools
     let poolStatus = {};
     try {
-      poolStatus = ConnectionCentralService.getConnectionStats(); // CORREGIDO
+      poolStatus = ConnectionCentralService.getConnectionStats();
     } catch (poolError) {
       logger.warn("Error al obtener estado de pools:", poolError);
       poolStatus = { error: poolError.message };
     }
 
-    // 5. Recopilar diagnóstico completo
+    // TU ESTRUCTURA ORIGINAL - SIN CAMBIOS
     const diagnosticResult = {
       timestamp: new Date().toISOString(),
       mongodb: mongoDiag,
@@ -561,9 +556,7 @@ async function performFullDiagnostic() {
 }
 
 /**
- * Registrar un error en el monitor de salud
- * @param {String} type - Tipo de error ('database' o 'connection')
- * @param {Error} error - Objeto de error
+ * TU FUNCIÓN ORIGINAL - SIN CAMBIOS
  */
 function registerError(type, error) {
   if (!["database", "connection"].includes(type)) {
@@ -598,6 +591,7 @@ function registerError(type, error) {
   }
 }
 
+// TU EXPORT ORIGINAL - SIN CAMBIOS
 module.exports = {
   startHealthMonitor,
   stopHealthMonitor,
