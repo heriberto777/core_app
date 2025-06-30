@@ -1746,6 +1746,186 @@ class DynamicTransferService {
       throw error;
     }
   }
+  /**
+   * 📥 Inserta datos en lotes para mejor rendimiento
+   * @param {Array} data - Datos a insertar
+   * @param {Object} tableConfig - Configuración de la tabla
+   * @param {Object} connection - Conexión a base de datos
+   * @returns {Object} - Resultado de la inserción
+   */
+  async insertDataBatch(data, tableConfig, connection) {
+    let inserted = 0;
+    let errors = 0;
+
+    try {
+      logger.info(
+        `📥 Insertando ${data.length} registros en tabla ${tableConfig.targetTable}`
+      );
+
+      // ✅ VALIDACIONES INICIALES
+      if (!Array.isArray(data) || data.length === 0) {
+        logger.warn("⚠️ No hay datos para insertar");
+        return { inserted: 0, errors: 0 };
+      }
+
+      if (!tableConfig) {
+        throw new Error("Configuración de tabla es requerida");
+      }
+
+      if (!connection) {
+        throw new Error("Conexión a base de datos es requerida");
+      }
+
+      // ✅ PROCESAR EN LOTES PEQUEÑOS para evitar problemas de memoria/timeout
+      const batchSize = 50; // Procesar de 50 en 50
+      const totalBatches = Math.ceil(data.length / batchSize);
+
+      for (let batchIndex = 0; batchIndex < totalBatches; batchIndex++) {
+        const startIndex = batchIndex * batchSize;
+        const endIndex = Math.min(startIndex + batchSize, data.length);
+        const batch = data.slice(startIndex, endIndex);
+
+        logger.debug(
+          `📦 Procesando lote ${batchIndex + 1}/${totalBatches} (${
+            batch.length
+          } registros)`
+        );
+
+        try {
+          const batchResult = await this.processBatch(
+            batch,
+            tableConfig,
+            connection
+          );
+          inserted += batchResult.inserted;
+          errors += batchResult.errors;
+
+          logger.debug(
+            `✅ Lote ${batchIndex + 1} completado: ${
+              batchResult.inserted
+            } inserciones, ${batchResult.errors} errores`
+          );
+        } catch (batchError) {
+          logger.error(
+            `❌ Error en lote ${batchIndex + 1}: ${batchError.message}`
+          );
+          errors += batch.length; // Contar todos los registros del lote como errores
+        }
+      }
+
+      logger.info(
+        `📊 Inserción completada - Tabla: ${tableConfig.targetTable}, Insertados: ${inserted}, Errores: ${errors}`
+      );
+
+      return { inserted, errors };
+    } catch (error) {
+      logger.error(`❌ Error en insertDataBatch: ${error.message}`);
+      return { inserted, errors: data.length }; // Todos como errores
+    }
+  }
+
+  /**
+   * 🔧 Procesa un lote individual de registros
+   * @private
+   */
+  async processBatch(batch, tableConfig, connection) {
+    let inserted = 0;
+    let errors = 0;
+
+    try {
+      // ✅ INSERTAR CADA REGISTRO DEL LOTE
+      for (const record of batch) {
+        try {
+          await this.insertSingleRecord(record, tableConfig, connection);
+          inserted++;
+        } catch (recordError) {
+          logger.error(`❌ Error insertando registro: ${recordError.message}`);
+          logger.debug(`Registro problemático:`, record);
+          errors++;
+        }
+      }
+
+      return { inserted, errors };
+    } catch (error) {
+      logger.error(`❌ Error procesando lote: ${error.message}`);
+      return { inserted, errors: batch.length };
+    }
+  }
+
+  /**
+   * 🔧 Inserta un registro individual
+   * @private
+   */
+  async insertSingleRecord(record, tableConfig, connection) {
+    try {
+      // ✅ PROCESAR FUNCIONES SQL NATIVAS
+      const processedRecord = {};
+      const sqlFunctions = new Set();
+
+      for (const [key, value] of Object.entries(record)) {
+        if (typeof value === "string" && this.isSqlFunction(value)) {
+          processedRecord[key] = value;
+          sqlFunctions.add(key);
+        } else {
+          processedRecord[key] = value;
+        }
+      }
+
+      // ✅ CONSTRUIR QUERY DE INSERCIÓN
+      const fields = Object.keys(processedRecord);
+      const values = fields.map((field) => {
+        return sqlFunctions.has(field) ? processedRecord[field] : `@${field}`;
+      });
+
+      const query = `
+      INSERT INTO ${tableConfig.targetTable} (${fields.join(", ")})
+      VALUES (${values.join(", ")})
+    `;
+
+      // ✅ PREPARAR PARÁMETROS (excluir funciones SQL)
+      const params = {};
+      fields.forEach((field) => {
+        if (!sqlFunctions.has(field)) {
+          params[field] = processedRecord[field];
+        }
+      });
+
+      logger.debug(`🔧 Insertando en ${tableConfig.targetTable}:`, {
+        query: query.substring(0, 100) + "...",
+        paramCount: Object.keys(params).length,
+        sqlFunctions: Array.from(sqlFunctions),
+      });
+
+      // ✅ EJECUTAR INSERCIÓN
+      await SqlService.query(connection, query, params);
+    } catch (error) {
+      logger.error(`❌ Error en insertSingleRecord: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * ✅ MÉTODO AUXILIAR: Verificar si un valor es una función SQL
+   * @private
+   */
+  isSqlFunction(value) {
+    if (typeof value !== "string") return false;
+
+    const sqlFunctions = [
+      "GETDATE()",
+      "CURRENT_TIMESTAMP",
+      "NEWID()",
+      "SYSUTCDATETIME()",
+      "SYSDATETIME()",
+      "GETUTCDATE()",
+      "GETDATE",
+      "DATEADD",
+      "DATEDIFF",
+    ];
+
+    const upperValue = value.toUpperCase();
+    return sqlFunctions.some((func) => upperValue.includes(func));
+  }
 }
 
 module.exports = new DynamicTransferService();
