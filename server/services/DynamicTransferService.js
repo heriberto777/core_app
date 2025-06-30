@@ -982,7 +982,7 @@ class DynamicTransferService {
         logger.info(
           `🔗 Conectando a servidor destino: ${mapping.targetServer}`
         );
-        const targetResult = await ConnectionManager.enhancedRobustConnect(
+        const targetResult = await ConnectionService.enhancedRobustConnect(
           mapping.targetServer
         );
         if (!targetResult.success) {
@@ -1116,7 +1116,7 @@ class DynamicTransferService {
         // Liberar conexiones
         if (sourceConnection) {
           try {
-            await ConnectionManager.releaseConnection(sourceConnection);
+            await ConnectionService.releaseConnection(sourceConnection);
             logger.debug("✅ Conexión origen liberada");
           } catch (e) {
             logger.warn(`⚠️ Error liberando conexión origen: ${e.message}`);
@@ -1125,7 +1125,7 @@ class DynamicTransferService {
 
         if (targetConnection) {
           try {
-            await ConnectionManager.releaseConnection(targetConnection);
+            await ConnectionService.releaseConnection(targetConnection);
             logger.debug("✅ Conexión destino liberada");
           } catch (e) {
             logger.warn(`⚠️ Error liberando conexión destino: ${e.message}`);
