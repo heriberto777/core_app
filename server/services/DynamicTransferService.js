@@ -12,6 +12,24 @@ class DynamicTransferService {
   // 🔥 CAMBIO 1: AGREGAR CONSTRUCTOR
   constructor() {
     this.bonificationService = new BonificationService({ debug: true });
+
+    // 🔥 NUEVO: Configuración para manejo de errores de conexión
+    this.connectionRetryConfig = {
+      maxRetries: 2,
+      baseDelay: 1000, // 1 segundo
+      maxDelay: 5000, // 5 segundos máximo
+      backoffMultiplier: 2,
+      connectionTimeout: 10000, // 10 segundos para validar conexión
+    };
+
+    // Contadores para monitoreo
+    this.connectionStats = {
+      reconnections: 0,
+      retriesExecuted: 0,
+      lastReconnection: null,
+      successfulRecoveries: 0,
+      failedRecoveries: 0,
+    };
   }
 
   /**
@@ -2491,7 +2509,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa una tabla (principal o detalle) - MÉTODO UNIFICADO
+   * Procesa una tabla (principal o detalle) - MÉTODO UNIFICADO CON MANEJO ROBUSTO
    * @private
    */
   async processTable(
@@ -2576,14 +2594,83 @@ class DynamicTransferService {
       );
     }
 
-    // Construir y ejecutar la consulta INSERT
-    await this.executeInsert(
-      tableConfig.targetTable,
-      targetFields,
-      targetValues,
-      targetData,
-      directSqlFields,
-      targetConnection
+    // 🔥 NUEVO: Ejecutar inserción con reintentos automáticos
+    const maxRetries = 2;
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Verificar conexión antes de cada intento
+        if (attempt > 1) {
+          logger.info(
+            `🔄 Intento ${attempt}/${maxRetries} para inserción en ${tableConfig.targetTable}`
+          );
+
+          // Asegurar que la conexión esté saludable
+          targetConnection = await this.ensureConnectionHealth(
+            targetConnection,
+            mapping.targetServer
+          );
+        }
+
+        // Construir y ejecutar la consulta INSERT
+        await this.executeInsert(
+          tableConfig.targetTable,
+          targetFields,
+          targetValues,
+          targetData,
+          directSqlFields,
+          targetConnection
+        );
+
+        // Si llegamos aquí, la inserción fue exitosa
+        logger.info(
+          `✅ INSERCIÓN EXITOSA en ${tableConfig.targetTable} (intento ${attempt})`
+        );
+        return; // Salir exitosamente
+      } catch (error) {
+        lastError = error;
+
+        // Verificar si es un error de conexión
+        const isConnError = this.isConnectionError(error);
+
+        if (!isConnError || attempt === maxRetries) {
+          // Si no es error de conexión o ya agotamos intentos, lanzar error
+          logger.error(
+            `❌ Error final en inserción ${tableConfig.targetTable} (intento ${attempt}/${maxRetries}): ${error.message}`
+          );
+
+          // Agregar contexto adicional al error
+          error.tableContext = {
+            tableName: tableConfig.targetTable,
+            isDetailTable,
+            documentId,
+            attempt,
+            maxRetries,
+            isConnectionError: isConnError,
+          };
+
+          throw error;
+        }
+
+        // Es error de conexión y no hemos agotado intentos
+        logger.warn(
+          `🔌 Error de conexión en inserción ${tableConfig.targetTable} (intento ${attempt}/${maxRetries}): ${error.message}`
+        );
+
+        // Esperar un poco antes del siguiente intento
+        const delay = Math.pow(2, attempt - 1) * 1000; // Backoff exponencial
+        logger.info(`⏳ Esperando ${delay}ms antes del siguiente intento...`);
+        await new Promise((resolve) => setTimeout(resolve, delay));
+      }
+    }
+
+    // Si llegamos aquí, algo salió mal
+    throw (
+      lastError ||
+      new Error(
+        `Falló la inserción en ${tableConfig.targetTable} después de ${maxRetries} intentos`
+      )
     );
   }
 
@@ -2909,7 +2996,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa las tablas de detalle
+   * Procesa las tablas de detalle con manejo robusto de errores
    * @private
    */
   async processDetailTables(
@@ -2938,65 +3025,152 @@ class DynamicTransferService {
     );
 
     for (const detailConfig of orderedDetailTables) {
-      // Obtener detalles
-      const detailsData = await this.getDetailData(
-        detailConfig,
-        parentTableConfig,
-        documentId,
-        sourceConnection
-      );
-
-      if (!detailsData || detailsData.length === 0) {
-        logger.warn(
-          `No se encontraron detalles en ${detailConfig.sourceTable} para documento ${documentId}`
-        );
-        continue;
-      }
-
-      logger.info(
-        `Procesando ${detailsData.length} registros de detalle en ${detailConfig.name}`
-      );
-
-      // 🟢 NUEVO: Si hay bonificaciones, usar datos procesados
-      let detailDataToProcess = detailsData;
-      if (
-        mapping.hasBonificationProcessing &&
-        mapping.bonificationConfig &&
-        Array.isArray(sourceData)
-      ) {
-        // Filtrar los datos de bonificaciones que corresponden a este documento
-        detailDataToProcess = sourceData.filter(
-          (record) =>
-            record[mapping.bonificationConfig.orderField] === documentId
-        );
-        logger.info(
-          `🎁 Usando ${detailDataToProcess.length} registros procesados de bonificaciones para detalles`
-        );
-      }
-
-      // Insertar detalles
-      for (const detailRow of detailDataToProcess) {
-        await this.processTable(
+      try {
+        // Obtener detalles
+        const detailsData = await this.getDetailData(
           detailConfig,
-          sourceData,
-          detailRow,
-          targetConnection,
-          currentConsecutive,
-          mapping,
+          parentTableConfig,
           documentId,
-          columnLengthCache,
-          true // isDetailTable = true
+          sourceConnection
         );
 
-        logger.debug(
-          `✅ INSERCIÓN EXITOSA DE DETALLE en ${detailConfig.targetTable}`
+        if (!detailsData || detailsData.length === 0) {
+          logger.warn(
+            `No se encontraron detalles en ${detailConfig.sourceTable} para documento ${documentId}`
+          );
+          continue;
+        }
+
+        logger.info(
+          `Procesando ${detailsData.length} registros de detalle en ${detailConfig.name}`
+        );
+
+        // 🟢 NUEVO: Si hay bonificaciones, usar datos procesados
+        let detailDataToProcess = detailsData;
+        if (
+          mapping.hasBonificationProcessing &&
+          mapping.bonificationConfig &&
+          Array.isArray(sourceData)
+        ) {
+          // Filtrar los datos de bonificaciones que corresponden a este documento
+          detailDataToProcess = sourceData.filter(
+            (record) =>
+              record[mapping.bonificationConfig.orderField] === documentId
+          );
+          logger.info(
+            `🎁 Usando ${detailDataToProcess.length} registros procesados de bonificaciones para detalles`
+          );
+        }
+
+        // 🔥 NUEVO: Procesar detalles con manejo robusto
+        let detailSuccessCount = 0;
+        let detailFailureCount = 0;
+
+        for (let i = 0; i < detailDataToProcess.length; i++) {
+          const detailRow = detailDataToProcess[i];
+
+          try {
+            // Asegurar conexión saludable antes de cada inserción de detalle
+            targetConnection = await this.ensureConnectionHealth(
+              targetConnection,
+              mapping.targetServer
+            );
+
+            await this.processTable(
+              detailConfig,
+              sourceData,
+              detailRow,
+              targetConnection,
+              currentConsecutive,
+              mapping,
+              documentId,
+              columnLengthCache,
+              true // isDetailTable = true
+            );
+
+            detailSuccessCount++;
+            logger.debug(
+              `✅ INSERCIÓN EXITOSA DE DETALLE ${i + 1}/${
+                detailDataToProcess.length
+              } en ${detailConfig.targetTable}`
+            );
+          } catch (detailError) {
+            detailFailureCount++;
+            logger.error(
+              `❌ Error en detalle ${i + 1}/${
+                detailDataToProcess.length
+              } para documento ${documentId}: ${detailError.message}`
+            );
+
+            // Si es error de conexión, intentar recuperar y continuar
+            if (this.isConnectionError(detailError)) {
+              logger.warn(
+                `🔄 Error de conexión en detalle, intentando recuperar conexión...`
+              );
+
+              try {
+                const reconnectResult =
+                  await ConnectionService.enhancedRobustConnect(
+                    mapping.targetServer
+                  );
+                if (reconnectResult.success) {
+                  targetConnection = reconnectResult.connection;
+                  logger.info(
+                    `✅ Conexión recuperada para continuar con detalles`
+                  );
+                  continue; // Continuar con el siguiente detalle
+                }
+              } catch (reconnectError) {
+                logger.error(
+                  `❌ No se pudo recuperar conexión: ${reconnectError.message}`
+                );
+              }
+            }
+
+            // Si no es error de conexión o no se pudo recuperar, decidir si continuar
+            if (detailFailureCount > detailDataToProcess.length * 0.5) {
+              // Si más del 50% de detalles fallan, abortar
+              throw new Error(
+                `Demasiados fallos en detalles (${detailFailureCount}/${detailDataToProcess.length}): ${detailError.message}`
+              );
+            }
+
+            // Continuar con el siguiente detalle
+            logger.warn(
+              `⚠️ Continuando con siguiente detalle después del error`
+            );
+          }
+        }
+
+        if (detailSuccessCount > 0) {
+          logger.info(
+            `✅ Detalles procesados en ${detailConfig.name}: ${detailSuccessCount} éxitos, ${detailFailureCount} fallos`
+          );
+          processedTables.push(detailConfig.name);
+        } else {
+          logger.error(
+            `❌ No se procesó ningún detalle exitosamente en ${detailConfig.name}`
+          );
+          throw new Error(
+            `No se procesó ningún detalle en ${detailConfig.name}: todos los ${detailFailureCount} registros fallaron`
+          );
+        }
+      } catch (tableError) {
+        logger.error(
+          `❌ Error procesando tabla de detalle ${detailConfig.name}: ${tableError.message}`
+        );
+
+        // Decidir si el error es crítico o se puede continuar
+        if (this.isConnectionError(tableError)) {
+          // Error de conexión es crítico, propagarlo
+          throw tableError;
+        }
+
+        // Para otros errores, log y continuar con siguiente tabla
+        logger.warn(
+          `⚠️ Continuando con siguiente tabla de detalle después del error`
         );
       }
-
-      logger.info(
-        `Insertados detalles en ${detailConfig.name} sin transacción`
-      );
-      processedTables.push(detailConfig.name);
     }
   }
 
@@ -4686,6 +4860,39 @@ class DynamicTransferService {
       );
       throw error;
     }
+  }
+
+  /**
+   * 🔥 NUEVO: Log detallado de errores de conexión para debugging
+   * @param {Error} error - Error a analizar
+   * @param {string} context - Contexto donde ocurrió el error
+   */
+  logConnectionError(error, context) {
+    const errorInfo = {
+      context: context,
+      errorName: error.name,
+      errorMessage: error.message,
+      isConnectionError: this.isConnectionError(error),
+      errorCode: error.code,
+      errorNumber: error.number,
+      severity: error.class,
+      state: error.state,
+      serverName: error.serverName,
+      procName: error.procName,
+      lineNumber: error.lineNumber,
+      timestamp: new Date().toISOString(),
+    };
+
+    logger.error(`🔍 ANÁLISIS DETALLADO DEL ERROR DE CONEXIÓN:`, errorInfo);
+
+    // Log del stack trace completo para debugging
+    if (error.stack) {
+      logger.debug(`📚 Stack trace completo:`, error.stack);
+    }
+
+    // Actualizar estadísticas
+    this.connectionStats.failedRecoveries++;
+    this.connectionStats.lastError = errorInfo;
   }
 }
 
