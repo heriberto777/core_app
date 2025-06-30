@@ -30,7 +30,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     markProcessedValue: 1,
     consecutiveConfig: { enabled: false },
     foreignKeyDependencies: [],
-    // 🟢 CAMPOS PARA BONIFICACIONES
+    // 🟢 CAMPOS PARA BONIFICACIONES COMPLETOS
     hasBonificationProcessing: false,
     bonificationConfig: {
       sourceTable: "FAC_DET_PED",
@@ -39,6 +39,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       regularArticleField: "COD_ART",
       bonificationReferenceField: "COD_ART_RFR",
       orderField: "NUM_PED",
+      lineOrderField: "NUM_LN", // 🔥 CAMPO CRÍTICO AGREGADO
       lineNumberField: "PEDIDO_LINEA",
       bonificationLineReferenceField: "PEDIDO_LINEA_BONIF",
       quantityField: "CNT_MAX",
@@ -71,6 +72,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
             regularArticleField: "COD_ART",
             bonificationReferenceField: "COD_ART_RFR",
             orderField: "NUM_PED",
+            lineOrderField: "NUM_LN", // 🔥 CAMPO CRÍTICO AGREGADO
             lineNumberField: "PEDIDO_LINEA",
             bonificationLineReferenceField: "PEDIDO_LINEA_BONIF",
             quantityField: "CNT_MAX",
@@ -2210,6 +2212,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         )}
 
         {/* 🟢 PESTAÑA BONIFICACIONES */}
+        {/* 🟢 PESTAÑA BONIFICACIONES */}
         {activeTab === "bonifications" && (
           <Section>
             <SectionHeader>
@@ -2323,7 +2326,25 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                     </FormGroup>
                   </FormRow>
 
+                  {/* 🔥 NUEVA FILA: Campo crítico faltante */}
                   <FormRow>
+                    <FormGroup>
+                      <Label>Campo de orden de líneas *</Label>
+                      <Input
+                        type="text"
+                        name="bonificationConfig.lineOrderField"
+                        value={
+                          mapping.bonificationConfig.lineOrderField || "NUM_LN"
+                        }
+                        onChange={handleChange}
+                        placeholder="ej: NUM_LN"
+                      />
+                      <small style={{ color: "#6c757d", fontSize: "0.75rem" }}>
+                        <strong>CRÍTICO:</strong> Campo para ordenar registros
+                        antes del procesamiento (NUM_LN)
+                      </small>
+                    </FormGroup>
+
                     <FormGroup>
                       <Label>Campo de artículo regular</Label>
                       <Input
@@ -2337,7 +2358,9 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                         Campo que contiene el código del artículo
                       </small>
                     </FormGroup>
+                  </FormRow>
 
+                  <FormRow>
                     <FormGroup>
                       <Label>Campo de referencia de bonificación</Label>
                       <Input
@@ -2354,11 +2377,25 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                         bonificación
                       </small>
                     </FormGroup>
+
+                    <FormGroup>
+                      <Label>Campo de cantidad</Label>
+                      <Input
+                        type="text"
+                        name="bonificationConfig.quantityField"
+                        value={mapping.bonificationConfig.quantityField}
+                        onChange={handleChange}
+                        placeholder="ej: CNT_MAX"
+                      />
+                      <small style={{ color: "#6c757d", fontSize: "0.75rem" }}>
+                        Campo que contiene la cantidad (regular o bonificada)
+                      </small>
+                    </FormGroup>
                   </FormRow>
 
                   <FormRow>
                     <FormGroup>
-                      <Label>Campo de número de línea</Label>
+                      <Label>Campo de número de línea destino</Label>
                       <Input
                         type="text"
                         name="bonificationConfig.lineNumberField"
@@ -2392,19 +2429,44 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                     </FormGroup>
                   </FormRow>
 
-                  <FormGroup>
-                    <Label>Campo de cantidad</Label>
-                    <Input
-                      type="text"
-                      name="bonificationConfig.quantityField"
-                      value={mapping.bonificationConfig.quantityField}
-                      onChange={handleChange}
-                      placeholder="ej: CNT_MAX"
-                    />
-                    <small style={{ color: "#6c757d", fontSize: "0.75rem" }}>
-                      Campo que contiene la cantidad (regular o bonificada)
-                    </small>
-                  </FormGroup>
+                  {/* 🔥 NUEVA SECCIÓN DE VALIDACIÓN */}
+                  <div
+                    style={{
+                      marginTop: "20px",
+                      padding: "15px",
+                      background: "#fff3cd",
+                      borderRadius: "6px",
+                      border: "1px solid #ffeaa7",
+                      borderLeft: "4px solid #fdcb6e",
+                    }}
+                  >
+                    <h5 style={{ margin: "0 0 10px 0", color: "#856404" }}>
+                      ⚠️ Validación de Configuración:
+                    </h5>
+                    <div style={{ fontSize: "0.875rem", color: "#856404" }}>
+                      {!mapping.bonificationConfig.sourceTable && (
+                        <div>❌ Falta tabla de origen</div>
+                      )}
+                      {!mapping.bonificationConfig
+                        .bonificationIndicatorField && (
+                        <div>❌ Falta campo indicador de bonificación</div>
+                      )}
+                      {!mapping.bonificationConfig.orderField && (
+                        <div>❌ Falta campo de agrupación</div>
+                      )}
+                      {!mapping.bonificationConfig.lineOrderField && (
+                        <div>❌ Falta campo de orden de líneas (NUM_LN)</div>
+                      )}
+                      {mapping.bonificationConfig.sourceTable &&
+                        mapping.bonificationConfig.bonificationIndicatorField &&
+                        mapping.bonificationConfig.orderField &&
+                        mapping.bonificationConfig.lineOrderField && (
+                          <div style={{ color: "#155724" }}>
+                            ✅ Configuración válida
+                          </div>
+                        )}
+                    </div>
+                  </div>
 
                   <div
                     style={{
@@ -2448,7 +2510,8 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                           color: "#495057",
                         }}
                       >
-                        2. Asigna líneas secuenciales a artículos regulares
+                        2. Ordena por{" "}
+                        {mapping.bonificationConfig.lineOrderField || "NUM_LN"}
                       </div>
                       <div
                         style={{
@@ -2460,7 +2523,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                           color: "#495057",
                         }}
                       >
-                        3. Mapea bonificaciones con sus artículos regulares
+                        3. Asigna líneas secuenciales a artículos regulares
                       </div>
                       <div
                         style={{
@@ -2472,7 +2535,19 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                           color: "#495057",
                         }}
                       >
-                        4. Asigna{" "}
+                        4. Mapea bonificaciones con sus artículos regulares
+                      </div>
+                      <div
+                        style={{
+                          padding: "8px 12px",
+                          background: "white",
+                          borderRadius: "4px",
+                          borderLeft: "3px solid #007bff",
+                          fontSize: "0.875rem",
+                          color: "#495057",
+                        }}
+                      >
+                        5. Asigna{" "}
                         {
                           mapping.bonificationConfig
                             .bonificationLineReferenceField
@@ -2489,7 +2564,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                           color: "#495057",
                         }}
                       >
-                        5. Limpia{" "}
+                        6. Limpia{" "}
                         {mapping.bonificationConfig.bonificationReferenceField}{" "}
                         original
                       </div>
