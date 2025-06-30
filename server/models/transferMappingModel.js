@@ -192,20 +192,23 @@ const TransferMappingSchema = new Schema({
       default: "B",
       description: "Valor que marca una bonificación",
     },
+
+    // 🔥 CAMPOS SOURCE (YA EXISTÍAN)
     regularArticleField: {
       type: String,
       default: "COD_ART",
-      description: "Campo del artículo regular",
+      description: "Campo del artículo regular en origen",
     },
-    bonificationReferenceField: {
+    quantityField: {
       type: String,
-      default: "COD_ART_RFR",
-      description: "Campo que referencia al artículo regular en bonificaciones",
+      default: "CNT_MAX",
+      description: "Campo de cantidad en origen",
     },
     orderField: {
       type: String,
       default: "NUM_PED",
-      description: "Campo para agrupar registros (ej: número de pedido)",
+      description:
+        "Campo para agrupar registros (ej: número de pedido) en origen",
     },
     lineOrderField: {
       type: String,
@@ -223,10 +226,27 @@ const TransferMappingSchema = new Schema({
       description:
         "Campo donde se asigna la referencia a la línea del artículo regular",
     },
-    quantityField: {
+    bonificationReferenceField: {
       type: String,
-      default: "CNT_MAX",
-      description: "Campo de cantidad",
+      default: "COD_ART_RFR",
+      description: "Campo que referencia al artículo regular en bonificaciones",
+    },
+
+    // 🔥 NUEVOS CAMPOS TARGET (CONFIGURABLES)
+    targetArticleField: {
+      type: String,
+      default: "CODIGO_ARTICULO",
+      description: "Campo destino para código de artículo",
+    },
+    targetQuantityField: {
+      type: String,
+      default: "CANTIDAD",
+      description: "Campo destino para cantidad",
+    },
+    targetOrderField: {
+      type: String,
+      default: "NUM_PEDIDO",
+      description: "Campo destino para número de pedido",
     },
   },
 });

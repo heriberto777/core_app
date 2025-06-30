@@ -39,10 +39,15 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       regularArticleField: "COD_ART",
       bonificationReferenceField: "COD_ART_RFR",
       orderField: "NUM_PED",
-      lineOrderField: "NUM_LN", // 🔥 CAMPO CRÍTICO AGREGADO
+      lineOrderField: "NUM_LN",
       lineNumberField: "PEDIDO_LINEA",
       bonificationLineReferenceField: "PEDIDO_LINEA_BONIF",
       quantityField: "CNT_MAX",
+      // 🔥 NUEVOS CAMPOS TARGET
+      targetArticleField: "CODIGO_ARTICULO",
+      targetQuantityField: "CANTIDAD",
+      targetOrderField: "NUM_PEDIDO",
+      targetLineReferenceField: "LINEA_REFERENCIA",
     },
   });
   const [isEditing, setIsEditing] = useState(!!mappingId);
@@ -72,10 +77,15 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
             regularArticleField: "COD_ART",
             bonificationReferenceField: "COD_ART_RFR",
             orderField: "NUM_PED",
-            lineOrderField: "NUM_LN", // 🔥 CAMPO CRÍTICO AGREGADO
+            lineOrderField: "NUM_LN",
             lineNumberField: "PEDIDO_LINEA",
             bonificationLineReferenceField: "PEDIDO_LINEA_BONIF",
             quantityField: "CNT_MAX",
+            // 🔥 NUEVOS CAMPOS TARGET CON DEFAULTS
+            targetArticleField: "CODIGO_ARTICULO",
+            targetQuantityField: "CANTIDAD",
+            targetOrderField: "NUM_PEDIDO",
+            targetLineReferenceField: "LINEA_REFERENCIA",
             ...data.bonificationConfig,
           },
         };
@@ -117,7 +127,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       return mappingToSave;
     }
 
-    // Campos requeridos para bonificaciones
+    // 🔥 CAMPOS COMPLETAMENTE DINÁMICOS
     const requiredBonificationFields = [
       {
         sourceField: config.lineNumberField || "PEDIDO_LINEA",
@@ -133,17 +143,17 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       },
       {
         sourceField: config.regularArticleField || "COD_ART",
-        targetField: "CODIGO_ARTICULO",
+        targetField: config.targetArticleField || "ARTICULO", // ✅ DINÁMICO
         description: "Código del artículo",
       },
       {
         sourceField: config.quantityField || "CNT_MAX",
-        targetField: "CANTIDAD",
+        targetField: config.targetQuantityField || "CANTIDAD_A_FACTURAR", // ✅ DINÁMICO
         description: "Cantidad del artículo",
       },
       {
         sourceField: config.orderField || "NUM_PED",
-        targetField: "NUM_PEDIDO",
+        targetField: config.targetOrderField || "NUM_PEDIDO", // ✅ DINÁMICO
         description: "Número del pedido",
       },
     ];
@@ -2336,350 +2346,527 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           </Section>
         )}
 
-        {/* 🔥 PESTAÑA BONIFICACIONES MEJORADA */}
+        {/* 🎁 PESTAÑA DE BONIFICACIONES COMPLETA */}
         {activeTab === "bonifications" && (
           <Section>
             <SectionHeader>
               <h3>
-                <FaGift /> Procesamiento de Bonificaciones
+                <FaGift /> Configuración de Bonificaciones
               </h3>
-              {!mapping.hasBonificationProcessing ? (
-                <SmallButton onClick={addBonificationConfig}>
-                  <FaPlus /> Habilitar Bonificaciones
-                </SmallButton>
-              ) : (
-                <SmallButton $danger onClick={removeBonificationConfig}>
-                  <FaTrash /> Deshabilitar
-                </SmallButton>
-              )}
             </SectionHeader>
 
-            {mapping.hasBonificationProcessing ? (
-              <Card>
-                <CardHeader>
-                  <h4>Configuración de Bonificaciones</h4>
-                </CardHeader>
-                <CardBody>
-                  <div
-                    style={{
-                      background: "#d1ecf1",
-                      border: "1px solid #bee5eb",
-                      borderRadius: "4px",
-                      padding: "15px",
-                      marginBottom: "20px",
-                      display: "flex",
-                      alignItems: "center",
-                      gap: "10px",
-                      color: "#0c5460",
-                    }}
-                  >
-                    <FaGift style={{ color: "#17a2b8", flexShrink: 0 }} />
-                    <div>
-                      <strong>Procesamiento automático habilitado:</strong> El
-                      sistema asignará automáticamente números de línea
-                      secuenciales y creará las referencias entre bonificaciones
-                      y artículos regulares.
-                    </div>
-                  </div>
+            {/* 🔧 ACTIVACIÓN DE BONIFICACIONES */}
+            <CheckboxGroup>
+              <Checkbox
+                type="checkbox"
+                name="hasBonificationProcessing"
+                checked={mapping.hasBonificationProcessing}
+                onChange={handleChange}
+              />
+              <CheckboxLabel>
+                Activar procesamiento de bonificaciones
+              </CheckboxLabel>
+            </CheckboxGroup>
 
-                  <FormRow>
-                    <FormGroup>
-                      <Label>Tabla de origen *</Label>
-                      <Input
-                        type="text"
-                        name="bonificationConfig.sourceTable"
-                        value={mapping.bonificationConfig.sourceTable}
-                        onChange={handleChange}
-                        placeholder="ej: FAC_DET_PED"
-                      />
-                      <small style={{ color: "#6c757d", fontSize: "0.75rem" }}>
-                        Tabla que contiene tanto artículos regulares como
-                        bonificaciones
-                      </small>
-                    </FormGroup>
-
-                    <FormGroup>
-                      <Label>Campo indicador de bonificación *</Label>
-                      <Input
-                        type="text"
-                        name="bonificationConfig.bonificationIndicatorField"
-                        value={
-                          mapping.bonificationConfig.bonificationIndicatorField
-                        }
-                        onChange={handleChange}
-                        placeholder="ej: ART_BON"
-                      />
-                      <small style={{ color: "#6c757d", fontSize: "0.75rem" }}>
-                        Campo que distingue bonificaciones de artículos
-                        regulares
-                      </small>
-                    </FormGroup>
-                  </FormRow>
-
-                  <FormRow>
-                    <FormGroup>
-                      <Label>Valor que marca bonificación *</Label>
-                      <Input
-                        type="text"
-                        name="bonificationConfig.bonificationIndicatorValue"
-                        value={
-                          mapping.bonificationConfig.bonificationIndicatorValue
-                        }
-                        onChange={handleChange}
-                        placeholder="ej: B"
-                      />
-                      <small style={{ color: "#6c757d", fontSize: "0.75rem" }}>
-                        Valor en el campo indicador que identifica una
-                        bonificación
-                      </small>
-                    </FormGroup>
-
-                    <FormGroup>
-                      <Label>Campo de agrupación *</Label>
-                      <Input
-                        type="text"
-                        name="bonificationConfig.orderField"
-                        value={mapping.bonificationConfig.orderField}
-                        onChange={handleChange}
-                        placeholder="ej: NUM_PED"
-                      />
-                      <small style={{ color: "#6c757d", fontSize: "0.75rem" }}>
-                        Campo para agrupar registros (número de pedido, factura,
-                        etc.)
-                      </small>
-                    </FormGroup>
-                  </FormRow>
-
-                  {/* 🔥 NUEVA FILA: Campo crítico agregado */}
-                  <FormRow>
-                    <FormGroup>
-                      <Label>Campo de orden de líneas *</Label>
-                      <Input
-                        type="text"
-                        name="bonificationConfig.lineOrderField"
-                        value={
-                          mapping.bonificationConfig.lineOrderField || "NUM_LN"
-                        }
-                        onChange={handleChange}
-                        placeholder="ej: NUM_LN"
-                      />
-                      <small style={{ color: "#6c757d", fontSize: "0.75rem" }}>
-                        <strong>CRÍTICO:</strong> Campo para ordenar registros
-                        antes del procesamiento (NUM_LN)
-                      </small>
-                    </FormGroup>
-
-                    <FormGroup>
-                      <Label>Campo de artículo regular</Label>
-                      <Input
-                        type="text"
-                        name="bonificationConfig.regularArticleField"
-                        value={mapping.bonificationConfig.regularArticleField}
-                        onChange={handleChange}
-                        placeholder="ej: COD_ART"
-                      />
-                      <small style={{ color: "#6c757d", fontSize: "0.75rem" }}>
-                        Campo que contiene el código del artículo
-                      </small>
-                    </FormGroup>
-                  </FormRow>
-
-                  <FormRow>
-                    <FormGroup>
-                      <Label>Campo de referencia de bonificación</Label>
-                      <Input
-                        type="text"
-                        name="bonificationConfig.bonificationReferenceField"
-                        value={
-                          mapping.bonificationConfig.bonificationReferenceField
-                        }
-                        onChange={handleChange}
-                        placeholder="ej: COD_ART_RFR"
-                      />
-                      <small style={{ color: "#6c757d", fontSize: "0.75rem" }}>
-                        Campo que referencia al artículo regular que lleva la
-                        bonificación
-                      </small>
-                    </FormGroup>
-
-                    <FormGroup>
-                      <Label>Campo de cantidad</Label>
-                      <Input
-                        type="text"
-                        name="bonificationConfig.quantityField"
-                        value={mapping.bonificationConfig.quantityField}
-                        onChange={handleChange}
-                        placeholder="ej: CNT_MAX"
-                      />
-                      <small style={{ color: "#6c757d", fontSize: "0.75rem" }}>
-                        Campo que contiene la cantidad (regular o bonificada)
-                      </small>
-                    </FormGroup>
-                  </FormRow>
-
-                  <FormRow>
-                    <FormGroup>
-                      <Label>Campo de número de línea destino</Label>
-                      <Input
-                        type="text"
-                        name="bonificationConfig.lineNumberField"
-                        value={mapping.bonificationConfig.lineNumberField}
-                        onChange={handleChange}
-                        placeholder="ej: PEDIDO_LINEA"
-                      />
-                      <small style={{ color: "#6c757d", fontSize: "0.75rem" }}>
-                        Campo donde se asignará el número de línea secuencial
-                      </small>
-                    </FormGroup>
-
-                    <FormGroup>
-                      <Label>
-                        Campo de referencia de línea de bonificación
-                      </Label>
-                      <Input
-                        type="text"
-                        name="bonificationConfig.bonificationLineReferenceField"
-                        value={
-                          mapping.bonificationConfig
-                            .bonificationLineReferenceField
-                        }
-                        onChange={handleChange}
-                        placeholder="ej: PEDIDO_LINEA_BONIF"
-                      />
-                      <small style={{ color: "#6c757d", fontSize: "0.75rem" }}>
-                        Campo donde se asignará la referencia a la línea del
-                        artículo regular
-                      </small>
-                    </FormGroup>
-                  </FormRow>
-
-                  {/* 🔥 NUEVA SECCIÓN DE VALIDACIÓN */}
-                  <div
-                    style={{
-                      marginTop: "20px",
-                      padding: "15px",
-                      background: "#fff3cd",
-                      borderRadius: "6px",
-                      border: "1px solid #ffeaa7",
-                      borderLeft: "4px solid #fdcb6e",
-                    }}
-                  >
-                    <h5 style={{ margin: "0 0 10px 0", color: "#856404" }}>
-                      ⚠️ Validación de Configuración:
-                    </h5>
-                    <div style={{ fontSize: "0.875rem", color: "#856404" }}>
-                      {!mapping.bonificationConfig.sourceTable && (
-                        <div>❌ Falta tabla de origen</div>
-                      )}
-                      {!mapping.bonificationConfig
-                        .bonificationIndicatorField && (
-                        <div>❌ Falta campo indicador de bonificación</div>
-                      )}
-                      {!mapping.bonificationConfig.orderField && (
-                        <div>❌ Falta campo de agrupación</div>
-                      )}
-                      {!mapping.bonificationConfig.lineOrderField && (
-                        <div>❌ Falta campo de orden de líneas (NUM_LN)</div>
-                      )}
-                      {mapping.bonificationConfig.sourceTable &&
-                        mapping.bonificationConfig.bonificationIndicatorField &&
-                        mapping.bonificationConfig.orderField &&
-                        mapping.bonificationConfig.lineOrderField && (
-                          <div style={{ color: "#155724" }}>
-                            ✅ Configuración válida
-                          </div>
-                        )}
-                    </div>
-                  </div>
-
-                  {/* 🔥 NUEVA SECCIÓN DE ESTADO */}
-                  {mapping.hasBonificationProcessing && (
-                    <div
+            {mapping.hasBonificationProcessing && (
+              <>
+                {/* 🔧 CONFIGURACIÓN BÁSICA */}
+                <Card style={{ marginTop: "20px" }}>
+                  <div style={{ padding: "20px" }}>
+                    <h4
                       style={{
-                        marginTop: "20px",
-                        padding: "15px",
-                        background: "#e8f5e8",
-                        borderRadius: "6px",
-                        border: "1px solid #c3e6c3",
-                        borderLeft: "4px solid #28a745",
+                        margin: "0 0 20px 0",
+                        color: "#495057",
+                        borderBottom: "2px solid #e9ecef",
+                        paddingBottom: "10px",
                       }}
                     >
-                      <h5 style={{ margin: "0 0 10px 0", color: "#155724" }}>
-                        ✅ Estado de Configuración:
-                      </h5>
-                      <div style={{ fontSize: "0.875rem", color: "#155724" }}>
-                        {(() => {
-                          const config = mapping.bonificationConfig;
-                          const detailTable = mapping.tableConfigs.find(
-                            (tc) =>
-                              tc.isDetailTable &&
-                              tc.sourceTable === config.sourceTable
-                          );
+                      📋 Configuración Básica
+                    </h4>
 
-                          const requiredFields = [
-                            config.lineNumberField || "PEDIDO_LINEA",
-                            config.bonificationLineReferenceField ||
-                              "PEDIDO_LINEA_BONIF",
-                          ];
+                    <FormRow>
+                      <FormGroup>
+                        <Label>Tabla de origen *</Label>
+                        <Input
+                          type="text"
+                          name="bonificationConfig.sourceTable"
+                          value={mapping.bonificationConfig?.sourceTable || ""}
+                          onChange={handleChange}
+                          placeholder="ej: FAC_DET_PED"
+                        />
+                        <small
+                          style={{ color: "#6c757d", fontSize: "0.75rem" }}
+                        >
+                          Tabla que contiene tanto artículos regulares como
+                          bonificaciones
+                        </small>
+                      </FormGroup>
 
-                          const existingFields =
-                            detailTable?.fieldMappings?.map(
-                              (fm) => fm.sourceField
-                            ) || [];
-                          const missingFields = requiredFields.filter(
-                            (field) => !existingFields.includes(field)
-                          );
-
-                          if (!detailTable) {
-                            return (
-                              <div>
-                                ❌ Falta tabla de detalle para{" "}
-                                {config.sourceTable}
-                              </div>
-                            );
+                      <FormGroup>
+                        <Label>Campo indicador de bonificación *</Label>
+                        <Input
+                          type="text"
+                          name="bonificationConfig.bonificationIndicatorField"
+                          value={
+                            mapping.bonificationConfig
+                              ?.bonificationIndicatorField || ""
                           }
+                          onChange={handleChange}
+                          placeholder="ej: ART_BON"
+                        />
+                        <small
+                          style={{ color: "#6c757d", fontSize: "0.75rem" }}
+                        >
+                          Campo que distingue bonificaciones de artículos
+                          regulares
+                        </small>
+                      </FormGroup>
+                    </FormRow>
 
-                          if (missingFields.length > 0) {
-                            return (
-                              <div>
-                                ⚠️ Se agregarán automáticamente estos campos al
-                                guardar:
-                                <ul
-                                  style={{
-                                    margin: "5px 0",
-                                    paddingLeft: "20px",
-                                  }}
-                                >
-                                  {missingFields.map((field) => (
-                                    <li key={field}>{field}</li>
-                                  ))}
-                                </ul>
-                              </div>
-                            );
+                    <FormRow>
+                      <FormGroup>
+                        <Label>Valor que marca bonificación *</Label>
+                        <Input
+                          type="text"
+                          name="bonificationConfig.bonificationIndicatorValue"
+                          value={
+                            mapping.bonificationConfig
+                              ?.bonificationIndicatorValue || ""
                           }
+                          onChange={handleChange}
+                          placeholder="ej: B"
+                        />
+                        <small
+                          style={{ color: "#6c757d", fontSize: "0.75rem" }}
+                        >
+                          Valor en el campo indicador que identifica una
+                          bonificación
+                        </small>
+                      </FormGroup>
 
-                          return (
-                            <div>
-                              ✅ Todos los campos necesarios están configurados
+                      <FormGroup>
+                        <Label>Campo de agrupación (orden) *</Label>
+                        <Input
+                          type="text"
+                          name="bonificationConfig.orderField"
+                          value={mapping.bonificationConfig?.orderField || ""}
+                          onChange={handleChange}
+                          placeholder="ej: NUM_PED"
+                        />
+                        <small
+                          style={{ color: "#6c757d", fontSize: "0.75rem" }}
+                        >
+                          Campo para agrupar registros (número de pedido,
+                          factura, etc.)
+                        </small>
+                      </FormGroup>
+                    </FormRow>
+
+                    <FormRow>
+                      <FormGroup>
+                        <Label>Campo de orden de líneas *</Label>
+                        <Input
+                          type="text"
+                          name="bonificationConfig.lineOrderField"
+                          value={
+                            mapping.bonificationConfig?.lineOrderField || ""
+                          }
+                          onChange={handleChange}
+                          placeholder="ej: NUM_LN"
+                        />
+                        <small
+                          style={{
+                            color: "#dc3545",
+                            fontSize: "0.75rem",
+                            fontWeight: "bold",
+                          }}
+                        >
+                          CRÍTICO: Campo para ordenar registros antes del
+                          procesamiento
+                        </small>
+                      </FormGroup>
+
+                      <FormGroup>
+                        <Label>Campo de referencia de bonificación</Label>
+                        <Input
+                          type="text"
+                          name="bonificationConfig.bonificationReferenceField"
+                          value={
+                            mapping.bonificationConfig
+                              ?.bonificationReferenceField || ""
+                          }
+                          onChange={handleChange}
+                          placeholder="ej: COD_ART_RFR"
+                        />
+                        <small
+                          style={{ color: "#6c757d", fontSize: "0.75rem" }}
+                        >
+                          Campo que referencia al artículo regular que lleva la
+                          bonificación
+                        </small>
+                      </FormGroup>
+                    </FormRow>
+                  </div>
+                </Card>
+
+                {/* 🔧 MAPEO DE CAMPOS ORIGEN */}
+                <Card style={{ marginTop: "20px" }}>
+                  <div style={{ padding: "20px" }}>
+                    <h4
+                      style={{
+                        margin: "0 0 20px 0",
+                        color: "#495057",
+                        borderBottom: "2px solid #e9ecef",
+                        paddingBottom: "10px",
+                      }}
+                    >
+                      📥 Campos de Origen (Source)
+                    </h4>
+
+                    <FormRow>
+                      <FormGroup>
+                        <Label>Campo de artículo regular</Label>
+                        <Input
+                          type="text"
+                          name="bonificationConfig.regularArticleField"
+                          value={
+                            mapping.bonificationConfig?.regularArticleField ||
+                            ""
+                          }
+                          onChange={handleChange}
+                          placeholder="ej: COD_ART"
+                        />
+                        <small
+                          style={{ color: "#6c757d", fontSize: "0.75rem" }}
+                        >
+                          Campo que contiene el código del artículo en origen
+                        </small>
+                      </FormGroup>
+
+                      <FormGroup>
+                        <Label>Campo de cantidad</Label>
+                        <Input
+                          type="text"
+                          name="bonificationConfig.quantityField"
+                          value={
+                            mapping.bonificationConfig?.quantityField || ""
+                          }
+                          onChange={handleChange}
+                          placeholder="ej: CNT_MAX"
+                        />
+                        <small
+                          style={{ color: "#6c757d", fontSize: "0.75rem" }}
+                        >
+                          Campo que contiene la cantidad en origen
+                        </small>
+                      </FormGroup>
+                    </FormRow>
+
+                    <FormRow>
+                      <FormGroup>
+                        <Label>Campo de número de línea (origen)</Label>
+                        <Input
+                          type="text"
+                          name="bonificationConfig.lineNumberField"
+                          value={
+                            mapping.bonificationConfig?.lineNumberField || ""
+                          }
+                          onChange={handleChange}
+                          placeholder="ej: PEDIDO_LINEA"
+                        />
+                        <small
+                          style={{ color: "#6c757d", fontSize: "0.75rem" }}
+                        >
+                          Campo donde se asignará el número de línea secuencial
+                        </small>
+                      </FormGroup>
+
+                      <FormGroup>
+                        <Label>
+                          Campo de referencia de línea de bonificación
+                        </Label>
+                        <Input
+                          type="text"
+                          name="bonificationConfig.bonificationLineReferenceField"
+                          value={
+                            mapping.bonificationConfig
+                              ?.bonificationLineReferenceField || ""
+                          }
+                          onChange={handleChange}
+                          placeholder="ej: PEDIDO_LINEA_BONIF"
+                        />
+                        <small
+                          style={{ color: "#6c757d", fontSize: "0.75rem" }}
+                        >
+                          Campo donde se asigna la referencia a la línea del
+                          artículo regular
+                        </small>
+                      </FormGroup>
+                    </FormRow>
+                  </div>
+                </Card>
+
+                {/* 🔧 MAPEO DE CAMPOS DESTINO */}
+                <Card style={{ marginTop: "20px" }}>
+                  <div style={{ padding: "20px" }}>
+                    <h4
+                      style={{
+                        margin: "0 0 20px 0",
+                        color: "#495057",
+                        borderBottom: "2px solid #e9ecef",
+                        paddingBottom: "10px",
+                      }}
+                    >
+                      📤 Campos de Destino (Target)
+                    </h4>
+
+                    <FormRow>
+                      <FormGroup>
+                        <Label>Campo destino - Artículo</Label>
+                        <Input
+                          type="text"
+                          name="bonificationConfig.targetArticleField"
+                          value={
+                            mapping.bonificationConfig?.targetArticleField ||
+                            "CODIGO_ARTICULO"
+                          }
+                          onChange={handleChange}
+                          placeholder="ej: CODIGO_ARTICULO"
+                        />
+                        <small
+                          style={{ color: "#6c757d", fontSize: "0.75rem" }}
+                        >
+                          Campo destino donde se guardará el código del artículo
+                        </small>
+                      </FormGroup>
+
+                      <FormGroup>
+                        <Label>Campo destino - Cantidad</Label>
+                        <Input
+                          type="text"
+                          name="bonificationConfig.targetQuantityField"
+                          value={
+                            mapping.bonificationConfig?.targetQuantityField ||
+                            "CANTIDAD"
+                          }
+                          onChange={handleChange}
+                          placeholder="ej: CANTIDAD"
+                        />
+                        <small
+                          style={{ color: "#6c757d", fontSize: "0.75rem" }}
+                        >
+                          Campo destino donde se guardará la cantidad
+                        </small>
+                      </FormGroup>
+                    </FormRow>
+
+                    <FormRow>
+                      <FormGroup>
+                        <Label>Campo destino - Pedido</Label>
+                        <Input
+                          type="text"
+                          name="bonificationConfig.targetOrderField"
+                          value={
+                            mapping.bonificationConfig?.targetOrderField ||
+                            "NUM_PEDIDO"
+                          }
+                          onChange={handleChange}
+                          placeholder="ej: NUM_PEDIDO"
+                        />
+                        <small
+                          style={{ color: "#6c757d", fontSize: "0.75rem" }}
+                        >
+                          Campo destino donde se guardará el número de pedido
+                        </small>
+                      </FormGroup>
+
+                      <FormGroup>
+                        <Label>Campo destino - Línea de referencia</Label>
+                        <Input
+                          type="text"
+                          name="bonificationConfig.targetLineReferenceField"
+                          value={
+                            mapping.bonificationConfig
+                              ?.targetLineReferenceField || "LINEA_REFERENCIA"
+                          }
+                          onChange={handleChange}
+                          placeholder="ej: LINEA_REFERENCIA"
+                        />
+                        <small
+                          style={{ color: "#6c757d", fontSize: "0.75rem" }}
+                        >
+                          Campo destino para la referencia entre líneas de
+                          bonificación
+                        </small>
+                      </FormGroup>
+                    </FormRow>
+                  </div>
+                </Card>
+
+                {/* 🔧 VALIDACIÓN DE CONFIGURACIÓN */}
+                <Card style={{ marginTop: "20px" }}>
+                  <div style={{ padding: "20px" }}>
+                    <h4
+                      style={{
+                        margin: "0 0 15px 0",
+                        color: "#495057",
+                        borderBottom: "2px solid #e9ecef",
+                        paddingBottom: "10px",
+                      }}
+                    >
+                      ⚠️ Validación de Configuración
+                    </h4>
+
+                    <div
+                      style={{
+                        padding: "15px",
+                        background: "#fff3cd",
+                        borderRadius: "6px",
+                        border: "1px solid #ffeaa7",
+                        borderLeft: "4px solid #fdcb6e",
+                      }}
+                    >
+                      <div style={{ fontSize: "0.875rem", color: "#856404" }}>
+                        {!mapping.bonificationConfig?.sourceTable && (
+                          <div style={{ marginBottom: "5px" }}>
+                            ❌ Falta tabla de origen
+                          </div>
+                        )}
+                        {!mapping.bonificationConfig
+                          ?.bonificationIndicatorField && (
+                          <div style={{ marginBottom: "5px" }}>
+                            ❌ Falta campo indicador de bonificación
+                          </div>
+                        )}
+                        {!mapping.bonificationConfig?.orderField && (
+                          <div style={{ marginBottom: "5px" }}>
+                            ❌ Falta campo de agrupación
+                          </div>
+                        )}
+                        {!mapping.bonificationConfig?.lineOrderField && (
+                          <div style={{ marginBottom: "5px" }}>
+                            ❌ Falta campo de orden de líneas (crítico)
+                          </div>
+                        )}
+                        {mapping.bonificationConfig?.sourceTable &&
+                          mapping.bonificationConfig
+                            ?.bonificationIndicatorField &&
+                          mapping.bonificationConfig?.orderField &&
+                          mapping.bonificationConfig?.lineOrderField && (
+                            <div
+                              style={{ color: "#155724", fontWeight: "bold" }}
+                            >
+                              ✅ Configuración básica válida
                             </div>
-                          );
-                        })()}
+                          )}
                       </div>
                     </div>
-                  )}
+                  </div>
+                </Card>
 
-                  <div
-                    style={{
-                      marginTop: "20px",
-                      padding: "15px",
-                      background: "#f8f9fa",
-                      borderRadius: "6px",
-                      border: "1px solid #dee2e6",
-                    }}
-                  >
-                    <h5 style={{ margin: "0 0 15px 0", color: "#495057" }}>
-                      Flujo de procesamiento:
-                    </h5>
+                {/* 🔧 ESTADO DE CONFIGURACIÓN */}
+                {mapping.hasBonificationProcessing && (
+                  <Card style={{ marginTop: "20px" }}>
+                    <div style={{ padding: "20px" }}>
+                      <h4
+                        style={{
+                          margin: "0 0 15px 0",
+                          color: "#495057",
+                          borderBottom: "2px solid #e9ecef",
+                          paddingBottom: "10px",
+                        }}
+                      >
+                        ✅ Estado del Sistema
+                      </h4>
+
+                      <div
+                        style={{
+                          padding: "15px",
+                          background: "#e8f5e8",
+                          borderRadius: "6px",
+                          border: "1px solid #c3e6c3",
+                          borderLeft: "4px solid #28a745",
+                        }}
+                      >
+                        <div style={{ fontSize: "0.875rem", color: "#155724" }}>
+                          {(() => {
+                            const config = mapping.bonificationConfig;
+                            const detailTable = mapping.tableConfigs?.find(
+                              (tc) =>
+                                tc.isDetailTable &&
+                                tc.sourceTable === config?.sourceTable
+                            );
+
+                            const requiredFields = [
+                              config?.lineNumberField || "PEDIDO_LINEA",
+                              config?.bonificationLineReferenceField ||
+                                "PEDIDO_LINEA_BONIF",
+                            ];
+
+                            const existingFields =
+                              detailTable?.fieldMappings?.map(
+                                (fm) => fm.sourceField
+                              ) || [];
+
+                            const missingFields = requiredFields.filter(
+                              (field) => !existingFields.includes(field)
+                            );
+
+                            if (!detailTable) {
+                              return (
+                                <div>
+                                  ❌ Falta tabla de detalle para{" "}
+                                  {config?.sourceTable || "tabla no definida"}
+                                </div>
+                              );
+                            }
+
+                            if (missingFields.length > 0) {
+                              return (
+                                <div>
+                                  ⚠️ Se agregarán automáticamente estos campos
+                                  al guardar:
+                                  <ul
+                                    style={{
+                                      margin: "5px 0",
+                                      paddingLeft: "20px",
+                                    }}
+                                  >
+                                    {missingFields.map((field) => (
+                                      <li key={field}>{field}</li>
+                                    ))}
+                                  </ul>
+                                </div>
+                              );
+                            }
+
+                            return (
+                              <div>
+                                ✅ Todos los campos necesarios están
+                                configurados
+                              </div>
+                            );
+                          })()}
+                        </div>
+                      </div>
+                    </div>
+                  </Card>
+                )}
+
+                {/* 🔧 FLUJO DE PROCESAMIENTO */}
+                <Card style={{ marginTop: "20px" }}>
+                  <div style={{ padding: "20px" }}>
+                    <h4
+                      style={{
+                        margin: "0 0 15px 0",
+                        color: "#495057",
+                        borderBottom: "2px solid #e9ecef",
+                        paddingBottom: "10px",
+                      }}
+                    >
+                      🔄 Flujo de Procesamiento
+                    </h4>
+
                     <div
                       style={{
                         display: "flex",
@@ -2698,7 +2885,9 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                         }}
                       >
                         1. Agrupa registros por{" "}
-                        {mapping.bonificationConfig.orderField}
+                        <strong>
+                          {mapping.bonificationConfig?.orderField || "NUM_PED"}
+                        </strong>
                       </div>
                       <div
                         style={{
@@ -2711,7 +2900,10 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                         }}
                       >
                         2. Ordena por{" "}
-                        {mapping.bonificationConfig.lineOrderField || "NUM_LN"}
+                        <strong>
+                          {mapping.bonificationConfig?.lineOrderField ||
+                            "NUM_LN"}
+                        </strong>
                       </div>
                       <div
                         style={{
@@ -2723,7 +2915,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                           color: "#495057",
                         }}
                       >
-                        3. Asigna líneas secuenciales a artículos regulares
+                        3. Asigna números de línea secuenciales
                       </div>
                       <div
                         style={{
@@ -2735,7 +2927,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                           color: "#495057",
                         }}
                       >
-                        4. Mapea bonificaciones con sus artículos regulares
+                        4. Vincula bonificaciones con artículos regulares
                       </div>
                       <div
                         style={{
@@ -2747,41 +2939,12 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                           color: "#495057",
                         }}
                       >
-                        5. Asigna{" "}
-                        {
-                          mapping.bonificationConfig
-                            .bonificationLineReferenceField
-                        }{" "}
-                        con la línea correspondiente
-                      </div>
-                      <div
-                        style={{
-                          padding: "8px 12px",
-                          background: "white",
-                          borderRadius: "4px",
-                          borderLeft: "3px solid #007bff",
-                          fontSize: "0.875rem",
-                          color: "#495057",
-                        }}
-                      >
-                        6. Limpia{" "}
-                        {mapping.bonificationConfig.bonificationReferenceField}{" "}
-                        original
+                        5. Transfiere a tabla destino con mapeo dinámico
                       </div>
                     </div>
                   </div>
-                </CardBody>
-              </Card>
-            ) : (
-              <EmptyMessage>
-                <FaGift size={48} />
-                <h3>Procesamiento de bonificaciones deshabilitado</h3>
-                <p>
-                  Habilite esta función para procesar automáticamente las
-                  bonificaciones y asignar las referencias correctas entre
-                  artículos regulares y bonificaciones.
-                </p>
-              </EmptyMessage>
+                </Card>
+              </>
             )}
           </Section>
         )}
