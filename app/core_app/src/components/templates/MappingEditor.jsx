@@ -62,7 +62,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       const data = await api.getMappingById(accessToken, mappingId);
 
       if (data) {
-        // 🟢 ASEGURAR CONFIGURACIÓN DE BONIFICACIONES CON VALORES POR DEFECTO
+        // 🔥 ASEGURAR CONFIGURACIÓN COMPLETA DE BONIFICACIONES
         const mappingWithDefaults = {
           ...data,
           bonificationConfig: {
@@ -92,6 +92,103 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     } finally {
       setLoading(false);
     }
+  };
+
+  /**
+   * 🔧 NUEVA FUNCIÓN: Validar y auto-configurar fieldMappings para bonificaciones
+   */
+  const validateAndSetupBonificationFieldMappings = (mappingToSave) => {
+    if (
+      !mappingToSave.hasBonificationProcessing ||
+      !mappingToSave.bonificationConfig
+    ) {
+      return mappingToSave;
+    }
+
+    const config = mappingToSave.bonificationConfig;
+
+    // Buscar la tabla de detalle que usa la misma tabla que bonificaciones
+    const detailTable = mappingToSave.tableConfigs.find(
+      (tc) => tc.isDetailTable && tc.sourceTable === config.sourceTable
+    );
+
+    if (!detailTable) {
+      console.warn("⚠️ No se encontró tabla de detalle para bonificaciones");
+      return mappingToSave;
+    }
+
+    // Campos requeridos para bonificaciones
+    const requiredBonificationFields = [
+      {
+        sourceField: config.lineNumberField || "PEDIDO_LINEA",
+        targetField: config.lineNumberField || "PEDIDO_LINEA",
+        description: "Número de línea secuencial",
+      },
+      {
+        sourceField:
+          config.bonificationLineReferenceField || "PEDIDO_LINEA_BONIF",
+        targetField:
+          config.bonificationLineReferenceField || "PEDIDO_LINEA_BONIF",
+        description: "Referencia a línea del artículo regular",
+      },
+      {
+        sourceField: config.regularArticleField || "COD_ART",
+        targetField: "CODIGO_ARTICULO",
+        description: "Código del artículo",
+      },
+      {
+        sourceField: config.quantityField || "CNT_MAX",
+        targetField: "CANTIDAD",
+        description: "Cantidad del artículo",
+      },
+      {
+        sourceField: config.orderField || "NUM_PED",
+        targetField: "NUM_PEDIDO",
+        description: "Número del pedido",
+      },
+    ];
+
+    // Verificar y agregar campos faltantes
+    const existingTargetFields =
+      detailTable.fieldMappings?.map((fm) => fm.targetField) || [];
+    let addedFields = 0;
+
+    requiredBonificationFields.forEach((requiredField) => {
+      if (!existingTargetFields.includes(requiredField.targetField)) {
+        if (!detailTable.fieldMappings) {
+          detailTable.fieldMappings = [];
+        }
+
+        detailTable.fieldMappings.push({
+          sourceField: requiredField.sourceField,
+          targetField: requiredField.targetField,
+          defaultValue: null,
+          isRequired: false,
+          removePrefix: false,
+          valueMappings: [],
+          lookupFromTarget: false,
+          isEditable: true,
+          showInList: true,
+          displayName: requiredField.description,
+          displayOrder: 0,
+          fieldGroup: "Bonificaciones",
+          fieldType: "text",
+        });
+
+        addedFields++;
+        console.log(
+          `✅ Campo agregado automáticamente: ${requiredField.sourceField} → ${requiredField.targetField}`
+        );
+      }
+    });
+
+    if (addedFields > 0) {
+      console.log(
+        `🎁 [BONIF] Se agregaron ${addedFields} campos automáticamente para bonificaciones`
+      );
+    }
+
+    return mappingToSave;
   };
 
   const handleChange = (e) => {
@@ -154,26 +251,46 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       return;
     }
 
-    console.log(mapping);
-
-    // 🟢 VALIDACIÓN DE BONIFICACIONES
+    // 🔥 VALIDACIÓN DE BONIFICACIONES MEJORADA
     if (mapping.hasBonificationProcessing) {
       const config = mapping.bonificationConfig;
       if (
         !config.sourceTable ||
         !config.bonificationIndicatorField ||
-        !config.orderField
+        !config.orderField ||
+        !config.lineOrderField
       ) {
         Swal.fire({
           icon: "warning",
           title: "Configuración de bonificaciones incompleta",
-          text: "Complete todos los campos requeridos para el procesamiento de bonificaciones",
+          text: "Complete todos los campos requeridos para el procesamiento de bonificaciones, incluyendo el campo de orden de líneas (NUM_LN)",
+        });
+        return;
+      }
+
+      // Validar que existe una tabla de detalle compatible
+      const detailTable = mapping.tableConfigs.find(
+        (tc) => tc.isDetailTable && tc.sourceTable === config.sourceTable
+      );
+
+      if (!detailTable) {
+        Swal.fire({
+          icon: "warning",
+          title: "Configuración de bonificaciones incompleta",
+          text: `No se encontró una tabla de detalle que use la tabla de origen de bonificaciones: ${config.sourceTable}`,
         });
         return;
       }
     }
 
-    const mappingCopy = JSON.parse(JSON.stringify(mapping));
+    console.log(mapping);
+
+    let mappingCopy = JSON.parse(JSON.stringify(mapping));
+
+    // 🔥 NUEVA VALIDACIÓN Y AUTO-CONFIGURACIÓN DE BONIFICACIONES
+    if (mappingCopy.hasBonificationProcessing) {
+      mappingCopy = validateAndSetupBonificationFieldMappings(mappingCopy);
+    }
 
     mappingCopy.tableConfigs.forEach((tableConfig) => {
       if (tableConfig.fieldMappings) {
@@ -206,11 +323,19 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       }
 
       if (result.success) {
+        // 🔥 MOSTRAR INFORMACIÓN DE AUTO-CONFIGURACIÓN
+        let successMessage = isEditing
+          ? "Configuración actualizada"
+          : "Configuración creada";
+
+        if (mappingCopy.hasBonificationProcessing) {
+          successMessage +=
+            "\n\n🎁 Los campos de bonificaciones se configuraron automáticamente.";
+        }
+
         Swal.fire({
           icon: "success",
-          title: isEditing
-            ? "Configuración actualizada"
-            : "Configuración creada",
+          title: successMessage,
           text: "Los cambios se han guardado correctamente",
         });
         onSave && onSave(result.data);
@@ -2211,8 +2336,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           </Section>
         )}
 
-        {/* 🟢 PESTAÑA BONIFICACIONES */}
-        {/* 🟢 PESTAÑA BONIFICACIONES */}
+        {/* 🔥 PESTAÑA BONIFICACIONES MEJORADA */}
         {activeTab === "bonifications" && (
           <Section>
             <SectionHeader>
@@ -2326,7 +2450,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                     </FormGroup>
                   </FormRow>
 
-                  {/* 🔥 NUEVA FILA: Campo crítico faltante */}
+                  {/* 🔥 NUEVA FILA: Campo crítico agregado */}
                   <FormRow>
                     <FormGroup>
                       <Label>Campo de orden de líneas *</Label>
@@ -2468,6 +2592,82 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                     </div>
                   </div>
 
+                  {/* 🔥 NUEVA SECCIÓN DE ESTADO */}
+                  {mapping.hasBonificationProcessing && (
+                    <div
+                      style={{
+                        marginTop: "20px",
+                        padding: "15px",
+                        background: "#e8f5e8",
+                        borderRadius: "6px",
+                        border: "1px solid #c3e6c3",
+                        borderLeft: "4px solid #28a745",
+                      }}
+                    >
+                      <h5 style={{ margin: "0 0 10px 0", color: "#155724" }}>
+                        ✅ Estado de Configuración:
+                      </h5>
+                      <div style={{ fontSize: "0.875rem", color: "#155724" }}>
+                        {(() => {
+                          const config = mapping.bonificationConfig;
+                          const detailTable = mapping.tableConfigs.find(
+                            (tc) =>
+                              tc.isDetailTable &&
+                              tc.sourceTable === config.sourceTable
+                          );
+
+                          const requiredFields = [
+                            config.lineNumberField || "PEDIDO_LINEA",
+                            config.bonificationLineReferenceField ||
+                              "PEDIDO_LINEA_BONIF",
+                          ];
+
+                          const existingFields =
+                            detailTable?.fieldMappings?.map(
+                              (fm) => fm.sourceField
+                            ) || [];
+                          const missingFields = requiredFields.filter(
+                            (field) => !existingFields.includes(field)
+                          );
+
+                          if (!detailTable) {
+                            return (
+                              <div>
+                                ❌ Falta tabla de detalle para{" "}
+                                {config.sourceTable}
+                              </div>
+                            );
+                          }
+
+                          if (missingFields.length > 0) {
+                            return (
+                              <div>
+                                ⚠️ Se agregarán automáticamente estos campos al
+                                guardar:
+                                <ul
+                                  style={{
+                                    margin: "5px 0",
+                                    paddingLeft: "20px",
+                                  }}
+                                >
+                                  {missingFields.map((field) => (
+                                    <li key={field}>{field}</li>
+                                  ))}
+                                </ul>
+                              </div>
+                            );
+                          }
+
+                          return (
+                            <div>
+                              ✅ Todos los campos necesarios están configurados
+                            </div>
+                          );
+                        })()}
+                      </div>
+                    </div>
+                  )}
+
                   <div
                     style={{
                       marginTop: "20px",
@@ -2590,7 +2790,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
   );
 }
 
-// Styled Components
+// Styled Components (igual que antes)
 const Container = styled.div`
   background: ${(props) => props.theme.cardBg};
   border-radius: 8px;

@@ -12,25 +12,17 @@ const { SqlService } = require("./SqlService");
  * - Control de pedidos ya procesados
  *
  * @author Tu Equipo de Desarrollo
- * @version 2.1.0
+ * @version 2.3.0
  */
 class BonificationService {
   constructor(options = {}) {
     this.processedOrders = new Set(); // Control de pedidos ya procesados
     this.debug = options.debug !== undefined ? options.debug : true;
-    this.version = "2.1.0";
+    this.version = "2.3.0";
   }
 
   /**
    * 🎯 MÉTODO PRINCIPAL: Procesamiento unificado de bonificaciones
-   *
-   * Este es el punto de entrada principal que decide si procesar bonificaciones
-   * o usar el flujo normal de datos.
-   *
-   * @param {Array} documentIds - IDs de documentos a procesar
-   * @param {Object} mapping - Configuración de mapeo completa
-   * @param {Object} connection - Conexión a base de datos SQL Server
-   * @returns {Promise<Array>} Datos procesados listos para inserción
    */
   async processBonificationsUnified(documentIds, mapping, connection) {
     try {
@@ -127,10 +119,199 @@ class BonificationService {
   }
 
   /**
+   * 🔧 CORREGIDO: Procesa un pedido individual con mapeo directo a campos destino
+   */
+  async processSingleOrder(orderRecords, config, orderNumber) {
+    try {
+      const processedRecords = [];
+      const regularArticleMap = new Map();
+
+      if (this.debug) {
+        logger.debug(
+          `📋 [BONIF] Procesando pedido ${orderNumber}: ${orderRecords.length} registros`
+        );
+      }
+
+      // 🔥 PASO 1: Ordenar por NUM_LN para mantener secuencia original
+      const sortedRecords = [...orderRecords].sort((a, b) => {
+        const numLnA = parseInt(a[config.lineOrderField] || a.NUM_LN || 0);
+        const numLnB = parseInt(b[config.lineOrderField] || b.NUM_LN || 0);
+        return numLnA - numLnB;
+      });
+
+      // 🔥 PASO 2: Primera pasada - mapear artículos regulares
+      let currentLineNumber = 1;
+
+      sortedRecords.forEach((record) => {
+        const isRegularArticle =
+          record[config.bonificationIndicatorField] !==
+          config.bonificationIndicatorValue;
+
+        if (isRegularArticle) {
+          const articleCode = record[config.regularArticleField];
+          regularArticleMap.set(articleCode, {
+            lineNumber: currentLineNumber,
+            originalData: record,
+            originalNumLn: record[config.lineOrderField] || record.NUM_LN,
+          });
+
+          if (this.debug) {
+            logger.debug(
+              `✅ [BONIF] Artículo regular: ${articleCode} → línea ${currentLineNumber} (NUM_LN original: ${record.NUM_LN})`
+            );
+          }
+
+          currentLineNumber++;
+        }
+      });
+
+      // 🔥 PASO 3: Segunda pasada - procesar todos los registros en orden
+      currentLineNumber = 1;
+
+      for (const record of sortedRecords) {
+        const isBonification =
+          record[config.bonificationIndicatorField] ===
+          config.bonificationIndicatorValue;
+
+        if (!isBonification) {
+          // 📦 ARTÍCULO REGULAR
+          const processedArticle = {
+            ...record,
+            // 🔥 MAPEO DIRECTO A CAMPOS DESTINO (no campos calculados)
+            [config.lineNumberField || "PEDIDO_LINEA"]: currentLineNumber,
+            [config.bonificationLineReferenceField || "PEDIDO_LINEA_BONIF"]:
+              null,
+            // Limpiar referencia original
+            [config.bonificationReferenceField]: null,
+          };
+
+          processedRecords.push(processedArticle);
+
+          if (this.debug) {
+            logger.debug(
+              `📦 [BONIF] Regular procesado: ${
+                record[config.regularArticleField]
+              } línea ${currentLineNumber}`
+            );
+            logger.debug(
+              `📦 [BONIF] Cantidad original: ${
+                record[config.quantityField || "CNT_MAX"]
+              }`
+            );
+          }
+
+          currentLineNumber++;
+        } else {
+          // 🎁 BONIFICACIÓN
+          const referencedArticleCode =
+            record[config.bonificationReferenceField];
+          const referencedArticle = regularArticleMap.get(
+            referencedArticleCode
+          );
+
+          // 🔥 VALIDACIÓN CRÍTICA: Verificar que existe el artículo regular
+          if (!referencedArticle) {
+            logger.error(
+              `❌ [BONIF] ERROR CRÍTICO: Bonificación huérfana en pedido ${orderNumber}`
+            );
+            logger.error(
+              `❌ [BONIF] Artículo bonificación: ${
+                record[config.regularArticleField]
+              }`
+            );
+            logger.error(
+              `❌ [BONIF] Referencia: ${referencedArticleCode} (NO ENCONTRADO)`
+            );
+            logger.error(
+              `❌ [BONIF] Artículos regulares disponibles: ${Array.from(
+                regularArticleMap.keys()
+              ).join(", ")}`
+            );
+
+            // Continuar procesando pero marcar como error
+            const processedBonification = {
+              ...record,
+              [config.lineNumberField || "PEDIDO_LINEA"]: currentLineNumber,
+              [config.bonificationLineReferenceField || "PEDIDO_LINEA_BONIF"]:
+                null, // ERROR: Sin referencia
+              [config.bonificationReferenceField]: null,
+              // Marcar como problemático
+              _BONIFICATION_ERROR: `REFERENCIA_NO_ENCONTRADA: ${referencedArticleCode}`,
+            };
+
+            processedRecords.push(processedBonification);
+          } else {
+            // ✅ BONIFICACIÓN VÁLIDA
+            const processedBonification = {
+              ...record,
+              // 🔥 MAPEO DIRECTO A CAMPOS DESTINO
+              [config.lineNumberField || "PEDIDO_LINEA"]: currentLineNumber,
+              [config.bonificationLineReferenceField || "PEDIDO_LINEA_BONIF"]:
+                referencedArticle.lineNumber,
+              [config.bonificationReferenceField]: null, // Limpiar COD_ART_RFR
+
+              // 🔥 PRESERVAR CANTIDAD ORIGINAL: No modificar CNT_MAX
+              [config.quantityField || "CNT_MAX"]:
+                record[config.quantityField || "CNT_MAX"],
+            };
+
+            processedRecords.push(processedBonification);
+
+            if (this.debug) {
+              logger.debug(
+                `🎁 [BONIF] Bonificación procesada: ${
+                  record[config.regularArticleField]
+                } línea ${currentLineNumber} → referencia línea ${
+                  referencedArticle.lineNumber
+                }`
+              );
+              logger.debug(
+                `🎁 [BONIF] Cantidad bonificación original: ${
+                  record[config.quantityField || "CNT_MAX"]
+                }`
+              );
+              logger.debug(
+                `🎁 [BONIF] PEDIDO_LINEA_BONIF asignado: ${referencedArticle.lineNumber}`
+              );
+            }
+          }
+
+          currentLineNumber++;
+        }
+      }
+
+      logger.info(
+        `✅ [BONIF] Pedido ${orderNumber} completado: ${processedRecords.length} líneas procesadas`
+      );
+
+      // 🔥 LOG DETALLADO PARA DEBUGGING
+      if (this.debug) {
+        for (const record of processedRecords) {
+          logger.debug(
+            `📊 [BONIF] Registro final: ${
+              record[config.regularArticleField]
+            } - Línea: ${
+              record[config.lineNumberField || "PEDIDO_LINEA"]
+            } - Ref: ${
+              record[
+                config.bonificationLineReferenceField || "PEDIDO_LINEA_BONIF"
+              ]
+            } - Cantidad: ${record[config.quantityField || "CNT_MAX"]}`
+          );
+        }
+      }
+
+      return processedRecords;
+    } catch (error) {
+      logger.error(
+        `❌ [BONIF] Error procesando pedido ${orderNumber}: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  /**
    * 🔍 Obtiene datos raw de la tabla fuente
-   *
-   * Ejecuta la consulta SQL para obtener todos los registros (regulares y bonificaciones)
-   * de los documentos especificados, ordenados correctamente.
    */
   async getRawSourceData(documentIds, config, connection) {
     try {
@@ -169,9 +350,6 @@ class BonificationService {
 
   /**
    * 🔧 Obtiene datos usando flujo normal (sin bonificaciones)
-   *
-   * Método de fallback para cuando no hay procesamiento de bonificaciones configurado.
-   * Utiliza la configuración de tablas estándar del mapping.
    */
   async getRegularSourceData(documentIds, mapping, connection) {
     try {
@@ -297,201 +475,6 @@ class BonificationService {
   }
 
   /**
-   * 🔧 CORREGIDO: Procesa un pedido individual manteniendo orden NUM_LN
-   */
-  async processSingleOrder(orderRecords, config, orderNumber) {
-    try {
-      const processedRecords = [];
-      const regularArticleMap = new Map(); // COD_ART → {lineNumber, originalData}
-
-      if (this.debug) {
-        logger.debug(
-          `📋 [BONIF] Procesando pedido ${orderNumber}: ${orderRecords.length} registros`
-        );
-      }
-
-      // 🔥 PASO 1: Ordenar por NUM_LN para mantener secuencia original
-      const sortedRecords = [...orderRecords].sort((a, b) => {
-        const numLnA = parseInt(a[config.lineOrderField] || a.NUM_LN || 0);
-        const numLnB = parseInt(b[config.lineOrderField] || b.NUM_LN || 0);
-        return numLnA - numLnB;
-      });
-
-      // 🔥 PASO 2: Primera pasada - mapear artículos regulares
-      let currentLineNumber = 1;
-
-      sortedRecords.forEach((record) => {
-        const isRegularArticle =
-          record[config.bonificationIndicatorField] !==
-          config.bonificationIndicatorValue;
-
-        if (isRegularArticle) {
-          const articleCode = record[config.regularArticleField];
-          regularArticleMap.set(articleCode, {
-            lineNumber: currentLineNumber,
-            originalData: record,
-            originalNumLn: record[config.lineOrderField] || record.NUM_LN,
-          });
-
-          if (this.debug) {
-            logger.debug(
-              `✅ [BONIF] Artículo regular: ${articleCode} → línea ${currentLineNumber} (NUM_LN original: ${record.NUM_LN})`
-            );
-          }
-
-          currentLineNumber++;
-        }
-      });
-
-      // 🔥 PASO 3: Segunda pasada - procesar todos los registros en orden
-      currentLineNumber = 1;
-
-      for (const record of sortedRecords) {
-        const isBonification =
-          record[config.bonificationIndicatorField] ===
-          config.bonificationIndicatorValue;
-
-        if (!isBonification) {
-          // 📦 ARTÍCULO REGULAR
-          const processedArticle = {
-            ...record,
-            // Campos destino correctos
-            [config.lineNumberField || "PEDIDO_LINEA"]: currentLineNumber,
-            [config.bonificationLineReferenceField || "PEDIDO_LINEA_BONIF"]:
-              null,
-            // Limpiar referencia original
-            [config.bonificationReferenceField]: null,
-            // Agregar campos calculados
-            CALCULATED_PEDIDO_LINEA: currentLineNumber,
-            CALCULATED_PEDIDO_LINEA_BONIF: null,
-          };
-
-          processedRecords.push(processedArticle);
-
-          if (this.debug) {
-            logger.debug(
-              `📦 [BONIF] Regular procesado: ${
-                record[config.regularArticleField]
-              } línea ${currentLineNumber}`
-            );
-          }
-
-          currentLineNumber++;
-        } else {
-          // 🎁 BONIFICACIÓN
-          const referencedArticleCode =
-            record[config.bonificationReferenceField];
-          const referencedArticle = regularArticleMap.get(
-            referencedArticleCode
-          );
-
-          // 🔥 VALIDACIÓN CRÍTICA: Verificar que existe el artículo regular
-          if (!referencedArticle) {
-            logger.error(
-              `❌ [BONIF] ERROR CRÍTICO: Bonificación huérfana en pedido ${orderNumber}`
-            );
-            logger.error(
-              `❌ [BONIF] Artículo bonificación: ${
-                record[config.regularArticleField]
-              }`
-            );
-            logger.error(
-              `❌ [BONIF] Referencia: ${referencedArticleCode} (NO ENCONTRADO)`
-            );
-            logger.error(
-              `❌ [BONIF] Artículos regulares disponibles: ${Array.from(
-                regularArticleMap.keys()
-              ).join(", ")}`
-            );
-
-            // Continuar procesando pero marcar como error
-            const processedBonification = {
-              ...record,
-              [config.lineNumberField || "PEDIDO_LINEA"]: currentLineNumber,
-              [config.bonificationLineReferenceField || "PEDIDO_LINEA_BONIF"]:
-                null, // ERROR: Sin referencia
-              [config.bonificationReferenceField]: null,
-              // Campos calculados
-              CALCULATED_PEDIDO_LINEA: currentLineNumber,
-              CALCULATED_PEDIDO_LINEA_BONIF: null,
-              // Marcar como problemático
-              _BONIFICATION_ERROR: `REFERENCIA_NO_ENCONTRADA: ${referencedArticleCode}`,
-            };
-
-            processedRecords.push(processedBonification);
-          } else {
-            // ✅ BONIFICACIÓN VÁLIDA
-            const processedBonification = {
-              ...record,
-              [config.lineNumberField || "PEDIDO_LINEA"]: currentLineNumber,
-              [config.bonificationLineReferenceField || "PEDIDO_LINEA_BONIF"]:
-                referencedArticle.lineNumber,
-              [config.bonificationReferenceField]: null, // Limpiar COD_ART_RFR
-              // Campos calculados
-              CALCULATED_PEDIDO_LINEA: currentLineNumber,
-              CALCULATED_PEDIDO_LINEA_BONIF: referencedArticle.lineNumber,
-
-              // 🔥 CORREGIR CANTIDAD: Usar CNT_MAX correctamente
-              [config.quantityField || "CNT_MAX"]: this.validateQuantity(
-                record[config.quantityField || "CNT_MAX"]
-              ),
-            };
-
-            processedRecords.push(processedBonification);
-
-            if (this.debug) {
-              logger.debug(
-                `🎁 [BONIF] Bonificación procesada: ${
-                  record[config.regularArticleField]
-                } línea ${currentLineNumber} → referencia línea ${
-                  referencedArticle.lineNumber
-                }`
-              );
-              logger.debug(
-                `🎁 [BONIF] Cantidad bonificación: ${
-                  processedBonification[config.quantityField || "CNT_MAX"]
-                }`
-              );
-            }
-          }
-
-          currentLineNumber++;
-        }
-      }
-
-      logger.info(
-        `✅ [BONIF] Pedido ${orderNumber} completado: ${processedRecords.length} líneas procesadas`
-      );
-
-      return processedRecords;
-    } catch (error) {
-      logger.error(
-        `❌ [BONIF] Error procesando pedido ${orderNumber}: ${error.message}`
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * 🔧 NUEVO: Validar y corregir cantidad de bonificación
-   */
-  validateQuantity(quantity) {
-    if (quantity === null || quantity === undefined) {
-      logger.warn(`⚠️ [BONIF] Cantidad null/undefined, usando 0`);
-      return 0;
-    }
-
-    const numericQuantity = parseFloat(quantity);
-    if (isNaN(numericQuantity)) {
-      logger.warn(`⚠️ [BONIF] Cantidad inválida: ${quantity}, usando 0`);
-      return 0;
-    }
-
-    // Las bonificaciones pueden tener cantidad negativa o positiva
-    return numericQuantity;
-  }
-
-  /**
    * 🔧 NUEVO: Validar configuración de bonificaciones
    */
   validateConfig(config) {
@@ -572,8 +555,6 @@ class BonificationService {
 
   /**
    * Valida la configuración de bonificaciones
-   * @param {Object} mapping - Configuración de mapeo
-   * @returns {Object} Resultado de validación
    */
   static validateBonificationConfig(mapping) {
     const errors = [];
