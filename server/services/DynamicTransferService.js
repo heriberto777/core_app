@@ -2224,7 +2224,553 @@ class DynamicTransferService {
     }
   }
 
-  
+  /**
+   * Obtiene todas las configuraciones de mapeo
+   * @returns {Promise<Array>} - Lista de configuraciones
+   */
+  static async getMappings() {
+    try {
+      logger.info("📋 Obteniendo todas las configuraciones de mapeo");
+      const mappings = await TransferMapping.find().sort({ name: 1 });
+      logger.info(
+        `✅ Se encontraron ${mappings.length} configuraciones de mapeo`
+      );
+      return mappings;
+    } catch (error) {
+      logger.error(
+        `❌ Error al obtener configuraciones de mapeo: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene una configuración de mapeo por ID
+   * @param {string} mappingId - ID de la configuración
+   * @returns {Promise<Object>} - Configuración de mapeo
+   */
+  static async getMappingById(mappingId) {
+    try {
+      logger.info(`🔍 Obteniendo configuración de mapeo: ${mappingId}`);
+
+      if (!mappingId) {
+        throw new Error("Se requiere el ID de la configuración");
+      }
+
+      const mapping = await TransferMapping.findById(mappingId);
+      if (!mapping) {
+        throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
+      }
+
+      logger.info(`✅ Configuración encontrada: ${mapping.name}`);
+      return mapping;
+    } catch (error) {
+      logger.error(
+        `❌ Error al obtener configuración de mapeo: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Crea una nueva configuración de mapeo
+   * @param {Object} mappingData - Datos de la configuración
+   * @returns {Promise<Object>} - Configuración creada
+   */
+  static async createMapping(mappingData) {
+    try {
+      logger.info(
+        `📝 Creando nueva configuración de mapeo: ${mappingData.name}`
+      );
+
+      // Validar datos requeridos
+      if (!mappingData || !mappingData.name) {
+        throw new Error(
+          "Datos de configuración incompletos - se requiere nombre"
+        );
+      }
+
+      // Crear tarea asociada si no existe
+      if (!mappingData.taskId) {
+        logger.info("🔧 Creando tarea por defecto para la configuración");
+
+        let defaultQuery = "SELECT 1";
+
+        // Generar consulta más específica si hay configuración de tablas
+        if (
+          mappingData.tableConfigs &&
+          Array.isArray(mappingData.tableConfigs) &&
+          mappingData.tableConfigs.length > 0
+        ) {
+          const mainTable = mappingData.tableConfigs.find(
+            (tc) => !tc.isDetailTable
+          );
+          if (mainTable && mainTable.sourceTable) {
+            defaultQuery = `SELECT * FROM ${mainTable.sourceTable}`;
+            logger.info(`📋 Consulta generada: ${defaultQuery}`);
+          }
+        }
+
+        const taskData = {
+          name: `Task_${mappingData.name}`,
+          type: "manual",
+          active: true,
+          transferType: mappingData.transferType || "down",
+          query: defaultQuery,
+          parameters: [],
+          status: "pending",
+        };
+
+        const task = new TransferTask(taskData);
+        await task.save();
+
+        logger.info(`✅ Tarea por defecto creada: ${task._id}`);
+        mappingData.taskId = task._id;
+      }
+
+      // Crear configuración de mapeo
+      const mapping = new TransferMapping(mappingData);
+      await mapping.save();
+
+      logger.info(
+        `✅ Configuración de mapeo creada exitosamente: ${mapping._id}`
+      );
+      return mapping;
+    } catch (error) {
+      logger.error(
+        `❌ Error al crear configuración de mapeo: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Actualiza una configuración de mapeo existente
+   * @param {string} mappingId - ID de la configuración
+   * @param {Object} mappingData - Datos actualizados
+   * @returns {Promise<Object>} - Configuración actualizada
+   */
+  static async updateMapping(mappingId, mappingData) {
+    try {
+      logger.info(`📝 Actualizando configuración de mapeo: ${mappingId}`);
+
+      if (!mappingId) {
+        throw new Error("Se requiere el ID de la configuración");
+      }
+
+      if (!mappingData) {
+        throw new Error("No se proporcionaron datos para actualizar");
+      }
+
+      // Verificar que la configuración existe
+      const existingMapping = await TransferMapping.findById(mappingId);
+      if (!existingMapping) {
+        throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
+      }
+
+      // Actualizar la tarea asociada si hay cambios en la configuración de tablas
+      if (mappingData.tableConfigs && existingMapping.taskId) {
+        try {
+          const task = await TransferTask.findById(existingMapping.taskId);
+          if (task) {
+            const mainTable = mappingData.tableConfigs.find(
+              (tc) => !tc.isDetailTable
+            );
+            if (mainTable && mainTable.sourceTable) {
+              const newQuery = `SELECT * FROM ${mainTable.sourceTable}`;
+              task.query = newQuery;
+              await task.save();
+              logger.info(
+                `🔧 Tarea ${task._id} actualizada automáticamente con nueva consulta: ${newQuery}`
+              );
+            }
+          }
+        } catch (taskError) {
+          logger.warn(
+            `⚠️ Error al actualizar tarea asociada: ${taskError.message}`
+          );
+        }
+      }
+
+      // Crear tarea si no existe
+      if (!existingMapping.taskId && !mappingData.taskId) {
+        logger.info("🔧 Creando tarea faltante para configuración existente");
+
+        let defaultQuery = "SELECT 1";
+        if (
+          mappingData.tableConfigs &&
+          Array.isArray(mappingData.tableConfigs) &&
+          mappingData.tableConfigs.length > 0
+        ) {
+          const mainTable = mappingData.tableConfigs.find(
+            (tc) => !tc.isDetailTable
+          );
+          if (mainTable && mainTable.sourceTable) {
+            defaultQuery = `SELECT * FROM ${mainTable.sourceTable}`;
+          }
+        }
+
+        const taskData = {
+          name: `Task_${mappingData.name || existingMapping.name}`,
+          type: "manual",
+          active: true,
+          transferType:
+            mappingData.transferType || existingMapping.transferType || "down",
+          query: defaultQuery,
+          parameters: [],
+          status: "pending",
+        };
+
+        const task = new TransferTask(taskData);
+        await task.save();
+
+        logger.info(
+          `✅ Tarea por defecto creada para mapeo existente: ${task._id}`
+        );
+        mappingData.taskId = task._id;
+      }
+
+      // Actualizar la configuración
+      const mapping = await TransferMapping.findByIdAndUpdate(
+        mappingId,
+        mappingData,
+        { new: true }
+      );
+
+      logger.info(
+        `✅ Configuración de mapeo actualizada exitosamente: ${mapping.name}`
+      );
+      return mapping;
+    } catch (error) {
+      logger.error(
+        `❌ Error al actualizar configuración de mapeo: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Elimina una configuración de mapeo
+   * @param {string} mappingId - ID de la configuración
+   * @returns {Promise<boolean>} - true si se eliminó correctamente
+   */
+  static async deleteMapping(mappingId) {
+    try {
+      logger.info(`🗑️ Eliminando configuración de mapeo: ${mappingId}`);
+
+      if (!mappingId) {
+        throw new Error("Se requiere el ID de la configuración");
+      }
+
+      // Obtener la configuración antes de eliminarla para limpiar dependencias
+      const mapping = await TransferMapping.findById(mappingId);
+      if (!mapping) {
+        throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
+      }
+
+      // Eliminar tarea asociada si existe
+      if (mapping.taskId) {
+        try {
+          await TransferTask.findByIdAndDelete(mapping.taskId);
+          logger.info(`🔧 Tarea asociada eliminada: ${mapping.taskId}`);
+        } catch (taskError) {
+          logger.warn(
+            `⚠️ Error al eliminar tarea asociada: ${taskError.message}`
+          );
+        }
+      }
+
+      // Eliminar configuración de mapeo
+      const result = await TransferMapping.findByIdAndDelete(mappingId);
+      const success = !!result;
+
+      if (success) {
+        logger.info(
+          `✅ Configuración de mapeo eliminada exitosamente: ${mapping.name}`
+        );
+      } else {
+        logger.warn(`⚠️ No se pudo eliminar la configuración: ${mappingId}`);
+      }
+
+      return success;
+    } catch (error) {
+      logger.error(
+        `❌ Error al eliminar configuración de mapeo: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene documentos basados en la configuración de mapeo
+   * @param {string} mappingId - ID de la configuración
+   * @param {number} limit - Límite de documentos (opcional)
+   * @param {number} offset - Offset para paginación (opcional)
+   * @returns {Promise<Array>} - Lista de documentos
+   */
+  static async getDocumentsByMapping(mappingId, limit = 100, offset = 0) {
+    let sourceConnection = null;
+
+    try {
+      logger.info(
+        `📄 Obteniendo documentos para mapeo: ${mappingId} (limit: ${limit}, offset: ${offset})`
+      );
+
+      if (!mappingId) {
+        throw new Error("Se requiere el ID de la configuración");
+      }
+
+      // Obtener configuración de mapeo
+      const mapping = await TransferMapping.findById(mappingId);
+      if (!mapping) {
+        throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
+      }
+
+      // Establecer conexión al servidor origen
+      sourceConnection = await ConnectionService.getConnection(
+        mapping.sourceServer
+      );
+
+      // Determinar la tabla principal y el campo primario
+      const mainTableConfig = mapping.tableConfigs?.find(
+        (tc) => !tc.isDetailTable
+      );
+      if (!mainTableConfig) {
+        throw new Error("No se encontró configuración de tabla principal");
+      }
+
+      const sourceTable = mainTableConfig.sourceTable;
+      const primaryKey = mainTableConfig.primaryKey || "NUM_PED";
+
+      // Construir consulta con paginación
+      let query = `
+        SELECT DISTINCT ${primaryKey}
+        FROM ${sourceTable}
+      `;
+
+      // Agregar filtro si no está marcado como procesado
+      if (mapping.markProcessedField) {
+        const markValue =
+          mapping.markProcessedValue !== undefined
+            ? mapping.markProcessedValue
+            : 1;
+        query += ` WHERE (${mapping.markProcessedField} IS NULL OR ${mapping.markProcessedField} != ${markValue})`;
+      }
+
+      // Agregar ordenación y paginación
+      query += `
+        ORDER BY ${primaryKey}
+        OFFSET ${offset} ROWS
+        FETCH NEXT ${limit} ROWS ONLY
+      `;
+
+      logger.debug(`📋 Ejecutando consulta: ${query}`);
+
+      // Ejecutar consulta
+      const result = await SqlService.query(sourceConnection, query);
+      const documents = result.recordset || [];
+
+      logger.info(
+        `✅ Se encontraron ${documents.length} documentos para el mapeo ${mapping.name}`
+      );
+
+      return documents;
+    } catch (error) {
+      logger.error(`❌ Error al obtener documentos: ${error.message}`);
+      throw error;
+    } finally {
+      if (sourceConnection) {
+        await ConnectionService.releaseConnection(sourceConnection);
+      }
+    }
+  }
+
+  /**
+   * Valida una configuración de mapeo
+   * @param {Object} mappingData - Datos de la configuración
+   * @returns {Object} - Resultado de la validación
+   */
+  static validateMappingConfiguration(mappingData) {
+    const errors = [];
+    const warnings = [];
+
+    try {
+      // Validaciones básicas
+      if (!mappingData.name) {
+        errors.push("El nombre de la configuración es obligatorio");
+      }
+
+      if (!mappingData.sourceServer) {
+        errors.push("El servidor de origen es obligatorio");
+      }
+
+      if (!mappingData.targetServer) {
+        errors.push("El servidor de destino es obligatorio");
+      }
+
+      // Validar configuración de tablas
+      if (
+        !mappingData.tableConfigs ||
+        !Array.isArray(mappingData.tableConfigs)
+      ) {
+        errors.push("Se requiere al menos una configuración de tabla");
+      } else {
+        const mainTables = mappingData.tableConfigs.filter(
+          (tc) => !tc.isDetailTable
+        );
+        if (mainTables.length === 0) {
+          errors.push("Se requiere al menos una tabla principal");
+        }
+
+        if (mainTables.length > 1) {
+          warnings.push("Se encontraron múltiples tablas principales");
+        }
+
+        // Validar cada tabla
+        mappingData.tableConfigs.forEach((tableConfig, index) => {
+          if (!tableConfig.name) {
+            errors.push(`Tabla ${index + 1}: Nombre de tabla requerido`);
+          }
+
+          if (!tableConfig.sourceTable) {
+            errors.push(`Tabla ${index + 1}: Tabla de origen requerida`);
+          }
+
+          if (!tableConfig.targetTable) {
+            errors.push(`Tabla ${index + 1}: Tabla de destino requerida`);
+          }
+
+          if (
+            !tableConfig.fieldMappings ||
+            tableConfig.fieldMappings.length === 0
+          ) {
+            errors.push(
+              `Tabla ${index + 1}: Se requiere al menos un mapeo de campo`
+            );
+          }
+        });
+      }
+
+      // Validar configuración de bonificaciones si está habilitada
+      if (mappingData.hasBonificationProcessing) {
+        if (!mappingData.bonificationConfig) {
+          errors.push("Configuración de bonificaciones incompleta");
+        } else {
+          const config = mappingData.bonificationConfig;
+          const requiredBonifFields = [
+            "sourceTable",
+            "bonificationIndicatorField",
+            "bonificationIndicatorValue",
+            "orderField",
+          ];
+
+          requiredBonifFields.forEach((field) => {
+            if (!config[field]) {
+              errors.push(
+                `Configuración de bonificaciones: Campo ${field} requerido`
+              );
+            }
+          });
+        }
+      }
+
+      const isValid = errors.length === 0;
+
+      logger.info(
+        `🔍 Validación de configuración completada: ${
+          isValid ? "VÁLIDA" : "INVÁLIDA"
+        }`
+      );
+      if (errors.length > 0) {
+        logger.error(`❌ Errores encontrados: ${errors.join(", ")}`);
+      }
+      if (warnings.length > 0) {
+        logger.warn(`⚠️ Advertencias: ${warnings.join(", ")}`);
+      }
+
+      return {
+        valid: isValid,
+        errors,
+        warnings,
+      };
+    } catch (error) {
+      logger.error(`❌ Error durante validación: ${error.message}`);
+      return {
+        valid: false,
+        errors: [`Error durante validación: ${error.message}`],
+        warnings,
+      };
+    }
+  }
+
+  // ========================================
+  // 🔧 MÉTODOS DE UTILIDAD ESTÁTICOS
+  // ========================================
+
+  /**
+   * Obtiene estadísticas de una configuración de mapeo
+   * @param {string} mappingId - ID de la configuración
+   * @returns {Promise<Object>} - Estadísticas de la configuración
+   */
+  static async getMappingStats(mappingId) {
+    let sourceConnection = null;
+
+    try {
+      const mapping = await TransferMapping.findById(mappingId);
+      if (!mapping) {
+        throw new Error(`Configuración ${mappingId} no encontrada`);
+      }
+
+      sourceConnection = await ConnectionService.getConnection(
+        mapping.sourceServer
+      );
+
+      const mainTableConfig = mapping.tableConfigs?.find(
+        (tc) => !tc.isDetailTable
+      );
+      if (!mainTableConfig) {
+        throw new Error("No se encontró tabla principal");
+      }
+
+      const sourceTable = mainTableConfig.sourceTable;
+      const primaryKey = mainTableConfig.primaryKey || "NUM_PED";
+
+      // Consultar estadísticas
+      const statsQuery = `
+        SELECT
+          COUNT(*) as totalDocuments,
+          COUNT(CASE WHEN ${mapping.markProcessedField} = ${
+        mapping.markProcessedValue || 1
+      } THEN 1 END) as processedDocuments,
+          COUNT(CASE WHEN ${mapping.markProcessedField} IS NULL OR ${
+        mapping.markProcessedField
+      } != ${mapping.markProcessedValue || 1} THEN 1 END) as pendingDocuments
+        FROM ${sourceTable}
+      `;
+
+      const result = await SqlService.query(sourceConnection, statsQuery);
+      const stats = result.recordset[0];
+
+      return {
+        totalDocuments: stats.totalDocuments || 0,
+        processedDocuments: stats.processedDocuments || 0,
+        pendingDocuments: stats.pendingDocuments || 0,
+        processedPercentage:
+          stats.totalDocuments > 0
+            ? Math.round(
+                (stats.processedDocuments / stats.totalDocuments) * 100
+              )
+            : 0,
+      };
+    } catch (error) {
+      logger.error(`❌ Error obteniendo estadísticas: ${error.message}`);
+      throw error;
+    } finally {
+      if (sourceConnection) {
+        await ConnectionService.releaseConnection(sourceConnection);
+      }
+    }
+  }
 }
 
 module.exports = DynamicTransferService;
