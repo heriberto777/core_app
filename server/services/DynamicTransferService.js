@@ -8,10 +8,9 @@ const TaskTracker = require("./TaskTracker");
 const TransferTask = require("../models/transferTaks");
 const ConsecutiveService = require("./ConsecutiveService");
 // 🟢 AGREGADO ÚNICAMENTE: Import del servicio de bonificaciones
-const BonificationService = require('./BonificationService');
+const BonificationService = require("./BonificationService");
 
 class DynamicTransferService {
-
   /**
    * 🔄 Procesa documentos según una configuración de mapeo
    * @param {Array} documentIds - IDs de los documentos a procesar
@@ -106,6 +105,7 @@ class DynamicTransferService {
       const execution = new TaskExecution({
         taskId: mapping.taskId,
         mappingId: mappingId,
+        taskName: mapping.name || `Mapping ${mappingId}`,
         startTime: new Date(),
         status: "running",
         documentIds: documentIds,
@@ -243,7 +243,12 @@ class DynamicTransferService {
       const executionTime = Date.now() - startTime;
       await TaskExecution.findByIdAndUpdate(executionId, {
         endTime: new Date(),
-        status: totalErrors === 0 ? "completed" : totalInserted > 0 ? "partial" : "failed",
+        status:
+          totalErrors === 0
+            ? "completed"
+            : totalInserted > 0
+            ? "partial"
+            : "failed",
         executionTime,
         totalRecords: documentIds.length,
         successfulRecords: totalInserted,
@@ -251,7 +256,9 @@ class DynamicTransferService {
         details: results,
       });
 
-      logger.info(`✅ Procesamiento completado: ${totalInserted} éxitos, ${totalErrors} errores`);
+      logger.info(
+        `✅ Procesamiento completado: ${totalInserted} éxitos, ${totalErrors} errores`
+      );
 
       return {
         processed: totalInserted,
@@ -259,7 +266,6 @@ class DynamicTransferService {
         results: results,
         executionTime,
       };
-
     } catch (error) {
       logger.error(`❌ Error en processDocuments: ${error.message}`);
 
@@ -271,9 +277,11 @@ class DynamicTransferService {
         });
       }
 
-      TaskTracker.completeTask(cancelTaskId || `dynamic_process_${mappingId}`, "failed");
+      TaskTracker.completeTask(
+        cancelTaskId || `dynamic_process_${mappingId}`,
+        "failed"
+      );
       throw error;
-
     } finally {
       clearTimeout(timeoutId);
 
@@ -379,7 +387,9 @@ class DynamicTransferService {
    */
   async getSourceDataForDocumentsV2(documentIds, mapping, connection) {
     try {
-      logger.info(`📥 [V2] Obteniendo datos para ${documentIds.length} documentos con BonificationService`);
+      logger.info(
+        `📥 [V2] Obteniendo datos para ${documentIds.length} documentos con BonificationService`
+      );
 
       // ✅ Usar servicio unificado de bonificaciones
       const sourceData = await BonificationService.processBonificationsUnified(
@@ -388,11 +398,14 @@ class DynamicTransferService {
         connection
       );
 
-      logger.info(`✅ [V2] Datos obtenidos y procesados: ${sourceData.length} registros`);
+      logger.info(
+        `✅ [V2] Datos obtenidos y procesados: ${sourceData.length} registros`
+      );
       return sourceData;
-
     } catch (error) {
-      logger.error(`❌ [V2] Error al obtener datos de origen: ${error.message}`);
+      logger.error(
+        `❌ [V2] Error al obtener datos de origen: ${error.message}`
+      );
       throw error;
     }
   }
@@ -404,7 +417,9 @@ class DynamicTransferService {
     let sourceConnection;
 
     try {
-      logger.info(`🧪 [TEST] Iniciando prueba de bonificaciones para mapping ${mappingId}`);
+      logger.info(
+        `🧪 [TEST] Iniciando prueba de bonificaciones para mapping ${mappingId}`
+      );
 
       // ✅ Cargar configuración
       const mapping = await TransferMapping.findById(mappingId);
@@ -416,7 +431,9 @@ class DynamicTransferService {
       if (mapping.hasBonificationProcessing) {
         const validation = this.validateBonificationConfig(mapping);
         if (!validation.valid) {
-          throw new Error(`Configuración inválida: ${validation.errors.join(", ")}`);
+          throw new Error(
+            `Configuración inválida: ${validation.errors.join(", ")}`
+          );
         }
       }
 
@@ -428,12 +445,24 @@ class DynamicTransferService {
       }
 
       // ✅ Procesar con método V2 (nuevo)
-      logger.info(`🔄 [TEST] Procesando con método V2 (BonificationService)...`);
-      const resultV2 = await this.getSourceDataForDocumentsV2(documentIds, mapping, sourceConnection);
+      logger.info(
+        `🔄 [TEST] Procesando con método V2 (BonificationService)...`
+      );
+      const resultV2 = await this.getSourceDataForDocumentsV2(
+        documentIds,
+        mapping,
+        sourceConnection
+      );
 
       // ✅ Procesar con método original para comparar
-      logger.info(`🔄 [TEST] Procesando con método original para comparación...`);
-      const resultOriginal = await this.getSourceDataForDocuments(documentIds, mapping, sourceConnection);
+      logger.info(
+        `🔄 [TEST] Procesando con método original para comparación...`
+      );
+      const resultOriginal = await this.getSourceDataForDocuments(
+        documentIds,
+        mapping,
+        sourceConnection
+      );
 
       // ✅ Comparar resultados
       const comparison = {
@@ -444,12 +473,11 @@ class DynamicTransferService {
         mappingName: mapping.name,
         testSuccess: true,
         timestamp: new Date().toISOString(),
-        bonificationStats: BonificationService.getStats()
+        bonificationStats: BonificationService.getStats(),
       };
 
       logger.info(`📊 [TEST] Comparación completada:`, comparison);
       return comparison;
-
     } catch (error) {
       logger.error(`❌ [TEST] Error en prueba: ${error.message}`);
       throw error;
@@ -483,8 +511,11 @@ class DynamicTransferService {
           // Procesar funciones SQL nativas
           const processedRecord = {};
           for (const [key, value] of Object.entries(record)) {
-            if (typeof value === 'string' && value.startsWith('__SQL_FUNCTION__')) {
-              processedRecord[key] = value.replace('__SQL_FUNCTION__', '');
+            if (
+              typeof value === "string" &&
+              value.startsWith("__SQL_FUNCTION__")
+            ) {
+              processedRecord[key] = value.replace("__SQL_FUNCTION__", "");
             } else {
               processedRecord[key] = value;
             }
@@ -536,19 +567,23 @@ class DynamicTransferService {
 
           await SqlService.query(connection, query, params);
           inserted++;
-
         } catch (recordError) {
-          logger.error(`Error insertando registro en ${tableConfig.targetTable}: ${recordError.message}`);
+          logger.error(
+            `Error insertando registro en ${tableConfig.targetTable}: ${recordError.message}`
+          );
           errors++;
         }
       }
 
-      logger.info(`📊 Inserción completada en ${tableConfig.targetTable}: ${inserted} éxitos, ${errors} errores`);
+      logger.info(
+        `📊 Inserción completada en ${tableConfig.targetTable}: ${inserted} éxitos, ${errors} errores`
+      );
 
       return { inserted, errors };
-
     } catch (error) {
-      logger.error(`❌ Error insertando datos en tabla ${tableConfig.targetTable}: ${error.message}`);
+      logger.error(
+        `❌ Error insertando datos en tabla ${tableConfig.targetTable}: ${error.message}`
+      );
       throw error;
     }
   }
@@ -564,7 +599,8 @@ class DynamicTransferService {
         const mappedRecord = {};
 
         for (const fieldMapping of fieldMappings) {
-          const { sourceField, targetField, defaultValue, transformFunction } = fieldMapping;
+          const { sourceField, targetField, defaultValue, transformFunction } =
+            fieldMapping;
 
           let value = sourceRecord[sourceField];
 
@@ -574,20 +610,28 @@ class DynamicTransferService {
           }
 
           // Aplicar transformación si está definida
-          if (transformFunction && typeof transformFunction === 'function') {
+          if (transformFunction && typeof transformFunction === "function") {
             try {
               value = transformFunction(value, sourceRecord);
             } catch (transformError) {
-              logger.warn(`Error en transformación para campo ${targetField}: ${transformError.message}`);
+              logger.warn(
+                `Error en transformación para campo ${targetField}: ${transformError.message}`
+              );
             }
           }
 
           // 🟢 AGREGADO ÚNICAMENTE: Usar campos calculados si están disponibles (para bonificaciones)
-          if (sourceRecord.CALCULATED_PEDIDO_LINEA && targetField === 'PEDIDO_LINEA') {
+          if (
+            sourceRecord.CALCULATED_PEDIDO_LINEA &&
+            targetField === "PEDIDO_LINEA"
+          ) {
             value = sourceRecord.CALCULATED_PEDIDO_LINEA;
           }
 
-          if (sourceRecord.CALCULATED_PEDIDO_LINEA_BONIF !== undefined && targetField === 'PEDIDO_LINEA_BONIF') {
+          if (
+            sourceRecord.CALCULATED_PEDIDO_LINEA_BONIF !== undefined &&
+            targetField === "PEDIDO_LINEA_BONIF"
+          ) {
             value = sourceRecord.CALCULATED_PEDIDO_LINEA_BONIF;
           }
 
@@ -597,9 +641,10 @@ class DynamicTransferService {
         mappedData.push(mappedRecord);
       }
 
-      logger.debug(`✅ Mapeo de campos completado: ${mappedData.length} registros`);
+      logger.debug(
+        `✅ Mapeo de campos completado: ${mappedData.length} registros`
+      );
       return mappedData;
-
     } catch (error) {
       logger.error(`❌ Error en mapeo de campos: ${error.message}`);
       throw error;
@@ -622,7 +667,10 @@ class DynamicTransferService {
           ORDER BY TABLE_SCHEMA, TABLE_NAME
         `;
 
-        const tablesResult = await SqlService.query(connection, listTablesQuery);
+        const tablesResult = await SqlService.query(
+          connection,
+          listTablesQuery
+        );
 
         if (tablesResult.recordset && tablesResult.recordset.length > 0) {
           const tables = tablesResult.recordset;
@@ -704,7 +752,10 @@ class DynamicTransferService {
             WHERE TABLE_NAME LIKE '%${tableName}%'
           `;
 
-          const searchResult = await SqlService.query(connection, searchTableQuery);
+          const searchResult = await SqlService.query(
+            connection,
+            searchTableQuery
+          );
 
           if (searchResult.recordset && searchResult.recordset.length > 0) {
             logger.warn(
@@ -765,9 +816,7 @@ class DynamicTransferService {
         }
       } catch (tableError) {
         logger.error(`Error verificando tabla: ${tableError.message}`);
-        throw new Error(
-          `Error verificando tabla: ${tableError.message}`
-        );
+        throw new Error(`Error verificando tabla: ${tableError.message}`);
       }
 
       // Construir consulta base
@@ -789,7 +838,10 @@ class DynamicTransferService {
         additionalFields.push(filters.warehouseField);
       }
 
-      if (mapping.markProcessedField && mapping.markProcessedField !== primaryKey) {
+      if (
+        mapping.markProcessedField &&
+        mapping.markProcessedField !== primaryKey
+      ) {
         additionalFields.push(mapping.markProcessedField);
       }
 
@@ -821,7 +873,11 @@ class DynamicTransferService {
       }
 
       // Filtro por bodega
-      if (filters.warehouse && filters.warehouse !== "all" && filters.warehouseField) {
+      if (
+        filters.warehouse &&
+        filters.warehouse !== "all" &&
+        filters.warehouseField
+      ) {
         whereConditions.push(`${filters.warehouseField} = @warehouse`);
         params.warehouse = filters.warehouse;
       }
@@ -867,7 +923,6 @@ class DynamicTransferService {
       logger.info(`Documentos encontrados: ${result.recordset.length}`);
 
       return result.recordset;
-
     } catch (error) {
       logger.error(`Error obteniendo documentos: ${error.message}`);
       throw error;
@@ -971,11 +1026,18 @@ class DynamicTransferService {
       const batch = documentIds.slice(i, i + batchSize);
 
       try {
-        const result = await this.markBatch(batch, mapping, connection, shouldMark);
+        const result = await this.markBatch(
+          batch,
+          mapping,
+          connection,
+          shouldMark
+        );
         totalSuccess += result.success;
         totalFailed += result.failed;
       } catch (batchError) {
-        logger.error(`Error en lote ${i / batchSize + 1}: ${batchError.message}`);
+        logger.error(
+          `Error en lote ${i / batchSize + 1}: ${batchError.message}`
+        );
         totalFailed += batch.length;
       }
     }
@@ -1073,11 +1135,15 @@ class DynamicTransferService {
     const errors = [];
 
     if (!config.sourceTable) errors.push("Tabla de origen requerida");
-    if (!config.bonificationIndicatorField) errors.push("Campo indicador requerido");
+    if (!config.bonificationIndicatorField)
+      errors.push("Campo indicador requerido");
     if (!config.orderField) errors.push("Campo de agrupación requerido");
-    if (!config.regularArticleField) errors.push("Campo de artículo regular requerido");
-    if (!config.bonificationReferenceField) errors.push("Campo de referencia de bonificación requerido");
-    if (!config.lineNumberField) errors.push("Campo de número de línea requerido");
+    if (!config.regularArticleField)
+      errors.push("Campo de artículo regular requerido");
+    if (!config.bonificationReferenceField)
+      errors.push("Campo de referencia de bonificación requerido");
+    if (!config.lineNumberField)
+      errors.push("Campo de número de línea requerido");
 
     return {
       valid: errors.length === 0,
@@ -1091,7 +1157,7 @@ class DynamicTransferService {
   groupByField(data, field) {
     const grouped = new Map();
 
-    data.forEach(record => {
+    data.forEach((record) => {
       const key = record[field];
       if (!grouped.has(key)) {
         grouped.set(key, []);
@@ -1109,7 +1175,9 @@ class DynamicTransferService {
       const mappings = await TransferMapping.find().sort({ name: 1 });
       return mappings;
     } catch (error) {
-      logger.error(`Error obteniendo configuraciones de mapeo: ${error.message}`);
+      logger.error(
+        `Error obteniendo configuraciones de mapeo: ${error.message}`
+      );
       throw error;
     }
   }
@@ -1154,7 +1222,9 @@ class DynamicTransferService {
       logger.info(`✅ Configuración de mapeo actualizada: ${mapping.name}`);
       return mapping;
     } catch (error) {
-      logger.error(`Error actualizando configuración de mapeo: ${error.message}`);
+      logger.error(
+        `Error actualizando configuración de mapeo: ${error.message}`
+      );
       throw error;
     }
   }
@@ -1167,7 +1237,10 @@ class DynamicTransferService {
       }
 
       logger.info(`✅ Configuración de mapeo eliminada: ${mapping.name}`);
-      return { success: true, message: "Configuración eliminada correctamente" };
+      return {
+        success: true,
+        message: "Configuración eliminada correctamente",
+      };
     } catch (error) {
       logger.error(`Error eliminando configuración de mapeo: ${error.message}`);
       throw error;
@@ -1177,7 +1250,6 @@ class DynamicTransferService {
   // ✅ TODO EL RESTO DE TUS MÉTODOS ORIGINALES ESTÁN AQUÍ...
   // (Todos los métodos como processSingleDocumentSimple, getSourceData,
   //  processField, executeInsert, lookupValuesFromTarget, etc.)
-
 }
 
 module.exports = new DynamicTransferService();
