@@ -390,76 +390,48 @@ class DynamicTransferService {
       await taskExecution.save();
       executionId = taskExecution._id;
 
-      // 5. Establecer conexiones
+      // 5. 🔥 MEJORADO: Establecer conexiones usando ConnectionCentralService
       const sourceServerName = mapping.sourceServer;
       const targetServerName = mapping.targetServer;
-
-      const getConnection = async (serverName, retries = 3) => {
-        for (let attempt = 0; attempt < retries; attempt++) {
-          try {
-            logger.info(
-              `Intento ${
-                attempt + 1
-              }/${retries} para conectar a ${serverName}...`
-            );
-
-            const connectionResult =
-              await ConnectionService.enhancedRobustConnect(serverName);
-
-            if (!connectionResult.success || !connectionResult.connection) {
-              const error =
-                connectionResult.error ||
-                new Error(`Conexión inválida a ${serverName}`);
-              logger.warn(`Intento ${attempt + 1} falló: ${error.message}`);
-
-              if (attempt === retries - 1) {
-                throw error;
-              }
-
-              const delay = Math.pow(2, attempt) * 1000;
-              await new Promise((resolve) => setTimeout(resolve, delay));
-              continue;
-            }
-
-            await SqlService.query(
-              connectionResult.connection,
-              "SELECT 1 AS test"
-            );
-
-            logger.info(`Conexión a ${serverName} establecida exitosamente`);
-            return connectionResult.connection;
-          } catch (error) {
-            logger.error(
-              `Error al conectar a ${serverName} (intento ${attempt + 1}): ${
-                error.message
-              }`
-            );
-
-            if (attempt === retries - 1) {
-              throw error;
-            }
-
-            const delay = Math.pow(2, attempt) * 1000;
-            await new Promise((resolve) => setTimeout(resolve, delay));
-          }
-        }
-
-        throw new Error(
-          `No se pudo establecer conexión a ${serverName} después de ${retries} intentos`
-        );
-      };
 
       try {
         logger.info(
           `Estableciendo conexiones a ${sourceServerName} y ${targetServerName}...`
         );
-        [sourceConnection, targetConnection] = await Promise.all([
-          getConnection(sourceServerName),
-          getConnection(targetServerName),
+
+        // 🔥 NUEVO: Usar el método robusto del ConnectionCentralService
+        const [sourceResult, targetResult] = await Promise.all([
+          ConnectionService.enhancedRobustConnect(sourceServerName),
+          ConnectionService.enhancedRobustConnect(targetServerName),
         ]);
-        logger.info(`Conexiones establecidas exitosamente`);
+
+        if (!sourceResult.success) {
+          throw new Error(
+            `Error conectando a origen ${sourceServerName}: ${
+              sourceResult.error?.message || "Error desconocido"
+            }`
+          );
+        }
+
+        if (!targetResult.success) {
+          throw new Error(
+            `Error conectando a destino ${targetServerName}: ${
+              targetResult.error?.message || "Error desconocido"
+            }`
+          );
+        }
+
+        sourceConnection = sourceResult.connection;
+        targetConnection = targetResult.connection;
+
+        logger.info(
+          `✅ Conexiones establecidas exitosamente usando ConnectionCentralService`
+        );
       } catch (connectionError) {
         clearTimeout(timeoutId);
+        logger.error(
+          `❌ Error al establecer conexiones con ConnectionCentralService: ${connectionError.message}`
+        );
         throw new Error(
           `Error al establecer conexiones: ${connectionError.message}`
         );
@@ -505,6 +477,16 @@ class DynamicTransferService {
             let currentConsecutive = null;
 
             try {
+              // 🔥 NUEVO: Verificar y asegurar conexiones saludables antes de procesar
+              sourceConnection = await this.ensureConnectionHealth(
+                sourceConnection,
+                mapping.sourceServer
+              );
+              targetConnection = await this.ensureConnectionHealth(
+                targetConnection,
+                mapping.targetServer
+              );
+
               // Generación de consecutivos
               if (
                 mapping.consecutiveConfig &&
@@ -700,18 +682,86 @@ class DynamicTransferService {
                 throw new Error("Tarea cancelada por el usuario");
               }
 
-              hasErrors = true;
-              failedDocuments.push(documentId);
-              logger.error(
-                `Error procesando documento ${documentId}: ${docError.message}`
-              );
-              results.failed++;
-              results.details.push({
-                documentId,
-                success: false,
-                error: docError.message,
-                errorDetails: docError.stack,
-              });
+              // 🔥 NUEVO: Si es error de conexión, intentar una reconexión automática
+              if (this.isConnectionError(docError)) {
+                logger.warn(
+                  `🔄 Error de conexión detectado para documento ${documentId}, intentando recuperación...`
+                );
+
+                try {
+                  // Reconectar usando ConnectionCentralService
+                  const sourceReconnect =
+                    await ConnectionService.enhancedRobustConnect(
+                      mapping.sourceServer
+                    );
+                  const targetReconnect =
+                    await ConnectionService.enhancedRobustConnect(
+                      mapping.targetServer
+                    );
+
+                  if (sourceReconnect.success && targetReconnect.success) {
+                    sourceConnection = sourceReconnect.connection;
+                    targetConnection = targetReconnect.connection;
+
+                    logger.info(
+                      `✅ Reconexión exitosa, continuando con siguiente documento...`
+                    );
+
+                    // Marcar como error pero continuar con el siguiente documento
+                    hasErrors = true;
+                    failedDocuments.push(documentId);
+                    results.failed++;
+                    results.details.push({
+                      documentId,
+                      success: false,
+                      error: "Error de conexión - Reconectado automáticamente",
+                      errorDetails: docError.stack,
+                      reconnected: true,
+                    });
+                  } else {
+                    logger.error(
+                      `❌ Falló la reconexión automática para documento ${documentId}`
+                    );
+                    hasErrors = true;
+                    failedDocuments.push(documentId);
+                    results.failed++;
+                    results.details.push({
+                      documentId,
+                      success: false,
+                      error:
+                        "Error de conexión - No se pudo reconectar automáticamente",
+                      errorDetails: docError.stack,
+                    });
+                  }
+                } catch (reconnectError) {
+                  logger.error(
+                    `❌ Error durante reconexión automática: ${reconnectError.message}`
+                  );
+                  hasErrors = true;
+                  failedDocuments.push(documentId);
+                  results.failed++;
+                  results.details.push({
+                    documentId,
+                    success: false,
+                    error: docError.message,
+                    errorDetails: docError.stack,
+                  });
+                }
+              } else {
+                // Error no relacionado con conexión, manejar normalmente
+                hasErrors = true;
+                failedDocuments.push(documentId);
+                logger.error(
+                  `Error procesando documento ${documentId}: ${docError.message}`
+                );
+                results.failed++;
+                results.details.push({
+                  documentId,
+                  success: false,
+                  error: docError.message,
+                  errorDetails: docError.stack,
+                });
+              }
             }
           }
         } catch (bonifError) {
@@ -733,6 +783,16 @@ class DynamicTransferService {
           let currentConsecutive = null;
 
           try {
+            // 🔥 NUEVO: Verificar y asegurar conexiones saludables antes de procesar
+            sourceConnection = await this.ensureConnectionHealth(
+              sourceConnection,
+              mapping.sourceServer
+            );
+            targetConnection = await this.ensureConnectionHealth(
+              targetConnection,
+              mapping.targetServer
+            );
+
             // Generación de consecutivos (código existente)
             if (
               mapping.consecutiveConfig &&
@@ -920,18 +980,86 @@ class DynamicTransferService {
               throw new Error("Tarea cancelada por el usuario");
             }
 
-            hasErrors = true;
-            failedDocuments.push(documentId);
-            logger.error(
-              `Error procesando documento ${documentId}: ${docError.message}`
-            );
-            results.failed++;
-            results.details.push({
-              documentId,
-              success: false,
-              error: docError.message,
-              errorDetails: docError.stack,
-            });
+            // 🔥 NUEVO: Si es error de conexión, intentar una reconexión automática
+            if (this.isConnectionError(docError)) {
+              logger.warn(
+                `🔄 Error de conexión detectado para documento ${documentId}, intentando recuperación...`
+              );
+
+              try {
+                // Reconectar usando ConnectionCentralService
+                const sourceReconnect =
+                  await ConnectionService.enhancedRobustConnect(
+                    mapping.sourceServer
+                  );
+                const targetReconnect =
+                  await ConnectionService.enhancedRobustConnect(
+                    mapping.targetServer
+                  );
+
+                if (sourceReconnect.success && targetReconnect.success) {
+                  sourceConnection = sourceReconnect.connection;
+                  targetConnection = targetReconnect.connection;
+
+                  logger.info(
+                    `✅ Reconexión exitosa, continuando con siguiente documento...`
+                  );
+
+                  // Marcar como error pero continuar con el siguiente documento
+                  hasErrors = true;
+                  failedDocuments.push(documentId);
+                  results.failed++;
+                  results.details.push({
+                    documentId,
+                    success: false,
+                    error: "Error de conexión - Reconectado automáticamente",
+                    errorDetails: docError.stack,
+                    reconnected: true,
+                  });
+                } else {
+                  logger.error(
+                    `❌ Falló la reconexión automática para documento ${documentId}`
+                  );
+                  hasErrors = true;
+                  failedDocuments.push(documentId);
+                  results.failed++;
+                  results.details.push({
+                    documentId,
+                    success: false,
+                    error:
+                      "Error de conexión - No se pudo reconectar automáticamente",
+                    errorDetails: docError.stack,
+                  });
+                }
+              } catch (reconnectError) {
+                logger.error(
+                  `❌ Error durante reconexión automática: ${reconnectError.message}`
+                );
+                hasErrors = true;
+                failedDocuments.push(documentId);
+                results.failed++;
+                results.details.push({
+                  documentId,
+                  success: false,
+                  error: docError.message,
+                  errorDetails: docError.stack,
+                });
+              }
+            } else {
+              // Error no relacionado con conexión, manejar normalmente
+              hasErrors = true;
+              failedDocuments.push(documentId);
+              logger.error(
+                `Error procesando documento ${documentId}: ${docError.message}`
+              );
+              results.failed++;
+              results.details.push({
+                documentId,
+                success: false,
+                error: docError.message,
+                errorDetails: docError.stack,
+              });
+            }
           }
         }
       }
@@ -1122,31 +1250,52 @@ class DynamicTransferService {
 
       throw error;
     } finally {
-      // Cerrar conexiones de forma segura
+      // 🔥 MEJORADO: Liberación de conexiones usando ConnectionCentralService
       if (sourceConnection || targetConnection) {
-        logger.info("Liberando conexiones...");
+        logger.info("Liberando conexiones usando ConnectionCentralService...");
 
         const releasePromises = [];
 
         if (sourceConnection) {
           releasePromises.push(
-            ConnectionService.releaseConnection(sourceConnection).catch((e) =>
-              logger.error(`Error al liberar conexión origen: ${e.message}`)
-            )
+            ConnectionService.releaseConnection(sourceConnection)
+              .then(() =>
+                logger.debug(`✅ Conexión origen liberada correctamente`)
+              )
+              .catch((e) =>
+                logger.error(
+                  `❌ Error al liberar conexión origen: ${e.message}`
+                )
+              )
           );
         }
 
         if (targetConnection) {
           releasePromises.push(
-            ConnectionService.releaseConnection(targetConnection).catch((e) =>
-              logger.error(`Error al liberar conexión destino: ${e.message}`)
-            )
+            ConnectionService.releaseConnection(targetConnection)
+              .then(() =>
+                logger.debug(`✅ Conexión destino liberada correctamente`)
+              )
+              .catch((e) =>
+                logger.error(
+                  `❌ Error al liberar conexión destino: ${e.message}`
+                )
+              )
           );
         }
 
-        await Promise.allSettled(releasePromises);
-        logger.info("Conexiones liberadas correctamente");
+        try {
+          await Promise.allSettled(releasePromises);
+          logger.info("✅ Todas las conexiones liberadas correctamente");
+        } catch (releaseError) {
+          logger.error(
+            `⚠️ Error durante liberación de conexiones: ${releaseError.message}`
+          );
+        }
       }
+
+      // Limpiar timeout
+      clearTimeout(timeoutId);
     }
   }
 
@@ -2107,16 +2256,23 @@ class DynamicTransferService {
         }
 
         // 5. Procesar tabla principal
-        await this.processTable(
-          tableConfig,
-          tableSourceData,
-          null, // No hay detailRow para tabla principal
+        await this.executeWithConnectionRetry(
+          async () => {
+            return await this.processTable(
+              tableConfig,
+              tableSourceData,
+              null,
+              targetConnection,
+              currentConsecutive,
+              mapping,
+              documentId,
+              columnLengthCache,
+              false
+            );
+          },
           targetConnection,
-          currentConsecutive,
-          mapping,
-          documentId,
-          columnLengthCache,
-          false // isDetailTable = false
+          mapping.targetServer,
+          3 // 3 intentos máximo
         );
 
         logger.info(`✅ INSERCIÓN EXITOSA en ${tableConfig.targetTable}`);
@@ -2715,9 +2871,9 @@ class DynamicTransferService {
     });
 
     const insertQuery = `
-   INSERT INTO ${targetTable} (${insertFieldsList.join(", ")})
-   VALUES (${insertValuesList.join(", ")})
- `;
+      INSERT INTO ${targetTable} (${insertFieldsList.join(", ")})
+      VALUES (${insertValuesList.join(", ")})
+    `;
 
     logger.debug(`Ejecutando inserción en tabla: ${insertQuery}`);
 
@@ -2733,7 +2889,23 @@ class DynamicTransferService {
     logger.info(`Campos: ${targetFields.join(", ")}`);
     logger.info(`Datos: ${JSON.stringify(filteredTargetData, null, 2)}`);
 
-    await SqlService.query(targetConnection, insertQuery, filteredTargetData);
+    try {
+      await SqlService.query(targetConnection, insertQuery, filteredTargetData);
+    } catch (error) {
+      // Si es error de conexión, lanzar error específico para manejo superior
+      if (this.isConnectionError(error)) {
+        logger.error(
+          `❌ Error de conexión durante inserción en ${targetTable}: ${error.message}`
+        );
+        throw new Error(`CONNECTION_ERROR: ${error.message}`);
+      }
+
+      // Para otros errores, manejar normalmente
+      logger.error(
+        `❌ Error durante inserción en ${targetTable}: ${error.message}`
+      );
+      throw error;
+    }
   }
 
   /**
@@ -2968,39 +3140,43 @@ class DynamicTransferService {
   }
 
   /**
-   * Maneja errores de procesamiento
+   * Maneja errores de procesamiento con reintentos para errores de conexión
    * @private
    */
   handleProcessingError(error, documentId, currentConsecutive, mapping) {
-    // Error de conexión
+    // 🔥 NUEVO: Manejo específico para errores de conexión agregados
     if (
       error.name === "AggregateError" ||
-      error.stack?.includes("AggregateError")
+      error.stack?.includes("AggregateError") ||
+      this.isConnectionError(error)
     ) {
-      logger.error(
-        `Error de conexión (AggregateError) para documento ${documentId}:`,
-        {
-          documentId,
-          errorMessage: error.message,
-          errorName: error.name,
-          errorStack: error.stack,
-        }
-      );
+      logger.error(`Error de conexión para documento ${documentId}:`, {
+        documentId,
+        errorMessage: error.message,
+        errorName: error.name,
+        errorStack: error.stack,
+        isAggregateError: error.name === "AggregateError",
+        isConnectionError: this.isConnectionError(error),
+      });
 
       return {
         success: false,
-        message: `Error de conexión: Se perdió la conexión con la base de datos.`,
+        message: `Error de conexión: ${
+          error.message || "Se perdió la conexión con la base de datos"
+        }`,
         documentType: "unknown",
         errorDetails: JSON.stringify({
           name: error.name,
           message: error.message,
           stack: error.stack,
+          type: "CONNECTION_ERROR",
         }),
         consecutiveUsed: currentConsecutive
           ? currentConsecutive.formatted
           : null,
         consecutiveValue: currentConsecutive ? currentConsecutive.value : null,
         errorCode: "CONNECTION_ERROR",
+        retryable: true, // 🔥 NUEVO: Marcar como reintentable
       };
     }
 
@@ -4285,6 +4461,231 @@ class DynamicTransferService {
 
     const result = await SqlService.query(connection, query, params);
     return result.rowsAffected > 0;
+  }
+
+  /**
+   * 🔥 NUEVO: Manejo robusto de errores de conexión con reintentos
+   * @param {Function} operation - Operación a ejecutar
+   * @param {Object} connection - Conexión a la base de datos
+   * @param {string} serverName - Nombre del servidor
+   * @param {number} maxRetries - Número máximo de reintentos
+   * @returns {Promise<any>} - Resultado de la operación
+   */
+  async executeWithConnectionRetry(
+    operation,
+    connection,
+    serverName,
+    maxRetries = 3
+  ) {
+    let lastError = null;
+
+    for (let attempt = 1; attempt <= maxRetries; attempt++) {
+      try {
+        // Validar que la conexión esté activa antes de usar
+        await this.validateConnectionHealth(connection);
+
+        // Ejecutar la operación
+        const result = await operation();
+
+        // Si llegamos aquí, la operación fue exitosa
+        logger.debug(
+          `✅ Operación exitosa en intento ${attempt}/${maxRetries}`
+        );
+        return result;
+      } catch (error) {
+        lastError = error;
+
+        // Verificar si es un error de conexión
+        const isConnectionError = this.isConnectionError(error);
+
+        if (!isConnectionError || attempt === maxRetries) {
+          // Si no es error de conexión o ya agotamos reintentos, lanzar error
+          throw error;
+        }
+
+        logger.warn(
+          `🔄 Error de conexión en intento ${attempt}/${maxRetries} para ${serverName}: ${error.message}`
+        );
+
+        // Intentar reconectar
+        try {
+          logger.info(`🔌 Intentando reconectar a ${serverName}...`);
+
+          const reconnectResult = await ConnectionService.enhancedRobustConnect(
+            serverName
+          );
+
+          if (reconnectResult.success && reconnectResult.connection) {
+            connection = reconnectResult.connection;
+            logger.info(`✅ Reconexión exitosa a ${serverName}`);
+
+            // Esperar un poco antes del siguiente intento
+            await this.delay(Math.pow(2, attempt - 1) * 1000); // Backoff exponencial
+            continue;
+          } else {
+            logger.error(`❌ Falló la reconexión a ${serverName}`);
+            throw new Error(
+              `No se pudo reconectar a ${serverName}: ${reconnectResult.error?.message}`
+            );
+          }
+        } catch (reconnectError) {
+          logger.error(
+            `❌ Error durante reconexión a ${serverName}: ${reconnectError.message}`
+          );
+
+          if (attempt === maxRetries) {
+            throw new Error(
+              `Fallo total de conexión después de ${maxRetries} intentos: ${reconnectError.message}`
+            );
+          }
+
+          // Esperar antes del siguiente intento
+          await this.delay(Math.pow(2, attempt) * 1000);
+        }
+      }
+    }
+
+    throw (
+      lastError ||
+      new Error(`Operación falló después de ${maxRetries} intentos`)
+    );
+  }
+
+  /**
+   * 🔥 NUEVO: Valida que la conexión esté saludable
+   * @param {Object} connection - Conexión a validar
+   */
+  async validateConnectionHealth(connection) {
+    try {
+      // Test simple para verificar que la conexión responde
+      await SqlService.query(connection, "SELECT 1 AS health_check", {}, 5000); // Timeout de 5 segundos
+    } catch (error) {
+      throw new Error(`Conexión no saludable: ${error.message}`);
+    }
+  }
+
+  /**
+   * 🔥 NUEVO: Determina si un error es de conexión (compatible con ConnectionCentralService)
+   * @param {Error} error - Error a analizar
+   * @returns {boolean} - true si es error de conexión
+   */
+  isConnectionError(error) {
+    if (!error) return false;
+
+    const connectionErrorPatterns = [
+      // Errores de tedious/SQL Server
+      "AggregateError",
+      "ECONNRESET",
+      "ETIMEDOUT",
+      "ENOTFOUND",
+      "ECONNREFUSED",
+      "connection closed",
+      "connection lost",
+      "connection terminated",
+      "socket hang up",
+      "network error",
+      "timeout",
+      "ConnectionError",
+      "RequestError",
+
+      // Errores específicos del ConnectionCentralService
+      "Pool is draining",
+      "Cannot accept work",
+      "Connection limit exceeded",
+      "Pool not found",
+      "No available connections",
+
+      // Errores de tedious específicos
+      "Login failed",
+      "Database not accessible",
+      "Server unreachable",
+
+      // Errores adicionales de connectividad
+      "driver error",
+      "connection interrupted",
+      "connection aborted",
+      "connection refused",
+      "host unreachable",
+    ];
+
+    const errorText =
+      error.message?.toLowerCase() ||
+      "" + error.name?.toLowerCase() ||
+      "" + error.stack?.toLowerCase() ||
+      "";
+
+    return connectionErrorPatterns.some((pattern) =>
+      errorText.includes(pattern.toLowerCase())
+    );
+  }
+
+  /**
+   * 🔥 NUEVO: Delay con Promise
+   * @param {number} ms - Milisegundos a esperar
+   */
+  delay(ms) {
+    return new Promise((resolve) => setTimeout(resolve, ms));
+  }
+
+  /**
+   * 🔥 NUEVO: Verifica y reconecta si es necesario usando ConnectionCentralService
+   * @param {Object} connection - Conexión a verificar
+   * @param {string} serverName - Nombre del servidor
+   * @returns {Promise<Object>} - Conexión válida (puede ser la misma o una nueva)
+   */
+  async ensureConnectionHealth(connection, serverName) {
+    try {
+      // Verificar si la conexión está saludable
+      if (!connection || !connection.connected) {
+        logger.warn(
+          `🔌 Conexión no válida para ${serverName}, obteniendo nueva conexión...`
+        );
+
+        const reconnectResult = await ConnectionService.enhancedRobustConnect(
+          serverName
+        );
+        if (!reconnectResult.success) {
+          throw new Error(
+            `No se pudo reconectar a ${serverName}: ${reconnectResult.error?.message}`
+          );
+        }
+
+        logger.info(`✅ Nueva conexión obtenida para ${serverName}`);
+        return reconnectResult.connection;
+      }
+
+      // Test rápido de conectividad
+      try {
+        await SqlService.query(
+          connection,
+          "SELECT 1 AS health_check",
+          {},
+          5000
+        );
+        return connection; // Conexión está bien
+      } catch (testError) {
+        logger.warn(
+          `🔌 Test de conectividad falló para ${serverName}, reconectando...`
+        );
+
+        const reconnectResult = await ConnectionService.enhancedRobustConnect(
+          serverName
+        );
+        if (!reconnectResult.success) {
+          throw new Error(
+            `No se pudo reconectar a ${serverName}: ${reconnectResult.error?.message}`
+          );
+        }
+
+        logger.info(`✅ Reconexión exitosa para ${serverName}`);
+        return reconnectResult.connection;
+      }
+    } catch (error) {
+      logger.error(
+        `❌ Error asegurando conexión para ${serverName}: ${error.message}`
+      );
+      throw error;
+    }
   }
 }
 
