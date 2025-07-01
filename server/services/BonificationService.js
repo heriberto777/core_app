@@ -1,643 +1,334 @@
-// services/BonificationService.js
+// services/BonificationProcessor.js
 const logger = require("./logger");
-const { SqlService } = require("./SqlService");
 
-/**
- * 🎁 Servicio especializado en el procesamiento de bonificaciones
- *
- * Este servicio maneja la lógica completa de bonificaciones:
- * - Evita duplicación de procesamiento
- * - Mantiene referencias correctas entre artículos regulares y bonificaciones
- * - Asigna números de línea secuenciales
- * - Control de pedidos ya procesados
- *
- * @author Tu Equipo de Desarrollo
- * @version 2.3.0
- */
-class BonificationService {
-  constructor(options = {}) {
-    this.processedOrders = new Set(); // Control de pedidos ya procesados
-    this.debug = options.debug !== undefined ? options.debug : true;
-    this.version = "2.3.0";
+class BonificationProcessor {
+  constructor(config = {}) {
+    this.config = {
+      enabled: false,
+      detailTable: "FAC_DET_PED",
+      groupByField: "NUM_PED",
+      lineNumberField: "NUM_LN",
+      bonificationMarkerField: "ART_BON",
+      bonificationMarkerValue: "B",
+      regularMarkerValue: "0",
+      articleCodeField: "COD_ART",
+      bonificationRefField: "COD_ART_RFR",
+      targetLineField: "PEDIDO_LINEA",
+      targetBonifRefField: "PEDIDO_LINEA_BONIF",
+      preserveOriginalOrder: false,
+      createOrphanBonifications: true,
+      logLevel: "detailed",
+      ...config,
+    };
+
+    this.stats = this.resetStats();
   }
 
-  /**
-   * 🎯 MÉTODO PRINCIPAL: Procesamiento unificado de bonificaciones
-   */
-  async processBonificationsUnified(documentIds, mapping, connection) {
-    try {
-      // ✅ Resetear estado para nueva ejecución
-      this.reset();
-
-      // ✅ Validar entrada
-      if (
-        !documentIds ||
-        !Array.isArray(documentIds) ||
-        documentIds.length === 0
-      ) {
-        logger.warn("⚠️ [BONIF] No hay documentos para procesar");
-        return [];
-      }
-
-      // ✅ Si no hay configuración de bonificaciones, usar flujo normal
-      if (!mapping.hasBonificationProcessing || !mapping.bonificationConfig) {
-        logger.info(
-          "📦 [BONIF] Sin procesamiento de bonificaciones, usando flujo normal"
-        );
-        return await this.getRegularSourceData(
-          documentIds,
-          mapping,
-          connection
-        );
-      }
-
-      // ✅ Validar configuración de bonificaciones
-      const validation =
-        BonificationService.validateBonificationConfig(mapping);
-      if (!validation.valid) {
-        throw new Error(
-          `Configuración de bonificaciones inválida: ${validation.errors.join(
-            ", "
-          )}`
-        );
-      }
-
-      const config = mapping.bonificationConfig;
-
-      logger.info(
-        `🎁 [BONIF] Iniciando procesamiento unificado v${this.version}`,
-        {
-          documents: documentIds.length,
-          orderField: config.orderField,
-          sourceTable: config.sourceTable,
-          indicatorField: config.bonificationIndicatorField,
-          indicatorValue: config.bonificationIndicatorValue,
-        }
-      );
-
-      // ✅ Obtener datos raw de la fuente
-      const rawData = await this.getRawSourceData(
-        documentIds,
-        config,
-        connection
-      );
-
-      if (rawData.length === 0) {
-        logger.warn("⚠️ [BONIF] No se encontraron datos para procesar");
-        return [];
-      }
-
-      logger.info(
-        `📋 [BONIF] Datos obtenidos: ${rawData.length} registros de ${config.sourceTable}`
-      );
-
-      // ✅ Procesar bonificaciones por pedido
-      const result = await this.processOrdersBonifications(rawData, config);
-      const processedData = result.processedData || result; // Compatibilidad
-
-      logger.info(
-        `✅ [BONIF] Procesamiento completado: ${processedData.length} registros finales`
-      );
-
-      // ✅ Log detallado para debugging
-      if (this.debug) {
-        this.logProcessingSummary(rawData, processedData, config);
-      }
-
-      return processedData;
-    } catch (error) {
-      logger.error(
-        `❌ [BONIF] Error en procesamiento unificado: ${error.message}`,
-        {
-          stack: error.stack,
-          documentIds,
-          mappingName: mapping?.name,
-        }
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * 🔧 CORREGIDO: Procesa un pedido individual con mapeo directo a campos destino
-   */
-  async processSingleOrder(orderRecords, config, orderNumber) {
-    try {
-      const processedRecords = [];
-      const regularArticleMap = new Map();
-
-      if (this.debug) {
-        logger.debug(
-          `📋 [BONIF] Procesando pedido ${orderNumber}: ${orderRecords.length} registros`
-        );
-      }
-
-      // 🔥 PASO 1: Ordenar por NUM_LN para mantener secuencia original
-      const sortedRecords = [...orderRecords].sort((a, b) => {
-        const numLnA = parseInt(a[config.lineOrderField] || a.NUM_LN || 0);
-        const numLnB = parseInt(b[config.lineOrderField] || b.NUM_LN || 0);
-        return numLnA - numLnB;
-      });
-
-      // 🔥 PASO 2: Primera pasada - mapear artículos regulares
-      let currentLineNumber = 1;
-
-      sortedRecords.forEach((record) => {
-        const isRegularArticle =
-          record[config.bonificationIndicatorField] !==
-          config.bonificationIndicatorValue;
-
-        if (isRegularArticle) {
-          const articleCode = record[config.regularArticleField];
-          regularArticleMap.set(articleCode, {
-            lineNumber: currentLineNumber,
-            originalData: record,
-            originalNumLn: record[config.lineOrderField] || record.NUM_LN,
-          });
-
-          if (this.debug) {
-            logger.debug(
-              `✅ [BONIF] Artículo regular: ${articleCode} → línea ${currentLineNumber} (NUM_LN original: ${record.NUM_LN})`
-            );
-          }
-
-          currentLineNumber++;
-        }
-      });
-
-      // 🔥 PASO 3: Segunda pasada - procesar todos los registros en orden
-      currentLineNumber = 1;
-
-      for (const record of sortedRecords) {
-        const isBonification =
-          record[config.bonificationIndicatorField] ===
-          config.bonificationIndicatorValue;
-
-        if (!isBonification) {
-          // 📦 ARTÍCULO REGULAR
-          const processedArticle = {
-            ...record,
-            // 🔥 MAPEO DIRECTO A CAMPOS DESTINO (no campos calculados)
-            [config.lineNumberField || "PEDIDO_LINEA"]: currentLineNumber,
-            [config.bonificationLineReferenceField || "PEDIDO_LINEA_BONIF"]:
-              null,
-            // Limpiar referencia original
-            [config.bonificationReferenceField]: null,
-          };
-
-          processedRecords.push(processedArticle);
-
-          if (this.debug) {
-            logger.debug(
-              `📦 [BONIF] Regular procesado: ${
-                record[config.regularArticleField]
-              } línea ${currentLineNumber}`
-            );
-            logger.debug(
-              `📦 [BONIF] Cantidad original: ${
-                record[config.quantityField || "CNT_MAX"]
-              }`
-            );
-          }
-
-          currentLineNumber++;
-        } else {
-          // 🎁 BONIFICACIÓN
-          const referencedArticleCode =
-            record[config.bonificationReferenceField];
-          const referencedArticle = regularArticleMap.get(
-            referencedArticleCode
-          );
-
-          // 🔥 VALIDACIÓN CRÍTICA: Verificar que existe el artículo regular
-          if (!referencedArticle) {
-            logger.error(
-              `❌ [BONIF] ERROR CRÍTICO: Bonificación huérfana en pedido ${orderNumber}`
-            );
-            logger.error(
-              `❌ [BONIF] Artículo bonificación: ${
-                record[config.regularArticleField]
-              }`
-            );
-            logger.error(
-              `❌ [BONIF] Referencia: ${referencedArticleCode} (NO ENCONTRADO)`
-            );
-            logger.error(
-              `❌ [BONIF] Artículos regulares disponibles: ${Array.from(
-                regularArticleMap.keys()
-              ).join(", ")}`
-            );
-
-            // Continuar procesando pero marcar como error
-            const processedBonification = {
-              ...record,
-              [config.lineNumberField || "PEDIDO_LINEA"]: currentLineNumber,
-              [config.bonificationLineReferenceField || "PEDIDO_LINEA_BONIF"]:
-                null, // ERROR: Sin referencia
-              [config.bonificationReferenceField]: null,
-              // Marcar como problemático
-              _BONIFICATION_ERROR: `REFERENCIA_NO_ENCONTRADA: ${referencedArticleCode}`,
-            };
-
-            processedRecords.push(processedBonification);
-          } else {
-            // ✅ BONIFICACIÓN VÁLIDA
-            const processedBonification = {
-              ...record,
-              // 🔥 MAPEO DIRECTO A CAMPOS DESTINO
-              [config.lineNumberField || "PEDIDO_LINEA"]: currentLineNumber,
-              [config.bonificationLineReferenceField || "PEDIDO_LINEA_BONIF"]:
-                referencedArticle.lineNumber,
-              [config.bonificationReferenceField]: null, // Limpiar COD_ART_RFR
-
-              // 🔥 PRESERVAR CANTIDAD ORIGINAL: No modificar CNT_MAX
-              [config.quantityField || "CNT_MAX"]:
-                record[config.quantityField || "CNT_MAX"],
-            };
-
-            processedRecords.push(processedBonification);
-
-            if (this.debug) {
-              logger.debug(
-                `🎁 [BONIF] Bonificación procesada: ${
-                  record[config.regularArticleField]
-                } línea ${currentLineNumber} → referencia línea ${
-                  referencedArticle.lineNumber
-                }`
-              );
-              logger.debug(
-                `🎁 [BONIF] Cantidad bonificación original: ${
-                  record[config.quantityField || "CNT_MAX"]
-                }`
-              );
-              logger.debug(
-                `🎁 [BONIF] PEDIDO_LINEA_BONIF asignado: ${referencedArticle.lineNumber}`
-              );
-            }
-          }
-
-          currentLineNumber++;
-        }
-      }
-
-      logger.info(
-        `✅ [BONIF] Pedido ${orderNumber} completado: ${processedRecords.length} líneas procesadas`
-      );
-
-      // 🔥 LOG DETALLADO PARA DEBUGGING
-      if (this.debug) {
-        for (const record of processedRecords) {
-          logger.debug(
-            `📊 [BONIF] Registro final: ${
-              record[config.regularArticleField]
-            } - Línea: ${
-              record[config.lineNumberField || "PEDIDO_LINEA"]
-            } - Ref: ${
-              record[
-                config.bonificationLineReferenceField || "PEDIDO_LINEA_BONIF"
-              ]
-            } - Cantidad: ${record[config.quantityField || "CNT_MAX"]}`
-          );
-        }
-      }
-
-      return processedRecords;
-    } catch (error) {
-      logger.error(
-        `❌ [BONIF] Error procesando pedido ${orderNumber}: ${error.message}`
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * 🔍 Obtiene datos raw de la tabla fuente
-   */
-  async getRawSourceData(documentIds, config, connection) {
-    try {
-      if (!documentIds.length) return [];
-
-      // Construir parámetros IN para la consulta
-      const inClause = documentIds.map((_, index) => `@doc${index}`).join(", ");
-      const parameters = {};
-      documentIds.forEach((id, index) => {
-        parameters[`doc${index}`] = id;
-      });
-
-      // Consulta SQL optimizada
-      const query = `
-        SELECT *
-        FROM ${config.sourceTable}
-        WHERE ${config.orderField} IN (${inClause})
-        ORDER BY ${config.orderField}, ${config.lineOrderField || "NUM_LN"}
-      `;
-
-      if (this.debug) {
-        logger.debug(`🔍 [BONIF] Ejecutando consulta:`, {
-          query: query.replace(/\s+/g, " ").trim(),
-          documents: documentIds,
-          parameters,
-        });
-      }
-
-      const result = await SqlService.query(connection, query, parameters);
-      return result.recordset || [];
-    } catch (error) {
-      logger.error(`❌ [BONIF] Error obteniendo datos raw: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * 🔧 Obtiene datos usando flujo normal (sin bonificaciones)
-   */
-  async getRegularSourceData(documentIds, mapping, connection) {
-    try {
-      logger.info(`📦 [BONIF] Obteniendo datos con flujo normal`);
-
-      // Buscar la tabla principal
-      const mainTable = mapping.tableConfigs?.find((tc) => !tc.isDetailTable);
-      if (!mainTable) {
-        throw new Error("No se encontró configuración de tabla principal");
-      }
-
-      // Construir consulta básica
-      const inClause = documentIds.map((_, index) => `@doc${index}`).join(", ");
-      const parameters = {};
-      documentIds.forEach((id, index) => {
-        parameters[`doc${index}`] = id;
-      });
-
-      const primaryKey = mainTable.primaryKey || "NUM_PED";
-      const query = `
-        SELECT *
-        FROM ${mainTable.sourceTable}
-        WHERE ${primaryKey} IN (${inClause})
-        ORDER BY ${primaryKey}
-      `;
-
-      const result = await SqlService.query(connection, query, parameters);
-      return result.recordset || [];
-    } catch (error) {
-      logger.error(`❌ [BONIF] Error en flujo normal: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * 🔧 CORREGIDO: Procesa múltiples pedidos con mejor control de errores
-   */
-  async processOrdersBonifications(rawData, config) {
-    try {
-      // Validar configuración
-      this.validateConfig(config);
-
-      // Agrupar por NUM_PED
-      const groupedByOrder = this.groupDataByField(rawData, config.orderField);
-      const finalProcessedData = [];
-      const errors = [];
-
-      logger.info(
-        `📦 [BONIF] Procesando ${groupedByOrder.size} pedidos únicos`
-      );
-
-      for (const [orderNumber, orderRecords] of groupedByOrder) {
-        try {
-          // Control anti-duplicados
-          if (this.processedOrders.has(orderNumber)) {
-            logger.warn(
-              `⚠️ [BONIF] Pedido ${orderNumber} ya procesado, omitiendo`
-            );
-            continue;
-          }
-
-          // Validar datos del pedido
-          const validation = this.validateOrderData(orderRecords, config);
-          if (!validation.isValid) {
-            errors.push({
-              orderNumber,
-              error: validation.error,
-              details: validation.details,
-            });
-            logger.error(
-              `❌ [BONIF] Pedido ${orderNumber} inválido: ${validation.error}`
-            );
-            continue;
-          }
-
-          // Procesar pedido
-          const processedOrder = await this.processSingleOrder(
-            orderRecords,
-            config,
-            orderNumber
-          );
-
-          finalProcessedData.push(...processedOrder);
-          this.processedOrders.add(orderNumber);
-        } catch (orderError) {
-          errors.push({
-            orderNumber,
-            error: orderError.message,
-            stack: orderError.stack,
-          });
-          logger.error(
-            `❌ [BONIF] Error procesando pedido ${orderNumber}: ${orderError.message}`
-          );
-        }
-      }
-
-      // Log de resultados finales
-      logger.info(`✅ [BONIF] Procesamiento completado:`);
-      logger.info(
-        `✅ [BONIF] - Líneas procesadas: ${finalProcessedData.length}`
-      );
-      logger.info(`✅ [BONIF] - Pedidos con errores: ${errors.length}`);
-
-      if (errors.length > 0) {
-        logger.warn(`⚠️ [BONIF] Errores encontrados:`, errors);
-      }
-
-      return {
-        processedData: finalProcessedData,
-        errors: errors,
-        stats: {
-          totalLines: finalProcessedData.length,
-          totalOrders: groupedByOrder.size,
-          errorOrders: errors.length,
-        },
-      };
-    } catch (error) {
-      logger.error(
-        `❌ [BONIF] Error general procesando pedidos: ${error.message}`
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * 🔧 NUEVO: Validar configuración de bonificaciones
-   */
-  validateConfig(config) {
-    const requiredFields = [
-      "bonificationIndicatorField",
-      "bonificationIndicatorValue",
-      "regularArticleField",
-      "bonificationReferenceField",
-      "orderField",
-    ];
-
-    for (const field of requiredFields) {
-      if (!config[field]) {
-        throw new Error(`Campo de configuración requerido faltante: ${field}`);
-      }
-    }
-  }
-
-  /**
-   * 🔧 NUEVO: Validar datos de un pedido
-   */
-  validateOrderData(orderRecords, config) {
-    if (!Array.isArray(orderRecords) || orderRecords.length === 0) {
-      return {
-        isValid: false,
-        error: "Pedido sin registros",
-        details: { recordCount: orderRecords?.length || 0 },
-      };
-    }
-
-    // Verificar que todos los registros tienen NUM_PED
-    const orderNumbers = new Set();
-    for (const record of orderRecords) {
-      const orderNum = record[config.orderField];
-      if (!orderNum) {
-        return {
-          isValid: false,
-          error: `Registro sin ${config.orderField}`,
-          details: { record },
-        };
-      }
-      orderNumbers.add(orderNum);
-    }
-
-    // Verificar que todos pertenecen al mismo pedido
-    if (orderNumbers.size > 1) {
-      return {
-        isValid: false,
-        error: "Registros de múltiples pedidos mezclados",
-        details: { orderNumbers: Array.from(orderNumbers) },
-      };
-    }
-
-    return { isValid: true };
-  }
-
-  /**
-   * 🔧 Agrupar datos por campo específico
-   */
-  groupDataByField(data, fieldName) {
-    const grouped = new Map();
-
-    for (const item of data) {
-      const key = item[fieldName];
-      if (!key) {
-        logger.warn(`⚠️ [BONIF] Registro sin ${fieldName}, omitiendo:`, item);
-        continue;
-      }
-
-      if (!grouped.has(key)) {
-        grouped.set(key, []);
-      }
-      grouped.get(key).push(item);
-    }
-
-    return grouped;
-  }
-
-  /**
-   * Valida la configuración de bonificaciones
-   */
-  static validateBonificationConfig(mapping) {
-    const errors = [];
-
-    if (!mapping.bonificationConfig) {
-      errors.push("Configuración de bonificaciones faltante");
-      return { valid: false, errors };
-    }
-
-    const config = mapping.bonificationConfig;
-
-    // ✅ Campos requeridos
-    const requiredFields = [
-      "sourceTable",
-      "bonificationIndicatorField",
-      "bonificationIndicatorValue",
-      "regularArticleField",
-      "bonificationReferenceField",
-      "orderField",
-    ];
-
-    requiredFields.forEach((field) => {
-      if (!config[field]) {
-        errors.push(`Campo requerido faltante: ${field}`);
-      }
-    });
-
-    // ✅ Validaciones adicionales
-    if (
-      config.bonificationIndicatorValue &&
-      config.bonificationIndicatorValue.length === 0
-    ) {
-      errors.push("bonificationIndicatorValue no puede estar vacío");
-    }
-
+  resetStats() {
     return {
-      valid: errors.length === 0,
-      errors,
+      totalProcessed: 0,
+      regularItems: 0,
+      bonifications: 0,
+      orphanBonifications: 0,
+      documentsProcessed: 0,
+      startTime: null,
+      endTime: null,
     };
   }
 
   /**
-   * Resetea el estado interno para nueva ejecución
+   * 🟢 MÉTODO PRINCIPAL: Procesa datos con bonificaciones
    */
-  reset() {
-    this.processedOrders.clear();
-    if (this.debug) {
-      logger.debug(`🔄 [BONIF] Estado reseteado para nueva ejecución`);
+  async processData(rawData) {
+    if (!this.config.enabled || !rawData || rawData.length === 0) {
+      return this.createPassthroughResult(rawData);
+    }
+
+    this.stats = this.resetStats();
+    this.stats.startTime = Date.now();
+
+    try {
+      // Paso 1: Clasificar y agrupar datos
+      const groupedData = this.classifyAndGroup(rawData);
+
+      // Paso 2: Procesar cada grupo independientemente
+      const processedGroups = await this.processGroups(groupedData);
+
+      // Paso 3: Consolidar resultados
+      const finalResult = this.consolidateResults(processedGroups);
+
+      this.stats.endTime = Date.now();
+      this.logFinalStats();
+
+      return finalResult;
+    } catch (error) {
+      logger.error(
+        `🔥 Error en procesamiento de bonificaciones: ${error.message}`
+      );
+      throw error;
     }
   }
 
   /**
-   * Genera log detallado del procesamiento para debug
+   * 🟢 PASO 1: Clasificar registros y agrupar por documento
    */
-  logProcessingSummary(rawData, processedData, config) {
-    try {
-      const regularCount = rawData.filter(
-        (r) =>
-          r[config.bonificationIndicatorField] !==
-          config.bonificationIndicatorValue
-      ).length;
-      const bonificationCount = rawData.filter(
-        (r) =>
-          r[config.bonificationIndicatorField] ===
-          config.bonificationIndicatorValue
-      ).length;
+  classifyAndGroup(rawData) {
+    const groups = new Map();
 
-      logger.debug(`📊 [BONIF] RESUMEN DE PROCESAMIENTO:`);
-      logger.debug(`📊 [BONIF] - Registros originales: ${rawData.length}`);
-      logger.debug(`📊 [BONIF] - Artículos regulares: ${regularCount}`);
-      logger.debug(`📊 [BONIF] - Bonificaciones: ${bonificationCount}`);
-      logger.debug(
-        `📊 [BONIF] - Registros procesados: ${processedData.length}`
-      );
-      logger.debug(
-        `📊 [BONIF] - Pedidos únicos: ${
-          new Set(rawData.map((r) => r[config.orderField])).size
-        }`
-      );
-    } catch (error) {
-      logger.warn(`⚠️ [BONIF] Error generando resumen: ${error.message}`);
+    rawData.forEach((record) => {
+      const groupKey = record[this.config.groupByField];
+      const isBonification =
+        record[this.config.bonificationMarkerField] ===
+        this.config.bonificationMarkerValue;
+
+      if (!groups.has(groupKey)) {
+        groups.set(groupKey, {
+          groupKey,
+          regulars: [],
+          bonifications: [],
+          allRecords: [],
+        });
+      }
+
+      const group = groups.get(groupKey);
+      group.allRecords.push(record);
+
+      if (isBonification) {
+        group.bonifications.push(record);
+      } else {
+        group.regulars.push(record);
+      }
+    });
+
+    this.logStep1Stats(groups);
+    return groups;
+  }
+
+  /**
+   * 🟢 PASO 2: Procesar cada grupo de forma independiente
+   */
+  async processGroups(groupedData) {
+    const processedGroups = new Map();
+
+    for (const [groupKey, group] of groupedData) {
+      try {
+        const processedGroup = await this.processIndividualGroup(group);
+        processedGroups.set(groupKey, processedGroup);
+        this.stats.documentsProcessed++;
+      } catch (error) {
+        logger.error(`❌ Error procesando grupo ${groupKey}: ${error.message}`);
+        // Crear grupo de fallback con datos originales
+        processedGroups.set(groupKey, {
+          ...group,
+          processed: group.allRecords.map((record) => ({
+            ...record,
+            _processingError: true,
+          })),
+          hasErrors: true,
+        });
+      }
     }
+
+    return processedGroups;
+  }
+
+  /**
+   * 🟢 CORE: Procesar un grupo individual
+   */
+  async processIndividualGroup(group) {
+    const { groupKey, regulars, bonifications } = group;
+
+    // Crear mapa de artículos regulares con sus nuevas líneas
+    const articleToLineMap = new Map();
+    const processedRecords = [];
+    let currentLineNumber = 1;
+
+    // Fase 1: Procesar productos regulares
+    regulars.forEach((regular) => {
+      const articleCode = regular[this.config.articleCodeField];
+      const processedRegular = {
+        ...regular,
+        [`_CALC_${this.config.targetLineField}`]: currentLineNumber,
+        [`_CALC_${this.config.targetBonifRefField}`]: null,
+        _itemType: "regular",
+        _originalLineNumber: regular[this.config.lineNumberField],
+      };
+
+      articleToLineMap.set(articleCode, currentLineNumber);
+      processedRecords.push(processedRegular);
+      currentLineNumber++;
+      this.stats.regularItems++;
+    });
+
+    // Fase 2: Procesar bonificaciones
+    bonifications.forEach((bonification) => {
+      const referencedArticle = bonification[this.config.bonificationRefField];
+      const referencedLineNumber = articleToLineMap.get(referencedArticle);
+
+      const processedBonification = {
+        ...bonification,
+        [`_CALC_${this.config.targetLineField}`]: currentLineNumber,
+        [`_CALC_${this.config.targetBonifRefField}`]:
+          referencedLineNumber || null,
+        [this.config.bonificationRefField]: null, // Limpiar campo original
+        _itemType: "bonification",
+        _originalLineNumber: bonification[this.config.lineNumberField],
+        _referencedArticle: referencedArticle,
+        _isOrphan: !referencedLineNumber,
+      };
+
+      if (!referencedLineNumber) {
+        this.stats.orphanBonifications++;
+        if (this.config.logLevel === "debug") {
+          logger.warn(
+            `🔗 Bonificación huérfana en grupo ${groupKey}: artículo ${referencedArticle} no encontrado`
+          );
+        }
+      } else {
+        if (this.config.logLevel === "debug") {
+          logger.debug(
+            `🎁 Bonificación vinculada: línea ${currentLineNumber} → línea ${referencedLineNumber}`
+          );
+        }
+      }
+
+      processedRecords.push(processedBonification);
+      currentLineNumber++;
+      this.stats.bonifications++;
+    });
+
+    // Fase 3: Aplicar opciones de ordenamiento
+    const finalRecords = this.applyOrderingOptions(processedRecords, group);
+
+    return {
+      ...group,
+      processed: finalRecords,
+      articleMap: articleToLineMap,
+      hasErrors: false,
+      stats: {
+        regulars: regulars.length,
+        bonifications: bonifications.length,
+        total: finalRecords.length,
+      },
+    };
+  }
+
+  /**
+   * 🟢 PASO 3: Aplicar opciones de ordenamiento
+   */
+  applyOrderingOptions(records, originalGroup) {
+    if (this.config.preserveOriginalOrder) {
+      // Mantener orden original de NUM_LN
+      return records.sort(
+        (a, b) => (a._originalLineNumber || 0) - (b._originalLineNumber || 0)
+      );
+    } else {
+      // Orden: regulares primero, luego bonificaciones
+      return records.sort((a, b) => {
+        if (a._itemType !== b._itemType) {
+          return a._itemType === "regular" ? -1 : 1;
+        }
+        return (a._originalLineNumber || 0) - (b._originalLineNumber || 0);
+      });
+    }
+  }
+
+  /**
+   * 🟢 PASO 4: Consolidar todos los resultados
+   */
+  consolidateResults(processedGroups) {
+    const allProcessedRecords = [];
+    const processingMeta = {
+      groups: processedGroups.size,
+      hasErrors: false,
+      errorGroups: [],
+    };
+
+    for (const [groupKey, group] of processedGroups) {
+      allProcessedRecords.push(...group.processed);
+
+      if (group.hasErrors) {
+        processingMeta.hasErrors = true;
+        processingMeta.errorGroups.push(groupKey);
+      }
+    }
+
+    this.stats.totalProcessed = allProcessedRecords.length;
+
+    return {
+      data: allProcessedRecords,
+      meta: processingMeta,
+      stats: { ...this.stats },
+      config: { ...this.config },
+    };
+  }
+
+  /**
+   * 🟢 UTILIDAD: Crear resultado directo sin procesamiento
+   */
+  createPassthroughResult(data) {
+    return {
+      data: data || [],
+      meta: {
+        processed: false,
+        reason: this.config.enabled
+          ? "No data provided"
+          : "Processing disabled",
+      },
+      stats: this.stats,
+      config: this.config,
+    };
+  }
+
+  /**
+   * 🟢 UTILIDAD: Verificar si un campo es calculado
+   */
+  isCalculatedField(fieldName) {
+    return fieldName.startsWith("_CALC_");
+  }
+
+  /**
+   * 🟢 UTILIDAD: Obtener valor de campo calculado
+   */
+  getCalculatedFieldValue(record, targetFieldName) {
+    const calcFieldName = `_CALC_${targetFieldName}`;
+    return record[calcFieldName];
+  }
+
+  /**
+   * 🟢 LOGGING: Estadísticas detalladas
+   */
+  logStep1Stats(groups) {
+    if (this.config.logLevel === "minimal") return;
+
+    logger.info(
+      `📊 Clasificación completada: ${groups.size} grupos encontrados`
+    );
+
+    if (this.config.logLevel === "debug") {
+      for (const [key, group] of groups) {
+        logger.debug(
+          `  📋 Grupo ${key}: ${group.regulars.length} regulares, ${group.bonifications.length} bonificaciones`
+        );
+      }
+    }
+  }
+
+  logFinalStats() {
+    if (this.config.logLevel === "minimal") return;
+
+    const duration = this.stats.endTime - this.stats.startTime;
+    logger.info(
+      `✅ Procesamiento de bonificaciones completado en ${duration}ms:`,
+      {
+        documentos: this.stats.documentsProcessed,
+        regulares: this.stats.regularItems,
+        bonificaciones: this.stats.bonifications,
+        huérfanas: this.stats.orphanBonifications,
+        total: this.stats.totalProcessed,
+      }
+    );
   }
 }
 
-module.exports = BonificationService;
+module.exports = BonificationProcessor;

@@ -139,6 +139,40 @@ const MarkProcessedConfigSchema = new Schema({
   allowRollback: { type: Boolean, default: false }, // Si permitir rollback en errores
 });
 
+const bonificationProcessorSchema = new mongoose.Schema(
+  {
+    enabled: { type: Boolean, default: false },
+
+    // Configuración básica
+    detailTable: { type: String, default: "FAC_DET_PED" },
+    groupByField: { type: String, default: "NUM_PED" },
+    lineNumberField: { type: String, default: "NUM_LN" },
+
+    // Identificación
+    bonificationMarkerField: { type: String, default: "ART_BON" },
+    bonificationMarkerValue: { type: String, default: "B" },
+    regularMarkerValue: { type: String, default: "0" },
+
+    // Referencia
+    articleCodeField: { type: String, default: "COD_ART" },
+    bonificationRefField: { type: String, default: "COD_ART_RFR" },
+
+    // Mapeo destino
+    targetLineField: { type: String, default: "PEDIDO_LINEA" },
+    targetBonifRefField: { type: String, default: "PEDIDO_LINEA_BONIF" },
+
+    // Opciones avanzadas
+    preserveOriginalOrder: { type: Boolean, default: false },
+    createOrphanBonifications: { type: Boolean, default: true },
+    logLevel: {
+      type: String,
+      enum: ["minimal", "detailed", "debug"],
+      default: "detailed",
+    },
+  },
+  { _id: false }
+);
+
 // Schema principal para el mapeo
 const TransferMappingSchema = new Schema({
   name: { type: String, required: true, unique: true },
@@ -169,86 +203,8 @@ const TransferMappingSchema = new Schema({
   },
   consecutiveConfig: ConsecutiveConfigSchema,
   foreignKeyDependencies: [ForeignKeyDependencySchema],
-
-  // 🟢 NUEVA CONFIGURACIÓN DE BONIFICACIONES
-  hasBonificationProcessing: {
-    type: Boolean,
-    default: false,
-    description: "Indica si este mapping procesa bonificaciones",
-  },
-
-  bonificationConfig: {
-    sourceTable: {
-      type: String,
-      description: "Tabla que contiene las bonificaciones (ej: FAC_DET_PED)",
-    },
-    bonificationIndicatorField: {
-      type: String,
-      default: "ART_BON",
-      description: "Campo que indica si es bonificación",
-    },
-    bonificationIndicatorValue: {
-      type: String,
-      default: "B",
-      description: "Valor que marca una bonificación",
-    },
-
-    // 🔥 CAMPOS SOURCE (YA EXISTÍAN)
-    regularArticleField: {
-      type: String,
-      default: "COD_ART",
-      description: "Campo del artículo regular en origen",
-    },
-    quantityField: {
-      type: String,
-      default: "CNT_MAX",
-      description: "Campo de cantidad en origen",
-    },
-    orderField: {
-      type: String,
-      default: "NUM_PED",
-      description:
-        "Campo para agrupar registros (ej: número de pedido) en origen",
-    },
-    lineOrderField: {
-      type: String,
-      default: "NUM_LN",
-      description: "Campo de orden de líneas en tabla origen (ej: NUM_LN)",
-    },
-    lineNumberField: {
-      type: String,
-      default: "PEDIDO_LINEA",
-      description: "Campo donde se asigna el número de línea en destino",
-    },
-    bonificationLineReferenceField: {
-      type: String,
-      default: "PEDIDO_LINEA_BONIF",
-      description:
-        "Campo donde se asigna la referencia a la línea del artículo regular",
-    },
-    bonificationReferenceField: {
-      type: String,
-      default: "COD_ART_RFR",
-      description: "Campo que referencia al artículo regular en bonificaciones",
-    },
-
-    // 🔥 NUEVOS CAMPOS TARGET (CONFIGURABLES)
-    targetArticleField: {
-      type: String,
-      default: "CODIGO_ARTICULO",
-      description: "Campo destino para código de artículo",
-    },
-    targetQuantityField: {
-      type: String,
-      default: "CANTIDAD",
-      description: "Campo destino para cantidad",
-    },
-    targetOrderField: {
-      type: String,
-      default: "NUM_PEDIDO",
-      description: "Campo destino para número de pedido",
-    },
-  },
+  bonificationProcessor: bonificationProcessorSchema,
+  hasBonificationProcessing: { type: Boolean, default: false },
 });
 
 // Pre-save hook para actualizar fecha
