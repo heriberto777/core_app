@@ -412,7 +412,7 @@ class DynamicTransferService {
         } catch (docError) {
           logger.error(
             `Error crítico procesando documento ${documentId}: ${docError.message}`
-);
+          );
 
           // Cancelar reserva si hay error crítico
           if (useCentralizedConsecutives && currentConsecutive?.reservationId) {
@@ -578,7 +578,7 @@ class DynamicTransferService {
           sourceData &&
           mapping.bonificationProcessor?.enabled &&
           this.isTableCompatibleWithBonifications(tableConfig, mapping)
-){
+        ) {
           const orderField =
             mapping.bonificationProcessor.groupByField || "NUM_PED";
           tableSourceData = sourceData.find(
@@ -1864,6 +1864,182 @@ class DynamicTransferService {
   }
 
   /**
+   * Obtiene documentos según configuración de mapeo con filtros avanzados
+   */
+  async getDocuments(mapping, filters, connection) {
+    try {
+      // Listar tablas disponibles en la base de datos para depuración
+      try {
+        logger.info("Listando tablas disponibles en la base de datos...");
+        const listTablesQuery = `
+        SELECT TOP 50 TABLE_SCHEMA, TABLE_NAME
+        FROM INFORMATION_SCHEMA.TABLES
+        ORDER BY TABLE_SCHEMA, TABLE_NAME
+      `;
+
+        const tablesResult = await SqlService.query(
+          connection,
+          listTablesQuery
+        );
+
+        if (tablesResult.recordset?.length > 0) {
+          const tables = tablesResult.recordset;
+          logger.info(
+            `Tablas disponibles: ${tables
+              .map((t) => `${t.TABLE_SCHEMA}.${t.TABLE_NAME}`)
+              .join(", ")}`
+          );
+        } else {
+          logger.warn("No se encontraron tablas en la base de datos");
+        }
+      } catch (listError) {
+        logger.warn(`Error al listar tablas: ${listError.message}`);
+      }
+
+      // Validar que el mapeo sea válido
+      if (!mapping) {
+        throw new Error("La configuración de mapeo es nula o indefinida");
+      }
+
+      if (!mapping.tableConfigs?.length) {
+        throw new Error(
+          "La configuración de mapeo no tiene tablas configuradas"
+        );
+      }
+
+      // Determinar tabla principal
+      const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
+      if (!mainTable) {
+        throw new Error("No se encontró configuración de tabla principal");
+      }
+
+      if (!mainTable.sourceTable) {
+        throw new Error(
+          "La tabla principal no tiene definido el campo sourceTable"
+        );
+      }
+
+      logger.info(
+        `Obteniendo documentos de ${mainTable.sourceTable} en ${mapping.sourceServer}`
+      );
+
+      // Verificar si la tabla existe, manejando correctamente esquemas
+      try {
+        let schema = "dbo"; // Esquema por defecto
+        let tableName = mainTable.sourceTable;
+
+        if (tableName.includes(".")) {
+          const parts = tableName.split(".");
+          if (parts.length === 2) {
+            schema = parts[0];
+            tableName = parts[1];
+          }
+        }
+
+        // Verificar existencia de tabla
+        const tableCheckQuery = `
+        SELECT TOP 1 1
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @tableName
+      `;
+
+        const tableCheckResult = await SqlService.query(
+          connection,
+          tableCheckQuery,
+          {
+            schema: schema,
+            tableName: tableName,
+          }
+        );
+
+        if (!tableCheckResult.recordset?.length) {
+          throw new Error(
+            `La tabla ${schema}.${tableName} no existe en la base de datos`
+          );
+        }
+
+        logger.info(`✅ Tabla ${schema}.${tableName} verificada exitosamente`);
+
+        // Construir consulta con filtros
+        const fullTableName = `${schema}.${tableName}`;
+        let query = `SELECT * FROM ${fullTableName}`;
+        const params = {};
+        const whereConditions = [];
+
+        // Aplicar filtro de fechas
+        if (filters.dateFrom || filters.dateTo) {
+          const dateField = filters.dateField || "FECHA";
+          if (filters.dateFrom) {
+            whereConditions.push(`${dateField} >= @dateFrom`);
+            params.dateFrom = filters.dateFrom;
+          }
+          if (filters.dateTo) {
+            whereConditions.push(`${dateField} <= @dateTo`);
+            params.dateTo = filters.dateTo;
+          }
+        }
+
+        // Aplicar filtro de estado procesado
+        if (filters.status && filters.status !== "all") {
+          const statusField =
+            filters.statusField || mapping.markProcessedField || "PROCESADO";
+
+          if (filters.status === "processed") {
+            whereConditions.push(`${statusField} = @processedValue`);
+            params.processedValue = mapping.markProcessedValue || "S";
+          } else if (filters.status === "pending") {
+            whereConditions.push(
+              `(${statusField} IS NULL OR ${statusField} != @processedValue)`
+            );
+            params.processedValue = mapping.markProcessedValue || "S";
+          }
+        }
+
+        // Aplicar filtro de bodega/warehouse
+        if (filters.warehouse && filters.warehouse !== "all") {
+          const warehouseField = filters.warehouseField || "BODEGA";
+          whereConditions.push(`${warehouseField} = @warehouse`);
+          params.warehouse = filters.warehouse;
+        }
+
+        // Construir WHERE clause
+        if (whereConditions.length > 0) {
+          query += ` WHERE ${whereConditions.join(" AND ")}`;
+        }
+
+        // Agregar ordenamiento
+        const primaryKey = mainTable.primaryKey || "NUM_PED";
+        query += ` ORDER BY ${primaryKey} DESC`;
+
+        // Aplicar límite si se especifica
+        if (filters.limit) {
+          const limit = parseInt(filters.limit, 10);
+          if (limit > 0) {
+            query = `SELECT TOP ${limit} * FROM (${query}) AS limited_results`;
+          }
+        }
+
+        logger.debug(`Ejecutando consulta de documentos: ${query}`);
+        logger.debug(`Parámetros: ${JSON.stringify(params)}`);
+
+        const result = await SqlService.query(connection, query, params);
+
+        logger.info(`Documentos obtenidos: ${result.recordset?.length || 0}`);
+
+        return result.recordset || [];
+      } catch (queryError) {
+        logger.error(`Error al ejecutar consulta SQL: ${queryError.message}`);
+        throw new Error(
+          `Error en consulta SQL (${mainTable.sourceTable}): ${queryError.message}`
+        );
+      }
+    } catch (error) {
+      logger.error(`Error al obtener documentos: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
    * Obtiene documentos según configuración de mapeo
    */
   async getDocumentsByMapping(mappingId, filters = {}) {
@@ -2190,6 +2366,91 @@ class DynamicTransferService {
       return `${config.prefix}${value}`;
     }
     return String(value);
+  }
+
+  /**
+   * Obtiene datos de origen para procesamiento de documentos
+   */
+  async getSourceDataForDocuments(documentIds, mapping, sourceConnection) {
+    try {
+      // Si hay procesador de bonificaciones nuevo, usar ese método
+      if (mapping.bonificationProcessor?.enabled) {
+        return await this.getSourceDataWithNewProcessor(
+          documentIds,
+          mapping,
+          sourceConnection
+        );
+      }
+
+      // Usar método normal
+      return await this.getSourceDataNormal(
+        documentIds,
+        mapping,
+        sourceConnection
+      );
+    } catch (error) {
+      logger.error(
+        `Error al obtener datos de origen para documentos: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Actualiza la configuración de consecutivos de un mapping
+   */
+  async updateConsecutiveConfig(mappingId, consecutiveConfig) {
+    try {
+      const mapping = await TransferMapping.findByIdAndUpdate(
+        mappingId,
+        { consecutiveConfig: consecutiveConfig },
+        { new: true }
+      );
+
+      if (!mapping) {
+        throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
+      }
+
+      logger.info(
+        `Configuración de consecutivos actualizada para mapping ${mappingId}`
+      );
+      return mapping;
+    } catch (error) {
+      logger.error(
+        `Error al actualizar configuración de consecutivos: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Reinicia el consecutivo de un mapping a un valor específico
+   */
+  async resetConsecutive(mappingId, value = 0) {
+    try {
+      const initialValue = parseInt(value, 10);
+
+      const mapping = await TransferMapping.findByIdAndUpdate(
+        mappingId,
+        { "consecutiveConfig.lastValue": initialValue },
+        { new: true }
+      );
+
+      if (!mapping) {
+        throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
+      }
+
+      logger.info(
+        `Consecutivo reiniciado a ${initialValue} para mapping ${mappingId}`
+      );
+      return {
+        success: true,
+        lastValue: mapping.consecutiveConfig?.lastValue || initialValue,
+      };
+    } catch (error) {
+      logger.error(`Error al reiniciar consecutivo: ${error.message}`);
+      throw error;
+    }
   }
 
   /**
