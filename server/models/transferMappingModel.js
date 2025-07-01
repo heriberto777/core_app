@@ -204,7 +204,6 @@ const TransferMappingSchema = new Schema({
   consecutiveConfig: ConsecutiveConfigSchema,
   foreignKeyDependencies: [ForeignKeyDependencySchema],
   bonificationProcessor: bonificationProcessorSchema,
-  hasBonificationProcessing: { type: Boolean, default: false },
 });
 
 // Pre-save hook para actualizar fecha
