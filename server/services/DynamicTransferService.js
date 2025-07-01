@@ -6,6 +6,7 @@ const TaskExecution = require("../models/taskExecutionModel");
 const TaskTracker = require("./TaskTracker");
 const TransferTask = require("../models/transferTaks");
 const ConsecutiveService = require("./ConsecutiveService");
+const BonificationProcessingService = require("./BonificationProcessingService");
 
 class DynamicTransferService {
   /**
@@ -2232,7 +2233,7 @@ class DynamicTransferService {
     const primaryKey = detailConfig.primaryKey || "NUM_PED";
 
     const query = `
-    SELECT ${finalSelectFields} FROM ${detailConfig.sourceTable} 
+    SELECT ${finalSelectFields} FROM ${detailConfig.sourceTable}
     WHERE ${primaryKey} = @documentId
     ${
       detailConfig.filterCondition ? ` AND ${detailConfig.filterCondition}` : ""
@@ -2519,9 +2520,9 @@ class DynamicTransferService {
 
       // Consultar metadata de la columna
       const query = `
-    SELECT CHARACTER_MAXIMUM_LENGTH 
-    FROM INFORMATION_SCHEMA.COLUMNS 
-    WHERE TABLE_NAME = '${tableNameOnly}' 
+    SELECT CHARACTER_MAXIMUM_LENGTH
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_NAME = '${tableNameOnly}'
     AND COLUMN_NAME = '${columnName}'
   `;
 
@@ -2560,8 +2561,8 @@ class DynamicTransferService {
       try {
         logger.info("Listando tablas disponibles en la base de datos...");
         const listTablesQuery = `
-      SELECT TOP 50 TABLE_SCHEMA, TABLE_NAME 
-      FROM INFORMATION_SCHEMA.TABLES 
+      SELECT TOP 50 TABLE_SCHEMA, TABLE_NAME
+      FROM INFORMATION_SCHEMA.TABLES
       ORDER BY TABLE_SCHEMA, TABLE_NAME
     `;
 
@@ -2632,8 +2633,8 @@ class DynamicTransferService {
         );
 
         const checkTableQuery = `
-      SELECT COUNT(*) AS table_exists 
-      FROM INFORMATION_SCHEMA.TABLES 
+      SELECT COUNT(*) AS table_exists
+      FROM INFORMATION_SCHEMA.TABLES
       WHERE TABLE_SCHEMA = '${schema}' AND TABLE_NAME = '${tableName}'
     `;
 
@@ -2645,8 +2646,8 @@ class DynamicTransferService {
         ) {
           // Si no se encuentra, intentar buscar sin distinguir mayúsculas/minúsculas
           const searchTableQuery = `
-        SELECT TOP 5 TABLE_SCHEMA, TABLE_NAME 
-        FROM INFORMATION_SCHEMA.TABLES 
+        SELECT TOP 5 TABLE_SCHEMA, TABLE_NAME
+        FROM INFORMATION_SCHEMA.TABLES
         WHERE TABLE_NAME LIKE '%${tableName}%'
       `;
 
@@ -2672,8 +2673,8 @@ class DynamicTransferService {
 
         // Obtener todas las columnas de la tabla para validar los campos
         const columnsQuery = `
-      SELECT COLUMN_NAME, DATA_TYPE 
-      FROM INFORMATION_SCHEMA.COLUMNS 
+      SELECT COLUMN_NAME, DATA_TYPE
+      FROM INFORMATION_SCHEMA.COLUMNS
       WHERE TABLE_SCHEMA = '${schema}' AND TABLE_NAME = '${tableName}'
     `;
 
@@ -3532,7 +3533,7 @@ class DynamicTransferService {
     });
 
     const query = `
-   UPDATE ${mainTable.sourceTable} 
+   UPDATE ${mainTable.sourceTable}
    SET ${updateFields}
    WHERE ${primaryKey} IN (${placeholders})
  `;
@@ -3566,7 +3567,7 @@ class DynamicTransferService {
     }
 
     const query = `
-   UPDATE ${mainTable.sourceTable} 
+   UPDATE ${mainTable.sourceTable}
    SET ${updateFields}
    WHERE ${primaryKey} = @documentId
  `;

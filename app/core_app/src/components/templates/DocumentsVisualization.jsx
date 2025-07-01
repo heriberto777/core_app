@@ -318,12 +318,12 @@ export function DocumentsVisualization() {
               )
               .join("")}
           </div>
-          
+
           <h4>Detalle</h4>
-          
+
           <div class="items-table-container">
             <div style="margin-bottom: 8px; text-align: left;">
-              <strong>Tablas disponibles:</strong> 
+              <strong>Tablas disponibles:</strong>
               ${Object.keys(detailTableMapping)
                 .map(
                   (tableName) =>
@@ -331,7 +331,7 @@ export function DocumentsVisualization() {
                 )
                 .join("")}
             </div>
-            
+
             <table class="items-table">
               <thead>
                 <tr>
@@ -531,17 +531,74 @@ export function DocumentsVisualization() {
     }
 
     try {
+      // 🎁 NUEVA LÓGICA: Verificar si el mapping tiene bonificaciones habilitadas
+      let hasBonifications = false;
+      let showPromotionOption = false;
+
+      if (activeConfig && activeConfig.hasBonificationProcessing) {
+        hasBonifications = true;
+        showPromotionOption = true;
+      }
+
+      // 🎁 NUEVA LÓGICA: Diálogo de confirmación mejorado con opción de promociones
+      const confirmationHtml = `
+      <div style="text-align: left;">
+        <p>¿Está seguro de procesar ${selectedDocuments.length} documentos?</p>
+        ${
+          hasBonifications
+            ? `
+          <div style="margin-top: 20px; padding: 15px; background: #e8f5e8; border-radius: 8px; border-left: 4px solid #28a745;">
+            <h4 style="color: #28a745; margin: 0 0 10px 0;">🎁 Procesamiento de Bonificaciones Habilitado</h4>
+            <p style="margin: 0; font-size: 14px;">Este mapping tiene configurado el procesamiento automático de bonificaciones.</p>
+          </div>
+        `
+            : ""
+        }
+        ${
+          showPromotionOption
+            ? `
+          <div style="margin-top: 15px;">
+            <label style="display: flex; align-items: center; gap: 10px; cursor: pointer;">
+              <input type="checkbox" id="applyPromotions" style="transform: scale(1.2);">
+              <span style="font-weight: 500;">Aplicar reglas de promociones automáticamente</span>
+            </label>
+            <small style="display: block; margin-top: 5px; color: #6c757d;">
+              Aplicará descuentos y bonificaciones según el tipo de cliente y contexto
+            </small>
+          </div>
+        `
+            : ""
+        }
+      </div>
+    `;
+
       // Ask for confirmation
       const confirmResult = await Swal.fire({
         title: "¿Procesar documentos?",
-        text: `¿Está seguro de procesar ${selectedDocuments.length} documentos?`,
+        html: showPromotionOption
+          ? confirmationHtml
+          : `¿Está seguro de procesar ${selectedDocuments.length} documentos?`,
         icon: "question",
         showCancelButton: true,
         confirmButtonText: "Sí, procesar",
         cancelButtonText: "Cancelar",
+        preConfirm: () => {
+          // 🎁 NUEVA LÓGICA: Capturar opción de promociones si está disponible
+          const applyPromotions = showPromotionOption
+            ? document.getElementById("applyPromotions")?.checked || false
+            : false;
+
+          return {
+            confirmed: true,
+            applyPromotionRules: applyPromotions,
+          };
+        },
       });
 
       if (!confirmResult.isConfirmed) return;
+
+      // 🎁 NUEVA LÓGICA: Extraer opciones de promociones
+      const processingOptions = confirmResult.value || {};
 
       // Show loading with a reference que podemos cerrar siempre
       setIsLoading(true);
@@ -550,19 +607,33 @@ export function DocumentsVisualization() {
       try {
         loadingSwal = Swal.fire({
           title: "Procesando documentos...",
-          text: "Esto puede tomar un momento",
+          text: hasBonifications
+            ? "Procesando documentos con bonificaciones. Esto puede tomar un momento"
+            : "Esto puede tomar un momento",
           allowOutsideClick: false,
           didOpen: () => {
             Swal.showLoading();
           },
         });
 
-        // Ejecutar el procesamiento
-        const result = await api.processDocumentsByMapping(
-          accessToken,
-          activeMappingId,
-          selectedDocuments
-        );
+        // 🎁 NUEVA LÓGICA: Usar el método apropiado según si tiene bonificaciones
+        let result;
+
+        if (hasBonifications) {
+          // Usar el nuevo método executeMapping para bonificaciones
+          result = await api.executeMapping(accessToken, activeMappingId, {
+            documentIds: selectedDocuments,
+            applyPromotionRules: processingOptions.applyPromotionRules || false,
+            limit: selectedDocuments.length,
+          });
+        } else {
+          // Usar el método existente para mappings normales
+          result = await api.processDocumentsByMapping(
+            accessToken,
+            activeMappingId,
+            selectedDocuments
+          );
+        }
 
         // Cerrar modal de carga explícitamente
         if (loadingSwal) {
@@ -613,147 +684,87 @@ export function DocumentsVisualization() {
             "Algunos documentos fueron procesados correctamente, pero otros fallaron.";
         }
 
-        // Parse common error types for more readable messages
-        const formatErrorMessage = (errMsg, errorCode) => {
-          if (errorCode === "NULL_VALUE_ERROR") {
-            return errMsg; // Ya está formateado correctamente
-          } else if (errorCode === "TRUNCATION_ERROR") {
-            return errMsg; // Ya está formateado correctamente
-          } else if (errorCode === "CONNECTION_ERROR") {
-            return "Error de conexión a la base de datos. Intente nuevamente.";
-          } else if (errorCode === "SEVERE_CONNECTION_ERROR") {
-            return "Error grave de conexión. Contacte al administrador del sistema.";
-          }
+        // 🎁 NUEVA LÓGICA: Construir mensaje de resultado con estadísticas de bonificaciones
+        let finalMessage = `Procesados: ${
+          result.data.processed || 0
+        }, Fallidos: ${result.data.failed || 0}`;
 
-          if (errMsg.includes("Cannot insert the value NULL into column")) {
-            const colMatch = errMsg.match(/column '([^']+)'/);
-            const colName = colMatch ? colMatch[1] : "desconocida";
-            return `No se puede insertar NULL en columna '${colName}'. Configure un valor por defecto.`;
-          } else if (
-            errMsg.includes("String or binary data would be truncated")
+        // Agregar estadísticas de bonificaciones si existen
+        if (
+          result.data.bonificationStats &&
+          result.data.bonificationStats.totalBonifications > 0
+        ) {
+          const stats = result.data.bonificationStats;
+          finalMessage += `\n\n🎁 ESTADÍSTICAS DE BONIFICACIONES:`;
+          finalMessage += `\n📦 Documentos con bonificaciones: ${stats.totalDocumentsWithBonifications}`;
+          finalMessage += `\n🎁 Total bonificaciones procesadas: ${stats.totalBonifications}`;
+          finalMessage += `\n🏷️ Promociones aplicadas: ${stats.totalPromotions}`;
+          finalMessage += `\n💰 Descuento total aplicado: $${stats.totalDiscountAmount.toFixed(
+            2
+          )}`;
+          finalMessage += `\n📄 Líneas de detalle procesadas: ${stats.processedDetails}`;
+
+          if (
+            stats.bonificationTypes &&
+            Object.keys(stats.bonificationTypes).length > 0
           ) {
-            const colMatch = errMsg.match(/column '([^']+)'/);
-            const colName = colMatch ? colMatch[1] : "desconocida";
-            return `Texto demasiado largo para columna '${colName}'. Verifique la longitud máxima.`;
+            finalMessage += `\n\n🏷️ TIPOS DE PROMOCIONES:`;
+            Object.entries(stats.bonificationTypes).forEach(([type, count]) => {
+              finalMessage += `\n   • ${type}: ${count} aplicaciones`;
+            });
           }
-          return errMsg;
-        };
+        }
 
-        // Mostrar resumen detallado en un nuevo modal
-        await Swal.fire({
-          title: resultTitle,
-          html: `
-          <div class="result-summary">
-            <p><strong>Resumen:</strong></p>
-            <ul>
-              <li>Procesados correctamente: ${result.data?.processed || 0}</li>
-              <li>Fallidos: ${result.data?.failed || 0}</li>
-              <li>Omitidos: ${result.data?.skipped || 0}</li>
-            </ul>
-            ${
-              result.data?.failed > 0 ||
-              (result.data?.errorDetails && result.data.errorDetails.length > 0)
-                ? `<p><strong>Detalles de errores:</strong></p>
-              <div class="error-details" style="max-height: 200px; overflow-y: auto; text-align: left;">
-                ${
-                  result.data?.errorDetails
-                    ? result.data.errorDetails
-                        .map(
-                          (detail) => `<p class="error-detail-item">
-                      <strong>Documento ${
-                        detail.documentId
-                      }:</strong> ${formatErrorMessage(
-                            detail.error || "Error no especificado",
-                            detail.errorCode
-                          )}
-                    </p>`
-                        )
-                        .join("")
-                    : result.data?.details
-                    ? result.data.details
-                        .filter((detail) => !detail.success)
-                        .map(
-                          (detail) => `<p class="error-detail-item">
-                      <strong>Documento ${
-                        detail.documentId
-                      }:</strong> ${formatErrorMessage(
-                            detail.message ||
-                              detail.error ||
-                              "Error no especificado",
-                            detail.errorCode
-                          )}
-                    </p>`
-                        )
-                        .join("")
-                    : "<p>No hay detalles específicos del error disponibles.</p>"
-                }
-              </div>`
-                : ""
-            }
-            ${resultMessage ? `<p>${resultMessage}</p>` : ""}
-          </div>
-        `,
+        // 🎁 NUEVA LÓGICA: Mensaje adicional personalizado según el resultado
+        if (resultMessage) {
+          finalMessage = resultMessage + "\n\n" + finalMessage;
+        }
+
+        // 🎁 NUEVA LÓGICA: Footer personalizado para bonificaciones
+        const footerText =
+          result.data.bonificationStats?.totalBonifications > 0
+            ? "✨ Procesamiento con bonificaciones ejecutado exitosamente"
+            : null;
+
+        Swal.fire({
           icon: resultIcon,
-          width: 600,
-          customClass: {
-            htmlContainer: "document-processing-result",
-          },
+          title: resultTitle,
+          text: finalMessage,
+          footer: footerText,
+          width:
+            result.data.bonificationStats?.totalBonifications > 0 ? 600 : 400,
+          // 🎁 NUEVA LÓGICA: Botón adicional para ver detalles si hay bonificaciones
+          showDenyButton: result.data.bonificationStats?.totalBonifications > 0,
+          denyButtonText: "Ver Detalles",
+          confirmButtonText: "Cerrar",
+          denyButtonColor: "#17a2b8",
+        }).then((modalResult) => {
+          // 🎁 NUEVA LÓGICA: Mostrar detalles de bonificaciones si se solicita
+          if (modalResult.isDenied && result.data.bonificationStats) {
+            showBonificationDetails(result.data);
+          }
         });
 
-        // Refresh documents and reset selection
-        fetchDocuments();
+        // Refresh documents list and clear selection
+        await fetchDocuments();
         setSelectedDocuments([]);
         setSelectAll(false);
       } catch (error) {
-        // Asegurarse de cerrar el modal si hay un error
+        // Cerrar modal de loading si existe
         if (loadingSwal) {
           loadingSwal.close();
         }
-
         setIsLoading(false);
 
-        console.error("Error completo del procesamiento:", error);
+        console.error("Error interno en el procesamiento:", error);
 
-        let errorMessage = "Ocurrió un error al procesar los documentos";
-        let errorDetails = "";
-
-        // Intentar extraer información detallada del error
-        if (error.response && error.response.data) {
-          errorMessage = error.response.data.message || errorMessage;
-          errorDetails = error.response.data.errorDetails || "";
-        } else if (error.message) {
-          errorMessage = error.message;
-        }
-
-        // Mostrar el error
         Swal.fire({
           title: "Error en el procesamiento",
-          html: `
-          <div>
-            <p>${errorMessage}</p>
-            ${
-              errorDetails
-                ? `
-              <div style="text-align: left; margin-top: 10px; padding: 10px; background: #f8f8f8; border-radius: 5px; max-height: 200px; overflow-y: auto;">
-                <strong>Detalles técnicos:</strong><br>
-                <pre style="white-space: pre-wrap; font-size: 12px;">${errorDetails}</pre>
-              </div>
-            `
-                : ""
-            }
-          </div>
-        `,
+          text: error.message || "No se pudieron procesar los documentos",
           icon: "error",
-          width: 600,
         });
-      } finally {
-        // Asegurarse de que la bandera de carga se desactive
-        setIsLoading(false);
-        // Refrescar la lista de documentos para mostrar el estado actual
-        fetchDocuments();
       }
     } catch (outerError) {
-      // Manejar errores externos (problemas con confirmaciones, etc.)
       setIsLoading(false);
       console.error("Error externo en el proceso:", outerError);
 
@@ -763,8 +774,94 @@ export function DocumentsVisualization() {
         icon: "error",
       });
     }
-  }, [activeMappingId, accessToken, selectedDocuments, fetchDocuments]);
+  }, [
+    activeMappingId,
+    accessToken,
+    selectedDocuments,
+    fetchDocuments,
+    activeConfig,
+  ]);
 
+  // 🎁 NUEVA FUNCIÓN: Mostrar detalles de bonificaciones en una ventana separada
+  const showBonificationDetails = useCallback((resultData) => {
+    const stats = resultData.bonificationStats;
+
+    let detailsHtml = `
+    <div style="text-align: left;">
+      <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px; margin-bottom: 20px;">
+
+        <div style="background: #e8f5e8; padding: 15px; border-radius: 8px;">
+          <h4 style="color: #28a745; margin: 0 0 10px 0;">📈 Resumen General</h4>
+          <p style="margin: 5px 0;">Documentos procesados: <strong>${
+            resultData.processed
+          }</strong></p>
+          <p style="margin: 5px 0;">Con bonificaciones: <strong>${
+            stats.totalDocumentsWithBonifications
+          }</strong></p>
+          <p style="margin: 5px 0;">Total líneas: <strong>${
+            stats.processedDetails
+          }</strong></p>
+        </div>
+
+        <div style="background: #fff3cd; padding: 15px; border-radius: 8px;">
+          <h4 style="color: #856404; margin: 0 0 10px 0;">🎁 Bonificaciones</h4>
+          <p style="margin: 5px 0;">Total bonificaciones: <strong>${
+            stats.totalBonifications
+          }</strong></p>
+          <p style="margin: 5px 0;">Promociones aplicadas: <strong>${
+            stats.totalPromotions
+          }</strong></p>
+          <p style="margin: 5px 0;">Descuento total: <strong>$${stats.totalDiscountAmount.toFixed(
+            2
+          )}</strong></p>
+        </div>
+      </div>
+  `;
+
+    if (
+      stats.bonificationTypes &&
+      Object.keys(stats.bonificationTypes).length > 0
+    ) {
+      detailsHtml += `
+      <div style="background: #d1ecf1; padding: 15px; border-radius: 8px;">
+        <h4 style="color: #0c5460; margin: 0 0 10px 0;">🏷️ Detalle por Tipo de Promoción</h4>
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 10px;">
+    `;
+
+      Object.entries(stats.bonificationTypes).forEach(([type, count]) => {
+        detailsHtml += `
+        <div style="background: white; padding: 10px; border-radius: 4px; border-left: 3px solid #007bff;">
+          <strong>${type}</strong><br>
+          <span style="color: #6c757d;">${count} aplicaciones</span>
+        </div>
+      `;
+      });
+
+      detailsHtml += `
+        </div>
+      </div>
+    `;
+    }
+
+    if (resultData.failed > 0) {
+      detailsHtml += `
+      <div style="background: #f8d7da; padding: 15px; border-radius: 8px; margin-top: 15px;">
+        <h4 style="color: #721c24; margin: 0 0 10px 0;">⚠️ Documentos con Errores</h4>
+        <p style="margin: 0; color: #721c24;">Se encontraron ${resultData.failed} documentos que no pudieron procesarse.</p>
+      </div>
+    `;
+    }
+
+    detailsHtml += `</div>`;
+
+    Swal.fire({
+      title: "📊 Detalles del Procesamiento con Bonificaciones",
+      html: detailsHtml,
+      width: 700,
+      confirmButtonText: "Cerrar",
+      confirmButtonColor: "#28a745",
+    });
+  }, []);
   // Handle mapping selection from list - con useCallback
   const handleSelectMapping = useCallback((mappingId) => {
     setActiveMappingId(mappingId);

@@ -47,5 +47,24 @@ router.post(
   mappingController.updateConsecutiveConfig
 );
 router.get("/:mappingId/reset-consecutive", mappingController.resetConsecutive);
+router.post(
+  "/:mappingId/documents/:documentId/process-bonifications",
+  mappingController.processDocumentWithBonifications
+);
 
+router.get(
+  "/:mappingId/documents/:documentId/preview-bonifications",
+  mappingController.previewBonificationProcessing
+);
+
+router.post("/:mappingId/execute", mappingController.executeMapping);
+
+router.post(
+  "/:mappingId/validate-bonifications",
+  mappingController.validateBonificationConfig
+);
+router.get(
+  "/:mappingId/bonification-stats",
+  mappingController.getBonificationStats
+);
 module.exports = router;

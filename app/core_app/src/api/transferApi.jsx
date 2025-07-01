@@ -2345,4 +2345,151 @@ export class TransferApi {
       throw error;
     }
   }
+
+  /**
+   * 🎁 NUEVO: Ejecuta un mapping con soporte completo para bonificaciones
+   * @param {string} accessToken - Token de autenticación
+   * @param {string} mappingId - ID del mapping
+   * @param {Object} options - Opciones de ejecución
+   * @returns {Promise<Object>} - Resultado de la ejecución
+   */
+  async executeMapping(accessToken, mappingId, options = {}) {
+    try {
+      const url = `${this.baseApi}/mappings/${mappingId}/execute`;
+      const params = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({
+          limit: options.limit || 10,
+          applyPromotionRules: options.applyPromotionRules || false,
+          documentIds: options.documentIds || null, // Para documentos específicos
+          filters: options.filters || {},
+        }),
+      };
+
+      console.log(`🎁 Ejecutando mapping con bonificaciones: ${mappingId}`);
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+
+      return result;
+    } catch (error) {
+      console.error("❌ Error ejecutando mapping con bonificaciones:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * 🎁 NUEVO: Previsualiza el procesamiento de bonificaciones para un documento
+   * @param {string} accessToken - Token de autenticación
+   * @param {string} mappingId - ID del mapping
+   * @param {string} documentId - ID del documento
+   * @returns {Promise<Object>} - Preview de las bonificaciones
+   */
+  async previewBonificationProcessing(accessToken, mappingId, documentId) {
+    try {
+      const url = `${this.baseApi}/mappings/${mappingId}/documents/${documentId}/preview-bonifications`;
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      console.log(
+        `🔍 Previsualizando bonificaciones para documento ${documentId}`
+      );
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+
+      return result;
+    } catch (error) {
+      console.error("❌ Error previsualizando bonificaciones:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * 🎁 MEJORA: Actualiza el método existente validateBonificationConfig
+   * para que sea más completo
+   */
+  async validateBonificationConfig(accessToken, mappingId, config = null) {
+    try {
+      const url = `${this.baseApi}/mappings/${mappingId}/validate-bonifications`;
+      const params = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ config }),
+      };
+
+      console.log(
+        `🔍 Validando configuración de bonificaciones para mapping ${mappingId}`
+      );
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+
+      return result;
+    } catch (error) {
+      console.error(
+        "❌ Error validando configuración de bonificaciones:",
+        error
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * 🎁 NUEVO: Obtiene estadísticas de bonificaciones de un mapping
+   * @param {string} accessToken - Token de autenticación
+   * @param {string} mappingId - ID del mapping
+   * @param {Object} filters - Filtros opcionales (dateFrom, dateTo, etc.)
+   * @returns {Promise<Object>} - Estadísticas de bonificaciones
+   */
+  async getBonificationStats(accessToken, mappingId, filters = {}) {
+    try {
+      // Construir URL con parámetros de consulta
+      let url = `${this.baseApi}/mappings/${mappingId}/bonification-stats`;
+      const queryParams = [];
+
+      if (filters.dateFrom) queryParams.push(`dateFrom=${filters.dateFrom}`);
+      if (filters.dateTo) queryParams.push(`dateTo=${filters.dateTo}`);
+      if (filters.timeRange) queryParams.push(`timeRange=${filters.timeRange}`);
+
+      if (queryParams.length > 0) {
+        url += `?${queryParams.join("&")}`;
+      }
+
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+
+      return result;
+    } catch (error) {
+      console.error(
+        "❌ Error obteniendo estadísticas de bonificaciones:",
+        error
+      );
+      throw error;
+    }
+  }
 }
