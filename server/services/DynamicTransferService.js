@@ -2132,9 +2132,20 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa una tabla (principal o detalle) - MÉTODO UNIFICADO
+   * Procesa una tabla (principal o detalle)
    * @private
+   * @param {Object} tableConfig - Configuración de la tabla
+   * @param {Object} sourceData - Datos del encabezado/principal
+   * @param {Object} detailRow - Datos de la fila de detalle (null para tablas principales)
+   * @param {Object} targetConnection - Conexión a la base de datos destino
+   * @param {Object} currentConsecutive - Consecutivo generado previamente
+   * @param {Object} mapping - Configuración completa del mapeo
+   * @param {string} documentId - ID del documento
+   * @param {Map} columnLengthCache - Cache de longitudes de columnas
+   * @param {boolean} isDetailTable - true si es tabla de detalle
+   * @returns {Promise<void>}
    */
+
   async processTable(
     tableConfig,
     sourceData,
@@ -2146,86 +2157,193 @@ class DynamicTransferService {
     columnLengthCache,
     isDetailTable = false
   ) {
+    // ===== VALIDACIONES INICIALES =====
+    if (!tableConfig) {
+      throw new Error("tableConfig es requerido");
+    }
+
+    if (!tableConfig.targetTable) {
+      throw new Error("tableConfig.targetTable es requerido");
+    }
+
+    if (!targetConnection) {
+      throw new Error("targetConnection es requerido");
+    }
+
+    if (!Array.isArray(tableConfig.fieldMappings)) {
+      throw new Error("tableConfig.fieldMappings debe ser un array");
+    }
+
+    // ===== INICIALIZACIÓN DE VARIABLES =====
     const targetData = {};
     const targetFields = [];
     const targetValues = [];
     const directSqlFields = new Set();
 
-    // Para detalles, combinar datos del encabezado y detalle
-    const dataForProcessing = isDetailTable
-      ? { ...sourceData, ...detailRow }
-      : sourceData;
+    const startTime = Date.now();
+    const tableType = isDetailTable ? "DETALLE" : "PRINCIPAL";
 
-    // Realizar consulta de lookup si es necesario
-    let lookupResults = {};
-    if (tableConfig.fieldMappings.some((fm) => fm.lookupFromTarget)) {
-      logger.info(
-        `Realizando lookups en BD destino para tabla ${tableConfig.name}`
+    logger.info(
+      `🔄 Iniciando procesamiento de tabla ${tableType}: ${tableConfig.name} -> ${tableConfig.targetTable}`
+    );
+
+    try {
+      // ===== PREPARACIÓN DE DATOS =====
+      const dataForProcessing = isDetailTable
+        ? {
+            ...sourceData,
+            ...detailRow,
+          }
+        : sourceData;
+
+      logger.debug(`📊 Datos disponibles para procesamiento:`, {
+        sourceDataKeys: Object.keys(sourceData || {}),
+        detailRowKeys: Object.keys(detailRow || {}),
+        combinedKeys: Object.keys(dataForProcessing || {}),
+        isDetailTable,
+      });
+
+      // ===== LOOKUP EN BASE DE DATOS DESTINO =====
+      let lookupResults = {};
+      const hasLookupFields = tableConfig.fieldMappings.some(
+        (fm) => fm.lookupFromTarget
       );
-      const lookupExecution = await this.lookupValuesFromTarget(
-        tableConfig,
-        dataForProcessing,
-        targetConnection
-      );
 
-      if (!lookupExecution.success) {
-        const failedMsg = lookupExecution.failedFields
-          ? lookupExecution.failedFields
-              .map((f) => `${f.field}: ${f.error}`)
-              .join(", ")
-          : lookupExecution.error || "Error desconocido en lookup";
+      if (hasLookupFields) {
+        logger.info(
+          `🔍 Realizando lookups en BD destino para tabla ${tableConfig.name}`
+        );
 
-        throw new Error(
-          `Falló la validación de lookup para tabla ${tableConfig.name}: ${failedMsg}`
+        const lookupExecution = await this.lookupValuesFromTarget(
+          tableConfig,
+          dataForProcessing,
+          targetConnection
+        );
+
+        if (!lookupExecution.success) {
+          const failedMsg = lookupExecution.failedFields
+            ? lookupExecution.failedFields
+                .map((f) => `${f.field}: ${f.error}`)
+                .join(", ")
+            : lookupExecution.error || "Error desconocido en lookup";
+
+          throw new Error(
+            `Falló la validación de lookup para tabla ${tableConfig.name}: ${failedMsg}`
+          );
+        }
+
+        lookupResults = lookupExecution.results;
+        logger.info(
+          `✅ Lookup completado exitosamente. Continuando con el procesamiento...`
         );
       }
 
-      lookupResults = lookupExecution.results;
+      // ===== PROCESAMIENTO DE CAMPOS =====
       logger.info(
-        `Lookup completado exitosamente. Continuando con el procesamiento...`
-      );
-    }
-
-    // Procesar todos los campos
-    for (const fieldMapping of tableConfig.fieldMappings) {
-      const processedField = await this.processField(
-        fieldMapping,
-        dataForProcessing,
-        lookupResults,
-        currentConsecutive,
-        mapping,
-        tableConfig,
-        isDetailTable,
-        targetConnection,
-        columnLengthCache
+        `🔧 Procesando ${tableConfig.fieldMappings.length} campos para tabla ${tableConfig.name}`
       );
 
-      if (processedField.isDirectSql) {
-        targetFields.push(fieldMapping.targetField);
-        targetValues.push(processedField.value); // Expresión SQL directa
-        directSqlFields.add(fieldMapping.targetField);
-      } else {
-        targetData[fieldMapping.targetField] = processedField.value;
-        targetFields.push(fieldMapping.targetField);
-        targetValues.push(`@${fieldMapping.targetField}`);
+      for (const fieldMapping of tableConfig.fieldMappings) {
+        try {
+          if (!fieldMapping.targetField) {
+            logger.warn(
+              `Field mapping sin targetField encontrado, saltando...`
+            );
+            continue;
+          }
+
+          const processedField = await this.processField(
+            fieldMapping,
+            dataForProcessing,
+            lookupResults,
+            currentConsecutive,
+            mapping,
+            tableConfig,
+            isDetailTable,
+            targetConnection,
+            columnLengthCache
+          );
+
+          if (processedField.isDirectSql) {
+            targetFields.push(fieldMapping.targetField);
+            targetValues.push(processedField.value);
+            directSqlFields.add(fieldMapping.targetField);
+
+            logger.debug(
+              `🔧 Campo SQL directo: ${fieldMapping.targetField} = ${processedField.value}`
+            );
+          } else {
+            targetData[fieldMapping.targetField] = processedField.value;
+            targetFields.push(fieldMapping.targetField);
+            targetValues.push(`@${fieldMapping.targetField}`);
+
+            logger.debug(
+              `🔧 Campo parametrizado: ${fieldMapping.targetField} = ${
+                processedField.value
+              } (tipo: ${typeof processedField.value})`
+            );
+          }
+        } catch (fieldError) {
+          logger.error(
+            `❌ Error procesando campo ${fieldMapping.targetField}:`,
+            {
+              error: fieldError.message,
+              fieldMapping,
+              sourceData: dataForProcessing,
+            }
+          );
+          throw new Error(
+            `Error en campo ${fieldMapping.targetField}: ${fieldError.message}`
+          );
+        }
       }
 
-      logger.debug(
-        `✅ Campo ${fieldMapping.targetField} preparado para inserción: ${
-          processedField.value
-        } (tipo: ${typeof processedField.value})`
-      );
-    }
+      // ===== VALIDACIONES PRE-INSERCIÓN =====
+      if (targetFields.length === 0) {
+        logger.warn(
+          `⚠️ No hay campos para insertar en tabla ${tableConfig.targetTable}`
+        );
+        return;
+      }
 
-    // Construir y ejecutar la consulta INSERT
-    await this.executeInsert(
-      tableConfig.targetTable,
-      targetFields,
-      targetValues,
-      targetData,
-      directSqlFields,
-      targetConnection
-    );
+      if (targetFields.length !== targetValues.length) {
+        throw new Error(
+          `Inconsistencia: targetFields (${targetFields.length}) y targetValues (${targetValues.length}) deben tener la misma longitud`
+        );
+      }
+
+      logger.info(
+        `📝 Preparando inserción: ${targetFields.length} campos en ${tableConfig.targetTable}`
+      );
+
+      // ===== EJECUCIÓN DE LA INSERCIÓN =====
+      await this.executeInsert(
+        tableConfig.targetTable,
+        targetFields,
+        targetValues,
+        targetData,
+        directSqlFields,
+        targetConnection
+      );
+
+      const processingTime = Date.now() - startTime;
+      logger.info(
+        `✅ INSERCIÓN EXITOSA en ${tableConfig.targetTable} (${processingTime}ms)`
+      );
+    } catch (error) {
+      const processingTime = Date.now() - startTime;
+      logger.error(`❌ Error procesando tabla ${tableConfig.name}:`, {
+        error: error.message,
+        tableConfig: tableConfig.name,
+        targetTable: tableConfig.targetTable,
+        isDetailTable,
+        documentId,
+        processingTime,
+        stack: error.stack,
+      });
+
+      throw new Error(`Error en tabla ${tableConfig.name}: ${error.message}`);
+    }
   }
 
   /**
@@ -2473,7 +2591,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Ejecuta la inserción en la base de datos
+   * Ejecuta la inserción en la base de datos - VERSIÓN CORREGIDA
    * @private
    */
   async executeInsert(
@@ -2484,31 +2602,115 @@ class DynamicTransferService {
     directSqlFields,
     targetConnection
   ) {
-    const insertFieldsList = targetFields;
-    const insertValuesList = targetFields.map((field, index) => {
-      return directSqlFields.has(field) ? targetValues[index] : `@${field}`;
-    });
-
-    const insertQuery = `
-    INSERT INTO ${targetTable} (${insertFieldsList.join(", ")})
-    VALUES (${insertValuesList.join(", ")})
-  `;
-
-    logger.debug(`Ejecutando inserción en tabla: ${insertQuery}`);
-
-    // Filtrar los datos para que solo contengan los campos que realmente son parámetros
-    const filteredTargetData = {};
-    for (const field in targetData) {
-      if (!directSqlFields.has(field)) {
-        filteredTargetData[field] = targetData[field];
+    try {
+      // VALIDACIONES INICIALES
+      if (!targetTable) {
+        throw new Error("targetTable es requerido");
       }
+
+      if (!targetConnection) {
+        throw new Error("targetConnection es requerido");
+      }
+
+      // Asegurar que targetFields es un array
+      if (!Array.isArray(targetFields)) {
+        logger.error(
+          `targetFields no es un array. Tipo: ${typeof targetFields}, Valor: ${JSON.stringify(
+            targetFields
+          )}`
+        );
+        throw new Error("targetFields debe ser un array");
+      }
+
+      // Asegurar que targetValues es un array
+      if (!Array.isArray(targetValues)) {
+        logger.error(
+          `targetValues no es un array. Tipo: ${typeof targetValues}, Valor: ${JSON.stringify(
+            targetValues
+          )}`
+        );
+        throw new Error("targetValues debe ser un array");
+      }
+
+      // Verificar que ambos arrays tengan la misma longitud
+      if (targetFields.length !== targetValues.length) {
+        throw new Error(
+          `targetFields (${targetFields.length}) y targetValues (${targetValues.length}) deben tener la misma longitud`
+        );
+      }
+
+      // Verificar que hay campos para insertar
+      if (targetFields.length === 0) {
+        throw new Error("No hay campos para insertar");
+      }
+
+      // Asegurar que directSqlFields es un Set
+      if (!(directSqlFields instanceof Set)) {
+        logger.warn("directSqlFields no es un Set, convirtiendo...");
+        directSqlFields = new Set(directSqlFields || []);
+      }
+
+      // Construir la consulta INSERT
+      const insertFieldsList = [...targetFields]; // Crear una copia del array
+
+      const insertValuesList = targetFields.map((field, index) => {
+        if (directSqlFields.has(field)) {
+          // Campo con valor SQL directo (ej: GETDATE(), NEWID())
+          return targetValues[index];
+        } else {
+          // Campo con parámetro
+          return `@${field}`;
+        }
+      });
+
+      const insertQuery = `
+      INSERT INTO ${targetTable} (${insertFieldsList.join(", ")})
+      VALUES (${insertValuesList.join(", ")})
+    `;
+
+      logger.debug(`Ejecutando inserción en tabla: ${insertQuery}`);
+
+      // Filtrar los datos para que solo contengan los campos que realmente son parámetros
+      const filteredTargetData = {};
+      if (targetData && typeof targetData === "object") {
+        for (const field in targetData) {
+          if (!directSqlFields.has(field)) {
+            filteredTargetData[field] = targetData[field];
+          }
+        }
+      }
+
+      logger.info(`📊 DATOS FINALES PARA INSERCIÓN en ${targetTable}:`);
+      logger.info(`Campos: ${targetFields.join(", ")}`);
+      logger.info(`Valores SQL: ${insertValuesList.join(", ")}`);
+      logger.info(`Parámetros: ${JSON.stringify(filteredTargetData, null, 2)}`);
+
+      // Ejecutar la inserción
+      const result = await SqlService.query(
+        targetConnection,
+        insertQuery,
+        filteredTargetData
+      );
+
+      logger.info(
+        `✅ Inserción exitosa en ${targetTable}. Filas afectadas: ${
+          result.rowsAffected || 0
+        }`
+      );
+
+      return result;
+    } catch (error) {
+      logger.error(`❌ Error en executeInsert para tabla ${targetTable}:`, {
+        error: error.message,
+        targetFields: targetFields,
+        targetFieldsType: typeof targetFields,
+        targetFieldsIsArray: Array.isArray(targetFields),
+        targetValuesType: typeof targetValues,
+        targetValuesIsArray: Array.isArray(targetValues),
+        stack: error.stack,
+      });
+      throw error;
     }
-
-    logger.info(`📊 DATOS FINALES PARA INSERCIÓN en ${targetTable}:`);
-    logger.info(`Campos: ${targetFields.join(", ")}`);
-    logger.info(`Datos: ${JSON.stringify(filteredTargetData, null, 2)}`);
-
-    await SqlService.query(targetConnection, insertQuery, filteredTargetData);
   }
 
   /**
