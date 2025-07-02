@@ -374,7 +374,7 @@ class DynamicTransferService {
 
           // Actualizar progreso en TaskTracker
           const progress = Math.round(((i + 1) / documentIds.length) * 100);
-          TaskTracker.updateTaskProgress(
+          TaskTracker.registerTask(
             cancelTaskId,
             progress,
             `Procesado ${i + 1}/${documentIds.length} documentos`
@@ -849,7 +849,7 @@ class DynamicTransferService {
 
               // Insertar documento principal (solo una vez)
               if (allProcessedDetails.length === 0) {
-                const mainInsertResult = await this.insertToTargetTable(
+                const mainInsertResult = await this.executeInsert(
                   enhancedSourceData,
                   tableConfig,
                   targetConnection,
@@ -876,7 +876,7 @@ class DynamicTransferService {
 
               for (const [index, detail] of processedDetails.entries()) {
                 try {
-                  const detailResult = await this.insertToTargetTable(
+                  const detailResult = await this.executeInsert(
                     detail,
                     detailTable,
                     targetConnection,
@@ -933,7 +933,7 @@ class DynamicTransferService {
 
           // Si no hay tablas de detalle, procesar como documento normal
           if (detailTables.length === 0) {
-            const mainInsertResult = await this.insertToTargetTable(
+            const mainInsertResult = await this.executeInsert(
               enhancedSourceData,
               tableConfig,
               targetConnection,
