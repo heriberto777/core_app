@@ -1,4 +1,4 @@
-// services/SqlService.js - Versión adaptada para usar ConnectionCentralService con logging mejorado
+// services/SqlService.js - Versión adaptada para usar ConnectionCentralService
 const { Request, TYPES } = require("tedious");
 const logger = require("./logger");
 const fs = require("fs");
@@ -224,29 +224,80 @@ class SqlService {
 
     let connectionObj = connection;
     let needToRelease = false;
+    let serverKey = null;
+
+    // Manejar parámetros opcionales flexibles
+    if (typeof columnTypes === "string") {
+      // Si el cuarto parámetro es string, es un serverKey
+      serverKey = columnTypes;
+      columnTypes = {};
+    } else if (typeof params === "string" && typeof columnTypes === "object") {
+      // Si el tercer parámetro es string, reorganizar parámetros
+      serverKey = params;
+      params = columnTypes;
+      columnTypes = {};
+    }
+
+    // Si pasaron un serverKey en lugar de una conexión, obtener la conexión
+    if (typeof connection === "string") {
+      serverKey = connection;
+      logger.debug(
+        `[${queryId}] Obteniendo conexión para serverKey: ${serverKey}`
+      );
+      try {
+        connectionObj = await ConnectionCentralService.getConnection(serverKey);
+        needToRelease = true; // Necesitamos liberar esta conexión al finalizar
+        logger.debug(
+          `[${queryId}] Conexión obtenida exitosamente para ${serverKey}`
+        );
+      } catch (connError) {
+        logger.error(
+          `[${queryId}] Error al obtener conexión para ${serverKey}:`,
+          connError
+        );
+        throw new Error(
+          `Error al obtener conexión para ${serverKey}: ${connError.message}`
+        );
+      }
+    } else if (connection && connection._serverKey) {
+      // Si la conexión tiene _serverKey, usarlo para telemetría
+      serverKey = connection._serverKey;
+      logger.debug(
+        `[${queryId}] Usando serverKey de conexión existente: ${serverKey}`
+      );
+    }
+
+    // Medir tiempo para métricas
+    logger.debug(`[${queryId}] Iniciando medición de tiempo de telemetría`);
+    Telemetry.startTimer(`query_exec_${Date.now()}`);
 
     try {
-      // Iniciar medición de telemetría
-      Telemetry.startTimer(`query_exec_${queryId}`);
+      // Verificar operaciones para gestión de memoria
+      logger.debug(`[${queryId}] Registrando operación en MemoryManager`);
+      MemoryManager.trackOperation("sql_query");
 
-      // Si pasaron un serverKey en lugar de una conexión, obtener la conexión
-      if (typeof connection === "string") {
-        const serverKey = connection;
-        logger.debug(
-          `[${queryId}] Obteniendo conexión para serverKey: ${serverKey}`
-        );
-        connectionObj = await ConnectionCentralService.getConnection(serverKey);
-        needToRelease = true;
-        logger.debug(`[${queryId}] Conexión obtenida exitosamente`);
-      }
+      // Incrementar contador de operaciones de la conexión
+      logger.debug(
+        `[${queryId}] Incrementando contador de operaciones de conexión`
+      );
+      ConnectionCentralService.incrementOperationCount(connectionObj);
 
-      // Validar parámetros
+      // Sanitizar parámetros
+      logger.debug(`[${queryId}] Sanitizando parámetros`);
       const sanitizedParams = this.sanitizeParams(params);
       logger.debug(
         `[${queryId}] Parámetros sanitizados: ${JSON.stringify(
           sanitizedParams
         )}`
       );
+
+      // Registrar métricas
+      if (serverKey) {
+        logger.debug(
+          `[${queryId}] Registrando métricas para serverKey: ${serverKey}`
+        );
+        Telemetry.trackQuery(serverKey);
+      }
 
       // Ejecutar la consulta
       logger.debug(`[${queryId}] Ejecutando consulta en base de datos`);
@@ -278,25 +329,37 @@ class SqlService {
         `[${queryId}] Error en ejecución de consulta. Tiempo: ${duration}ms`,
         error
       );
+
+      // Registrar error en métricas
+      if (serverKey) {
+        logger.debug(
+          `[${queryId}] Registrando error en métricas para serverKey: ${serverKey}`
+        );
+        Telemetry.trackQuery(serverKey, true);
+      }
+
+      // Registrar detalles del error para diagnóstico
       logger.error(`[${queryId}] SQL problemático: ${sql}`);
       logger.error(
         `[${queryId}] Parámetros problemáticos: ${JSON.stringify(params)}`
       );
-
-      // Registrar error para análisis
-      this.logQueryError("query_execution", sql, params, error);
+      this.logQueryError("execution", sql, params, error);
       throw error;
     } finally {
       // Finalizar medición de tiempo
-      const queryTime = Telemetry.endTimer(`query_exec_${queryId}`);
+      logger.debug(`[${queryId}] Finalizando medición de tiempo de telemetría`);
+      const queryTime = Telemetry.endTimer(`query_exec_${Date.now()}`);
       if (queryTime > 0) {
         Telemetry.updateAverage("avgQueryTime", queryTime);
+        logger.debug(
+          `[${queryId}] Tiempo de consulta registrado: ${queryTime}ms`
+        );
       }
 
       // Si obtuvimos la conexión aquí, liberarla
       if (needToRelease && connectionObj) {
         try {
-          logger.debug(`[${queryId}] Liberando conexión`);
+          logger.debug(`[${queryId}] Liberando conexión obtenida`);
           await ConnectionCentralService.releaseConnection(connectionObj);
           logger.debug(`[${queryId}] Conexión liberada exitosamente`);
         } catch (releaseError) {
@@ -326,10 +389,11 @@ class SqlService {
     const requestId = `req_${Date.now()}_${Math.random()
       .toString(36)
       .substr(2, 5)}`;
+    logger.debug(`[${requestId}] Iniciando executeQuery`);
 
     return new Promise((resolve, reject) => {
       try {
-        logger.debug(`[${requestId}] Creando request SQL`);
+        logger.debug(`[${requestId}] Validando conexión y transacción`);
 
         // Validar la conexión
         if (!connection && !transaction) {
@@ -355,16 +419,17 @@ class SqlService {
 
         const rows = [];
 
+        logger.debug(`[${requestId}] Creando Request SQL`);
         // Crear la request directamente con la función de callback
         const request = new Request(sql, (err, rowCount) => {
           if (err) {
-            logger.error(`[${requestId}] Error en callback de request:`, err);
+            logger.error(`[${requestId}] Error en callback de Request:`, err);
             reject(err);
             return;
           }
 
           logger.debug(
-            `[${requestId}] Request completado. Filas afectadas: ${rowCount}`
+            `[${requestId}] Request completado exitosamente. Filas afectadas: ${rowCount}`
           );
           resolve({
             recordset: rows,
@@ -372,14 +437,16 @@ class SqlService {
           });
         });
 
-        // Configurar parámetros manualmente
+        // Configurar parámetros manualmente sin llamar a validateParameters
         logger.debug(
-          `[${requestId}] Configurando parámetros: ${
-            Object.keys(params).length
-          } parámetros`
+          `[${requestId}] Configurando ${Object.keys(params).length} parámetros`
         );
         for (const [key, value] of Object.entries(params)) {
           try {
+            logger.debug(
+              `[${requestId}] Procesando parámetro: ${key} = ${value}`
+            );
+
             // Determinar tipo
             let paramType = this.determineType(value);
             let paramValue = value;
@@ -395,51 +462,120 @@ class SqlService {
               );
             }
 
-            // Agregar parámetro
-            request.addParameter(key, paramType, paramValue);
-            logger.debug(
-              `[${requestId}] Parámetro agregado: ${key} = ${paramValue} (tipo: ${
-                paramType.name || paramType
-              })`
-            );
-          } catch (paramError) {
+            // Validación y conversión de valores problemáticos
+            if (paramValue === undefined) {
+              paramValue = null;
+              paramType = TYPES.Null;
+              logger.debug(
+                `[${requestId}] Parámetro ${key} convertido de undefined a null`
+              );
+            } else if (paramValue === "" && paramType !== TYPES.NVarChar) {
+              paramValue = null;
+              paramType = TYPES.Null;
+              logger.debug(
+                `[${requestId}] Parámetro ${key} convertido de string vacío a null`
+              );
+            }
+
+            // Agregar parámetro con manejo de errores robusto
+            try {
+              request.addParameter(key, paramType, paramValue);
+              logger.debug(
+                `[${requestId}] Parámetro ${key} agregado exitosamente`
+              );
+            } catch (paramError) {
+              logger.warn(
+                `[${requestId}] Error agregando parámetro ${key} con tipo ${
+                  paramType.name || paramType
+                }, intentando con NVarChar`
+              );
+
+              // Intentar con NVarChar como fallback
+              const safeValue = paramValue === null ? null : String(value);
+              request.addParameter(key, TYPES.NVarChar, safeValue);
+              logger.debug(
+                `[${requestId}] Parámetro ${key} agregado como NVarChar: ${safeValue}`
+              );
+            }
+          } catch (finalError) {
             logger.error(
-              `[${requestId}] Error al agregar parámetro ${key}:`,
-              paramError
+              `[${requestId}] Error final al agregar parámetro ${key}:`,
+              finalError
             );
-            return reject(
-              new Error(
-                `Error al agregar parámetro ${key}: ${paramError.message}`
-              )
-            );
+            // Si incluso esto falla, propagar el error original
+            throw paramError;
           }
         }
 
-        // Configurar manejo de filas
+        logger.debug(`[${requestId}] Configurando manejo de filas`);
+        // Manejar filas
         request.on("row", (columns) => {
           const row = {};
-          columns.forEach((column) => {
-            row[column.metadata.colName] = column.value;
-          });
-          rows.push(row);
+
+          logger.debug(
+            `[${requestId}] Procesando fila. Tipo de columns: ${typeof columns}, Es array: ${Array.isArray(
+              columns
+            )}`
+          );
+
+          // Manejar diferentes formatos de columnas según la versión de Tedious
+          if (Array.isArray(columns)) {
+            // Formato de versiones anteriores (array de columnas)
+            logger.debug(`[${requestId}] Procesando columns como array`);
+            columns.forEach((column) => {
+              row[column.metadata.colName] = column.value;
+            });
+          } else if (columns && typeof columns === "object") {
+            // Formato de versiones más recientes (objeto con propiedades)
+            logger.debug(`[${requestId}] Procesando columns como objeto`);
+            Object.entries(columns).forEach(([key, column]) => {
+              if (key !== "meta" && column !== undefined) {
+                if (column && column.metadata && column.metadata.colName) {
+                  row[column.metadata.colName] = column.value;
+                } else {
+                  row[key] = column;
+                }
+              }
+            });
+          }
+
+          // Añadir solo si tiene datos
+          if (Object.keys(row).length > 0) {
+            rows.push(row);
+            logger.debug(
+              `[${requestId}] Fila agregada con ${
+                Object.keys(row).length
+              } campos`
+            );
+          } else {
+            logger.debug(`[${requestId}] Fila vacía omitida`);
+          }
         });
 
         // Configurar manejo de errores
         request.on("error", (err) => {
-          logger.error(`[${requestId}] Error en evento de request:`, err);
+          logger.error(`[${requestId}] Error en evento de Request:`, err);
           reject(err);
         });
 
-        // Ejecutar el request
-        logger.debug(`[${requestId}] Ejecutando request SQL`);
-        if (transaction) {
-          logger.debug(`[${requestId}] Ejecutando con transacción`);
-          transaction.execSql(request);
-        } else {
-          connection.execSql(request);
+        logger.debug(`[${requestId}] Ejecutando Request SQL`);
+        try {
+          // Usar la transacción si está disponible, de lo contrario la conexión
+          if (transaction) {
+            logger.debug(`[${requestId}] Ejecutando con transacción`);
+            transaction.execSql(request);
+          } else {
+            logger.debug(`[${requestId}] Ejecutando con conexión directa`);
+            connection.execSql(request);
+          }
+        } catch (execError) {
+          logger.error(`[${requestId}] Error en execSql:`, execError);
+          reject(
+            new Error(`Error al ejecutar SQL (execSql): ${execError.message}`)
+          );
         }
       } catch (error) {
-        logger.error(`[${requestId}] Error al configurar request:`, error);
+        logger.error(`[${requestId}] Error general en executeQuery:`, error);
         reject(error);
       }
     });
@@ -456,7 +592,7 @@ class SqlService {
     );
 
     if (value === null || value === undefined) {
-      logger.debug(`Valor nulo/undefined, usando Null`);
+      logger.debug(`Valor nulo/undefined, retornando TYPES.Null`);
       return TYPES.Null;
     }
 
@@ -479,16 +615,20 @@ class SqlService {
         return TYPES.Bit;
       case "object":
         if (value instanceof Date) {
-          logger.debug(`Objeto Date (DateTime): ${value}`);
+          logger.debug(`Fecha (DateTime): ${value}`);
           return TYPES.DateTime;
         }
-        logger.debug(`Objeto (convirtiendo a NVarChar): ${value}`);
+        logger.debug(`Objeto convertido a NVarChar: ${value}`);
         return TYPES.NVarChar;
       case "string":
       default:
-        logger.debug(`String o tipo por defecto (NVarChar): ${value}`);
+        logger.debug(`String (NVarChar): ${value}`);
         return value === null ? TYPES.Null : TYPES.NVarChar;
     }
+
+    // Por defecto
+    logger.debug(`Tipo por defecto (NVarChar) para: ${value}`);
+    return TYPES.NVarChar;
   }
 
   /**
@@ -499,7 +639,7 @@ class SqlService {
   validateRecord(record) {
     logger.debug(`Validando registro con ${Object.keys(record).length} campos`);
     const sanitized = ValidationService.sanitizeRecord(record);
-    logger.debug(`Registro sanitizado exitosamente`);
+    logger.debug(`Registro validado y sanitizado exitosamente`);
     return sanitized;
   }
 
@@ -509,9 +649,7 @@ class SqlService {
    * @returns {Object} - Parámetros sanitizados
    */
   sanitizeParams(params) {
-    logger.debug(
-      `Sanitizando parámetros: ${Object.keys(params).length} parámetros`
-    );
+    logger.debug(`Sanitizando ${Object.keys(params).length} parámetros`);
 
     const sanitized = {};
     let nullCount = 0;
@@ -532,7 +670,7 @@ class SqlService {
     logger.debug(
       `Parámetros sanitizados: ${
         Object.keys(sanitized).length
-      } total, ${nullCount} valores nulos`
+      } total, ${nullCount} convertidos a null`
     );
     return sanitized;
   }
@@ -557,9 +695,7 @@ class SqlService {
       .toString(36)
       .substr(2, 5)}`;
     logger.info(`[${insertId}] Iniciando inserción en tabla: ${tableName}`);
-    logger.debug(
-      `[${insertId}] Registro a insertar: ${JSON.stringify(record)}`
-    );
+    logger.debug(`[${insertId}] Registro original: ${JSON.stringify(record)}`);
 
     try {
       // Si pasaron un serverKey en lugar de una conexión, obtener la conexión
@@ -569,6 +705,7 @@ class SqlService {
           `[${insertId}] Obteniendo conexión para serverKey: ${serverKey}`
         );
         connection = await ConnectionCentralService.getConnection(serverKey);
+        logger.debug(`[${insertId}] Conexión obtenida exitosamente`);
       }
 
       // Validar y sanitizar el registro
@@ -579,18 +716,97 @@ class SqlService {
       Object.keys(sanitizedRecord).forEach((key) => {
         if (sanitizedRecord[key] === undefined) {
           sanitizedRecord[key] = null;
+          logger.debug(
+            `[${insertId}] Campo ${key} convertido de undefined a null`
+          );
         }
       });
 
-      // Construir la consulta INSERT
-      const columns = Object.keys(sanitizedRecord);
-      const values = columns.map((col) => `@${col}`);
+      // Aplicar validaciones específicas por tipo de columna
+      if (columnTypes && Object.keys(columnTypes).length > 0) {
+        logger.debug(
+          `[${insertId}] Aplicando validaciones específicas por tipo de columna`
+        );
+        for (const [key, colType] of Object.entries(columnTypes)) {
+          if (sanitizedRecord.hasOwnProperty(key) && colType) {
+            if (
+              colType.type === TYPES.NVarChar &&
+              colType.maxLength &&
+              sanitizedRecord[key] &&
+              typeof sanitizedRecord[key] === "string"
+            ) {
+              // Truncar strings que excedan la longitud máxima
+              const originalLength = sanitizedRecord[key].length;
+              if (originalLength > colType.maxLength) {
+                sanitizedRecord[key] = sanitizedRecord[key].substring(
+                  0,
+                  colType.maxLength
+                );
+                logger.warn(
+                  `[${insertId}] Campo ${key} truncado de ${originalLength} a ${colType.maxLength} caracteres`
+                );
+              }
+            } else if (
+              colType.type === TYPES.Bit &&
+              sanitizedRecord[key] !== null &&
+              sanitizedRecord[key] !== undefined
+            ) {
+              // Conversión a booleano
+              if (typeof sanitizedRecord[key] === "string") {
+                const value = sanitizedRecord[key].toLowerCase();
+                if (
+                  value === "true" ||
+                  value === "1" ||
+                  value === "yes" ||
+                  value === "s" ||
+                  value === "y"
+                ) {
+                  sanitizedRecord[key] = true;
+                } else if (
+                  value === "false" ||
+                  value === "0" ||
+                  value === "no" ||
+                  value === "n"
+                ) {
+                  sanitizedRecord[key] = false;
+                } else {
+                  sanitizedRecord[key] = null;
+                }
+                logger.debug(
+                  `[${insertId}] Campo booleano ${key} convertido a: ${sanitizedRecord[key]}`
+                );
+              } else if (typeof sanitizedRecord[key] !== "boolean") {
+                sanitizedRecord[key] = Boolean(sanitizedRecord[key]);
+                logger.debug(
+                  `[${insertId}] Campo ${key} convertido a booleano: ${sanitizedRecord[key]}`
+                );
+              }
+            }
+          }
+        }
+      }
 
-      const sql = `INSERT INTO ${tableName} (${columns.join(
-        ", "
-      )}) VALUES (${values.join(", ")})`;
+      // Preparar la consulta
+      logger.debug(`[${insertId}] Preparando consulta INSERT`);
+      const columns = Object.keys(sanitizedRecord)
+        .map((k) => `[${k}]`)
+        .join(", ");
 
-      logger.debug(`[${insertId}] SQL generado: ${sql}`);
+      const paramNames = Object.keys(sanitizedRecord)
+        .map((k) => `@${k}`)
+        .join(", ");
+
+      const sql = `
+      INSERT INTO ${tableName} (${columns})
+      VALUES (${paramNames});
+
+      SELECT @@ROWCOUNT AS rowsAffected;
+    `;
+
+      // MEJORA: Depuración
+      logger.debug(
+        `[${insertId}] Consulta de inserción para ${tableName}: ${sql}`
+      );
       logger.debug(
         `[${insertId}] Parámetros para inserción en ${tableName}: ${JSON.stringify(
           sanitizedRecord
@@ -598,6 +814,7 @@ class SqlService {
       );
 
       // Ejecutar la consulta con tipos explícitos
+      logger.debug(`[${insertId}] Ejecutando consulta de inserción`);
       const result = await this.query(
         connection,
         sql,
@@ -611,6 +828,7 @@ class SqlService {
       );
       return result;
     } catch (error) {
+      // MEJORA: Captura detallada de errores
       logger.error(
         `[${insertId}] Error en insertWithExplicitTypes para tabla ${tableName}:`,
         error
@@ -629,6 +847,7 @@ class SqlService {
           2
         )}`
       );
+
       throw error;
     }
   }
@@ -655,6 +874,7 @@ class SqlService {
           `[${clearId}] Obteniendo conexión para serverKey: ${serverKey}`
         );
         connectionObj = await ConnectionCentralService.getConnection(serverKey);
+        logger.debug(`[${clearId}] Conexión obtenida exitosamente`);
       }
 
       // Limpiar el nombre de la tabla
@@ -714,16 +934,19 @@ class SqlService {
   }
 
   /**
-   * Inicia una nueva transacción
+   * Inicia una nueva transacción en la conexión dada
    * Adaptado para usar ConnectionCentralService
    * @param {Connection|string} connection - Conexión a SQL Server o serverKey
-   * @returns {Promise<Transaction>} - Objeto de transacción
+   * @returns {Promise<Object>} - Objeto con conexión y transacción
    */
   async beginTransaction(connection) {
     const transactionId = `trans_${Date.now()}_${Math.random()
       .toString(36)
       .substr(2, 5)}`;
     logger.info(`[${transactionId}] Iniciando nueva transacción`);
+
+    let connectionObj = connection;
+    let needToRelease = false;
 
     try {
       // Si pasaron un serverKey en lugar de una conexión, obtener la conexión
@@ -732,20 +955,48 @@ class SqlService {
         logger.debug(
           `[${transactionId}] Obteniendo conexión para serverKey: ${serverKey}`
         );
-        connection = await ConnectionCentralService.getConnection(serverKey);
+        connectionObj = await ConnectionCentralService.getConnection(
+          serverKey,
+          { useTransaction: true }
+        );
+        needToRelease = false; // ConnectionCentralService ya maneja la liberación
+        logger.debug(`[${transactionId}] Conexión obtenida para transacción`);
+
+        // La conexión ya debería tener la transacción
+        if (ConnectionCentralService.activeTransactions.has(connectionObj)) {
+          const transaction =
+            ConnectionCentralService.activeTransactions.get(connectionObj);
+          logger.info(
+            `[${transactionId}] Transacción existente encontrada y retornada`
+          );
+          return { connection: connectionObj, transaction };
+        }
       }
 
+      // Usar el servicio centralizado
       logger.debug(
         `[${transactionId}] Creando transacción en ConnectionCentralService`
       );
-      const transaction = await ConnectionCentralService.beginTransaction(
-        connection
+      const result = await ConnectionCentralService.beginTransaction(
+        connectionObj
       );
 
-      logger.info(`[${transactionId}] Transacción iniciada exitosamente`);
-      return transaction;
+      logger.info(`[${transactionId}] Transacción creada exitosamente`);
+      return result;
     } catch (error) {
-      logger.error(`[${transactionId}] Error al iniciar transacción:`, error);
+      // Si obtuvimos una conexión y hubo error, liberarla
+      if (needToRelease && connectionObj) {
+        try {
+          logger.debug(`[${transactionId}] Liberando conexión debido a error`);
+          await ConnectionCentralService.releaseConnection(connectionObj);
+        } catch (e) {
+          logger.warn(`[${transactionId}] Error al liberar conexión:`, e);
+        }
+      }
+
+      logger.error(
+        `[${transactionId}] Error al iniciar transacción: ${error.message}`
+      );
       throw error;
     }
   }
@@ -762,19 +1013,20 @@ class SqlService {
       .substr(2, 5)}`;
     logger.info(`[${commitId}] Iniciando commit de transacción`);
 
-    try {
-      if (!transaction) {
-        logger.warn(`[${commitId}] No hay transacción para confirmar`);
-        return;
-      }
+    if (!transaction) {
+      logger.error(
+        `[${commitId}] Error: Se requiere una transacción válida para confirmar`
+      );
+      throw new Error("Se requiere una transacción válida para confirmar");
+    }
 
+    try {
       logger.debug(
         `[${commitId}] Ejecutando commit en ConnectionCentralService`
       );
       const result = await ConnectionCentralService.commitTransaction(
         transaction
       );
-
       logger.info(`[${commitId}] Transacción confirmada exitosamente`);
       return result;
     } catch (error) {
@@ -795,19 +1047,18 @@ class SqlService {
       .substr(2, 5)}`;
     logger.info(`[${rollbackId}] Iniciando rollback de transacción`);
 
-    try {
-      if (!transaction) {
-        logger.warn(`[${rollbackId}] No hay transacción para revertir`);
-        return;
-      }
+    if (!transaction) {
+      logger.warn(`[${rollbackId}] No hay transacción para revertir`);
+      return;
+    }
 
+    try {
       logger.debug(
         `[${rollbackId}] Ejecutando rollback en ConnectionCentralService`
       );
       const result = await ConnectionCentralService.rollbackTransaction(
         transaction
       );
-
       logger.info(`[${rollbackId}] Transacción revertida exitosamente`);
       return result;
     } catch (error) {
@@ -833,11 +1084,12 @@ class SqlService {
       const logDir = path.join(process.cwd(), "logs");
       const logPath = path.join(logDir, "sql_errors.log");
 
-      logger.debug(`[${errorId}] Ruta de log de errores: ${logPath}`);
+      logger.debug(`[${errorId}] Directorio de logs: ${logDir}`);
+      logger.debug(`[${errorId}] Archivo de log: ${logPath}`);
 
       // Crear directorio si no existe
       if (!fs.existsSync(logDir)) {
-        logger.debug(`[${errorId}] Creando directorio de logs: ${logDir}`);
+        logger.debug(`[${errorId}] Creando directorio de logs`);
         fs.mkdirSync(logDir, { recursive: true });
       }
 
@@ -853,7 +1105,7 @@ class SqlService {
           logger.error(`[${errorId}] Error al escribir log de error SQL:`, err);
         } else {
           logger.debug(
-            `[${errorId}] Error SQL registrado en archivo exitosamente`
+            `[${errorId}] Error SQL registrado exitosamente en archivo`
           );
         }
       });
@@ -873,19 +1125,18 @@ class SqlService {
       .substr(2, 5)}`;
     logger.info(`[${closeId}] Iniciando cierre de conexión`);
 
-    try {
-      if (!connection) {
-        logger.warn(`[${closeId}] No hay conexión para cerrar`);
-        return;
-      }
+    if (!connection) {
+      logger.warn(`[${closeId}] No hay conexión para cerrar`);
+      return;
+    }
 
+    try {
       logger.debug(
         `[${closeId}] Liberando conexión en ConnectionCentralService`
       );
       const result = await ConnectionCentralService.releaseConnection(
         connection
       );
-
       logger.info(`[${closeId}] Conexión cerrada exitosamente`);
       return result;
     } catch (error) {
@@ -896,7 +1147,7 @@ class SqlService {
 }
 
 // Exportar instancia singleton
-logger.info("Exportando instancia singleton de SqlService");
+logger.info("Creando y exportando instancia singleton de SqlService");
 module.exports = {
   SqlService: new SqlService(),
 };
