@@ -724,6 +724,8 @@ class DynamicTransferService {
         documentId,
       });
 
+      console.log("Resultado de consulta", result);
+
       return result.recordset || [];
     } catch (error) {
       logger.error(
