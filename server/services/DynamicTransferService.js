@@ -681,23 +681,26 @@ class DynamicTransferService {
         this.getRequiredFieldsFromTableConfig(detailConfig);
 
       // Agregar campos adicionales para promociones si existen en la tabla
-      const promotionFields = [
-        "PROMOTION_TYPE",
-        "PROMOTION_ID",
-        "PROMOTION_RULE_ID",
-        "FAMILY_DISCOUNT_PCT",
-        "DISCOUNT_AMOUNT",
-        "IS_ONE_TIME_OFFER",
-        "ONE_TIME_OFFER_FLAG",
-        "REFLECT_AS_DISCOUNT",
-        "BONUS_BY_FAMILY",
-        "SCALED_PROMOTION",
-        "PRODUCT_SPECIFIC",
-        "FAMILY_CODE",
-        "LINE_AMOUNT",
-        "CUSTOMER_TYPE",
-        "PRICE_LIST",
-      ];
+      // const promotionFields = [
+      //   "PROMOTION_TYPE",
+      //   "PROMOTION_ID",
+      //   "PROMOTION_RULE_ID",
+      //   "FAMILY_DISCOUNT_PCT",
+      //   "DISCOUNT_AMOUNT",
+      //   "IS_ONE_TIME_OFFER",
+      //   "ONE_TIME_OFFER_FLAG",
+      //   "REFLECT_AS_DISCOUNT",
+      //   "BONUS_BY_FAMILY",
+      //   "SCALED_PROMOTION",
+      //   "PRODUCT_SPECIFIC",
+      //   "FAMILY_CODE",
+      //   "LINE_AMOUNT",
+      //   "CUSTOMER_TYPE",
+      //   "PRICE_LIST",
+      //   "ART_BON"
+      // ];
+
+      const promotionFields = ["ART_BON"];
 
       // Combinar campos requeridos con campos de promociones (eliminar duplicados)
       const allFields = [...new Set([...requiredFields, ...promotionFields])];
