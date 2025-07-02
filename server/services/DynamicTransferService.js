@@ -626,6 +626,85 @@ class DynamicTransferService {
   }
 
   /**
+   * Obtiene detalles del pedido con información de promociones - MÉTODO MEJORADO
+   * @private
+   */
+  async getOrderDetailsWithPromotions(
+    detailConfig,
+    documentId,
+    sourceConnection
+  ) {
+    try {
+      const orderByColumn = detailConfig.orderByColumn || "NUM_LN";
+      const requiredFields =
+        this.getRequiredFieldsFromTableConfig(detailConfig);
+
+      // Agregar campos adicionales para promociones si existen en la tabla
+      const promotionFields = [
+        "PROMOTION_TYPE",
+        "PROMOTION_ID",
+        "PROMOTION_RULE_ID",
+        "FAMILY_DISCOUNT_PCT",
+        "DISCOUNT_AMOUNT",
+        "IS_ONE_TIME_OFFER",
+        "ONE_TIME_OFFER_FLAG",
+        "REFLECT_AS_DISCOUNT",
+        "BONUS_BY_FAMILY",
+        "SCALED_PROMOTION",
+        "PRODUCT_SPECIFIC",
+        "FAMILY_CODE",
+        "LINE_AMOUNT",
+        "CUSTOMER_TYPE",
+        "PRICE_LIST",
+      ];
+
+      // Combinar campos requeridos con campos de promociones (eliminar duplicados)
+      const allFields = [...new Set([...requiredFields, ...promotionFields])];
+
+      const finalSelectFields = allFields.join(", ");
+      const primaryKey = detailConfig.primaryKey || "NUM_PED";
+
+      const query = `
+      SELECT ${finalSelectFields}
+      FROM ${detailConfig.sourceTable}
+      WHERE ${primaryKey} = @documentId
+      ${
+        detailConfig.filterCondition
+          ? ` AND ${detailConfig.filterCondition}`
+          : ""
+      }
+      ORDER BY ${orderByColumn}
+    `;
+
+      logger.debug(`🔍 Consulta detalles con promociones: ${query}`);
+      const result = await SqlService.query(sourceConnection, query, {
+        documentId,
+      });
+
+      return result.recordset || [];
+    } catch (error) {
+      logger.error(
+        `Error obteniendo detalles con promociones: ${error.message}`
+      );
+
+      // Fallback: intentar con campos básicos si falla
+      try {
+        logger.warn(
+          `Intentando fallback con campos básicos para ${detailConfig.sourceTable}`
+        );
+        return await this.getDetailDataFromOwnTable(
+          detailConfig,
+          documentId,
+          sourceConnection
+        );
+      } catch (fallbackError) {
+        logger.error(`Error en fallback: ${fallbackError.message}`);
+        throw error;
+      }
+    }
+  }
+
+  /**
    * Aplica conversión de unidades a un valor específico - VERSIÓN CORREGIDA
    * @param {Object} sourceData - Datos completos del registro
    * @param {Object} fieldMapping - Configuración del campo con conversión
