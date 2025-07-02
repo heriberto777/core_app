@@ -2050,6 +2050,17 @@ class DynamicTransferService {
     columnLengthCache,
     isDetailTable = false
   ) {
+    logger.debug(`🔄 INICIANDO processTable con parámetros:`, {
+      tableConfigExists: !!tableConfig,
+      tableConfigName: tableConfig?.name,
+      tableConfigTargetTable: tableConfig?.targetTable,
+      sourceDataExists: !!sourceData,
+      detailRowExists: !!detailRow,
+      targetConnectionExists: !!targetConnection,
+      targetConnectionType: typeof targetConnection,
+      documentId,
+      isDetailTable,
+    });
     // ===== VALIDACIONES INICIALES =====
     if (!tableConfig) {
       throw new Error("tableConfig es requerido");
@@ -2208,6 +2219,27 @@ class DynamicTransferService {
       logger.info(
         `📝 Preparando inserción: ${targetFields.length} campos en ${tableConfig.targetTable}`
       );
+
+      logger.debug(`🔍 Preparando llamada a executeInsert:`, {
+        tableConfigTargetTable: tableConfig.targetTable,
+        targetFieldsLength: targetFields.length,
+        targetValuesLength: targetValues.length,
+        targetDataKeys: Object.keys(targetData),
+        directSqlFieldsSize: directSqlFields.size,
+        targetConnectionExists: !!targetConnection,
+      });
+
+      if (!tableConfig?.targetTable) {
+        throw new Error(
+          `tableConfig.targetTable es requerido. tableConfig: ${JSON.stringify(
+            tableConfig
+          )}`
+        );
+      }
+
+      if (!targetConnection) {
+        throw new Error(`targetConnection es requerido en processTable`);
+      }
 
       // ===== EJECUCIÓN DE LA INSERCIÓN =====
       await this.executeInsert(
@@ -3822,8 +3854,14 @@ class DynamicTransferService {
   }
 
   /**
-   * Ejecuta la inserción en la base de datos - VERSIÓN CORREGIDA
+   * Ejecuta la inserción en la base de datos
    * @private
+   * @param {string} targetTable - Nombre de la tabla destino
+   * @param {Array} targetFields - Array de nombres de campos
+   * @param {Array} targetValues - Array de valores o placeholders
+   * @param {Object} targetData - Objeto con datos para parámetros
+   * @param {Set} directSqlFields - Set de campos con valores SQL directos
+   * @param {Object} targetConnection - Conexión a la base de datos
    */
   async executeInsert(
     targetTable,
@@ -3834,36 +3872,70 @@ class DynamicTransferService {
     targetConnection
   ) {
     try {
-      // VALIDACIONES INICIALES
-      if (!targetTable) {
-        throw new Error("targetTable es requerido");
+      // ===== VALIDACIONES ROBUSTAS =====
+      logger.debug(`🔍 Validando parámetros de executeInsert:`, {
+        targetTableType: typeof targetTable,
+        targetTable: targetTable,
+        targetFieldsType: typeof targetFields,
+        targetFieldsIsArray: Array.isArray(targetFields),
+        targetFieldsLength: targetFields?.length,
+        targetValuesType: typeof targetValues,
+        targetValuesIsArray: Array.isArray(targetValues),
+        targetValuesLength: targetValues?.length,
+        targetDataType: typeof targetData,
+        directSqlFieldsType: typeof directSqlFields,
+        targetConnectionType: typeof targetConnection,
+        targetConnectionExists: !!targetConnection,
+      });
+
+      // Validar targetTable
+      if (!targetTable || typeof targetTable !== "string") {
+        throw new Error(
+          `targetTable debe ser un string válido. Recibido: ${typeof targetTable} - ${JSON.stringify(
+            targetTable
+          )}`
+        );
       }
 
+      // Validar targetConnection
       if (!targetConnection) {
-        throw new Error("targetConnection es requerido");
+        throw new Error(
+          `targetConnection es requerido. Recibido: ${typeof targetConnection}`
+        );
       }
 
-      // Asegurar que targetFields es un array
+      // Validar que targetConnection tenga las propiedades necesarias
+      if (typeof targetConnection !== "object") {
+        throw new Error(
+          `targetConnection debe ser un objeto. Recibido: ${typeof targetConnection}`
+        );
+      }
+
+      // Validar targetFields
       if (!Array.isArray(targetFields)) {
-        logger.error(
-          `targetFields no es un array. Tipo: ${typeof targetFields}, Valor: ${JSON.stringify(
-            targetFields
-          )}`
+        logger.error(`❌ targetFields no es un array:`, {
+          type: typeof targetFields,
+          value: targetFields,
+          converted: Array.from(targetFields || []),
+        });
+        throw new Error(
+          `targetFields debe ser un array. Recibido: ${typeof targetFields}`
         );
-        throw new Error("targetFields debe ser un array");
       }
 
-      // Asegurar que targetValues es un array
+      // Validar targetValues
       if (!Array.isArray(targetValues)) {
-        logger.error(
-          `targetValues no es un array. Tipo: ${typeof targetValues}, Valor: ${JSON.stringify(
-            targetValues
-          )}`
+        logger.error(`❌ targetValues no es un array:`, {
+          type: typeof targetValues,
+          value: targetValues,
+          converted: Array.from(targetValues || []),
+        });
+        throw new Error(
+          `targetValues debe ser un array. Recibido: ${typeof targetValues}`
         );
-        throw new Error("targetValues debe ser un array");
       }
 
-      // Verificar que ambos arrays tengan la misma longitud
+      // Validar que ambos arrays tengan la misma longitud
       if (targetFields.length !== targetValues.length) {
         throw new Error(
           `targetFields (${targetFields.length}) y targetValues (${targetValues.length}) deben tener la misma longitud`
@@ -3872,17 +3944,32 @@ class DynamicTransferService {
 
       // Verificar que hay campos para insertar
       if (targetFields.length === 0) {
-        throw new Error("No hay campos para insertar");
+        logger.warn(`⚠️ No hay campos para insertar en tabla ${targetTable}`);
+        return {
+          success: true,
+          message: "No hay campos para insertar",
+          rowsAffected: 0,
+        };
       }
 
-      // Asegurar que directSqlFields es un Set
+      // Validar/convertir directSqlFields a Set
       if (!(directSqlFields instanceof Set)) {
-        logger.warn("directSqlFields no es un Set, convirtiendo...");
-        directSqlFields = new Set(directSqlFields || []);
+        logger.warn(`⚠️ directSqlFields no es un Set, convirtiendo...`);
+        directSqlFields = new Set(
+          Array.isArray(directSqlFields) ? directSqlFields : []
+        );
       }
 
-      // Construir la consulta INSERT
-      const insertFieldsList = [...targetFields]; // Crear una copia del array
+      // Validar targetData
+      if (!targetData || typeof targetData !== "object") {
+        logger.warn(
+          `⚠️ targetData no es un objeto válido, usando objeto vacío`
+        );
+        targetData = {};
+      }
+
+      // ===== CONSTRUCCIÓN DE LA CONSULTA =====
+      const insertFieldsList = [...targetFields]; // Crear copia segura
 
       const insertValuesList = targetFields.map((field, index) => {
         if (directSqlFields.has(field)) {
@@ -3899,48 +3986,61 @@ class DynamicTransferService {
       VALUES (${insertValuesList.join(", ")})
     `;
 
-      logger.debug(`Ejecutando inserción en tabla: ${insertQuery}`);
-
-      // Filtrar los datos para que solo contengan los campos que realmente son parámetros
+      // ===== FILTRADO DE DATOS =====
       const filteredTargetData = {};
-      if (targetData && typeof targetData === "object") {
-        for (const field in targetData) {
-          if (!directSqlFields.has(field)) {
-            filteredTargetData[field] = targetData[field];
-          }
+      for (const field in targetData) {
+        if (!directSqlFields.has(field)) {
+          filteredTargetData[field] = targetData[field];
         }
       }
 
-      logger.info(`📊 DATOS FINALES PARA INSERCIÓN en ${targetTable}:`);
-      logger.info(`Campos: ${targetFields.join(", ")}`);
-      logger.info(`Valores SQL: ${insertValuesList.join(", ")}`);
-      logger.info(`Parámetros: ${JSON.stringify(filteredTargetData, null, 2)}`);
+      // ===== LOGGING DETALLADO =====
+      logger.info(`📝 EJECUTANDO INSERCIÓN EN ${targetTable}:`);
+      logger.debug(`📋 Consulta SQL: ${insertQuery}`);
+      logger.debug(`📊 Campos: ${targetFields.join(", ")}`);
+      logger.debug(`🔧 Valores SQL: ${insertValuesList.join(", ")}`);
+      logger.debug(`📦 Parámetros:`, filteredTargetData);
+      logger.debug(`⚡ Campos SQL directos:`, Array.from(directSqlFields));
 
-      // Ejecutar la inserción
+      // ===== EJECUCIÓN DE LA CONSULTA =====
+      const startTime = Date.now();
+
       const result = await SqlService.query(
         targetConnection,
         insertQuery,
         filteredTargetData
       );
 
-      logger.info(
-        `✅ Inserción exitosa en ${targetTable}. Filas afectadas: ${
-          result.rowsAffected || 0
-        }`
-      );
+      const executionTime = Date.now() - startTime;
 
-      return result;
-    } catch (error) {
-      logger.error(`❌ Error en executeInsert para tabla ${targetTable}:`, {
-        error: error.message,
-        targetFields: targetFields,
-        targetFieldsType: typeof targetFields,
-        targetFieldsIsArray: Array.isArray(targetFields),
-        targetValuesType: typeof targetValues,
-        targetValuesIsArray: Array.isArray(targetValues),
-        stack: error.stack,
+      logger.info(`✅ INSERCIÓN EXITOSA en ${targetTable}:`, {
+        rowsAffected: result.rowsAffected || 0,
+        executionTime: `${executionTime}ms`,
+        fieldsInserted: targetFields.length,
       });
-      throw error;
+
+      return {
+        success: true,
+        rowsAffected: result.rowsAffected || 0,
+        executionTime,
+        result,
+      };
+    } catch (error) {
+      logger.error(`❌ ERROR EN EXECUTEINSERT:`, {
+        targetTable: targetTable,
+        error: error.message,
+        stack: error.stack,
+        parametersReceived: {
+          targetTableType: typeof targetTable,
+          targetFieldsType: typeof targetFields,
+          targetValuesType: typeof targetValues,
+          targetDataType: typeof targetData,
+          directSqlFieldsType: typeof directSqlFields,
+          targetConnectionType: typeof targetConnection,
+        },
+      });
+
+      throw new Error(`Error en inserción a ${targetTable}: ${error.message}`);
     }
   }
 
