@@ -120,10 +120,11 @@ class DynamicTransferService {
       );
 
       // 4. Crear registro de ejecución
-      const TaskExecution = require("../models/taskExecutionModel");
+      // const TaskExecution = require("../models/taskExecutionModel");
       const execution = new TaskExecution({
         taskId: mapping.taskId,
         mappingId: mappingId,
+        taskName: mapping.name,
         executedBy: "system",
         status: "running",
         startTime: new Date(),
