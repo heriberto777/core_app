@@ -1057,12 +1057,16 @@ class DynamicTransferService {
 
               // Insertar documento principal (solo una vez)
               if (allProcessedDetails.length === 0) {
-                const mainInsertResult = await this.executeInsert(
-                  enhancedSourceData,
+                const mainInsertResult = await this.processTable(
                   tableConfig,
+                  enhancedSourceData,
+                  null,
                   targetConnection,
+                  currentConsecutive,
                   mapping,
-                  columnLengthCache
+                  documentId,
+                  columnLengthCache,
+                  false
                 );
 
                 if (!mainInsertResult.success) {
@@ -1084,12 +1088,16 @@ class DynamicTransferService {
 
               for (const [index, detail] of processedDetails.entries()) {
                 try {
-                  const detailResult = await this.executeInsert(
-                    detail,
+                  const detailResult = await this.processTable(
                     detailTable,
+                    enhancedSourceData,
+                    detail,
                     targetConnection,
+                    currentConsecutive,
                     mapping,
-                    columnLengthCache
+                    documentId,
+                    columnLengthCache,
+                    true
                   );
 
                   if (detailResult.success) {
@@ -1141,12 +1149,16 @@ class DynamicTransferService {
 
           // Si no hay tablas de detalle, procesar como documento normal
           if (detailTables.length === 0) {
-            const mainInsertResult = await this.executeInsert(
-              enhancedSourceData,
+            const mainInsertResult = await this.processTable(
               tableConfig,
+              enhancedSourceData,
+              null,
               targetConnection,
+              currentConsecutive,
               mapping,
-              columnLengthCache
+              documentId,
+              columnLengthCache,
+              false
             );
 
             if (!mainInsertResult.success) {
