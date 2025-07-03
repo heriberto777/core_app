@@ -58,28 +58,43 @@ class DynamicTransferService {
       // let BonificationService = null;
 
       if (mapping.hasBonificationProcessing) {
-        logger.info(
-          `🎁 Mapping configurado con procesamiento de bonificaciones habilitado`
-        );
+        const bonificationResult =
+          await BonificationProcessingService.processBonifications(
+            documentId,
+            mapping,
+            sourceConnection
+          );
 
-        try {
-          BonificationService.validateBonificationConfig(
-            mapping.bonificationConfig
-          );
-          bonificationServiceLoaded = true;
+        if (bonificationResult) {
           logger.info(
-            `🎁 Servicio de bonificaciones cargado y validado correctamente`
-          );
-        } catch (configError) {
-          logger.error(
-            `❌ Error en configuración de bonificaciones: ${configError.message}`
-          );
-          clearTimeout(timeoutId);
-          throw new Error(
-            `Configuración de bonificaciones inválida: ${configError.message}`
+            `🎁 Bonificaciones procesadas: ${bonificationResult.totalRecords} registros`
           );
         }
       }
+
+      // if (mapping.hasBonificationProcessing) {
+      //   logger.info(
+      //     `🎁 Mapping configurado con procesamiento de bonificaciones habilitado`
+      //   );
+
+      //   try {
+      //     BonificationService.validateBonificationConfig(
+      //       mapping.bonificationConfig
+      //     );
+      //     bonificationServiceLoaded = true;
+      //     logger.info(
+      //       `🎁 Servicio de bonificaciones cargado y validado correctamente`
+      //     );
+      //   } catch (configError) {
+      //     logger.error(
+      //       `❌ Error en configuración de bonificaciones: ${configError.message}`
+      //     );
+      //     clearTimeout(timeoutId);
+      //     throw new Error(
+      //       `Configuración de bonificaciones inválida: ${configError.message}`
+      //     );
+      //   }
+      // }
 
       // Asegurar configuración por defecto para mappings existentes
       if (!mapping.markProcessedStrategy) {
