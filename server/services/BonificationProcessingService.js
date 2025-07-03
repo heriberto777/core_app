@@ -55,10 +55,14 @@ class BonificationProcessingService {
         `📊 Documento ${documentId}: ${regularArticles.length} regulares, ${bonifications.length} bonificaciones`
       );
 
-      // 4. Si no hay bonificaciones, no hay nada que procesar
+      // 4. Si no hay bonificaciones, solo mapear regulares
       if (bonifications.length === 0) {
         logger.info(
           `✅ Documento ${documentId}: No hay bonificaciones que procesar`
+        );
+        const bonificationMapping = this.createRegularOnlyMapping(
+          regularArticles,
+          bonificationConfig
         );
         return {
           success: true,
@@ -66,12 +70,12 @@ class BonificationProcessingService {
           regularArticles: regularArticles.length,
           bonifications: 0,
           message: "No hay bonificaciones en este documento",
-          bonificationMapping: null,
+          bonificationMapping,
         };
       }
 
-      // 5. Crear el mapeo en memoria
-      const bonificationMapping = await this.createBonificationMapping(
+      // 5. Crear el mapeo usando NUM_LN existente
+      const bonificationMapping = await this.createBonificationMappingFromNumLn(
         regularArticles,
         bonifications,
         bonificationConfig
@@ -90,7 +94,7 @@ class BonificationProcessingService {
         orphanBonifications: bonificationMapping.orphanBonifications,
         processingTimeMs: processingTime,
         message: `Procesado: ${bonificationMapping.mappedBonifications} bonificaciones mapeadas, ${bonificationMapping.orphanBonifications} huérfanas`,
-        bonificationMapping: bonificationMapping, // ESTA ES LA INFORMACIÓN CLAVE
+        bonificationMapping: bonificationMapping,
       };
     } catch (error) {
       logger.error(
@@ -111,6 +115,34 @@ class BonificationProcessingService {
         bonificationMapping: null,
       };
     }
+  }
+
+  /**
+   * Crea mapeo solo de productos regulares (cuando no hay bonificaciones)
+   */
+  createRegularOnlyMapping(regularArticles, config) {
+    const regularMapping = new Map();
+
+    regularArticles.forEach((article) => {
+      const articleCode = article[config.regularArticleField];
+      const numLn = article["NUM_LN"]; // Usar NUM_LN existente
+
+      regularMapping.set(articleCode, {
+        ...article,
+        lineNumber: numLn,
+        isRegular: true,
+      });
+
+      logger.debug(`📋 Artículo regular: ${articleCode} → Línea: ${numLn}`);
+    });
+
+    return {
+      regularMapping,
+      bonificationMapping: new Map(),
+      mappedBonifications: 0,
+      orphanBonifications: 0,
+      orphanList: [],
+    };
   }
 
   /**
@@ -208,6 +240,111 @@ class BonificationProcessingService {
   }
 
   /**
+   * Crea el mapeo de bonificaciones usando NUM_LN existente
+   */
+  async createBonificationMappingFromNumLn(
+    regularArticles,
+    bonifications,
+    config
+  ) {
+    logger.info(`🔗 Creando mapeo de bonificaciones usando NUM_LN existente`);
+
+    // 1. Crear mapa de artículos regulares: COD_ART → NUM_LN
+    const regularMapping = new Map();
+    const articleToLineMap = new Map(); // COD_ART → NUM_LN
+
+    regularArticles.forEach((article) => {
+      const articleCode = article[config.regularArticleField];
+      const numLn = article["NUM_LN"];
+
+      regularMapping.set(articleCode, {
+        ...article,
+        lineNumber: numLn,
+        isRegular: true,
+      });
+
+      articleToLineMap.set(articleCode, numLn);
+
+      logger.debug(`📋 Artículo regular: ${articleCode} → Línea: ${numLn}`);
+    });
+
+    // 2. Mapear bonificaciones con artículos regulares usando COD_ART_RFR
+    const bonificationMapping = new Map();
+    let mappedBonifications = 0;
+    let orphanBonifications = 0;
+    const orphanList = [];
+
+    bonifications.forEach((bonification) => {
+      const bonificationCode = bonification[config.regularArticleField]; // COD_ART de la bonificación
+      const regularArticleCode =
+        bonification[config.bonificationReferenceField]; // COD_ART_RFR
+      const bonificationNumLn = bonification["NUM_LN"]; // NUM_LN de la bonificación
+
+      logger.debug(
+        `🎁 Procesando bonificación: ${bonificationCode}, refiere a: ${regularArticleCode}, NUM_LN: ${bonificationNumLn}`
+      );
+
+      if (!regularArticleCode) {
+        logger.warn(
+          `⚠️ Bonificación ${bonificationCode} sin referencia a artículo regular (COD_ART_RFR)`
+        );
+        orphanBonifications++;
+        orphanList.push({
+          bonificationCode,
+          reason: "Sin COD_ART_RFR",
+        });
+        return;
+      }
+
+      // Buscar el NUM_LN del artículo regular usando COD_ART_RFR
+      const regularLineNumber = articleToLineMap.get(regularArticleCode);
+
+      if (!regularLineNumber) {
+        logger.warn(
+          `⚠️ No se encontró NUM_LN para artículo regular: ${regularArticleCode}`
+        );
+        orphanBonifications++;
+        orphanList.push({
+          bonificationCode,
+          regularArticleCode,
+          reason: "Artículo regular no encontrado o sin NUM_LN",
+        });
+        return;
+      }
+
+      // Mapear bonificación
+      bonificationMapping.set(bonificationCode, {
+        ...bonification,
+        lineNumber: bonificationNumLn, // PEDIDO_LINEA = NUM_LN de la bonificación
+        bonificationLineReference: regularLineNumber, // PEDIDO_LINEA_BONIF = NUM_LN del artículo regular
+        isRegular: false,
+        referencedArticle: regularArticleCode,
+      });
+
+      mappedBonifications++;
+      logger.debug(
+        `✅ Bonificación: ${bonificationCode} (línea ${bonificationNumLn}) → refiere línea regular ${regularLineNumber} (${regularArticleCode})`
+      );
+    });
+
+    logger.info(
+      `✅ Mapeo completado: ${mappedBonifications} mapeadas, ${orphanBonifications} huérfanas`
+    );
+
+    if (orphanBonifications > 0) {
+      logger.warn(`⚠️ Bonificaciones huérfanas:`, orphanList);
+    }
+
+    return {
+      regularMapping,
+      bonificationMapping,
+      mappedBonifications,
+      orphanBonifications,
+      orphanList,
+    };
+  }
+
+  /**
    * Obtiene el mapeo para un artículo específico
    */
   getArticleMapping(articleCode, bonificationMapping) {
@@ -242,11 +379,9 @@ class BonificationProcessingService {
    */
   async getAllRecords(connection, documentId, config) {
     const query = `
-      SELECT * FROM ${config.sourceTable}
+      SELECT *, NUM_LN FROM ${config.sourceTable}
       WHERE ${config.orderField} = @documentId
-      ORDER BY
-        CASE WHEN ${config.bonificationIndicatorField} = @bonificationValue THEN 1 ELSE 0 END,
-        ${config.regularArticleField}
+      ORDER BY NUM_LN ASC
     `;
 
     logger.debug(`🔍 Consulta registros: ${query}`);

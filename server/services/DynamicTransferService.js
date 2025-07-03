@@ -4485,7 +4485,7 @@ class DynamicTransferService {
       return null;
     }
 
-    // Obtener el mapeo del artículo
+    // Obtener el mapeo del artículo usando el nuevo método
     const articleMapping = this.getArticleMappingFromBonificationData(
       articleCode,
       bonificationMapping
@@ -4500,14 +4500,14 @@ class DynamicTransferService {
 
     // Asignar valores según el campo
     if (targetField === bonificationConfig.lineNumberField) {
-      // PEDIDO_LINEA
+      // PEDIDO_LINEA = NUM_LN del registro actual
       const lineNumber = articleMapping.lineNumber;
       logger.debug(`🎁 PEDIDO_LINEA para ${articleCode}: ${lineNumber}`);
       return lineNumber;
     }
 
     if (targetField === bonificationConfig.bonificationLineReferenceField) {
-      // PEDIDO_LINEA_BONIF
+      // PEDIDO_LINEA_BONIF = NUM_LN del artículo regular al que hace referencia
       const bonifLineRef = articleMapping.bonificationLineReference;
       if (bonifLineRef !== null && bonifLineRef !== undefined) {
         logger.debug(
