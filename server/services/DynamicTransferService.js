@@ -2019,12 +2019,13 @@ class DynamicTransferService {
     documentId,
     columnLengthCache,
     isDetailTable = false,
-    bonificationMapping = null // NUEVO PARÁMETRO
+    bonificationMapping = null
   ) {
     const targetData = {};
     const targetFields = [];
     const targetValues = [];
     const directSqlFields = new Set();
+    const processedFields = new Set(); // 🔥 NUEVO: Rastrear campos procesados
 
     // Para detalles, combinar datos del encabezado y detalle
     const dataForProcessing = isDetailTable
@@ -2063,6 +2064,14 @@ class DynamicTransferService {
 
     // Procesar todos los campos
     for (const fieldMapping of tableConfig.fieldMappings) {
+      const targetField = fieldMapping.targetField;
+
+      // 🔥 NUEVO: Verificar si ya procesamos este campo
+      if (processedFields.has(targetField)) {
+        logger.warn(`⚠️ Campo ${targetField} ya procesado, saltando duplicado`);
+        continue;
+      }
+
       const processedField = await this.processField(
         fieldMapping,
         dataForProcessing,
@@ -2073,24 +2082,56 @@ class DynamicTransferService {
         isDetailTable,
         targetConnection,
         columnLengthCache,
-        bonificationMapping // NUEVO PARÁMETRO
+        bonificationMapping
       );
 
+      // 🔥 NUEVO: Marcar campo como procesado
+      processedFields.add(targetField);
+
       if (processedField.isDirectSql) {
-        targetFields.push(fieldMapping.targetField);
+        targetFields.push(targetField);
         targetValues.push(processedField.value); // Expresión SQL directa
-        directSqlFields.add(fieldMapping.targetField);
+        directSqlFields.add(targetField);
       } else {
-        targetData[fieldMapping.targetField] = processedField.value;
-        targetFields.push(fieldMapping.targetField);
-        targetValues.push(`@${fieldMapping.targetField}`);
+        targetData[targetField] = processedField.value;
+        targetFields.push(targetField);
+        targetValues.push(`@${targetField}`);
+      }
+
+      // 🔍 DEBUG ESPECÍFICO PARA PEDIDO
+      if (targetField === "PEDIDO") {
+        logger.warn(`🔍 CAMPO PEDIDO PROCESADO:`);
+        logger.warn(`  - Valor: ${processedField.value}`);
+        logger.warn(`  - Tipo: ${typeof processedField.value}`);
+        logger.warn(`  - Es DirectSQL: ${processedField.isDirectSql}`);
+        logger.warn(`  - Mapping sourceField: ${fieldMapping.sourceField}`);
+        logger.warn(`  - Mapping defaultValue: ${fieldMapping.defaultValue}`);
       }
 
       logger.debug(
-        `✅ Campo ${fieldMapping.targetField} preparado para inserción: ${
+        `✅ Campo ${targetField} preparado para inserción: ${
           processedField.value
         } (tipo: ${typeof processedField.value})`
       );
+    }
+
+    // 🔍 DEBUG ANTES DE EXECUTEINSERT
+    if (tableConfig.targetTable.includes("PEDIDO_LINEA")) {
+      logger.warn(`🔍 DEBUG ANTES DE EXECUTEINSERT:`);
+      logger.warn(`  - targetFields: ${targetFields.join(", ")}`);
+      logger.warn(`  - targetValues: ${targetValues.join(", ")}`);
+      logger.warn(`  - targetData keys: ${Object.keys(targetData).join(", ")}`);
+
+      // Verificar duplicados
+      const duplicates = targetFields.filter(
+        (field, index) => targetFields.indexOf(field) !== index
+      );
+
+      if (duplicates.length > 0) {
+        logger.error(
+          `🚨 CAMPOS DUPLICADOS DETECTADOS: ${duplicates.join(", ")}`
+        );
+      }
     }
 
     // Construir y ejecutar la consulta INSERT
@@ -2261,26 +2302,19 @@ class DynamicTransferService {
       );
 
       if (shouldReceiveConsecutive) {
-        // Solo aplicar consecutivo si no hubo conversión numérica
-        if (
-          fieldMapping.unitConversion &&
-          fieldMapping.unitConversion.enabled &&
-          typeof value === "number"
-        ) {
-          logger.warn(
-            `⚠️ No se aplicará consecutivo a ${fieldMapping.targetField} porque se aplicó conversión numérica (valor: ${value})`
-          );
-        } else {
-          value = currentConsecutive.formatted;
-          logger.debug(
-            `Asignando consecutivo ${currentConsecutive.formatted} a campo ${fieldMapping.targetField} en tabla ${tableConfig.name}`
-          );
+        // 🔍 DEBUG ESPECÍFICO PARA CONSECUTIVO
+        logger.warn(`🔍 APLICANDO CONSECUTIVO:`);
+        logger.warn(`  - Campo: ${fieldMapping.targetField}`);
+        logger.warn(`  - Valor anterior: ${value}`);
+        logger.warn(`  - Consecutivo: ${currentConsecutive.formatted}`);
+        logger.warn(
+          `  - consecutiveConfig.fieldName: ${mapping.consecutiveConfig.fieldName}`
+        );
 
-          // 🚨 DEBUG ESPECÍFICO PARA PEDIDO
-          if (fieldMapping.targetField === "PEDIDO") {
-            logger.warn(`🚨 PEDIDO CONSECUTIVO ASIGNADO: ${value}`);
-          }
-        }
+        value = currentConsecutive.formatted;
+        logger.debug(
+          `Asignando consecutivo ${currentConsecutive.formatted} a campo ${fieldMapping.targetField}`
+        );
       }
     }
 
