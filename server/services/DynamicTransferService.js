@@ -6,7 +6,7 @@ const TaskExecution = require("../models/taskExecutionModel");
 const TaskTracker = require("./TaskTracker");
 const TransferTask = require("../models/transferTaks");
 const ConsecutiveService = require("./ConsecutiveService");
-// const BonificationProcessingService = require("./BonificationProcessingService");
+
 const BonificationService = require("./BonificationProcessingService");
 
 class DynamicTransferService {
@@ -136,31 +136,75 @@ class DynamicTransferService {
 
       // 5. Verificar consecutivos centralizados
       if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
-        if (mapping.consecutiveConfig.useConsecutiveService) {
-          useCentralizedConsecutives = true;
-          const ConsecutiveService = require("./ConsecutiveService");
+        logger.info(`🎯 Configurando consecutivos para mapping ${mappingId}`);
 
-          try {
-            centralizedConsecutiveId =
-              await ConsecutiveService.getOrCreateConsecutive(
-                mapping.consecutiveConfig.consecutiveName,
-                {
-                  format: mapping.consecutiveConfig.format,
-                  startValue: mapping.consecutiveConfig.startValue || 1,
-                  increment: mapping.consecutiveConfig.increment || 1,
-                },
-                { id: mapping._id.toString(), name: "mapping" }
-              );
+        try {
+          // Auto-obtener o crear consecutivo centralizado
+          centralizedConsecutiveId =
+            await this.getOrCreateConsecutiveForMapping(mapping);
+
+          if (centralizedConsecutiveId) {
+            useCentralizedConsecutives = true;
             logger.info(
-              `📊 Consecutivo centralizado configurado: ${centralizedConsecutiveId}`
+              `✅ Consecutivo centralizado configurado: ${centralizedConsecutiveId}`
             );
-          } catch (consecError) {
-            logger.error(
-              `Error configurando consecutivo centralizado: ${consecError.message}`
+
+            // Realizar una prueba adicional de conectividad
+            try {
+              const connectivityTest =
+                await ConsecutiveService.reserveConsecutiveValues(
+                  centralizedConsecutiveId,
+                  1,
+                  { segment: null },
+                  { id: mapping._id.toString(), name: "mapping" }
+                );
+
+              if (connectivityTest && connectivityTest.reservationId) {
+                // Cancelar inmediatamente la reserva de prueba
+                await ConsecutiveService.cancelReservation(
+                  centralizedConsecutiveId,
+                  connectivityTest.reservationId
+                );
+
+                logger.info(
+                  `✅ Conectividad con consecutivo centralizado validada`
+                );
+              } else {
+                throw new Error("Test de conectividad falló");
+              }
+            } catch (connectivityError) {
+              logger.warn(
+                `⚠️ Error en test de conectividad: ${connectivityError.message}`
+              );
+              throw connectivityError;
+            }
+          } else {
+            logger.info(
+              `📋 Consecutivos no habilitados para mapping ${mappingId}. Modo sin consecutivos.`
             );
-            throw consecError;
+          }
+        } catch (consecError) {
+          logger.warn(
+            `⚠️ Error configurando consecutivos centralizados: ${consecError.message}`
+          );
+          logger.info(
+            `🔄 Fallback: Usando sistema local para mapping ${mappingId}`
+          );
+
+          useCentralizedConsecutives = false;
+          centralizedConsecutiveId = null;
+
+          // Verificar si el sistema local está disponible
+          if (mapping.consecutiveConfig.enabled) {
+            logger.info(
+              `📋 Sistema local de consecutivos disponible como fallback`
+            );
           }
         }
+      } else {
+        logger.info(
+          `📋 Consecutivos no configurados para mapping ${mappingId}`
+        );
       }
 
       // 6. Procesar documentos - NUEVA LÓGICA CON ESTRATEGIAS DE MARCADO
@@ -903,7 +947,7 @@ class DynamicTransferService {
     try {
       logger.info(`🎁 Procesando documento con bonificaciones: ${documentId}`);
 
-      const BonificationService = require("./BonificationProcessingService");
+      // const BonificationService = require("./BonificationProcessingService");
       const columnLengthCache = new Map();
 
       // 1. Identificar las tablas principales
@@ -1055,66 +1099,68 @@ class DynamicTransferService {
                 promotions.summary.appliedPromotions || []
               );
 
-              // Insertar documento principal (solo una vez)
+              // ✅ CAMBIO 1: Insertar documento principal (solo una vez)
               if (allProcessedDetails.length === 0) {
-                const mainInsertResult = await this.processTable(
-                  tableConfig,
-                  enhancedSourceData,
-                  null,
-                  targetConnection,
-                  currentConsecutive,
-                  mapping,
-                  documentId,
-                  columnLengthCache,
-                  false
-                );
-
-                if (!mainInsertResult.success) {
-                  throw new Error(
-                    `Error insertando documento principal: ${mainInsertResult.error}`
-                  );
-                }
-
-                processedTables.push({
-                  tableName: tableConfig.targetTable || tableConfig.sourceTable,
-                  recordsInserted: 1,
-                  tableType: "main",
-                });
-              }
-
-              // Insertar detalles procesados
-              let detailsInserted = 0;
-              const detailErrors = [];
-
-              for (const [index, detail] of processedDetails.entries()) {
                 try {
-                  const detailResult = await this.processTable(
-                    detailTable,
+                  await this.processTable(
+                    tableConfig,
                     enhancedSourceData,
-                    detail,
+                    null, // No hay detailRow para tabla principal
                     targetConnection,
                     currentConsecutive,
                     mapping,
                     documentId,
                     columnLengthCache,
-                    true
+                    false // isDetailTable = false
                   );
 
-                  if (detailResult.success) {
-                    detailsInserted++;
-                  } else {
-                    detailErrors.push({
-                      line: index + 1,
-                      article: detail.COD_ART,
-                      error: detailResult.error,
-                    });
-                  }
+                  // ✅ Si llegamos aquí = éxito
+                  processedTables.push({
+                    tableName:
+                      tableConfig.targetTable || tableConfig.sourceTable,
+                    recordsInserted: 1,
+                    tableType: "main",
+                  });
+
+                  logger.info(`✅ Documento principal insertado exitosamente`);
+                } catch (mainError) {
+                  throw new Error(
+                    `Error insertando documento principal: ${mainError.message}`
+                  );
+                }
+              }
+
+              // ✅ CAMBIO 2: Insertar detalles procesados
+              let detailsInserted = 0;
+              const detailErrors = [];
+
+              for (const [index, detail] of processedDetails.entries()) {
+                try {
+                  await this.processTable(
+                    detailTable,
+                    enhancedSourceData, // Datos del encabezado
+                    detail, // Datos de esta fila de detalle
+                    targetConnection,
+                    currentConsecutive,
+                    mapping,
+                    documentId,
+                    columnLengthCache,
+                    true // isDetailTable = true
+                  );
+
+                  // ✅ Si llegamos aquí = éxito
+                  detailsInserted++;
                 } catch (detailError) {
                   detailErrors.push({
                     line: index + 1,
                     article: detail.COD_ART,
                     error: detailError.message,
                   });
+                  logger.error(
+                    `❌ Error en detalle línea ${index + 1}: ${
+                      detailError.message
+                    }`
+                  );
                 }
               }
 
@@ -1147,31 +1193,34 @@ class DynamicTransferService {
             }
           }
 
-          // Si no hay tablas de detalle, procesar como documento normal
+          // ✅ CAMBIO 3: Si no hay tablas de detalle, procesar como documento normal
           if (detailTables.length === 0) {
-            const mainInsertResult = await this.processTable(
-              tableConfig,
-              enhancedSourceData,
-              null,
-              targetConnection,
-              currentConsecutive,
-              mapping,
-              documentId,
-              columnLengthCache,
-              false
-            );
+            try {
+              await this.processTable(
+                tableConfig,
+                enhancedSourceData,
+                null, // No hay detailRow
+                targetConnection,
+                currentConsecutive,
+                mapping,
+                documentId,
+                columnLengthCache,
+                false // isDetailTable = false
+              );
 
-            if (!mainInsertResult.success) {
+              // ✅ Si llegamos aquí = éxito
+              processedTables.push({
+                tableName: tableConfig.targetTable || tableConfig.sourceTable,
+                recordsInserted: 1,
+                tableType: "main_only",
+              });
+
+              logger.info(`✅ Documento sin detalles insertado exitosamente`);
+            } catch (mainError) {
               throw new Error(
-                `Error insertando documento principal: ${mainInsertResult.error}`
+                `Error insertando documento principal: ${mainError.message}`
               );
             }
-
-            processedTables.push({
-              tableName: tableConfig.targetTable || tableConfig.sourceTable,
-              recordsInserted: 1,
-              tableType: "main_only",
-            });
           }
         } catch (tableError) {
           logger.error(
@@ -1186,12 +1235,20 @@ class DynamicTransferService {
         mapping.markProcessedStrategy === "individual" &&
         mapping.markProcessedField
       ) {
-        await this.markSingleDocument(
-          documentId,
-          mapping,
-          sourceConnection,
-          true
-        );
+        try {
+          await this.markSingleDocument(
+            documentId,
+            mapping,
+            sourceConnection,
+            true
+          );
+          logger.debug(`✅ Documento ${documentId} marcado como procesado`);
+        } catch (markError) {
+          logger.warn(
+            `⚠️ No se pudo marcar documento ${documentId}: ${markError.message}`
+          );
+          // No fallar el proceso por error de marcado
+        }
       }
 
       logger.info(
@@ -3484,6 +3541,159 @@ class DynamicTransferService {
     } catch (error) {
       logger.error(`Error al generar consecutivo: ${error.message}`);
       throw error;
+    }
+  }
+
+  /**
+   * Obtiene o crea consecutivo centralizado para un mapping
+   * @param {Object} mapping - Configuración de mapeo
+   * @returns {Promise<string|null>} - ID del consecutivo centralizado o null
+   */
+  async getOrCreateConsecutiveForMapping(mapping) {
+    try {
+      const mappingId = mapping._id.toString();
+
+      logger.info(
+        `🔍 Verificando consecutivo centralizado para mapping ${mappingId} (${mapping.name})`
+      );
+
+      // 1. VERIFICAR SI YA EXISTE CONSECUTIVO ASIGNADO
+      let assignedConsecutives =
+        await ConsecutiveService.getConsecutivesByEntity("mapping", mappingId);
+
+      if (assignedConsecutives && assignedConsecutives.length > 0) {
+        logger.info(
+          `✅ Consecutivo existente encontrado: ${assignedConsecutives[0]._id}`
+        );
+
+        // Validar que el consecutivo sea accesible
+        try {
+          const testAccess = await ConsecutiveService.getNextConsecutiveValue(
+            assignedConsecutives[0]._id,
+            { segment: null }
+          );
+
+          if (testAccess && testAccess.success) {
+            logger.info(
+              `✅ Consecutivo ${assignedConsecutives[0]._id} validado y accesible`
+            );
+            return assignedConsecutives[0]._id;
+          } else {
+            logger.warn(
+              `⚠️ Consecutivo existente no es accesible, creando uno nuevo`
+            );
+          }
+        } catch (accessError) {
+          logger.warn(
+            `⚠️ Error validando acceso al consecutivo: ${accessError.message}`
+          );
+        }
+      }
+
+      // 2. VERIFICAR SI ESTÁ HABILITADO PARA AUTO-CREAR
+      if (!mapping.consecutiveConfig || !mapping.consecutiveConfig.enabled) {
+        logger.info(`❌ Consecutivos no habilitados para mapping ${mappingId}`);
+        return null;
+      }
+
+      // 3. AUTO-CREAR CONSECUTIVO CENTRALIZADO
+      logger.info(
+        `🔄 Auto-creando consecutivo centralizado para mapping ${mappingId}`
+      );
+
+      const config = mapping.consecutiveConfig;
+
+      // Preparar datos del consecutivo
+      const consecutiveData = {
+        name: config.consecutiveName || `MAPPING_${mapping.name}`,
+        description: `Consecutivo automático para mapping: ${mapping.name}`,
+        format: config.format || config.pattern || "{PREFIX}{VALUE}",
+        startValue: config.startValue || 1,
+        increment: config.increment || 1,
+        currentValue: config.lastValue || config.startValue || 1,
+        prefix: config.prefix || "",
+        entityType: "mapping",
+        entityId: mappingId,
+        segments: config.segments || [],
+        // Metadatos adicionales
+        metadata: {
+          mappingName: mapping.name,
+          createdBy: "auto-creation",
+          sourceServer: mapping.sourceServer,
+          targetServer: mapping.targetServer,
+          transferType: mapping.transferType,
+          createdAt: new Date().toISOString(),
+        },
+      };
+
+      logger.debug(`📝 Datos del consecutivo a crear:`, {
+        name: consecutiveData.name,
+        format: consecutiveData.format,
+        currentValue: consecutiveData.currentValue,
+        mappingId,
+      });
+
+      // 4. CREAR CONSECUTIVO EN EL SERVICIO CENTRALIZADO
+      const newConsecutive = await ConsecutiveService.createConsecutive(
+        consecutiveData
+      );
+
+      if (!newConsecutive || !newConsecutive._id) {
+        throw new Error(
+          "El servicio centralizado no retornó un consecutivo válido"
+        );
+      }
+
+      logger.info(`✅ Consecutivo centralizado creado: ${newConsecutive._id}`);
+
+      // 5. ASIGNAR CONSECUTIVO A LA ENTIDAD MAPPING
+      await ConsecutiveService.assignConsecutiveToEntity(
+        newConsecutive._id,
+        "mapping",
+        mappingId
+      );
+
+      logger.info(
+        `✅ Consecutivo ${newConsecutive._id} asignado a mapping ${mappingId}`
+      );
+
+      // 6. VALIDAR QUE FUNCIONA CORRECTAMENTE
+      try {
+        const validationTest = await ConsecutiveService.getNextConsecutiveValue(
+          newConsecutive._id,
+          { segment: null }
+        );
+
+        if (validationTest && validationTest.success) {
+          logger.info(
+            `✅ Consecutivo ${newConsecutive._id} creado y validado correctamente`
+          );
+          return newConsecutive._id;
+        } else {
+          throw new Error("El consecutivo creado no pasa la validación");
+        }
+      } catch (validationError) {
+        logger.error(
+          `❌ Error validando consecutivo recién creado: ${validationError.message}`
+        );
+        throw validationError;
+      }
+    } catch (error) {
+      logger.error(
+        `❌ Error en getOrCreateConsecutiveForMapping para mapping ${mapping._id}:`,
+        {
+          error: error.message,
+          mappingId: mapping._id.toString(),
+          mappingName: mapping.name,
+          consecutiveEnabled: mapping.consecutiveConfig?.enabled,
+          stack: error.stack,
+        }
+      );
+
+      // Re-lanzar el error para que el caller maneje el fallback
+      throw new Error(
+        `Error gestionando consecutivo centralizado: ${error.message}`
+      );
     }
   }
 

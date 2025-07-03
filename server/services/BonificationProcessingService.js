@@ -16,9 +16,7 @@ class BonificationProcessingService {
    */
   async processBonifications(orderDetails, bonificationConfig, orderId) {
     try {
-      logger.info(
-        `🎁 Iniciando procesamiento de bonificaciones para pedido: ${orderId}`
-      );
+      logger.info(`🎁 Iniciando procesamiento de bonificaciones para pedido: ${orderId}`);
 
       // Validar configuración
       this.validateBonificationConfig(bonificationConfig);
@@ -30,7 +28,7 @@ class BonificationProcessingService {
         bonificationReferenceField,
         lineNumberField,
         bonificationLineReferenceField,
-        quantityField,
+        quantityField
       } = bonificationConfig;
 
       // Separar artículos regulares y bonificaciones
@@ -40,15 +38,10 @@ class BonificationProcessingService {
         bonificationIndicatorValue
       );
 
-      logger.info(
-        `📦 Items regulares: ${regularItems.length}, Bonificaciones: ${bonificationItems.length}`
-      );
+      logger.info(`📦 Items regulares: ${regularItems.length}, Bonificaciones: ${bonificationItems.length}`);
 
       // Crear mapa de artículos regulares
-      const regularItemsMap = this.createRegularItemsMap(
-        regularItems,
-        regularArticleField
-      );
+      const regularItemsMap = this.createRegularItemsMap(regularItems, regularArticleField);
 
       // Procesar artículos regulares
       const processedRegularItems = this.processRegularItems(
@@ -66,25 +59,18 @@ class BonificationProcessingService {
       );
 
       // Combinar y ordenar todos los items
-      const allProcessedItems = [
-        ...processedRegularItems,
-        ...processedBonifications,
-      ];
-      const sortedItems = this.sortItemsByLineNumber(
-        allProcessedItems,
-        lineNumberField
-      );
+      const allProcessedItems = [...processedRegularItems, ...processedBonifications];
+      const sortedItems = this.sortItemsByLineNumber(allProcessedItems, lineNumberField);
 
       // Generar estadísticas
       const stats = this.generateProcessingStats(sortedItems);
       logger.info(`✅ Procesamiento completado: ${JSON.stringify(stats)}`);
 
       return sortedItems;
+
     } catch (error) {
       logger.error(`❌ Error procesando bonificaciones: ${error.message}`);
-      throw new Error(
-        `Error en procesamiento de bonificaciones: ${error.message}`
-      );
+      throw new Error(`Error en procesamiento de bonificaciones: ${error.message}`);
     }
   }
 
@@ -107,17 +93,17 @@ class BonificationProcessingService {
         summary: {
           totalPromotions: 0,
           totalDiscountAmount: 0,
-          totalBonifiedItems: 0,
-        },
+          totalBonifiedItems: 0
+        }
       };
 
       const {
         bonificationIndicatorField,
         bonificationIndicatorValue,
-        quantityField,
+        quantityField
       } = bonificationConfig;
 
-      orderDetails.forEach((item) => {
+      orderDetails.forEach(item => {
         // Detectar bonificaciones por tipo
         if (item[bonificationIndicatorField] === bonificationIndicatorValue) {
           this.classifyBonification(item, promotions);
@@ -128,10 +114,9 @@ class BonificationProcessingService {
         if (item.FAMILY_DISCOUNT_PCT && item.FAMILY_DISCOUNT_PCT > 0) {
           promotions.familyDiscounts.push({
             ...item,
-            discountAmount: this.calculateFamilyDiscount(item),
+            discountAmount: this.calculateFamilyDiscount(item)
           });
-          promotions.summary.totalDiscountAmount +=
-            this.calculateFamilyDiscount(item);
+          promotions.summary.totalDiscountAmount += this.calculateFamilyDiscount(item);
         }
 
         // Detectar ofertas de una sola vez
@@ -152,10 +137,9 @@ class BonificationProcessingService {
         promotions.scaledPromotions.length +
         promotions.oneTimeOffers.length;
 
-      logger.info(
-        `🏷️ Promociones detectadas: ${JSON.stringify(promotions.summary)}`
-      );
+      logger.info(`🏷️ Promociones detectadas: ${JSON.stringify(promotions.summary)}`);
       return promotions;
+
     } catch (error) {
       logger.error(`Error detectando tipos de promociones: ${error.message}`);
       throw error;
@@ -171,43 +155,27 @@ class BonificationProcessingService {
    */
   async applyPromotionRules(orderDetails, customerContext, bonificationConfig) {
     try {
-      logger.info(
-        `🎯 Aplicando reglas de promociones para cliente tipo: ${customerContext.customerType}`
-      );
+      logger.info(`🎯 Aplicando reglas de promociones para cliente tipo: ${customerContext.customerType}`);
 
       let processedItems = [...orderDetails];
 
       // Aplicar descuentos por familia por monto
-      processedItems = await this.applyFamilyDiscountByAmount(
-        processedItems,
-        customerContext
-      );
+      processedItems = await this.applyFamilyDiscountByAmount(processedItems, customerContext);
 
       // Aplicar bonificaciones por cantidad de familia
-      processedItems = await this.applyFamilyQuantityBonifications(
-        processedItems,
-        customerContext
-      );
+      processedItems = await this.applyFamilyQuantityBonifications(processedItems, customerContext);
 
       // Aplicar bonificaciones escaladas
-      processedItems = await this.applyScaledBonifications(
-        processedItems,
-        customerContext
-      );
+      processedItems = await this.applyScaledBonifications(processedItems, customerContext);
 
       // Aplicar bonificaciones por producto específico
-      processedItems = await this.applyProductBonifications(
-        processedItems,
-        customerContext
-      );
+      processedItems = await this.applyProductBonifications(processedItems, customerContext);
 
       // Marcar ofertas de una sola vez
-      processedItems = await this.markOneTimeOffers(
-        processedItems,
-        customerContext
-      );
+      processedItems = await this.markOneTimeOffers(processedItems, customerContext);
 
       return processedItems;
+
     } catch (error) {
       logger.error(`Error aplicando reglas de promociones: ${error.message}`);
       throw error;
@@ -222,12 +190,12 @@ class BonificationProcessingService {
    */
   validateBonificationConfig(config) {
     const requiredFields = [
-      "bonificationIndicatorField",
-      "bonificationIndicatorValue",
-      "regularArticleField",
-      "bonificationReferenceField",
-      "lineNumberField",
-      "bonificationLineReferenceField",
+      'bonificationIndicatorField',
+      'bonificationIndicatorValue',
+      'regularArticleField',
+      'bonificationReferenceField',
+      'lineNumberField',
+      'bonificationLineReferenceField'
     ];
 
     for (const field of requiredFields) {
@@ -242,12 +210,12 @@ class BonificationProcessingService {
    * @private
    */
   categorizeItems(orderDetails, indicatorField, indicatorValue) {
-    const regularItems = orderDetails.filter(
-      (item) => item[indicatorField] !== indicatorValue
+    const regularItems = orderDetails.filter(item =>
+      item[indicatorField] !== indicatorValue
     );
 
-    const bonificationItems = orderDetails.filter(
-      (item) => item[indicatorField] === indicatorValue
+    const bonificationItems = orderDetails.filter(item =>
+      item[indicatorField] === indicatorValue
     );
 
     return { regularItems, bonificationItems };
@@ -277,17 +245,13 @@ class BonificationProcessingService {
    * Procesa artículos regulares asignando números de línea
    * @private
    */
-  processRegularItems(
-    regularItems,
-    lineNumberField,
-    bonificationReferenceField
-  ) {
+  processRegularItems(regularItems, lineNumberField, bonificationReferenceField) {
     return regularItems.map((item, index) => ({
       ...item,
       [lineNumberField]: index + 1,
       [bonificationReferenceField]: null,
-      ITEM_TYPE: "REGULAR",
-      PROCESSING_STATUS: "PROCESSED",
+      ITEM_TYPE: 'REGULAR',
+      PROCESSING_STATUS: 'PROCESSED'
     }));
   }
 
@@ -295,17 +259,12 @@ class BonificationProcessingService {
    * Procesa items de bonificación
    * @private
    */
-  processBonificationItems(
-    bonificationItems,
-    regularItemsMap,
-    config,
-    regularItemsCount
-  ) {
+  processBonificationItems(bonificationItems, regularItemsMap, config, regularItemsCount) {
     const {
       regularArticleField,
       bonificationReferenceField,
       lineNumberField,
-      bonificationLineReferenceField,
+      bonificationLineReferenceField
     } = config;
 
     return bonificationItems.map((bonificationItem, index) => {
@@ -314,30 +273,26 @@ class BonificationProcessingService {
       const bonificationLineNumber = regularItemsCount + index + 1;
 
       if (referencedLineNumber) {
-        logger.info(
-          `🎁 Bonificación vinculada: Art: ${bonificationItem[regularArticleField]} -> Línea: ${bonificationLineNumber} ref a línea: ${referencedLineNumber}`
-        );
+        logger.info(`🎁 Bonificación vinculada: Art: ${bonificationItem[regularArticleField]} -> Línea: ${bonificationLineNumber} ref a línea: ${referencedLineNumber}`);
 
         return {
           ...bonificationItem,
           [lineNumberField]: bonificationLineNumber,
           [bonificationLineReferenceField]: referencedLineNumber,
           [bonificationReferenceField]: null, // Limpiar referencia original
-          ITEM_TYPE: "BONIFICATION",
-          PROCESSING_STATUS: "PROCESSED",
+          ITEM_TYPE: 'BONIFICATION',
+          PROCESSING_STATUS: 'PROCESSED'
         };
       } else {
-        logger.warn(
-          `⚠️ Bonificación huérfana - No se encontró artículo regular para: ${referencedArticle}`
-        );
+        logger.warn(`⚠️ Bonificación huérfana - No se encontró artículo regular para: ${referencedArticle}`);
 
         return {
           ...bonificationItem,
           [lineNumberField]: bonificationLineNumber,
           [bonificationLineReferenceField]: null,
           [bonificationReferenceField]: null,
-          ITEM_TYPE: "BONIFICATION_ORPHAN",
-          PROCESSING_STATUS: "WARNING",
+          ITEM_TYPE: 'BONIFICATION_ORPHAN',
+          PROCESSING_STATUS: 'WARNING'
         };
       }
     });
@@ -350,13 +305,13 @@ class BonificationProcessingService {
   classifyBonification(item, promotions) {
     if (item.PROMOTION_TYPE) {
       switch (item.PROMOTION_TYPE) {
-        case "FAMILY_BONUS":
+        case 'FAMILY_BONUS':
           promotions.familyBonifications.push(item);
           break;
-        case "PRODUCT_BONUS":
+        case 'PRODUCT_BONUS':
           promotions.productBonifications.push(item);
           break;
-        case "SCALED_BONUS":
+        case 'SCALED_BONUS':
           promotions.scaledPromotions.push(item);
           break;
         default:
@@ -392,7 +347,7 @@ class BonificationProcessingService {
     const familyAmounts = {};
 
     // Calcular montos por familia
-    orderDetails.forEach((item) => {
+    orderDetails.forEach(item => {
       const family = item.FAMILY_CODE;
       if (family) {
         if (!familyAmounts[family]) {
@@ -403,29 +358,21 @@ class BonificationProcessingService {
     });
 
     // Aplicar reglas específicas según tipo de cliente
-    const discountRules = this.getDiscountRules(
-      context.customerType,
-      context.priceList
-    );
+    const discountRules = this.getDiscountRules(context.customerType, context.priceList);
 
-    Object.keys(familyAmounts).forEach((family) => {
+    Object.keys(familyAmounts).forEach(family => {
       const amount = familyAmounts[family];
-      const rule = discountRules.find(
-        (r) => r.family === family && amount >= r.minAmount
-      );
+      const rule = discountRules.find(r => r.family === family && amount >= r.minAmount);
 
       if (rule) {
-        orderDetails.forEach((item) => {
+        orderDetails.forEach(item => {
           if (item.FAMILY_CODE === family) {
             item.FAMILY_DISCOUNT_PCT = rule.discountPercent;
-            item.FAMILY_DISCOUNT_AMOUNT =
-              item.LINE_AMOUNT * (rule.discountPercent / 100);
-            item.PROMOTION_TYPE = "FAMILY_DISCOUNT";
+            item.FAMILY_DISCOUNT_AMOUNT = item.LINE_AMOUNT * (rule.discountPercent / 100);
+            item.PROMOTION_TYPE = 'FAMILY_DISCOUNT';
             item.PROMOTION_RULE_ID = rule.id;
 
-            logger.info(
-              `💰 Descuento aplicado: ${family} - ${rule.discountPercent}% en ${item.COD_ART}`
-            );
+            logger.info(`💰 Descuento aplicado: ${family} - ${rule.discountPercent}% en ${item.COD_ART}`);
           }
         });
       }
@@ -442,9 +389,9 @@ class BonificationProcessingService {
     const familyQuantities = {};
 
     // Calcular cantidades por familia
-    orderDetails.forEach((item) => {
+    orderDetails.forEach(item => {
       const family = item.FAMILY_CODE;
-      if (family && item.ITEM_TYPE !== "BONIFICATION") {
+      if (family && item.ITEM_TYPE !== 'BONIFICATION') {
         if (!familyQuantities[family]) {
           familyQuantities[family] = 0;
         }
@@ -453,47 +400,37 @@ class BonificationProcessingService {
     });
 
     // Aplicar bonificaciones según reglas
-    const bonificationRules = this.getBonificationRules(
-      context.customerType,
-      context.zone
-    );
+    const bonificationRules = this.getBonificationRules(context.customerType, context.zone);
 
-    Object.keys(familyQuantities).forEach((family) => {
+    Object.keys(familyQuantities).forEach(family => {
       const quantity = familyQuantities[family];
-      const rule = bonificationRules.find(
-        (r) => r.family === family && quantity >= r.minQuantity
+      const rule = bonificationRules.find(r =>
+        r.family === family &&
+        quantity >= r.minQuantity
       );
 
       if (rule) {
-        const bonificationsToAdd =
-          Math.floor(quantity / rule.minQuantity) * rule.bonificationQuantity;
+        const bonificationsToAdd = Math.floor(quantity / rule.minQuantity) * rule.bonificationQuantity;
 
         if (bonificationsToAdd > 0) {
           // Encontrar el producto más vendido de la familia para bonificar
-          const mostSoldProduct = this.findMostSoldProductInFamily(
-            orderDetails,
-            family
-          );
+          const mostSoldProduct = this.findMostSoldProductInFamily(orderDetails, family);
 
           orderDetails.push({
             FAMILY_CODE: family,
             COD_ART: rule.bonificationProduct || mostSoldProduct,
-            ART_BON: "B",
+            ART_BON: 'B',
             COD_ART_RFR: mostSoldProduct,
             QUANTITY: bonificationsToAdd,
             UNIT_PRICE: 0,
             LINE_AMOUNT: 0,
-            PROMOTION_TYPE: "FAMILY_QUANTITY_BONUS",
+            PROMOTION_TYPE: 'FAMILY_QUANTITY_BONUS',
             PROMOTION_RULE_ID: rule.id,
-            ITEM_TYPE: "BONIFICATION",
-            PROCESSING_STATUS: "GENERATED",
+            ITEM_TYPE: 'BONIFICATION',
+            PROCESSING_STATUS: 'GENERATED'
           });
 
-          logger.info(
-            `🎁 Bonificación por familia generada: ${family} - ${bonificationsToAdd} unidades de ${
-              rule.bonificationProduct || mostSoldProduct
-            }`
-          );
+          logger.info(`🎁 Bonificación por familia generada: ${family} - ${bonificationsToAdd} unidades de ${rule.bonificationProduct || mostSoldProduct}`);
         }
       }
     });
@@ -508,43 +445,37 @@ class BonificationProcessingService {
   async applyScaledBonifications(orderDetails, context) {
     const scaledRules = this.getScaledBonificationRules(context.customerType);
 
-    scaledRules.forEach((rule) => {
-      if (rule.type === "PRODUCT") {
+    scaledRules.forEach(rule => {
+      if (rule.type === 'PRODUCT') {
         // Bonificación escalada por producto específico
-        const productItems = orderDetails.filter(
-          (item) =>
-            item.COD_ART === rule.productCode &&
-            item.ITEM_TYPE !== "BONIFICATION"
+        const productItems = orderDetails.filter(item =>
+          item.COD_ART === rule.productCode &&
+          item.ITEM_TYPE !== 'BONIFICATION'
         );
 
-        const totalQuantity = productItems.reduce(
-          (sum, item) => sum + (item.QUANTITY || 0),
-          0
-        );
+        const totalQuantity = productItems.reduce((sum, item) => sum + (item.QUANTITY || 0), 0);
 
         // Encontrar el escalón apropiado
         const applicableScale = rule.scales
-          .filter((scale) => totalQuantity >= scale.minQuantity)
+          .filter(scale => totalQuantity >= scale.minQuantity)
           .sort((a, b) => b.minQuantity - a.minQuantity)[0];
 
         if (applicableScale) {
           orderDetails.push({
             COD_ART: applicableScale.bonificationProduct || rule.productCode,
-            ART_BON: "B",
+            ART_BON: 'B',
             COD_ART_RFR: rule.productCode,
             QUANTITY: applicableScale.bonificationQuantity,
             UNIT_PRICE: 0,
             LINE_AMOUNT: 0,
-            PROMOTION_TYPE: "SCALED_PRODUCT_BONUS",
+            PROMOTION_TYPE: 'SCALED_PRODUCT_BONUS',
             PROMOTION_RULE_ID: rule.id,
             SCALE_LEVEL: applicableScale.level,
-            ITEM_TYPE: "BONIFICATION",
-            PROCESSING_STATUS: "GENERATED",
+            ITEM_TYPE: 'BONIFICATION',
+            PROCESSING_STATUS: 'GENERATED'
           });
 
-          logger.info(
-            `📈 Bonificación escalada aplicada: ${rule.productCode} - Nivel ${applicableScale.level} - ${applicableScale.bonificationQuantity} unidades`
-          );
+          logger.info(`📈 Bonificación escalada aplicada: ${rule.productCode} - Nivel ${applicableScale.level} - ${applicableScale.bonificationQuantity} unidades`);
         }
       }
     });
@@ -559,39 +490,32 @@ class BonificationProcessingService {
   async applyProductBonifications(orderDetails, context) {
     const productRules = this.getProductBonificationRules(context.customerType);
 
-    productRules.forEach((rule) => {
-      const productItems = orderDetails.filter(
-        (item) =>
-          item.COD_ART === rule.productCode && item.ITEM_TYPE !== "BONIFICATION"
+    productRules.forEach(rule => {
+      const productItems = orderDetails.filter(item =>
+        item.COD_ART === rule.productCode &&
+        item.ITEM_TYPE !== 'BONIFICATION'
       );
 
-      const totalQuantity = productItems.reduce(
-        (sum, item) => sum + (item.QUANTITY || 0),
-        0
-      );
+      const totalQuantity = productItems.reduce((sum, item) => sum + (item.QUANTITY || 0), 0);
 
       if (totalQuantity >= rule.minQuantity) {
-        const bonificationsToAdd =
-          Math.floor(totalQuantity / rule.minQuantity) *
-          rule.bonificationQuantity;
+        const bonificationsToAdd = Math.floor(totalQuantity / rule.minQuantity) * rule.bonificationQuantity;
 
         if (bonificationsToAdd > 0) {
           orderDetails.push({
             COD_ART: rule.bonificationProduct || rule.productCode,
-            ART_BON: "B",
+            ART_BON: 'B',
             COD_ART_RFR: rule.productCode,
             QUANTITY: bonificationsToAdd,
             UNIT_PRICE: 0,
             LINE_AMOUNT: 0,
-            PROMOTION_TYPE: "PRODUCT_SPECIFIC_BONUS",
+            PROMOTION_TYPE: 'PRODUCT_SPECIFIC_BONUS',
             PROMOTION_RULE_ID: rule.id,
-            ITEM_TYPE: "BONIFICATION",
-            PROCESSING_STATUS: "GENERATED",
+            ITEM_TYPE: 'BONIFICATION',
+            PROCESSING_STATUS: 'GENERATED'
           });
 
-          logger.info(
-            `🎯 Bonificación por producto aplicada: ${rule.productCode} - ${bonificationsToAdd} unidades`
-          );
+          logger.info(`🎯 Bonificación por producto aplicada: ${rule.productCode} - ${bonificationsToAdd} unidades`);
         }
       }
     });
@@ -605,13 +529,11 @@ class BonificationProcessingService {
    */
   async markOneTimeOffers(orderDetails, context) {
     // Marcar items que son ofertas de una sola vez
-    orderDetails.forEach((item) => {
+    orderDetails.forEach(item => {
       if (item.ONE_TIME_OFFER_FLAG) {
-        item.OFFER_USAGE_RESTRICTION = "ONE_TIME";
+        item.OFFER_USAGE_RESTRICTION = 'ONE_TIME';
         item.CUSTOMER_OFFER_HISTORY_CHECK = true;
-        logger.info(
-          `🔒 Oferta una sola vez marcada: ${item.COD_ART} para cliente ${context.customerId}`
-        );
+        logger.info(`🔒 Oferta una sola vez marcada: ${item.COD_ART} para cliente ${context.customerId}`);
       }
     });
 
@@ -623,9 +545,7 @@ class BonificationProcessingService {
    * @private
    */
   sortItemsByLineNumber(items, lineNumberField) {
-    return items.sort(
-      (a, b) => (a[lineNumberField] || 0) - (b[lineNumberField] || 0)
-    );
+    return items.sort((a, b) => (a[lineNumberField] || 0) - (b[lineNumberField] || 0));
   }
 
   /**
@@ -635,17 +555,10 @@ class BonificationProcessingService {
   generateProcessingStats(processedItems) {
     const stats = {
       totalItems: processedItems.length,
-      regularItems: processedItems.filter((i) => i.ITEM_TYPE === "REGULAR")
-        .length,
-      bonifications: processedItems.filter(
-        (i) => i.ITEM_TYPE === "BONIFICATION"
-      ).length,
-      orphanBonifications: processedItems.filter(
-        (i) => i.ITEM_TYPE === "BONIFICATION_ORPHAN"
-      ).length,
-      generatedPromotions: processedItems.filter(
-        (i) => i.PROCESSING_STATUS === "GENERATED"
-      ).length,
+      regularItems: processedItems.filter(i => i.ITEM_TYPE === 'REGULAR').length,
+      bonifications: processedItems.filter(i => i.ITEM_TYPE === 'BONIFICATION').length,
+      orphanBonifications: processedItems.filter(i => i.ITEM_TYPE === 'BONIFICATION_ORPHAN').length,
+      generatedPromotions: processedItems.filter(i => i.PROCESSING_STATUS === 'GENERATED').length
     };
 
     return stats;
@@ -656,8 +569,9 @@ class BonificationProcessingService {
    * @private
    */
   findMostSoldProductInFamily(orderDetails, family) {
-    const familyProducts = orderDetails.filter(
-      (item) => item.FAMILY_CODE === family && item.ITEM_TYPE !== "BONIFICATION"
+    const familyProducts = orderDetails.filter(item =>
+      item.FAMILY_CODE === family &&
+      item.ITEM_TYPE !== 'BONIFICATION'
     );
 
     if (familyProducts.length === 0) return null;
@@ -673,24 +587,24 @@ class BonificationProcessingService {
    */
   initializePromotionRules() {
     // Estas reglas pueden venir de BD o configuración
-    this.promotionRules.set("discountRules", [
+    this.promotionRules.set('discountRules', [
       {
-        id: "DESCH_FAMILY_DISCOUNT",
-        family: "DESECHABLES",
+        id: 'DESCH_FAMILY_DISCOUNT',
+        family: 'DESECHABLES',
         minAmount: 8000,
         discountPercent: 2,
-        customerTypes: ["MAYORISTA", "COLMADO"],
-      },
+        customerTypes: ['MAYORISTA', 'COLMADO']
+      }
     ]);
 
-    this.promotionRules.set("bonificationRules", [
+    this.promotionRules.set('bonificationRules', [
       {
-        id: "BEBIDAS_FAMILY_BONUS",
-        family: "BEBIDAS",
+        id: 'BEBIDAS_FAMILY_BONUS',
+        family: 'BEBIDAS',
         minQuantity: 10,
         bonificationQuantity: 1,
-        bonificationProduct: "BEBIDA_PROMO",
-      },
+        bonificationProduct: 'BEBIDA_PROMO'
+      }
     ]);
   }
 
@@ -699,9 +613,9 @@ class BonificationProcessingService {
    * @private
    */
   getDiscountRules(customerType, priceList) {
-    const allRules = this.promotionRules.get("discountRules") || [];
-    return allRules.filter(
-      (rule) => !rule.customerTypes || rule.customerTypes.includes(customerType)
+    const allRules = this.promotionRules.get('discountRules') || [];
+    return allRules.filter(rule =>
+      !rule.customerTypes || rule.customerTypes.includes(customerType)
     );
   }
 
@@ -710,9 +624,9 @@ class BonificationProcessingService {
    * @private
    */
   getBonificationRules(customerType, zone) {
-    const allRules = this.promotionRules.get("bonificationRules") || [];
-    return allRules.filter(
-      (rule) => !rule.customerTypes || rule.customerTypes.includes(customerType)
+    const allRules = this.promotionRules.get('bonificationRules') || [];
+    return allRules.filter(rule =>
+      !rule.customerTypes || rule.customerTypes.includes(customerType)
     );
   }
 
@@ -723,14 +637,14 @@ class BonificationProcessingService {
   getScaledBonificationRules(customerType) {
     return [
       {
-        id: "PRODUCTO_ESCALADO_1",
-        type: "PRODUCT",
-        productCode: "PROD_001",
+        id: 'PRODUCTO_ESCALADO_1',
+        type: 'PRODUCT',
+        productCode: 'PROD_001',
         scales: [
           { level: 1, minQuantity: 20, bonificationQuantity: 1 },
-          { level: 2, minQuantity: 50, bonificationQuantity: 3 },
-        ],
-      },
+          { level: 2, minQuantity: 50, bonificationQuantity: 3 }
+        ]
+      }
     ];
   }
 
@@ -741,12 +655,12 @@ class BonificationProcessingService {
   getProductBonificationRules(customerType) {
     return [
       {
-        id: "PRODUCTO_ESPECIFICO_1",
-        productCode: "ARTICULO_001",
+        id: 'PRODUCTO_ESPECIFICO_1',
+        productCode: 'ARTICULO_001',
         minQuantity: 5,
         bonificationQuantity: 1,
-        bonificationProduct: "ARTICULO_001", // Mismo producto
-      },
+        bonificationProduct: 'ARTICULO_001' // Mismo producto
+      }
     ];
   }
 }
