@@ -379,10 +379,10 @@ class BonificationProcessingService {
    */
   async getAllRecords(connection, documentId, config) {
     const query = `
-      SELECT *, NUM_LN FROM ${config.sourceTable}
-      WHERE ${config.orderField} = @documentId
-      ORDER BY NUM_LN ASC
-    `;
+    SELECT * FROM ${config.sourceTable}
+    WHERE ${config.orderField} = @documentId
+    ORDER BY NUM_LN ASC
+  `;
 
     logger.debug(`🔍 Consulta registros: ${query}`);
 
@@ -390,6 +390,23 @@ class BonificationProcessingService {
       documentId,
       bonificationValue: config.bonificationIndicatorValue,
     });
+
+    // Verificar que NUM_LN existe en los resultados
+    if (result.recordset && result.recordset.length > 0) {
+      const firstRecord = result.recordset[0];
+      if (!firstRecord.hasOwnProperty("NUM_LN")) {
+        logger.warn(
+          `⚠️ La tabla ${config.sourceTable} no tiene columna NUM_LN`
+        );
+        logger.warn(
+          `📋 Columnas disponibles: ${Object.keys(firstRecord).join(", ")}`
+        );
+      } else {
+        logger.debug(
+          `✅ Columna NUM_LN encontrada en ${result.recordset.length} registros`
+        );
+      }
+    }
 
     return result.recordset;
   }
