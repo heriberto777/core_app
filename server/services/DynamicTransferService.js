@@ -695,7 +695,7 @@ class DynamicTransferService {
       // Liberar conexiones
       if (sourceConnection) {
         try {
-          await ConnectionManager.releaseConnection(sourceConnection);
+          await ConnectionService.releaseConnection(sourceConnection);
         } catch (e) {
           logger.warn(`Error liberando conexión origen: ${e.message}`);
         }
@@ -703,7 +703,7 @@ class DynamicTransferService {
 
       if (targetConnection) {
         try {
-          await ConnectionManager.releaseConnection(targetConnection);
+          await ConnectionService.releaseConnection(targetConnection);
         } catch (e) {
           logger.warn(`Error liberando conexión destino: ${e.message}`);
         }
@@ -4221,27 +4221,60 @@ class DynamicTransferService {
       // ===== EJECUCIÓN DE LA CONSULTA =====
       const startTime = Date.now();
 
-      const result = await SqlService.query(
-        targetConnection,
-        insertQuery,
-        filteredTargetData
-      );
+      try {
+        const result = await SqlService.query(
+          targetConnection,
+          insertQuery,
+          filteredTargetData
+        );
 
-      const executionTime = Date.now() - startTime;
+        const executionTime = Date.now() - startTime;
 
-      logger.info(`✅ INSERCIÓN EXITOSA en ${targetTable}:`, {
-        rowsAffected: result.rowsAffected || 0,
-        executionTime: `${executionTime}ms`,
-        fieldsInserted: validFields.length,
-        fieldsExcluded: targetFields.length - validFields.length,
-      });
+        logger.info(`✅ INSERCIÓN EXITOSA en ${targetTable}:`, {
+          rowsAffected: result.rowsAffected || 0,
+          executionTime: `${executionTime}ms`,
+          fieldsInserted: validFields.length,
+        });
 
-      return {
-        success: true,
-        rowsAffected: result.rowsAffected || 0,
-        executionTime,
-        result,
-      };
+        return {
+          success: true,
+          rowsAffected: result.rowsAffected || 0,
+          executionTime,
+          result,
+        };
+      } catch (sqlError) {
+        // ===== MANEJO ESPECÍFICO DE ERRORES SQL =====
+        const executionTime = Date.now() - startTime;
+
+        let errorMessage =
+          sqlError.message || "Error SQL sin mensaje específico";
+        let errorDetails = {};
+
+        // Manejar AggregateError específicamente
+        if (sqlError.name === "AggregateError") {
+          logger.info(
+            `🔍 Ejecutando diagnóstico automático para AggregateError`
+          );
+
+          try {
+            const diagnostic = await this.diagnoseSQLServerIssue(
+              targetTable,
+              insertQuery,
+              filteredTargetData,
+              targetConnection
+            );
+
+            logger.info(`📋 Resultado del diagnóstico:`, diagnostic);
+          } catch (diagError) {
+            logger.warn(
+              `⚠️ Error en diagnóstico automático: ${diagError.message}`
+            );
+          }
+        }
+
+        // Re-lanzar con mensaje mejorado
+        throw new Error(`Error SQL en ${targetTable}: ${errorMessage}`);
+      }
     } catch (error) {
       logger.error(`❌ ERROR EN EXECUTEINSERT PARA TABLA ${targetTable}:`, {
         error: error.message,
@@ -4559,6 +4592,118 @@ class DynamicTransferService {
     }
 
     return "GENERAL_ERROR";
+  }
+
+  /**
+   * Diagnostica problemas específicos de SQL Server
+   * @private
+   */
+  async diagnoseSQLServerIssue(
+    targetTable,
+    insertQuery,
+    filteredTargetData,
+    targetConnection
+  ) {
+    try {
+      logger.info(`🔍 Iniciando diagnóstico para tabla ${targetTable}`);
+
+      // 1. Verificar conectividad básica
+      try {
+        await SqlService.query(
+          targetConnection,
+          "SELECT 1 AS connectivity_test"
+        );
+        logger.info(`✅ Conectividad básica OK`);
+      } catch (connError) {
+        logger.error(`❌ Error de conectividad básica: ${connError.message}`);
+        return { issue: "connectivity", details: connError.message };
+      }
+
+      // 2. Verificar existencia de tabla
+      try {
+        const tableCheck = await SqlService.query(
+          targetConnection,
+          `SELECT TOP 1 * FROM ${targetTable} WHERE 1=0`
+        );
+        logger.info(`✅ Tabla ${targetTable} existe y es accesible`);
+      } catch (tableError) {
+        logger.error(
+          `❌ Error accediendo tabla ${targetTable}: ${tableError.message}`
+        );
+        return { issue: "table_access", details: tableError.message };
+      }
+
+      // 3. Verificar estructura de tabla
+      try {
+        const [schema, table] = targetTable.includes(".")
+          ? targetTable.split(".")
+          : ["dbo", targetTable];
+
+        const columnCheck = await SqlService.query(
+          targetConnection,
+          `SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH
+         FROM INFORMATION_SCHEMA.COLUMNS
+         WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table`,
+          {
+            schema: schema.replace(/[\[\]]/g, ""),
+            table: table.replace(/[\[\]]/g, ""),
+          }
+        );
+
+        logger.info(
+          `✅ Estructura de tabla obtenida: ${columnCheck.recordset.length} columnas`
+        );
+
+        // Verificar campos faltantes
+        const availableColumns = columnCheck.recordset.map(
+          (c) => c.COLUMN_NAME
+        );
+        const queryFields = Object.keys(filteredTargetData);
+        const missingFields = queryFields.filter(
+          (field) => !availableColumns.includes(field)
+        );
+
+        if (missingFields.length > 0) {
+          logger.error(
+            `❌ Campos faltantes en tabla: ${missingFields.join(", ")}`
+          );
+          return { issue: "missing_columns", details: missingFields };
+        }
+      } catch (structureError) {
+        logger.warn(
+          `⚠️ No se pudo verificar estructura: ${structureError.message}`
+        );
+      }
+
+      // 4. Verificar constraints o triggers
+      try {
+        const constraintCheck = await SqlService.query(
+          targetConnection,
+          `SELECT name, type_desc FROM sys.objects
+         WHERE parent_object_id = OBJECT_ID(@tableName)
+         AND type IN ('C', 'F', 'PK', 'UQ', 'TR')`,
+          { tableName: targetTable }
+        );
+
+        if (constraintCheck.recordset.length > 0) {
+          logger.info(
+            `⚠️ Tabla tiene ${constraintCheck.recordset.length} constraints/triggers activos`
+          );
+        }
+      } catch (constraintError) {
+        logger.debug(
+          `ℹ️ No se pudieron verificar constraints: ${constraintError.message}`
+        );
+      }
+
+      return {
+        issue: "unknown",
+        details: "Diagnóstico no encontró problemas obvios",
+      };
+    } catch (diagError) {
+      logger.error(`❌ Error en diagnóstico: ${diagError.message}`);
+      return { issue: "diagnostic_failed", details: diagError.message };
+    }
   }
 }
 
