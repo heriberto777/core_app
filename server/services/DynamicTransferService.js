@@ -84,25 +84,25 @@ class DynamicTransferService {
       if (mapping.hasBonificationProcessing && mapping.bonificationConfig) {
         try {
           // Validar configuración
-          bonificationService.validateBonificationConfig(
+          BonificationService.validateBonificationConfig(
             mapping.bonificationConfig
           );
 
           // Procesar bonificaciones para este documento
           const bonificationResult =
-            await bonificationService.processBonifications(
+            await BonificationService.processBonifications(
               sourceConnection,
-              documentId,
+              documentIds,
               mapping.bonificationConfig
             );
 
           logger.info(
-            `🎁 Bonificaciones procesadas para ${documentId}:`,
+            `🎁 Bonificaciones procesadas para ${documentIds}:`,
             bonificationResult
           );
         } catch (bonificationError) {
           logger.error(
-            `❌ Error procesando bonificaciones para ${documentId}:`,
+            `❌ Error procesando bonificaciones para ${documentIds}:`,
             bonificationError
           );
           // Decidir si continuar o fallar (dependiendo de los requerimientos)
