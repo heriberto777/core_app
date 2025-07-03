@@ -2107,7 +2107,6 @@ class DynamicTransferService {
    * @param {boolean} isDetailTable - true si es tabla de detalle
    * @returns {Promise<void>}
    */
-
   async processTable(
     tableConfig,
     sourceData,
@@ -2130,6 +2129,7 @@ class DynamicTransferService {
       documentId,
       isDetailTable,
     });
+
     // ===== VALIDACIONES INICIALES =====
     if (!tableConfig) {
       throw new Error("tableConfig es requerido");
@@ -2175,6 +2175,14 @@ class DynamicTransferService {
         combinedKeys: Object.keys(dataForProcessing || {}),
         isDetailTable,
       });
+
+      // ===== NUEVO: LOGGING DE INFORMACIÓN DEL MAPPING =====
+      this.logMappingInformation(
+        tableConfig,
+        sourceData,
+        detailRow,
+        isDetailTable
+      );
 
       // ===== LOOKUP EN BASE DE DATOS DESTINO =====
       let lookupResults = {};
@@ -2309,6 +2317,15 @@ class DynamicTransferService {
       if (!targetConnection) {
         throw new Error(`targetConnection es requerido en processTable`);
       }
+
+      // ===== NUEVO: LOGGING FINAL ANTES DE EXECUTEINSERT =====
+      logger.info(
+        `📤 ENVIANDO A EXECUTEINSERT para ${tableConfig.targetTable}:`
+      );
+      logger.info(`- Campos del mapping: [${targetFields.join(", ")}]`);
+      logger.info(`- Cantidad de campos: ${targetFields.length}`);
+      logger.info(`- Campos SQL directos: ${directSqlFields.size}`);
+      logger.info(`- Campos parametrizados: ${Object.keys(targetData).length}`);
 
       // ===== EJECUCIÓN DE LA INSERCIÓN =====
       await this.executeInsert(
@@ -4703,6 +4720,70 @@ class DynamicTransferService {
     } catch (diagError) {
       logger.error(`❌ Error en diagnóstico: ${diagError.message}`);
       return { issue: "diagnostic_failed", details: diagError.message };
+    }
+  }
+
+  /**
+   * Registra información del mapping configurado (sin validaciones)
+   * @private
+   */
+  logMappingInformation(tableConfig, sourceData, detailRow, isDetailTable) {
+    try {
+      const dataForProcessing = isDetailTable
+        ? { ...sourceData, ...detailRow }
+        : sourceData;
+
+      const availableDataFields = Object.keys(dataForProcessing || {});
+      const configuredMappings = tableConfig.fieldMappings.map(
+        (fm) => `${fm.sourceField || "DEFAULT"} → ${fm.targetField}`
+      );
+
+      const sourceFields = tableConfig.fieldMappings
+        .filter((fm) => fm.sourceField)
+        .map((fm) => fm.sourceField);
+
+      const targetFields = tableConfig.fieldMappings.map(
+        (fm) => fm.targetField
+      );
+
+      const missingSourceFields = sourceFields.filter(
+        (field) => !availableDataFields.includes(field)
+      );
+
+      logger.info(`📋 INFORMACIÓN DEL MAPPING para ${tableConfig.name}:`);
+      logger.info(`- Tabla origen: ${tableConfig.sourceTable || "N/A"}`);
+      logger.info(`- Tabla destino: ${tableConfig.targetTable}`);
+      logger.info(`- Tipo: ${isDetailTable ? "DETALLE" : "PRINCIPAL"}`);
+      logger.info(
+        `- Campos configurados en mapping: ${tableConfig.fieldMappings.length}`
+      );
+      logger.info(
+        `- Campos origen → destino: [${configuredMappings.join(", ")}]`
+      );
+      logger.info(
+        `- Campos destino que se insertarán: [${targetFields.join(", ")}]`
+      );
+      logger.info(`- Datos disponibles: [${availableDataFields.join(", ")}]`);
+
+      if (missingSourceFields.length > 0) {
+        logger.warn(
+          `⚠️ Campos del mapping no encontrados en datos (usarán defaults): [${missingSourceFields.join(
+            ", "
+          )}]`
+        );
+      } else {
+        logger.info(
+          `✅ Todos los campos source del mapping están disponibles en los datos`
+        );
+      }
+
+      logger.info(
+        `🎯 El sistema usará ÚNICAMENTE los campos configurados en este mapping`
+      );
+    } catch (error) {
+      logger.debug(
+        `Error en logging de información del mapping: ${error.message}`
+      );
     }
   }
 }
