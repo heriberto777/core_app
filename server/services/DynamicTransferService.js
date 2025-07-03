@@ -573,6 +573,7 @@ class DynamicTransferService {
   ) {
     let processedTables = [];
     let documentType = "unknown";
+    let bonificationMapping = null; // ⭐ DECLARAR AQUÍ
 
     try {
       logger.info(
@@ -635,8 +636,6 @@ class DynamicTransferService {
           );
           throw new Error(`Error al obtener datos de origen: ${error.message}`);
         }
-
-        let bonificationMapping = null;
 
         // 🎁 PROCESAMIENTO DE BONIFICACIONES (ANTES DE PROCESAR DATOS)
         if (mapping.hasBonificationProcessing && mapping.bonificationConfig) {
@@ -780,7 +779,8 @@ class DynamicTransferService {
             currentConsecutive,
             mapping,
             columnLengthCache,
-            processedTables
+            processedTables,
+            bonificationMapping
           );
         }
       }
@@ -2364,7 +2364,8 @@ class DynamicTransferService {
     currentConsecutive,
     mapping,
     columnLengthCache,
-    processedTables
+    processedTables,
+    bonificationMapping = null
   ) {
     // Ordenar tablas de detalle por executionOrder
     const orderedDetailTables = [...detailTables].sort(
