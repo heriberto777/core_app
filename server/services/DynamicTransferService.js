@@ -2236,20 +2236,21 @@ class DynamicTransferService {
         }
       }
 
-      // Validar longitud de campo
-      try {
-        value = await this.validateFieldLength(
-          value,
-          fieldMapping.targetField,
-          tableConfig.targetTable,
+      // VALIDAR LONGITUD DE CAMPO (LÓGICA EXISTENTE)
+      if (typeof value === "string") {
+        const maxLength = await this.getColumnMaxLength(
           targetConnection,
+          tableConfig.targetTable,
+          fieldMapping.targetField,
           columnLengthCache
         );
-      } catch (lengthError) {
-        logger.error(
-          `Error de longitud en campo ${fieldMapping.targetField}: ${lengthError.message}`
-        );
-        throw lengthError;
+
+        if (maxLength > 0 && value.length > maxLength) {
+          logger.warn(
+            `Truncando valor para campo ${fieldMapping.targetField} de longitud ${value.length} a ${maxLength} caracteres`
+          );
+          value = value.substring(0, maxLength);
+        }
       }
 
       return { value, isDirectSql: false };
@@ -4518,12 +4519,10 @@ class DynamicTransferService {
     }
 
     // Obtener el mapeo del artículo
-    const articleMapping =
-      bonificationMapping &&
-      this.bonificationService.getArticleMapping(
-        articleCode,
-        bonificationMapping
-      );
+    const articleMapping = this.getArticleMappingFromBonificationData(
+      articleCode,
+      bonificationMapping
+    );
 
     if (!articleMapping) {
       logger.warn(
@@ -4551,6 +4550,43 @@ class DynamicTransferService {
       }
       // Para artículos regulares, PEDIDO_LINEA_BONIF debe ser null
       return null;
+    }
+
+    return null;
+  }
+
+  /**
+   * Obtiene el mapeo para un artículo específico desde los datos de bonificación
+   * @private
+   */
+  getArticleMappingFromBonificationData(articleCode, bonificationMapping) {
+    if (!bonificationMapping) return null;
+
+    // Verificar si es artículo regular
+    if (
+      bonificationMapping.regularMapping &&
+      bonificationMapping.regularMapping.has(articleCode)
+    ) {
+      const regular = bonificationMapping.regularMapping.get(articleCode);
+      return {
+        isRegular: true,
+        lineNumber: regular.lineNumber,
+        bonificationLineReference: null,
+      };
+    }
+
+    // Verificar si es bonificación
+    if (
+      bonificationMapping.bonificationMapping &&
+      bonificationMapping.bonificationMapping.has(articleCode)
+    ) {
+      const bonification =
+        bonificationMapping.bonificationMapping.get(articleCode);
+      return {
+        isRegular: false,
+        lineNumber: bonification.lineNumber,
+        bonificationLineReference: bonification.bonificationLineReference,
+      };
     }
 
     return null;
