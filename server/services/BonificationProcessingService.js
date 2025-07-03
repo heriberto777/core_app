@@ -21,7 +21,7 @@ class BonificationProcessingService {
       // 1. Validar configuración
       this.validateBonificationConfig(bonificationConfig);
 
-      // 2. Obtener todos los registros del documento
+      // 2. Obtener todos los registros del documento de la tabla origen
       const allRecords = await this.getAllRecords(
         connection,
         documentId,
@@ -34,6 +34,7 @@ class BonificationProcessingService {
           success: true,
           processed: 0,
           message: "No hay registros para procesar",
+          bonificationMapping: null,
         };
       }
 
@@ -65,34 +66,13 @@ class BonificationProcessingService {
           regularArticles: regularArticles.length,
           bonifications: 0,
           message: "No hay bonificaciones en este documento",
+          bonificationMapping: null,
         };
       }
 
-      // 5. Limpiar datos previos (si es reprocesamiento)
-      await this.cleanPreviousProcessing(
-        connection,
-        documentId,
-        bonificationConfig
-      );
-
-      // 6. Asignar números de línea secuenciales a artículos regulares
-      const lineAssignmentResult = await this.assignLineNumbers(
-        connection,
+      // 5. Crear el mapeo en memoria
+      const bonificationMapping = await this.createBonificationMapping(
         regularArticles,
-        bonificationConfig
-      );
-
-      // 7. Mapear bonificaciones con artículos regulares
-      const mappingResult = await this.mapBonificationsToRegularArticles(
-        connection,
-        regularArticles,
-        bonifications,
-        bonificationConfig
-      );
-
-      // 8. Limpiar referencias originales en bonificaciones
-      await this.cleanOriginalReferences(
-        connection,
         bonifications,
         bonificationConfig
       );
@@ -104,13 +84,13 @@ class BonificationProcessingService {
 
       return {
         success: true,
-        processed: mappingResult.mapped,
+        processed: bonificationMapping.mappedBonifications,
         regularArticles: regularArticles.length,
         bonifications: bonifications.length,
-        lineAssignments: lineAssignmentResult.assigned,
-        orphanBonifications: mappingResult.orphans,
+        orphanBonifications: bonificationMapping.orphanBonifications,
         processingTimeMs: processingTime,
-        message: `Procesado: ${mappingResult.mapped} bonificaciones mapeadas, ${mappingResult.orphans} huérfanas`,
+        message: `Procesado: ${bonificationMapping.mappedBonifications} bonificaciones mapeadas, ${bonificationMapping.orphanBonifications} huérfanas`,
+        bonificationMapping: bonificationMapping, // ESTA ES LA INFORMACIÓN CLAVE
       };
     } catch (error) {
       logger.error(
@@ -128,8 +108,133 @@ class BonificationProcessingService {
         error: error.message,
         processed: 0,
         documentId,
+        bonificationMapping: null,
       };
     }
+  }
+
+  /**
+   * Crea el mapeo de bonificaciones en memoria
+   */
+  async createBonificationMapping(regularArticles, bonifications, config) {
+    logger.info(`🔗 Creando mapeo de bonificaciones en memoria`);
+
+    // 1. Asignar números de línea secuenciales a artículos regulares
+    const regularMapping = new Map();
+    const lineNumberMapping = new Map(); // codigo_articulo -> numero_linea
+
+    regularArticles.forEach((article, index) => {
+      const lineNumber = index + 1;
+      const articleCode = article[config.regularArticleField];
+
+      regularMapping.set(articleCode, {
+        ...article,
+        lineNumber: lineNumber, // Este será el PEDIDO_LINEA en destino
+      });
+
+      lineNumberMapping.set(articleCode, lineNumber);
+
+      logger.debug(
+        `📋 Artículo regular: ${articleCode} → Línea: ${lineNumber}`
+      );
+    });
+
+    // 2. Mapear bonificaciones con artículos regulares
+    const bonificationMapping = new Map();
+    let mappedBonifications = 0;
+    let orphanBonifications = 0;
+    const orphanList = [];
+
+    bonifications.forEach((bonification) => {
+      const bonificationCode = bonification[config.regularArticleField];
+      const regularArticleCode =
+        bonification[config.bonificationReferenceField];
+
+      if (!regularArticleCode) {
+        logger.warn(
+          `⚠️ Bonificación ${bonificationCode} sin referencia a artículo regular`
+        );
+        orphanBonifications++;
+        orphanList.push({
+          bonificationCode,
+          reason: "Sin referencia a artículo regular",
+        });
+        return;
+      }
+
+      const regularLineNumber = lineNumberMapping.get(regularArticleCode);
+
+      if (!regularLineNumber) {
+        logger.warn(
+          `⚠️ No se encontró artículo regular para código: ${regularArticleCode}`
+        );
+        orphanBonifications++;
+        orphanList.push({
+          bonificationCode,
+          regularArticleCode,
+          reason: "Artículo regular no encontrado",
+        });
+        return;
+      }
+
+      // Mapear bonificación
+      bonificationMapping.set(bonificationCode, {
+        ...bonification,
+        lineNumber: 0, // Las bonificaciones pueden tener línea 0 o secuencial
+        bonificationLineReference: regularLineNumber, // PEDIDO_LINEA_BONIF = línea del artículo regular
+      });
+
+      mappedBonifications++;
+      logger.debug(
+        `✅ Bonificación: ${bonificationCode} → Línea regular: ${regularLineNumber}`
+      );
+    });
+
+    logger.info(
+      `✅ Mapeo completado: ${mappedBonifications} mapeadas, ${orphanBonifications} huérfanas`
+    );
+
+    if (orphanBonifications > 0) {
+      logger.warn(`⚠️ Bonificaciones huérfanas:`, orphanList);
+    }
+
+    return {
+      regularMapping, // Map de artículos regulares con números de línea
+      bonificationMapping, // Map de bonificaciones con referencias a líneas regulares
+      mappedBonifications,
+      orphanBonifications,
+      orphanList,
+    };
+  }
+
+  /**
+   * Obtiene el mapeo para un artículo específico
+   */
+  getArticleMapping(articleCode, bonificationMapping) {
+    if (!bonificationMapping) return null;
+
+    // Verificar si es artículo regular
+    if (bonificationMapping.regularMapping.has(articleCode)) {
+      const regular = bonificationMapping.regularMapping.get(articleCode);
+      return {
+        isRegular: true,
+        lineNumber: regular.lineNumber,
+        bonificationLineReference: null,
+      };
+    }
+
+    // Verificar si es bonificación
+    if (bonificationMapping.bonificationMapping.has(articleCode)) {
+      const bonification =
+        bonificationMapping.bonificationMapping.get(articleCode);
+      return {
+        isRegular: false,
+        lineNumber: bonification.lineNumber,
+        bonificationLineReference: bonification.bonificationLineReference,
+      };
+    }
+
+    return null;
   }
 
   /**

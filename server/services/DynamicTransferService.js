@@ -91,11 +91,15 @@ class DynamicTransferService {
       }
 
       // 3. Registrar tarea en el tracker
-      TaskTracker.registerTask(cancelTaskId, `Processing mapping: ${mapping.name}`, {
-        mappingId,
-        documentIds,
-        signal,
-      });
+      TaskTracker.registerTask(
+        cancelTaskId,
+        `Processing mapping: ${mapping.name}`,
+        {
+          mappingId,
+          documentIds,
+          signal,
+        }
+      );
 
       // 4. Crear registro de ejecución
       const taskExecution = new TaskExecution({
@@ -632,6 +636,8 @@ class DynamicTransferService {
           throw new Error(`Error al obtener datos de origen: ${error.message}`);
         }
 
+        let bonificationMapping = null;
+
         // 🎁 PROCESAMIENTO DE BONIFICACIONES (ANTES DE PROCESAR DATOS)
         if (mapping.hasBonificationProcessing && mapping.bonificationConfig) {
           try {
@@ -647,6 +653,7 @@ class DynamicTransferService {
               );
 
             if (bonificationResult.success) {
+              bonificationMapping = bonificationResult.bonificationMapping; // GUARDAR EL MAPEO
               logger.info(
                 `✅ Bonificaciones procesadas exitosamente para ${documentId}:`,
                 {
@@ -661,7 +668,6 @@ class DynamicTransferService {
                 `❌ Error procesando bonificaciones para ${documentId}:`,
                 bonificationResult.error
               );
-              // Decidir si continuar o fallar completamente
               throw new Error(
                 `Falló procesamiento de bonificaciones: ${bonificationResult.error}`
               );
@@ -745,13 +751,14 @@ class DynamicTransferService {
         await this.processTable(
           tableConfig,
           sourceData,
-          null, // No hay detailRow para tabla principal
+          null,
           targetConnection,
           currentConsecutive,
           mapping,
           documentId,
           columnLengthCache,
-          false // isDetailTable = false
+          false,
+          bonificationMapping // NUEVO PARÁMETRO
         );
 
         logger.info(`✅ INSERCIÓN EXITOSA en ${tableConfig.targetTable}`);
@@ -1998,6 +2005,10 @@ class DynamicTransferService {
    * @param {boolean} isDetailTable - true si es tabla de detalle
    * @returns {Promise<void>}
    */
+  /**
+   * Procesa una tabla (principal o detalle) - MÉTODO UNIFICADO CON BONIFICACIONES
+   * @private
+   */
   async processTable(
     tableConfig,
     sourceData,
@@ -2007,245 +2018,90 @@ class DynamicTransferService {
     mapping,
     documentId,
     columnLengthCache,
-    isDetailTable = false
+    isDetailTable = false,
+    bonificationMapping = null // NUEVO PARÁMETRO
   ) {
-    logger.debug(`🔄 INICIANDO processTable con parámetros:`, {
-      tableConfigExists: !!tableConfig,
-      tableConfigName: tableConfig?.name,
-      tableConfigTargetTable: tableConfig?.targetTable,
-      sourceDataExists: !!sourceData,
-      detailRowExists: !!detailRow,
-      targetConnectionExists: !!targetConnection,
-      targetConnectionType: typeof targetConnection,
-      documentId,
-      isDetailTable,
-    });
-
-    // ===== VALIDACIONES INICIALES =====
-    if (!tableConfig) {
-      throw new Error("tableConfig es requerido");
-    }
-
-    if (!tableConfig.targetTable) {
-      throw new Error("tableConfig.targetTable es requerido");
-    }
-
-    if (!targetConnection) {
-      throw new Error("targetConnection es requerido");
-    }
-
-    if (!Array.isArray(tableConfig.fieldMappings)) {
-      throw new Error("tableConfig.fieldMappings debe ser un array");
-    }
-
-    // ===== INICIALIZACIÓN DE VARIABLES =====
     const targetData = {};
     const targetFields = [];
     const targetValues = [];
     const directSqlFields = new Set();
 
-    const startTime = Date.now();
-    const tableType = isDetailTable ? "DETALLE" : "PRINCIPAL";
+    // Para detalles, combinar datos del encabezado y detalle
+    const dataForProcessing = isDetailTable
+      ? { ...sourceData, ...detailRow }
+      : sourceData;
 
-    logger.info(
-      `🔄 Iniciando procesamiento de tabla ${tableType}: ${tableConfig.name} -> ${tableConfig.targetTable}`
-    );
-
-    try {
-      // ===== PREPARACIÓN DE DATOS =====
-      const dataForProcessing = isDetailTable
-        ? {
-            ...sourceData,
-            ...detailRow,
-          }
-        : sourceData;
-
-      logger.debug(`📊 Datos disponibles para procesamiento:`, {
-        sourceDataKeys: Object.keys(sourceData || {}),
-        detailRowKeys: Object.keys(detailRow || {}),
-        combinedKeys: Object.keys(dataForProcessing || {}),
-        isDetailTable,
-      });
-
-      // ===== NUEVO: LOGGING DE INFORMACIÓN DEL MAPPING =====
-      this.logMappingInformation(
+    // Realizar consulta de lookup si es necesario
+    let lookupResults = {};
+    if (tableConfig.fieldMappings.some((fm) => fm.lookupFromTarget)) {
+      logger.info(
+        `Realizando lookups en BD destino para tabla ${tableConfig.name}`
+      );
+      const lookupExecution = await this.lookupValuesFromTarget(
         tableConfig,
-        sourceData,
-        detailRow,
-        isDetailTable
-      );
-
-      // ===== LOOKUP EN BASE DE DATOS DESTINO =====
-      let lookupResults = {};
-      const hasLookupFields = tableConfig.fieldMappings.some(
-        (fm) => fm.lookupFromTarget
-      );
-
-      if (hasLookupFields) {
-        logger.info(
-          `🔍 Realizando lookups en BD destino para tabla ${tableConfig.name}`
-        );
-
-        const lookupExecution = await this.lookupValuesFromTarget(
-          tableConfig,
-          dataForProcessing,
-          targetConnection
-        );
-
-        if (!lookupExecution.success) {
-          const failedMsg = lookupExecution.failedFields
-            ? lookupExecution.failedFields
-                .map((f) => `${f.field}: ${f.error}`)
-                .join(", ")
-            : lookupExecution.error || "Error desconocido en lookup";
-
-          throw new Error(
-            `Falló la validación de lookup para tabla ${tableConfig.name}: ${failedMsg}`
-          );
-        }
-
-        lookupResults = lookupExecution.results;
-        logger.info(
-          `✅ Lookup completado exitosamente. Continuando con el procesamiento...`
-        );
-      }
-
-      // ===== PROCESAMIENTO DE CAMPOS =====
-      logger.info(
-        `🔧 Procesando ${tableConfig.fieldMappings.length} campos para tabla ${tableConfig.name}`
-      );
-
-      for (const fieldMapping of tableConfig.fieldMappings) {
-        try {
-          if (!fieldMapping.targetField) {
-            logger.warn(
-              `Field mapping sin targetField encontrado, saltando...`
-            );
-            continue;
-          }
-
-          const processedField = await this.processField(
-            fieldMapping,
-            dataForProcessing,
-            lookupResults,
-            currentConsecutive,
-            mapping,
-            tableConfig,
-            isDetailTable,
-            targetConnection,
-            columnLengthCache
-          );
-
-          if (processedField.isDirectSql) {
-            targetFields.push(fieldMapping.targetField);
-            targetValues.push(processedField.value);
-            directSqlFields.add(fieldMapping.targetField);
-
-            logger.debug(
-              `🔧 Campo SQL directo: ${fieldMapping.targetField} = ${processedField.value}`
-            );
-          } else {
-            targetData[fieldMapping.targetField] = processedField.value;
-            targetFields.push(fieldMapping.targetField);
-            targetValues.push(`@${fieldMapping.targetField}`);
-
-            logger.debug(
-              `🔧 Campo parametrizado: ${fieldMapping.targetField} = ${
-                processedField.value
-              } (tipo: ${typeof processedField.value})`
-            );
-          }
-        } catch (fieldError) {
-          logger.error(
-            `❌ Error procesando campo ${fieldMapping.targetField}:`,
-            {
-              error: fieldError.message,
-              fieldMapping,
-              sourceData: dataForProcessing,
-            }
-          );
-          throw new Error(
-            `Error en campo ${fieldMapping.targetField}: ${fieldError.message}`
-          );
-        }
-      }
-
-      // ===== VALIDACIONES PRE-INSERCIÓN =====
-      if (targetFields.length === 0) {
-        logger.warn(
-          `⚠️ No hay campos para insertar en tabla ${tableConfig.targetTable}`
-        );
-        return;
-      }
-
-      if (targetFields.length !== targetValues.length) {
-        throw new Error(
-          `Inconsistencia: targetFields (${targetFields.length}) y targetValues (${targetValues.length}) deben tener la misma longitud`
-        );
-      }
-
-      logger.info(
-        `📝 Preparando inserción: ${targetFields.length} campos en ${tableConfig.targetTable}`
-      );
-
-      logger.debug(`🔍 Preparando llamada a executeInsert:`, {
-        tableConfigTargetTable: tableConfig.targetTable,
-        targetFieldsLength: targetFields.length,
-        targetValuesLength: targetValues.length,
-        targetDataKeys: Object.keys(targetData),
-        directSqlFieldsSize: directSqlFields.size,
-        targetConnectionExists: !!targetConnection,
-      });
-
-      if (!tableConfig?.targetTable) {
-        throw new Error(
-          `tableConfig.targetTable es requerido. tableConfig: ${JSON.stringify(
-            tableConfig
-          )}`
-        );
-      }
-
-      if (!targetConnection) {
-        throw new Error(`targetConnection es requerido en processTable`);
-      }
-
-      // ===== NUEVO: LOGGING FINAL ANTES DE EXECUTEINSERT =====
-      logger.info(
-        `📤 ENVIANDO A EXECUTEINSERT para ${tableConfig.targetTable}:`
-      );
-      logger.info(`- Campos del mapping: [${targetFields.join(", ")}]`);
-      logger.info(`- Cantidad de campos: ${targetFields.length}`);
-      logger.info(`- Campos SQL directos: ${directSqlFields.size}`);
-      logger.info(`- Campos parametrizados: ${Object.keys(targetData).length}`);
-
-      // ===== EJECUCIÓN DE LA INSERCIÓN =====
-      await this.executeInsert(
-        tableConfig.targetTable,
-        targetFields,
-        targetValues,
-        targetData,
-        directSqlFields,
+        dataForProcessing,
         targetConnection
       );
 
-      const processingTime = Date.now() - startTime;
-      logger.info(
-        `✅ INSERCIÓN EXITOSA en ${tableConfig.targetTable} (${processingTime}ms)`
-      );
-    } catch (error) {
-      const processingTime = Date.now() - startTime;
-      logger.error(`❌ Error procesando tabla ${tableConfig.name}:`, {
-        error: error.message,
-        tableConfig: tableConfig.name,
-        targetTable: tableConfig.targetTable,
-        isDetailTable,
-        documentId,
-        processingTime,
-        stack: error.stack,
-      });
+      if (!lookupExecution.success) {
+        const failedMsg = lookupExecution.failedFields
+          ? lookupExecution.failedFields
+              .map((f) => `${f.field}: ${f.error}`)
+              .join(", ")
+          : lookupExecution.error || "Error desconocido en lookup";
 
-      throw new Error(`Error en tabla ${tableConfig.name}: ${error.message}`);
+        throw new Error(
+          `Falló la validación de lookup para tabla ${tableConfig.name}: ${failedMsg}`
+        );
+      }
+
+      lookupResults = lookupExecution.results;
+      logger.info(
+        `Lookup completado exitosamente. Continuando con el procesamiento...`
+      );
     }
+
+    // Procesar todos los campos
+    for (const fieldMapping of tableConfig.fieldMappings) {
+      const processedField = await this.processField(
+        fieldMapping,
+        dataForProcessing,
+        lookupResults,
+        currentConsecutive,
+        mapping,
+        tableConfig,
+        isDetailTable,
+        targetConnection,
+        columnLengthCache,
+        bonificationMapping // NUEVO PARÁMETRO
+      );
+
+      if (processedField.isDirectSql) {
+        targetFields.push(fieldMapping.targetField);
+        targetValues.push(processedField.value); // Expresión SQL directa
+        directSqlFields.add(fieldMapping.targetField);
+      } else {
+        targetData[fieldMapping.targetField] = processedField.value;
+        targetFields.push(fieldMapping.targetField);
+        targetValues.push(`@${fieldMapping.targetField}`);
+      }
+
+      logger.debug(
+        `✅ Campo ${fieldMapping.targetField} preparado para inserción: ${
+          processedField.value
+        } (tipo: ${typeof processedField.value})`
+      );
+    }
+
+    // Construir y ejecutar la consulta INSERT
+    await this.executeInsert(
+      tableConfig.targetTable,
+      targetFields,
+      targetValues,
+      targetData,
+      directSqlFields,
+      targetConnection
+    );
   }
 
   /**
@@ -2261,9 +2117,27 @@ class DynamicTransferService {
     tableConfig,
     isDetailTable,
     targetConnection,
-    columnLengthCache
+    columnLengthCache,
+    bonificationMapping = null // NUEVO PARÁMETRO
   ) {
     let value;
+
+    // 🎁 PRIORIDAD 0: CAMPOS DE BONIFICACIONES
+    if (bonificationMapping && mapping.hasBonificationProcessing) {
+      const bonificationValue = this.processBonificationField(
+        fieldMapping,
+        sourceData,
+        bonificationMapping,
+        mapping.bonificationConfig
+      );
+
+      if (bonificationValue !== null) {
+        logger.debug(
+          `🎁 Usando valor de bonificación para ${fieldMapping.targetField}: ${bonificationValue}`
+        );
+        return { value: bonificationValue, isDirectSql: false };
+      }
+    }
 
     // PRIORIDAD 1: Usar valores obtenidos por lookup si existen
     if (
@@ -2295,168 +2169,105 @@ class DynamicTransferService {
     ];
 
     const isNativeFunction =
+      defaultValue &&
       typeof defaultValue === "string" &&
-      sqlNativeFunctions.some((func) =>
-        defaultValue.trim().toUpperCase().includes(func)
-      );
+      sqlNativeFunctions.some((func) => defaultValue.includes(func));
 
     if (isNativeFunction) {
       logger.debug(
-        `Detectada función SQL nativa para ${fieldMapping.targetField}: ${defaultValue}`
+        `Campo ${fieldMapping.targetField} usa función SQL nativa: ${defaultValue}`
       );
       return { value: defaultValue, isDirectSql: true };
     }
 
-    // PASO 1: Obtener valor del origen o usar valor por defecto
-    if (fieldMapping.sourceField) {
+    // PRIORIDAD 3: Consecutivo automático
+    if (fieldMapping.isConsecutive && currentConsecutive) {
+      const formattedValue = fieldMapping.consecutiveAsNumber
+        ? currentConsecutive.value
+        : currentConsecutive.formatted;
+
+      logger.debug(
+        `Asignando consecutivo a ${fieldMapping.targetField}: ${formattedValue}`
+      );
+      return { value: formattedValue, isDirectSql: false };
+    }
+
+    // PRIORIDAD 4: Campo mapeado desde origen
+    if (
+      fieldMapping.sourceField &&
+      sourceData[fieldMapping.sourceField] !== undefined
+    ) {
       value = sourceData[fieldMapping.sourceField];
-      logger.debug(`Valor original de ${fieldMapping.sourceField}: ${value}`);
 
-      // PASO 2: Aplicar eliminación de prefijo específico si está configurado
-      if (
-        fieldMapping.removePrefix &&
-        typeof value === "string" &&
-        value.startsWith(fieldMapping.removePrefix)
-      ) {
-        const originalValue = value;
-        value = value.substring(fieldMapping.removePrefix.length);
-        logger.debug(
-          `Prefijo '${fieldMapping.removePrefix}' eliminado del campo ${fieldMapping.sourceField}: '${originalValue}' → '${value}'`
-        );
-      }
-    } else {
-      // No hay campo origen, usar valor por defecto
-      value = defaultValue === "NULL" ? null : defaultValue;
-    }
-
-    // Si el valor es undefined/null pero hay un valor por defecto
-    if ((value === undefined || value === null) && defaultValue !== undefined) {
-      value = defaultValue === "NULL" ? null : defaultValue;
-    }
-
-    // PASO 3: **APLICAR CONVERSIÓN DE UNIDADES**
-    if (fieldMapping.unitConversion && fieldMapping.unitConversion.enabled) {
-      logger.info(
-        `🔄 Iniciando conversión de unidades para campo: ${fieldMapping.targetField}`
-      );
-      logger.info(
-        `📦 Valor antes de conversión: ${value} (tipo: ${typeof value})`
-      );
-
-      // **LOG CRÍTICO PARA DEBUG**
-      console.log(`🔍 DEBUG CONVERSIÓN - Campo: ${fieldMapping.targetField}`);
-      console.log(`🔍 sourceData keys: ${Object.keys(sourceData).join(", ")}`);
-      console.log(`🔍 Buscando campos:`);
-      console.log(
-        `   - unitMeasureField: ${fieldMapping.unitConversion.unitMeasureField}`
-      );
-      console.log(
-        `   - conversionFactorField: ${fieldMapping.unitConversion.conversionFactorField}`
-      );
-
-      const originalValue = value;
-      value = this.applyUnitConversion(sourceData, fieldMapping, value);
-
-      if (originalValue !== value) {
-        logger.info(
-          `🎉 Conversión aplicada exitosamente en ${fieldMapping.targetField}:`
-        );
-        logger.info(`   📦 Antes: ${originalValue} (${typeof originalValue})`);
-        logger.info(`   📊 Después: ${value} (${typeof value})`);
-      } else {
-        logger.info(
-          `ℹ️ No se aplicó conversión en ${fieldMapping.targetField}: ${value}`
-        );
-      }
-    }
-
-    // PASO 4: Formatear fechas si es necesario
-    if (
-      typeof value !== "number" &&
-      (value instanceof Date ||
-        (typeof value === "string" &&
-          value.includes("T") &&
-          !isNaN(new Date(value).getTime())))
-    ) {
-      logger.debug(`Convirtiendo fecha a formato SQL Server: ${value}`);
-      value = this.formatSqlDate(value);
-      logger.debug(`Fecha convertida: ${value}`);
-    }
-
-    // PASO 5: Aplicar consecutivo si corresponde
-    if (
-      currentConsecutive &&
-      mapping.consecutiveConfig &&
-      mapping.consecutiveConfig.enabled
-    ) {
-      const shouldReceiveConsecutive = this.shouldReceiveConsecutive(
-        fieldMapping,
-        mapping.consecutiveConfig,
-        tableConfig,
-        isDetailTable
-      );
-
-      if (shouldReceiveConsecutive) {
-        // Solo aplicar consecutivo si no hubo conversión numérica
-        if (
-          fieldMapping.unitConversion &&
-          fieldMapping.unitConversion.enabled &&
-          typeof value === "number"
-        ) {
-          logger.warn(
-            `⚠️ No se aplicará consecutivo a ${fieldMapping.targetField} porque se aplicó conversión numérica (valor: ${value})`
-          );
-        } else {
-          value = currentConsecutive.formatted;
+      // Aplicar eliminación de prefijo
+      if (fieldMapping.removePrefix && typeof value === "string") {
+        if (value.startsWith(fieldMapping.removePrefix)) {
+          value = value.substring(fieldMapping.removePrefix.length);
           logger.debug(
-            `Asignando consecutivo ${currentConsecutive.formatted} a campo ${fieldMapping.targetField} en tabla ${tableConfig.name}`
+            `Prefijo '${fieldMapping.removePrefix}' eliminado de ${fieldMapping.targetField}`
           );
         }
       }
-    }
 
-    // PASO 6: Verificar campos obligatorios
-    if (fieldMapping.isRequired && (value === undefined || value === null)) {
-      throw new Error(
-        `El campo obligatorio '${fieldMapping.targetField}' no tiene valor de origen ni valor por defecto`
-      );
-    }
-
-    // PASO 7: Aplicar mapeo de valores si existe
-    if (
-      value !== null &&
-      value !== undefined &&
-      fieldMapping.valueMappings?.length > 0
-    ) {
-      const valueMapping = fieldMapping.valueMappings.find(
-        (vm) => vm.sourceValue === value
-      );
-      if (valueMapping) {
-        logger.debug(
-          `Aplicando mapeo de valor para ${fieldMapping.targetField}: ${value} → ${valueMapping.targetValue}`
+      // Aplicar mapeo de valores
+      if (fieldMapping.valueMappings && fieldMapping.valueMappings.length > 0) {
+        const mapping = fieldMapping.valueMappings.find(
+          (vm) => vm.sourceValue === value
         );
-        value = valueMapping.targetValue;
+        if (mapping) {
+          value = mapping.targetValue;
+          logger.debug(
+            `Valor mapeado para ${fieldMapping.targetField}: ${value}`
+          );
+        }
       }
-    }
 
-    // PASO 8: Verificar y ajustar longitud de strings
-    if (typeof value === "string") {
-      const maxLength = await this.getColumnMaxLength(
-        targetConnection,
-        tableConfig.targetTable,
-        fieldMapping.targetField,
-        columnLengthCache
-      );
+      // Aplicar conversión de unidades
+      if (fieldMapping.unitConversion?.enabled) {
+        try {
+          value = this.applyUnitConversion(sourceData, fieldMapping, value);
+          logger.debug(
+            `Conversión de unidades aplicada a ${fieldMapping.targetField}: ${value}`
+          );
+        } catch (convError) {
+          logger.warn(
+            `Error en conversión de unidades para ${fieldMapping.targetField}: ${convError.message}`
+          );
+        }
+      }
 
-      if (maxLength > 0 && value.length > maxLength) {
-        logger.warn(
-          `Truncando valor para campo ${fieldMapping.targetField} de longitud ${value.length} a ${maxLength} caracteres`
+      // Validar longitud de campo
+      try {
+        value = await this.validateFieldLength(
+          value,
+          fieldMapping.targetField,
+          tableConfig.targetTable,
+          targetConnection,
+          columnLengthCache
         );
-        value = value.substring(0, maxLength);
+      } catch (lengthError) {
+        logger.error(
+          `Error de longitud en campo ${fieldMapping.targetField}: ${lengthError.message}`
+        );
+        throw lengthError;
       }
+
+      return { value, isDirectSql: false };
     }
 
-    return { value, isDirectSql: false };
+    // PRIORIDAD 5: Valor por defecto
+    if (fieldMapping.defaultValue !== undefined) {
+      value =
+        fieldMapping.defaultValue === "NULL" ? null : fieldMapping.defaultValue;
+      logger.debug(
+        `Usando valor por defecto para ${fieldMapping.targetField}: ${value}`
+      );
+      return { value, isDirectSql: false };
+    }
+
+    // PRIORIDAD 6: null por defecto
+    logger.debug(`Campo ${fieldMapping.targetField} será null`);
+    return { value: null, isDirectSql: false };
   }
 
   /**
@@ -2519,7 +2330,8 @@ class DynamicTransferService {
           mapping,
           documentId,
           columnLengthCache,
-          true // isDetailTable = true
+          true, // isDetailTable = true
+          bonificationMapping // NUEVO PARÁMETRO
         );
 
         logger.debug(
@@ -4676,6 +4488,72 @@ class DynamicTransferService {
         `Error en logging de información del mapping: ${error.message}`
       );
     }
+  }
+
+  /**
+   * Procesa campos específicos de bonificaciones
+   * @private
+   */
+  processBonificationField(
+    fieldMapping,
+    sourceData,
+    bonificationMapping,
+    bonificationConfig
+  ) {
+    const targetField = fieldMapping.targetField;
+
+    // Verificar si es un campo de bonificaciones
+    if (
+      targetField !== bonificationConfig.lineNumberField &&
+      targetField !== bonificationConfig.bonificationLineReferenceField
+    ) {
+      return null; // No es un campo de bonificaciones
+    }
+
+    // Obtener el código del artículo del registro actual
+    const articleCode = sourceData[bonificationConfig.regularArticleField];
+    if (!articleCode) {
+      logger.warn(`⚠️ No se encontró código de artículo para ${targetField}`);
+      return null;
+    }
+
+    // Obtener el mapeo del artículo
+    const articleMapping =
+      bonificationMapping &&
+      this.bonificationService.getArticleMapping(
+        articleCode,
+        bonificationMapping
+      );
+
+    if (!articleMapping) {
+      logger.warn(
+        `⚠️ No se encontró mapeo de bonificación para artículo: ${articleCode}`
+      );
+      return null;
+    }
+
+    // Asignar valores según el campo
+    if (targetField === bonificationConfig.lineNumberField) {
+      // PEDIDO_LINEA
+      const lineNumber = articleMapping.lineNumber;
+      logger.debug(`🎁 PEDIDO_LINEA para ${articleCode}: ${lineNumber}`);
+      return lineNumber;
+    }
+
+    if (targetField === bonificationConfig.bonificationLineReferenceField) {
+      // PEDIDO_LINEA_BONIF
+      const bonifLineRef = articleMapping.bonificationLineReference;
+      if (bonifLineRef !== null && bonifLineRef !== undefined) {
+        logger.debug(
+          `🎁 PEDIDO_LINEA_BONIF para ${articleCode}: ${bonifLineRef}`
+        );
+        return bonifLineRef;
+      }
+      // Para artículos regulares, PEDIDO_LINEA_BONIF debe ser null
+      return null;
+    }
+
+    return null;
   }
 }
 
