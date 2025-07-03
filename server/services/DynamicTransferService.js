@@ -91,7 +91,7 @@ class DynamicTransferService {
       }
 
       // 3. Registrar tarea en el tracker
-      TaskTracker.addTask(cancelTaskId, `Processing mapping: ${mapping.name}`, {
+      TaskTracker.registerTask(cancelTaskId, `Processing mapping: ${mapping.name}`, {
         mappingId,
         documentIds,
         signal,
