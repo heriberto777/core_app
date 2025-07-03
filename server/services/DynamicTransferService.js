@@ -57,21 +57,6 @@ class DynamicTransferService {
       let bonificationServiceLoaded = false;
       // let BonificationService = null;
 
-      if (mapping.hasBonificationProcessing) {
-        const bonificationResult =
-          await BonificationService.processBonifications(
-            documentIds,
-            mapping,
-            sourceConnection
-          );
-
-        if (bonificationResult) {
-          logger.info(
-            `🎁 Bonificaciones procesadas: ${bonificationResult.totalRecords} registros`
-          );
-        }
-      }
-
       // if (mapping.hasBonificationProcessing) {
       //   logger.info(
       //     `🎁 Mapping configurado con procesamiento de bonificaciones habilitado`
@@ -95,6 +80,51 @@ class DynamicTransferService {
       //     );
       //   }
       // }
+
+      if (mapping.hasBonificationProcessing) {
+        try {
+          logger.info(
+            `🎁 Iniciando procesamiento de bonificaciones para documento ${documentId}`
+          );
+
+          // 1. Obtener TODOS los detalles del documento (regulares + bonificaciones)
+          const orderDetails = await this.getOrderDetailsForBonifications(
+            documentIds,
+            mapping.bonificationConfig,
+            sourceConnection
+          );
+
+          if (orderDetails && orderDetails.length > 0) {
+            // 2. Procesar bonificaciones usando tu servicio existente
+            const processedDetails =
+              await BonificationService.processBonifications(
+                orderDetails,
+                mapping.bonificationConfig,
+                documentIds
+              );
+
+            // 3. Actualizar los datos procesados en la BD origen
+            await this.updateProcessedBonifications(
+              processedDetails,
+              mapping.bonificationConfig,
+              sourceConnection
+            );
+
+            logger.info(
+              `✅ Bonificaciones procesadas: ${processedDetails.length} registros`
+            );
+          } else {
+            logger.info(
+              `ℹ️ No se encontraron detalles para procesar bonificaciones`
+            );
+          }
+        } catch (bonificationError) {
+          logger.error(
+            `❌ Error en procesamiento de bonificaciones: ${bonificationError.message}`
+          );
+          // No lanzar error para permitir continuar el procesamiento normal
+        }
+      }
 
       // Asegurar configuración por defecto para mappings existentes
       if (!mapping.markProcessedStrategy) {
@@ -1295,6 +1325,81 @@ class DynamicTransferService {
         bonificationStats,
       };
     }
+  }
+
+  /**
+   * Obtiene todos los detalles del pedido para procesamiento de bonificaciones
+   * @private
+   */
+  async getOrderDetailsForBonifications(
+    documentId,
+    bonificationConfig,
+    sourceConnection
+  ) {
+    const query = `
+    SELECT *
+    FROM ${bonificationConfig.sourceTable}
+    WHERE ${bonificationConfig.orderField} = @documentId
+    ORDER BY ${bonificationConfig.regularArticleField}
+  `;
+
+    const params = { documentId };
+    const result = await SqlService.query(sourceConnection, query, params);
+
+    return result.recordset || [];
+  }
+
+  /**
+   * Actualiza los registros procesados de bonificaciones en la BD
+   * @private
+   */
+  async updateProcessedBonifications(
+    processedDetails,
+    bonificationConfig,
+    sourceConnection
+  ) {
+    logger.info(
+      `💾 Actualizando ${processedDetails.length} registros procesados`
+    );
+
+    for (const record of processedDetails) {
+      // Solo actualizar si el registro fue procesado
+      if (
+        record.PROCESSING_STATUS === "PROCESSED" ||
+        record.PROCESSING_STATUS === "GENERATED"
+      ) {
+        const updateQuery = `
+        UPDATE ${bonificationConfig.sourceTable}
+        SET
+          ${bonificationConfig.lineNumberField} = @lineNumber,
+          ${bonificationConfig.bonificationLineReferenceField} = @bonificationLineRef
+        WHERE
+          ${bonificationConfig.orderField} = @documentId
+          AND ${bonificationConfig.regularArticleField} = @articleCode
+      `;
+
+        const params = {
+          lineNumber: record[bonificationConfig.lineNumberField],
+          bonificationLineRef:
+            record[bonificationConfig.bonificationLineReferenceField] || null,
+          documentId: record[bonificationConfig.orderField],
+          articleCode: record[bonificationConfig.regularArticleField],
+        };
+
+        try {
+          await SqlService.query(sourceConnection, updateQuery, params);
+        } catch (error) {
+          logger.error(
+            `Error actualizando registro ${
+              record[bonificationConfig.regularArticleField]
+            }: ${error.message}`
+          );
+          // Continuar con los demás registros
+        }
+      }
+    }
+
+    logger.info(`✅ Actualización de bonificaciones completada`);
   }
 
   /**
