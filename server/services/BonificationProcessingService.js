@@ -10,6 +10,7 @@ class BonificationProcessingService {
    * @param {Object} bonificationConfig - Configuración de bonificaciones
    * @returns {Promise<Object>} - Resultado del procesamiento
    */
+
   async processBonifications(connection, documentId, bonificationConfig) {
     const startTime = Date.now();
 
@@ -19,10 +20,10 @@ class BonificationProcessingService {
       );
 
       // 1. Validar configuración
-      this.validateBonificationConfig(bonificationConfig);
+      this._validateBonificationConfig(bonificationConfig);
 
-      // 2. Obtener todos los registros del documento de la tabla origen
-      const allRecords = await this.getAllRecords(
+      // 2. Obtener todos los registros del documento
+      const allRecords = await this._getAllRecords(
         connection,
         documentId,
         bonificationConfig
@@ -30,61 +31,26 @@ class BonificationProcessingService {
 
       if (!allRecords || allRecords.length === 0) {
         logger.warn(`No se encontraron registros para documento ${documentId}`);
-        return {
-          success: true,
-          processed: 0,
-          message: "No hay registros para procesar",
-          bonificationMapping: null,
-        };
+        return this._createEmptyResult();
       }
 
       // 3. Separar artículos regulares y bonificaciones
-      const regularArticles = allRecords.filter(
-        (record) =>
-          record[bonificationConfig.bonificationIndicatorField] !==
-          bonificationConfig.bonificationIndicatorValue
-      );
-
-      const bonifications = allRecords.filter(
-        (record) =>
-          record[bonificationConfig.bonificationIndicatorField] ===
-          bonificationConfig.bonificationIndicatorValue
-      );
+      const { regularArticles, bonifications } =
+        this._separateArticlesAndBonifications(allRecords, bonificationConfig);
 
       logger.info(
         `📊 Documento ${documentId}: ${regularArticles.length} regulares, ${bonifications.length} bonificaciones`
       );
 
-      // 4. Si no hay bonificaciones, solo mapear regulares
-      if (bonifications.length === 0) {
-        logger.info(
-          `✅ Documento ${documentId}: No hay bonificaciones que procesar`
-        );
-        const bonificationMapping = this.createRegularOnlyMapping(
-          regularArticles,
-          bonificationConfig
-        );
-        return {
-          success: true,
-          processed: 0,
-          regularArticles: regularArticles.length,
-          bonifications: 0,
-          message: "No hay bonificaciones en este documento",
-          bonificationMapping,
-        };
-      }
-
-      // 5. Crear el mapeo usando NUM_LN existente
-      const bonificationMapping = await this.createBonificationMappingFromNumLn(
+      // 4. Crear mapeo de bonificaciones
+      const bonificationMapping = this._createBonificationMapping(
         regularArticles,
         bonifications,
         bonificationConfig
       );
 
       const processingTime = Date.now() - startTime;
-      logger.info(
-        `✅ Procesamiento de bonificaciones completado para documento ${documentId} en ${processingTime}ms`
-      );
+      logger.info(`✅ Procesamiento completado en ${processingTime}ms`);
 
       return {
         success: true,
@@ -93,20 +59,14 @@ class BonificationProcessingService {
         bonifications: bonifications.length,
         orphanBonifications: bonificationMapping.orphanBonifications,
         processingTimeMs: processingTime,
-        message: `Procesado: ${bonificationMapping.mappedBonifications} bonificaciones mapeadas, ${bonificationMapping.orphanBonifications} huérfanas`,
         bonificationMapping: bonificationMapping,
+        message: `Procesado: ${bonificationMapping.mappedBonifications} bonificaciones mapeadas, ${bonificationMapping.orphanBonifications} huérfanas`,
       };
     } catch (error) {
       logger.error(
         `❌ Error procesando bonificaciones para documento ${documentId}:`,
-        {
-          error: error.message,
-          stack: error.stack,
-          documentId,
-          config: bonificationConfig,
-        }
+        error
       );
-
       return {
         success: false,
         error: error.message,
@@ -115,6 +75,144 @@ class BonificationProcessingService {
         bonificationMapping: null,
       };
     }
+  }
+
+  /**
+   * Separa artículos regulares y bonificaciones
+   */
+  _separateArticlesAndBonifications(allRecords, config) {
+    const regularArticles = [];
+    const bonifications = [];
+
+    for (const record of allRecords) {
+      const indicatorValue = record[config.bonificationIndicatorField];
+
+      if (indicatorValue === config.bonificationIndicatorValue) {
+        bonifications.push(record);
+      } else {
+        regularArticles.push(record);
+      }
+    }
+
+    return { regularArticles, bonifications };
+  }
+
+  /**
+   * Crea el mapeo de bonificaciones usando NUM_LN existente
+   */
+  _createBonificationMapping(regularArticles, bonifications, config) {
+    logger.info(`🔗 Creando mapeo de bonificaciones usando NUM_LN existente`);
+
+    // 1. Crear mapa de artículos regulares: COD_ART → NUM_LN
+    const regularMapping = new Map();
+    const articleToLineMap = new Map();
+
+    for (const article of regularArticles) {
+      const articleCode = article[config.regularArticleField];
+      const numLn = article["NUM_LN"];
+
+      if (!articleCode || numLn === null || numLn === undefined) {
+        logger.warn(
+          `⚠️ Artículo regular sin código o NUM_LN: ${JSON.stringify(article)}`
+        );
+        continue;
+      }
+
+      regularMapping.set(articleCode, {
+        ...article,
+        lineNumber: numLn,
+        isRegular: true,
+      });
+
+      articleToLineMap.set(articleCode, numLn);
+
+      logger.debug(
+        `📋 Artículo regular mapeado: ${articleCode} → Línea: ${numLn}`
+      );
+    }
+
+    // 2. Mapear bonificaciones con artículos regulares
+    const bonificationMapping = new Map();
+    let mappedBonifications = 0;
+    let orphanBonifications = 0;
+    const orphanList = [];
+
+    for (const bonification of bonifications) {
+      const bonificationCode = bonification[config.regularArticleField];
+      const regularArticleCode =
+        bonification[config.bonificationReferenceField];
+      const bonificationNumLn = bonification["NUM_LN"];
+
+      logger.debug(
+        `🎁 Procesando bonificación: ${bonificationCode}, refiere a: ${regularArticleCode}, NUM_LN: ${bonificationNumLn}`
+      );
+
+      // Validar datos de bonificación
+      if (!bonificationCode) {
+        logger.warn(`⚠️ Bonificación sin código de artículo`);
+        orphanBonifications++;
+        orphanList.push({
+          bonificationCode: "NO_CODE",
+          reason: "Sin código de artículo",
+        });
+        continue;
+      }
+
+      if (!regularArticleCode) {
+        logger.warn(
+          `⚠️ Bonificación ${bonificationCode} sin referencia a artículo regular`
+        );
+        orphanBonifications++;
+        orphanList.push({ bonificationCode, reason: "Sin COD_ART_RFR" });
+        continue;
+      }
+
+      // Buscar el NUM_LN del artículo regular
+      const regularLineNumber = articleToLineMap.get(regularArticleCode);
+
+      if (!regularLineNumber) {
+        logger.warn(
+          `⚠️ No se encontró NUM_LN para artículo regular: ${regularArticleCode}`
+        );
+        orphanBonifications++;
+        orphanList.push({
+          bonificationCode,
+          regularArticleCode,
+          reason: "Artículo regular no encontrado",
+        });
+        continue;
+      }
+
+      // Mapear bonificación exitosamente
+      bonificationMapping.set(bonificationCode, {
+        ...bonification,
+        lineNumber: bonificationNumLn,
+        bonificationLineReference: regularLineNumber,
+        isRegular: false,
+        referencedArticle: regularArticleCode,
+      });
+
+      mappedBonifications++;
+      logger.debug(
+        `✅ Bonificación mapeada: ${bonificationCode} (línea ${bonificationNumLn}) → refiere línea ${regularLineNumber}`
+      );
+    }
+
+    logger.info(
+      `✅ Mapeo completado: ${mappedBonifications} mapeadas, ${orphanBonifications} huérfanas`
+    );
+
+    if (orphanBonifications > 0) {
+      logger.warn(`⚠️ Bonificaciones huérfanas:`, orphanList);
+    }
+
+    return {
+      regularMapping,
+      bonificationMapping,
+      mappedBonifications,
+      orphanBonifications,
+      orphanList,
+    };
   }
 
   /**
@@ -409,6 +507,98 @@ class BonificationProcessingService {
     }
 
     return result.recordset;
+  }
+
+  /**
+   * Obtiene todos los registros del documento
+   */
+  async _getAllRecords(connection, documentId, config) {
+    const query = `
+      SELECT * FROM ${config.sourceTable}
+      WHERE ${config.orderField} = @documentId
+      ORDER BY NUM_LN ASC
+    `;
+
+    logger.debug(
+      `🔍 Ejecutando consulta: ${query} con documentId: ${documentId}`
+    );
+
+    try {
+      const result = await SqlService.query(connection, query, { documentId });
+
+      if (!result.recordset || result.recordset.length === 0) {
+        logger.warn(`No se encontraron registros para documento ${documentId}`);
+        return [];
+      }
+
+      // Verificar que NUM_LN existe
+      const firstRecord = result.recordset[0];
+      if (!firstRecord.hasOwnProperty("NUM_LN")) {
+        logger.error(
+          `⚠️ La tabla ${config.sourceTable} no tiene columna NUM_LN`
+        );
+        logger.error(
+          `📋 Columnas disponibles: ${Object.keys(firstRecord).join(", ")}`
+        );
+        throw new Error(
+          `La tabla ${config.sourceTable} no tiene columna NUM_LN requerida`
+        );
+      }
+
+      logger.debug(
+        `✅ Encontrados ${result.recordset.length} registros con NUM_LN`
+      );
+      return result.recordset;
+    } catch (error) {
+      logger.error(`❌ Error ejecutando consulta de registros:`, error);
+      throw error;
+    }
+  }
+
+  /**
+   * Crea resultado vacío
+   */
+  _createEmptyResult() {
+    return {
+      success: true,
+      processed: 0,
+      regularArticles: 0,
+      bonifications: 0,
+      orphanBonifications: 0,
+      message: "No hay registros para procesar",
+      bonificationMapping: {
+        regularMapping: new Map(),
+        bonificationMapping: new Map(),
+        mappedBonifications: 0,
+        orphanBonifications: 0,
+        orphanList: [],
+      },
+    };
+  }
+
+  /**
+   * Valida la configuración de bonificaciones
+   */
+  _validateBonificationConfig(config) {
+    const required = [
+      "sourceTable",
+      "bonificationIndicatorField",
+      "bonificationIndicatorValue",
+      "regularArticleField",
+      "bonificationReferenceField",
+      "orderField",
+    ];
+
+    const missing = required.filter((field) => !config[field]);
+
+    if (missing.length > 0) {
+      throw new Error(
+        `Campos requeridos faltantes en configuración: ${missing.join(", ")}`
+      );
+    }
+
+    logger.debug(`✅ Configuración de bonificaciones validada`);
+    return true;
   }
 
   /**
