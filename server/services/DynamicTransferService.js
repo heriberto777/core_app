@@ -9,7 +9,12 @@ const ConsecutiveService = require("./ConsecutiveService");
 
 const BonificationService = require("./BonificationProcessingService");
 
+// const bonificationService = new BonificationProcessingService();
+
 class DynamicTransferService {
+  constructor() {
+    this.bonificationService = new BonificationService();
+  }
   /**
    * Procesa documentos según una configuración de mapeo
    * @param {Array} documentIds - IDs de los documentos a procesar
@@ -51,65 +56,6 @@ class DynamicTransferService {
         throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
       }
 
-      logger.info(`🚀 Iniciando proceso para mapping: ${mapping.name}`);
-
-      // 🎁 NUEVA LÓGICA: Verificar si tiene procesamiento de bonificaciones
-      let bonificationServiceLoaded = false;
-      // let BonificationService = null;
-
-      // if (mapping.hasBonificationProcessing) {
-      //   logger.info(
-      //     `🎁 Mapping configurado con procesamiento de bonificaciones habilitado`
-      //   );
-
-      //   try {
-      //     BonificationService.validateBonificationConfig(
-      //       mapping.bonificationConfig
-      //     );
-      //     bonificationServiceLoaded = true;
-      //     logger.info(
-      //       `🎁 Servicio de bonificaciones cargado y validado correctamente`
-      //     );
-      //   } catch (configError) {
-      //     logger.error(
-      //       `❌ Error en configuración de bonificaciones: ${configError.message}`
-      //     );
-      //     clearTimeout(timeoutId);
-      //     throw new Error(
-      //       `Configuración de bonificaciones inválida: ${configError.message}`
-      //     );
-      //   }
-      // }
-
-      if (mapping.hasBonificationProcessing && mapping.bonificationConfig) {
-        try {
-          // Validar configuración
-          BonificationService.validateBonificationConfig(
-            mapping.bonificationConfig
-          );
-
-          // Procesar bonificaciones para este documento
-          const bonificationResult =
-            await BonificationService.processBonifications(
-              sourceConnection,
-              documentIds,
-              mapping.bonificationConfig
-            );
-
-          logger.info(
-            `🎁 Bonificaciones procesadas para ${documentIds}:`,
-            bonificationResult
-          );
-        } catch (bonificationError) {
-          logger.error(
-            `❌ Error procesando bonificaciones para ${documentIds}:`,
-            bonificationError
-          );
-          // Decidir si continuar o fallar (dependiendo de los requerimientos)
-          throw bonificationError;
-        }
-      }
-
       // Asegurar configuración por defecto para mappings existentes
       if (!mapping.markProcessedStrategy) {
         mapping.markProcessedStrategy = "individual"; // Mantener comportamiento actual
@@ -124,173 +70,156 @@ class DynamicTransferService {
         };
       }
 
-      // 2. Registrar tarea en el TaskTracker
-      TaskTracker.registerTask(cancelTaskId, "processDocuments", {
-        mappingId,
-        documentCount: documentIds.length,
-        hasBonifications: mapping.hasBonificationProcessing, // 🎁 NUEVO
-      });
-
-      // 3. Obtener conexiones
-
-      sourceConnection = await ConnectionService.getConnection(
-        mapping.sourceServer
-      );
-      targetConnection = await ConnectionService.getConnection(
-        mapping.targetServer
-      );
-
-      if (!sourceConnection || !targetConnection) {
-        throw new Error("No se pudieron establecer las conexiones necesarias");
-      }
-
-      logger.info(
-        `🔗 Conexiones establecidas: ${mapping.sourceServer} -> ${mapping.targetServer}`
-      );
-
-      // 4. Crear registro de ejecución
-      // const TaskExecution = require("../models/taskExecutionModel");
-      const execution = new TaskExecution({
-        taskId: mapping.taskId,
-        mappingId: mappingId,
-        taskName: mapping.name,
-        executedBy: "system",
-        status: "running",
-        startTime: new Date(),
-        totalRecords: documentIds.length,
-        hasBonificationProcessing: mapping.hasBonificationProcessing, // 🎁 NUEVO
-      });
-      await execution.save();
-      executionId = execution._id;
-
-      // 5. Verificar consecutivos centralizados
-      if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
-        logger.info(`🎯 Configurando consecutivos para mapping ${mappingId}`);
-
+      // 2. Verificar si es consecutivo centralizado
+      if (mapping.consecutiveConfig?.enabled) {
         try {
-          // Auto-obtener o crear consecutivo centralizado
-          centralizedConsecutiveId =
-            await this.getOrCreateConsecutiveForMapping(mapping);
-
-          if (centralizedConsecutiveId) {
+          const consecutiveInfo = await ConsecutiveService.getConsecutiveConfig(
+            mapping.consecutiveConfig.fieldName
+          );
+          if (consecutiveInfo?.centralized) {
             useCentralizedConsecutives = true;
+            centralizedConsecutiveId = consecutiveInfo.id;
             logger.info(
-              `✅ Consecutivo centralizado configurado: ${centralizedConsecutiveId}`
-            );
-
-            // Realizar una prueba adicional de conectividad
-            try {
-              const connectivityTest =
-                await ConsecutiveService.reserveConsecutiveValues(
-                  centralizedConsecutiveId,
-                  1,
-                  { segment: null },
-                  { id: mapping._id.toString(), name: "mapping" }
-                );
-
-              if (connectivityTest && connectivityTest.reservationId) {
-                // Cancelar inmediatamente la reserva de prueba
-                await ConsecutiveService.cancelReservation(
-                  centralizedConsecutiveId,
-                  connectivityTest.reservationId
-                );
-
-                logger.info(
-                  `✅ Conectividad con consecutivo centralizado validada`
-                );
-              } else {
-                throw new Error("Test de conectividad falló");
-              }
-            } catch (connectivityError) {
-              logger.warn(
-                `⚠️ Error en test de conectividad: ${connectivityError.message}`
-              );
-              throw connectivityError;
-            }
-          } else {
-            logger.info(
-              `📋 Consecutivos no habilitados para mapping ${mappingId}. Modo sin consecutivos.`
+              `Usando consecutivos centralizados para mapping ${mapping.name}`
             );
           }
         } catch (consecError) {
           logger.warn(
-            `⚠️ Error configurando consecutivos centralizados: ${consecError.message}`
+            `No se pudo verificar configuración centralizada: ${consecError.message}`
           );
-          logger.info(
-            `🔄 Fallback: Usando sistema local para mapping ${mappingId}`
-          );
+        }
+      }
 
-          useCentralizedConsecutives = false;
-          centralizedConsecutiveId = null;
+      // 3. Registrar tarea en el tracker
+      TaskTracker.addTask(cancelTaskId, `Processing mapping: ${mapping.name}`, {
+        mappingId,
+        documentIds,
+        signal,
+      });
 
-          // Verificar si el sistema local está disponible
-          if (mapping.consecutiveConfig.enabled) {
+      // 4. Crear registro de ejecución
+      const taskExecution = new TaskExecution({
+        taskId: mapping.taskId,
+        taskName: mapping.name,
+        date: new Date(),
+        status: "running",
+        details: {
+          documentIds,
+          mappingId,
+        },
+      });
+
+      await taskExecution.save();
+      executionId = taskExecution._id;
+
+      // 5. Establecer conexiones
+      const sourceServerName = mapping.sourceServer;
+      const targetServerName = mapping.targetServer;
+
+      const getConnection = async (serverName, retries = 3) => {
+        for (let attempt = 0; attempt < retries; attempt++) {
+          try {
             logger.info(
-              `📋 Sistema local de consecutivos disponible como fallback`
+              `Intento ${
+                attempt + 1
+              }/${retries} para conectar a ${serverName}...`
             );
+
+            const connectionResult =
+              await ConnectionService.enhancedRobustConnect(serverName);
+
+            if (!connectionResult.success || !connectionResult.connection) {
+              const error =
+                connectionResult.error ||
+                new Error(`Conexión inválida a ${serverName}`);
+              logger.warn(`Intento ${attempt + 1} falló: ${error.message}`);
+
+              if (attempt === retries - 1) {
+                throw error;
+              }
+
+              const delay = Math.pow(2, attempt) * 1000;
+              await new Promise((resolve) => setTimeout(resolve, delay));
+              continue;
+            }
+
+            await SqlService.query(
+              connectionResult.connection,
+              "SELECT 1 AS test"
+            );
+
+            logger.info(`Conexión a ${serverName} establecida exitosamente`);
+            return connectionResult.connection;
+          } catch (error) {
+            logger.error(
+              `Error al conectar a ${serverName} (intento ${attempt + 1}): ${
+                error.message
+              }`
+            );
+
+            if (attempt === retries - 1) {
+              throw error;
+            }
+
+            const delay = Math.pow(2, attempt) * 1000;
+            await new Promise((resolve) => setTimeout(resolve, delay));
           }
         }
-      } else {
+
+        throw new Error(
+          `No se pudo establecer conexión a ${serverName} después de ${retries} intentos`
+        );
+      };
+
+      try {
         logger.info(
-          `📋 Consecutivos no configurados para mapping ${mappingId}`
+          `Estableciendo conexiones a ${sourceServerName} y ${targetServerName}...`
+        );
+        [sourceConnection, targetConnection] = await Promise.all([
+          getConnection(sourceServerName),
+          getConnection(targetServerName),
+        ]);
+        logger.info(`Conexiones establecidas exitosamente`);
+      } catch (connectionError) {
+        clearTimeout(timeoutId);
+        throw new Error(
+          `Error al establecer conexiones: ${connectionError.message}`
         );
       }
 
-      // 6. Procesar documentos - NUEVA LÓGICA CON ESTRATEGIAS DE MARCADO
+      // 6. Procesar documentos
+      logger.info(
+        `Iniciando procesamiento de ${documentIds.length} documentos`
+      );
+
       const results = {
         processed: 0,
         failed: 0,
-        skipped: 0,
         byType: {},
         details: [],
         consecutivesUsed: [],
-        // 🎁 NUEVAS ESTADÍSTICAS DE BONIFICACIONES
-        bonificationStats: {
-          totalDocumentsWithBonifications: 0,
-          totalBonifications: 0,
-          totalPromotions: 0,
-          totalDiscountAmount: 0,
-          processedDetails: 0,
-          bonificationTypes: {},
-        },
       };
 
-      // NUEVO: Arrays para recopilar documentos exitosos y fallidos
-      const successfulDocuments = [];
       const failedDocuments = [];
       let hasErrors = false;
 
-      // Procesar cada documento individualmente
-      for (let i = 0; i < documentIds.length; i++) {
-        // Verificar si se ha cancelado la tarea
+      for (const documentId of documentIds) {
+        // Verificar cancelación
         if (signal.aborted) {
-          clearTimeout(timeoutId);
-          throw new Error("Tarea cancelada por el usuario");
+          logger.warn(`Operación cancelada para documento ${documentId}`);
+          break;
         }
 
-        const documentId = documentIds[i];
-        let currentConsecutive = null;
-
         try {
-          // Generación de consecutivos (código existente)
-          if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
+          let currentConsecutive = null;
+
+          // Generar consecutivo si está habilitado
+          if (mapping.consecutiveConfig?.enabled) {
             if (useCentralizedConsecutives) {
               try {
-                const reservation =
-                  await ConsecutiveService.reserveConsecutiveValues(
-                    centralizedConsecutiveId,
-                    1,
-                    { segment: null },
-                    { id: mapping._id.toString(), name: "mapping" }
-                  );
-
-                currentConsecutive = {
-                  value: reservation.values[0].numeric,
-                  formatted: reservation.values[0].formatted,
-                  isCentralized: true,
-                  reservationId: reservation.reservationId,
-                };
-
+                currentConsecutive = await ConsecutiveService.generateNext(
+                  centralizedConsecutiveId
+                );
                 logger.info(
                   `Consecutivo centralizado generado para documento ${documentId}: ${currentConsecutive.formatted}`
                 );
@@ -333,227 +262,143 @@ class DynamicTransferService {
             }
           }
 
-          // 🎁 NUEVA LÓGICA: Decidir qué método usar según configuración de bonificaciones
-          let docResult;
-
-          if (mapping.hasBonificationProcessing && bonificationServiceLoaded) {
-            // Procesar con bonificaciones
-            docResult = await this.processSingleDocumentWithBonifications(
-              documentId,
-              mapping,
-              sourceConnection,
-              targetConnection,
-              currentConsecutive,
-              BonificationService
-            );
-          } else {
-            // Procesar normalmente (lógica existente)
-            docResult = await this.processSingleDocumentSimple(
-              documentId,
-              mapping,
-              sourceConnection,
-              targetConnection,
-              currentConsecutive
-            );
-          }
+          // Procesar documento
+          const docResult = await this.processSingleDocumentSimple(
+            documentId,
+            mapping,
+            sourceConnection,
+            targetConnection,
+            currentConsecutive
+          );
 
           if (docResult.success) {
             results.processed++;
-            successfulDocuments.push(documentId);
 
-            // 🎁 NUEVA LÓGICA: Agregar estadísticas de bonificaciones si existen
-            if (docResult.bonificationStats) {
-              results.bonificationStats.totalDocumentsWithBonifications++;
-              results.bonificationStats.totalBonifications +=
-                docResult.bonificationStats.totalBonifications || 0;
-              results.bonificationStats.totalPromotions +=
-                docResult.bonificationStats.totalPromotions || 0;
-              results.bonificationStats.totalDiscountAmount +=
-                docResult.bonificationStats.totalDiscountAmount || 0;
-              results.bonificationStats.processedDetails +=
-                docResult.bonificationStats.processedDetails || 0;
-
-              // Agregar tipos de bonificaciones
-              if (docResult.bonificationStats.promotionTypes) {
-                docResult.bonificationStats.promotionTypes.forEach((type) => {
-                  results.bonificationStats.bonificationTypes[type] =
-                    (results.bonificationStats.bonificationTypes[type] || 0) +
-                    1;
-                });
+            if (docResult.documentType) {
+              if (!results.byType[docResult.documentType]) {
+                results.byType[docResult.documentType] = {
+                  processed: 0,
+                  failed: 0,
+                };
               }
+              results.byType[docResult.documentType].processed++;
             }
 
-            // Actualizar estadísticas por tipo de documento
-            if (
-              docResult.documentType &&
-              docResult.documentType !== "unknown"
-            ) {
-              results.byType[docResult.documentType] =
-                (results.byType[docResult.documentType] || 0) + 1;
-            }
-
-            // Guardar consecutivo usado
-            if (currentConsecutive) {
+            if (docResult.consecutiveUsed) {
               results.consecutivesUsed.push({
                 documentId,
-                consecutive: currentConsecutive.formatted,
-                value: currentConsecutive.value,
+                consecutive: docResult.consecutiveUsed,
               });
             }
 
-            logger.debug(
-              `✅ Documento procesado exitosamente: ${documentId}${
-                docResult.bonificationStats ? " (con bonificaciones)" : ""
-              }`
-            );
+            // NUEVA LÓGICA: Marcado individual solo si está configurado así
+            if (
+              mapping.markProcessedStrategy === "individual" &&
+              mapping.markProcessedField
+            ) {
+              try {
+                await this.markDocumentsAsProcessed(
+                  [documentId],
+                  mapping,
+                  sourceConnection,
+                  true
+                );
+                logger.debug(
+                  `✅ Documento ${documentId} marcado individualmente como procesado`
+                );
+              } catch (markError) {
+                logger.warn(
+                  `⚠️ Error al marcar documento ${documentId}: ${markError.message}`
+                );
+                // No detener el proceso por errores de marcado
+              }
+            }
           } else {
-            results.failed++;
-            failedDocuments.push(documentId);
             hasErrors = true;
-            logger.error(
-              `❌ Error procesando documento ${documentId}: ${docResult.message}`
-            );
+            failedDocuments.push(documentId);
+            results.failed++;
+
+            if (docResult.documentType) {
+              if (!results.byType[docResult.documentType]) {
+                results.byType[docResult.documentType] = {
+                  processed: 0,
+                  failed: 0,
+                };
+              }
+              results.byType[docResult.documentType].failed++;
+            }
           }
 
           results.details.push({
             documentId,
-            success: docResult.success,
-            message: docResult.message,
-            documentType: docResult.documentType,
-            consecutiveUsed: docResult.consecutiveUsed,
-            bonificationStats: docResult.bonificationStats, // 🎁 NUEVO
-            error: docResult.success ? null : docResult.message,
+            ...docResult,
           });
 
-          // Marcado individual según estrategia (código existente)
-          if (
-            mapping.markProcessedStrategy === "individual" &&
-            mapping.markProcessedField
-          ) {
-            try {
-              const shouldMark = docResult.success;
-              await this.markSingleDocument(
-                documentId,
-                mapping,
-                sourceConnection,
-                shouldMark
-              );
-            } catch (markError) {
-              logger.warn(
-                `Advertencia: No se pudo marcar documento ${documentId}: ${markError.message}`
-              );
-            }
-          }
-
-          // Actualizar progreso en TaskTracker
-          const progress = Math.round(((i + 1) / documentIds.length) * 100);
-          TaskTracker.registerTask(
-            cancelTaskId,
-            progress,
-            `Procesado ${i + 1}/${documentIds.length} documentos`
-          );
-
-          // Log cada 10 documentos procesados
-          if ((i + 1) % 10 === 0 || i === documentIds.length - 1) {
-            logger.info(
-              `📊 Progreso: ${i + 1}/${
-                documentIds.length
-              } documentos procesados. ${results.processed} éxitos, ${
-                results.failed
-              } fallos.`
-            );
-
-            // 🎁 NUEVO: Log estadísticas de bonificaciones
-            if (
-              mapping.hasBonificationProcessing &&
-              results.bonificationStats.totalDocumentsWithBonifications > 0
-            ) {
-              logger.info(
-                `🎁 Bonificaciones: ${results.bonificationStats.totalDocumentsWithBonifications} docs con bonificaciones, ${results.bonificationStats.totalBonifications} bonificaciones totales`
-              );
-            }
-          }
-
-          // Log de estado: "Éxito" o "Error"
           logger.info(
-            `Documento ${documentId}: ${docResult.success ? "Éxito" : "Error"}`
+            `Documento ${documentId} procesado: ${
+              docResult.success ? "✅ ÉXITO" : "❌ ERROR"
+            }`
           );
-        } catch (docError) {
-          // Verificar si fue cancelado
-          if (signal?.aborted) {
-            clearTimeout(timeoutId);
-            throw new Error("Tarea cancelada por el usuario");
-          }
-
+        } catch (error) {
           hasErrors = true;
           failedDocuments.push(documentId);
-          logger.error(
-            `Error procesando documento ${documentId}: ${docError.message}`
-          );
           results.failed++;
           results.details.push({
             documentId,
             success: false,
-            error: docError.message,
-            errorDetails: docError.stack,
+            error: error.message,
+            errorDetails: error.stack,
           });
+          logger.error(`Error procesando documento ${documentId}:`, error);
         }
       }
 
-      // NUEVA LÓGICA: Marcado en lotes al final si está configurado así
+      // 7. Marcado en lote (si está configurado)
       if (
         mapping.markProcessedStrategy === "batch" &&
-        successfulDocuments.length > 0
+        mapping.markProcessedField &&
+        results.processed > 0
       ) {
-        logger.info(
-          `📦 Iniciando marcado en lotes para ${successfulDocuments.length} documentos exitosos`
-        );
-
         try {
-          const markResult = await this.markDocumentsAsProcessed(
-            successfulDocuments,
-            mapping,
-            sourceConnection,
-            true
-          );
+          const successfulDocs = results.details
+            .filter((d) => d.success)
+            .map((d) => d.documentId);
 
-          logger.info(
-            `📦 Resultado del marcado en lotes: ${markResult.message}`
-          );
-
-          // Agregar información del marcado al resultado final
-          results.markingResult = markResult;
-
-          if (markResult.failed > 0) {
-            logger.warn(
-              `⚠️ ${markResult.failed} documentos exitosos no se pudieron marcar como procesados`
+          if (successfulDocs.length > 0) {
+            const batchResult = await this.markDocumentsAsProcessed(
+              successfulDocs,
+              mapping,
+              sourceConnection,
+              true
+            );
+            logger.info(
+              `📦 Marcado en lote: ${batchResult.success} éxitos, ${batchResult.failed} fallos`
             );
           }
-        } catch (markError) {
-          logger.error(`❌ Error en marcado por lotes: ${markError.message}`);
-          results.markingError = markError.message;
+        } catch (batchError) {
+          logger.error(`Error en marcado en lote: ${batchError.message}`);
+          // No fallar todo el proceso por errores de marcado
         }
       }
 
-      // NUEVA LÓGICA: Rollback si está habilitado y hay fallos críticos
+      // 8. Rollback si es necesario
       if (
+        hasErrors &&
         mapping.markProcessedConfig?.allowRollback &&
-        failedDocuments.length > 0 &&
-        mapping.markProcessedStrategy === "batch" &&
-        successfulDocuments.length > 0
+        results.processed > 0
       ) {
-        logger.warn(
-          `🔄 Rollback habilitado: desmarcando ${successfulDocuments.length} documentos debido a fallos`
-        );
-
         try {
+          logger.warn(`Ejecutando rollback debido a errores...`);
+          const successfulDocs = results.details
+            .filter((d) => d.success)
+            .map((d) => d.documentId);
+
           await this.markDocumentsAsProcessed(
-            successfulDocuments,
+            successfulDocs,
             mapping,
             sourceConnection,
             false
           );
-          logger.info(`🔄 Rollback completado: documentos desmarcados`);
           results.rollbackExecuted = true;
         } catch (rollbackError) {
           logger.error(`❌ Error en rollback: ${rollbackError.message}`);
@@ -580,7 +425,6 @@ class DynamicTransferService {
         successfulRecords: results.processed,
         failedRecords: results.failed,
         details: results,
-        bonificationStats: results.bonificationStats, // 🎁 NUEVO
       });
 
       // Actualizar la tarea principal con el resultado
@@ -594,124 +438,82 @@ class DynamicTransferService {
             ? `Procesamiento completado con errores: ${results.processed} éxitos, ${results.failed} fallos`
             : "Procesamiento completado con éxito",
           affectedRecords: results.processed,
-          bonificationStats: results.bonificationStats, // 🎁 NUEVO
           errorDetails: hasErrors
-            ? results.details
-                .filter((d) => !d.success)
-                .map(
-                  (d) =>
-                    `Documento ${d.documentId}: ${
-                      d.message || d.error || "Error no especificado"
-                    }`
-                )
-                .join("\n")
-            : null,
+            ? results.details.filter((d) => !d.success)
+            : undefined,
         },
       });
 
-      clearTimeout(timeoutId);
-      TaskTracker.completeTask(cancelTaskId, finalStatus);
-
-      // 🎁 NUEVO: Log final con estadísticas de bonificaciones
+      // Actualizar último consecutivo usado si es local
       if (
-        mapping.hasBonificationProcessing &&
-        results.bonificationStats.totalDocumentsWithBonifications > 0
+        !useCentralizedConsecutives &&
+        mapping.consecutiveConfig?.enabled &&
+        mapping.consecutiveConfig?.updateAfterTransfer &&
+        results.consecutivesUsed.length > 0
       ) {
-        logger.info(`🎁 RESUMEN DE BONIFICACIONES:`);
-        logger.info(
-          `   📦 Documentos con bonificaciones: ${results.bonificationStats.totalDocumentsWithBonifications}`
-        );
-        logger.info(
-          `   🎁 Total bonificaciones: ${results.bonificationStats.totalBonifications}`
-        );
-        logger.info(
-          `   🏷️ Total promociones: ${results.bonificationStats.totalPromotions}`
-        );
-        logger.info(
-          `   💰 Descuento total: $${results.bonificationStats.totalDiscountAmount.toFixed(
-            2
-          )}`
-        );
-        logger.info(
-          `   📄 Detalles procesados: ${results.bonificationStats.processedDetails}`
-        );
-        if (
-          Object.keys(results.bonificationStats.bonificationTypes).length > 0
-        ) {
-          logger.info(
-            `   🏷️ Tipos de promociones: ${JSON.stringify(
-              results.bonificationStats.bonificationTypes
-            )}`
+        try {
+          const lastConsecutive = Math.max(
+            ...results.consecutivesUsed.map((c) =>
+              parseInt(c.consecutive.match(/\d+$/)?.[0] || 0)
+            )
+          );
+          await this.updateLastConsecutive(mappingId, lastConsecutive);
+        } catch (updateError) {
+          logger.warn(
+            `Error actualizando último consecutivo: ${updateError.message}`
           );
         }
       }
 
-      return {
-        success: true,
-        executionId,
-        status: finalStatus,
-        ...results,
-      };
-    } catch (error) {
-      // Limpiar timeout
+      // 9. Completar la tarea
+      TaskTracker.completeTask(cancelTaskId, "completed");
       clearTimeout(timeoutId);
 
-      // Verificar si fue cancelado
-      if (signal?.aborted) {
-        logger.info("Tarea cancelada por el usuario");
+      logger.info(
+        `✅ Procesamiento completado: ${results.processed} éxitos, ${results.failed} fallos en ${executionTime}ms`
+      );
 
-        if (executionId) {
+      return {
+        success: !hasErrors,
+        ...results,
+        executionTime,
+      };
+    } catch (error) {
+      logger.error(`❌ Error en processDocuments: ${error.message}`, error);
+      clearTimeout(timeoutId);
+
+      // Actualizar tarea como fallida
+      if (executionId) {
+        try {
           await TaskExecution.findByIdAndUpdate(executionId, {
-            status: "cancelled",
+            status: "failed",
             executionTime: Date.now() - startTime,
-            errorMessage: "Cancelada por el usuario",
+            error: error.message,
+            errorStack: error.stack,
           });
+        } catch (updateError) {
+          logger.error(
+            `Error actualizando ejecución fallida: ${updateError.message}`
+          );
         }
+      }
 
-        if (mapping?.taskId) {
+      if (mapping?.taskId) {
+        try {
           await TransferTask.findByIdAndUpdate(mapping.taskId, {
-            status: "cancelled",
-            progress: -1,
+            status: "failed",
+            lastExecutionDate: new Date(),
             lastExecutionResult: {
               success: false,
-              message: "Tarea cancelada por el usuario",
+              message: `Error: ${error.message}`,
+              errorDetails: error.stack,
             },
           });
+        } catch (updateError) {
+          logger.error(
+            `Error actualizando tarea fallida: ${updateError.message}`
+          );
         }
-
-        TaskTracker.completeTask(
-          cancelTaskId || `dynamic_process_${mappingId}`,
-          "cancelled"
-        );
-
-        return {
-          success: false,
-          message: "Tarea cancelada por el usuario",
-          executionId,
-        };
-      }
-
-      logger.error(`Error al procesar documentos: ${error.message}`);
-
-      // Actualizar el registro de ejecución en caso de error
-      if (executionId) {
-        await TaskExecution.findByIdAndUpdate(executionId, {
-          status: "failed",
-          executionTime: Date.now() - startTime,
-          errorMessage: error.message,
-        });
-      }
-
-      // Actualizar la tarea principal con el error
-      if (mapping?.taskId) {
-        await TransferTask.findByIdAndUpdate(mapping.taskId, {
-          status: "failed",
-          progress: -1,
-          lastExecutionResult: {
-            success: false,
-            message: error.message,
-          },
-        });
       }
 
       TaskTracker.completeTask(
@@ -721,21 +523,30 @@ class DynamicTransferService {
 
       throw error;
     } finally {
-      // Liberar conexiones
-      if (sourceConnection) {
-        try {
-          await ConnectionService.releaseConnection(sourceConnection);
-        } catch (e) {
-          logger.warn(`Error liberando conexión origen: ${e.message}`);
-        }
-      }
+      // Cerrar conexiones de forma segura
+      if (sourceConnection || targetConnection) {
+        logger.info("Liberando conexiones...");
 
-      if (targetConnection) {
-        try {
-          await ConnectionService.releaseConnection(targetConnection);
-        } catch (e) {
-          logger.warn(`Error liberando conexión destino: ${e.message}`);
+        const releasePromises = [];
+
+        if (sourceConnection) {
+          releasePromises.push(
+            ConnectionService.releaseConnection(sourceConnection).catch((e) =>
+              logger.error(`Error al liberar conexión origen: ${e.message}`)
+            )
+          );
         }
+
+        if (targetConnection) {
+          releasePromises.push(
+            ConnectionService.releaseConnection(targetConnection).catch((e) =>
+              logger.error(`Error al liberar conexión destino: ${e.message}`)
+            )
+          );
+        }
+
+        await Promise.allSettled(releasePromises);
+        logger.info("Conexiones liberadas correctamente");
       }
     }
   }
@@ -819,6 +630,57 @@ class DynamicTransferService {
             `Error al obtener datos de origen para documento ${documentId}: ${error.message}`
           );
           throw new Error(`Error al obtener datos de origen: ${error.message}`);
+        }
+
+        // 🎁 PROCESAMIENTO DE BONIFICACIONES (ANTES DE PROCESAR DATOS)
+        if (mapping.hasBonificationProcessing && mapping.bonificationConfig) {
+          try {
+            logger.info(
+              `🎁 Iniciando procesamiento de bonificaciones para documento ${documentId}`
+            );
+
+            const bonificationResult =
+              await this.bonificationService.processBonifications(
+                sourceConnection,
+                documentId,
+                mapping.bonificationConfig
+              );
+
+            if (bonificationResult.success) {
+              logger.info(
+                `✅ Bonificaciones procesadas exitosamente para ${documentId}:`,
+                {
+                  processed: bonificationResult.processed,
+                  regularArticles: bonificationResult.regularArticles,
+                  bonifications: bonificationResult.bonifications,
+                  orphans: bonificationResult.orphanBonifications || 0,
+                }
+              );
+            } else {
+              logger.error(
+                `❌ Error procesando bonificaciones para ${documentId}:`,
+                bonificationResult.error
+              );
+              // Decidir si continuar o fallar completamente
+              throw new Error(
+                `Falló procesamiento de bonificaciones: ${bonificationResult.error}`
+              );
+            }
+          } catch (bonificationError) {
+            logger.error(
+              `❌ Error crítico en bonificaciones para ${documentId}:`,
+              bonificationError
+            );
+            return {
+              success: false,
+              message: `Error en procesamiento de bonificaciones: ${bonificationError.message}`,
+              documentType,
+              errorDetails: bonificationError.stack,
+              errorCode: "BONIFICATION_PROCESSING_ERROR",
+              consecutiveUsed: null,
+              consecutiveValue: null,
+            };
+          }
         }
 
         // Procesar dependencias de foreign key ANTES de insertar datos principales
