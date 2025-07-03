@@ -59,8 +59,8 @@ class DynamicTransferService {
 
       if (mapping.hasBonificationProcessing) {
         const bonificationResult =
-          await BonificationProcessingService.processBonifications(
-            documentId,
+          await BonificationService.processBonifications(
+            documentIds,
             mapping,
             sourceConnection
           );
