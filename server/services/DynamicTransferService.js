@@ -2118,183 +2118,52 @@ class DynamicTransferService {
     isDetailTable,
     targetConnection,
     columnLengthCache,
-    bonificationMapping = null
+    bonificationMapping = null // NUEVO PARÁMETRO
   ) {
     let value;
 
-    try {
-      // PASO 1: Lookup results (mayor prioridad)
-      if (
-        fieldMapping.lookupFromTarget &&
-        lookupResults[fieldMapping.targetField] !== undefined
-      ) {
-        value = lookupResults[fieldMapping.targetField];
-        logger.debug(
-          `Usando valor de lookup para ${fieldMapping.targetField}: ${value}`
-        );
-        return { value, isDirectSql: false };
-      }
-
-      // PASO 2: Funciones SQL nativas
-      if (this._isNativeSqlFunction(fieldMapping.defaultValue)) {
-        logger.debug(
-          `Función SQL nativa detectada: ${fieldMapping.defaultValue}`
-        );
-        return { value: fieldMapping.defaultValue, isDirectSql: true };
-      }
-
-      // PASO 3: Obtener valor del campo fuente
-      value = this._getSourceFieldValue(fieldMapping, sourceData);
-
-      // PASO 4: Aplicar conversión de unidades si está habilitada
-      if (fieldMapping.unitConversion?.enabled) {
-        value = this.applyUnitConversion(sourceData, fieldMapping, value);
-      }
-
-      // PASO 5: Formatear fechas
-      if (this._isDateValue(value)) {
-        value = this.formatSqlDate(value);
-      }
-
-      // PASO 6: Aplicar consecutivo si corresponde
-      if (
-        this._shouldApplyConsecutive(
-          fieldMapping,
-          currentConsecutive,
-          mapping,
-          tableConfig,
-          isDetailTable
-        )
-      ) {
-        value = currentConsecutive.formatted;
-        logger.debug(`Consecutivo aplicado: ${value}`);
-      }
-
-      // PASO 7: 🎁 PROCESAMIENTO DE BONIFICACIONES (NUEVA LÓGICA)
-      if (bonificationMapping && mapping.hasBonificationProcessing) {
-        const bonificationValue = this.processBonificationField(
-          fieldMapping,
-          sourceData,
-          bonificationMapping,
-          mapping.bonificationConfig
-        );
-
-        if (bonificationValue !== null && bonificationValue !== undefined) {
-          logger.debug(
-            `🎁 Aplicando valor de bonificación para ${fieldMapping.targetField}: ${bonificationValue}`
-          );
-          value = bonificationValue;
-        }
-      }
-
-      // PASO 8: Validar campos obligatorios
-      if (fieldMapping.isRequired && (value === undefined || value === null)) {
-        throw new Error(
-          `Campo obligatorio '${fieldMapping.targetField}' sin valor`
-        );
-      }
-
-      // PASO 9: Aplicar mapeo de valores
-      if (fieldMapping.valueMappings?.length > 0) {
-        value = this._applyValueMapping(fieldMapping, value);
-      }
-
-      // PASO 10: Verificar longitud de strings
-      if (typeof value === "string") {
-        value = await this._truncateStringIfNeeded(
-          value,
-          targetConnection,
-          tableConfig.targetTable,
-          fieldMapping.targetField,
-          columnLengthCache
-        );
-      }
-
-      // Debug final
-      logger.debug(
-        `✅ Campo ${
-          fieldMapping.targetField
-        } procesado: ${value} (tipo: ${typeof value})`
+    // 🚨 DEBUG ESPECÍFICO PARA PEDIDO
+    if (fieldMapping.targetField === "PEDIDO") {
+      logger.warn(`🚨 DEBUG CAMPO PEDIDO:`);
+      logger.warn(`  - sourceField: ${fieldMapping.sourceField}`);
+      logger.warn(`  - defaultValue: ${fieldMapping.defaultValue}`);
+      logger.warn(
+        `  - currentConsecutive: ${
+          currentConsecutive ? currentConsecutive.formatted : "NULL"
+        }`
       );
-
-      return { value, isDirectSql: false };
-    } catch (error) {
-      logger.error(
-        `❌ Error procesando campo ${fieldMapping.targetField}:`,
-        error
+      logger.warn(
+        `  - consecutiveConfig.fieldName: ${mapping.consecutiveConfig?.fieldName}`
       );
-      throw error;
-    }
-  }
-
-  /**
-   * Obtiene valor del campo fuente
-   */
-  _getSourceFieldValue(fieldMapping, sourceData) {
-    let value;
-
-    if (fieldMapping.sourceField) {
-      value = sourceData[fieldMapping.sourceField];
-
-      // Aplicar eliminación de prefijo si está configurado
-      if (
-        fieldMapping.removePrefix &&
-        typeof value === "string" &&
-        value.startsWith(fieldMapping.removePrefix)
-      ) {
-        const originalValue = value;
-        value = value.substring(fieldMapping.removePrefix.length);
-        logger.debug(`Prefijo eliminado: '${originalValue}' → '${value}'`);
-      }
-    } else {
-      // Usar valor por defecto si no hay campo fuente
-      value =
-        fieldMapping.defaultValue === "NULL" ? null : fieldMapping.defaultValue;
+      logger.warn(
+        `  - shouldReceive: ${
+          mapping.consecutiveConfig?.enabled
+            ? this.shouldReceiveConsecutive(
+                fieldMapping,
+                mapping.consecutiveConfig,
+                tableConfig,
+                isDetailTable
+              )
+            : "disabled"
+        }`
+      );
     }
 
-    // Si el valor es undefined/null pero hay un valor por defecto
+    // PRIORIDAD 1: Usar valores obtenidos por lookup si existen
     if (
-      (value === undefined || value === null) &&
-      fieldMapping.defaultValue !== undefined
+      fieldMapping.lookupFromTarget &&
+      lookupResults[fieldMapping.targetField] !== undefined
     ) {
-      value =
-        fieldMapping.defaultValue === "NULL" ? null : fieldMapping.defaultValue;
-    }
-
-    return value;
-  }
-
-  /**
-   * Verifica si debe aplicar consecutivo
-   */
-  _shouldApplyConsecutive(
-    fieldMapping,
-    currentConsecutive,
-    mapping,
-    tableConfig,
-    isDetailTable
-  ) {
-    if (!currentConsecutive || !mapping.consecutiveConfig?.enabled) {
-      return false;
-    }
-
-    // Lógica para aplicar consecutivo según configuración
-    if (isDetailTable) {
-      return (
-        mapping.consecutiveConfig.detailFieldName === fieldMapping.targetField
+      value = lookupResults[fieldMapping.targetField];
+      logger.debug(
+        `Usando valor de lookup para ${fieldMapping.targetField}: ${value}`
       );
-    } else {
-      return mapping.consecutiveConfig.fieldName === fieldMapping.targetField;
+      return { value, isDirectSql: false };
     }
-  }
 
-  /**
-   * Verifica si es función SQL nativa
-   */
-  _isNativeSqlFunction(defaultValue) {
-    if (!defaultValue || typeof defaultValue !== "string") return false;
-
-    const sqlFunctions = [
+    // PRIORIDAD 2: Verificar si el campo es una función SQL nativa
+    const defaultValue = fieldMapping.defaultValue;
+    const sqlNativeFunctions = [
       "GETDATE()",
       "CURRENT_TIMESTAMP",
       "NEWID()",
@@ -2304,24 +2173,209 @@ class DynamicTransferService {
       "DAY(",
       "MONTH(",
       "YEAR(",
+      "GETDATE",
+      "DATEADD",
+      "DATEDIFF",
     ];
 
-    return sqlFunctions.some((func) =>
-      defaultValue.trim().toUpperCase().includes(func)
-    );
+    const isNativeFunction =
+      defaultValue &&
+      typeof defaultValue === "string" &&
+      sqlNativeFunctions.some((func) =>
+        defaultValue.trim().toUpperCase().includes(func)
+      );
+
+    if (isNativeFunction) {
+      logger.debug(
+        `Detectada función SQL nativa para ${fieldMapping.targetField}: ${defaultValue}`
+      );
+      return { value: defaultValue, isDirectSql: true };
+    }
+
+    // PASO 1: Obtener valor del origen o usar valor por defecto
+    if (fieldMapping.sourceField) {
+      value = sourceData[fieldMapping.sourceField];
+      logger.debug(`Valor original de ${fieldMapping.sourceField}: ${value}`);
+
+      // PASO 2: Aplicar eliminación de prefijo específico si está configurado
+      if (
+        fieldMapping.removePrefix &&
+        typeof value === "string" &&
+        value.startsWith(fieldMapping.removePrefix)
+      ) {
+        const originalValue = value;
+        value = value.substring(fieldMapping.removePrefix.length);
+        logger.debug(
+          `Prefijo '${fieldMapping.removePrefix}' eliminado del campo ${fieldMapping.sourceField}: '${originalValue}' → '${value}'`
+        );
+      }
+    } else {
+      // No hay campo origen, usar valor por defecto
+      value = defaultValue === "NULL" ? null : defaultValue;
+    }
+
+    // Si el valor es undefined/null pero hay un valor por defecto
+    if ((value === undefined || value === null) && defaultValue !== undefined) {
+      value = defaultValue === "NULL" ? null : defaultValue;
+    }
+
+    // PASO 3: **APLICAR CONVERSIÓN DE UNIDADES**
+    if (fieldMapping.unitConversion && fieldMapping.unitConversion.enabled) {
+      logger.info(
+        `🔄 Iniciando conversión de unidades para campo: ${fieldMapping.targetField}`
+      );
+      const originalValue = value;
+      value = this.applyUnitConversion(sourceData, fieldMapping, value);
+
+      if (originalValue !== value) {
+        logger.info(
+          `🎉 Conversión aplicada exitosamente en ${fieldMapping.targetField}: ${originalValue} → ${value}`
+        );
+      }
+    }
+
+    // PASO 4: Formatear fechas si es necesario
+    if (
+      typeof value !== "number" &&
+      (value instanceof Date ||
+        (typeof value === "string" &&
+          value.includes("T") &&
+          !isNaN(new Date(value).getTime())))
+    ) {
+      logger.debug(`Convirtiendo fecha a formato SQL Server: ${value}`);
+      value = this.formatSqlDate(value);
+      logger.debug(`Fecha convertida: ${value}`);
+    }
+
+    // PASO 5: ✅ **APLICAR CONSECUTIVO SI CORRESPONDE** (LÓGICA ORIGINAL)
+    if (
+      currentConsecutive &&
+      mapping.consecutiveConfig &&
+      mapping.consecutiveConfig.enabled
+    ) {
+      const shouldReceiveConsecutive = this.shouldReceiveConsecutive(
+        fieldMapping,
+        mapping.consecutiveConfig,
+        tableConfig,
+        isDetailTable
+      );
+
+      if (shouldReceiveConsecutive) {
+        // Solo aplicar consecutivo si no hubo conversión numérica
+        if (
+          fieldMapping.unitConversion &&
+          fieldMapping.unitConversion.enabled &&
+          typeof value === "number"
+        ) {
+          logger.warn(
+            `⚠️ No se aplicará consecutivo a ${fieldMapping.targetField} porque se aplicó conversión numérica (valor: ${value})`
+          );
+        } else {
+          value = currentConsecutive.formatted;
+          logger.debug(
+            `Asignando consecutivo ${currentConsecutive.formatted} a campo ${fieldMapping.targetField} en tabla ${tableConfig.name}`
+          );
+
+          // 🚨 DEBUG ESPECÍFICO PARA PEDIDO
+          if (fieldMapping.targetField === "PEDIDO") {
+            logger.warn(`🚨 PEDIDO CONSECUTIVO ASIGNADO: ${value}`);
+          }
+        }
+      }
+    }
+
+    // PASO 5.5: 🎁 **APLICAR BONIFICACIONES** (NUEVA LÓGICA - DESPUÉS DEL CONSECUTIVO)
+    if (bonificationMapping && mapping.hasBonificationProcessing) {
+      // 🔍 DEBUG ANTES DE PROCESAR BONIFICACIONES
+      if (
+        fieldMapping.targetField === "PEDIDO_LINEA" ||
+        fieldMapping.targetField === "PEDIDO_LINEA_BONIF"
+      ) {
+        logger.warn(`🔍 ANTES DE BONIFICACIONES:`);
+        logger.warn(`  - Campo: ${fieldMapping.targetField}`);
+        logger.warn(`  - Valor actual: ${value}`);
+        logger.warn(`  - Tipo valor: ${typeof value}`);
+        logger.warn(
+          `  - hasBonificationProcessing: ${mapping.hasBonificationProcessing}`
+        );
+      }
+
+      const bonificationValue = this.processBonificationField(
+        fieldMapping,
+        sourceData,
+        bonificationMapping,
+        mapping.bonificationConfig
+      );
+
+      if (bonificationValue !== null) {
+        // 🔍 DEBUG DESPUÉS DE PROCESAR BONIFICACIONES
+        if (
+          fieldMapping.targetField === "PEDIDO_LINEA" ||
+          fieldMapping.targetField === "PEDIDO_LINEA_BONIF"
+        ) {
+          logger.warn(`🔍 DESPUÉS DE BONIFICACIONES:`);
+          logger.warn(`  - Campo: ${fieldMapping.targetField}`);
+          logger.warn(`  - Valor bonificación: ${bonificationValue}`);
+          logger.warn(`  - Tipo bonificación: ${typeof bonificationValue}`);
+          logger.warn(`  - Sobrescribiendo valor anterior: ${value}`);
+        }
+
+        logger.debug(
+          `🎁 Sobrescribiendo con valor de bonificación para ${fieldMapping.targetField}: ${bonificationValue}`
+        );
+        value = bonificationValue;
+      }
+    }
+
+    // PASO 6: Verificar campos obligatorios
+    if (fieldMapping.isRequired && (value === undefined || value === null)) {
+      throw new Error(
+        `El campo obligatorio '${fieldMapping.targetField}' no tiene valor de origen ni valor por defecto`
+      );
+    }
+
+    // PASO 7: Aplicar mapeo de valores si existe
+    if (
+      value !== null &&
+      value !== undefined &&
+      fieldMapping.valueMappings?.length > 0
+    ) {
+      const valueMapping = fieldMapping.valueMappings.find(
+        (vm) => vm.sourceValue === value
+      );
+      if (valueMapping) {
+        logger.debug(
+          `Aplicando mapeo de valor para ${fieldMapping.targetField}: ${value} → ${valueMapping.targetValue}`
+        );
+        value = valueMapping.targetValue;
+      }
+    }
+
+    // PASO 8: Verificar y ajustar longitud de strings
+    if (typeof value === "string") {
+      const maxLength = await this.getColumnMaxLength(
+        targetConnection,
+        tableConfig.targetTable,
+        fieldMapping.targetField,
+        columnLengthCache
+      );
+
+      if (maxLength > 0 && value.length > maxLength) {
+        logger.warn(
+          `Truncando valor para campo ${fieldMapping.targetField} de longitud ${value.length} a ${maxLength} caracteres`
+        );
+        value = value.substring(0, maxLength);
+      }
+    }
+
+    // 🚨 DEBUG ESPECÍFICO PARA PEDIDO
+    if (fieldMapping.targetField === "PEDIDO") {
+      logger.warn(`🚨 PEDIDO VALOR FINAL: ${value}`);
+    }
+
+    return { value, isDirectSql: false };
   }
 
-  /**
-   * Verifica si es un valor de fecha
-   */
-  _isDateValue(value) {
-    return (
-      value instanceof Date ||
-      (typeof value === "string" &&
-        value.includes("T") &&
-        !isNaN(new Date(value).getTime()))
-    );
-  }
   /**
    * Procesa las tablas de detalle
    * @private
@@ -3862,6 +3916,10 @@ class DynamicTransferService {
    * Ejecuta la inserción en la base de datos - VERSIÓN DEFINITIVA CON FILTRO COMPLETO DE NULOS
    * @private
    */
+
+  /**
+   * Ejecuta la inserción en la base de datos - DEBUG PARA BONIFICACIONES
+   */
   async executeInsert(
     targetTable,
     targetFields,
@@ -3871,13 +3929,15 @@ class DynamicTransferService {
     targetConnection
   ) {
     try {
-      // 🚨 VALIDACIÓN PREVIA CRÍTICA
-      logger.warn(`🔍 VALIDACIÓN EXECUTEINSERT:`);
-      logger.warn(`  - Tabla: ${targetTable}`);
-      logger.warn(`  - Campos: ${targetFields.length}`);
-      logger.warn(`  - Valores: ${targetValues.length}`);
-      logger.warn(`  - Parámetros: ${Object.keys(targetData).length}`);
-      logger.warn(`  - DirectSQL: ${directSqlFields.size}`);
+      // 🔍 DEBUG ESPECÍFICO PARA BONIFICACIONES
+      if (targetTable.includes("PEDIDO_LINEA")) {
+        logger.warn(`🔍 DEBUG EXECUTEINSERT PEDIDO_LINEA:`);
+        logger.warn(`  - Tabla: ${targetTable}`);
+        logger.warn(`  - Campos: ${targetFields.join(", ")}`);
+        logger.warn(`  - Valores: ${targetValues.join(", ")}`);
+        logger.warn(`  - Datos: ${JSON.stringify(targetData, null, 2)}`);
+        logger.warn(`  - DirectSQL: ${Array.from(directSqlFields).join(", ")}`);
+      }
 
       // Verificar que campos y valores coincidan
       if (targetFields.length !== targetValues.length) {
@@ -3886,28 +3946,33 @@ class DynamicTransferService {
         );
       }
 
-      // Verificar campos SQL directos
+      // Filtrar los datos para que solo contengan los campos que realmente son parámetros
+      const filteredTargetData = {};
+      for (const field in targetData) {
+        if (!directSqlFields.has(field)) {
+          filteredTargetData[field] = targetData[field];
+        }
+      }
+
+      // Verificar parámetros faltantes
       const expectedParams = targetFields.filter(
         (field) => !directSqlFields.has(field)
       );
-      const actualParams = Object.keys(targetData);
-
-      logger.warn(
-        `🔍 Campos que necesitan parámetros: ${expectedParams.join(", ")}`
-      );
-      logger.warn(`🔍 Parámetros disponibles: ${actualParams.join(", ")}`);
-
-      // Verificar si hay parámetros faltantes
+      const actualParams = Object.keys(filteredTargetData);
       const missingParams = expectedParams.filter(
         (field) => !actualParams.includes(field)
       );
-      if (missingParams.length > 0) {
-        logger.error(`🚨 PARÁMETROS FALTANTES: ${missingParams.join(", ")}`);
 
+      if (missingParams.length > 0) {
+        logger.error(
+          `🚨 PARÁMETROS FALTANTES EN ${targetTable}: ${missingParams.join(
+            ", "
+          )}`
+        );
         // Agregar parámetros faltantes con valor NULL
         missingParams.forEach((param) => {
           logger.warn(`⚠️ Agregando parámetro faltante ${param} = NULL`);
-          targetData[param] = null;
+          filteredTargetData[param] = null;
         });
       }
 
@@ -3921,29 +3986,33 @@ class DynamicTransferService {
       VALUES (${insertValuesList.join(", ")})
     `;
 
-      logger.debug(`Ejecutando inserción en tabla: ${insertQuery}`);
-
-      // Filtrar los datos para que solo contengan los campos que realmente son parámetros
-      const filteredTargetData = {};
-      for (const field in targetData) {
-        if (!directSqlFields.has(field)) {
-          filteredTargetData[field] = targetData[field];
-        }
+      // 🔍 DEBUG FINAL ANTES DE EJECUTAR
+      if (targetTable.includes("PEDIDO_LINEA")) {
+        logger.warn(`🔍 CONSULTA FINAL: ${insertQuery}`);
+        logger.warn(
+          `🔍 PARÁMETROS FINALES: ${JSON.stringify(
+            filteredTargetData,
+            null,
+            2
+          )}`
+        );
       }
 
-      logger.info(`📊 DATOS FINALES PARA INSERCIÓN en ${targetTable}:`);
-      logger.info(`Campos: ${targetFields.join(", ")}`);
-      logger.info(`Datos: ${JSON.stringify(filteredTargetData, null, 2)}`);
-
       await SqlService.query(targetConnection, insertQuery, filteredTargetData);
+
+      // 🔍 DEBUG ÉXITO
+      if (targetTable.includes("PEDIDO_LINEA")) {
+        logger.warn(`✅ INSERCIÓN EXITOSA EN ${targetTable}`);
+      }
     } catch (error) {
-      logger.error(`❌ ERROR EN EXECUTEINSERT PARA TABLA ${targetTable}:`, {
-        error: error.message,
-        targetTable,
-        fieldsReceived: targetFields.length,
-        parametersReceived: Object.keys(targetData).length,
-        stack: error.stack,
-      });
+      // 🔍 DEBUG ERROR ESPECÍFICO
+      if (targetTable.includes("PEDIDO_LINEA")) {
+        logger.error(`❌ ERROR ESPECÍFICO EN ${targetTable}:`);
+        logger.error(`  - Error: ${error.message}`);
+        logger.error(`  - Stack: ${error.stack}`);
+        logger.error(`  - Campos: ${targetFields.join(", ")}`);
+        logger.error(`  - Datos: ${JSON.stringify(targetData, null, 2)}`);
+      }
 
       throw new Error(`Error en inserción a ${targetTable}: ${error.message}`);
     }
@@ -4440,94 +4509,80 @@ class DynamicTransferService {
     bonificationMapping,
     bonificationConfig
   ) {
-    try {
-      const targetField = fieldMapping.targetField;
+    const targetField = fieldMapping.targetField;
 
-      // Verificar si es un campo que debe ser procesado por bonificaciones
-      if (!this._isBonificationField(targetField, bonificationConfig)) {
-        return null; // No es un campo de bonificaciones
-      }
-
-      // Obtener el código del artículo del registro actual
-      const articleCode = sourceData[bonificationConfig.regularArticleField];
-      if (!articleCode) {
-        logger.warn(
-          `⚠️ No se encontró código de artículo en ${bonificationConfig.regularArticleField}`
-        );
-        return null;
-      }
-
-      // Obtener el mapeo del artículo
-      const articleMapping = this.bonificationService.getArticleMapping(
-        articleCode,
-        bonificationMapping
+    // 🔍 DEBUG ESPECÍFICO
+    if (
+      targetField === "PEDIDO_LINEA" ||
+      targetField === "PEDIDO_LINEA_BONIF"
+    ) {
+      logger.warn(`🔍 DEBUG processBonificationField:`);
+      logger.warn(`  - Campo: ${targetField}`);
+      logger.warn(
+        `  - regularArticleField: ${bonificationConfig.regularArticleField}`
       );
-      if (!articleMapping) {
-        logger.warn(`⚠️ No se encontró mapeo para artículo: ${articleCode}`);
-        return null;
-      }
-
-      // Procesar según el tipo de campo
-      return this._processBonificationFieldValue(
-        targetField,
-        articleMapping,
-        bonificationConfig
+      logger.warn(
+        `  - Datos disponibles: ${Object.keys(sourceData).join(", ")}`
       );
-    } catch (error) {
-      logger.error(
-        `❌ Error procesando campo de bonificación ${fieldMapping.targetField}:`,
-        error
+    }
+
+    // Verificar si es un campo de bonificaciones
+    if (
+      targetField !== bonificationConfig.lineNumberField &&
+      targetField !== bonificationConfig.bonificationLineReferenceField
+    ) {
+      return null; // No es un campo de bonificaciones
+    }
+
+    // Obtener el código del artículo del registro actual
+    const articleCode = sourceData[bonificationConfig.regularArticleField];
+    if (!articleCode) {
+      logger.warn(`⚠️ No se encontró código de artículo para ${targetField}`);
+      return null;
+    }
+
+    // Obtener el mapeo del artículo usando el método existente
+    const articleMapping = this.getArticleMappingFromBonificationData(
+      articleCode,
+      bonificationMapping
+    );
+
+    if (!articleMapping) {
+      logger.warn(
+        `⚠️ No se encontró mapeo de bonificación para artículo: ${articleCode}`
       );
       return null;
     }
-  }
 
-  /**
-   * Determina si es un campo de bonificaciones
-   */
-  _isBonificationField(targetField, bonificationConfig) {
-    return (
-      targetField === bonificationConfig.lineNumberField ||
-      targetField === bonificationConfig.bonificationLineReferenceField ||
-      targetField === "PEDIDO_LINEA" ||
-      targetField === "PEDIDO_LINEA_BONIF"
-    );
-  }
-
-  /**
-   * Procesa el valor específico del campo de bonificación
-   */
-  _processBonificationFieldValue(
-    targetField,
-    articleMapping,
-    bonificationConfig
-  ) {
-    // Campo PEDIDO_LINEA (número de línea del registro actual)
-    if (
-      targetField === bonificationConfig.lineNumberField ||
-      targetField === "PEDIDO_LINEA"
-    ) {
+    // Asignar valores según el campo
+    if (targetField === bonificationConfig.lineNumberField) {
       const lineNumber = articleMapping.lineNumber;
-      logger.debug(`🎁 ${targetField} para artículo: ${lineNumber}`);
+
+      // 🔍 DEBUG ESPECÍFICO
+      if (targetField === "PEDIDO_LINEA") {
+        logger.warn(
+          `🔍 PEDIDO_LINEA asignado: ${lineNumber} para artículo ${articleCode}`
+        );
+      }
+
       return lineNumber;
     }
 
-    // Campo PEDIDO_LINEA_BONIF (línea del artículo regular al que refiere)
-    if (
-      targetField === bonificationConfig.bonificationLineReferenceField ||
-      targetField === "PEDIDO_LINEA_BONIF"
-    ) {
+    if (targetField === bonificationConfig.bonificationLineReferenceField) {
       const bonifLineRef = articleMapping.bonificationLineReference;
 
-      if (articleMapping.isRegular) {
-        // Para artículos regulares, PEDIDO_LINEA_BONIF debe ser null
-        logger.debug(`🎁 ${targetField} para artículo regular: null`);
-        return null;
-      } else {
-        // Para bonificaciones, debe tener el número de línea del artículo regular
-        logger.debug(`🎁 ${targetField} para bonificación: ${bonifLineRef}`);
+      // 🔍 DEBUG ESPECÍFICO
+      if (targetField === "PEDIDO_LINEA_BONIF") {
+        logger.warn(
+          `🔍 PEDIDO_LINEA_BONIF asignado: ${bonifLineRef} para artículo ${articleCode}`
+        );
+      }
+
+      if (bonifLineRef !== null && bonifLineRef !== undefined) {
         return bonifLineRef;
       }
+      // Para artículos regulares, PEDIDO_LINEA_BONIF debe ser null
+      return null;
     }
 
     return null;
@@ -4538,7 +4593,15 @@ class DynamicTransferService {
    * @private
    */
   getArticleMappingFromBonificationData(articleCode, bonificationMapping) {
-    if (!bonificationMapping) return null;
+    // 🔍 DEBUG
+    logger.warn(`🔍 getArticleMappingFromBonificationData:`);
+    logger.warn(`  - articleCode: ${articleCode}`);
+    logger.warn(`  - bonificationMapping existe: ${!!bonificationMapping}`);
+
+    if (!bonificationMapping) {
+      logger.warn(`  - No hay bonificationMapping`);
+      return null;
+    }
 
     // Verificar si es artículo regular
     if (
@@ -4546,6 +4609,9 @@ class DynamicTransferService {
       bonificationMapping.regularMapping.has(articleCode)
     ) {
       const regular = bonificationMapping.regularMapping.get(articleCode);
+      logger.warn(
+        `  - Es artículo regular: ${articleCode}, línea: ${regular.lineNumber}`
+      );
       return {
         isRegular: true,
         lineNumber: regular.lineNumber,
@@ -4560,6 +4626,9 @@ class DynamicTransferService {
     ) {
       const bonification =
         bonificationMapping.bonificationMapping.get(articleCode);
+      logger.warn(
+        `  - Es bonificación: ${articleCode}, línea: ${bonification.lineNumber}, refiere a: ${bonification.bonificationLineReference}`
+      );
       return {
         isRegular: false,
         lineNumber: bonification.lineNumber,
@@ -4567,6 +4636,7 @@ class DynamicTransferService {
       };
     }
 
+    logger.warn(`  - No se encontró mapeo para: ${articleCode}`);
     return null;
   }
 }
