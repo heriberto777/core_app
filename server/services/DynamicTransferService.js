@@ -2143,12 +2143,15 @@ class DynamicTransferService {
           );
           if (mainTable?.sourceTable) {
             task.query = `SELECT * FROM ${mainTable.sourceTable}`;
+            // ✅ CORREGIR: No cambiar el status aquí
+            // task.status = "failed"; // ❌ REMOVER ESTA LÍNEA
             await task.save();
             logger.info(`Tarea ${task._id} actualizada automáticamente`);
           }
         }
       } catch (taskError) {
         logger.warn(`Error al actualizar tarea asociada: ${taskError.message}`);
+        // ✅ NO intentar cambiar status a "failed" aquí
       }
     }
 

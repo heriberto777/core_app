@@ -40,7 +40,17 @@ const transferTaskSchema = new mongoose.Schema(
     // Estado actual de la tarea
     status: {
       type: String,
-      enum: ["pending", "running", "completed", "error", "cancelled"],
+      enum: [
+        "pending",
+        "running",
+        "completed",
+        "error",
+        "cancelled",
+        "failed",
+        "partial",
+        "cancelled",
+        "error",
+      ],
       default: "pending",
     },
 

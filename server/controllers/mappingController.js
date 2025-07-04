@@ -3,7 +3,8 @@ const { SqlService } = require("../services/SqlService");
 const ConnectionManager = require("../services/ConnectionCentralService");
 const logger = require("../services/logger");
 const TransferMapping = require("../models/transferMappingModel");
-const BonificationService = require("../services/BonificationProcessingService");
+const BonificationProcessingService = require("../services/BonificationProcessingService");
+const bonificationService = new BonificationProcessingService();
 
 /**
  * Obtiene todas las configuraciones de mapeo
@@ -1070,14 +1071,19 @@ const previewBonificationProcessing = async (req, res) => {
     }
 
     // Procesar bonificaciones en modo preview
-    const BonificationService = require("../services/BonificationProcessingService");
-    const processedDetails = await BonificationService.processBonifications(
-      originalDetails,
-      mapping.bonificationConfig,
-      documentId
+
+    // const processedDetails = await BonificationService.processBonifications(
+    //   originalDetails,
+    //   mapping.bonificationConfig,
+    //   documentId
+    // );
+    const processedDetails = await bonificationService.processBonifications(
+      sourceConnection,
+      documentId,
+      mapping.bonificationConfig
     );
 
-    const promotions = BonificationService.detectPromotionTypes(
+    const promotions = bonificationService.detectPromotionTypes(
       processedDetails,
       mapping.bonificationConfig
     );
@@ -1164,8 +1170,8 @@ const validateBonificationConfig = async (req, res) => {
 
     try {
       // Validar que el servicio de bonificaciones puede cargar la configuración
-      const BonificationService = require("../services/BonificationProcessingService");
-      BonificationService.validateBonificationConfig(configToValidate);
+
+      bonificationService.validateBonificationConfig(configToValidate);
 
       // Validar acceso a la tabla de origen
       const sourceConnection = await ConnectionManager.getConnection(
