@@ -666,13 +666,12 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa un documento con bonificaciones habilitadas
+   * Procesa un documento con bonificaciones habilitadas - VERSIÓN CORREGIDA COMPLETA
    * @param {string} documentId - ID del documento
    * @param {Object} mapping - Configuración de mapeo
    * @param {Object} sourceConnection - Conexión origen
    * @param {Object} targetConnection - Conexión destino
    * @param {Object} currentConsecutive - Consecutivo actual
-   * @param {Object} BonificationService - Servicio de bonificaciones cargado
    * @returns {Promise<Object>} - Resultado del procesamiento
    */
   async processSingleDocumentWithBonifications(
@@ -680,8 +679,7 @@ class DynamicTransferService {
     mapping,
     sourceConnection,
     targetConnection,
-    currentConsecutive = null,
-    BonificationService
+    currentConsecutive = null
   ) {
     let processedTables = [];
     let documentType = "unknown";
@@ -690,7 +688,6 @@ class DynamicTransferService {
       totalPromotions: 0,
       totalDiscountAmount: 0,
       processedDetails: 0,
-      promotionTypes: [],
     };
 
     try {
@@ -725,7 +722,7 @@ class DynamicTransferService {
       // 2. Procesar cada tabla principal
       for (const tableConfig of orderedMainTables) {
         try {
-          // Obtener datos de origen
+          // Obtener datos de origen del encabezado
           const sourceData = await this.getSourceData(
             documentId,
             tableConfig,
@@ -751,10 +748,7 @@ class DynamicTransferService {
           };
 
           // Procesar dependencias FK si existen
-          if (
-            mapping.foreignKeyDependencies &&
-            mapping.foreignKeyDependencies.length > 0
-          ) {
+          if (mapping.foreignKeyDependencies?.length > 0) {
             await this.processForeignKeyDependencies(
               documentId,
               mapping,
@@ -776,14 +770,14 @@ class DynamicTransferService {
               currentConsecutive.formatted;
           }
 
-          // 🎁 LÓGICA DE BONIFICACIONES: Procesar detalles
+          // ✅ NUEVA LÓGICA CORREGIDA: Procesar bonificaciones y detalles
           let enhancedSourceData = { ...sourceData };
           let allProcessedDetails = [];
 
           // Procesar cada tabla de detalle con bonificaciones
           for (const detailTable of detailTables) {
             try {
-              // Obtener detalles originales
+              // ✅ PASO 1: Obtener detalles originales
               const originalDetails = await this.getOrderDetailsWithPromotions(
                 detailTable,
                 documentId,
@@ -801,111 +795,215 @@ class DynamicTransferService {
                 `📦 Procesando ${originalDetails.length} detalles originales`
               );
 
-              // Aplicar reglas de promociones si están habilitadas
+              // ✅ PASO 2: Procesar bonificaciones CORRECTAMENTE
+              let bonificationResult = null;
+              let bonificationMapping = null;
+
+              if (
+                mapping.hasBonificationProcessing &&
+                mapping.bonificationConfig
+              ) {
+                try {
+                  bonificationResult =
+                    await this.bonificationService.processBonifications(
+                      sourceConnection, // ✅ CORRECTO: conexión
+                      documentId, // ✅ CORRECTO: documentId
+                      mapping.bonificationConfig // ✅ CORRECTO: configuración
+                    );
+
+                  if (bonificationResult.success) {
+                    bonificationMapping =
+                      bonificationResult.bonificationMapping;
+                    logger.info(
+                      `✅ Bonificaciones procesadas: ${bonificationResult.processed} mapeadas, ${bonificationResult.orphanBonifications} huérfanas`
+                    );
+                  } else {
+                    logger.warn(
+                      `⚠️ Error en bonificaciones: ${bonificationResult.error}`
+                    );
+                  }
+                } catch (bonificationError) {
+                  logger.error(
+                    `❌ Error procesando bonificaciones: ${bonificationError.message}`
+                  );
+                  // Continuar sin bonificaciones
+                }
+              }
+
+              // ✅ PASO 3: Aplicar reglas de promociones si están habilitadas
               let enhancedDetails = originalDetails;
-              if (mapping.bonificationConfig.applyPromotionRules) {
-                enhancedDetails = await BonificationService.applyPromotionRules(
-                  originalDetails,
-                  customerContext,
-                  mapping.bonificationConfig
-                );
+              if (mapping.bonificationConfig?.applyPromotionRules) {
+                try {
+                  enhancedDetails =
+                    await this.bonificationService.applyPromotionRules(
+                      originalDetails,
+                      customerContext,
+                      mapping.bonificationConfig
+                    );
+                  logger.info(
+                    `🎯 Promociones aplicadas: ${
+                      enhancedDetails.length - originalDetails.length
+                    } items añadidos`
+                  );
+                } catch (promotionError) {
+                  logger.warn(
+                    `⚠️ Error aplicando promociones: ${promotionError.message}`
+                  );
+                  enhancedDetails = originalDetails; // Usar originales si falla
+                }
               }
 
-              // Procesar bonificaciones
-              const processedDetails =
-                await BonificationService.processBonifications(
-                  enhancedDetails,
-                  mapping.bonificationConfig,
-                  documentId
-                );
+              // ✅ PASO 4: Los detalles finales para procesar (ESTOS SÍ SON UN ARRAY)
+              const processedDetails = enhancedDetails;
 
-              // Detectar promociones
-              const promotions = BonificationService.detectPromotionTypes(
-                processedDetails,
-                mapping.bonificationConfig,
-                sourceData
-              );
+              // ✅ PASO 5: Detectar promociones con validación robusta
+              let promotions = {
+                summary: {
+                  totalBonifiedItems: 0,
+                  totalPromotions: 0,
+                  totalDiscountAmount: 0,
+                  appliedPromotions: [],
+                },
+              };
 
-              // Actualizar estadísticas
-              bonificationStats.totalBonifications +=
-                promotions.summary.totalBonifiedItems;
-              bonificationStats.totalPromotions +=
-                promotions.summary.totalPromotions;
-              bonificationStats.totalDiscountAmount +=
-                promotions.summary.totalDiscountAmount;
-              bonificationStats.processedDetails += processedDetails.length;
-
-              if (promotions.summary.appliedPromotions) {
-                bonificationStats.promotionTypes.push(
-                  ...promotions.summary.appliedPromotions
-                );
-              }
-
-              // Agregar información de promociones al documento principal
-              enhancedSourceData.HAS_BONIFICATIONS = processedDetails.some(
-                (d) => d.ITEM_TYPE === "BONIFICATION"
-              );
-              enhancedSourceData.TOTAL_BONIFICATIONS =
-                promotions.summary.totalBonifiedItems;
-              enhancedSourceData.TOTAL_DISCOUNT_AMOUNT =
-                promotions.summary.totalDiscountAmount;
-              enhancedSourceData.PROMOTION_TYPES = JSON.stringify(
-                promotions.summary.appliedPromotions || []
-              );
-
-              // Insertar documento principal (solo una vez)
-              if (allProcessedDetails.length === 0) {
-                const mainInsertResult = await this.insertToTargetTable(
-                  enhancedSourceData,
-                  tableConfig,
-                  targetConnection,
-                  mapping,
-                  columnLengthCache
-                );
-
-                if (!mainInsertResult.success) {
-                  throw new Error(
-                    `Error insertando documento principal: ${mainInsertResult.error}`
+              if (
+                Array.isArray(processedDetails) &&
+                processedDetails.length > 0
+              ) {
+                try {
+                  promotions = this.bonificationService.detectPromotionTypes(
+                    processedDetails,
+                    mapping.bonificationConfig,
+                    sourceData
+                  );
+                  logger.debug(
+                    `🔍 Promociones detectadas: ${promotions.summary.totalPromotions}`
+                  );
+                } catch (detectionError) {
+                  logger.warn(
+                    `⚠️ Error detectando promociones: ${detectionError.message}`
                   );
                 }
-
-                processedTables.push({
-                  tableName: tableConfig.targetTable || tableConfig.sourceTable,
-                  recordsInserted: 1,
-                  tableType: "main",
-                });
+              } else {
+                logger.warn(
+                  `⚠️ processedDetails no es un array válido: ${typeof processedDetails}, longitud: ${
+                    processedDetails?.length
+                  }`
+                );
               }
 
-              // Insertar detalles procesados
+              // ✅ PASO 6: Actualizar estadísticas de manera segura
+              if (bonificationResult?.success) {
+                bonificationStats.totalBonifications +=
+                  bonificationResult.processed || 0;
+              }
+              bonificationStats.totalPromotions +=
+                promotions.summary?.totalPromotions || 0;
+              bonificationStats.totalDiscountAmount +=
+                promotions.summary?.totalDiscountAmount || 0;
+              bonificationStats.processedDetails +=
+                processedDetails?.length || 0;
+
+              // ✅ PASO 7: Agregar información de promociones al documento principal
+              enhancedSourceData.HAS_BONIFICATIONS =
+                (bonificationResult?.processed || 0) > 0;
+              enhancedSourceData.TOTAL_BONIFICATIONS =
+                bonificationResult?.processed || 0;
+              enhancedSourceData.TOTAL_DISCOUNT_AMOUNT =
+                promotions.summary?.totalDiscountAmount || 0;
+              enhancedSourceData.PROMOTION_TYPES = JSON.stringify(
+                promotions.summary?.appliedPromotions || []
+              );
+
+              // ✅ PASO 8: Insertar documento principal (solo una vez)
+              if (allProcessedDetails.length === 0) {
+                try {
+                  await this.processTable(
+                    tableConfig,
+                    enhancedSourceData,
+                    null, // No hay detailRow para tabla principal
+                    targetConnection,
+                    currentConsecutive,
+                    mapping,
+                    documentId,
+                    columnLengthCache,
+                    false, // isDetailTable = false
+                    bonificationMapping // ✅ PASAR EL MAPEO DE BONIFICACIONES
+                  );
+
+                  processedTables.push({
+                    tableName:
+                      tableConfig.targetTable || tableConfig.sourceTable,
+                    recordsInserted: 1,
+                    tableType: "main",
+                  });
+
+                  logger.info(`✅ Documento principal insertado exitosamente`);
+                } catch (mainError) {
+                  throw new Error(
+                    `Error insertando documento principal: ${mainError.message}`
+                  );
+                }
+              }
+
+              // ✅ PASO 9: Insertar detalles procesados
               let detailsInserted = 0;
               const detailErrors = [];
 
-              for (const [index, detail] of processedDetails.entries()) {
-                try {
-                  const detailResult = await this.insertToTargetTable(
-                    detail,
-                    detailTable,
-                    targetConnection,
-                    mapping,
-                    columnLengthCache
-                  );
+              // Validar que processedDetails sea un array antes de iterar
+              if (Array.isArray(processedDetails)) {
+                for (const [index, detail] of processedDetails.entries()) {
+                  if (!detail || typeof detail !== "object") {
+                    logger.warn(
+                      `⚠️ Detalle inválido en índice ${index}: ${typeof detail}`
+                    );
+                    continue;
+                  }
 
-                  if (detailResult.success) {
+                  try {
+                    await this.processTable(
+                      detailTable,
+                      enhancedSourceData, // Datos del encabezado
+                      detail, // Datos de esta fila de detalle
+                      targetConnection,
+                      currentConsecutive,
+                      mapping,
+                      documentId,
+                      columnLengthCache,
+                      true, // isDetailTable = true
+                      bonificationMapping // ✅ PASAR EL MAPEO DE BONIFICACIONES
+                    );
+
                     detailsInserted++;
-                  } else {
+                    logger.debug(
+                      `✅ Detalle ${index + 1} insertado exitosamente`
+                    );
+                  } catch (detailError) {
                     detailErrors.push({
                       line: index + 1,
-                      article: detail.COD_ART,
-                      error: detailResult.error,
+                      article:
+                        detail.COD_ART ||
+                        detail.CODIGO ||
+                        detail[
+                          mapping.bonificationConfig?.sourceArticleField
+                        ] ||
+                        "N/A",
+                      error: detailError.message,
                     });
+                    logger.error(
+                      `❌ Error en detalle línea ${index + 1}: ${
+                        detailError.message
+                      }`
+                    );
                   }
-                } catch (detailError) {
-                  detailErrors.push({
-                    line: index + 1,
-                    article: detail.COD_ART,
-                    error: detailError.message,
-                  });
                 }
+              } else {
+                logger.error(
+                  `❌ processedDetails no es un array: ${typeof processedDetails}`
+                );
+                throw new Error(
+                  `processedDetails debe ser un array, recibido: ${typeof processedDetails}`
+                );
               }
 
               processedTables.push({
@@ -914,6 +1012,15 @@ class DynamicTransferService {
                 totalRecords: processedDetails.length,
                 errors: detailErrors,
                 tableType: "detail_with_bonifications",
+                bonificationStats: bonificationResult
+                  ? {
+                      mappedBonifications: bonificationResult.processed,
+                      orphanBonifications:
+                        bonificationResult.orphanBonifications,
+                      regularArticles: bonificationResult.regularArticles,
+                      bonifications: bonificationResult.bonifications,
+                    }
+                  : null,
               });
 
               allProcessedDetails.push(...processedDetails);
@@ -924,9 +1031,8 @@ class DynamicTransferService {
 
               if (detailErrors.length > 0) {
                 logger.warn(
-                  `⚠️ ${
-                    detailErrors.length
-                  } errores en detalles: ${JSON.stringify(detailErrors)}`
+                  `⚠️ ${detailErrors.length} errores en detalles:`,
+                  detailErrors
                 );
               }
             } catch (detailError) {
@@ -937,27 +1043,33 @@ class DynamicTransferService {
             }
           }
 
-          // Si no hay tablas de detalle, procesar como documento normal
+          // ✅ PASO 10: Si no hay tablas de detalle, procesar como documento normal
           if (detailTables.length === 0) {
-            const mainInsertResult = await this.insertToTargetTable(
-              enhancedSourceData,
-              tableConfig,
-              targetConnection,
-              mapping,
-              columnLengthCache
-            );
+            try {
+              await this.processTable(
+                tableConfig,
+                enhancedSourceData,
+                null, // No hay detailRow
+                targetConnection,
+                currentConsecutive,
+                mapping,
+                documentId,
+                columnLengthCache,
+                false // isDetailTable = false
+              );
 
-            if (!mainInsertResult.success) {
+              processedTables.push({
+                tableName: tableConfig.targetTable || tableConfig.sourceTable,
+                recordsInserted: 1,
+                tableType: "main_only",
+              });
+
+              logger.info(`✅ Documento sin detalles insertado exitosamente`);
+            } catch (mainError) {
               throw new Error(
-                `Error insertando documento principal: ${mainInsertResult.error}`
+                `Error insertando documento principal: ${mainError.message}`
               );
             }
-
-            processedTables.push({
-              tableName: tableConfig.targetTable || tableConfig.sourceTable,
-              recordsInserted: 1,
-              tableType: "main_only",
-            });
           }
         } catch (tableError) {
           logger.error(
@@ -967,10 +1079,33 @@ class DynamicTransferService {
         }
       }
 
+      // ✅ PASO 11: Marcar como procesado si está configurado
+      if (
+        mapping.markProcessedStrategy === "individual" &&
+        mapping.markProcessedField
+      ) {
+        try {
+          await this.markSingleDocument(
+            documentId,
+            mapping,
+            sourceConnection,
+            true
+          );
+          logger.debug(`✅ Documento ${documentId} marcado como procesado`);
+        } catch (markError) {
+          logger.warn(
+            `⚠️ No se pudo marcar documento ${documentId}: ${markError.message}`
+          );
+          // No fallar el proceso por error de marcado
+        }
+      }
+
       logger.info(
         `✅ Documento con bonificaciones procesado exitosamente: ${documentId}`
       );
-      logger.info(`📊 Estadísticas: ${JSON.stringify(bonificationStats)}`);
+      logger.info(
+        `📊 Estadísticas finales: ${JSON.stringify(bonificationStats)}`
+      );
 
       return {
         success: true,
@@ -980,10 +1115,17 @@ class DynamicTransferService {
         consecutiveValue: currentConsecutive?.value || null,
         processedTables,
         bonificationStats,
+        totalDetailsProcessed: bonificationStats.processedDetails,
       };
     } catch (error) {
       logger.error(
-        `❌ Error procesando documento con bonificaciones ${documentId}: ${error.message}`
+        `❌ Error procesando documento con bonificaciones ${documentId}: ${error.message}`,
+        {
+          error: error.message,
+          stack: error.stack,
+          documentId,
+          mappingId: mapping._id || mapping.id,
+        }
       );
 
       return {
@@ -994,6 +1136,11 @@ class DynamicTransferService {
         consecutiveValue: currentConsecutive?.value || null,
         processedTables,
         bonificationStats,
+        errorDetails: {
+          message: error.message,
+          stack: error.stack,
+          timestamp: new Date().toISOString(),
+        },
       };
     }
   }
