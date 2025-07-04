@@ -15,28 +15,23 @@ class DynamicTransferService {
   constructor() {
     this.bonificationService = new BonificationService();
   }
+
   /**
-   * Procesa documentos según una configuración de mapeo
-   * @param {Array} documentIds - IDs de los documentos a procesar
-   * @param {string} mappingId - ID de la configuración de mapeo
-   * @param {Object} signal - Señal de AbortController para cancelación
-   * @returns {Promise<Object>} - Resultado del procesamiento
+   * MÉTODO PRINCIPAL: Procesa documentos según configuración de mapeo
+   * ✅ CORREGIDO: Integra consecutivos centralizados y bonificaciones
    */
   async processDocuments(documentIds, mappingId, signal = null) {
-    // Crear AbortController local si no se proporcionó signal
     const localAbortController = !signal ? new AbortController() : null;
     signal = signal || localAbortController.signal;
-
-    // Define cancelTaskId at the function level so it's available in all scopes
     const cancelTaskId = `dynamic_process_${mappingId}_${Date.now()}`;
 
-    // Configurar un timeout interno como medida de seguridad
+    // Timeout de seguridad
     const timeoutId = setTimeout(() => {
       if (localAbortController) {
         logger.warn(`Timeout interno activado para tarea ${mappingId}`);
         localAbortController.abort();
       }
-    }, 120000); // 2 minutos
+    }, 120000);
 
     let sourceConnection = null;
     let targetConnection = null;
@@ -44,7 +39,7 @@ class DynamicTransferService {
     let mapping = null;
     const startTime = Date.now();
 
-    // Variables para manejar consecutivos centralizados
+    // ✅ NUEVA LÓGICA: Variables para manejar consecutivos centralizados
     let useCentralizedConsecutives = false;
     let centralizedConsecutiveId = null;
 
@@ -56,11 +51,10 @@ class DynamicTransferService {
         throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
       }
 
-      // Asegurar configuración por defecto para mappings existentes
+      // Configuraciones por defecto
       if (!mapping.markProcessedStrategy) {
-        mapping.markProcessedStrategy = "individual"; // Mantener comportamiento actual
+        mapping.markProcessedStrategy = "individual";
       }
-
       if (!mapping.markProcessedConfig) {
         mapping.markProcessedConfig = {
           batchSize: 100,
@@ -70,22 +64,20 @@ class DynamicTransferService {
         };
       }
 
-      // 2. Verificar si es consecutivo centralizado
+      // ✅ NUEVA LÓGICA: Verificar si usar consecutivos centralizados
       if (mapping.consecutiveConfig?.enabled) {
         try {
-          const consecutiveInfo = await ConsecutiveService.getConsecutiveConfig(
-            mapping.consecutiveConfig.fieldName
-          );
-          if (consecutiveInfo?.centralized) {
+          centralizedConsecutiveId =
+            await this.getOrCreateConsecutiveForMapping(mapping);
+          if (centralizedConsecutiveId) {
             useCentralizedConsecutives = true;
-            centralizedConsecutiveId = consecutiveInfo.id;
             logger.info(
-              `Usando consecutivos centralizados para mapping ${mapping.name}`
+              `✅ Usando consecutivos centralizados para mapping ${mapping.name}`
             );
           }
         } catch (consecError) {
           logger.warn(
-            `No se pudo verificar configuración centralizada: ${consecError.message}`
+            `⚠️ No se pudo usar consecutivo centralizado: ${consecError.message}`
           );
         }
       }
@@ -107,451 +99,176 @@ class DynamicTransferService {
         taskName: mapping.name,
         date: new Date(),
         status: "running",
-        details: {
-          documentIds,
-          mappingId,
-        },
+        details: { documentIds, mappingId },
       });
-
       await taskExecution.save();
       executionId = taskExecution._id;
 
       // 5. Establecer conexiones
-      const sourceServerName = mapping.sourceServer;
-      const targetServerName = mapping.targetServer;
+      sourceConnection = await ConnectionService.getConnection(
+        mapping.sourceServer
+      );
+      targetConnection = await ConnectionService.getConnection(
+        mapping.targetServer
+      );
 
-      const getConnection = async (serverName, retries = 3) => {
-        for (let attempt = 0; attempt < retries; attempt++) {
+      // ✅ NUEVA LÓGICA: Pre-procesar bonificaciones por documento
+      const documentBonificationMappings = new Map();
+
+      if (mapping.hasBonificationProcessing && mapping.bonificationConfig) {
+        logger.info(
+          `🎁 Pre-procesando bonificaciones para ${documentIds.length} documentos`
+        );
+
+        for (const documentId of documentIds) {
           try {
-            logger.info(
-              `Intento ${
-                attempt + 1
-              }/${retries} para conectar a ${serverName}...`
-            );
+            const bonificationResult =
+              await this.bonificationService.processBonifications(
+                sourceConnection,
+                documentId,
+                mapping.bonificationConfig
+              );
 
-            const connectionResult =
-              await ConnectionService.enhancedRobustConnect(serverName);
-
-            if (!connectionResult.success || !connectionResult.connection) {
-              const error =
-                connectionResult.error ||
-                new Error(`Conexión inválida a ${serverName}`);
-              logger.warn(`Intento ${attempt + 1} falló: ${error.message}`);
-
-              if (attempt === retries - 1) {
-                throw error;
-              }
-
-              const delay = Math.pow(2, attempt) * 1000;
-              await new Promise((resolve) => setTimeout(resolve, delay));
-              continue;
+            if (
+              bonificationResult.success &&
+              bonificationResult.bonificationMapping
+            ) {
+              documentBonificationMappings.set(
+                documentId,
+                bonificationResult.bonificationMapping
+              );
+              logger.debug(
+                `✅ Bonificaciones procesadas para documento: ${documentId}`
+              );
             }
-
-            await SqlService.query(
-              connectionResult.connection,
-              "SELECT 1 AS test"
-            );
-
-            logger.info(`Conexión a ${serverName} establecida exitosamente`);
-            return connectionResult.connection;
-          } catch (error) {
+          } catch (bonificationError) {
             logger.error(
-              `Error al conectar a ${serverName} (intento ${attempt + 1}): ${
-                error.message
-              }`
+              `❌ Error procesando bonificaciones para documento ${documentId}: ${bonificationError.message}`
             );
-
-            if (attempt === retries - 1) {
-              throw error;
-            }
-
-            const delay = Math.pow(2, attempt) * 1000;
-            await new Promise((resolve) => setTimeout(resolve, delay));
           }
         }
-
-        throw new Error(
-          `No se pudo establecer conexión a ${serverName} después de ${retries} intentos`
-        );
-      };
-
-      try {
-        logger.info(
-          `Estableciendo conexiones a ${sourceServerName} y ${targetServerName}...`
-        );
-        [sourceConnection, targetConnection] = await Promise.all([
-          getConnection(sourceServerName),
-          getConnection(targetServerName),
-        ]);
-        logger.info(`Conexiones establecidas exitosamente`);
-      } catch (connectionError) {
-        clearTimeout(timeoutId);
-        throw new Error(
-          `Error al establecer conexiones: ${connectionError.message}`
-        );
       }
 
       // 6. Procesar documentos
-      logger.info(
-        `Iniciando procesamiento de ${documentIds.length} documentos`
-      );
-
       const results = {
         processed: 0,
         failed: 0,
-        byType: {},
         details: [],
         consecutivesUsed: [],
       };
 
-      const failedDocuments = [];
-      let hasErrors = false;
-
+      // Procesar cada documento
       for (const documentId of documentIds) {
-        // Verificar cancelación
-        if (signal.aborted) {
-          logger.warn(`Operación cancelada para documento ${documentId}`);
-          break;
+        if (signal?.aborted) {
+          throw new Error("Procesamiento cancelado por el usuario");
         }
 
         try {
+          // ✅ NUEVA LÓGICA: Generar consecutivo por documento
           let currentConsecutive = null;
 
-          // Generar consecutivo si está habilitado
           if (mapping.consecutiveConfig?.enabled) {
-            if (useCentralizedConsecutives) {
-              try {
-                currentConsecutive = await ConsecutiveService.generateNext(
-                  centralizedConsecutiveId
+            if (useCentralizedConsecutives && centralizedConsecutiveId) {
+              // Usar consecutivo centralizado
+              const consecutiveResult =
+                await ConsecutiveService.getNextConsecutiveValue(
+                  centralizedConsecutiveId,
+                  { segment: null }
                 );
+
+              if (consecutiveResult?.success) {
+                currentConsecutive = {
+                  value:
+                    consecutiveResult.data.nextValue ||
+                    consecutiveResult.data.value,
+                  formatted:
+                    consecutiveResult.data.formattedValue ||
+                    consecutiveResult.data.value,
+                  isCentralized: true,
+                };
                 logger.info(
-                  `Consecutivo centralizado generado para documento ${documentId}: ${currentConsecutive.formatted}`
+                  `✅ Consecutivo centralizado generado: ${currentConsecutive.formatted}`
                 );
-              } catch (consecError) {
-                logger.error(
-                  `Error generando consecutivo centralizado para documento ${documentId}: ${consecError.message}`
-                );
-                failedDocuments.push(documentId);
-                results.failed++;
-                results.details.push({
-                  documentId,
-                  success: false,
-                  error: `Error generando consecutivo: ${consecError.message}`,
-                  errorDetails: consecError.stack,
-                });
-                continue;
               }
             } else {
-              try {
-                currentConsecutive = await this.generateConsecutive(mapping);
-                if (currentConsecutive) {
-                  logger.info(
-                    `Consecutivo local generado para documento ${documentId}: ${currentConsecutive.formatted}`
-                  );
-                }
-              } catch (consecError) {
-                logger.error(
-                  `Error generando consecutivo local para documento ${documentId}: ${consecError.message}`
+              // Usar consecutivo local
+              currentConsecutive = await this.generateConsecutive(mapping);
+              if (currentConsecutive) {
+                currentConsecutive.isCentralized = false;
+                logger.info(
+                  `✅ Consecutivo local generado: ${currentConsecutive.formatted}`
                 );
-                failedDocuments.push(documentId);
-                results.failed++;
-                results.details.push({
-                  documentId,
-                  success: false,
-                  error: `Error generando consecutivo: ${consecError.message}`,
-                  errorDetails: consecError.stack,
-                });
-                continue;
               }
             }
           }
 
-          // Procesar documento
-          const docResult = await this.processSingleDocumentSimple(
+          // ✅ CORREGIDO: Obtener mapeo de bonificaciones específico del documento
+          const bonificationMapping =
+            documentBonificationMappings.get(documentId) || null;
+
+          // Procesar documento con consecutivo y bonificaciones
+          const result = await this.processDocument(
             documentId,
             mapping,
             sourceConnection,
             targetConnection,
-            currentConsecutive
+            currentConsecutive,
+            bonificationMapping // ✅ PASAR MAPEO DE BONIFICACIONES
           );
 
-          if (docResult.success) {
+          if (result.success) {
             results.processed++;
-
-            if (docResult.documentType) {
-              if (!results.byType[docResult.documentType]) {
-                results.byType[docResult.documentType] = {
-                  processed: 0,
-                  failed: 0,
-                };
-              }
-              results.byType[docResult.documentType].processed++;
-            }
-
-            if (docResult.consecutiveUsed) {
+            if (currentConsecutive) {
               results.consecutivesUsed.push({
                 documentId,
-                consecutive: docResult.consecutiveUsed,
+                consecutive: currentConsecutive.formatted,
+                value: currentConsecutive.value,
               });
             }
-
-            // NUEVA LÓGICA: Marcado individual solo si está configurado así
-            if (
-              mapping.markProcessedStrategy === "individual" &&
-              mapping.markProcessedField
-            ) {
-              try {
-                await this.markDocumentsAsProcessed(
-                  [documentId],
-                  mapping,
-                  sourceConnection,
-                  true
-                );
-                logger.debug(
-                  `✅ Documento ${documentId} marcado individualmente como procesado`
-                );
-              } catch (markError) {
-                logger.warn(
-                  `⚠️ Error al marcar documento ${documentId}: ${markError.message}`
-                );
-                // No detener el proceso por errores de marcado
-              }
-            }
           } else {
-            hasErrors = true;
-            failedDocuments.push(documentId);
             results.failed++;
-
-            if (docResult.documentType) {
-              if (!results.byType[docResult.documentType]) {
-                results.byType[docResult.documentType] = {
-                  processed: 0,
-                  failed: 0,
-                };
-              }
-              results.byType[docResult.documentType].failed++;
-            }
           }
 
-          results.details.push({
-            documentId,
-            ...docResult,
-          });
-
-          logger.info(
-            `Documento ${documentId} procesado: ${
-              docResult.success ? "✅ ÉXITO" : "❌ ERROR"
-            }`
-          );
+          results.details.push(result);
         } catch (error) {
-          hasErrors = true;
-          failedDocuments.push(documentId);
+          logger.error(
+            `❌ Error procesando documento ${documentId}: ${error.message}`
+          );
           results.failed++;
           results.details.push({
             documentId,
             success: false,
-            error: error.message,
-            errorDetails: error.stack,
+            message: error.message,
+            consecutiveUsed: null,
           });
-          logger.error(`Error procesando documento ${documentId}:`, error);
         }
       }
 
-      // 7. Marcado en lote (si está configurado)
-      if (
-        mapping.markProcessedStrategy === "batch" &&
-        mapping.markProcessedField &&
-        results.processed > 0
-      ) {
-        try {
-          const successfulDocs = results.details
-            .filter((d) => d.success)
-            .map((d) => d.documentId);
-
-          if (successfulDocs.length > 0) {
-            const batchResult = await this.markDocumentsAsProcessed(
-              successfulDocs,
-              mapping,
-              sourceConnection,
-              true
-            );
-            logger.info(
-              `📦 Marcado en lote: ${batchResult.success} éxitos, ${batchResult.failed} fallos`
-            );
-          }
-        } catch (batchError) {
-          logger.error(`Error en marcado en lote: ${batchError.message}`);
-          // No fallar todo el proceso por errores de marcado
-        }
-      }
-
-      // 8. Rollback si es necesario
-      if (
-        hasErrors &&
-        mapping.markProcessedConfig?.allowRollback &&
-        results.processed > 0
-      ) {
-        try {
-          logger.warn(`Ejecutando rollback debido a errores...`);
-          const successfulDocs = results.details
-            .filter((d) => d.success)
-            .map((d) => d.documentId);
-
-          await this.markDocumentsAsProcessed(
-            successfulDocs,
-            mapping,
-            sourceConnection,
-            false
-          );
-          results.rollbackExecuted = true;
-        } catch (rollbackError) {
-          logger.error(`❌ Error en rollback: ${rollbackError.message}`);
-          results.rollbackError = rollbackError.message;
-        }
-      }
-
-      // Actualizar registro de ejecución y tarea
-      const executionTime = Date.now() - startTime;
-
-      // Determinar el estado correcto basado en los resultados
-      let finalStatus = "completed";
-      if (results.processed === 0 && results.failed > 0) {
-        finalStatus = "failed";
-      } else if (results.failed > 0) {
-        finalStatus = "partial";
-      }
-
-      // Actualizar el registro de ejecución
-      await TaskExecution.findByIdAndUpdate(executionId, {
-        status: finalStatus,
-        executionTime,
-        totalRecords: documentIds.length,
-        successfulRecords: results.processed,
-        failedRecords: results.failed,
-        details: results,
-      });
-
-      // Actualizar la tarea principal con el resultado
-      await TransferTask.findByIdAndUpdate(mapping.taskId, {
-        status: finalStatus,
-        progress: 100,
-        lastExecutionDate: new Date(),
-        lastExecutionResult: {
-          success: !hasErrors,
-          message: hasErrors
-            ? `Procesamiento completado con errores: ${results.processed} éxitos, ${results.failed} fallos`
-            : "Procesamiento completado con éxito",
-          affectedRecords: results.processed,
-          errorDetails: hasErrors
-            ? results.details.filter((d) => !d.success)
-            : undefined,
-        },
-      });
-
-      // Actualizar último consecutivo usado si es local
+      // Actualizar último consecutivo local si se usó
       if (
         !useCentralizedConsecutives &&
         mapping.consecutiveConfig?.enabled &&
-        mapping.consecutiveConfig?.updateAfterTransfer &&
         results.consecutivesUsed.length > 0
       ) {
-        try {
-          const lastConsecutive = Math.max(
-            ...results.consecutivesUsed.map((c) =>
-              parseInt(c.consecutive.match(/\d+$/)?.[0] || 0)
-            )
-          );
-          await this.updateLastConsecutive(mappingId, lastConsecutive);
-        } catch (updateError) {
-          logger.warn(
-            `Error actualizando último consecutivo: ${updateError.message}`
-          );
-        }
+        const lastConsecutive = Math.max(
+          ...results.consecutivesUsed.map((c) => c.value)
+        );
+        await this.updateLastConsecutive(mappingId, lastConsecutive);
       }
 
-      // 9. Completar la tarea
-      TaskTracker.completeTask(cancelTaskId, "completed");
       clearTimeout(timeoutId);
-
-      logger.info(
-        `✅ Procesamiento completado: ${results.processed} éxitos, ${results.failed} fallos en ${executionTime}ms`
-      );
-
-      return {
-        success: !hasErrors,
-        ...results,
-        executionTime,
-      };
+      return results;
     } catch (error) {
-      logger.error(`❌ Error en processDocuments: ${error.message}`, error);
       clearTimeout(timeoutId);
-
-      // Actualizar tarea como fallida
-      if (executionId) {
-        try {
-          await TaskExecution.findByIdAndUpdate(executionId, {
-            status: "failed",
-            executionTime: Date.now() - startTime,
-            error: error.message,
-            errorStack: error.stack,
-          });
-        } catch (updateError) {
-          logger.error(
-            `Error actualizando ejecución fallida: ${updateError.message}`
-          );
-        }
-      }
-
-      if (mapping?.taskId) {
-        try {
-          await TransferTask.findByIdAndUpdate(mapping.taskId, {
-            status: "failed",
-            lastExecutionDate: new Date(),
-            lastExecutionResult: {
-              success: false,
-              message: `Error: ${error.message}`,
-              errorDetails: error.stack,
-            },
-          });
-        } catch (updateError) {
-          logger.error(
-            `Error actualizando tarea fallida: ${updateError.message}`
-          );
-        }
-      }
-
-      TaskTracker.completeTask(
-        cancelTaskId || `dynamic_process_${mappingId}`,
-        "failed"
-      );
-
+      logger.error(`❌ Error en processDocuments: ${error.message}`);
       throw error;
     } finally {
-      // Cerrar conexiones de forma segura
-      if (sourceConnection || targetConnection) {
-        logger.info("Liberando conexiones...");
-
-        const releasePromises = [];
-
-        if (sourceConnection) {
-          releasePromises.push(
-            ConnectionService.releaseConnection(sourceConnection).catch((e) =>
-              logger.error(`Error al liberar conexión origen: ${e.message}`)
-            )
-          );
-        }
-
-        if (targetConnection) {
-          releasePromises.push(
-            ConnectionService.releaseConnection(targetConnection).catch((e) =>
-              logger.error(`Error al liberar conexión destino: ${e.message}`)
-            )
-          );
-        }
-
-        await Promise.allSettled(releasePromises);
-        logger.info("Conexiones liberadas correctamente");
-      }
+      // Limpiar recursos
+      if (sourceConnection)
+        await ConnectionService.releaseConnection(sourceConnection);
+      if (targetConnection)
+        await ConnectionService.releaseConnection(targetConnection);
+      TaskTracker.unregisterTask(cancelTaskId);
     }
   }
 
@@ -564,26 +281,21 @@ class DynamicTransferService {
    * @param {Object} currentConsecutive - Consecutivo generado previamente (opcional)
    * @returns {Promise<Object>} - Resultado del procesamiento
    */
-  async processSingleDocumentSimple(
+  async processDocument(
     documentId,
     mapping,
     sourceConnection,
     targetConnection,
-    currentConsecutive = null
+    currentConsecutive = null,
+    bonificationMapping = null // ✅ NUEVO PARÁMETRO
   ) {
     let processedTables = [];
     let documentType = "unknown";
-    let bonificationMapping = null; // ⭐ DECLARAR AQUÍ
 
     try {
-      logger.info(
-        `Procesando documento ${documentId} (modo sin transacciones)`
-      );
+      logger.info(`Procesando documento ${documentId}`);
 
-      // Create column length cache
       const columnLengthCache = new Map();
-
-      // 1. Identificar las tablas principales (no de detalle)
       const mainTables = mapping.tableConfigs.filter((tc) => !tc.isDetailTable);
 
       if (mainTables.length === 0) {
@@ -591,181 +303,55 @@ class DynamicTransferService {
           success: false,
           message: "No se encontraron configuraciones de tablas principales",
           documentType,
-          consecutiveUsed: null,
-          consecutiveValue: null,
+          consecutiveUsed: currentConsecutive?.formatted || null,
+          consecutiveValue: currentConsecutive?.value || null,
         };
       }
 
-      // Ordenar tablas por executionOrder si está definido
+      // Ordenar tablas por executionOrder
       const orderedMainTables = [...mainTables].sort(
         (a, b) => (a.executionOrder || 0) - (b.executionOrder || 0)
       );
-      logger.info(
-        `Procesando ${
-          orderedMainTables.length
-        } tablas principales en orden: ${orderedMainTables
-          .map((t) => t.name)
-          .join(" -> ")}`
-      );
 
-      // 2. Procesar cada tabla principal
+      // Procesar cada tabla principal
       for (const tableConfig of orderedMainTables) {
-        // Obtener datos de la tabla de origen
-        let sourceData;
+        const sourceData = await this.getSourceData(
+          documentId,
+          tableConfig,
+          sourceConnection
+        );
 
-        try {
-          sourceData = await this.getSourceData(
-            documentId,
-            tableConfig,
-            sourceConnection
+        if (!sourceData) {
+          logger.warn(
+            `No se encontraron datos en ${tableConfig.sourceTable} para documento ${documentId}`
           );
-
-          if (!sourceData) {
-            logger.warn(
-              `No se encontraron datos en ${tableConfig.sourceTable} para documento ${documentId}`
-            );
-            continue; // Pasar a la siguiente tabla principal
-          }
-
-          logger.debug(
-            `Datos de origen obtenidos: ${JSON.stringify(sourceData)}`
-          );
-        } catch (error) {
-          logger.error(
-            `Error al obtener datos de origen para documento ${documentId}: ${error.message}`
-          );
-          throw new Error(`Error al obtener datos de origen: ${error.message}`);
+          continue;
         }
 
-        // 🎁 PROCESAMIENTO DE BONIFICACIONES (ANTES DE PROCESAR DATOS)
-        if (mapping.hasBonificationProcessing && mapping.bonificationConfig) {
-          try {
-            logger.info(
-              `🎁 Iniciando procesamiento de bonificaciones para documento ${documentId}`
-            );
-
-            const bonificationResult =
-              await this.bonificationService.processBonifications(
-                sourceConnection,
-                documentId,
-                mapping.bonificationConfig
-              );
-
-            if (bonificationResult.success) {
-              bonificationMapping = bonificationResult.bonificationMapping; // GUARDAR EL MAPEO
-              logger.info(
-                `✅ Bonificaciones procesadas exitosamente para ${documentId}:`,
-                {
-                  processed: bonificationResult.processed,
-                  regularArticles: bonificationResult.regularArticles,
-                  bonifications: bonificationResult.bonifications,
-                  orphans: bonificationResult.orphanBonifications || 0,
-                }
-              );
-            } else {
-              logger.error(
-                `❌ Error procesando bonificaciones para ${documentId}:`,
-                bonificationResult.error
-              );
-              throw new Error(
-                `Falló procesamiento de bonificaciones: ${bonificationResult.error}`
-              );
-            }
-          } catch (bonificationError) {
-            logger.error(
-              `❌ Error crítico en bonificaciones para ${documentId}:`,
-              bonificationError
-            );
-            return {
-              success: false,
-              message: `Error en procesamiento de bonificaciones: ${bonificationError.message}`,
-              documentType,
-              errorDetails: bonificationError.stack,
-              errorCode: "BONIFICATION_PROCESSING_ERROR",
-              consecutiveUsed: null,
-              consecutiveValue: null,
-            };
-          }
-        }
-
-        // Procesar dependencias de foreign key ANTES de insertar datos principales
-        try {
-          if (
-            mapping.foreignKeyDependencies &&
-            mapping.foreignKeyDependencies.length > 0
-          ) {
-            logger.info(
-              `Verificando ${mapping.foreignKeyDependencies.length} dependencias de foreign key para documento ${documentId}`
-            );
-            await this.processForeignKeyDependencies(
-              documentId,
-              mapping,
-              sourceConnection,
-              targetConnection,
-              sourceData
-            );
-            logger.info(
-              `Dependencias de foreign key procesadas exitosamente para documento ${documentId}`
-            );
-          }
-        } catch (depError) {
-          logger.error(
-            `Error en dependencias de foreign key para documento ${documentId}: ${depError.message}`
-          );
-          throw new Error(`Error en dependencias: ${depError.message}`);
-        }
-
-        // 3. Determinar el tipo de documento basado en las reglas
         documentType = this.determineDocumentType(
           mapping.documentTypeRules,
           sourceData
         );
-        if (documentType !== "unknown") {
-          logger.info(`Tipo de documento determinado: ${documentType}`);
-        }
 
-        // 4. Verificar si el documento ya existe en destino
-        const targetPrimaryKey = this.getTargetPrimaryKeyField(tableConfig);
-        const exists = await this.checkDocumentExists(
-          documentId,
-          tableConfig.targetTable,
-          targetPrimaryKey,
-          targetConnection
-        );
-
-        if (exists) {
-          logger.warn(
-            `Documento ${documentId} ya existe en tabla ${tableConfig.targetTable}`
-          );
-          return {
-            success: false,
-            message: `El documento ya existe en la tabla ${tableConfig.targetTable}`,
-            documentType,
-            consecutiveUsed: null,
-            consecutiveValue: null,
-          };
-        }
-
-        // 5. Procesar tabla principal
+        // Procesar tabla principal
         await this.processTable(
           tableConfig,
           sourceData,
-          null,
+          null, // No hay detailRow para tabla principal
           targetConnection,
           currentConsecutive,
           mapping,
           documentId,
           columnLengthCache,
-          false,
-          bonificationMapping // NUEVO PARÁMETRO
+          false, // isDetailTable = false
+          bonificationMapping // ✅ PASAR MAPEO DE BONIFICACIONES
         );
 
-        logger.info(`✅ INSERCIÓN EXITOSA en ${tableConfig.targetTable}`);
         processedTables.push(tableConfig.name);
 
-        // 6. Procesar tablas de detalle relacionadas
+        // Procesar tablas de detalle
         const detailTables = mapping.tableConfigs.filter(
-          (tc) => tc.isDetailTable && tc.parentTableRef === tableConfig.name
+          (tc) => tc.isDetailTable
         );
 
         if (detailTables.length > 0) {
@@ -780,40 +366,30 @@ class DynamicTransferService {
             mapping,
             columnLengthCache,
             processedTables,
-            bonificationMapping
+            bonificationMapping // ✅ PASAR MAPEO DE BONIFICACIONES
           );
         }
       }
 
-      if (processedTables.length === 0) {
-        return {
-          success: false,
-          message: "No se procesó ninguna tabla para este documento",
-          documentType,
-          consecutiveUsed: null,
-          consecutiveValue: null,
-        };
-      }
-
       return {
         success: true,
-        message: `Documento procesado correctamente en ${processedTables.join(
-          ", "
-        )}`,
+        message: "Documento procesado exitosamente",
         documentType,
         processedTables,
-        consecutiveUsed: currentConsecutive
-          ? currentConsecutive.formatted
-          : null,
-        consecutiveValue: currentConsecutive ? currentConsecutive.value : null,
+        consecutiveUsed: currentConsecutive?.formatted || null,
+        consecutiveValue: currentConsecutive?.value || null,
       };
     } catch (error) {
-      return this.handleProcessingError(
-        error,
-        documentId,
-        currentConsecutive,
-        mapping
+      logger.error(
+        `Error procesando documento ${documentId}: ${error.message}`
       );
+      return {
+        success: false,
+        message: error.message,
+        documentType,
+        consecutiveUsed: currentConsecutive?.formatted || null,
+        consecutiveValue: currentConsecutive?.value || null,
+      };
     }
   }
 
@@ -2019,7 +1595,7 @@ class DynamicTransferService {
     documentId,
     columnLengthCache,
     isDetailTable = false,
-    bonificationMapping = null // NUEVO PARÁMETRO
+    bonificationMapping = null // ✅ NUEVO PARÁMETRO
   ) {
     const targetData = {};
     const targetFields = [];
@@ -2034,9 +1610,6 @@ class DynamicTransferService {
     // Realizar consulta de lookup si es necesario
     let lookupResults = {};
     if (tableConfig.fieldMappings.some((fm) => fm.lookupFromTarget)) {
-      logger.info(
-        `Realizando lookups en BD destino para tabla ${tableConfig.name}`
-      );
       const lookupExecution = await this.lookupValuesFromTarget(
         tableConfig,
         dataForProcessing,
@@ -2056,12 +1629,9 @@ class DynamicTransferService {
       }
 
       lookupResults = lookupExecution.results;
-      logger.info(
-        `Lookup completado exitosamente. Continuando con el procesamiento...`
-      );
     }
 
-    // Procesar todos los campos
+    // ✅ CORREGIDO: Procesar todos los campos con bonificaciones
     for (const fieldMapping of tableConfig.fieldMappings) {
       const processedField = await this.processField(
         fieldMapping,
@@ -2073,27 +1643,22 @@ class DynamicTransferService {
         isDetailTable,
         targetConnection,
         columnLengthCache,
-        bonificationMapping // NUEVO PARÁMETRO
+        bonificationMapping, // ✅ PASAR MAPEO DE BONIFICACIONES
+        mapping.bonificationConfig // ✅ PASAR CONFIGURACIÓN DE BONIFICACIONES
       );
 
       if (processedField.isDirectSql) {
         targetFields.push(fieldMapping.targetField);
-        targetValues.push(processedField.value); // Expresión SQL directa
+        targetValues.push(processedField.value);
         directSqlFields.add(fieldMapping.targetField);
       } else {
         targetData[fieldMapping.targetField] = processedField.value;
         targetFields.push(fieldMapping.targetField);
         targetValues.push(`@${fieldMapping.targetField}`);
       }
-
-      logger.debug(
-        `✅ Campo ${fieldMapping.targetField} preparado para inserción: ${
-          processedField.value
-        } (tipo: ${typeof processedField.value})`
-      );
     }
 
-    // Construir y ejecutar la consulta INSERT
+    // Ejecutar inserción
     await this.executeInsert(
       tableConfig.targetTable,
       targetFields,
@@ -2118,66 +1683,28 @@ class DynamicTransferService {
     isDetailTable,
     targetConnection,
     columnLengthCache,
-    bonificationMapping = null // NUEVO PARÁMETRO
+    bonificationMapping = null, // ✅ NUEVO PARÁMETRO
+    bonificationConfig = null // ✅ NUEVO PARÁMETRO
   ) {
     let value;
 
-    // 🚨 DEBUG ESPECÍFICO PARA PEDIDO
-    if (fieldMapping.targetField === "PEDIDO") {
-      logger.warn(`🚨 DEBUG CAMPO PEDIDO:`);
-      logger.warn(`  - sourceField: ${fieldMapping.sourceField}`);
-      logger.warn(`  - defaultValue: ${fieldMapping.defaultValue}`);
-      logger.warn(
-        `  - currentConsecutive: ${
-          currentConsecutive ? currentConsecutive.formatted : "NULL"
-        }`
-      );
-      logger.warn(
-        `  - consecutiveConfig.fieldName: ${mapping.consecutiveConfig?.fieldName}`
-      );
-      logger.warn(
-        `  - shouldReceive: ${
-          mapping.consecutiveConfig?.enabled
-            ? this.shouldReceiveConsecutive(
-                fieldMapping,
-                mapping.consecutiveConfig,
-                tableConfig,
-                isDetailTable
-              )
-            : "disabled"
-        }`
-      );
-    }
-
-    // PRIORIDAD 1: Usar valores obtenidos por lookup si existen
+    // PRIORIDAD 1: Valores obtenidos por lookup
     if (
       fieldMapping.lookupFromTarget &&
       lookupResults[fieldMapping.targetField] !== undefined
     ) {
       value = lookupResults[fieldMapping.targetField];
-      logger.debug(
-        `Usando valor de lookup para ${fieldMapping.targetField}: ${value}`
-      );
       return { value, isDirectSql: false };
     }
 
-    // PRIORIDAD 2: Verificar si el campo es una función SQL nativa
+    // PRIORIDAD 2: Funciones SQL nativas
     const defaultValue = fieldMapping.defaultValue;
     const sqlNativeFunctions = [
       "GETDATE()",
       "CURRENT_TIMESTAMP",
       "NEWID()",
       "SYSUTCDATETIME()",
-      "SYSDATETIME()",
-      "GETUTCDATE()",
-      "DAY(",
-      "MONTH(",
-      "YEAR(",
-      "GETDATE",
-      "DATEADD",
-      "DATEDIFF",
     ];
-
     const isNativeFunction =
       defaultValue &&
       typeof defaultValue === "string" &&
@@ -2186,31 +1713,66 @@ class DynamicTransferService {
       );
 
     if (isNativeFunction) {
-      logger.debug(
-        `Detectada función SQL nativa para ${fieldMapping.targetField}: ${defaultValue}`
-      );
       return { value: defaultValue, isDirectSql: true };
     }
 
-    // PASO 1: Obtener valor del origen o usar valor por defecto
+    // PRIORIDAD 3: ✅ CONSECUTIVOS - LÓGICA CORREGIDA
+    if (
+      currentConsecutive &&
+      mapping.consecutiveConfig?.enabled &&
+      this.shouldReceiveConsecutive(
+        fieldMapping,
+        mapping.consecutiveConfig,
+        tableConfig,
+        isDetailTable
+      )
+    ) {
+      value = currentConsecutive.formatted;
+      logger.debug(
+        `✅ Consecutivo asignado a ${fieldMapping.targetField}: ${value}`
+      );
+      return { value, isDirectSql: false };
+    }
+
+    // PRIORIDAD 4: ✅ BONIFICACIONES - NUEVA LÓGICA
+    if (bonificationMapping && bonificationConfig) {
+      const bonificationFields = [
+        bonificationConfig.lineNumberField,
+        bonificationConfig.bonificationLineReferenceField,
+        bonificationConfig.bonificationQuantityField,
+        bonificationConfig.regularQuantityField,
+      ].filter(Boolean);
+
+      if (bonificationFields.includes(fieldMapping.targetField)) {
+        value = this.getBonificationField(
+          fieldMapping.targetField,
+          sourceData,
+          bonificationMapping,
+          bonificationConfig
+        );
+
+        if (value !== null && value !== undefined) {
+          logger.debug(
+            `✅ Campo bonificación ${fieldMapping.targetField}: ${value}`
+          );
+          return { value, isDirectSql: false };
+        }
+      }
+    }
+
+    // PRIORIDAD 5: Procesamiento normal de campo
     if (fieldMapping.sourceField) {
       value = sourceData[fieldMapping.sourceField];
-      logger.debug(`Valor original de ${fieldMapping.sourceField}: ${value}`);
 
-      // PASO 2: Aplicar eliminación de prefijo específico si está configurado
+      // Aplicar eliminación de prefijo si está configurado
       if (
         fieldMapping.removePrefix &&
         typeof value === "string" &&
         value.startsWith(fieldMapping.removePrefix)
       ) {
-        const originalValue = value;
         value = value.substring(fieldMapping.removePrefix.length);
-        logger.debug(
-          `Prefijo '${fieldMapping.removePrefix}' eliminado del campo ${fieldMapping.sourceField}: '${originalValue}' → '${value}'`
-        );
       }
     } else {
-      // No hay campo origen, usar valor por defecto
       value = defaultValue === "NULL" ? null : defaultValue;
     }
 
@@ -2219,132 +1781,25 @@ class DynamicTransferService {
       value = defaultValue === "NULL" ? null : defaultValue;
     }
 
-    // PASO 3: **APLICAR CONVERSIÓN DE UNIDADES**
-    if (fieldMapping.unitConversion && fieldMapping.unitConversion.enabled) {
-      logger.info(
-        `🔄 Iniciando conversión de unidades para campo: ${fieldMapping.targetField}`
-      );
+    // Aplicar conversión de unidades si está configurado
+    if (fieldMapping.unitConversion?.enabled) {
       const originalValue = value;
       value = this.applyUnitConversion(sourceData, fieldMapping, value);
 
       if (originalValue !== value) {
         logger.info(
-          `🎉 Conversión aplicada exitosamente en ${fieldMapping.targetField}: ${originalValue} → ${value}`
+          `🔄 Conversión de unidades en ${fieldMapping.targetField}: ${originalValue} → ${value}`
         );
       }
     }
 
-    // PASO 4: Formatear fechas si es necesario
+    // Formatear fechas si es necesario
     if (
       typeof value !== "number" &&
       (value instanceof Date ||
-        (typeof value === "string" &&
-          value.includes("T") &&
-          !isNaN(new Date(value).getTime())))
+        (typeof value === "string" && value.includes("T")))
     ) {
-      logger.debug(`Convirtiendo fecha a formato SQL Server: ${value}`);
       value = this.formatSqlDate(value);
-      logger.debug(`Fecha convertida: ${value}`);
-    }
-
-    // PASO 5: ✅ **APLICAR CONSECUTIVO SI CORRESPONDE** (LÓGICA ORIGINAL)
-    if (
-      currentConsecutive &&
-      mapping.consecutiveConfig &&
-      mapping.consecutiveConfig.enabled
-    ) {
-      const shouldReceiveConsecutive = this.shouldReceiveConsecutive(
-        fieldMapping,
-        mapping.consecutiveConfig,
-        tableConfig,
-        isDetailTable
-      );
-
-      if (shouldReceiveConsecutive) {
-        // Solo aplicar consecutivo si no hubo conversión numérica
-        if (
-          fieldMapping.unitConversion &&
-          fieldMapping.unitConversion.enabled &&
-          typeof value === "number"
-        ) {
-          logger.warn(
-            `⚠️ No se aplicará consecutivo a ${fieldMapping.targetField} porque se aplicó conversión numérica (valor: ${value})`
-          );
-        } else {
-          value = currentConsecutive.formatted;
-          logger.debug(
-            `Asignando consecutivo ${currentConsecutive.formatted} a campo ${fieldMapping.targetField} en tabla ${tableConfig.name}`
-          );
-
-          // 🚨 DEBUG ESPECÍFICO PARA PEDIDO
-          if (fieldMapping.targetField === "PEDIDO") {
-            logger.warn(`🚨 PEDIDO CONSECUTIVO ASIGNADO: ${value}`);
-          }
-        }
-      }
-    }
-
-    // PASO 5.5: 🎁 **APLICAR BONIFICACIONES** (NUEVA LÓGICA - DESPUÉS DEL CONSECUTIVO)
-    if (bonificationMapping && mapping.hasBonificationProcessing) {
-      const bonificationValue = this.processBonificationField(
-        fieldMapping,
-        sourceData,
-        bonificationMapping,
-        mapping.bonificationConfig
-      );
-
-      if (bonificationValue !== null) {
-        logger.debug(
-          `🎁 Sobrescribiendo con valor de bonificación para ${fieldMapping.targetField}: ${bonificationValue}`
-        );
-        value = bonificationValue;
-      }
-    }
-
-    // PASO 6: Verificar campos obligatorios
-    if (fieldMapping.isRequired && (value === undefined || value === null)) {
-      throw new Error(
-        `El campo obligatorio '${fieldMapping.targetField}' no tiene valor de origen ni valor por defecto`
-      );
-    }
-
-    // PASO 7: Aplicar mapeo de valores si existe
-    if (
-      value !== null &&
-      value !== undefined &&
-      fieldMapping.valueMappings?.length > 0
-    ) {
-      const valueMapping = fieldMapping.valueMappings.find(
-        (vm) => vm.sourceValue === value
-      );
-      if (valueMapping) {
-        logger.debug(
-          `Aplicando mapeo de valor para ${fieldMapping.targetField}: ${value} → ${valueMapping.targetValue}`
-        );
-        value = valueMapping.targetValue;
-      }
-    }
-
-    // PASO 8: Verificar y ajustar longitud de strings
-    if (typeof value === "string") {
-      const maxLength = await this.getColumnMaxLength(
-        targetConnection,
-        tableConfig.targetTable,
-        fieldMapping.targetField,
-        columnLengthCache
-      );
-
-      if (maxLength > 0 && value.length > maxLength) {
-        logger.warn(
-          `Truncando valor para campo ${fieldMapping.targetField} de longitud ${value.length} a ${maxLength} caracteres`
-        );
-        value = value.substring(0, maxLength);
-      }
-    }
-
-    // 🚨 DEBUG ESPECÍFICO PARA PEDIDO
-    if (fieldMapping.targetField === "PEDIDO") {
-      logger.warn(`🚨 PEDIDO VALOR FINAL: ${value}`);
     }
 
     return { value, isDirectSql: false };
@@ -3300,24 +2755,16 @@ class DynamicTransferService {
    */
   async generateConsecutive(mapping) {
     try {
-      if (!mapping.consecutiveConfig || !mapping.consecutiveConfig.enabled) {
+      if (!mapping.consecutiveConfig?.enabled) {
         return null;
       }
 
-      // Generar número consecutivo
       const lastValue = mapping.consecutiveConfig.lastValue || 0;
       const newValue = lastValue + 1;
 
-      // IMPORTANTE: Actualizar inmediatamente el último valor usado en la configuración
-      // Esto evita que dos documentos obtengan el mismo valor consecutivo
       await this.updateLastConsecutive(mapping._id, newValue);
-      logger.info(
-        `Consecutivo reservado: ${newValue} para mapeo ${mapping._id}`
-      );
 
-      // Formatear según el patrón si existe
       let formattedValue = String(newValue);
-
       if (mapping.consecutiveConfig.pattern) {
         formattedValue = this.formatConsecutive(
           mapping.consecutiveConfig.pattern,
@@ -3330,14 +2777,13 @@ class DynamicTransferService {
           }
         );
       } else if (mapping.consecutiveConfig.prefix) {
-        // Si no hay patrón pero sí prefijo
         formattedValue = `${mapping.consecutiveConfig.prefix}${newValue}`;
       }
 
       return {
         value: newValue,
         formatted: formattedValue,
-        isCentralized: false, // Marcar que es un consecutivo local
+        isCentralized: false,
       };
     } catch (error) {
       logger.error(`Error al generar consecutivo: ${error.message}`);
@@ -3354,19 +2800,11 @@ class DynamicTransferService {
     try {
       const mappingId = mapping._id.toString();
 
-      logger.info(
-        `🔍 Verificando consecutivo centralizado para mapping ${mappingId} (${mapping.name})`
-      );
-
-      // 1. VERIFICAR SI YA EXISTE CONSECUTIVO ASIGNADO
+      // 1. Verificar si ya existe consecutivo asignado
       let assignedConsecutives =
         await ConsecutiveService.getConsecutivesByEntity("mapping", mappingId);
 
-      if (assignedConsecutives && assignedConsecutives.length > 0) {
-        logger.info(
-          `✅ Consecutivo existente encontrado: ${assignedConsecutives[0]._id}`
-        );
-
+      if (assignedConsecutives?.length > 0) {
         // Validar que el consecutivo sea accesible
         try {
           const testAccess = await ConsecutiveService.getNextConsecutiveValue(
@@ -3374,15 +2812,8 @@ class DynamicTransferService {
             { segment: null }
           );
 
-          if (testAccess && testAccess.success) {
-            logger.info(
-              `✅ Consecutivo ${assignedConsecutives[0]._id} validado y accesible`
-            );
+          if (testAccess?.success) {
             return assignedConsecutives[0]._id;
-          } else {
-            logger.warn(
-              `⚠️ Consecutivo existente no es accesible, creando uno nuevo`
-            );
           }
         } catch (accessError) {
           logger.warn(
@@ -3391,20 +2822,13 @@ class DynamicTransferService {
         }
       }
 
-      // 2. VERIFICAR SI ESTÁ HABILITADO PARA AUTO-CREAR
-      if (!mapping.consecutiveConfig || !mapping.consecutiveConfig.enabled) {
-        logger.info(`❌ Consecutivos no habilitados para mapping ${mappingId}`);
+      // 2. Verificar si está habilitado para auto-crear
+      if (!mapping.consecutiveConfig?.enabled) {
         return null;
       }
 
-      // 3. AUTO-CREAR CONSECUTIVO CENTRALIZADO
-      logger.info(
-        `🔄 Auto-creando consecutivo centralizado para mapping ${mappingId}`
-      );
-
+      // 3. Auto-crear consecutivo centralizado
       const config = mapping.consecutiveConfig;
-
-      // Preparar datos del consecutivo
       const consecutiveData = {
         name: config.consecutiveName || `MAPPING_${mapping.name}`,
         description: `Consecutivo automático para mapping: ${mapping.name}`,
@@ -3416,7 +2840,6 @@ class DynamicTransferService {
         entityType: "mapping",
         entityId: mappingId,
         segments: config.segments || [],
-        // Metadatos adicionales
         metadata: {
           mappingName: mapping.name,
           createdBy: "auto-creation",
@@ -3427,74 +2850,31 @@ class DynamicTransferService {
         },
       };
 
-      logger.debug(`📝 Datos del consecutivo a crear:`, {
-        name: consecutiveData.name,
-        format: consecutiveData.format,
-        currentValue: consecutiveData.currentValue,
-        mappingId,
-      });
-
-      // 4. CREAR CONSECUTIVO EN EL SERVICIO CENTRALIZADO
       const newConsecutive = await ConsecutiveService.createConsecutive(
         consecutiveData
       );
 
-      if (!newConsecutive || !newConsecutive._id) {
-        throw new Error(
-          "El servicio centralizado no retornó un consecutivo válido"
-        );
-      }
+      await ConsecutiveService.assignConsecutive(newConsecutive._id, {
+        entityType: "mapping",
+        entityId: mappingId,
+      });
 
-      logger.info(`✅ Consecutivo centralizado creado: ${newConsecutive._id}`);
-
-      // 5. ASIGNAR CONSECUTIVO A LA ENTIDAD MAPPING
-      await ConsecutiveService.assignConsecutiveToEntity(
+      // Validar que funciona
+      const validationTest = await ConsecutiveService.getNextConsecutiveValue(
         newConsecutive._id,
-        "mapping",
-        mappingId
+        { segment: null }
       );
 
-      logger.info(
-        `✅ Consecutivo ${newConsecutive._id} asignado a mapping ${mappingId}`
-      );
-
-      // 6. VALIDAR QUE FUNCIONA CORRECTAMENTE
-      try {
-        const validationTest = await ConsecutiveService.getNextConsecutiveValue(
-          newConsecutive._id,
-          { segment: null }
-        );
-
-        if (validationTest && validationTest.success) {
-          logger.info(
-            `✅ Consecutivo ${newConsecutive._id} creado y validado correctamente`
-          );
-          return newConsecutive._id;
-        } else {
-          throw new Error("El consecutivo creado no pasa la validación");
-        }
-      } catch (validationError) {
-        logger.error(
-          `❌ Error validando consecutivo recién creado: ${validationError.message}`
-        );
-        throw validationError;
+      if (!validationTest?.success) {
+        throw new Error("El consecutivo creado no funciona correctamente");
       }
+
+      return newConsecutive._id;
     } catch (error) {
       logger.error(
-        `❌ Error en getOrCreateConsecutiveForMapping para mapping ${mapping._id}:`,
-        {
-          error: error.message,
-          mappingId: mapping._id.toString(),
-          mappingName: mapping.name,
-          consecutiveEnabled: mapping.consecutiveConfig?.enabled,
-          stack: error.stack,
-        }
+        `❌ Error en getOrCreateConsecutiveForMapping: ${error.message}`
       );
-
-      // Re-lanzar el error para que el caller maneje el fallback
-      throw new Error(
-        `Error gestionando consecutivo centralizado: ${error.message}`
-      );
+      throw error;
     }
   }
 
@@ -3989,6 +3369,53 @@ class DynamicTransferService {
       }
 
       throw new Error(`Error en inserción a ${targetTable}: ${error.message}`);
+    }
+  }
+
+  getBonificationField(
+    targetField,
+    sourceData,
+    bonificationMapping,
+    bonificationConfig
+  ) {
+    if (!bonificationConfig || !bonificationMapping) {
+      return null;
+    }
+
+    const articleCode = sourceData[bonificationConfig.regularArticleField];
+    if (!articleCode) {
+      return null;
+    }
+
+    const articleMapping = this.getArticleMappingFromBonificationData(
+      articleCode,
+      bonificationMapping
+    );
+    if (!articleMapping) {
+      return null;
+    }
+
+    switch (targetField) {
+      case bonificationConfig.lineNumberField:
+        return articleMapping.lineNumber;
+
+      case bonificationConfig.bonificationLineReferenceField:
+        return articleMapping.bonificationLineReference || null;
+
+      case bonificationConfig.bonificationQuantityField:
+        if (!articleMapping.isRegular) {
+          return sourceData[bonificationConfig.quantityField] || 0;
+        }
+        return 0;
+
+      case bonificationConfig.regularQuantityField:
+        if (articleMapping.isRegular) {
+          return sourceData[bonificationConfig.quantityField] || 0;
+        }
+        return 0;
+
+      default:
+        return null;
     }
   }
 
@@ -4573,10 +4000,7 @@ class DynamicTransferService {
     if (!bonificationMapping) return null;
 
     // Verificar si es artículo regular
-    if (
-      bonificationMapping.regularMapping &&
-      bonificationMapping.regularMapping.has(articleCode)
-    ) {
+    if (bonificationMapping.regularMapping?.has(articleCode)) {
       const regular = bonificationMapping.regularMapping.get(articleCode);
       return {
         isRegular: true,
@@ -4586,10 +4010,7 @@ class DynamicTransferService {
     }
 
     // Verificar si es bonificación
-    if (
-      bonificationMapping.bonificationMapping &&
-      bonificationMapping.bonificationMapping.has(articleCode)
-    ) {
+    if (bonificationMapping.bonificationMapping?.has(articleCode)) {
       const bonification =
         bonificationMapping.bonificationMapping.get(articleCode);
       return {
