@@ -634,6 +634,23 @@ class DynamicTransferService {
   }
 
   /**
+   * ✅ NUEVO MÉTODO ESTÁTICO: Para uso desde controllers
+   * Método estático que crea una instancia y llama al método de instancia
+   */
+  static async getOrderDetailsWithPromotions(
+    detailConfig,
+    documentId,
+    sourceConnection
+  ) {
+    const service = new DynamicTransferService();
+    return await service.getOrderDetailsWithPromotions(
+      detailConfig,
+      documentId,
+      sourceConnection
+    );
+  }
+
+  /**
    * Obtiene detalles de su propia tabla
    */
   async getDetailDataFromOwnTable(detailConfig, documentId, sourceConnection) {
