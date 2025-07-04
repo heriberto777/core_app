@@ -1711,17 +1711,168 @@ class DynamicTransferService {
    * Obtiene campos requeridos de configuración de tabla
    */
   getRequiredFieldsFromTableConfig(tableConfig) {
-    const fields = new Set();
+    const requiredFields = new Set();
 
-    if (tableConfig.fieldMapping) {
-      Object.values(tableConfig.fieldMapping).forEach((mapping) => {
+    // ✅ UNIFICAR: Usar fieldMapping (object) o fieldMappings (array)
+    const fieldMappings =
+      tableConfig.fieldMapping || tableConfig.fieldMappings || {};
+
+    if (Array.isArray(fieldMappings)) {
+      // Si es array (fieldMappings)
+      fieldMappings.forEach((fm) => {
+        if (fm.sourceField) {
+          requiredFields.add(fm.sourceField);
+        }
+      });
+    } else {
+      // Si es objeto (fieldMapping)
+      Object.values(fieldMappings).forEach((mapping) => {
         if (mapping.sourceField) {
-          fields.add(mapping.sourceField);
+          requiredFields.add(mapping.sourceField);
         }
       });
     }
 
-    return Array.from(fields);
+    // ✅ SOLO agregar campos base que sabemos que existen en la tabla origen
+    const commonOriginFields = [
+      "NUM_LN",
+      "NUM_PED",
+      "COD_ART",
+      "CANT",
+      "TIPO_ART",
+    ];
+
+    // Agregar clave primaria si está definida
+    const primaryKey =
+      tableConfig.primaryKey || this._inferPrimaryKey(tableConfig.sourceTable);
+    if (primaryKey) {
+      requiredFields.add(primaryKey);
+    }
+
+    return Array.from(requiredFields);
+  }
+
+  /**
+   * ✅ CORREGIDO: Obtiene detalles del pedido SIN incluir campos que no existen
+   */
+  async getOrderDetailsWithPromotions(
+    detailConfig,
+    documentId,
+    sourceConnection
+  ) {
+    try {
+      const orderByColumn = detailConfig.orderByColumn || "NUM_LN";
+
+      // ✅ SOLO campos que sabemos que existen en la tabla origen
+      const requiredFields =
+        this.getRequiredFieldsFromTableConfig(detailConfig);
+
+      // ✅ CAMPOS PROMOCIONALES OPCIONALES - Solo agregar si existen
+      const optionalPromotionFields = ["ART_BON", "TIPO_ART", "NUM_LN_REF"];
+
+      // ✅ VERIFICAR qué campos realmente existen en la tabla
+      const existingFields = await this._getExistingColumns(
+        detailConfig.sourceTable,
+        sourceConnection
+      );
+
+      // ✅ Solo incluir campos que realmente existan
+      const validRequiredFields = requiredFields.filter((field) =>
+        existingFields.includes(field.toUpperCase())
+      );
+
+      const validPromotionFields = optionalPromotionFields.filter((field) =>
+        existingFields.includes(field.toUpperCase())
+      );
+
+      const allValidFields = [
+        ...new Set([...validRequiredFields, ...validPromotionFields]),
+      ];
+      const finalSelectFields =
+        allValidFields.length > 0 ? allValidFields.join(", ") : "*";
+
+      const primaryKey = detailConfig.primaryKey || "NUM_PED";
+
+      const query = `
+      SELECT ${finalSelectFields}
+      FROM ${detailConfig.sourceTable}
+      WHERE ${primaryKey} = @documentId
+      ${
+        detailConfig.filterCondition
+          ? ` AND ${detailConfig.filterCondition}`
+          : ""
+      }
+      ORDER BY ${orderByColumn}
+    `;
+
+      logger.debug(`🔍 Query para detalles: ${query}`);
+      logger.debug(
+        `📋 Campos válidos encontrados: ${allValidFields.join(", ")}`
+      );
+
+      const result = await SqlService.query(sourceConnection, query, {
+        documentId,
+      });
+      return result.recordset || [];
+    } catch (error) {
+      logger.error(
+        `Error obteniendo detalles con promociones: ${error.message}`
+      );
+
+      // ✅ FALLBACK MEJORADO: Solo con campos básicos
+      try {
+        return await this._getDetailDataBasic(
+          detailConfig,
+          documentId,
+          sourceConnection
+        );
+      } catch (fallbackError) {
+        logger.error(`Error en fallback: ${fallbackError.message}`);
+        throw error;
+      }
+    }
+  }
+
+  async _getExistingColumns(tableName, connection) {
+    try {
+      const query = `
+      SELECT COLUMN_NAME
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_NAME = @tableName
+    `;
+
+      const result = await SqlService.query(connection, query, { tableName });
+      return result.recordset.map((row) => row.COLUMN_NAME.toUpperCase());
+    } catch (error) {
+      logger.warn(
+        `No se pudo verificar columnas de ${tableName}: ${error.message}`
+      );
+      // Retornar campos básicos comunes
+      return ["NUM_PED", "NUM_LN", "COD_ART", "CANT", "PRECIO", "TOTAL"];
+    }
+  }
+
+  async _getDetailDataBasic(detailConfig, documentId, sourceConnection) {
+    const primaryKey = detailConfig.primaryKey || "NUM_PED";
+    const orderByColumn = detailConfig.orderByColumn || "NUM_LN";
+
+    // ✅ Solo campos básicos que casi siempre existen
+    const basicFields = [primaryKey, "NUM_LN", "COD_ART", "CANT"];
+
+    const query = `
+    SELECT ${basicFields.join(", ")}
+    FROM ${detailConfig.sourceTable}
+    WHERE ${primaryKey} = @documentId
+    ${
+      detailConfig.filterCondition ? ` AND ${detailConfig.filterCondition}` : ""
+    }
+    ORDER BY ${orderByColumn}
+  `;
+
+    const result = await SqlService.query(sourceConnection, query, {
+      documentId,
+    });
+    return result.recordset || [];
   }
 
   /**
