@@ -745,8 +745,16 @@ class DynamicTransferService {
       return null;
     }
 
-    const articleCode = sourceData[bonificationConfig.regularArticleField];
+    // ✅ Usar campo ORIGEN para obtener código de artículo
+    const articleCode =
+      sourceData[
+        bonificationConfig.sourceArticleField ||
+          bonificationConfig.regularArticleField
+      ];
     if (!articleCode) {
+      logger.debug(
+        `⚠️ No se encontró código de artículo en campo origen: ${bonificationConfig.sourceArticleField}`
+      );
       return null;
     }
 
@@ -758,22 +766,35 @@ class DynamicTransferService {
       return null;
     }
 
+    // ✅ Usar targetField (DESTINO) para determinar qué valor retornar
     switch (targetField) {
-      case bonificationConfig.lineNumberField:
+      case bonificationConfig.lineNumberField: // "PEDIDO_LINEA"
         return articleMapping.lineNumber;
 
-      case bonificationConfig.bonificationLineReferenceField:
+      case bonificationConfig.bonificationLineReferenceField: // "PEDIDO_LINEA_BONIF"
         return articleMapping.bonificationLineReference || null;
 
-      case bonificationConfig.bonificationQuantityField:
+      case bonificationConfig.bonificationQuantityField: // "CANTIDAD_BONIFICADA"
         if (!articleMapping.isRegular) {
-          return sourceData[bonificationConfig.quantityField] || 0;
+          // ✅ Usar campo ORIGEN para obtener cantidad
+          return (
+            sourceData[
+              bonificationConfig.sourceQuantityField ||
+                bonificationConfig.quantityField
+            ] || 0
+          );
         }
         return 0;
 
-      case bonificationConfig.regularQuantityField:
+      case bonificationConfig.regularQuantityField: // "CANTIDAD_REGULAR"
         if (articleMapping.isRegular) {
-          return sourceData[bonificationConfig.quantityField] || 0;
+          // ✅ Usar campo ORIGEN para obtener cantidad
+          return (
+            sourceData[
+              bonificationConfig.sourceQuantityField ||
+                bonificationConfig.quantityField
+            ] || 0
+          );
         }
         return 0;
 

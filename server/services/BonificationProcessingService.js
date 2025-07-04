@@ -342,15 +342,18 @@ class BonificationProcessingService {
     bonifications,
     config
   ) {
-    logger.info(`🔗 Creando mapeo de bonificaciones usando NUM_LN existente`);
+    logger.info(`🔗 Creando mapeo de bonificaciones usando campos ORIGEN`);
 
-    // 1. Crear mapa de artículos regulares: COD_ART → NUM_LN
+    // ✅ USAR CAMPOS ORIGEN para acceder a los datos
     const regularMapping = new Map();
     const articleToLineMap = new Map();
 
     regularArticles.forEach((article) => {
-      const articleCode = article[config.regularArticleField];
-      const numLn = article["NUM_LN"] || article[config.lineNumberField];
+      // ✅ Usar campo ORIGEN para código de artículo
+      const articleCode =
+        article[config.sourceArticleField || config.regularArticleField];
+      // ✅ Usar campo ORIGEN para número de línea
+      const numLn = article[config.sourceLineNumberField || "NUM_LN"];
 
       regularMapping.set(articleCode, {
         ...article,
@@ -359,31 +362,30 @@ class BonificationProcessingService {
       });
 
       articleToLineMap.set(articleCode, numLn);
-      logger.debug(`📋 Artículo regular: ${articleCode} → Línea: ${numLn}`);
     });
 
-    // 2. Mapear bonificaciones con artículos regulares
+    // Mapear bonificaciones
     const bonificationMapping = new Map();
     let mappedBonifications = 0;
     let orphanBonifications = 0;
     const orphanList = [];
 
     bonifications.forEach((bonification) => {
-      const bonificationCode = bonification[config.regularArticleField];
+      // ✅ Usar campos ORIGEN para acceder a los datos
+      const bonificationCode =
+        bonification[config.sourceArticleField || config.regularArticleField];
       const regularArticleCode =
-        bonification[config.bonificationReferenceField];
+        bonification[
+          config.sourceReferenceField || config.bonificationReferenceField
+        ];
       const bonificationNumLn =
-        bonification["NUM_LN"] || bonification[config.lineNumberField];
-
-      logger.debug(
-        `🎁 Procesando bonificación: ${bonificationCode}, refiere a: ${regularArticleCode}, NUM_LN: ${bonificationNumLn}`
-      );
+        bonification[config.sourceLineNumberField || "NUM_LN"];
 
       if (!regularArticleCode) {
         orphanBonifications++;
         orphanList.push({
           bonificationCode,
-          reason: "Sin COD_ART_RFR",
+          reason: "Sin referencia a artículo regular",
         });
         return;
       }
@@ -409,18 +411,7 @@ class BonificationProcessingService {
       });
 
       mappedBonifications++;
-      logger.debug(
-        `✅ Bonificación: ${bonificationCode} (línea ${bonificationNumLn}) → refiere línea regular ${regularLineNumber}`
-      );
     });
-
-    logger.info(
-      `✅ Mapeo completado: ${mappedBonifications} mapeadas, ${orphanBonifications} huérfanas`
-    );
-
-    if (orphanBonifications > 0) {
-      logger.warn(`⚠️ Bonificaciones huérfanas:`, orphanList);
-    }
 
     return {
       regularMapping,
@@ -439,11 +430,17 @@ class BonificationProcessingService {
       "sourceTable",
       "bonificationIndicatorField",
       "bonificationIndicatorValue",
-      "regularArticleField",
-      "bonificationReferenceField",
       "orderField",
-      "lineNumberField",
-      "bonificationLineReferenceField",
+
+      // Campos ORIGEN (para consultas):
+      "sourceArticleField", // COD_ART
+      "sourceReferenceField", // COD_ART_RFR
+      "sourceLineNumberField", // NUM_LN
+      "sourceQuantityField", // CANTIDAD
+
+      // Campos DESTINO (para mapping):
+      "lineNumberField", // PEDIDO_LINEA
+      "bonificationLineReferenceField", // PEDIDO_LINEA_BONIF
     ];
 
     const missing = required.filter((field) => !config[field]);
