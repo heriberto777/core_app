@@ -1,919 +1,197 @@
-// BonificationProcessingService.js - VERSIÓN LIMPIA Y COMPLETA
+// services/BonificationIntegrationService.js
 const logger = require("./logger");
-const { SqlService } = require("./SqlService");
 
-class BonificationProcessingService {
-  constructor() {
-    this.defaultConfig = {
-      bonificationIndicatorField: "TIPO_ART",
-      bonificationIndicatorValue: "B",
-      regularArticleField: "COD_ART",
-      bonificationLineReferenceField: "NUM_LN_REF",
-      orderField: "NUM_PED",
-      lineNumberField: "NUM_LN",
-      quantityField: "CANT",
-      sourceTable: "PED_VEN_REN",
-    };
-  }
-
-  // ================================
-  // MÉTODOS PRINCIPALES
-  // ================================
-
+class BonificationIntegrationService {
   /**
-   * Procesa bonificaciones para un documento específico
-   * @param {Object} connection - Conexión a la base de datos
-   * @param {string} documentId - ID del documento a procesar
-   * @param {Object} bonificationConfig - Configuración de bonificaciones
-   * @returns {Promise<Object>} - Resultado del procesamiento
+   * Procesa bonificaciones en los datos obtenidos, integrándose con el flujo existente
    */
-  async processBonifications(connection, documentId, bonificationConfig) {
-    const startTime = Date.now();
+  async processBonificationsInData(sourceData, detailData, bonificationConfig) {
+    if (
+      !bonificationConfig ||
+      !Array.isArray(detailData) ||
+      detailData.length === 0
+    ) {
+      logger.debug("No hay configuración de bonificaciones o datos de detalle");
+      return {
+        processedData: detailData,
+        bonificationStats: null,
+        hasBonifications: false,
+      };
+    }
+
+    logger.info(
+      `🎁 Procesando bonificaciones en ${detailData.length} registros de detalle`
+    );
 
     try {
-      logger.info(
-        `🎁 Iniciando procesamiento de bonificaciones para documento: ${documentId}`
-      );
+      // Separar registros regulares y bonificaciones
+      const regularRecords = [];
+      const bonificationRecords = [];
 
-      // 1. Validar y normalizar configuración
-      const config = this._validateAndNormalizeConfig(bonificationConfig);
+      detailData.forEach((record, index) => {
+        const indicatorValue =
+          record[bonificationConfig.bonificationIndicatorField];
 
-      // 2. Obtener todos los registros del documento
-      const allRecords = await this._getAllRecords(
-        connection,
-        documentId,
-        config
-      );
-
-      if (!allRecords || allRecords.length === 0) {
-        logger.warn(`No se encontraron registros para documento ${documentId}`);
-        return this._buildEmptyResult();
-      }
-
-      // 3. Separar artículos regulares y bonificaciones
-      const { regularArticles, bonifications } =
-        this._separateArticlesAndBonifications(allRecords, config);
-
-      logger.info(
-        `📊 Documento ${documentId}: ${regularArticles.length} regulares, ${bonifications.length} bonificaciones`
-      );
-
-      // 4. Si no hay bonificaciones, solo mapear regulares
-      if (bonifications.length === 0) {
-        return this._buildRegularOnlyResult(regularArticles, config);
-      }
-
-      // 5. Crear mapeo usando números de línea existentes
-      const bonificationMapping =
-        await this._createBonificationMappingFromNumLn(
-          regularArticles,
-          bonifications,
-          config
-        );
-
-      // 6. Detectar tipos de promociones
-      const promotionAnalysis = this._detectPromotionTypes(allRecords, config, {
-        regularArticles,
-        bonifications,
+        if (indicatorValue === bonificationConfig.bonificationIndicatorValue) {
+          bonificationRecords.push({ ...record, originalIndex: index });
+        } else {
+          regularRecords.push({ ...record, originalIndex: index });
+        }
       });
 
-      const processingTime = Date.now() - startTime;
       logger.info(
-        `✅ Procesamiento de bonificaciones completado para documento ${documentId} en ${processingTime}ms`
+        `📊 Separación: ${regularRecords.length} regulares, ${bonificationRecords.length} bonificaciones`
       );
 
-      return {
-        success: true,
-        processed: bonificationMapping.mappedBonifications,
-        regularArticles: regularArticles.length,
-        bonifications: bonifications.length,
-        orphanBonifications: bonificationMapping.orphanBonifications,
-        processingTimeMs: processingTime,
-        message: `Procesado: ${bonificationMapping.mappedBonifications} bonificaciones mapeadas, ${bonificationMapping.orphanBonifications} huérfanas`,
-        bonificationMapping: bonificationMapping,
-        promotionTypes: promotionAnalysis.byType,
-        totalPromotions: promotionAnalysis.summary.totalPromotions,
-        totalDiscountAmount: promotionAnalysis.summary.totalDiscountAmount,
-      };
-    } catch (error) {
-      logger.error(
-        `❌ Error procesando bonificaciones para documento ${documentId}:`,
-        {
-          error: error.message,
-          stack: error.stack,
-          documentId,
-          config: bonificationConfig,
-        }
-      );
-
-      return {
-        success: false,
-        error: error.message,
-        processed: 0,
-        documentId,
-        bonificationMapping: null,
-      };
-    }
-  }
-
-  /**
-   * Aplica reglas de promociones a los detalles
-   * @param {Array} originalDetails - Detalles originales
-   * @param {Object} customerContext - Contexto del cliente
-   * @param {Object} bonificationConfig - Configuración de bonificaciones
-   * @returns {Promise<Array>} - Detalles con promociones aplicadas
-   */
-  async applyPromotionRules(
-    originalDetails,
-    customerContext,
-    bonificationConfig
-  ) {
-    try {
-      // ✅ VALIDAR que originalDetails sea un array
-      if (!Array.isArray(originalDetails)) {
-        logger.warn(
-          `⚠️ originalDetails no es un array: ${typeof originalDetails}`
-        );
-        return []; // Retornar array vacío
-      }
-
-      logger.info(
-        `🎯 Aplicando reglas de promociones a ${originalDetails.length} detalles`
-      );
-
-      // Clonar detalles para no modificar el original
-      let enhancedDetails = [...originalDetails];
-
-      // ✅ VALIDAR que bonificationConfig exista
-      if (!bonificationConfig) {
-        logger.warn(
-          `⚠️ bonificationConfig no proporcionado, retornando detalles originales`
-        );
-        return enhancedDetails;
-      }
-
-      // 1. Aplicar promociones por familia
-      enhancedDetails = await this._applyFamilyPromotions(
-        enhancedDetails,
-        customerContext,
-        bonificationConfig
-      );
-
-      // 2. Aplicar promociones por volumen
-      enhancedDetails = await this._applyVolumePromotions(
-        enhancedDetails,
-        customerContext,
-        bonificationConfig
-      );
-
-      // 3. Aplicar promociones especiales
-      enhancedDetails = await this._applySpecialPromotions(
-        enhancedDetails,
-        customerContext,
-        bonificationConfig
-      );
-
-      logger.info(
-        `✅ Promociones aplicadas: ${
-          enhancedDetails.length - originalDetails.length
-        } nuevos items generados`
-      );
-
-      return enhancedDetails;
-    } catch (error) {
-      logger.error(
-        `❌ Error aplicando reglas de promociones: ${error.message}`
-      );
-      // ✅ ASEGURAR que siempre retornemos un array
-      return Array.isArray(originalDetails) ? originalDetails : [];
-    }
-  }
-
-  /**
-   * Detecta tipos de promociones en los detalles procesados
-   * @param {Array} processedDetails - Detalles procesados
-   * @param {Object} bonificationConfig - Configuración de bonificaciones
-   * @param {Object} sourceData - Datos de origen del documento
-   * @returns {Object} - Información de promociones detectadas
-   */
-  detectPromotionTypes(processedDetails, bonificationConfig, sourceData) {
-    try {
-      // ✅ VALIDAR que processedDetails sea un array
-      if (!Array.isArray(processedDetails)) {
-        logger.warn(
-          `⚠️ processedDetails no es un array: ${typeof processedDetails}`
-        );
+      if (bonificationRecords.length === 0) {
         return {
-          summary: {
-            totalPromotions: 0,
-            totalBonifiedItems: 0,
-            totalDiscountAmount: 0,
-            appliedPromotions: [],
+          processedData: detailData,
+          bonificationStats: {
+            totalRegular: regularRecords.length,
+            totalBonifications: 0,
+            mappedBonifications: 0,
+            orphanBonifications: 0,
           },
-          details: [],
-          byType: {},
+          hasBonifications: false,
         };
       }
 
-      logger.info(
-        `🔍 Detectando tipos de promociones en ${processedDetails.length} detalles`
-      );
-
-      const promotions = {
-        summary: {
-          totalPromotions: 0,
-          totalBonifiedItems: 0,
-          totalDiscountAmount: 0,
-          appliedPromotions: [],
-        },
-        details: [],
-        byType: {},
-      };
-
-      // Contadores por tipo
-      const typeCounters = {
-        FAMILY_BONUS: 0,
-        VOLUME_BONUS: 0,
-        SPECIAL_OFFER: 0,
-        FREE_PRODUCT: 0,
-        DISCOUNT: 0,
-      };
-
-      // ✅ VALIDAR que bonificationConfig exista
-      if (!bonificationConfig) {
-        logger.warn(`⚠️ bonificationConfig no proporcionado`);
-        return promotions;
-      }
-
-      // Analizar cada detalle
-      for (const detail of processedDetails) {
-        // ✅ VALIDAR que detail sea un objeto
-        if (!detail || typeof detail !== "object") {
-          logger.warn(`⚠️ Detalle inválido encontrado: ${typeof detail}`);
-          continue;
+      // Crear índice de artículos regulares
+      const regularIndex = new Map();
+      regularRecords.forEach((record) => {
+        const articleCode = record[bonificationConfig.regularArticleField];
+        const lineNumber = record.NUM_LN;
+        if (articleCode && lineNumber) {
+          regularIndex.set(articleCode, {
+            lineNumber,
+            record,
+          });
         }
-
-        const detailPromotion = this._analyzeDetailPromotion(
-          detail,
-          bonificationConfig,
-          sourceData
-        );
-
-        if (detailPromotion.isPromotion) {
-          promotions.details.push(detailPromotion);
-          typeCounters[detailPromotion.type]++;
-          promotions.summary.totalPromotions++;
-
-          if (detailPromotion.isBonification) {
-            promotions.summary.totalBonifiedItems++;
-          }
-
-          if (detailPromotion.discountAmount) {
-            promotions.summary.totalDiscountAmount +=
-              detailPromotion.discountAmount;
-          }
-        }
-      }
-
-      // Establecer contadores por tipo
-      promotions.byType = typeCounters;
-
-      logger.info(
-        `✅ Promociones detectadas: ${promotions.summary.totalPromotions} total, ${promotions.summary.totalBonifiedItems} bonificados`
-      );
-
-      return promotions;
-    } catch (error) {
-      logger.error(
-        `❌ Error detectando tipos de promociones: ${error.message}`
-      );
-      return {
-        summary: {
-          totalPromotions: 0,
-          totalBonifiedItems: 0,
-          totalDiscountAmount: 0,
-        },
-        details: [],
-        byType: {},
-      };
-    }
-  }
-
-  /**
-   * Obtiene estadísticas de bonificaciones para un documento
-   * @param {Object} connection - Conexión a la base de datos
-   * @param {string} documentId - ID del documento
-   * @param {Object} config - Configuración de bonificaciones
-   * @returns {Promise<Object>} - Estadísticas
-   */
-  async getBonificationStats(connection, documentId, config) {
-    try {
-      const statsQuery = `
-        SELECT
-          COUNT(*) as total_records,
-          COUNT(CASE WHEN ${config.bonificationIndicatorField} = @bonificationValue THEN 1 END) as bonifications,
-          COUNT(CASE WHEN ${config.bonificationIndicatorField} != @bonificationValue OR ${config.bonificationIndicatorField} IS NULL THEN 1 END) as regular_articles,
-          COUNT(CASE WHEN ${config.bonificationIndicatorField} = @bonificationValue AND ${config.bonificationLineReferenceField} IS NOT NULL THEN 1 END) as mapped_bonifications,
-          COUNT(CASE WHEN ${config.bonificationIndicatorField} = @bonificationValue AND ${config.bonificationLineReferenceField} IS NULL THEN 1 END) as orphan_bonifications
-        FROM ${config.sourceTable}
-        WHERE ${config.orderField} = @documentId
-      `;
-
-      const result = await SqlService.query(connection, statsQuery, {
-        documentId,
-        bonificationValue: config.bonificationIndicatorValue,
       });
 
-      return result.recordset[0];
+      // Procesar bonificaciones
+      const processedRecords = [...regularRecords]; // Empezar con regulares
+      let mappedBonifications = 0;
+      let orphanBonifications = 0;
+      const orphanDetails = [];
+
+      bonificationRecords.forEach((bonification) => {
+        const bonificationCode =
+          bonification[bonificationConfig.regularArticleField];
+        const referenceCode =
+          bonification[bonificationConfig.bonificationReferenceField];
+        const bonificationLine = bonification.NUM_LN;
+
+        if (!referenceCode) {
+          orphanBonifications++;
+          orphanDetails.push({
+            line: bonificationLine,
+            article: bonificationCode,
+            reason: "Sin código de referencia",
+          });
+          logger.warn(
+            `⚠️ Bonificación sin referencia en línea ${bonificationLine}`
+          );
+          return;
+        }
+
+        const regularInfo = regularIndex.get(referenceCode);
+        if (!regularInfo) {
+          orphanBonifications++;
+          orphanDetails.push({
+            line: bonificationLine,
+            article: bonificationCode,
+            reference: referenceCode,
+            reason: "Artículo regular no encontrado",
+          });
+          logger.warn(
+            `⚠️ Bonificación huérfana: artículo ${referenceCode} no encontrado para línea ${bonificationLine}`
+          );
+          return;
+        }
+
+        // Mapeo exitoso: agregar campo de referencia de línea
+        const mappedBonification = {
+          ...bonification,
+          [bonificationConfig.bonificationLineReferenceField]:
+            regularInfo.lineNumber,
+          _isMappedBonification: true,
+          _referencedLine: regularInfo.lineNumber,
+          _referencedArticle: referenceCode,
+        };
+
+        processedRecords.push(mappedBonification);
+        mappedBonifications++;
+
+        logger.debug(
+          `✅ Bonificación mapeada: línea ${bonificationLine} → referencia línea ${regularInfo.lineNumber}`
+        );
+      });
+
+      // Ordenar por línea original para mantener orden
+      processedRecords.sort((a, b) => (a.NUM_LN || 0) - (b.NUM_LN || 0));
+
+      const stats = {
+        totalRegular: regularRecords.length,
+        totalBonifications: bonificationRecords.length,
+        mappedBonifications,
+        orphanBonifications,
+        orphanDetails,
+        successRate:
+          bonificationRecords.length > 0
+            ? (
+                (mappedBonifications / bonificationRecords.length) *
+                100
+              ).toFixed(2)
+            : 0,
+      };
+
+      logger.info(`🎯 Procesamiento de bonificaciones completado:`, stats);
+
+      return {
+        processedData: processedRecords,
+        bonificationStats: stats,
+        hasBonifications: true,
+      };
     } catch (error) {
-      logger.error(`Error obteniendo estadísticas de bonificaciones:`, error);
-      return null;
+      logger.error(`❌ Error procesando bonificaciones: ${error.message}`);
+      throw error;
     }
   }
 
-  // ================================
-  // MÉTODOS PRIVADOS PRINCIPALES
-  // ================================
-
   /**
-   * Valida y normaliza la configuración de bonificaciones
-   * @private
+   * Verifica si un mapping debe procesar bonificaciones
    */
-  _validateAndNormalizeConfig(bonificationConfig) {
-    if (!bonificationConfig) {
-      throw new Error("Configuración de bonificaciones requerida");
-    }
-
-    // Combinar con configuración por defecto
-    const config = { ...this.defaultConfig, ...bonificationConfig };
-
-    // Validaciones específicas
-    this._validateConfig(config);
-
-    return config;
+  shouldProcessBonifications(mapping) {
+    return !!(
+      mapping.hasBonificationProcessing &&
+      mapping.bonificationConfig &&
+      mapping.bonificationConfig.sourceTable
+    );
   }
 
   /**
-   * Valida la configuración de bonificaciones
-   * @private
+   * Enriquece la consulta de detalle para incluir campos necesarios para bonificaciones
    */
-  _validateConfig(config) {
+  enrichDetailQueryForBonifications(baseQuery, bonificationConfig) {
+    if (!bonificationConfig) return baseQuery;
+
+    // Asegurar que los campos necesarios estén en la consulta
     const requiredFields = [
-      "sourceTable",
-      "bonificationIndicatorField",
-      "bonificationIndicatorValue",
-      "regularArticleField",
-      "orderField",
-      "lineNumberField",
+      bonificationConfig.bonificationIndicatorField,
+      bonificationConfig.regularArticleField,
+      bonificationConfig.bonificationReferenceField,
+      "NUM_LN",
     ];
 
-    for (const field of requiredFields) {
-      if (!config[field]) {
-        throw new Error(`Campo requerido faltante en configuración: ${field}`);
-      }
-    }
-
-    // Validaciones adicionales
-    if (
-      config.bonificationIndicatorValue === null ||
-      config.bonificationIndicatorValue === undefined
-    ) {
-      throw new Error(
-        "El valor indicador de bonificación no puede ser null o undefined"
-      );
-    }
-
-    if (config.lineNumberField === config.bonificationLineReferenceField) {
-      throw new Error(
-        "El campo de número de línea no puede ser el mismo que el campo de referencia de bonificación"
-      );
-    }
-
-    return true;
-  }
-
-  /**
-   * Obtiene todos los registros del documento
-   * @private
-   */
-  async _getAllRecords(connection, documentId, config) {
-    try {
-      const query = `
-        SELECT *
-        FROM ${config.sourceTable}
-        WHERE ${config.orderField} = @documentId
-        ORDER BY ${config.lineNumberField}
-      `;
-
-      const result = await SqlService.query(connection, query, { documentId });
-      return result.recordset || [];
-    } catch (error) {
-      logger.error(
-        `Error obteniendo registros del documento ${documentId}:`,
-        error
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * Separa artículos regulares de bonificaciones
-   * @private
-   */
-  _separateArticlesAndBonifications(allRecords, config) {
-    const regularArticles = allRecords.filter(
-      (record) =>
-        record[config.bonificationIndicatorField] !==
-        config.bonificationIndicatorValue
+    // Esta es una implementación simple - en producción podrías analizar la consulta
+    // y agregar campos faltantes de manera más sofisticada
+    logger.debug(
+      `Campos requeridos para bonificaciones: ${requiredFields.join(", ")}`
     );
 
-    const bonifications = allRecords.filter(
-      (record) =>
-        record[config.bonificationIndicatorField] ===
-        config.bonificationIndicatorValue
-    );
-
-    return { regularArticles, bonifications };
-  }
-
-  /**
-   * Crea mapeo de bonificaciones usando números de línea
-   * @private
-   */
-  async _createBonificationMappingFromNumLn(
-    regularArticles,
-    bonifications,
-    config
-  ) {
-    try {
-      logger.info(
-        `🔗 Creando mapeo de bonificaciones usando ${config.bonificationLineReferenceField}`
-      );
-
-      const mappingResult = {
-        mappedBonifications: 0,
-        orphanBonifications: 0,
-        mappings: [],
-        orphanList: [],
-      };
-
-      // Crear índice de artículos regulares por número de línea
-      const regularByLineNumber = new Map();
-      regularArticles.forEach((article) => {
-        const lineNumber = article[config.lineNumberField];
-        if (lineNumber) {
-          regularByLineNumber.set(lineNumber, article);
-        }
-      });
-
-      // Procesar cada bonificación
-      for (const bonification of bonifications) {
-        const referenceLineNumber =
-          bonification[config.bonificationLineReferenceField];
-
-        if (
-          referenceLineNumber &&
-          regularByLineNumber.has(referenceLineNumber)
-        ) {
-          // Bonificación mapeada correctamente
-          const linkedRegularArticle =
-            regularByLineNumber.get(referenceLineNumber);
-
-          mappingResult.mappings.push({
-            bonification,
-            linkedRegularArticle,
-            lineReference: referenceLineNumber,
-            regularArticleCode:
-              linkedRegularArticle[config.regularArticleField],
-            bonificationQuantity: bonification[config.quantityField] || 0,
-          });
-
-          mappingResult.mappedBonifications++;
-
-          logger.debug(
-            `✅ Bonificación mapeada: ${
-              bonification[config.regularArticleField]
-            } -> línea ${referenceLineNumber}`
-          );
-        } else {
-          // Bonificación huérfana
-          mappingResult.orphanList.push({
-            bonification,
-            referenceLineNumber,
-            reason: referenceLineNumber
-              ? "Línea de referencia no encontrada"
-              : "Sin línea de referencia",
-          });
-
-          mappingResult.orphanBonifications++;
-
-          logger.warn(
-            `⚠️ Bonificación huérfana: ${
-              bonification[config.regularArticleField]
-            } (ref: ${referenceLineNumber})`
-          );
-        }
-      }
-
-      logger.info(
-        `✅ Mapeo completado: ${mappingResult.mappedBonifications} mapeadas, ${mappingResult.orphanBonifications} huérfanas`
-      );
-
-      return mappingResult;
-    } catch (error) {
-      logger.error(
-        `❌ Error creando mapeo de bonificaciones: ${error.message}`
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * Construye resultado para documento sin bonificaciones
-   * @private
-   */
-  _buildRegularOnlyResult(regularArticles, config) {
-    logger.info(
-      `✅ Documento sin bonificaciones: ${regularArticles.length} artículos regulares`
-    );
-
-    return {
-      success: true,
-      processed: 0,
-      regularArticles: regularArticles.length,
-      bonifications: 0,
-      orphanBonifications: 0,
-      message: "No hay bonificaciones en este documento",
-      bonificationMapping: {
-        mappedBonifications: 0,
-        orphanBonifications: 0,
-        mappings: [],
-        orphanList: [],
-      },
-      promotionTypes: {},
-      totalPromotions: 0,
-      totalDiscountAmount: 0,
-    };
-  }
-
-  /**
-   * Construye resultado vacío
-   * @private
-   */
-  _buildEmptyResult() {
-    return {
-      success: true,
-      processed: 0,
-      regularArticles: 0,
-      bonifications: 0,
-      orphanBonifications: 0,
-      message: "No hay registros para procesar",
-      bonificationMapping: null,
-      promotionTypes: {},
-      totalPromotions: 0,
-      totalDiscountAmount: 0,
-    };
-  }
-
-  // =======================================
-  // MÉTODOS DE REGLAS DE PROMOCIONES
-  // =======================================
-
-  /**
-   * Aplica promociones por familia de productos
-   * @private
-   */
-  async _applyFamilyPromotions(details, customerContext, config) {
-    logger.debug(`🏷️ Aplicando promociones por familia`);
-
-    try {
-      // ✅ VALIDAR que details sea un array
-      if (!Array.isArray(details)) {
-        logger.warn(`⚠️ details no es un array en _applyFamilyPromotions`);
-        return [];
-      }
-
-      // Implementación básica - puede expandirse según reglas específicas
-      return details;
-    } catch (error) {
-      logger.error(`Error aplicando promociones por familia: ${error.message}`);
-      return Array.isArray(details) ? details : [];
-    }
-  }
-
-  /**
-   * Aplica promociones por volumen
-   * @private
-   */
-  async _applyVolumePromotions(details, customerContext, config) {
-    logger.debug(`📦 Aplicando promociones por volumen`);
-
-    try {
-      // ✅ VALIDAR que details sea un array
-      if (!Array.isArray(details)) {
-        logger.warn(`⚠️ details no es un array en _applyVolumePromotions`);
-        return [];
-      }
-
-      // Implementación básica - puede expandirse según reglas específicas
-      return details;
-    } catch (error) {
-      logger.error(`Error aplicando promociones por volumen: ${error.message}`);
-      return Array.isArray(details) ? details : [];
-    }
-  }
-
-  /**
-   * Aplica promociones especiales
-   * @private
-   */
-  async _applySpecialPromotions(details, customerContext, config) {
-    logger.debug(`⭐ Aplicando promociones especiales`);
-
-    try {
-      // ✅ VALIDAR que details sea un array
-      if (!Array.isArray(details)) {
-        logger.warn(`⚠️ details no es un array en _applySpecialPromotions`);
-        return [];
-      }
-
-      // Implementación básica - puede expandirse según reglas específicas
-      return details;
-    } catch (error) {
-      logger.error(`Error aplicando promociones especiales: ${error.message}`);
-      return Array.isArray(details) ? details : [];
-    }
-  }
-
-  // =======================================
-  // MÉTODOS DE ANÁLISIS DE PROMOCIONES
-  // =======================================
-
-  /**
-   * Analiza un detalle individual para detectar promociones
-   * @private
-   */
-  _analyzeDetailPromotion(detail, config, sourceData) {
-    const isBonus =
-      detail[config.bonificationIndicatorField] ===
-      config.bonificationIndicatorValue;
-
-    // Análisis de bonificación
-    if (isBonus) {
-      return {
-        isPromotion: true,
-        isBonification: true,
-        type: "FREE_PRODUCT",
-        articleCode: detail[config.regularArticleField],
-        quantity: detail[config.quantityField] || 0,
-        discountAmount: 0,
-        description: "Producto bonificado",
-        lineNumber: detail[config.lineNumberField],
-        referenceLineNumber: detail[config.bonificationLineReferenceField],
-      };
-    }
-
-    // Análisis de descuentos especiales
-    const hasSpecialPrice = detail.PRECIO_ESPECIAL || detail.DESCUENTO;
-    if (hasSpecialPrice) {
-      return {
-        isPromotion: true,
-        isBonification: false,
-        type: "DISCOUNT",
-        articleCode: detail[config.regularArticleField],
-        quantity: detail[config.quantityField] || 0,
-        discountAmount: detail.DESCUENTO || 0,
-        description: "Descuento especial",
-        lineNumber: detail[config.lineNumberField],
-      };
-    }
-
-    // Análisis de promociones por volumen
-    if (detail.CANT && detail.CANT >= 50) {
-      return {
-        isPromotion: true,
-        isBonification: false,
-        type: "VOLUME_BONUS",
-        articleCode: detail[config.regularArticleField],
-        quantity: detail[config.quantityField] || 0,
-        discountAmount: 0,
-        description: "Promoción por volumen",
-        lineNumber: detail[config.lineNumberField],
-      };
-    }
-
-    return {
-      isPromotion: false,
-      isBonification: false,
-      type: null,
-    };
-  }
-
-  /**
-   * Detecta tipos de promociones
-   * @private
-   */
-  _detectPromotionTypes(processedDetails, config, sourceData) {
-    const promotions = {
-      summary: {
-        totalPromotions: 0,
-        totalBonifiedItems: 0,
-        totalDiscountAmount: 0,
-        appliedPromotions: [],
-      },
-      details: [],
-      byType: {
-        FAMILY_BONUS: 0,
-        VOLUME_BONUS: 0,
-        SPECIAL_OFFER: 0,
-        FREE_PRODUCT: 0,
-        DISCOUNT: 0,
-      },
-    };
-
-    // Analizar cada detalle
-    for (const detail of processedDetails) {
-      const detailPromotion = this._analyzeDetailPromotion(
-        detail,
-        config,
-        sourceData
-      );
-
-      if (detailPromotion.isPromotion) {
-        promotions.details.push(detailPromotion);
-        promotions.byType[detailPromotion.type]++;
-        promotions.summary.totalPromotions++;
-
-        if (detailPromotion.isBonification) {
-          promotions.summary.totalBonifiedItems++;
-        }
-
-        if (detailPromotion.discountAmount) {
-          promotions.summary.totalDiscountAmount +=
-            detailPromotion.discountAmount;
-        }
-      }
-    }
-
-    return promotions;
-  }
-
-  // =======================================
-  // MÉTODOS DE UTILIDAD
-  // =======================================
-
-  /**
-   * Agrupa detalles por familia
-   * @private
-   */
-  _groupByFamily(details) {
-    const groups = {};
-    details.forEach((detail) => {
-      const family = detail.FAMILIA || "SIN_FAMILIA";
-      if (!groups[family]) groups[family] = [];
-      groups[family].push(detail);
-    });
-    return groups;
-  }
-
-  /**
-   * Agrupa detalles por artículo
-   * @private
-   */
-  _groupByArticle(details) {
-    const groups = {};
-    details.forEach((detail) => {
-      const articleCode = detail.COD_ART || detail.CODIGO_ARTICULO;
-      if (!groups[articleCode]) groups[articleCode] = [];
-      groups[articleCode].push(detail);
-    });
-    return groups;
-  }
-
-  /**
-   * Crea item de bonificación por familia
-   * @private
-   */
-  _createFamilyBonusItem(baseItem, bonusQuantity, family) {
-    return {
-      ...baseItem,
-      CANT: bonusQuantity,
-      TIPO_ART: "B",
-      NUM_LN: this._generateNewLineNumber(),
-      NUM_LN_REF: baseItem.NUM_LN,
-      DESCRIPCION: `Bonificación familia ${family}`,
-      PRECIO: 0,
-      TOTAL: 0,
-      ES_PROMOCION: true,
-      TIPO_PROMOCION: "FAMILY_BONUS",
-    };
-  }
-
-  /**
-   * Crea item de bonificación por volumen
-   * @private
-   */
-  _createVolumeBonusItem(baseItem, bonusQuantity, description) {
-    return {
-      ...baseItem,
-      CANT: bonusQuantity,
-      TIPO_ART: "B",
-      NUM_LN: this._generateNewLineNumber(),
-      NUM_LN_REF: baseItem.NUM_LN,
-      DESCRIPCION: description,
-      PRECIO: 0,
-      TOTAL: 0,
-      ES_PROMOCION: true,
-      TIPO_PROMOCION: "VOLUME_BONUS",
-    };
-  }
-
-  /**
-   * Aplica promoción VIP
-   * @private
-   */
-  _applyVIPPromotion(details) {
-    // Lógica específica para clientes VIP
-    const vipItems = [];
-    const highValueItems = details.filter((item) => (item.PRECIO || 0) > 1000);
-
-    highValueItems.forEach((item) => {
-      if (Math.random() > 0.7) {
-        // 30% de probabilidad
-        vipItems.push({
-          ...item,
-          CANT: 1,
-          TIPO_ART: "B",
-          NUM_LN: this._generateNewLineNumber(),
-          DESCRIPCION: "Bonificación VIP",
-          PRECIO: 0,
-          TOTAL: 0,
-          ES_PROMOCION: true,
-          TIPO_PROMOCION: "SPECIAL_OFFER",
-        });
-      }
-    });
-
-    return vipItems;
-  }
-
-  /**
-   * Aplica promociones estacionales
-   * @private
-   */
-  _applySeasonalPromotions(details) {
-    const seasonalItems = [];
-    const currentMonth = new Date().getMonth() + 1;
-
-    // Promociones navideñas (diciembre)
-    if (currentMonth === 12) {
-      const giftItems = details.filter(
-        (item) =>
-          (item.DESCRIPCION || "").toLowerCase().includes("regalo") ||
-          (item.FAMILIA || "").toLowerCase().includes("juguete")
-      );
-
-      giftItems.forEach((item) => {
-        seasonalItems.push({
-          ...item,
-          CANT: 1,
-          TIPO_ART: "B",
-          NUM_LN: this._generateNewLineNumber(),
-          DESCRIPCION: "Promoción Navideña",
-          PRECIO: 0,
-          TOTAL: 0,
-          ES_PROMOCION: true,
-          TIPO_PROMOCION: "SPECIAL_OFFER",
-        });
-      });
-    }
-
-    return seasonalItems;
-  }
-
-  /**
-   * Genera nuevo número de línea
-   * @private
-   */
-  _generateNewLineNumber() {
-    return Math.floor(Math.random() * 9000) + 1000;
-  }
-
-  /**
-   * Obtiene descripción del tipo de promoción
-   * @private
-   */
-  _getPromotionTypeDescription(type) {
-    const descriptions = {
-      FAMILY_BONUS: "Bonificación por familia",
-      VOLUME_BONUS: "Bonificación por volumen",
-      SPECIAL_OFFER: "Oferta especial",
-      FREE_PRODUCT: "Producto gratis",
-      DISCOUNT: "Descuento aplicado",
-    };
-
-    return descriptions[type] || "Promoción desconocida";
+    return baseQuery;
   }
 }
 
-module.exports = BonificationProcessingService;
+module.exports = new BonificationIntegrationService();
