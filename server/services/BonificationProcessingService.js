@@ -251,54 +251,49 @@ class BonificationProcessingService {
 
     // 1. Crear mapa de artículos regulares: COD_ART → NUM_LN
     const regularMapping = new Map();
-    const articleToLineMap = new Map(); // COD_ART → NUM_LN
+    const articleToLineMap = new Map();
 
     regularArticles.forEach((article) => {
       const articleCode = article[config.regularArticleField];
       const numLn = article["NUM_LN"];
+      const quantity = article[config.quantityField] || 0; // 🆕 AGREGAR CANTIDAD
 
       regularMapping.set(articleCode, {
         ...article,
         lineNumber: numLn,
         isRegular: true,
+        quantity: quantity, // 🆕 AGREGAR CANTIDAD
       });
 
       articleToLineMap.set(articleCode, numLn);
-
-      logger.debug(`📋 Artículo regular: ${articleCode} → Línea: ${numLn}`);
+      logger.debug(
+        `📋 Artículo regular: ${articleCode} → Línea: ${numLn}, Cantidad: ${quantity}`
+      );
     });
 
-    // 2. Mapear bonificaciones con artículos regulares usando COD_ART_RFR
+    // 2. Mapear bonificaciones con artículos regulares
     const bonificationMapping = new Map();
     let mappedBonifications = 0;
     let orphanBonifications = 0;
     const orphanList = [];
 
     bonifications.forEach((bonification) => {
-      const bonificationCode = bonification[config.regularArticleField]; // COD_ART de la bonificación
+      const bonificationCode = bonification[config.regularArticleField];
       const regularArticleCode =
-        bonification[config.bonificationReferenceField]; // COD_ART_RFR
-      const bonificationNumLn = bonification["NUM_LN"]; // NUM_LN de la bonificación
-
-      logger.debug(
-        `🎁 Procesando bonificación: ${bonificationCode}, refiere a: ${regularArticleCode}, NUM_LN: ${bonificationNumLn}`
-      );
+        bonification[config.bonificationReferenceField];
+      const bonificationNumLn = bonification["NUM_LN"];
+      const bonificationQuantity = bonification[config.quantityField] || 0; // 🆕 AGREGAR CANTIDAD
 
       if (!regularArticleCode) {
         logger.warn(
-          `⚠️ Bonificación ${bonificationCode} sin referencia a artículo regular (COD_ART_RFR)`
+          `⚠️ Bonificación ${bonificationCode} sin referencia a artículo regular`
         );
         orphanBonifications++;
-        orphanList.push({
-          bonificationCode,
-          reason: "Sin COD_ART_RFR",
-        });
+        orphanList.push({ bonificationCode, reason: "Sin COD_ART_RFR" });
         return;
       }
 
-      // Buscar el NUM_LN del artículo regular usando COD_ART_RFR
       const regularLineNumber = articleToLineMap.get(regularArticleCode);
-
       if (!regularLineNumber) {
         logger.warn(
           `⚠️ No se encontró NUM_LN para artículo regular: ${regularArticleCode}`
@@ -307,7 +302,7 @@ class BonificationProcessingService {
         orphanList.push({
           bonificationCode,
           regularArticleCode,
-          reason: "Artículo regular no encontrado o sin NUM_LN",
+          reason: "Artículo regular no encontrado",
         });
         return;
       }
@@ -315,15 +310,16 @@ class BonificationProcessingService {
       // Mapear bonificación
       bonificationMapping.set(bonificationCode, {
         ...bonification,
-        lineNumber: bonificationNumLn, // PEDIDO_LINEA = NUM_LN de la bonificación
-        bonificationLineReference: regularLineNumber, // PEDIDO_LINEA_BONIF = NUM_LN del artículo regular
+        lineNumber: bonificationNumLn,
+        bonificationLineReference: regularLineNumber,
         isRegular: false,
         referencedArticle: regularArticleCode,
+        bonificationQuantity: bonificationQuantity, // 🆕 CANTIDAD BONIFICADA
       });
 
       mappedBonifications++;
       logger.debug(
-        `✅ Bonificación: ${bonificationCode} (línea ${bonificationNumLn}) → refiere línea regular ${regularLineNumber} (${regularArticleCode})`
+        `✅ Bonificación: ${bonificationCode} (línea ${bonificationNumLn}) → refiere línea regular ${regularLineNumber}, Cantidad: ${bonificationQuantity}`
       );
     });
 

@@ -2019,13 +2019,12 @@ class DynamicTransferService {
     documentId,
     columnLengthCache,
     isDetailTable = false,
-    bonificationMapping = null
+    bonificationMapping = null // NUEVO PARÁMETRO
   ) {
     const targetData = {};
     const targetFields = [];
     const targetValues = [];
     const directSqlFields = new Set();
-    const processedFields = new Set(); // 🔥 NUEVO: Rastrear campos procesados
 
     // Para detalles, combinar datos del encabezado y detalle
     const dataForProcessing = isDetailTable
@@ -2064,14 +2063,6 @@ class DynamicTransferService {
 
     // Procesar todos los campos
     for (const fieldMapping of tableConfig.fieldMappings) {
-      const targetField = fieldMapping.targetField;
-
-      // 🔥 NUEVO: Verificar si ya procesamos este campo
-      if (processedFields.has(targetField)) {
-        logger.warn(`⚠️ Campo ${targetField} ya procesado, saltando duplicado`);
-        continue;
-      }
-
       const processedField = await this.processField(
         fieldMapping,
         dataForProcessing,
@@ -2082,56 +2073,24 @@ class DynamicTransferService {
         isDetailTable,
         targetConnection,
         columnLengthCache,
-        bonificationMapping
+        bonificationMapping // NUEVO PARÁMETRO
       );
 
-      // 🔥 NUEVO: Marcar campo como procesado
-      processedFields.add(targetField);
-
       if (processedField.isDirectSql) {
-        targetFields.push(targetField);
+        targetFields.push(fieldMapping.targetField);
         targetValues.push(processedField.value); // Expresión SQL directa
-        directSqlFields.add(targetField);
+        directSqlFields.add(fieldMapping.targetField);
       } else {
-        targetData[targetField] = processedField.value;
-        targetFields.push(targetField);
-        targetValues.push(`@${targetField}`);
-      }
-
-      // 🔍 DEBUG ESPECÍFICO PARA PEDIDO
-      if (targetField === "PEDIDO") {
-        logger.warn(`🔍 CAMPO PEDIDO PROCESADO:`);
-        logger.warn(`  - Valor: ${processedField.value}`);
-        logger.warn(`  - Tipo: ${typeof processedField.value}`);
-        logger.warn(`  - Es DirectSQL: ${processedField.isDirectSql}`);
-        logger.warn(`  - Mapping sourceField: ${fieldMapping.sourceField}`);
-        logger.warn(`  - Mapping defaultValue: ${fieldMapping.defaultValue}`);
+        targetData[fieldMapping.targetField] = processedField.value;
+        targetFields.push(fieldMapping.targetField);
+        targetValues.push(`@${fieldMapping.targetField}`);
       }
 
       logger.debug(
-        `✅ Campo ${targetField} preparado para inserción: ${
+        `✅ Campo ${fieldMapping.targetField} preparado para inserción: ${
           processedField.value
         } (tipo: ${typeof processedField.value})`
       );
-    }
-
-    // 🔍 DEBUG ANTES DE EXECUTEINSERT
-    if (tableConfig.targetTable.includes("PEDIDO_LINEA")) {
-      logger.warn(`🔍 DEBUG ANTES DE EXECUTEINSERT:`);
-      logger.warn(`  - targetFields: ${targetFields.join(", ")}`);
-      logger.warn(`  - targetValues: ${targetValues.join(", ")}`);
-      logger.warn(`  - targetData keys: ${Object.keys(targetData).join(", ")}`);
-
-      // Verificar duplicados
-      const duplicates = targetFields.filter(
-        (field, index) => targetFields.indexOf(field) !== index
-      );
-
-      if (duplicates.length > 0) {
-        logger.error(
-          `🚨 CAMPOS DUPLICADOS DETECTADOS: ${duplicates.join(", ")}`
-        );
-      }
     }
 
     // Construir y ejecutar la consulta INSERT
@@ -2302,38 +2261,31 @@ class DynamicTransferService {
       );
 
       if (shouldReceiveConsecutive) {
-        // 🔍 DEBUG ESPECÍFICO PARA CONSECUTIVO
-        logger.warn(`🔍 APLICANDO CONSECUTIVO:`);
-        logger.warn(`  - Campo: ${fieldMapping.targetField}`);
-        logger.warn(`  - Valor anterior: ${value}`);
-        logger.warn(`  - Consecutivo: ${currentConsecutive.formatted}`);
-        logger.warn(
-          `  - consecutiveConfig.fieldName: ${mapping.consecutiveConfig.fieldName}`
-        );
+        // Solo aplicar consecutivo si no hubo conversión numérica
+        if (
+          fieldMapping.unitConversion &&
+          fieldMapping.unitConversion.enabled &&
+          typeof value === "number"
+        ) {
+          logger.warn(
+            `⚠️ No se aplicará consecutivo a ${fieldMapping.targetField} porque se aplicó conversión numérica (valor: ${value})`
+          );
+        } else {
+          value = currentConsecutive.formatted;
+          logger.debug(
+            `Asignando consecutivo ${currentConsecutive.formatted} a campo ${fieldMapping.targetField} en tabla ${tableConfig.name}`
+          );
 
-        value = currentConsecutive.formatted;
-        logger.debug(
-          `Asignando consecutivo ${currentConsecutive.formatted} a campo ${fieldMapping.targetField}`
-        );
+          // 🚨 DEBUG ESPECÍFICO PARA PEDIDO
+          if (fieldMapping.targetField === "PEDIDO") {
+            logger.warn(`🚨 PEDIDO CONSECUTIVO ASIGNADO: ${value}`);
+          }
+        }
       }
     }
 
     // PASO 5.5: 🎁 **APLICAR BONIFICACIONES** (NUEVA LÓGICA - DESPUÉS DEL CONSECUTIVO)
     if (bonificationMapping && mapping.hasBonificationProcessing) {
-      // 🔍 DEBUG ANTES DE PROCESAR BONIFICACIONES
-      if (
-        fieldMapping.targetField === "PEDIDO_LINEA" ||
-        fieldMapping.targetField === "PEDIDO_LINEA_BONIF"
-      ) {
-        logger.warn(`🔍 ANTES DE BONIFICACIONES:`);
-        logger.warn(`  - Campo: ${fieldMapping.targetField}`);
-        logger.warn(`  - Valor actual: ${value}`);
-        logger.warn(`  - Tipo valor: ${typeof value}`);
-        logger.warn(
-          `  - hasBonificationProcessing: ${mapping.hasBonificationProcessing}`
-        );
-      }
-
       const bonificationValue = this.processBonificationField(
         fieldMapping,
         sourceData,
@@ -2342,18 +2294,6 @@ class DynamicTransferService {
       );
 
       if (bonificationValue !== null) {
-        // 🔍 DEBUG DESPUÉS DE PROCESAR BONIFICACIONES
-        if (
-          fieldMapping.targetField === "PEDIDO_LINEA" ||
-          fieldMapping.targetField === "PEDIDO_LINEA_BONIF"
-        ) {
-          logger.warn(`🔍 DESPUÉS DE BONIFICACIONES:`);
-          logger.warn(`  - Campo: ${fieldMapping.targetField}`);
-          logger.warn(`  - Valor bonificación: ${bonificationValue}`);
-          logger.warn(`  - Tipo bonificación: ${typeof bonificationValue}`);
-          logger.warn(`  - Sobrescribiendo valor anterior: ${value}`);
-        }
-
         logger.debug(
           `🎁 Sobrescribiendo con valor de bonificación para ${fieldMapping.targetField}: ${bonificationValue}`
         );
@@ -4545,26 +4485,15 @@ class DynamicTransferService {
   ) {
     const targetField = fieldMapping.targetField;
 
-    // 🔍 DEBUG ESPECÍFICO
-    if (
-      targetField === "PEDIDO_LINEA" ||
-      targetField === "PEDIDO_LINEA_BONIF"
-    ) {
-      logger.warn(`🔍 DEBUG processBonificationField:`);
-      logger.warn(`  - Campo: ${targetField}`);
-      logger.warn(
-        `  - regularArticleField: ${bonificationConfig.regularArticleField}`
-      );
-      logger.warn(
-        `  - Datos disponibles: ${Object.keys(sourceData).join(", ")}`
-      );
-    }
+    // 🆕 AMPLIAR: Verificar si es un campo de bonificaciones
+    const bonificationFields = [
+      bonificationConfig.lineNumberField,
+      bonificationConfig.bonificationLineReferenceField,
+      bonificationConfig.bonificationQuantityField, // 🆕 NUEVO
+      bonificationConfig.regularQuantityField, // 🆕 NUEVO
+    ];
 
-    // Verificar si es un campo de bonificaciones
-    if (
-      targetField !== bonificationConfig.lineNumberField &&
-      targetField !== bonificationConfig.bonificationLineReferenceField
-    ) {
+    if (!bonificationFields.includes(targetField)) {
       return null; // No es un campo de bonificaciones
     }
 
@@ -4575,7 +4504,7 @@ class DynamicTransferService {
       return null;
     }
 
-    // Obtener el mapeo del artículo usando el método existente
+    // Obtener el mapeo del artículo
     const articleMapping = this.getArticleMappingFromBonificationData(
       articleCode,
       bonificationMapping
@@ -4588,38 +4517,52 @@ class DynamicTransferService {
       return null;
     }
 
-    // Asignar valores según el campo
-    if (targetField === bonificationConfig.lineNumberField) {
-      const lineNumber = articleMapping.lineNumber;
+    // 🆕 AMPLIAR: Asignar valores según el campo
+    switch (targetField) {
+      case bonificationConfig.lineNumberField:
+        // PEDIDO_LINEA
+        const lineNumber = articleMapping.lineNumber;
+        logger.debug(`🎁 PEDIDO_LINEA para ${articleCode}: ${lineNumber}`);
+        return lineNumber;
 
-      // 🔍 DEBUG ESPECÍFICO
-      if (targetField === "PEDIDO_LINEA") {
-        logger.warn(
-          `🔍 PEDIDO_LINEA asignado: ${lineNumber} para artículo ${articleCode}`
-        );
-      }
+      case bonificationConfig.bonificationLineReferenceField:
+        // PEDIDO_LINEA_BONIF
+        const bonifLineRef = articleMapping.bonificationLineReference;
+        if (bonifLineRef !== null && bonifLineRef !== undefined) {
+          logger.debug(
+            `🎁 PEDIDO_LINEA_BONIF para ${articleCode}: ${bonifLineRef}`
+          );
+          return bonifLineRef;
+        }
+        return null;
 
-      return lineNumber;
+      case bonificationConfig.bonificationQuantityField:
+        // 🆕 CANTIDAD_BONIFICAD
+        if (!articleMapping.isRegular) {
+          const bonificationQuantity =
+            sourceData[bonificationConfig.quantityField] || 0;
+          logger.debug(
+            `🎁 CANTIDAD_BONIFICAD para ${articleCode}: ${bonificationQuantity}`
+          );
+          return bonificationQuantity;
+        }
+        return 0; // Artículos regulares tienen 0 en cantidad bonificada
+
+      case bonificationConfig.regularQuantityField:
+        // 🆕 CANTIDAD_REGULAR
+        if (articleMapping.isRegular) {
+          const regularQuantity =
+            sourceData[bonificationConfig.quantityField] || 0;
+          logger.debug(
+            `🎁 CANTIDAD_REGULAR para ${articleCode}: ${regularQuantity}`
+          );
+          return regularQuantity;
+        }
+        return 0; // Bonificaciones tienen 0 en cantidad regular
+
+      default:
+        return null;
     }
-
-    if (targetField === bonificationConfig.bonificationLineReferenceField) {
-      const bonifLineRef = articleMapping.bonificationLineReference;
-
-      // 🔍 DEBUG ESPECÍFICO
-      if (targetField === "PEDIDO_LINEA_BONIF") {
-        logger.warn(
-          `🔍 PEDIDO_LINEA_BONIF asignado: ${bonifLineRef} para artículo ${articleCode}`
-        );
-      }
-
-      if (bonifLineRef !== null && bonifLineRef !== undefined) {
-        return bonifLineRef;
-      }
-      // Para artículos regulares, PEDIDO_LINEA_BONIF debe ser null
-      return null;
-    }
-
-    return null;
   }
 
   /**
@@ -4627,15 +4570,7 @@ class DynamicTransferService {
    * @private
    */
   getArticleMappingFromBonificationData(articleCode, bonificationMapping) {
-    // 🔍 DEBUG
-    logger.warn(`🔍 getArticleMappingFromBonificationData:`);
-    logger.warn(`  - articleCode: ${articleCode}`);
-    logger.warn(`  - bonificationMapping existe: ${!!bonificationMapping}`);
-
-    if (!bonificationMapping) {
-      logger.warn(`  - No hay bonificationMapping`);
-      return null;
-    }
+    if (!bonificationMapping) return null;
 
     // Verificar si es artículo regular
     if (
@@ -4643,9 +4578,6 @@ class DynamicTransferService {
       bonificationMapping.regularMapping.has(articleCode)
     ) {
       const regular = bonificationMapping.regularMapping.get(articleCode);
-      logger.warn(
-        `  - Es artículo regular: ${articleCode}, línea: ${regular.lineNumber}`
-      );
       return {
         isRegular: true,
         lineNumber: regular.lineNumber,
@@ -4660,9 +4592,6 @@ class DynamicTransferService {
     ) {
       const bonification =
         bonificationMapping.bonificationMapping.get(articleCode);
-      logger.warn(
-        `  - Es bonificación: ${articleCode}, línea: ${bonification.lineNumber}, refiere a: ${bonification.bonificationLineReference}`
-      );
       return {
         isRegular: false,
         lineNumber: bonification.lineNumber,
@@ -4670,7 +4599,6 @@ class DynamicTransferService {
       };
     }
 
-    logger.warn(`  - No se encontró mapeo para: ${articleCode}`);
     return null;
   }
 }

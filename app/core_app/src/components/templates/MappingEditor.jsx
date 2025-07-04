@@ -1,5 +1,3 @@
-// MappingEditor.jsx - CÓDIGO COMPLETO CON BONIFICACIONES INTEGRADAS
-
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import { ConsecutiveConfigSection, TransferApi, useAuth } from "../../index";
@@ -22,7 +20,6 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
   const { accessToken } = useAuth();
   const [loading, setLoading] = useState(true);
   const [mapping, setMapping] = useState({
-    // ... estado inicial sin _id ...
     name: "",
     description: "",
     transferType: "down",
@@ -43,6 +40,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     },
     consecutiveConfig: { enabled: false },
     foreignKeyDependencies: [],
+    // 🟢 CAMPOS PARA BONIFICACIONES COMPLETOS
     hasBonificationProcessing: false,
     bonificationConfig: {
       sourceTable: "FAC_DET_PED",
@@ -54,10 +52,12 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       lineNumberField: "PEDIDO_LINEA",
       bonificationLineReferenceField: "PEDIDO_LINEA_BONIF",
       quantityField: "CNT_MAX",
+      bonificationQuantityField: "CANTIDAD_BONIFICAD", // 🆕 Campo cantidad bonificada
+      regularQuantityField: "CANTIDAD_REGULAR", // 🆕 Campo cantidad regular
       applyPromotionRules: false,
     },
   });
-  const [isEditing, setIsEditing] = useState(!mappingId);
+  const [isEditing, setIsEditing] = useState(!!mappingId);
   const [activeTab, setActiveTab] = useState("general");
 
   useEffect(() => {
@@ -65,7 +65,6 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       loadMapping();
     } else {
       setLoading(false);
-      setIsEditing(false); // 🔧 Asegurar que está en modo crear
     }
   }, [mappingId]);
 
@@ -75,11 +74,20 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       const data = await api.getMappingById(accessToken, mappingId);
 
       if (data) {
-        // 🔧 IMPORTANTE: Mantener el _id cuando cargamos para edición
-        console.log("📥 Cargando mapping para edición:", data._id);
-
+        // 🟢 ASEGURAR CONFIGURACIÓN DE BONIFICACIONES CON VALORES POR DEFECTO
         const mappingWithDefaults = {
-          ...data, // 🔧 Mantener TODOS los campos incluyendo _id
+          ...data,
+          consecutiveConfig: {
+            enabled: false, // Default
+            fieldName: "",
+            detailFieldName: "",
+            lastValue: 0,
+            prefix: "",
+            pattern: "",
+            updateAfterTransfer: true,
+            applyToTables: [],
+            ...data.consecutiveConfig, // Sobrescribir con datos reales
+          },
           bonificationConfig: {
             sourceTable: "FAC_DET_PED",
             bonificationIndicatorField: "ART_BON",
@@ -90,6 +98,8 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
             lineNumberField: "PEDIDO_LINEA",
             bonificationLineReferenceField: "PEDIDO_LINEA_BONIF",
             quantityField: "CNT_MAX",
+            bonificationQuantityField: "CANTIDAD_BONIFICAD", // 🆕
+            regularQuantityField: "CANTIDAD_PEDIDA", // 🆕
             applyPromotionRules: false,
             ...data.bonificationConfig,
           },
@@ -102,9 +112,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
             ...data.markProcessedConfig,
           },
         };
-
         setMapping(mappingWithDefaults);
-        setIsEditing(true); // 🔧 Confirmar modo edición
       }
     } catch (error) {
       console.error("Error al cargar la configuración:", error);
@@ -302,7 +310,6 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         cancelButtonText: "Ver Detalles",
       }).then((result) => {
         if (result.dismiss === Swal.DismissReason.cancel) {
-          // Mostrar detalles en una segunda ventana
           showBonificationDetails(processed.details || []);
         }
       });
@@ -638,14 +645,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       }
     }
 
-    // 🔧 CORREGIR: Crear copia limpia sin _id para nuevos mappings
     const mappingCopy = JSON.parse(JSON.stringify(mapping));
-
-    // 🔧 IMPORTANTE: Si es un nuevo mapping (no isEditing), eliminar _id si existe
-    if (!isEditing && mappingCopy._id) {
-      delete mappingCopy._id;
-      console.log("🔧 Eliminando _id para nuevo mapping");
-    }
 
     // Limpiar y validar configuraciones de tablas
     mappingCopy.tableConfigs.forEach((tableConfig) => {
@@ -668,20 +668,13 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     });
 
     console.log("Mapping a guardar:", mappingCopy);
-    console.log("🔍 isEditing:", isEditing, "mappingId:", mappingId);
 
     setLoading(true);
     try {
       let result;
-
-      // 🔧 CORREGIR: Lógica clara de crear vs actualizar
-      if (mappingId && isEditing) {
-        // ACTUALIZAR mapping existente
-        console.log("🔄 Actualizando mapping existente:", mappingId);
+      if (isEditing) {
         result = await api.updateMapping(accessToken, mappingId, mappingCopy);
       } else {
-        // CREAR nuevo mapping
-        console.log("✨ Creando nuevo mapping");
         result = await api.createMapping(accessToken, mappingCopy);
       }
 
@@ -713,7 +706,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     }
   };
 
-  // 🟢 FUNCIÓN PARA HABILITAR/DESHABILITAR BONIFICACIONES
+  // 🟢 FUNCIONES PARA BONIFICACIONES
   const addBonificationConfig = () => {
     setMapping((prev) => ({
       ...prev,
@@ -739,41 +732,46 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     });
   };
 
-  // TODAS LAS DEMÁS FUNCIONES EXISTENTES (sin cambios)...
   const addDocumentTypeRule = () => {
     Swal.fire({
       title: "Nueva Regla de Tipo de Documento",
       html: `
       <div class="form-group">
-        <label for="typeName">Nombre del tipo</label>
-        <input id="typeName" class="swal2-input" placeholder="Ej: Pedido Normal">
+        <label for="ruleName">Nombre</label>
+        <input id="ruleName" class="swal2-input" placeholder="Ej: pedido">
       </div>
       <div class="form-group">
-        <label for="conditions">Condiciones (JSON)</label>
-        <textarea id="conditions" class="swal2-textarea" placeholder='{"fieldName": "value"}'></textarea>
+        <label for="sourceField">Campo de origen</label>
+        <input id="sourceField" class="swal2-input" placeholder="Ej: EST_PED">
+      </div>
+      <div class="form-group">
+        <label for="sourceValues">Valores (separados por coma)</label>
+        <input id="sourceValues" class="swal2-input" placeholder="Ej: P, p">
+      </div>
+      <div class="form-group">
+        <label for="description">Descripción</label>
+        <input id="description" class="swal2-input" placeholder="Ej: Pedidos pendientes">
       </div>
     `,
       showCancelButton: true,
       confirmButtonText: "Agregar",
       cancelButtonText: "Cancelar",
       preConfirm: () => {
-        const typeName = document.getElementById("typeName").value;
-        const conditions = document.getElementById("conditions").value;
+        const name = document.getElementById("ruleName").value;
+        const sourceField = document.getElementById("sourceField").value;
+        const sourceValuesStr = document.getElementById("sourceValues").value;
+        const description = document.getElementById("description").value;
 
-        if (!typeName) {
-          Swal.showValidationMessage("El nombre del tipo es obligatorio");
+        if (!name || !sourceField || !sourceValuesStr) {
+          Swal.showValidationMessage(
+            "Los campos nombre, campo origen y valores son obligatorios"
+          );
           return false;
         }
 
-        let parsedConditions;
-        try {
-          parsedConditions = conditions ? JSON.parse(conditions) : {};
-        } catch (e) {
-          Swal.showValidationMessage("Las condiciones deben ser JSON válido");
-          return false;
-        }
+        const sourceValues = sourceValuesStr.split(",").map((v) => v.trim());
 
-        return { typeName, conditions: parsedConditions };
+        return { name, sourceField, sourceValues, description };
       },
     }).then((result) => {
       if (result.isConfirmed) {
@@ -785,9 +783,74 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     });
   };
 
+  const editDocumentTypeRule = (index) => {
+    const rule = mapping.documentTypeRules[index];
+
+    Swal.fire({
+      title: "Editar Regla de Tipo de Documento",
+      html: `
+      <div class="form-group">
+        <label for="ruleName">Nombre</label>
+        <input id="ruleName" class="swal2-input" value="${
+          rule.name
+        }" placeholder="Ej: pedido">
+      </div>
+      <div class="form-group">
+        <label for="sourceField">Campo de origen</label>
+        <input id="sourceField" class="swal2-input" value="${
+          rule.sourceField
+        }" placeholder="Ej: EST_PED">
+      </div>
+      <div class="form-group">
+        <label for="sourceValues">Valores (separados por coma)</label>
+        <input id="sourceValues" class="swal2-input" value="${rule.sourceValues.join(
+          ", "
+        )}" placeholder="Ej: P, p">
+      </div>
+      <div class="form-group">
+        <label for="description">Descripción</label>
+        <input id="description" class="swal2-input" value="${
+          rule.description || ""
+        }" placeholder="Ej: Pedidos pendientes">
+      </div>
+    `,
+      showCancelButton: true,
+      confirmButtonText: "Guardar",
+      cancelButtonText: "Cancelar",
+      preConfirm: () => {
+        const name = document.getElementById("ruleName").value;
+        const sourceField = document.getElementById("sourceField").value;
+        const sourceValuesStr = document.getElementById("sourceValues").value;
+        const description = document.getElementById("description").value;
+
+        if (!name || !sourceField || !sourceValuesStr) {
+          Swal.showValidationMessage(
+            "Los campos nombre, campo origen y valores son obligatorios"
+          );
+          return false;
+        }
+
+        const sourceValues = sourceValuesStr.split(",").map((v) => v.trim());
+
+        return { name, sourceField, sourceValues, description };
+      },
+    }).then((result) => {
+      if (result.isConfirmed) {
+        const newRules = [...mapping.documentTypeRules];
+        newRules[index] = result.value;
+
+        setMapping({
+          ...mapping,
+          documentTypeRules: newRules,
+        });
+      }
+    });
+  };
+
   const removeDocumentTypeRule = (index) => {
     const newRules = [...mapping.documentTypeRules];
     newRules.splice(index, 1);
+
     setMapping({
       ...mapping,
       documentTypeRules: newRules,
@@ -798,29 +861,42 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     Swal.fire({
       title: "Nueva Dependencia de Foreign Key",
       html: `
-      <div class="form-group">
-        <label for="fieldName">Campo que genera la dependencia</label>
-        <input id="fieldName" class="swal2-input" placeholder="Ej: COD_CLI">
-      </div>
-      <div class="form-group">
-        <label for="dependentTable">Tabla dependiente</label>
-        <input id="dependentTable" class="swal2-input" placeholder="Ej: CLIENTES">
-      </div>
-      <div class="form-group">
-        <label for="executionOrder">Orden de ejecución</label>
-        <input id="executionOrder" type="number" class="swal2-input" value="0">
-      </div>
-      <div class="form-check">
-        <input type="checkbox" id="insertIfNotExists" class="swal2-checkbox">
-        <label for="insertIfNotExists">Insertar si no existe</label>
-      </div>
-      <div class="form-check">
-        <input type="checkbox" id="validateOnly" class="swal2-checkbox">
-        <label for="validateOnly">Solo validar (no insertar)</label>
-      </div>
-      <div class="form-group">
-        <label for="dependentFields">Campos mapeados (JSON)</label>
-        <textarea id="dependentFields" class="swal2-textarea" placeholder='[{"sourceField": "COD_CLI", "targetField": "CODIGO", "isKey": true}]'></textarea>
+      <div class="fk-dependency-form">
+        <div class="form-group">
+          <label for="fieldName">Campo que causa dependencia</label>
+          <input id="fieldName" class="swal2-input" placeholder="Ej: COD_CLT">
+          <small>Campo en la tabla origen que referencia otra tabla</small>
+        </div>
+
+        <div class="form-group">
+          <label for="dependentTable">Tabla dependiente</label>
+          <input id="dependentTable" class="swal2-input" placeholder="Ej: CLIENTES">
+          <small>Tabla donde debe existir/insertarse el registro referenciado</small>
+        </div>
+
+        <div class="form-group">
+          <label for="executionOrder">Orden de ejecución</label>
+          <input id="executionOrder" type="number" class="swal2-input" value="0" placeholder="0">
+          <small>Orden de procesamiento (0 = primero)</small>
+        </div>
+
+        <div class="form-check-group">
+          <div class="form-check">
+            <input type="checkbox" id="insertIfNotExists" class="swal2-checkbox">
+            <label for="insertIfNotExists">Insertar si no existe</label>
+          </div>
+
+          <div class="form-check">
+            <input type="checkbox" id="validateOnly" class="swal2-checkbox">
+            <label for="validateOnly">Solo validar (no insertar)</label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="dependentFields">Campos dependientes (JSON)</label>
+          <textarea id="dependentFields" class="swal2-textarea" placeholder='[{"sourceField": "COD_CLT", "targetField": "CODIGO", "isKey": true}]'></textarea>
+          <small>Mapeo de campos entre tabla origen y dependiente</small>
+        </div>
       </div>
     `,
       showCancelButton: true,
@@ -829,25 +905,26 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       preConfirm: () => {
         const fieldName = document.getElementById("fieldName").value;
         const dependentTable = document.getElementById("dependentTable").value;
-        const executionOrder =
-          parseInt(document.getElementById("executionOrder").value) || 0;
+        const executionOrder = parseInt(
+          document.getElementById("executionOrder").value
+        );
         const insertIfNotExists =
           document.getElementById("insertIfNotExists").checked;
         const validateOnly = document.getElementById("validateOnly").checked;
-        const dependentFieldsValue =
+        const dependentFieldsStr =
           document.getElementById("dependentFields").value;
 
         if (!fieldName || !dependentTable) {
           Swal.showValidationMessage(
-            "Campo y tabla dependiente son obligatorios"
+            "Los campos nombre del campo y tabla dependiente son obligatorios"
           );
           return false;
         }
 
         let dependentFields = [];
-        if (dependentFieldsValue) {
+        if (dependentFieldsStr) {
           try {
-            dependentFields = JSON.parse(dependentFieldsValue);
+            dependentFields = JSON.parse(dependentFieldsStr);
           } catch (e) {
             Swal.showValidationMessage(
               "El formato de campos dependientes debe ser JSON válido"
@@ -870,7 +947,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         setMapping({
           ...mapping,
           foreignKeyDependencies: [
-            ...mapping.foreignKeyDependencies,
+            ...(mapping.foreignKeyDependencies || []),
             result.value,
           ],
         });
@@ -884,70 +961,84 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     Swal.fire({
       title: "Editar Dependencia de Foreign Key",
       html: `
-      <div class="form-group">
-        <label for="fieldName">Campo que genera la dependencia</label>
-        <input id="fieldName" class="swal2-input" value="${
-          dependency.fieldName
-        }" placeholder="Ej: COD_CLI">
-      </div>
-      <div class="form-group">
-        <label for="dependentTable">Tabla dependiente</label>
-        <input id="dependentTable" class="swal2-input" value="${
-          dependency.dependentTable
-        }" placeholder="Ej: CLIENTES">
-      </div>
-      <div class="form-group">
-        <label for="executionOrder">Orden de ejecución</label>
-        <input id="executionOrder" type="number" class="swal2-input" value="${
-          dependency.executionOrder || 0
-        }">
-      </div>
-      <div class="form-check">
-        <input type="checkbox" id="insertIfNotExists" class="swal2-checkbox" ${
-          dependency.insertIfNotExists ? "checked" : ""
-        }>
-        <label for="insertIfNotExists">Insertar si no existe</label>
-      </div>
-      <div class="form-check">
-        <input type="checkbox" id="validateOnly" class="swal2-checkbox" ${
-          dependency.validateOnly ? "checked" : ""
-        }>
-        <label for="validateOnly">Solo validar (no insertar)</label>
-      </div>
-      <div class="form-group">
-        <label for="dependentFields">Campos mapeados (JSON)</label>
-        <textarea id="dependentFields" class="swal2-textarea" placeholder='[{"sourceField": "COD_CLI", "targetField": "CODIGO", "isKey": true}]'>${JSON.stringify(
-          dependency.dependentFields || [],
-          null,
-          2
-        )}</textarea>
+      <div class="fk-dependency-form">
+        <div class="form-group">
+          <label for="fieldName">Campo que causa dependencia</label>
+          <input id="fieldName" class="swal2-input" value="${
+            dependency.fieldName
+          }" placeholder="Ej: COD_CLT">
+          <small>Campo en la tabla origen que referencia otra tabla</small>
+        </div>
+
+        <div class="form-group">
+          <label for="dependentTable">Tabla dependiente</label>
+          <input id="dependentTable" class="swal2-input" value="${
+            dependency.dependentTable
+          }" placeholder="Ej: CLIENTES">
+          <small>Tabla donde debe existir/insertarse el registro referenciado</small>
+        </div>
+
+        <div class="form-group">
+          <label for="executionOrder">Orden de ejecución</label>
+          <input id="executionOrder" type="number" class="swal2-input" value="${
+            dependency.executionOrder || 0
+          }" placeholder="0">
+          <small>Orden de procesamiento (0 = primero)</small>
+        </div>
+
+        <div class="form-check-group">
+          <div class="form-check">
+            <input type="checkbox" id="insertIfNotExists" class="swal2-checkbox" ${
+              dependency.insertIfNotExists ? "checked" : ""
+            }>
+            <label for="insertIfNotExists">Insertar si no existe</label>
+          </div>
+
+          <div class="form-check">
+            <input type="checkbox" id="validateOnly" class="swal2-checkbox" ${
+              dependency.validateOnly ? "checked" : ""
+            }>
+            <label for="validateOnly">Solo validar (no insertar)</label>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label for="dependentFields">Campos dependientes (JSON)</label>
+          <textarea id="dependentFields" class="swal2-textarea" placeholder='[{"sourceField": "COD_CLT", "targetField": "CODIGO", "isKey": true}]'>${JSON.stringify(
+            dependency.dependentFields || [],
+            null,
+            2
+          )}</textarea>
+          <small>Mapeo de campos entre tabla origen y dependiente</small>
+        </div>
       </div>
     `,
       showCancelButton: true,
-      confirmButtonText: "Actualizar",
+      confirmButtonText: "Guardar",
       cancelButtonText: "Cancelar",
       preConfirm: () => {
         const fieldName = document.getElementById("fieldName").value;
         const dependentTable = document.getElementById("dependentTable").value;
-        const executionOrder =
-          parseInt(document.getElementById("executionOrder").value) || 0;
+        const executionOrder = parseInt(
+          document.getElementById("executionOrder").value
+        );
         const insertIfNotExists =
           document.getElementById("insertIfNotExists").checked;
         const validateOnly = document.getElementById("validateOnly").checked;
-        const dependentFieldsValue =
+        const dependentFieldsStr =
           document.getElementById("dependentFields").value;
 
         if (!fieldName || !dependentTable) {
           Swal.showValidationMessage(
-            "Campo y tabla dependiente son obligatorios"
+            "Los campos nombre del campo y tabla dependiente son obligatorios"
           );
           return false;
         }
 
         let dependentFields = [];
-        if (dependentFieldsValue) {
+        if (dependentFieldsStr) {
           try {
-            dependentFields = JSON.parse(dependentFieldsValue);
+            dependentFields = JSON.parse(dependentFieldsStr);
           } catch (e) {
             Swal.showValidationMessage(
               "El formato de campos dependientes debe ser JSON válido"
@@ -992,49 +1083,49 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     Swal.fire({
       title: "Nueva Configuración de Tabla",
       html: `
+    <div class="form-group">
+      <label for="tableName">Nombre</label>
+      <input id="tableName" class="swal2-input" placeholder="Ej: pedidosHeader">
+    </div>
+    <div class="form-group">
+      <label for="sourceTable">Tabla origen</label>
+      <input id="sourceTable" class="swal2-input" placeholder="Ej: FAC_ENC_PED">
+    </div>
+    <div class="form-group">
+      <label for="targetTable">Tabla destino</label>
+      <input id="targetTable" class="swal2-input" placeholder="Ej: PEDIDO">
+    </div>
+    <div class="form-group">
+      <label for="primaryKey">Clave primaria en tabla origen</label>
+      <input id="primaryKey" class="swal2-input" placeholder="Ej: NUM_PED">
+    </div>
+    <div class="form-group">
+      <label for="targetPrimaryKey">Clave primaria en tabla destino</label>
+      <input id="targetPrimaryKey" class="swal2-input" placeholder="Ej: PEDIDO">
+    </div>
+    <div class="form-check">
+      <input type="checkbox" id="isDetailTable" class="swal2-checkbox">
+      <label for="isDetailTable">¿Es tabla de detalle?</label>
+    </div>
+    <div id="detailOptions" style="display: none; margin-left: 20px; padding-left: 10px; border-left: 2px solid #eee;">
       <div class="form-group">
-        <label for="tableName">Nombre</label>
-        <input id="tableName" class="swal2-input" placeholder="Ej: pedidosHeader">
-      </div>
-      <div class="form-group">
-        <label for="sourceTable">Tabla origen</label>
-        <input id="sourceTable" class="swal2-input" placeholder="Ej: FAC_ENC_PED">
-      </div>
-      <div class="form-group">
-        <label for="targetTable">Tabla destino</label>
-        <input id="targetTable" class="swal2-input" placeholder="Ej: PEDIDO">
-      </div>
-      <div class="form-group">
-        <label for="primaryKey">Clave primaria en tabla origen</label>
-        <input id="primaryKey" class="swal2-input" placeholder="Ej: NUM_PED">
-      </div>
-      <div class="form-group">
-        <label for="targetPrimaryKey">Clave primaria en tabla destino</label>
-        <input id="targetPrimaryKey" class="swal2-input" placeholder="Ej: PEDIDO">
+        <label for="parentTableRef">Referencia a tabla padre</label>
+        <input id="parentTableRef" class="swal2-input" placeholder="Ej: pedidosHeader">
       </div>
       <div class="form-check">
-        <input type="checkbox" id="isDetailTable" class="swal2-checkbox">
-        <label for="isDetailTable">¿Es tabla de detalle?</label>
+        <input type="checkbox" id="useSameSourceTable" class="swal2-checkbox">
+        <label for="useSameSourceTable">Usar misma tabla origen que tabla padre</label>
       </div>
-      <div id="detailOptions" style="display: none; margin-left: 20px; padding-left: 10px; border-left: 2px solid #eee;">
-        <div class="form-group">
-          <label for="parentTableRef">Referencia a tabla padre</label>
-          <input id="parentTableRef" class="swal2-input" placeholder="Ej: pedidosHeader">
-        </div>
-        <div class="form-check">
-          <input type="checkbox" id="useSameSourceTable" class="swal2-checkbox">
-          <label for="useSameSourceTable">Usar la misma tabla origen</label>
-        </div>
-        <div class="form-group">
-          <label for="orderByColumn">Columna de ordenamiento</label>
-          <input id="orderByColumn" class="swal2-input" placeholder="Ej: NUM_LN">
-        </div>
-        <div class="form-group">
-          <label for="filterCondition">Condición de filtro</label>
-          <input id="filterCondition" class="swal2-input" placeholder="Ej: STATUS = 'ACTIVE'">
-        </div>
-      </div>
-    `,
+    </div>
+    <div class="form-group">
+      <label for="orderByColumn">Columna de ordenamiento (opcional)</label>
+      <input id="orderByColumn" class="swal2-input" placeholder="Ej: LIN_PED">
+    </div>
+    <div class="form-group">
+      <label for="filterCondition">Condición de filtro (opcional)</label>
+      <input id="filterCondition" class="swal2-input" placeholder="Ej: EST_LIN = 'A'">
+    </div>
+  `,
       showCancelButton: true,
       confirmButtonText: "Agregar",
       cancelButtonText: "Cancelar",
@@ -1049,10 +1140,10 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         });
       },
       preConfirm: () => {
-        const tableName = document.getElementById("tableName").value;
+        const name = document.getElementById("tableName").value;
         const sourceTable = document.getElementById("sourceTable").value;
         const targetTable = document.getElementById("targetTable").value;
-        const primaryKey = document.getElementById("primaryKey").value;
+        const primaryKey = document.getElementById("primaryKey").value || "ID";
         const targetPrimaryKey =
           document.getElementById("targetPrimaryKey").value;
         const isDetailTable = document.getElementById("isDetailTable").checked;
@@ -1063,19 +1154,19 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         const filterCondition =
           document.getElementById("filterCondition").value;
 
-        if (!tableName || !sourceTable || !targetTable) {
+        if (!name || !sourceTable || !targetTable) {
           Swal.showValidationMessage(
-            "Nombre, tabla origen y tabla destino son obligatorios"
+            "Los campos nombre, tabla origen y tabla destino son obligatorios"
           );
           return false;
         }
 
         return {
-          name: tableName,
+          name,
           sourceTable,
           targetTable,
-          primaryKey: primaryKey || null,
-          targetPrimaryKey: targetPrimaryKey || null,
+          primaryKey,
+          targetPrimaryKey,
           isDetailTable,
           parentTableRef: isDetailTable ? parentTableRef : null,
           useSameSourceTable,
@@ -1109,73 +1200,73 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     Swal.fire({
       title: "Editar Configuración de Tabla",
       html: `
+    <div class="form-group">
+      <label for="tableName">Nombre</label>
+      <input id="tableName" class="swal2-input" value="${
+        tableConfig.name
+      }" placeholder="Ej: pedidosHeader">
+    </div>
+    <div class="form-group">
+      <label for="sourceTable">Tabla origen</label>
+      <input id="sourceTable" class="swal2-input" value="${
+        tableConfig.sourceTable
+      }" placeholder="Ej: FAC_ENC_PED">
+    </div>
+    <div class="form-group">
+      <label for="targetTable">Tabla destino</label>
+      <input id="targetTable" class="swal2-input" value="${
+        tableConfig.targetTable
+      }" placeholder="Ej: PEDIDO">
+    </div>
+    <div class="form-group">
+      <label for="primaryKey">Clave primaria en tabla origen</label>
+      <input id="primaryKey" class="swal2-input" value="${
+        tableConfig.primaryKey || ""
+      }" placeholder="Ej: NUM_PED">
+    </div>
+    <div class="form-group">
+      <label for="targetPrimaryKey">Clave primaria en tabla destino</label>
+      <input id="targetPrimaryKey" class="swal2-input" value="${
+        tableConfig.targetPrimaryKey || ""
+      }" placeholder="Ej: PEDIDO">
+    </div>
+    <div class="form-check">
+      <input type="checkbox" id="isDetailTable" class="swal2-checkbox" ${
+        tableConfig.isDetailTable ? "checked" : ""
+      }>
+      <label for="isDetailTable">¿Es tabla de detalle?</label>
+    </div>
+    <div id="detailOptions" style="display: ${
+      tableConfig.isDetailTable ? "block" : "none"
+    }; margin-left: 20px; padding-left: 10px; border-left: 2px solid #eee;">
       <div class="form-group">
-        <label for="tableName">Nombre</label>
-        <input id="tableName" class="swal2-input" value="${
-          tableConfig.name
+        <label for="parentTableRef">Referencia a tabla padre</label>
+        <input id="parentTableRef" class="swal2-input" value="${
+          tableConfig.parentTableRef || ""
         }" placeholder="Ej: pedidosHeader">
       </div>
-      <div class="form-group">
-        <label for="sourceTable">Tabla origen</label>
-        <input id="sourceTable" class="swal2-input" value="${
-          tableConfig.sourceTable
-        }" placeholder="Ej: FAC_ENC_PED">
-      </div>
-      <div class="form-group">
-        <label for="targetTable">Tabla destino</label>
-        <input id="targetTable" class="swal2-input" value="${
-          tableConfig.targetTable
-        }" placeholder="Ej: PEDIDO">
-      </div>
-      <div class="form-group">
-        <label for="primaryKey">Clave primaria en tabla origen</label>
-        <input id="primaryKey" class="swal2-input" value="${
-          tableConfig.primaryKey || ""
-        }" placeholder="Ej: NUM_PED">
-      </div>
-      <div class="form-group">
-        <label for="targetPrimaryKey">Clave primaria en tabla destino</label>
-        <input id="targetPrimaryKey" class="swal2-input" value="${
-          tableConfig.targetPrimaryKey || ""
-        }" placeholder="Ej: PEDIDO">
-      </div>
       <div class="form-check">
-        <input type="checkbox" id="isDetailTable" class="swal2-checkbox" ${
-          tableConfig.isDetailTable ? "checked" : ""
+        <input type="checkbox" id="useSameSourceTable" class="swal2-checkbox" ${
+          tableConfig.useSameSourceTable ? "checked" : ""
         }>
-        <label for="isDetailTable">¿Es tabla de detalle?</label>
+        <label for="useSameSourceTable">Usar misma tabla origen que tabla padre</label>
       </div>
-      <div id="detailOptions" style="display: ${
-        tableConfig.isDetailTable ? "block" : "none"
-      }; margin-left: 20px; padding-left: 10px; border-left: 2px solid #eee;">
-        <div class="form-group">
-          <label for="parentTableRef">Referencia a tabla padre</label>
-          <input id="parentTableRef" class="swal2-input" value="${
-            tableConfig.parentTableRef || ""
-          }" placeholder="Ej: pedidosHeader">
-        </div>
-        <div class="form-check">
-          <input type="checkbox" id="useSameSourceTable" class="swal2-checkbox" ${
-            tableConfig.useSameSourceTable ? "checked" : ""
-          }>
-          <label for="useSameSourceTable">Usar la misma tabla origen</label>
-        </div>
-        <div class="form-group">
-          <label for="orderByColumn">Columna de ordenamiento</label>
-          <input id="orderByColumn" class="swal2-input" value="${
-            tableConfig.orderByColumn || ""
-          }" placeholder="Ej: NUM_LN">
-        </div>
-        <div class="form-group">
-          <label for="filterCondition">Condición de filtro</label>
-          <input id="filterCondition" class="swal2-input" value="${
-            tableConfig.filterCondition || ""
-          }" placeholder="Ej: STATUS = 'ACTIVE'">
-        </div>
-      </div>
-    `,
+    </div>
+    <div class="form-group">
+      <label for="orderByColumn">Columna de ordenamiento (opcional)</label>
+      <input id="orderByColumn" class="swal2-input" value="${
+        tableConfig.orderByColumn || ""
+      }" placeholder="Ej: LIN_PED">
+    </div>
+    <div class="form-group">
+      <label for="filterCondition">Condición de filtro (opcional)</label>
+      <input id="filterCondition" class="swal2-input" value="${
+        tableConfig.filterCondition || ""
+      }" placeholder="Ej: EST_LIN = 'A'">
+    </div>
+  `,
       showCancelButton: true,
-      confirmButtonText: "Actualizar",
+      confirmButtonText: "Guardar",
       cancelButtonText: "Cancelar",
       didOpen: () => {
         const isDetailCheckbox = document.getElementById("isDetailTable");
@@ -1188,7 +1279,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         });
       },
       preConfirm: () => {
-        const tableName = document.getElementById("tableName").value;
+        const name = document.getElementById("tableName").value;
         const sourceTable = document.getElementById("sourceTable").value;
         const targetTable = document.getElementById("targetTable").value;
         const primaryKey = document.getElementById("primaryKey").value;
@@ -1202,19 +1293,19 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         const filterCondition =
           document.getElementById("filterCondition").value;
 
-        if (!tableName || !sourceTable || !targetTable) {
+        if (!name || !sourceTable || !targetTable) {
           Swal.showValidationMessage(
-            "Nombre, tabla origen y tabla destino son obligatorios"
+            "Los campos nombre, tabla origen y tabla destino son obligatorios"
           );
           return false;
         }
 
         return {
-          name: tableName,
+          name,
           sourceTable,
           targetTable,
-          primaryKey: primaryKey || null,
-          targetPrimaryKey: targetPrimaryKey || null,
+          primaryKey,
+          targetPrimaryKey,
           isDetailTable,
           parentTableRef: isDetailTable ? parentTableRef : null,
           useSameSourceTable,
@@ -1236,13 +1327,703 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
   };
 
   const addFieldMapping = (tableIndex) => {
-    // [Función existente addFieldMapping - sin cambios]
-    // ... código completo de la función existente
+    Swal.fire({
+      title: "Nuevo Mapeo de Campo",
+      html: `
+      <div class="mapping-form">
+        <div class="field-section">
+          <div class="form-group">
+            <div class="field-container">
+              <div class="field-header">Campo origen (opcional)</div>
+              <input id="sourceField" class="swal2-input" placeholder="Ej: COD_CLT">
+            </div>
+          </div>
+
+          <div class="form-group">
+           <div class="field-container">
+             <div class="field-header">Campo destino (obligatorio)</div>
+             <input id="targetField" class="swal2-input" placeholder="Ej: CODIGO">
+           </div>
+         </div>
+       </div>
+
+       <!-- Opciones para especificar el origen de datos -->
+       <div class="data-source-options">
+         <!-- NUEVA OPCIÓN: Consulta en base de datos destino -->
+         <div class="form-check">
+           <input type="checkbox" id="lookupFromTarget" class="swal2-checkbox">
+           <label for="lookupFromTarget"><strong>¿Consultar en BD destino?</strong></label>
+         </div>
+       </div>
+
+       <!-- Opciones para valor por defecto -->
+       <div id="defaultValueSection" class="form-group">
+         <div class="field-container">
+           <div id="defaultValueLabel" class="field-header">Valor por defecto</div>
+           <textarea id="defaultValue" class="swal2-textarea" rows="3" placeholder="Ingrese valor por defecto o función SQL nativa (GETDATE(), etc.)"></textarea>
+           <div class="form-info">
+             <strong>Nota:</strong> Para usar funciones SQL nativas como GETDATE(), NEWID(), etc. ingréselas directamente en el valor por defecto.
+           </div>
+         </div>
+       </div>
+
+       <!-- Opciones de lookup -->
+       <div id="lookupSection" class="form-group" style="display: none;">
+         <div class="field-container">
+           <div class="field-header">Consulta SQL (obligatorio si lookup está habilitado)</div>
+           <textarea id="lookupQuery" class="swal2-textarea" rows="3" placeholder="SELECT campo FROM tabla WHERE condicion = @param"></textarea>
+           <div class="form-info">
+             Use parámetros como @nombreParametro en la consulta
+           </div>
+         </div>
+
+         <div class="form-check">
+           <input type="checkbox" id="validateExistence" class="swal2-checkbox">
+           <label for="validateExistence">Validar que existe en BD destino</label>
+         </div>
+
+         <div class="form-check">
+           <input type="checkbox" id="failIfNotFound" class="swal2-checkbox">
+           <label for="failIfNotFound">Fallar si no se encuentra</label>
+         </div>
+       </div>
+
+       <!-- Configuración adicional -->
+       <div class="additional-config">
+         <div class="form-check">
+           <input type="checkbox" id="removePrefix" class="swal2-checkbox">
+           <label for="removePrefix">Remover prefijo del valor</label>
+         </div>
+
+         <div class="form-check">
+           <input type="checkbox" id="isRequired" class="swal2-checkbox">
+           <label for="isRequired">Campo obligatorio</label>
+         </div>
+
+         <!-- NUEVA CONFIGURACIÓN: Conversión de unidades -->
+         <div class="form-check">
+           <input type="checkbox" id="enableConversion" class="swal2-checkbox">
+           <label for="enableConversion">Habilitar conversión de unidades</label>
+         </div>
+       </div>
+
+       <!-- NUEVA SECCIÓN: Configuración de conversión -->
+       <div id="conversionConfig" class="form-group" style="display: none;">
+         <div class="field-container">
+           <div class="field-header">Factor de conversión</div>
+           <input id="conversionFactor" type="number" step="any" class="swal2-input" placeholder="1.0">
+           <div class="form-info">
+             Factor numérico para multiplicar el valor original (ej: 1000 para convertir kg a g)
+           </div>
+         </div>
+
+         <div class="field-container">
+           <div class="field-header">Decimales</div>
+           <input id="conversionDecimals" type="number" min="0" max="10" class="swal2-input" placeholder="2">
+         </div>
+       </div>
+
+       <!-- Propiedades de visualización -->
+       <div class="display-properties">
+         <h4>Propiedades de Visualización</h4>
+
+         <div class="form-check">
+           <input type="checkbox" id="isEditable" class="swal2-checkbox" checked>
+           <label for="isEditable">Campo editable</label>
+         </div>
+
+         <div class="form-check">
+           <input type="checkbox" id="showInList" class="swal2-checkbox">
+           <label for="showInList">Mostrar en listado</label>
+         </div>
+
+         <div class="form-group">
+           <label for="displayName">Nombre a mostrar</label>
+           <input id="displayName" class="swal2-input" placeholder="Nombre legible para el usuario">
+         </div>
+
+         <div class="form-group">
+           <label for="displayOrder">Orden de visualización</label>
+           <input id="displayOrder" type="number" class="swal2-input" value="0" placeholder="0">
+         </div>
+
+         <div class="form-group">
+           <label for="fieldGroup">Grupo de campos</label>
+           <input id="fieldGroup" class="swal2-input" placeholder="Ej: Información General">
+         </div>
+
+         <div class="form-group">
+           <label for="fieldType">Tipo de campo</label>
+           <select id="fieldType" class="swal2-select">
+             <option value="text">Texto</option>
+             <option value="number">Número</option>
+             <option value="date">Fecha</option>
+             <option value="select">Lista desplegable</option>
+             <option value="textarea">Área de texto</option>
+             <option value="checkbox">Casilla de verificación</option>
+           </select>
+         </div>
+
+         <!-- Opciones para select -->
+         <div id="selectOptions" class="form-group" style="display: none;">
+           <label>Opciones de la lista</label>
+           <div id="optionsContainer"></div>
+           <button type="button" id="addOption" class="swal2-confirm swal2-styled" style="margin-top: 10px;">Añadir Opción</button>
+         </div>
+       </div>
+     </div>
+   `,
+      showCancelButton: true,
+      confirmButtonText: "Agregar",
+      cancelButtonText: "Cancelar",
+      width: 800,
+      didOpen: () => {
+        const lookupFromTargetCheckbox =
+          document.getElementById("lookupFromTarget");
+        const lookupSection = document.getElementById("lookupSection");
+        const defaultValueSection = document.getElementById(
+          "defaultValueSection"
+        );
+        const fieldTypeSelect = document.getElementById("fieldType");
+        const selectOptionsContainer = document.getElementById("selectOptions");
+        const enableConversionCheckbox =
+          document.getElementById("enableConversion");
+        const conversionConfigDiv = document.getElementById("conversionConfig");
+
+        const updateUI = () => {
+          const isLookup = lookupFromTargetCheckbox.checked;
+          lookupSection.style.display = isLookup ? "block" : "none";
+          defaultValueSection.style.display = isLookup ? "none" : "block";
+
+          selectOptionsContainer.style.display =
+            fieldTypeSelect.value === "select" ? "block" : "none";
+          conversionConfigDiv.style.display = enableConversionCheckbox.checked
+            ? "block"
+            : "none";
+        };
+
+        lookupFromTargetCheckbox.addEventListener("change", updateUI);
+        fieldTypeSelect.addEventListener("change", updateUI);
+        enableConversionCheckbox.addEventListener("change", updateUI);
+
+        updateUI();
+
+        const addOptionBtn = document.getElementById("addOption");
+        const optionsContainer = document.getElementById("optionsContainer");
+
+        addOptionBtn.addEventListener("click", () => {
+          const optionRow = document.createElement("div");
+          optionRow.className = "option-row";
+          optionRow.style = "display: flex; gap: 10px; margin-bottom: 10px;";
+
+          optionRow.innerHTML = `
+        <input type="text" class="swal2-input option-label" placeholder="Etiqueta" style="flex: 1;">
+        <input type="text" class="swal2-input option-value" placeholder="Valor" style="flex: 1;">
+        <button type="button" class="btn-remove-option" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 0 10px;">✕</button>
+      `;
+
+          optionsContainer.appendChild(optionRow);
+
+          optionRow
+            .querySelector(".btn-remove-option")
+            .addEventListener("click", () => {
+              optionRow.remove();
+            });
+        });
+      },
+      preConfirm: () => {
+        const sourceField = document.getElementById("sourceField").value;
+        const targetField = document.getElementById("targetField").value;
+        const defaultValue = document.getElementById("defaultValue").value;
+        const removePrefix = document.getElementById("removePrefix").checked;
+        const isRequired = document.getElementById("isRequired").checked;
+        const lookupFromTarget =
+          document.getElementById("lookupFromTarget").checked;
+        const lookupQuery = document.getElementById("lookupQuery").value;
+        const validateExistence =
+          document.getElementById("validateExistence").checked;
+        const failIfNotFound =
+          document.getElementById("failIfNotFound").checked;
+
+        const enableConversion =
+          document.getElementById("enableConversion").checked;
+        const conversionFactor =
+          parseFloat(document.getElementById("conversionFactor").value) || 1;
+        const conversionDecimals =
+          parseInt(document.getElementById("conversionDecimals").value) || 2;
+
+        const unitConversion = enableConversion
+          ? {
+              enabled: true,
+              factor: conversionFactor,
+              decimals: conversionDecimals,
+            }
+          : false;
+
+        const isEditable = document.getElementById("isEditable").checked;
+        const showInList = document.getElementById("showInList").checked;
+        const displayName = document.getElementById("displayName").value;
+        const displayOrder =
+          parseInt(document.getElementById("displayOrder").value) || 0;
+        const fieldGroup = document.getElementById("fieldGroup").value;
+        const fieldType = document.getElementById("fieldType").value;
+
+        let options = [];
+        if (fieldType === "select") {
+          const optionRows = document.querySelectorAll(".option-row");
+          optionRows.forEach((row) => {
+            const label = row.querySelector(".option-label").value;
+            const value = row.querySelector(".option-value").value;
+            if (label && value) {
+              options.push({ label, value });
+            }
+          });
+        }
+
+        if (!targetField) {
+          Swal.showValidationMessage("El campo destino es obligatorio");
+          return false;
+        }
+
+        if (lookupFromTarget && !lookupQuery) {
+          Swal.showValidationMessage(
+            "La consulta SQL es obligatoria cuando lookup está habilitado"
+          );
+          return false;
+        }
+
+        let lookupParams = [];
+        if (lookupFromTarget && lookupQuery) {
+          const paramMatches = lookupQuery.match(/@(\w+)/g);
+          if (paramMatches) {
+            lookupParams = paramMatches.map((param) => param.substring(1));
+          }
+        }
+
+        return {
+          sourceField: sourceField || null,
+          targetField,
+          defaultValue: defaultValue || null,
+          removePrefix,
+          isRequired,
+          valueMappings: [],
+          lookupFromTarget,
+          lookupQuery: lookupFromTarget ? lookupQuery : null,
+          lookupParams: lookupFromTarget ? lookupParams : [],
+          validateExistence: lookupFromTarget ? validateExistence : false,
+          failIfNotFound: lookupFromTarget ? failIfNotFound : false,
+          unitConversion,
+          isEditable,
+          showInList,
+          displayName: displayName || null,
+          displayOrder,
+          fieldGroup: fieldGroup || null,
+          fieldType,
+          options: options.length > 0 ? options : null,
+        };
+      },
+    }).then((result) => {
+      if (result.isConfirmed && result.value) {
+        const newTableConfigs = JSON.parse(
+          JSON.stringify(mapping.tableConfigs)
+        );
+
+        if (!newTableConfigs[tableIndex].fieldMappings) {
+          newTableConfigs[tableIndex].fieldMappings = [];
+        }
+
+        newTableConfigs[tableIndex].fieldMappings.push(result.value);
+
+        setMapping({
+          ...mapping,
+          tableConfigs: newTableConfigs,
+        });
+      }
+    });
   };
 
   const editFieldMapping = (tableIndex, fieldIndex) => {
-    // [Función existente editFieldMapping - sin cambios]
-    // ... código completo de la función existente
+    const field = mapping.tableConfigs[tableIndex].fieldMappings[fieldIndex];
+
+    if (!field) {
+      console.error(
+        `Campo no encontrado en posición ${tableIndex}-${fieldIndex}`
+      );
+      return;
+    }
+
+    const existingOptionsHtml = (field.options || [])
+      .map(
+        (option, index) => `
+     <div class="option-row" style="display: flex; gap: 10px; margin-bottom: 10px;">
+       <input type="text" class="swal2-input option-label" placeholder="Etiqueta" value="${option.label}" style="flex: 1;">
+       <input type="text" class="swal2-input option-value" placeholder="Valor" value="${option.value}" style="flex: 1;">
+       <button type="button" class="btn-remove-option" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 0 10px;">✕</button>
+     </div>
+   `
+      )
+      .join("");
+
+    Swal.fire({
+      title: "Editar Mapeo de Campo",
+      html: `
+     <div class="mapping-form">
+       <div class="field-section">
+         <div class="form-group">
+           <div class="field-container">
+             <div class="field-header">Campo origen (opcional)</div>
+             <input id="sourceField" class="swal2-input" value="${
+               field.sourceField || ""
+             }" placeholder="Ej: COD_CLT">
+           </div>
+         </div>
+
+         <div class="form-group">
+           <div class="field-container">
+             <div class="field-header">Campo destino (obligatorio)</div>
+             <input id="targetField" class="swal2-input" value="${
+               field.targetField
+             }" placeholder="Ej: CODIGO">
+           </div>
+         </div>
+       </div>
+
+       <!-- Opciones para especificar el origen de datos -->
+       <div class="data-source-options">
+         <div class="form-check">
+           <input type="checkbox" id="lookupFromTarget" class="swal2-checkbox" ${
+             field.lookupFromTarget ? "checked" : ""
+           }>
+           <label for="lookupFromTarget"><strong>¿Consultar en BD destino?</strong></label>
+         </div>
+       </div>
+
+       <!-- Opciones para valor por defecto -->
+       <div id="defaultValueSection" class="form-group">
+         <div class="field-container">
+           <div class="field-header">Valor por defecto</div>
+           <textarea id="defaultValue" class="swal2-textarea" rows="3" placeholder="Ingrese valor por defecto">${
+             field.defaultValue || ""
+           }</textarea>
+         </div>
+       </div>
+
+       <!-- Opciones de lookup -->
+       <div id="lookupSection" class="form-group" style="display: ${
+         field.lookupFromTarget ? "block" : "none"
+       };">
+         <div class="field-container">
+           <div class="field-header">Consulta SQL</div>
+           <textarea id="lookupQuery" class="swal2-textarea" rows="3" placeholder="SELECT campo FROM tabla WHERE condicion = @param">${
+             field.lookupQuery || ""
+           }</textarea>
+         </div>
+
+         <div class="form-check">
+           <input type="checkbox" id="validateExistence" class="swal2-checkbox" ${
+             field.validateExistence ? "checked" : ""
+           }>
+           <label for="validateExistence">Validar que existe en BD destino</label>
+         </div>
+
+         <div class="form-check">
+           <input type="checkbox" id="failIfNotFound" class="swal2-checkbox" ${
+             field.failIfNotFound ? "checked" : ""
+           }>
+           <label for="failIfNotFound">Fallar si no se encuentra</label>
+         </div>
+       </div>
+
+       <!-- Configuración adicional -->
+       <div class="additional-config">
+         <div class="form-check">
+           <input type="checkbox" id="removePrefix" class="swal2-checkbox" ${
+             field.removePrefix ? "checked" : ""
+           }>
+           <label for="removePrefix">Remover prefijo del valor</label>
+         </div>
+
+         <div class="form-check">
+           <input type="checkbox" id="isRequired" class="swal2-checkbox" ${
+             field.isRequired ? "checked" : ""
+           }>
+           <label for="isRequired">Campo obligatorio</label>
+         </div>
+
+         <!-- CONFIGURACIÓN: Conversión de unidades -->
+         <div class="form-check">
+           <input type="checkbox" id="enableConversion" class="swal2-checkbox" ${
+             field.unitConversion && field.unitConversion.enabled
+               ? "checked"
+               : ""
+           }>
+           <label for="enableConversion">Habilitar conversión de unidades</label>
+         </div>
+       </div>
+
+       <!-- SECCIÓN: Configuración de conversión -->
+       <div id="conversionConfig" class="form-group" style="display: ${
+         field.unitConversion && field.unitConversion.enabled ? "block" : "none"
+       };">
+         <div class="field-container">
+           <div class="field-header">Factor de conversión</div>
+           <input id="conversionFactor" type="number" step="any" class="swal2-input" value="${
+             field.unitConversion ? field.unitConversion.factor || 1 : 1
+           }" placeholder="1.0">
+         </div>
+
+         <div class="field-container">
+           <div class="field-header">Decimales</div>
+           <input id="conversionDecimals" type="number" min="0" max="10" class="swal2-input" value="${
+             field.unitConversion ? field.unitConversion.decimals || 2 : 2
+           }" placeholder="2">
+         </div>
+       </div>
+
+       <!-- Propiedades de visualización -->
+       <div class="display-properties">
+         <h4>Propiedades de Visualización</h4>
+
+         <div class="form-check">
+           <input type="checkbox" id="isEditable" class="swal2-checkbox" ${
+             field.isEditable !== false ? "checked" : ""
+           }>
+           <label for="isEditable">Campo editable</label>
+         </div>
+
+         <div class="form-check">
+           <input type="checkbox" id="showInList" class="swal2-checkbox" ${
+             field.showInList ? "checked" : ""
+           }>
+           <label for="showInList">Mostrar en listado</label>
+         </div>
+
+         <div class="form-group">
+           <label for="displayName">Nombre a mostrar</label>
+           <input id="displayName" class="swal2-input" value="${
+             field.displayName || ""
+           }" placeholder="Nombre legible para el usuario">
+         </div>
+
+         <div class="form-group">
+           <label for="displayOrder">Orden de visualización</label>
+           <input id="displayOrder" type="number" class="swal2-input" value="${
+             field.displayOrder || 0
+           }" placeholder="0">
+         </div>
+
+         <div class="form-group">
+           <label for="fieldGroup">Grupo de campos</label>
+           <input id="fieldGroup" class="swal2-input" value="${
+             field.fieldGroup || ""
+           }" placeholder="Ej: Información General">
+         </div>
+
+         <div class="form-group">
+           <label for="fieldType">Tipo de campo</label>
+           <select id="fieldType" class="swal2-select">
+             <option value="text" ${
+               field.fieldType === "text" ? "selected" : ""
+             }>Texto</option>
+             <option value="number" ${
+               field.fieldType === "number" ? "selected" : ""
+             }>Número</option>
+             <option value="date" ${
+               field.fieldType === "date" ? "selected" : ""
+             }>Fecha</option>
+             <option value="select" ${
+               field.fieldType === "select" ? "selected" : ""
+             }>Lista desplegable</option>
+             <option value="textarea" ${
+               field.fieldType === "textarea" ? "selected" : ""
+             }>Área de texto</option>
+             <option value="checkbox" ${
+               field.fieldType === "checkbox" ? "selected" : ""
+             }>Casilla de verificación</option>
+           </select>
+         </div>
+
+         <!-- Opciones para select -->
+         <div id="selectOptions" class="form-group" style="display: ${
+           field.fieldType === "select" ? "block" : "none"
+         };">
+           <label>Opciones de la lista</label>
+           <div id="optionsContainer">${existingOptionsHtml}</div>
+           <button type="button" id="addOption" class="swal2-confirm swal2-styled" style="margin-top: 10px;">Añadir Opción</button>
+         </div>
+       </div>
+     </div>
+   `,
+      showCancelButton: true,
+      confirmButtonText: "Guardar",
+      cancelButtonText: "Cancelar",
+      width: 800,
+      didOpen: () => {
+        const lookupFromTargetCheckbox =
+          document.getElementById("lookupFromTarget");
+        const lookupSection = document.getElementById("lookupSection");
+        const defaultValueSection = document.getElementById(
+          "defaultValueSection"
+        );
+        const fieldTypeSelect = document.getElementById("fieldType");
+        const selectOptionsContainer = document.getElementById("selectOptions");
+        const enableConversionCheckbox =
+          document.getElementById("enableConversion");
+        const conversionConfigDiv = document.getElementById("conversionConfig");
+
+        const updateUI = () => {
+          const isLookup = lookupFromTargetCheckbox.checked;
+          lookupSection.style.display = isLookup ? "block" : "none";
+          defaultValueSection.style.display = isLookup ? "none" : "block";
+
+          selectOptionsContainer.style.display =
+            fieldTypeSelect.value === "select" ? "block" : "none";
+          conversionConfigDiv.style.display = enableConversionCheckbox.checked
+            ? "block"
+            : "none";
+        };
+
+        lookupFromTargetCheckbox.addEventListener("change", updateUI);
+        fieldTypeSelect.addEventListener("change", updateUI);
+        enableConversionCheckbox.addEventListener("change", updateUI);
+
+        updateUI();
+
+        const addOptionBtn = document.getElementById("addOption");
+        const optionsContainer = document.getElementById("optionsContainer");
+
+        addOptionBtn.addEventListener("click", () => {
+          const optionRow = document.createElement("div");
+          optionRow.className = "option-row";
+          optionRow.style = "display: flex; gap: 10px; margin-bottom: 10px;";
+
+          optionRow.innerHTML = `
+        <input type="text" class="swal2-input option-label" placeholder="Etiqueta" style="flex: 1;">
+        <input type="text" class="swal2-input option-value" placeholder="Valor" style="flex: 1;">
+        <button type="button" class="btn-remove-option" style="background: #dc3545; color: white; border: none; border-radius: 4px; padding: 0 10px;">✕</button>
+      `;
+
+          optionsContainer.appendChild(optionRow);
+
+          optionRow
+            .querySelector(".btn-remove-option")
+            .addEventListener("click", () => {
+              optionRow.remove();
+            });
+        });
+
+        document.querySelectorAll(".btn-remove-option").forEach((btn) => {
+          btn.addEventListener("click", () => {
+            btn.closest(".option-row").remove();
+          });
+        });
+      },
+      preConfirm: () => {
+        const sourceField = document.getElementById("sourceField").value;
+        const targetField = document.getElementById("targetField").value;
+        const defaultValue = document.getElementById("defaultValue").value;
+        const removePrefix = document.getElementById("removePrefix").checked;
+        const isRequired = document.getElementById("isRequired").checked;
+        const lookupFromTarget =
+          document.getElementById("lookupFromTarget").checked;
+        const lookupQuery = document.getElementById("lookupQuery").value;
+        const validateExistence =
+          document.getElementById("validateExistence").checked;
+        const failIfNotFound =
+          document.getElementById("failIfNotFound").checked;
+
+        const enableConversion =
+          document.getElementById("enableConversion").checked;
+        const conversionFactor =
+          parseFloat(document.getElementById("conversionFactor").value) || 1;
+        const conversionDecimals =
+          parseInt(document.getElementById("conversionDecimals").value) || 2;
+
+        const unitConversion = enableConversion
+          ? {
+              enabled: true,
+              factor: conversionFactor,
+              decimals: conversionDecimals,
+            }
+          : false;
+
+        const isEditable = document.getElementById("isEditable").checked;
+        const showInList = document.getElementById("showInList").checked;
+        const displayName = document.getElementById("displayName").value;
+        const displayOrder =
+          parseInt(document.getElementById("displayOrder").value) || 0;
+        const fieldGroup = document.getElementById("fieldGroup").value;
+        const fieldType = document.getElementById("fieldType").value;
+
+        let options = [];
+        if (fieldType === "select") {
+          const optionRows = document.querySelectorAll(".option-row");
+          optionRows.forEach((row) => {
+            const label = row.querySelector(".option-label").value;
+            const value = row.querySelector(".option-value").value;
+            if (label && value) {
+              options.push({ label, value });
+            }
+          });
+        }
+
+        if (!targetField) {
+          Swal.showValidationMessage("El campo destino es obligatorio");
+          return false;
+        }
+
+        if (lookupFromTarget && !lookupQuery) {
+          Swal.showValidationMessage(
+            "La consulta SQL es obligatoria cuando lookup está habilitado"
+          );
+          return false;
+        }
+
+        let lookupParams = [];
+        if (lookupFromTarget && lookupQuery) {
+          const paramMatches = lookupQuery.match(/@(\w+)/g);
+          if (paramMatches) {
+            lookupParams = paramMatches.map((param) => param.substring(1));
+          }
+        }
+
+        const updatedField = {
+          sourceField: sourceField || null,
+          targetField,
+          defaultValue: defaultValue || null,
+          removePrefix,
+          isRequired,
+          valueMappings: field.valueMappings || [],
+          lookupFromTarget,
+          lookupQuery: lookupFromTarget ? lookupQuery : null,
+          lookupParams: lookupFromTarget ? lookupParams : [],
+          validateExistence: lookupFromTarget ? validateExistence : false,
+          failIfNotFound: lookupFromTarget ? failIfNotFound : false,
+          unitConversion,
+          isEditable,
+          showInList,
+          displayName: displayName || null,
+          displayOrder,
+          fieldGroup: fieldGroup || null,
+          fieldType,
+          options: options.length > 0 ? options : null,
+        };
+
+        return updatedField;
+      },
+    }).then((result) => {
+      if (result.isConfirmed && result.value) {
+        const newTableConfigs = JSON.parse(
+          JSON.stringify(mapping.tableConfigs)
+        );
+        newTableConfigs[tableIndex].fieldMappings[fieldIndex] = result.value;
+
+        setMapping({
+          ...mapping,
+          tableConfigs: newTableConfigs,
+        });
+      }
+    });
   };
 
   const removeFieldMapping = (tableIndex, fieldIndex) => {
@@ -1256,8 +2037,52 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
   };
 
   const addValueMapping = (tableIndex, fieldIndex) => {
-    // [Función existente addValueMapping - sin cambios]
-    // ... código completo de la función existente
+    Swal.fire({
+      title: "Nuevo Mapeo de Valor",
+      html: `
+     <div class="form-group">
+       <label for="sourceValue">Valor origen</label>
+       <input id="sourceValue" class="swal2-input" placeholder="Valor en la tabla origen">
+     </div>
+     <div class="form-group">
+       <label for="targetValue">Valor destino</label>
+       <input id="targetValue" class="swal2-input" placeholder="Valor en la tabla destino">
+     </div>
+     <div class="form-group">
+       <label for="description">Descripción (opcional)</label>
+       <input id="description" class="swal2-input" placeholder="Descripción del mapeo">
+     </div>
+   `,
+      showCancelButton: true,
+      confirmButtonText: "Agregar",
+      cancelButtonText: "Cancelar",
+      preConfirm: () => {
+        const sourceValue = document.getElementById("sourceValue").value;
+        const targetValue = document.getElementById("targetValue").value;
+        const description = document.getElementById("description").value;
+
+        if (!sourceValue || !targetValue) {
+          Swal.showValidationMessage(
+            "Los valores origen y destino son obligatorios"
+          );
+          return false;
+        }
+
+        return { sourceValue, targetValue, description };
+      },
+    }).then((result) => {
+      if (result.isConfirmed) {
+        const newTableConfigs = [...mapping.tableConfigs];
+        newTableConfigs[tableIndex].fieldMappings[
+          fieldIndex
+        ].valueMappings.push(result.value);
+
+        setMapping({
+          ...mapping,
+          tableConfigs: newTableConfigs,
+        });
+      }
+    });
   };
 
   const removeValueMapping = (tableIndex, fieldIndex, valueIndex) => {
@@ -1285,61 +2110,62 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     <Container>
       <Header>
         <h2>{isEditing ? "Editar" : "Nueva"} Configuración de Mapeo</h2>
-        <ButtonGroup>
-          <SaveButton onClick={handleSave} disabled={loading}>
-            <FaSave /> {loading ? "Guardando..." : "Guardar"}
-          </SaveButton>
-          <CancelButton onClick={onCancel}>
+        <ButtonsGroup>
+          <Button onClick={handleSave}>
+            <FaSave /> Guardar
+          </Button>
+          <Button $secondary onClick={onCancel}>
             <FaTimes /> Cancelar
-          </CancelButton>
-        </ButtonGroup>
+          </Button>
+        </ButtonsGroup>
       </Header>
 
-      <TabNavigation>
+      <Tabs>
         <Tab
-          active={activeTab === "general"}
+          $active={activeTab === "general"}
           onClick={() => setActiveTab("general")}
         >
           General
         </Tab>
         <Tab
-          active={activeTab === "rules"}
-          onClick={() => setActiveTab("rules")}
+          $active={activeTab === "documentTypes"}
+          onClick={() => setActiveTab("documentTypes")}
         >
-          Reglas
+          Tipos de Documento
         </Tab>
         <Tab
-          active={activeTab === "dependencies"}
+          $active={activeTab === "dependencies"}
           onClick={() => setActiveTab("dependencies")}
         >
-          Dependencias
+          Dependencias FK
         </Tab>
         <Tab
-          active={activeTab === "bonifications"}
-          onClick={() => setActiveTab("bonifications")}
-        >
-          🎁 Bonificaciones
-        </Tab>
-        <Tab
-          active={activeTab === "tables"}
+          $active={activeTab === "tables"}
           onClick={() => setActiveTab("tables")}
         >
           Tablas y Campos
         </Tab>
-      </TabNavigation>
+        {/* 🟢 TAB DE BONIFICACIONES */}
+        <Tab
+          $active={activeTab === "bonifications"}
+          onClick={() => setActiveTab("bonifications")}
+        >
+          <FaGift /> Bonificaciones
+        </Tab>
+      </Tabs>
 
       <Content>
-        {/* Pestaña General */}
+        {/* PESTAÑA GENERAL */}
         {activeTab === "general" && (
           <Section>
             <FormGroup>
-              <Label>Nombre de la configuración *</Label>
+              <Label>Nombre</Label>
               <Input
                 type="text"
                 name="name"
                 value={mapping.name}
                 onChange={handleChange}
-                placeholder="Nombre descriptivo de la configuración"
+                placeholder="Nombre de la configuración"
               />
             </FormGroup>
 
@@ -1416,6 +2242,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
               <CheckboxLabel>Configuración activa</CheckboxLabel>
             </CheckboxGroup>
 
+            {/* SECCIÓN DE MARCADO MEJORADA */}
             <FormGroup>
               <Label>Estrategia de marcado de procesados</Label>
               <Select
@@ -1436,19 +2263,19 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                     name="markProcessedField"
                     value={mapping.markProcessedField}
                     onChange={handleChange}
-                    placeholder="Campo para marcar como procesado"
+                    placeholder="Campo para marcar documentos procesados"
                   />
 
-                  <Label style={{ marginTop: "10px" }}>
-                    Valor para marcar como procesado
-                  </Label>
-                  <Input
-                    type="text"
-                    name="markProcessedValue"
-                    value={mapping.markProcessedValue}
-                    onChange={handleChange}
-                    placeholder="Valor que indica procesado"
-                  />
+                  <div style={{ marginTop: "10px" }}>
+                    <Label>Valor para marcar procesados</Label>
+                    <Input
+                      type="text"
+                      name="markProcessedValue"
+                      value={mapping.markProcessedValue}
+                      onChange={handleChange}
+                      placeholder="Valor para marcar como procesado"
+                    />
+                  </div>
 
                   {mapping.markProcessedStrategy === "batch" && (
                     <>
@@ -1502,27 +2329,110 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                       </CheckboxGroup>
                     </>
                   )}
+
+                  <div
+                    style={{
+                      marginTop: "15px",
+                      padding: "12px",
+                      backgroundColor: "#fff3cd",
+                      border: "1px solid #ffeaa7",
+                      borderLeft: "4px solid #fdcb6e",
+                      borderRadius: "6px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontWeight: "600",
+                        color: "#856404",
+                        marginBottom: "8px",
+                        fontSize: "0.95rem",
+                      }}
+                    >
+                      ⚠️ Estrategia: {mapping.markProcessedStrategy}
+                    </div>
+                    <div
+                      style={{
+                        color: "#856404",
+                        fontSize: "0.85rem",
+                        lineHeight: "1.4",
+                      }}
+                    >
+                      {mapping.markProcessedStrategy === "individual" && (
+                        <>
+                          Cada documento se marca individualmente después de ser
+                          procesado. Esto es más seguro pero más lento para
+                          grandes volúmenes.
+                        </>
+                      )}
+                      {mapping.markProcessedStrategy === "batch" && (
+                        <>
+                          Los documentos se marcan en lotes al final del
+                          procesamiento. Esto es más rápido pero todos los
+                          documentos del lote se marcarán aunque algunos fallen.
+                        </>
+                      )}
+                    </div>
+                  </div>
+
+                  <div
+                    style={{
+                      marginTop: "15px",
+                      padding: "12px",
+                      backgroundColor: "#e3f2fd",
+                      border: "1px solid #bbdefb",
+                      borderLeft: "4px solid #2196f3",
+                      borderRadius: "6px",
+                    }}
+                  >
+                    <div
+                      style={{
+                        fontWeight: "600",
+                        color: "#1565c0",
+                        marginBottom: "8px",
+                        fontSize: "0.95rem",
+                      }}
+                    >
+                      💡 Recomendaciones de Uso
+                    </div>
+                    <ul
+                      style={{
+                        margin: "0",
+                        paddingLeft: "20px",
+                        color: "#424242",
+                        fontSize: "0.85rem",
+                        lineHeight: "1.4",
+                      }}
+                    >
+                      <li style={{ marginBottom: "4px" }}>
+                        <strong>Individual:</strong> Ideal para documentos
+                        críticos o volúmenes pequeños (menos de 50 documentos)
+                      </li>
+                      <li style={{ marginBottom: "4px" }}>
+                        <strong>Lotes:</strong> Recomendado para volúmenes
+                        grandes (más de 100 documentos) por mejor rendimiento
+                      </li>
+                      <li style={{ marginBottom: "4px" }}>
+                        <strong>Ninguno:</strong> Útil para pruebas o cuando se
+                        requiere reprocesamiento múltiple
+                      </li>
+                    </ul>
+                  </div>
                 </div>
               )}
             </FormGroup>
 
-            <ConsecutiveConfigSection
-              consecutiveConfig={mapping.consecutiveConfig}
-              onChange={(config) =>
-                handleChange({
-                  target: {
-                    name: "consecutiveConfig",
-                    value: config,
-                    type: "custom",
-                  },
-                })
-              }
-            />
+            {/* Sección de Consecutivos */}
+            <FormGroup>
+              <ConsecutiveConfigSection
+                mapping={mapping}
+                handleChange={handleChange}
+              />
+            </FormGroup>
           </Section>
         )}
 
-        {/* Pestaña Reglas */}
-        {activeTab === "rules" && (
+        {/* Pestaña Tipos de Documento */}
+        {activeTab === "documentTypes" && (
           <Section>
             <SectionHeader>
               <h3>Reglas de Tipo de Documento</h3>
@@ -1537,19 +2447,43 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
               mapping.documentTypeRules.map((rule, index) => (
                 <Card key={index}>
                   <CardHeader>
-                    <h4>{rule.typeName}</h4>
-                    <SmallButton onClick={() => removeDocumentTypeRule(index)}>
-                      <FaTrash />
-                    </SmallButton>
+                    <h4>{rule.name}</h4>
+                    <div className="button_container">
+                      <SmallButton
+                        onClick={() => editDocumentTypeRule(index)}
+                        title="Editar regla"
+                      >
+                        <FaEdit />
+                      </SmallButton>
+                      <SmallButton
+                        $danger
+                        onClick={() => removeDocumentTypeRule(index)}
+                      >
+                        <FaTrash />
+                      </SmallButton>
+                    </div>
                   </CardHeader>
+
                   <CardBody>
                     <PropertyList>
                       <PropertyItem>
-                        <PropertyLabel>Condiciones:</PropertyLabel>
+                        <PropertyLabel>Campo origen:</PropertyLabel>
+                        <PropertyValue>{rule.sourceField}</PropertyValue>
+                      </PropertyItem>
+
+                      <PropertyItem>
+                        <PropertyLabel>Valores:</PropertyLabel>
                         <PropertyValue>
-                          <pre>{JSON.stringify(rule.conditions, null, 2)}</pre>
+                          {rule.sourceValues.join(", ")}
                         </PropertyValue>
                       </PropertyItem>
+
+                      {rule.description && (
+                        <PropertyItem>
+                          <PropertyLabel>Descripción:</PropertyLabel>
+                          <PropertyValue>{rule.description}</PropertyValue>
+                        </PropertyItem>
+                      )}
                     </PropertyList>
                   </CardBody>
                 </Card>
@@ -1558,7 +2492,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           </Section>
         )}
 
-        {/* Pestaña Dependencias */}
+        {/* Pestaña dependencias de Foreign Key */}
         {activeTab === "dependencies" && (
           <Section>
             <SectionHeader>
@@ -1569,7 +2503,14 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
             </SectionHeader>
 
             {mapping.foreignKeyDependencies.length === 0 ? (
-              <EmptyMessage>No hay dependencias configuradas</EmptyMessage>
+              <EmptyMessage>
+                <p>No hay dependencias configuradas</p>
+                <small>
+                  Las dependencias de Foreign Key permiten insertar registros en
+                  tablas relacionadas antes de procesar el documento principal,
+                  evitando errores de integridad referencial.
+                </small>
+              </EmptyMessage>
             ) : (
               mapping.foreignKeyDependencies.map((dependency, index) => (
                 <Card key={index}>
@@ -1577,23 +2518,40 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                     <h4>
                       {dependency.fieldName} → {dependency.dependentTable}
                     </h4>
-                    <div>
+                    <div className="button_container">
                       <SmallButton
                         onClick={() => editForeignKeyDependency(index)}
+                        title="Editar dependencia"
                       >
                         <FaEdit />
                       </SmallButton>
                       <SmallButton
+                        $danger
                         onClick={() => removeForeignKeyDependency(index)}
                       >
                         <FaTrash />
                       </SmallButton>
                     </div>
                   </CardHeader>
+
                   <CardBody>
                     <PropertyList>
                       <PropertyItem>
-                        <PropertyLabel>Comportamiento:</PropertyLabel>
+                        <PropertyLabel>
+                          Campo que causa dependencia:
+                        </PropertyLabel>
+                        <PropertyValue>{dependency.fieldName}</PropertyValue>
+                      </PropertyItem>
+
+                      <PropertyItem>
+                        <PropertyLabel>Tabla dependiente:</PropertyLabel>
+                        <PropertyValue>
+                          {dependency.dependentTable}
+                        </PropertyValue>
+                      </PropertyItem>
+
+                      <PropertyItem>
+                        <PropertyLabel>Acción:</PropertyLabel>
                         <PropertyValue>
                           {dependency.insertIfNotExists
                             ? dependency.validateOnly
@@ -1632,11 +2590,169 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
           </Section>
         )}
 
-        {/* 🎁 PESTAÑA DE BONIFICACIONES */}
+        {/* Pestaña Tablas y Campos */}
+        {activeTab === "tables" && (
+          <Section>
+            <SectionHeader>
+              <h3>Configuración de Tablas</h3>
+              <SmallButton onClick={addTableConfig}>
+                <FaPlus /> Añadir Tabla
+              </SmallButton>
+            </SectionHeader>
+
+            {mapping.tableConfigs.length === 0 ? (
+              <EmptyMessage>No hay tablas configuradas</EmptyMessage>
+            ) : (
+              mapping.tableConfigs.map((tableConfig, tableIndex) => (
+                <Card key={tableIndex} $isDetail={tableConfig.isDetailTable}>
+                  <CardHeader>
+                    <h4>{tableConfig.name}</h4>
+                    <div className="button_container">
+                      <SmallButton
+                        onClick={() => editTableConfig(tableIndex)}
+                        title="Editar tabla"
+                      >
+                        <FaEdit />
+                      </SmallButton>
+                      <SmallButton
+                        $danger
+                        onClick={() => removeTableConfig(tableIndex)}
+                      >
+                        <FaTrash />
+                      </SmallButton>
+                    </div>
+                  </CardHeader>
+
+                  <CardBody>
+                    <PropertyList>
+                      <PropertyItem>
+                        <PropertyLabel>Tabla origen:</PropertyLabel>
+                        <PropertyValue>{tableConfig.sourceTable}</PropertyValue>
+                      </PropertyItem>
+
+                      <PropertyItem>
+                        <PropertyLabel>Tabla destino:</PropertyLabel>
+                        <PropertyValue>{tableConfig.targetTable}</PropertyValue>
+                      </PropertyItem>
+
+                      <PropertyItem>
+                        <PropertyLabel>Clave primaria:</PropertyLabel>
+                        <PropertyValue>
+                          {tableConfig.primaryKey || "N/A"}
+                        </PropertyValue>
+                      </PropertyItem>
+
+                      <PropertyItem>
+                        <PropertyLabel>Tipo:</PropertyLabel>
+                        <PropertyValue>
+                          {tableConfig.isDetailTable ? "Detalle" : "Principal"}
+                        </PropertyValue>
+                      </PropertyItem>
+
+                      {tableConfig.isDetailTable &&
+                        tableConfig.parentTableRef && (
+                          <PropertyItem>
+                            <PropertyLabel>Tabla padre:</PropertyLabel>
+                            <PropertyValue>
+                              {tableConfig.parentTableRef}
+                            </PropertyValue>
+                          </PropertyItem>
+                        )}
+                    </PropertyList>
+
+                    <SubSection>
+                      <SubSectionHeader>
+                        <h5>Mapeo de Campos</h5>
+                        <SmallButton
+                          onClick={() => addFieldMapping(tableIndex)}
+                        >
+                          <FaPlus /> Añadir Campo
+                        </SmallButton>
+                      </SubSectionHeader>
+
+                      {tableConfig.fieldMappings.length === 0 ? (
+                        <EmptyMessage>No hay campos mapeados</EmptyMessage>
+                      ) : (
+                        <Table>
+                          <thead>
+                            <tr>
+                              <th>Campo Origen</th>
+                              <th>Campo Destino</th>
+                              <th>Valor Default</th>
+                              <th>Función SQL</th>
+                              <th>Mapeos</th>
+                              <th>Acciones</th>
+                            </tr>
+                          </thead>
+                          <tbody>
+                            {tableConfig.fieldMappings.map(
+                              (field, fieldIndex) => (
+                                <tr key={fieldIndex}>
+                                  <td>{field.sourceField || "-"}</td>
+                                  <td>{field.targetField}</td>
+                                  <td>
+                                    {field.defaultValue !== undefined
+                                      ? String(field.defaultValue)
+                                      : "-"}
+                                  </td>
+                                  <td>{field.isSqlFunction ? "Sí" : "No"}</td>
+                                  <td>
+                                    {field.valueMappings?.length || 0}
+                                    {field.valueMappings?.length > 0 && (
+                                      <SmallButton
+                                        onClick={() =>
+                                          addValueMapping(
+                                            tableIndex,
+                                            fieldIndex
+                                          )
+                                        }
+                                        style={{ marginLeft: "5px" }}
+                                      >
+                                        <FaPlus />
+                                      </SmallButton>
+                                    )}
+                                  </td>
+                                  <td>
+                                    <SmallButton
+                                      onClick={() =>
+                                        editFieldMapping(tableIndex, fieldIndex)
+                                      }
+                                    >
+                                      <FaEdit />
+                                    </SmallButton>
+                                    <SmallButton
+                                      $danger
+                                      onClick={() =>
+                                        removeFieldMapping(
+                                          tableIndex,
+                                          fieldIndex
+                                        )
+                                      }
+                                    >
+                                      <FaTrash />
+                                    </SmallButton>
+                                  </td>
+                                </tr>
+                              )
+                            )}
+                          </tbody>
+                        </Table>
+                      )}
+                    </SubSection>
+                  </CardBody>
+                </Card>
+              ))
+            )}
+          </Section>
+        )}
+
+        {/* 🟢 PESTAÑA BONIFICACIONES COMPLETA */}
         {activeTab === "bonifications" && (
           <Section>
             <SectionHeader>
-              <h3>Procesamiento de Bonificaciones</h3>
+              <h3>
+                <FaGift /> Procesamiento de Bonificaciones
+              </h3>
               {!mapping.hasBonificationProcessing ? (
                 <SmallButton onClick={addBonificationConfig}>
                   <FaPlus /> Habilitar Bonificaciones
@@ -1831,42 +2947,84 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                     </FormGroup>
                   </FormRow>
 
-                  <FormGroup>
-                    <Label>Campo de cantidad</Label>
-                    <Input
-                      type="text"
-                      name="bonificationConfig.quantityField"
-                      value={mapping.bonificationConfig.quantityField}
-                      onChange={handleChange}
-                      placeholder="ej: CNT_MAX"
-                    />
-                    <small style={{ color: "#6c757d", fontSize: "0.75rem" }}>
-                      Campo que contiene la cantidad (regular o bonificada)
-                    </small>
-                  </FormGroup>
+                  <FormRow>
+                    <FormGroup>
+                      <Label>Campo de cantidad</Label>
+                      <Input
+                        type="text"
+                        name="bonificationConfig.quantityField"
+                        value={mapping.bonificationConfig.quantityField}
+                        onChange={handleChange}
+                        placeholder="ej: CNT_MAX"
+                      />
+                      <small style={{ color: "#6c757d", fontSize: "0.75rem" }}>
+                        Campo que contiene la cantidad (regular o bonificada)
+                      </small>
+                    </FormGroup>
 
-                  <CheckboxGroup>
-                    <Checkbox
-                      type="checkbox"
-                      name="bonificationConfig.applyPromotionRules"
-                      checked={mapping.bonificationConfig.applyPromotionRules}
-                      onChange={handleChange}
-                    />
-                    <CheckboxLabel>
-                      Aplicar reglas de promociones automáticamente
-                    </CheckboxLabel>
-                    <small
-                      style={{
-                        color: "#6c757d",
-                        fontSize: "0.75rem",
-                        display: "block",
-                        marginTop: "5px",
-                      }}
+                    {/* 🆕 NUEVO CAMPO: Cantidad bonificada */}
+                    <FormGroup>
+                      <Label>Campo de cantidad bonificada</Label>
+                      <Input
+                        type="text"
+                        name="bonificationConfig.bonificationQuantityField"
+                        value={
+                          mapping.bonificationConfig.bonificationQuantityField
+                        }
+                        onChange={handleChange}
+                        placeholder="ej: CANTIDAD_BONIFICAD"
+                      />
+                      <small style={{ color: "#6c757d", fontSize: "0.75rem" }}>
+                        Campo específico para la cantidad bonificada
+                      </small>
+                    </FormGroup>
+                  </FormRow>
+
+                  <FormRow>
+                    {/* 🆕 NUEVO CAMPO: Cantidad regular */}
+                    <FormGroup>
+                      <Label>Campo de cantidad regular</Label>
+                      <Input
+                        type="text"
+                        name="bonificationConfig.regularQuantityField"
+                        value={mapping.bonificationConfig.regularQuantityField}
+                        onChange={handleChange}
+                        placeholder="ej: CANTIDAD_REGULAR"
+                      />
+                      <small style={{ color: "#6c757d", fontSize: "0.75rem" }}>
+                        Campo específico para la cantidad regular del artículo
+                      </small>
+                    </FormGroup>
+
+                    <FormGroup
+                      style={{ display: "flex", alignItems: "center" }}
                     >
-                      Cuando está habilitado, el sistema aplicará reglas de
-                      promociones según el contexto del cliente
-                    </small>
-                  </CheckboxGroup>
+                      <CheckboxGroup>
+                        <Checkbox
+                          type="checkbox"
+                          name="bonificationConfig.applyPromotionRules"
+                          checked={
+                            mapping.bonificationConfig.applyPromotionRules
+                          }
+                          onChange={handleChange}
+                        />
+                        <CheckboxLabel>
+                          Aplicar reglas de promociones automáticamente
+                        </CheckboxLabel>
+                      </CheckboxGroup>
+                      <small
+                        style={{
+                          color: "#6c757d",
+                          fontSize: "0.75rem",
+                          display: "block",
+                          marginTop: "5px",
+                        }}
+                      >
+                        Cuando está habilitado, el sistema aplicará reglas de
+                        promociones según el contexto del cliente
+                      </small>
+                    </FormGroup>
+                  </FormRow>
 
                   <div
                     style={{
@@ -1951,7 +3109,25 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                           color: "#495057",
                         }}
                       >
-                        5. Limpia{" "}
+                        5. Procesa cantidades separadas para regulares (
+                        {mapping.bonificationConfig.regularQuantityField ||
+                          "N/A"}
+                        ) y bonificaciones (
+                        {mapping.bonificationConfig.bonificationQuantityField ||
+                          "N/A"}
+                        )
+                      </div>
+                      <div
+                        style={{
+                          padding: "8px 12px",
+                          background: "white",
+                          borderRadius: "4px",
+                          borderLeft: "3px solid #007bff",
+                          fontSize: "0.875rem",
+                          color: "#495057",
+                        }}
+                      >
+                        6. Limpia{" "}
                         {mapping.bonificationConfig.bonificationReferenceField}{" "}
                         original para inserción en tabla destino
                       </div>
@@ -1976,142 +3152,10 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                   }}
                 >
                   Una vez habilitado podrá configurar campos específicos, reglas
-                  de promociones y validar la configuración antes de procesar
-                  documentos.
+                  de promociones, campos de cantidad separados y validar la
+                  configuración antes de procesar documentos.
                 </p>
               </EmptyMessage>
-            )}
-          </Section>
-        )}
-
-        {/* Pestaña Tablas y Campos */}
-        {activeTab === "tables" && (
-          <Section>
-            <SectionHeader>
-              <h3>Configuración de Tablas</h3>
-              <SmallButton onClick={addTableConfig}>
-                <FaPlus /> Añadir Tabla
-              </SmallButton>
-            </SectionHeader>
-
-            {mapping.tableConfigs.length === 0 ? (
-              <EmptyMessage>No hay tablas configuradas</EmptyMessage>
-            ) : (
-              mapping.tableConfigs.map((tableConfig, tableIndex) => (
-                <Card key={tableIndex}>
-                  <CardHeader>
-                    <h4>{tableConfig.name}</h4>
-                    <div>
-                      <SmallButton onClick={() => editTableConfig(tableIndex)}>
-                        <FaEdit />
-                      </SmallButton>
-                      <SmallButton
-                        onClick={() => removeTableConfig(tableIndex)}
-                      >
-                        <FaTrash />
-                      </SmallButton>
-                    </div>
-                  </CardHeader>
-                  <CardBody>
-                    <PropertyList>
-                      <PropertyItem>
-                        <PropertyLabel>Tabla origen:</PropertyLabel>
-                        <PropertyValue>{tableConfig.sourceTable}</PropertyValue>
-                      </PropertyItem>
-
-                      <PropertyItem>
-                        <PropertyLabel>Tabla destino:</PropertyLabel>
-                        <PropertyValue>{tableConfig.targetTable}</PropertyValue>
-                      </PropertyItem>
-
-                      <PropertyItem>
-                        <PropertyLabel>Tipo:</PropertyLabel>
-                        <PropertyValue>
-                          {tableConfig.isDetailTable ? "Detalle" : "Principal"}
-                        </PropertyValue>
-                      </PropertyItem>
-
-                      {tableConfig.isDetailTable &&
-                        tableConfig.parentTableRef && (
-                          <PropertyItem>
-                            <PropertyLabel>Tabla padre:</PropertyLabel>
-                            <PropertyValue>
-                              {tableConfig.parentTableRef}
-                            </PropertyValue>
-                          </PropertyItem>
-                        )}
-                    </PropertyList>
-
-                    <SubSection>
-                      <SubSectionHeader>
-                        <h5>Mapeo de Campos</h5>
-                        <SmallButton
-                          onClick={() => addFieldMapping(tableIndex)}
-                        >
-                          <FaPlus /> Añadir Campo
-                        </SmallButton>
-                      </SubSectionHeader>
-
-                      {tableConfig.fieldMappings.length === 0 ? (
-                        <EmptyMessage>No hay campos mapeados</EmptyMessage>
-                      ) : (
-                        <Table>
-                          <thead>
-                            <tr>
-                              <th>Campo Origen</th>
-                              <th>Campo Destino</th>
-                              <th>Valor Default</th>
-                              <th>Función SQL</th>
-                              <th>Mapeos</th>
-                              <th>Acciones</th>
-                            </tr>
-                          </thead>
-                          <tbody>
-                            {tableConfig.fieldMappings.map(
-                              (field, fieldIndex) => (
-                                <tr key={fieldIndex}>
-                                  <td>{field.sourceField || "-"}</td>
-                                  <td>{field.targetField}</td>
-                                  <td>
-                                    {field.defaultValue !== undefined
-                                      ? String(field.defaultValue)
-                                      : "-"}
-                                  </td>
-                                  <td>{field.isSqlFunction ? "✓" : "-"}</td>
-                                  <td>
-                                    {field.valueMappings
-                                      ? field.valueMappings.length
-                                      : 0}
-                                  </td>
-                                  <td>
-                                    <SmallButton
-                                      onClick={() =>
-                                        editFieldMapping(tableIndex, fieldIndex)
-                                      }
-                                    >
-                                      <FaEdit />
-                                    </SmallButton>
-                                    <SmallButton
-                                      onClick={() =>
-                                        removeFieldMapping(
-                                          tableIndex,
-                                          fieldIndex
-                                        )
-                                      }
-                                    >
-                                      <FaTrash />
-                                    </SmallButton>
-                                  </td>
-                                </tr>
-                              )
-                            )}
-                          </tbody>
-                        </Table>
-                      )}
-                    </SubSection>
-                  </CardBody>
-                </Card>
-              ))
             )}
           </Section>
         )}
@@ -2120,58 +3164,47 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
   );
 }
 
-// TODOS LOS STYLED COMPONENTS EXISTENTES (sin cambios)
+// Styled Components
 const Container = styled.div`
-  max-width: 1200px;
-  margin: 0 auto;
-  padding: 20px;
+  background: ${(props) => props.theme?.cardBg || "#fff"};
+  border-radius: 8px;
+  box-shadow: ${(props) =>
+    props.theme?.boxShadow || "0 2px 4px rgba(0,0,0,0.1)"};
+  overflow: hidden;
+`;
+
+const LoadingContainer = styled.div`
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  height: 200px;
+  color: ${(props) => props.theme?.text || "#333"};
 `;
 
 const Header = styled.div`
+  padding: 20px;
+  background: ${(props) => props.theme?.headerBg || "#f8f9fa"};
+  border-bottom: 1px solid ${(props) => props.theme?.border || "#dee2e6"};
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 30px;
-  padding-bottom: 20px;
-  border-bottom: 2px solid #e9ecef;
 
   h2 {
     margin: 0;
-    color: #343a40;
-    font-weight: 600;
+    color: ${(props) => props.theme?.title || "#343a40"};
   }
 `;
 
-const ButtonGroup = styled.div`
+const ButtonsGroup = styled.div`
   display: flex;
   gap: 10px;
 `;
 
-const SaveButton = styled.button`
-  background: #28a745;
-  color: white;
-  border: none;
-  padding: 10px 20px;
-  border-radius: 6px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 500;
-  transition: background-color 0.2s;
-
-  &:hover:not(:disabled) {
-    background: #218838;
-  }
-
-  &:disabled {
-    background: #6c757d;
-    cursor: not-allowed;
-  }
-`;
-
-const CancelButton = styled.button`
-  background: #6c757d;
+const Button = styled.button`
+  background: ${(props) =>
+    props.$secondary
+      ? props.theme?.secondary || "#6c757d"
+      : props.theme?.primary || "#007bff"};
   color: white;
   border: none;
   padding: 10px 20px;
@@ -2184,33 +3217,69 @@ const CancelButton = styled.button`
   transition: background-color 0.2s;
 
   &:hover {
-    background: #5a6268;
+    background: ${(props) =>
+      props.$secondary
+        ? props.theme?.secondaryHover || "#5a6268"
+        : props.theme?.primaryHover || "#0056b3"};
   }
 `;
 
-const TabNavigation = styled.div`
+const SmallButton = styled.button`
+  background: ${(props) =>
+    props.$danger
+      ? props.theme?.danger || "#dc3545"
+      : props.theme?.primary || "#007bff"};
+  color: white;
+  border: none;
+  padding: 6px 12px;
+  border-radius: 4px;
+  cursor: pointer;
   display: flex;
-  border-bottom: 2px solid #e9ecef;
-  margin-bottom: 30px;
+  align-items: center;
+  gap: 4px;
+  font-size: 0.85rem;
+  transition: background-color 0.2s;
+
+  &:hover {
+    background: ${(props) =>
+      props.$danger
+        ? props.theme?.dangerHover || "#c82333"
+        : props.theme?.primaryHover || "#0056b3"};
+  }
 `;
 
-const Tab = styled.button`
-  background: ${(props) => (props.active ? "#007bff" : "transparent")};
-  color: ${(props) => (props.active ? "white" : "#495057")};
-  border: none;
-  padding: 12px 24px;
+const Tabs = styled.div`
+  display: flex;
+  margin-bottom: 20px;
+  border-bottom: 1px solid ${(props) => props.theme?.border || "#dee2e6"};
+  overflow-x: auto;
+`;
+
+const Tab = styled.div`
+  padding: 10px 20px;
   cursor: pointer;
-  font-weight: 500;
-  border-radius: 6px 6px 0 0;
+  border-bottom: 3px solid
+    ${(props) =>
+      props.$active ? props.theme?.primary || "#007bff" : "transparent"};
+  color: ${(props) =>
+    props.$active
+      ? props.theme?.primary || "#007bff"
+      : props.theme?.text || "#6c757d"};
+  font-weight: ${(props) => (props.$active ? "bold" : "normal")};
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  white-space: nowrap;
   transition: all 0.2s;
 
   &:hover {
-    background: ${(props) => (props.active ? "#0056b3" : "#f8f9fa")};
+    color: ${(props) => props.theme?.primary || "#007bff"};
   }
 `;
 
 const Content = styled.div`
-  min-height: 400px;
+  margin-top: 20px;
+  padding: 0 20px 20px;
 `;
 
 const Section = styled.div`
@@ -2221,246 +3290,242 @@ const SectionHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 20px;
+  margin-bottom: 15px;
 
   h3 {
     margin: 0;
-    color: #495057;
-    font-weight: 600;
+    color: ${(props) => props.theme?.title || "#343a40"};
+    display: flex;
+    align-items: center;
+    gap: 8px;
   }
 `;
 
 const FormGroup = styled.div`
-  margin-bottom: 20px;
+  margin-bottom: 15px;
+
+  @media (max-width: 768px) {
+    width: 100%;
+  }
 `;
 
 const FormRow = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
-  margin-bottom: 20px;
+  display: flex;
+  gap: 15px;
+  margin-bottom: 15px;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    gap: 10px;
+  }
 `;
 
 const Label = styled.label`
   display: block;
-  margin-bottom: 8px;
+  margin-bottom: 5px;
   font-weight: 500;
-  color: #495057;
+  color: ${(props) => props.theme?.text || "#495057"};
 `;
 
 const Input = styled.input`
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid #ced4da;
+  padding: 8px 12px;
+  border: 1px solid ${(props) => props.theme?.border || "#ced4da"};
   border-radius: 4px;
   font-size: 14px;
+  color: ${(props) => props.theme?.text || "#495057"};
+  background-color: ${(props) => props.theme?.inputBg || "#fff"};
   transition: border-color 0.2s;
 
   &:focus {
     outline: none;
-    border-color: #007bff;
-    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    border-color: ${(props) => props.theme?.primary || "#007bff"};
+    box-shadow: 0 0 0 2px
+      ${(props) => (props.theme?.primary || "#007bff") + "20"};
   }
 `;
 
 const Textarea = styled.textarea`
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid #ced4da;
+  padding: 8px 12px;
+  border: 1px solid ${(props) => props.theme?.border || "#ced4da"};
   border-radius: 4px;
   font-size: 14px;
+  color: ${(props) => props.theme?.text || "#495057"};
+  background-color: ${(props) => props.theme?.inputBg || "#fff"};
   min-height: 100px;
   resize: vertical;
   transition: border-color 0.2s;
 
   &:focus {
     outline: none;
-    border-color: #007bff;
-    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    border-color: ${(props) => props.theme?.primary || "#007bff"};
+    box-shadow: 0 0 0 2px
+      ${(props) => (props.theme?.primary || "#007bff") + "20"};
   }
 `;
 
 const Select = styled.select`
   width: 100%;
-  padding: 10px 12px;
-  border: 1px solid #ced4da;
+  padding: 8px 12px;
+  border: 1px solid ${(props) => props.theme?.border || "#ced4da"};
   border-radius: 4px;
   font-size: 14px;
-  background-color: white;
+  color: ${(props) => props.theme?.text || "#495057"};
+  background-color: ${(props) => props.theme?.inputBg || "#fff"};
   transition: border-color 0.2s;
 
   &:focus {
     outline: none;
-    border-color: #007bff;
-    box-shadow: 0 0 0 2px rgba(0, 123, 255, 0.25);
+    border-color: ${(props) => props.theme?.primary || "#007bff"};
+    box-shadow: 0 0 0 2px
+      ${(props) => (props.theme?.primary || "#007bff") + "20"};
   }
 `;
 
 const CheckboxGroup = styled.div`
   display: flex;
   align-items: center;
-  gap: 8px;
   margin-bottom: 15px;
 `;
 
 const Checkbox = styled.input`
-  width: 18px;
-  height: 18px;
+  margin-right: 8px;
   cursor: pointer;
 `;
 
 const CheckboxLabel = styled.label`
-  margin: 0;
   cursor: pointer;
-  font-weight: 500;
-  color: #495057;
+  color: ${(props) => props.theme?.text || "#495057"};
 `;
 
 const Card = styled.div`
-  border: 1px solid #e9ecef;
-  border-radius: 8px;
   margin-bottom: 20px;
+  border: 1px solid ${(props) => props.theme?.border || "#dee2e6"};
+  border-left: 4px solid
+    ${(props) =>
+      props.$isDetail
+        ? props.theme?.secondary || "#6c757d"
+        : props.theme?.primary || "#007bff"};
+  border-radius: 6px;
   overflow: hidden;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+  background: ${(props) => props.theme?.cardBg || "#fff"};
 `;
 
 const CardHeader = styled.div`
-  background: #f8f9fa;
-  padding: 15px 20px;
-  border-bottom: 1px solid #e9ecef;
+  padding: 15px;
+  background: ${(props) => props.theme?.headerBg || "#f8f9fa"};
+  border-bottom: 1px solid ${(props) => props.theme?.border || "#dee2e6"};
   display: flex;
   justify-content: space-between;
   align-items: center;
 
   h4 {
     margin: 0;
-    color: #495057;
-    font-weight: 600;
+    color: ${(props) => props.theme?.title || "#343a40"};
   }
 
-  div {
+  .button_container {
     display: flex;
-    gap: 5px;
+    gap: 8px;
   }
 `;
 
 const CardBody = styled.div`
-  padding: 20px;
+  padding: 15px;
 `;
 
 const PropertyList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
+  gap: 10px;
+  margin-bottom: 15px;
 `;
 
 const PropertyItem = styled.div`
   display: flex;
-  align-items: flex-start;
-  gap: 15px;
+  flex-direction: column;
 `;
 
-const PropertyLabel = styled.div`
-  font-weight: 600;
-  color: #495057;
-  min-width: 150px;
-  flex-shrink: 0;
+const PropertyLabel = styled.span`
+  font-size: 0.85rem;
+  color: ${(props) => props.theme?.textSecondary || "#6c757d"};
+  margin-bottom: 2px;
 `;
 
-const PropertyValue = styled.div`
-  color: #6c757d;
-  flex: 1;
-
-  pre {
-    background: #f8f9fa;
-    padding: 8px;
-    border-radius: 4px;
-    margin: 0;
-    font-size: 12px;
-    overflow-x: auto;
-  }
+const PropertyValue = styled.span`
+  font-weight: 500;
+  color: ${(props) => props.theme?.text || "#495057"};
 `;
 
 const SubSection = styled.div`
   margin-top: 20px;
-  padding-top: 20px;
-  border-top: 1px solid #e9ecef;
 `;
 
 const SubSectionHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 15px;
+  margin-bottom: 10px;
 
   h5 {
     margin: 0;
-    color: #495057;
-    font-weight: 600;
-  }
-`;
-
-const SmallButton = styled.button`
-  background: ${(props) => (props.$danger ? "#dc3545" : "#007bff")};
-  color: white;
-  border: none;
-  padding: 6px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  transition: background-color 0.2s;
-
-  &:hover {
-    background: ${(props) => (props.$danger ? "#c82333" : "#0056b3")};
+    color: ${(props) => props.theme?.title || "#343a40"};
+    font-size: 1rem;
   }
 `;
 
 const Table = styled.table`
   width: 100%;
   border-collapse: collapse;
-  font-size: 13px;
+  margin-top: 10px;
 
   th,
   td {
-    padding: 8px 12px;
+    padding: 10px;
     text-align: left;
-    border-bottom: 1px solid #e9ecef;
+    border-bottom: 1px solid ${(props) => props.theme?.border || "#dee2e6"};
   }
 
   th {
-    background: #f8f9fa;
-    font-weight: 600;
-    color: #495057;
+    background: ${(props) => props.theme?.headerBg || "#f8f9fa"};
+    font-weight: 500;
+    color: ${(props) => props.theme?.title || "#343a40"};
+    font-size: 0.9rem;
   }
 
   td {
-    color: #6c757d;
+    color: ${(props) => props.theme?.text || "#495057"};
+    font-size: 0.85rem;
+  }
+
+  td:last-child {
+    display: flex;
+    gap: 5px;
   }
 `;
 
 const EmptyMessage = styled.div`
   text-align: center;
-  padding: 40px 20px;
-  color: #6c757d;
+  padding: 40px;
+  color: ${(props) => props.theme?.textSecondary || "#6c757d"};
 
   h3 {
     margin: 10px 0;
-    color: #495057;
+    color: ${(props) => props.theme?.title || "#343a40"};
   }
 
   p {
-    margin: 5px 0;
-    font-size: 14px;
+    margin: 0;
+    max-width: 400px;
+    margin: 0 auto;
+    line-height: 1.5;
   }
-`;
 
-const LoadingContainer = styled.div`
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 200px;
-  color: #6c757d;
+  small {
+    display: block;
+    margin-top: 10px;
+    font-size: 0.8rem;
+    color: ${(props) => props.theme?.textSecondary || "#6c757d"};
+  }
 `;

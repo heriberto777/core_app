@@ -223,6 +223,16 @@ const TransferMappingSchema = new Schema({
       default: "CNT_MAX",
       description: "Campo de cantidad",
     },
+    bonificationQuantityField: {
+      type: String,
+      default: "CANTIDAD_BONIFICAD",
+      description: "Campo donde se insertará la cantidad bonificada",
+    },
+    regularQuantityField: {
+      type: String,
+      default: "CANTIDAD_PEDIDA",
+      description: "Campo donde se insertará la cantidad regular",
+    },
   },
 });
 

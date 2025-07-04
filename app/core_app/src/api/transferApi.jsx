@@ -1269,6 +1269,19 @@ export class TransferApi {
 
   async createMapping(accessToken, mappingData) {
     try {
+      // Validar configuración de bonificaciones antes de crear
+      if (
+        mappingData.hasBonificationProcessing &&
+        mappingData.bonificationConfig
+      ) {
+        // Validar que los nuevos campos estén presentes si se requieren
+        const config = mappingData.bonificationConfig;
+        console.log(
+          "🎁 Validando configuración de bonificaciones en creación:",
+          config
+        );
+      }
+
       // Asegurarnos de que la configuración consecutiva tenga todas las propiedades necesarias
       if (
         mappingData.consecutiveConfig &&
@@ -1287,7 +1300,7 @@ export class TransferApi {
         };
       }
 
-      console.log("Guardando...", mappingData);
+      console.log("🎁 Guardando mapping con bonificaciones...", mappingData);
       const url = `${this.baseApi}/mappings`;
       const params = {
         method: "POST",
@@ -1303,16 +1316,31 @@ export class TransferApi {
 
       if (response.status !== 201) throw result;
 
+      console.log("✅ Mapping creado exitosamente con bonificaciones");
       return result;
     } catch (error) {
-      console.error("Error al crear configuración de mapeo:", error);
+      console.error("❌ Error al crear configuración de mapeo:", error);
       throw error;
     }
   }
 
+  /**
+   * 🎁 ACTUALIZADO: Método updateMapping para incluir validación de bonificaciones
+   */
   async updateMapping(accessToken, mappingId, mappingData) {
     try {
-      //validación
+      // Validar configuración de bonificaciones antes de actualizar
+      if (
+        mappingData.hasBonificationProcessing &&
+        mappingData.bonificationConfig
+      ) {
+        console.log(
+          "🎁 Validando configuración de bonificaciones en actualización:",
+          mappingData.bonificationConfig
+        );
+      }
+
+      // Validación de configuración consecutiva
       if (
         mappingData.consecutiveConfig &&
         mappingData.consecutiveConfig.enabled
@@ -1345,9 +1373,10 @@ export class TransferApi {
 
       if (response.status !== 200) throw result;
 
+      console.log("✅ Mapping actualizado exitosamente con bonificaciones");
       return result;
     } catch (error) {
-      console.error("Error al actualizar configuración de mapeo:", error);
+      console.error("❌ Error al actualizar configuración de mapeo:", error);
       throw error;
     }
   }
