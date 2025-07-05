@@ -178,6 +178,12 @@ const TransferMappingSchema = new Schema({
   },
 
   bonificationConfig: {
+    enabled: {
+      type: Boolean,
+      default: false,
+      description:
+        "Indica si el procesamiento de bonificaciones está habilitado",
+    },
     sourceTable: {
       type: String,
       description: "Tabla que contiene las bonificaciones (ej: FAC_DET_PED)",

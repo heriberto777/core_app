@@ -298,7 +298,12 @@ const getDocumentDetailsByMapping = async (req, res) => {
 const processDocumentsByMapping = async (req, res) => {
   try {
     const { mappingId } = req.params;
-    const { documentIds, limit, filters = {} } = req.body;
+    const {
+      documentIds,
+      limit,
+      filters = {},
+      applyPromotionRules = false,
+    } = req.body;
     logger.info(`🔄 Procesando documentos para mapeo: ${mappingId}`);
 
     if (!mappingId) {
@@ -318,11 +323,19 @@ const processDocumentsByMapping = async (req, res) => {
 
     let result;
 
+    // 🎁 NUEVO: Configurar opciones de procesamiento
+    const processingOptions = {
+      applyPromotionRules,
+      includeStatistics: true,
+    };
+
     if (documentIds && documentIds.length > 0) {
       logger.info(`🔄 Procesando ${documentIds.length} documentos específicos`);
       result = await DynamicTransferService.processDocuments(
         documentIds,
-        mappingId
+        mappingId,
+        null, // signal
+        processingOptions
       );
     } else {
       // Obtener documentos según filtros y límite
@@ -339,6 +352,7 @@ const processDocumentsByMapping = async (req, res) => {
             failed: 0,
             skipped: 0,
             details: [],
+            bonificationStats: null,
           },
           message: "No se encontraron documentos para procesar",
         });
@@ -355,20 +369,41 @@ const processDocumentsByMapping = async (req, res) => {
       logger.info(
         `🔄 Procesando ${docIds.length} documentos obtenidos por filtros`
       );
-      result = await DynamicTransferService.processDocuments(docIds, mappingId);
+      result = await DynamicTransferService.processDocuments(
+        docIds,
+        mappingId,
+        null, // signal
+        processingOptions
+      );
+    }
+
+    // 🎁 MEJORADO: Respuesta con estadísticas de bonificaciones
+    let message = "Mapping ejecutado exitosamente";
+    if (
+      mapping.hasBonificationProcessing &&
+      result.bonificationStats?.totalBonifications > 0
+    ) {
+      message = `Mapping ejecutado exitosamente con ${result.bonificationStats.totalBonifications} bonificaciones procesadas`;
     }
 
     res.json({
-      success: result.success || true,
+      success: result.success !== false,
       data: result,
-      message: mapping.hasBonificationProcessing
-        ? "Mapping ejecutado exitosamente con procesamiento de bonificaciones"
-        : "Mapping ejecutado exitosamente",
+      message,
     });
 
     logger.info(
       `✅ Procesamiento completado: ${result.processed} éxitos, ${result.failed} fallos`
     );
+
+    // 🎁 NUEVO: Log detallado de bonificaciones
+    if (result.bonificationStats?.totalBonifications > 0) {
+      logger.info(
+        `🎁 Estadísticas de bonificaciones: ${JSON.stringify(
+          result.bonificationStats
+        )}`
+      );
+    }
   } catch (error) {
     logger.error(`❌ Error procesando documentos: ${error.message}`);
     res.status(500).json({

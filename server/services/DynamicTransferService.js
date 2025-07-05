@@ -1,3 +1,4 @@
+// services/DynamicTransferService.js
 const logger = require("./logger");
 const ConnectionService = require("./ConnectionCentralService");
 const { SqlService } = require("./SqlService");
@@ -8,6 +9,7 @@ const TransferTask = require("../models/transferTaks");
 const ConsecutiveService = require("./ConsecutiveService");
 const { sendProgress } = require("./progressSse");
 const UnifiedCancellationService = require("./UnifiedCancellationService");
+const BonificationIntegrationService = require("./BonificationIntegrationService");
 
 class DynamicTransferService {
   constructor() {
@@ -23,13 +25,14 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa documentos según una configuración de mapeo
+   * 🎁 CORREGIDO: Procesa documentos según una configuración de mapeo con soporte completo para bonificaciones
    * @param {Array} documentIds - IDs de los documentos a procesar
    * @param {string} mappingId - ID de la configuración de mapeo
    * @param {Object} signal - Señal de AbortController para cancelación
+   * @param {Object} options - Opciones de procesamiento
    * @returns {Promise<Object>} - Resultado del procesamiento
    */
-  async processDocuments(documentIds, mappingId, signal = null) {
+  async processDocuments(documentIds, mappingId, signal = null, options = {}) {
     const processingId = `dynamic_process_${mappingId}_${Date.now()}`;
     const startTime = Date.now();
 
@@ -57,7 +60,7 @@ class DynamicTransferService {
     let mapping = null;
     let transaction = null;
 
-    // Variables para resultados
+    // Variables para resultados CON estadísticas de bonificaciones
     const results = {
       success: true,
       processed: 0,
@@ -67,6 +70,16 @@ class DynamicTransferService {
       errors: [],
       processingTime: 0,
       rollbackExecuted: false,
+      // 🎁 NUEVO: Estadísticas de bonificaciones
+      bonificationStats: {
+        totalDocumentsWithBonifications: 0,
+        totalBonifications: 0,
+        totalPromotions: 0,
+        totalDiscountAmount: 0,
+        processedDetails: 0,
+        bonificationTypes: {},
+        errorDetails: [],
+      },
     };
 
     // Arrays para tracking
@@ -99,6 +112,16 @@ class DynamicTransferService {
       }
 
       logger.info(`✅ [${processingId}] Mapping cargado: ${mapping.name}`);
+
+      // 🎁 NUEVO: Log de configuración de bonificaciones
+      if (
+        mapping.hasBonificationProcessing &&
+        mapping.bonificationConfig?.enabled
+      ) {
+        logger.info(
+          `🎁 [${processingId}] Procesamiento de bonificaciones habilitado`
+        );
+      }
 
       // Asegurar configuración por defecto para mappings existentes
       if (!mapping.markProcessedStrategy) {
@@ -182,7 +205,7 @@ class DynamicTransferService {
             sendProgress(mapping.taskId, progress);
           }
 
-          // Procesar documento individual
+          // 🎁 MODIFICADO: Procesar documento individual con captura de estadísticas
           const docResult = await this.processDocument(
             documentId,
             mapping,
@@ -190,7 +213,8 @@ class DynamicTransferService {
             targetConnection,
             transaction,
             executionId,
-            processingId
+            processingId,
+            options // 🎁 NUEVO: Pasar opciones al procesamiento
           );
 
           const docProcessingTime = Date.now() - docStartTime;
@@ -198,6 +222,15 @@ class DynamicTransferService {
           if (docResult.success) {
             results.processed++;
             successfulDocuments.push(documentId);
+
+            // 🎁 NUEVO: Acumular estadísticas de bonificaciones si existen
+            if (docResult.bonificationStats) {
+              this.accumulateBonificationStats(
+                results.bonificationStats,
+                docResult.bonificationStats
+              );
+            }
+
             logger.info(
               `✅ [${processingId}] Documento ${documentId} procesado exitosamente en ${docProcessingTime}ms`
             );
@@ -216,6 +249,7 @@ class DynamicTransferService {
             message: docResult.message,
             processingTime: docProcessingTime,
             error: docResult.error,
+            bonificationStats: docResult.bonificationStats, // 🎁 NUEVO: Incluir estadísticas por documento
           });
 
           processedCount++;
@@ -243,6 +277,7 @@ class DynamicTransferService {
             error: docError.message,
             processingTime: docProcessingTime,
             errorDetails: docError.stack,
+            bonificationStats: null,
           });
 
           results.errors.push({
@@ -369,7 +404,25 @@ class DynamicTransferService {
         `🎉 [${processingId}] Procesamiento completado: ${results.processed} éxitos, ${results.failed} fallos en ${processingTime}ms`
       );
 
+      // 🎁 NUEVO: Log de estadísticas de bonificaciones
+      if (results.bonificationStats.totalBonifications > 0) {
+        logger.info(
+          `🎁 [${processingId}] Estadísticas de bonificaciones: ${results.bonificationStats.totalBonifications} bonificaciones procesadas en ${results.bonificationStats.totalDocumentsWithBonifications} documentos`
+        );
+        logger.info(
+          `🎁 [${processingId}] Tipos de bonificaciones: ${JSON.stringify(
+            results.bonificationStats.bonificationTypes
+          )}`
+        );
+      }
+
       clearTimeout(timeoutId);
+
+      // 🎁 NUEVO: Limpiar estadísticas de bonificaciones si están vacías
+      if (results.bonificationStats.totalBonifications === 0) {
+        results.bonificationStats = null;
+      }
+
       return results;
     } catch (error) {
       clearTimeout(timeoutId);
@@ -434,7 +487,37 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa un documento individual
+   * 🎁 NUEVO: Acumula estadísticas de bonificaciones a nivel de lote
+   * @param {Object} accumulator - Acumulador de estadísticas
+   * @param {Object} documentStats - Estadísticas del documento
+   */
+  accumulateBonificationStats(accumulator, documentStats) {
+    if (!documentStats || !documentStats.totalBonifications) return;
+
+    accumulator.totalDocumentsWithBonifications++;
+    accumulator.totalBonifications += documentStats.totalBonifications || 0;
+    accumulator.totalPromotions += documentStats.totalPromotions || 0;
+    accumulator.totalDiscountAmount += documentStats.totalDiscountAmount || 0;
+    accumulator.processedDetails += documentStats.processedDetails || 0;
+
+    // Acumular tipos de bonificaciones
+    if (documentStats.bonificationTypes) {
+      Object.entries(documentStats.bonificationTypes).forEach(
+        ([type, count]) => {
+          accumulator.bonificationTypes[type] =
+            (accumulator.bonificationTypes[type] || 0) + count;
+        }
+      );
+    }
+
+    // Acumular errores
+    if (documentStats.errorDetails) {
+      accumulator.errorDetails.push(...documentStats.errorDetails);
+    }
+  }
+
+  /**
+   * 🎁 MODIFICADO: Procesa un documento individual con soporte para bonificaciones
    * @private
    */
   async processDocument(
@@ -444,9 +527,11 @@ class DynamicTransferService {
     targetConnection,
     transaction,
     executionId,
-    processingId
+    processingId,
+    options = {}
   ) {
     const docId = `${processingId}_doc_${documentId}`;
+    let bonificationStats = null;
 
     try {
       logger.debug(`📄 [${docId}] Iniciando procesamiento de documento`);
@@ -464,6 +549,7 @@ class DynamicTransferService {
           success: false,
           error: `No se encontraron datos para documento ${documentId}`,
           message: "Documento no encontrado",
+          bonificationStats: null,
         };
       }
 
@@ -482,6 +568,7 @@ class DynamicTransferService {
             success: false,
             error: "Documento ya existe en destino",
             message: "Duplicado saltado",
+            bonificationStats: null,
           };
         }
       }
@@ -536,7 +623,9 @@ class DynamicTransferService {
         );
 
         const processedTables = [];
-        await this.processDetailTables(
+
+        // 🎁 NUEVO: Procesar tablas de detalle y capturar estadísticas de bonificaciones
+        const detailProcessingResult = await this.processDetailTables(
           detailTables,
           documentId,
           sourceData,
@@ -546,8 +635,17 @@ class DynamicTransferService {
           currentConsecutive,
           mapping,
           columnLengthCache,
-          processedTables
+          processedTables,
+          options // 🎁 NUEVO: Pasar opciones
         );
+
+        // 🎁 NUEVO: Capturar estadísticas de bonificaciones si existen
+        if (
+          detailProcessingResult &&
+          detailProcessingResult.bonificationStats
+        ) {
+          bonificationStats = detailProcessingResult.bonificationStats;
+        }
 
         logger.debug(
           `✅ [${docId}] ${processedTables.length} tablas de detalle procesadas`
@@ -591,6 +689,7 @@ class DynamicTransferService {
       return {
         success: true,
         message: `Documento ${documentId} procesado exitosamente`,
+        bonificationStats, // 🎁 NUEVO: Incluir estadísticas de bonificaciones
       };
     } catch (error) {
       logger.error(
@@ -602,7 +701,217 @@ class DynamicTransferService {
         success: false,
         error: error.message,
         message: `Error procesando documento ${documentId}`,
+        bonificationStats: null,
       };
+    }
+  }
+
+  /**
+   * 🎁 CORREGIDO: Procesa las tablas de detalle con bonificaciones
+   * @private
+   */
+  async processDetailTables(
+    detailTables,
+    documentId,
+    sourceData,
+    parentTableConfig,
+    sourceConnection,
+    targetConnection,
+    currentConsecutive,
+    mapping,
+    columnLengthCache,
+    processedTables,
+    options = {}
+  ) {
+    const logId = `processDetailTables_${documentId}`;
+    let accumulatedBonificationStats = null;
+
+    try {
+      logger.debug(`🏗️ [${logId}] Procesando tablas de detalle`);
+
+      // Ordenar tablas de detalle por executionOrder
+      const orderedDetailTables = [...detailTables].sort(
+        (a, b) => (a.executionOrder || 0) - (b.executionOrder || 0)
+      );
+
+      logger.info(
+        `📋 [${logId}] Procesando ${
+          orderedDetailTables.length
+        } tablas de detalle en orden: ${orderedDetailTables
+          .map((t) => t.name)
+          .join(" -> ")}`
+      );
+
+      for (const detailConfig of orderedDetailTables) {
+        const tableLogId = `${logId}_${detailConfig.name}`;
+
+        try {
+          logger.debug(
+            `📋 [${tableLogId}] Procesando tabla de detalle: ${detailConfig.name}`
+          );
+
+          // Obtener detalles
+          const detailsData = await this.getDetailData(
+            detailConfig,
+            parentTableConfig,
+            documentId,
+            sourceConnection
+          );
+
+          if (!detailsData || detailsData.length === 0) {
+            logger.warn(
+              `⚠️ [${tableLogId}] No se encontraron detalles para la tabla`
+            );
+            continue;
+          }
+
+          logger.info(
+            `📊 [${tableLogId}] Procesando ${detailsData.length} registros de detalle`
+          );
+
+          // 🎁 CORREGIDO: Procesar bonificaciones usando el servicio integrado
+          let processedDetails = detailsData;
+          let bonificationStats = null;
+
+          if (
+            mapping.hasBonificationProcessing &&
+            mapping.bonificationConfig &&
+            mapping.bonificationConfig.enabled
+          ) {
+            logger.info(`🎁 [${tableLogId}] Procesando bonificaciones`);
+
+            try {
+              const bonificationResult =
+                await BonificationIntegrationService.processBonificationsInData(
+                  sourceData,
+                  detailsData,
+                  mapping.bonificationConfig,
+                  options
+                );
+
+              if (bonificationResult.success) {
+                processedDetails = bonificationResult.processedData;
+                bonificationStats = bonificationResult.bonificationStats;
+
+                // Acumular estadísticas de bonificaciones
+                if (
+                  bonificationStats &&
+                  bonificationStats.totalBonifications > 0
+                ) {
+                  if (!accumulatedBonificationStats) {
+                    accumulatedBonificationStats = {
+                      totalBonifications: 0,
+                      totalPromotions: 0,
+                      totalDiscountAmount: 0,
+                      processedDetails: 0,
+                      bonificationTypes: {},
+                      errorDetails: [],
+                    };
+                  }
+
+                  accumulatedBonificationStats.totalBonifications +=
+                    bonificationStats.totalBonifications;
+                  accumulatedBonificationStats.totalPromotions +=
+                    bonificationStats.totalPromotions;
+                  accumulatedBonificationStats.totalDiscountAmount +=
+                    bonificationStats.totalDiscountAmount;
+                  accumulatedBonificationStats.processedDetails +=
+                    bonificationStats.processedDetails;
+
+                  // Acumular tipos de bonificaciones
+                  Object.entries(bonificationStats.bonificationTypes).forEach(
+                    ([type, count]) => {
+                      accumulatedBonificationStats.bonificationTypes[type] =
+                        (accumulatedBonificationStats.bonificationTypes[type] ||
+                          0) + count;
+                    }
+                  );
+                }
+
+                logger.info(
+                  `✅ [${tableLogId}] Bonificaciones procesadas: ${bonificationStats.mappedBonifications}/${bonificationStats.totalBonifications} mapeadas`
+                );
+
+                if (bonificationStats.orphanBonifications > 0) {
+                  logger.warn(
+                    `⚠️ [${tableLogId}] ${bonificationStats.orphanBonifications} bonificaciones huérfanas detectadas`
+                  );
+                }
+              } else {
+                logger.warn(
+                  `⚠️ [${tableLogId}] Falló procesamiento de bonificaciones: ${bonificationResult.message}`
+                );
+              }
+            } catch (bonificationError) {
+              logger.error(
+                `❌ [${tableLogId}] Error procesando bonificaciones: ${bonificationError.message}`
+              );
+              // Continuar con datos originales si falla el procesamiento
+            }
+          }
+
+          // Insertar detalles procesados
+          let insertedCount = 0;
+          for (const detailRow of processedDetails) {
+            try {
+              await this.processTable(
+                detailConfig,
+                sourceData,
+                detailRow,
+                targetConnection,
+                currentConsecutive,
+                mapping,
+                documentId,
+                columnLengthCache,
+                true // isDetailTable = true
+              );
+              insertedCount++;
+            } catch (rowError) {
+              logger.error(
+                `❌ [${tableLogId}] Error procesando registro de detalle: ${rowError.message}`
+              );
+              // Continuar con el siguiente registro
+            }
+          }
+
+          logger.info(
+            `✅ [${tableLogId}] ${insertedCount}/${processedDetails.length} registros insertados correctamente`
+          );
+
+          if (processedTables) {
+            processedTables.push(detailConfig.name);
+          }
+
+          // Guardar estadísticas de bonificaciones para el documento
+          if (bonificationStats && bonificationStats.totalBonifications > 0) {
+            logger.info(
+              `📊 [${tableLogId}] Estadísticas de bonificaciones: ${JSON.stringify(
+                bonificationStats
+              )}`
+            );
+          }
+        } catch (tableError) {
+          logger.error(
+            `❌ [${tableLogId}] Error procesando tabla de detalle: ${tableError.message}`
+          );
+          // Continuar con la siguiente tabla
+        }
+      }
+
+      logger.info(
+        `✅ [${logId}] Procesamiento de tablas de detalle completado`
+      );
+
+      // 🎁 NUEVO: Retornar estadísticas de bonificaciones acumuladas
+      return {
+        success: true,
+        bonificationStats: accumulatedBonificationStats,
+      };
+    } catch (error) {
+      logger.error(
+        `❌ [${logId}] Error procesando tablas de detalle: ${error.message}`
+      );
+      throw error;
     }
   }
 
@@ -1390,131 +1699,6 @@ class DynamicTransferService {
     } catch (error) {
       logger.error(
         `❌ [${logId}] Error obteniendo datos de detalle: ${error.message}`
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * Procesa las tablas de detalle
-   * @private
-   */
-  async processDetailTables(
-    detailTables,
-    documentId,
-    sourceData,
-    parentTableConfig,
-    sourceConnection,
-    targetConnection,
-    currentConsecutive,
-    mapping,
-    columnLengthCache,
-    processedTables
-  ) {
-    const logId = `processDetailTables_${documentId}`;
-
-    try {
-      logger.debug(`🏗️ [${logId}] Procesando tablas de detalle`);
-
-      // Ordenar tablas de detalle por executionOrder
-      const orderedDetailTables = [...detailTables].sort(
-        (a, b) => (a.executionOrder || 0) - (b.executionOrder || 0)
-      );
-
-      logger.info(
-        `📋 [${logId}] Procesando ${
-          orderedDetailTables.length
-        } tablas de detalle en orden: ${orderedDetailTables
-          .map((t) => t.name)
-          .join(" -> ")}`
-      );
-
-      for (const detailConfig of orderedDetailTables) {
-        const tableLogId = `${logId}_${detailConfig.name}`;
-
-        try {
-          logger.debug(
-            `📋 [${tableLogId}] Procesando tabla de detalle: ${detailConfig.name}`
-          );
-
-          // Obtener detalles
-          const detailsData = await this.getDetailData(
-            detailConfig,
-            parentTableConfig,
-            documentId,
-            sourceConnection
-          );
-
-          if (!detailsData || detailsData.length === 0) {
-            logger.warn(
-              `⚠️ [${tableLogId}] No se encontraron detalles para la tabla`
-            );
-            continue;
-          }
-
-          logger.info(
-            `📊 [${tableLogId}] Procesando ${detailsData.length} registros de detalle`
-          );
-
-          // Procesar bonificaciones si están habilitadas
-          let processedDetails = detailsData;
-          if (mapping.hasBonificationProcessing && mapping.bonificationConfig) {
-            logger.info(`🎁 [${tableLogId}] Procesando bonificaciones`);
-            processedDetails = await this.simulateBonificationProcessing(
-              detailsData,
-              mapping.bonificationConfig,
-              documentId
-            );
-            logger.info(
-              `✅ [${tableLogId}] Bonificaciones procesadas: ${processedDetails.length} registros resultantes`
-            );
-          }
-
-          // Insertar detalles
-          let insertedCount = 0;
-          for (const detailRow of processedDetails) {
-            try {
-              await this.processTable(
-                detailConfig,
-                sourceData,
-                detailRow,
-                targetConnection,
-                currentConsecutive,
-                mapping,
-                documentId,
-                columnLengthCache,
-                true // isDetailTable = true
-              );
-              insertedCount++;
-            } catch (rowError) {
-              logger.error(
-                `❌ [${tableLogId}] Error procesando registro de detalle: ${rowError.message}`
-              );
-              // Continuar con el siguiente registro
-            }
-          }
-
-          logger.info(
-            `✅ [${tableLogId}] ${insertedCount}/${processedDetails.length} registros insertados correctamente`
-          );
-
-          if (processedTables) {
-            processedTables.push(detailConfig.name);
-          }
-        } catch (tableError) {
-          logger.error(
-            `❌ [${tableLogId}] Error procesando tabla de detalle: ${tableError.message}`
-          );
-          // Continuar con la siguiente tabla
-        }
-      }
-
-      logger.info(
-        `✅ [${logId}] Procesamiento de tablas de detalle completado`
-      );
-    } catch (error) {
-      logger.error(
-        `❌ [${logId}] Error procesando tablas de detalle: ${error.message}`
       );
       throw error;
     }
@@ -2561,6 +2745,449 @@ class DynamicTransferService {
   }
 
   /**
+   * 🎁 NUEVO: Verifica si un mapping debe procesar bonificaciones
+   * @param {Object} mapping - Configuración de mapeo
+   * @returns {boolean} - True si debe procesar bonificaciones
+   */
+  shouldProcessBonifications(mapping) {
+    return !!(
+      mapping.hasBonificationProcessing &&
+      mapping.bonificationConfig &&
+      mapping.bonificationConfig.enabled &&
+      mapping.bonificationConfig.bonificationIndicatorField &&
+      mapping.bonificationConfig.bonificationIndicatorValue
+    );
+  }
+
+  /**
+   * 🎁 NUEVO: Obtiene vista previa de bonificaciones para un documento
+   * @param {Object} mapping - Configuración de mapeo
+   * @param {string} documentId - ID del documento
+   * @returns {Promise<Object>} - Vista previa de bonificaciones
+   */
+  async previewBonifications(mapping, documentId) {
+    const logId = `previewBonif_${documentId}`;
+    let sourceConnection = null;
+
+    try {
+      logger.info(`🎁 [${logId}] Generando vista previa de bonificaciones`);
+
+      if (!this.shouldProcessBonifications(mapping)) {
+        return {
+          success: false,
+          message: "Procesamiento de bonificaciones no habilitado",
+          data: null,
+        };
+      }
+
+      sourceConnection = await ConnectionService.getConnection(
+        mapping.sourceServer
+      );
+
+      // Buscar tabla de detalle
+      const detailTable = mapping.tableConfigs.find((tc) => tc.isDetailTable);
+      if (!detailTable) {
+        return {
+          success: false,
+          message: "No se encontró tabla de detalle",
+          data: null,
+        };
+      }
+
+      // Obtener datos originales
+      let originalData = [];
+      try {
+        if (detailTable.useSameSourceTable) {
+          originalData = await this.getDetailDataFromSameTable(
+            detailTable,
+            mapping.tableConfigs.find((tc) => !tc.isDetailTable),
+            documentId,
+            sourceConnection
+          );
+        } else {
+          originalData = await this.getDetailDataFromOwnTable(
+            detailTable,
+            documentId,
+            sourceConnection
+          );
+        }
+      } catch (dataError) {
+        logger.error(
+          `❌ [${logId}] Error obteniendo datos: ${dataError.message}`
+        );
+        originalData = [];
+      }
+
+      if (originalData.length === 0) {
+        return {
+          success: true,
+          message: "No se encontraron datos para el documento",
+          data: {
+            documentId,
+            original: {
+              totalItems: 0,
+              regularItems: 0,
+              bonifications: 0,
+              details: [],
+            },
+            processed: {
+              totalItems: 0,
+              regularItems: 0,
+              bonifications: 0,
+              details: [],
+            },
+            transformation: {
+              linesAdded: 0,
+              bonificationsLinked: 0,
+              orphanBonifications: 0,
+            },
+          },
+        };
+      }
+
+      // Procesar bonificaciones usando el servicio integrado
+      const bonificationResult =
+        await BonificationIntegrationService.processBonificationsInData(
+          null, // sourceData principal no necesario para preview
+          originalData,
+          mapping.bonificationConfig
+        );
+
+      // Calcular estadísticas
+      const bonificationIndicator =
+        mapping.bonificationConfig.bonificationIndicatorField || "ART_BON";
+      const bonificationValue =
+        mapping.bonificationConfig.bonificationIndicatorValue || "B";
+
+      const originalStats = {
+        totalItems: originalData.length,
+        regularItems: originalData.filter(
+          (item) => item[bonificationIndicator] !== bonificationValue
+        ).length,
+        bonifications: originalData.filter(
+          (item) => item[bonificationIndicator] === bonificationValue
+        ).length,
+        details: originalData,
+      };
+
+      const processedData = bonificationResult.success
+        ? bonificationResult.processedData
+        : originalData;
+      const processedStats = {
+        totalItems: processedData.length,
+        regularItems: processedData.filter(
+          (item) =>
+            item.recordType === "REGULAR" || item.ITEM_TYPE === "REGULAR"
+        ).length,
+        bonifications: processedData.filter(
+          (item) =>
+            item.recordType === "BONIFICATION" ||
+            item.ITEM_TYPE === "BONIFICATION"
+        ).length,
+        orphanBonifications: processedData.filter(
+          (item) => item.ITEM_TYPE === "BONIFICATION_ORPHAN"
+        ).length,
+        linkedBonifications: processedData.filter(
+          (item) =>
+            (item.recordType === "BONIFICATION" ||
+              item.ITEM_TYPE === "BONIFICATION") &&
+            item._isMappedBonification
+        ).length,
+        details: processedData,
+      };
+
+      const transformation = {
+        linesAdded: processedData.length - originalData.length,
+        bonificationsLinked: processedStats.linkedBonifications,
+        orphanBonifications: processedStats.orphanBonifications,
+      };
+
+      logger.info(`✅ [${logId}] Vista previa generada exitosamente`);
+
+      return {
+        success: true,
+        message: "Vista previa generada exitosamente",
+        data: {
+          documentId,
+          original: originalStats,
+          processed: processedStats,
+          transformation,
+          bonificationStats: bonificationResult.bonificationStats,
+        },
+      };
+    } catch (error) {
+      logger.error(`❌ [${logId}] Error en vista previa: ${error.message}`);
+      return {
+        success: false,
+        message: error.message,
+        data: null,
+      };
+    } finally {
+      if (sourceConnection) {
+        try {
+          await ConnectionService.releaseConnection(sourceConnection);
+        } catch (connError) {
+          logger.error(
+            `❌ [${logId}] Error liberando conexión: ${connError.message}`
+          );
+        }
+      }
+    }
+  }
+
+  /**
+   * 🎁 NUEVO: Valida configuración de bonificaciones
+   * @param {Object} mapping - Configuración de mapeo
+   * @returns {Object} - Resultado de la validación
+   */
+  validateBonificationConfig(mapping) {
+    const logId = `validateBonif_${mapping._id}`;
+
+    try {
+      logger.debug(`🎁 [${logId}] Validando configuración de bonificaciones`);
+
+      const validation = {
+        isValid: true,
+        issues: [],
+        warnings: [],
+      };
+
+      // Verificar si las bonificaciones están habilitadas
+      if (!mapping.hasBonificationProcessing) {
+        validation.isValid = false;
+        validation.issues.push("Procesamiento de bonificaciones no habilitado");
+        return validation;
+      }
+
+      // Verificar configuración de bonificaciones
+      if (!mapping.bonificationConfig) {
+        validation.isValid = false;
+        validation.issues.push("Configuración de bonificaciones no encontrada");
+        return validation;
+      }
+
+      const config = mapping.bonificationConfig;
+
+      // Validar campos requeridos
+      const requiredFields = [
+        { field: "enabled", name: "Habilitado" },
+        {
+          field: "bonificationIndicatorField",
+          name: "Campo indicador de bonificación",
+        },
+        {
+          field: "bonificationIndicatorValue",
+          name: "Valor indicador de bonificación",
+        },
+        { field: "regularArticleField", name: "Campo de artículo regular" },
+        {
+          field: "bonificationReferenceField",
+          name: "Campo de referencia de bonificación",
+        },
+        {
+          field: "bonificationLineReferenceField",
+          name: "Campo de referencia de línea",
+        },
+      ];
+
+      requiredFields.forEach(({ field, name }) => {
+        if (!config[field]) {
+          if (field === "enabled") {
+            validation.isValid = false;
+            validation.issues.push(`${name} debe estar establecido`);
+          } else {
+            validation.warnings.push(`${name} no está configurado`);
+          }
+        }
+      });
+
+      // Verificar tabla de detalle
+      const detailTable = mapping.tableConfigs.find((tc) => tc.isDetailTable);
+      if (!detailTable) {
+        validation.isValid = false;
+        validation.issues.push("No se encontró tabla de detalle en el mapping");
+      }
+
+      // Verificar campos en tabla de detalle
+      if (detailTable && detailTable.fieldMappings) {
+        const fieldMappings = detailTable.fieldMappings;
+        const requiredMappings = [
+          config.bonificationIndicatorField,
+          config.regularArticleField,
+          config.bonificationReferenceField,
+        ].filter((field) => field);
+
+        requiredMappings.forEach((field) => {
+          const hasMapping = fieldMappings.some(
+            (fm) => fm.sourceField === field
+          );
+          if (!hasMapping) {
+            validation.warnings.push(
+              `Campo ${field} no encontrado en mappings de tabla de detalle`
+            );
+          }
+        });
+      }
+
+      logger.debug(
+        `✅ [${logId}] Validación completada: ${
+          validation.isValid ? "válida" : "inválida"
+        }`
+      );
+
+      return validation;
+    } catch (error) {
+      logger.error(
+        `❌ [${logId}] Error validando configuración: ${error.message}`
+      );
+      return {
+        isValid: false,
+        issues: [`Error de validación: ${error.message}`],
+        warnings: [],
+      };
+    }
+  }
+
+  /**
+   * 🎁 NUEVO: Obtiene estadísticas de bonificaciones de un mapping
+   * @param {Object} mapping - Configuración de mapeo
+   * @param {Object} filters - Filtros de búsqueda
+   * @returns {Promise<Object>} - Estadísticas de bonificaciones
+   */
+  async getBonificationStats(mapping, filters = {}) {
+    const logId = `getBonifStats_${mapping._id}`;
+    let sourceConnection = null;
+
+    try {
+      logger.info(`📊 [${logId}] Obteniendo estadísticas de bonificaciones`);
+
+      if (!this.shouldProcessBonifications(mapping)) {
+        return {
+          success: false,
+          message: "Procesamiento de bonificaciones no habilitado",
+          data: null,
+        };
+      }
+
+      sourceConnection = await ConnectionService.getConnection(
+        mapping.sourceServer
+      );
+
+      // Estadísticas básicas
+      const stats = {
+        totalDocuments: 0,
+        documentsWithBonifications: 0,
+        totalBonifications: 0,
+        totalRegularItems: 0,
+        avgBonificationsPerDocument: 0,
+        bonificationTypes: {},
+        period: {
+          from: filters.dateFrom || null,
+          to: filters.dateTo || null,
+        },
+        lastUpdated: new Date(),
+      };
+
+      // Obtener tabla de detalle
+      const detailTable = mapping.tableConfigs.find((tc) => tc.isDetailTable);
+      if (!detailTable) {
+        return {
+          success: false,
+          message: "No se encontró tabla de detalle",
+          data: null,
+        };
+      }
+
+      // Construir consulta de estadísticas
+      const bonificationIndicator =
+        mapping.bonificationConfig.bonificationIndicatorField;
+      const bonificationValue =
+        mapping.bonificationConfig.bonificationIndicatorValue;
+      const sourceTable = detailTable.useSameSourceTable
+        ? mapping.tableConfigs.find((tc) => !tc.isDetailTable).sourceTable
+        : detailTable.sourceTable;
+
+      let statsQuery = `
+        SELECT
+          COUNT(DISTINCT ${
+            detailTable.primaryKey || "NUM_PED"
+          }) as totalDocuments,
+          COUNT(*) as totalItems,
+          SUM(CASE WHEN ${bonificationIndicator} = '${bonificationValue}' THEN 1 ELSE 0 END) as totalBonifications,
+          SUM(CASE WHEN ${bonificationIndicator} != '${bonificationValue}' OR ${bonificationIndicator} IS NULL THEN 1 ELSE 0 END) as totalRegularItems
+        FROM ${sourceTable}
+      `;
+
+      // Aplicar filtros de fecha si existen
+      const whereConditions = [];
+      const queryParams = {};
+
+      if (filters.dateFrom) {
+        whereConditions.push(`FECHA >= @dateFrom`);
+        queryParams.dateFrom = filters.dateFrom;
+      }
+
+      if (filters.dateTo) {
+        whereConditions.push(`FECHA <= @dateTo`);
+        queryParams.dateTo = filters.dateTo;
+      }
+
+      if (whereConditions.length > 0) {
+        statsQuery += ` WHERE ${whereConditions.join(" AND ")}`;
+      }
+
+      logger.debug(
+        `📊 [${logId}] Ejecutando consulta de estadísticas: ${statsQuery}`
+      );
+
+      const result = await SqlService.query(
+        sourceConnection,
+        statsQuery,
+        queryParams
+      );
+
+      if (result.recordset && result.recordset.length > 0) {
+        const row = result.recordset[0];
+        stats.totalDocuments = row.totalDocuments || 0;
+        stats.totalBonifications = row.totalBonifications || 0;
+        stats.totalRegularItems = row.totalRegularItems || 0;
+        stats.documentsWithBonifications = stats.totalDocuments; // Aproximación
+        stats.avgBonificationsPerDocument =
+          stats.totalDocuments > 0
+            ? (stats.totalBonifications / stats.totalDocuments).toFixed(2)
+            : 0;
+      }
+
+      logger.info(`✅ [${logId}] Estadísticas obtenidas exitosamente`);
+
+      return {
+        success: true,
+        message: "Estadísticas obtenidas exitosamente",
+        data: stats,
+      };
+    } catch (error) {
+      logger.error(
+        `❌ [${logId}] Error obteniendo estadísticas: ${error.message}`
+      );
+      return {
+        success: false,
+        message: error.message,
+        data: null,
+      };
+    } finally {
+      if (sourceConnection) {
+        try {
+          await ConnectionService.releaseConnection(sourceConnection);
+        } catch (connError) {
+          logger.error(
+            `❌ [${logId}] Error liberando conexión: ${connError.message}`
+          );
+        }
+      }
+    }
+  }
+
+  /**
    * Obtiene estadísticas del servicio
    * @returns {Object} - Estadísticas del servicio
    */
@@ -2570,6 +3197,207 @@ class DynamicTransferService {
       activeProcesses: this.activeProcesses.size,
       uptime: process.uptime(),
       memoryUsage: process.memoryUsage(),
+      version: "2.0.0",
+      features: {
+        bonificationProcessing: true,
+        transactionSupport: true,
+        batchProcessing: true,
+        lookupSupport: true,
+        consecutiveGeneration: true,
+      },
+    };
+  }
+
+  /**
+   * 🎁 NUEVO: Procesa un documento específico con bonificaciones para testing
+   * @param {Object} mapping - Configuración de mapeo
+   * @param {string} documentId - ID del documento
+   * @param {Object} options - Opciones de procesamiento
+   * @returns {Promise<Object>} - Resultado del procesamiento
+   */
+  async processDocumentWithBonifications(mapping, documentId, options = {}) {
+    const logId = `processDocBonif_${documentId}`;
+    let sourceConnection = null;
+    let targetConnection = null;
+
+    try {
+      logger.info(`🎁 [${logId}] Procesando documento con bonificaciones`);
+
+      // Establecer conexiones
+      sourceConnection = await ConnectionService.getConnection(
+        mapping.sourceServer
+      );
+      targetConnection = await ConnectionService.getConnection(
+        mapping.targetServer
+      );
+
+      // Procesar documento usando el método principal
+      const result = await this.processDocument(
+        documentId,
+        mapping,
+        sourceConnection,
+        targetConnection,
+        null, // transaction
+        null, // executionId
+        logId,
+        options
+      );
+
+      logger.info(`✅ [${logId}] Documento procesado exitosamente`);
+
+      return result;
+    } catch (error) {
+      logger.error(
+        `❌ [${logId}] Error procesando documento: ${error.message}`
+      );
+      return {
+        success: false,
+        message: error.message,
+        bonificationStats: null,
+      };
+    } finally {
+      if (sourceConnection) {
+        try {
+          await ConnectionService.releaseConnection(sourceConnection);
+        } catch (connError) {
+          logger.error(
+            `❌ [${logId}] Error liberando conexión source: ${connError.message}`
+          );
+        }
+      }
+      if (targetConnection) {
+        try {
+          await ConnectionService.releaseConnection(targetConnection);
+        } catch (connError) {
+          logger.error(
+            `❌ [${logId}] Error liberando conexión target: ${connError.message}`
+          );
+        }
+      }
+    }
+  }
+
+  /**
+   * 🎁 NUEVO: Obtiene documentos con bonificaciones para análisis
+   * @param {Object} mapping - Configuración de mapeo
+   * @param {Object} options - Opciones de consulta
+   * @returns {Promise<Array>} - Lista de documentos con bonificaciones
+   */
+  async getDocumentsWithBonifications(mapping, options = {}) {
+    const logId = `getDocsBonif_${mapping._id}`;
+    let sourceConnection = null;
+
+    try {
+      logger.info(`🎁 [${logId}] Obteniendo documentos con bonificaciones`);
+
+      if (!this.shouldProcessBonifications(mapping)) {
+        return [];
+      }
+
+      sourceConnection = await ConnectionService.getConnection(
+        mapping.sourceServer
+      );
+
+      const detailTable = mapping.tableConfigs.find((tc) => tc.isDetailTable);
+      if (!detailTable) {
+        return [];
+      }
+
+      const bonificationIndicator =
+        mapping.bonificationConfig.bonificationIndicatorField;
+      const bonificationValue =
+        mapping.bonificationConfig.bonificationIndicatorValue;
+      const primaryKey = detailTable.primaryKey || "NUM_PED";
+      const sourceTable = detailTable.useSameSourceTable
+        ? mapping.tableConfigs.find((tc) => !tc.isDetailTable).sourceTable
+        : detailTable.sourceTable;
+
+      const { limit = 50, offset = 0 } = options;
+
+      const query = `
+        SELECT DISTINCT TOP ${limit} ${primaryKey}
+        FROM ${sourceTable}
+        WHERE ${bonificationIndicator} = @bonificationValue
+        ORDER BY ${primaryKey}
+        ${offset > 0 ? `OFFSET ${offset} ROWS` : ""}
+      `;
+
+      logger.debug(`🔍 [${logId}] Ejecutando consulta: ${query}`);
+
+      const result = await SqlService.query(sourceConnection, query, {
+        bonificationValue,
+      });
+
+      const documents = result.recordset || [];
+
+      logger.info(
+        `✅ [${logId}] ${documents.length} documentos con bonificaciones encontrados`
+      );
+
+      return documents.map((doc) => doc[primaryKey]);
+    } catch (error) {
+      logger.error(
+        `❌ [${logId}] Error obteniendo documentos con bonificaciones: ${error.message}`
+      );
+      return [];
+    } finally {
+      if (sourceConnection) {
+        try {
+          await ConnectionService.releaseConnection(sourceConnection);
+        } catch (connError) {
+          logger.error(
+            `❌ [${logId}] Error liberando conexión: ${connError.message}`
+          );
+        }
+      }
+    }
+  }
+
+  /**
+   * 🎁 NUEVO: Limpia caché y estadísticas del servicio
+   */
+  clearCache() {
+    try {
+      logger.info("🧹 Limpiando caché del servicio");
+
+      // Limpiar procesos activos
+      this.activeProcesses.clear();
+
+      // Resetear estadísticas
+      this.processingStats = {
+        totalProcessed: 0,
+        totalFailed: 0,
+        averageProcessingTime: 0,
+        lastProcessingTime: null,
+      };
+
+      logger.info("✅ Caché limpiado exitosamente");
+    } catch (error) {
+      logger.error(`❌ Error limpiando caché: ${error.message}`);
+    }
+  }
+
+  /**
+   * 🎁 NUEVO: Obtiene información de salud del servicio
+   * @returns {Object} - Información de salud
+   */
+  getHealthInfo() {
+    return {
+      status: "healthy",
+      timestamp: new Date(),
+      version: "2.0.0",
+      uptime: process.uptime(),
+      activeProcesses: this.activeProcesses.size,
+      memoryUsage: process.memoryUsage(),
+      stats: this.processingStats,
+      features: {
+        bonificationProcessing: true,
+        transactionSupport: true,
+        batchProcessing: true,
+        lookupSupport: true,
+        consecutiveGeneration: true,
+        connectionPooling: true,
+      },
     };
   }
 }
