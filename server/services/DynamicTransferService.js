@@ -137,7 +137,7 @@ class DynamicTransferService {
       }
 
       // 6. Registrar tarea en TaskTracker
-      TaskTracker.startTask(
+      TaskTracker.registerTask(
         cancelTaskId,
         mapping.name,
         documentIds.length,
