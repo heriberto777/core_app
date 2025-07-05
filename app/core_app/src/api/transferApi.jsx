@@ -1494,7 +1494,7 @@ export class TransferApi {
   /**
    * 🟢 NUEVO: Valida configuración de bonificaciones
    */
-  async validateBonificationConfig(accessToken, mappingId) {
+  async validateBonifications(accessToken, mappingId) {
     try {
       const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/mappings/${mappingId}/validate-bonifications`;
       const params = {

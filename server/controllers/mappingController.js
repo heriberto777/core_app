@@ -786,7 +786,7 @@ const previewBonifications = async (req, res) => {
         documentId,
         original: originalStats,
         processed: processedStats,
-        transformation,
+        transformation: transformation, // ✅ Asegurar que este objeto existe
       },
     });
 

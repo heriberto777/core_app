@@ -244,7 +244,8 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       if (response.success) {
         const validation = response.data;
 
-        if (validation.valid) {
+        // ✅ CORREGIDO: Acceder a isValid en lugar de valid
+        if (validation.isValid) {
           Swal.fire({
             icon: "success",
             title: "✅ Configuración Válida",
@@ -255,16 +256,16 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
             showConfirmButton: false,
           });
         } else {
-          const issuesHtml = validation.issues
+          const issuesHtml = validation.issues?.length
             ? `<strong>❌ Errores:</strong><br>${validation.issues.join(
                 "<br>"
               )}<br><br>`
             : "";
-          const warningsHtml = validation.warnings
+          const warningsHtml = validation.warnings?.length
             ? `<strong>⚠️ Advertencias:</strong><br>${validation.warnings.join(
                 "<br>"
               )}`
-  : "";
+            : "";
 
           Swal.fire({
             icon: "warning",
@@ -279,7 +280,8 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       Swal.fire({
         icon: "error",
         title: "❌ Error",
-        text: "Error validando configuración de bonificaciones",
+        text:
+          error.message || "Error validando configuración de bonificaciones",
       });
     } finally {
       setLoading(false);
@@ -323,34 +325,46 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         if (response.success) {
           const data = response.data;
 
+          // ✅ CORREGIDO: Acceder a transformation en lugar de summary
+          const transformation = data.transformation || {};
+          const processed = data.processed || {};
+
           Swal.fire({
             icon: "info",
             title: "🎁 Preview de Bonificaciones",
             html: `
-              <div style="text-align: left; font-family: monospace;">
-                <h4>📋 Documento: <strong>${data.documentId}</strong></h4>
+            <div style="text-align: left; font-family: monospace;">
+              <h4>📋 Documento: <strong>${data.documentId}</strong></h4>
 
-                <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0;">
-                  <h5>📊 Resumen del Procesamiento:</h5>
-                  <strong>Datos Originales:</strong><br>
-                  • Total items: ${data.original.totalItems}<br><br>
+              <div style="background: #f8f9fa; padding: 15px; border-radius: 8px; margin: 10px 0;">
+                <h5>📊 Resumen del Procesamiento:</h5>
+                <strong>Datos Originales:</strong><br>
+                • Total items: ${data.original?.totalItems || 0}<br><br>
 
-                  <strong>Datos Procesados:</strong><br>
-                  • Total items: ${data.processed.totalItems}<br>
-                  • Artículos regulares: ${data.processed.regularItems}<br>
-                  • Bonificaciones: ${data.processed.bonifications}<br>
-                  • ✅ Bonificaciones vinculadas: ${data.processed.linkedBonifications}<br>
-                  • ⚠️ Bonificaciones huérfanas: ${data.processed.orphanBonifications}<br>
-                </div>
-
-                <div style="background: #e9ecef; padding: 10px; border-radius: 5px;">
-                  <strong>🔄 Transformación:</strong><br>
-                  • Líneas agregadas: ${data.summary.linesAdded}<br>
-                  • Bonificaciones vinculadas: ${data.summary.bonificationsLinked}<br>
-                  • Bonificaciones huérfanas: ${data.summary.bonificationsOrphan}<br>
-                </div>
+                <strong>Datos Procesados:</strong><br>
+                • Total items: ${processed.totalItems || 0}<br>
+                • Artículos regulares: ${processed.regularItems || 0}<br>
+                • Bonificaciones: ${processed.bonifications || 0}<br>
+                • ✅ Bonificaciones vinculadas: ${
+                  processed.linkedBonifications || 0
+                }<br>
+                • ⚠️ Bonificaciones huérfanas: ${
+                  processed.orphanBonifications || 0
+                }<br>
               </div>
-            `,
+
+              <div style="background: #e9ecef; padding: 10px; border-radius: 5px;">
+                <strong>🔄 Transformación:</strong><br>
+                • Líneas agregadas: ${transformation.linesAdded || 0}<br>
+                • Bonificaciones vinculadas: ${
+                  transformation.bonificationsLinked || 0
+                }<br>
+                • Bonificaciones huérfanas: ${
+                  transformation.orphanBonifications || 0
+                }<br>
+              </div>
+            </div>
+          `,
             width: 700,
             showConfirmButton: true,
             confirmButtonText: "Cerrar",
@@ -362,13 +376,12 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       Swal.fire({
         icon: "error",
         title: "❌ Error",
-        text: "Error generando preview de bonificaciones",
+        text: error.message || "Error generando preview de bonificaciones",
       });
     } finally {
       setLoading(false);
     }
   };
-
   // Otras funciones existentes (mantienes todas las que ya tienes)
   const addDocumentTypeRule = () => {
     Swal.fire({
