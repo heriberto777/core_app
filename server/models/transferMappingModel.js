@@ -169,61 +169,6 @@ const TransferMappingSchema = new Schema({
   },
   consecutiveConfig: ConsecutiveConfigSchema,
   foreignKeyDependencies: [ForeignKeyDependencySchema],
-
-  // 🟢 NUEVA CONFIGURACIÓN DE BONIFICACIONES
-  hasBonificationProcessing: {
-    type: Boolean,
-    default: false,
-    description: "Indica si este mapping procesa bonificaciones",
-  },
-
-  bonificationConfig: {
-    sourceTable: {
-      type: String,
-      description: "Tabla que contiene las bonificaciones (ej: FAC_DET_PED)",
-    },
-    bonificationIndicatorField: {
-      type: String,
-      default: "ART_BON",
-      description: "Campo que indica si es bonificación",
-    },
-    bonificationIndicatorValue: {
-      type: String,
-      default: "B",
-      description: "Valor que marca una bonificación",
-    },
-    regularArticleField: {
-      type: String,
-      default: "COD_ART",
-      description: "Campo del artículo regular",
-    },
-    bonificationReferenceField: {
-      type: String,
-      default: "COD_ART_RFR",
-      description: "Campo que referencia al artículo regular en bonificaciones",
-    },
-    orderField: {
-      type: String,
-      default: "NUM_PED",
-      description: "Campo para agrupar registros (ej: número de pedido)",
-    },
-    lineNumberField: {
-      type: String,
-      default: "PEDIDO_LINEA",
-      description: "Campo donde se asigna el número de línea",
-    },
-    bonificationLineReferenceField: {
-      type: String,
-      default: "PEDIDO_LINEA_BONIF",
-      description:
-        "Campo donde se asigna la referencia a la línea del artículo regular",
-    },
-    quantityField: {
-      type: String,
-      default: "CNT_MAX",
-      description: "Campo de cantidad",
-    },
-  },
 });
 
 // Pre-save hook para actualizar fecha
