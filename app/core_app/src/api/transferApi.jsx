@@ -2345,4 +2345,83 @@ export class TransferApi {
       throw error;
     }
   }
+
+  async getDocumentDetailsWithPromotions(token, mappingId, documentId) {
+    try {
+      const response = await fetch(
+        `${this.baseUrl}/mapping/${mappingId}/document/${documentId}/details-with-promotions`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error al obtener detalles con promociones:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Procesa documentos con soporte para promociones
+   */
+  async processDocumentsWithPromotions(token, mappingId, documentIds) {
+    try {
+      const response = await fetch(
+        `${this.baseUrl}/mapping/${mappingId}/process-with-promotions`,
+        {
+          method: "POST",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+          body: JSON.stringify({ documentIds }),
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error al procesar documentos con promociones:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Valida configuración de promociones
+   */
+  async validatePromotionConfig(token, mappingId) {
+    try {
+      const response = await fetch(
+        `${this.baseUrl}/mapping/${mappingId}/validate-promotions`,
+        {
+          method: "GET",
+          headers: {
+            "Content-Type": "application/json",
+            Authorization: `Bearer ${token}`,
+          },
+        }
+      );
+
+      if (!response.ok) {
+        throw new Error(`Error ${response.status}: ${response.statusText}`);
+      }
+
+      return await response.json();
+    } catch (error) {
+      console.error("Error al validar configuración de promociones:", error);
+      throw error;
+    }
+  }
 }

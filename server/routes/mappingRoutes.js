@@ -48,4 +48,19 @@ router.post(
 );
 router.get("/:mappingId/reset-consecutive", mappingController.resetConsecutive);
 
+router.get(
+  "/:mappingId/document/:documentId/details-with-promotions",
+  mappingController.getDocumentDetailsWithPromotions
+);
+
+router.post(
+  "/:mappingId/process-with-promotions",
+  mappingController.processDocumentsWithPromotions
+);
+
+router.get(
+  "/:mappingId/validate-promotions",
+  mappingController.validatePromotionConfig
+);
+
 module.exports = router;
