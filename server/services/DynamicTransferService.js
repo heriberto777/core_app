@@ -2531,10 +2531,10 @@ class DynamicTransferService {
       try {
         logger.info("Listando tablas disponibles en la base de datos...");
         const listTablesQuery = `
-          SELECT TOP 50 TABLE_SCHEMA, TABLE_NAME
-          FROM INFORMATION_SCHEMA.TABLES
-          ORDER BY TABLE_SCHEMA, TABLE_NAME
-        `;
+        SELECT TOP 50 TABLE_SCHEMA, TABLE_NAME
+        FROM INFORMATION_SCHEMA.TABLES
+        ORDER BY TABLE_SCHEMA, TABLE_NAME
+      `;
 
         const tablesResult = await SqlService.query(
           connection,
@@ -2608,11 +2608,11 @@ class DynamicTransferService {
 
         // Verificar si la tabla existe
         const checkTableQuery = `
-          SELECT COUNT(*) as count
-          FROM INFORMATION_SCHEMA.TABLES
-          WHERE TABLE_SCHEMA = '${schema}'
-          AND TABLE_NAME = '${tableName}'
-        `;
+        SELECT COUNT(*) as count
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = '${schema}'
+        AND TABLE_NAME = '${tableName}'
+      `;
 
         const tableCheckResult = await SqlService.query(
           connection,
@@ -2629,12 +2629,12 @@ class DynamicTransferService {
 
         // Obtener columnas de la tabla
         const columnsQuery = `
-          SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT
-          FROM INFORMATION_SCHEMA.COLUMNS
-          WHERE TABLE_SCHEMA = '${schema}'
-          AND TABLE_NAME = '${tableName}'
-          ORDER BY ORDINAL_POSITION
-        `;
+        SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = '${schema}'
+        AND TABLE_NAME = '${tableName}'
+        ORDER BY ORDINAL_POSITION
+      `;
 
         const columnsResult = await SqlService.query(connection, columnsQuery);
 
@@ -2685,12 +2685,14 @@ class DynamicTransferService {
         const selectFieldsStr = selectFields.join(", ");
         logger.debug(`Campos a seleccionar: ${selectFieldsStr}`);
 
-        // Construir consulta basada en filtros, usando el nombre completo de la tabla
+        // CORRECCIÓN: Construir consulta directa sin subconsulta problemática
+        const limit = filters.limit || 100;
+
         let query = `
-          SELECT ${selectFieldsStr}
-          FROM ${fullTableName}
-          WHERE 1=1
-        `;
+        SELECT TOP ${limit} ${selectFieldsStr}
+        FROM ${fullTableName}
+        WHERE 1=1
+      `;
 
         const params = {};
 
@@ -2713,6 +2715,9 @@ class DynamicTransferService {
             "DATE_CREATED",
             "CREATED_DATE",
             "FEC_CREACION",
+            "FEC_DOC",
+            "FECHA_DOC",
+            "FEC_REGISTRO",
           ];
           for (const altField of alternativeDateFields) {
             if (availableColumns.includes(altField)) {
@@ -2763,15 +2768,16 @@ class DynamicTransferService {
           );
         }
 
-        // Ordenamiento
+        // CORRECCIÓN: Agregar ORDER BY directamente en la consulta principal
         const primaryKey = mainTable.primaryKey || "NUM_PED";
         if (availableColumns.includes(primaryKey)) {
           query += ` ORDER BY ${primaryKey} DESC`;
+        } else {
+          // Si no existe la clave primaria, usar el primer campo disponible
+          if (selectFields.length > 0) {
+            query += ` ORDER BY ${selectFields[0]} DESC`;
+          }
         }
-
-        // Limitar resultados
-        const limit = filters.limit || 100;
-        query = `SELECT TOP ${limit} * FROM (${query}) AS limited_results`;
 
         logger.info(`Ejecutando consulta: ${query}`);
         logger.debug(`Parámetros: ${JSON.stringify(params)}`);
