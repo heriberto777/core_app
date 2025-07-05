@@ -100,7 +100,7 @@ router.post(
 
 // GET /api/v1/mappings/:mappingId/preview-bonifications/:documentId - Preview de bonificaciones
 router.get(
-  "/:mappingId/preview-bonifications/:documentId",
+  "/:mappingId/documents/:documentId",
   errorHandler(mappingController.previewBonifications)
 );
 
