@@ -75,21 +75,18 @@ const createMapping = async (req, res) => {
 
     // Eliminar _id si viene en la data para creación
     if (mappingData._id) {
-      logger.debug("Eliminando _id de datos de creación");
       delete mappingData._id;
     }
-
-    logger.info(`Creando nuevo mapping: ${mappingData.name}`);
 
     const mapping = await DynamicTransferService.createMapping(mappingData);
 
     res.status(201).json({
       success: true,
-      message: "Configuración de mapeo creada exitosamente",
       data: mapping,
+      message: "Configuración de mapeo creada exitosamente",
     });
   } catch (error) {
-    logger.error("Error al crear configuración de mapeo:", error);
+    logger.error(`Error al crear configuración de mapeo: ${error.message}`);
     res.status(500).json({
       success: false,
       message: error.message,
@@ -98,7 +95,7 @@ const createMapping = async (req, res) => {
 };
 
 /**
- * Actualiza una configuración de mapeo existente
+ * Actualiza una configuración de mapeo
  */
 const updateMapping = async (req, res) => {
   try {
@@ -112,15 +109,6 @@ const updateMapping = async (req, res) => {
       });
     }
 
-    if (!mappingData) {
-      return res.status(400).json({
-        success: false,
-        message: "No se proporcionaron datos para actualizar",
-      });
-    }
-
-    logger.info(`Actualizando mapping: ${mappingData.name}`);
-
     const mapping = await DynamicTransferService.updateMapping(
       mappingId,
       mappingData
@@ -128,8 +116,8 @@ const updateMapping = async (req, res) => {
 
     res.json({
       success: true,
-      message: "Configuración de mapeo actualizada correctamente",
       data: mapping,
+      message: "Configuración de mapeo actualizada exitosamente",
     });
   } catch (error) {
     logger.error(
@@ -156,19 +144,12 @@ const deleteMapping = async (req, res) => {
       });
     }
 
-    const result = await DynamicTransferService.deleteMapping(mappingId);
+    await DynamicTransferService.deleteMapping(mappingId);
 
-    if (result) {
-      res.json({
-        success: true,
-        message: "Configuración de mapeo eliminada correctamente",
-      });
-    } else {
-      res.status(404).json({
-        success: false,
-        message: "Configuración de mapeo no encontrada",
-      });
-    }
+    res.json({
+      success: true,
+      message: "Configuración de mapeo eliminada exitosamente",
+    });
   } catch (error) {
     logger.error(`Error al eliminar configuración de mapeo: ${error.message}`);
     res.status(500).json({
@@ -179,79 +160,42 @@ const deleteMapping = async (req, res) => {
 };
 
 /**
- * 📊 FUNCIONES DE DOCUMENTOS
+ * 📄 FUNCIONES DE DOCUMENTOS
  */
 
 /**
- * Obtiene documentos según una configuración de mapeo
+ * Obtiene documentos por configuración de mapeo
  */
 const getDocumentsByMapping = async (req, res) => {
-  let connection = null;
-
   try {
     const { mappingId } = req.params;
-    const filters = req.query;
-
-    logger.info(`Obteniendo documentos para mapeo ${mappingId}`);
-    logger.debug(`Filtros: ${JSON.stringify(filters)}`);
+    const { limit = 50, offset = 0, filters = {} } = req.query;
 
     if (!mappingId) {
       return res.status(400).json({
         success: false,
-        message: "Se requiere el ID de la configuración de mapeo",
+        message: "Se requiere el ID de la configuración",
       });
     }
 
-    // Validación básica de filtros
-    if (!filters.dateFrom || !filters.dateTo) {
-      return res.status(400).json({
-        success: false,
-        message: "Se requieren los parámetros 'dateFrom' y 'dateTo'",
-      });
-    }
-
-    // Obtener configuración de mapeo
     const mapping = await DynamicTransferService.getMappingById(mappingId);
-
     if (!mapping) {
       return res.status(404).json({
         success: false,
-        message: `No se encontró la configuración de mapeo con ID ${mappingId}`,
+        message: "Configuración de mapeo no encontrada",
       });
     }
 
-    logger.info(`Configuración encontrada: ${mapping.name}`);
-
-    // Validar que haya al menos una tabla principal
-    const mainTable = mapping.tableConfigs?.find((tc) => !tc.isDetailTable);
-    if (!mainTable) {
-      return res.status(400).json({
-        success: false,
-        message: "No se encontró configuración de tabla principal en el mapeo",
-      });
-    }
-
-    // Establecer conexión al servidor origen
-    connection = await ConnectionManager.getConnection(mapping.sourceServer);
-
-    // Obtener documentos usando el servicio
-    const documents = await DynamicTransferService.getDocuments(
-      mapping,
-      filters,
-      connection
-    );
-
-    logger.info(`Documentos obtenidos: ${documents.length}`);
+    const documents = await DynamicTransferService.getDocuments(mapping, {
+      limit: parseInt(limit),
+      offset: parseInt(offset),
+      filters: filters,
+    });
 
     res.json({
       success: true,
       data: documents,
-      total: documents.length,
-      mappingInfo: {
-        name: mapping.name,
-        sourceServer: mapping.sourceServer,
-        sourceTable: mainTable.sourceTable,
-      },
+      message: `${documents.length} documentos encontrados`,
     });
   } catch (error) {
     logger.error(`Error al obtener documentos: ${error.message}`);
@@ -259,35 +203,24 @@ const getDocumentsByMapping = async (req, res) => {
       success: false,
       message: error.message,
     });
-  } finally {
-    if (connection) {
-      try {
-        await ConnectionManager.releaseConnection(connection);
-      } catch (e) {
-        logger.error(`Error al liberar conexión: ${e.message}`);
-      }
-    }
   }
 };
 
 /**
- * Obtiene detalles de un documento específico según el mapeo
+ * Obtiene detalles de un documento específico
  */
 const getDocumentDetailsByMapping = async (req, res) => {
-  let connection = null;
-
   try {
     const { mappingId, documentId } = req.params;
 
     if (!mappingId || !documentId) {
       return res.status(400).json({
         success: false,
-        message: "Se requiere ID de mapeo y ID de documento",
+        message: "Se requiere ID de mapping y ID de documento",
       });
     }
 
     const mapping = await DynamicTransferService.getMappingById(mappingId);
-
     if (!mapping) {
       return res.status(404).json({
         success: false,
@@ -295,244 +228,31 @@ const getDocumentDetailsByMapping = async (req, res) => {
       });
     }
 
-    connection = await ConnectionManager.getConnection(mapping.sourceServer);
-
-    // Obtener detalles usando las tablas de detalle configuradas
-    const details = {};
-    const detailTables = mapping.tableConfigs.filter((tc) => tc.isDetailTable);
-
-    for (const detailConfig of detailTables) {
-      let detailData = [];
-
-      try {
-        if (detailConfig.useSameSourceTable) {
-          // Usar la misma tabla que el encabezado
-          detailData = await DynamicTransferService.getDetailDataFromSameTable(
-            detailConfig,
-            mapping.tableConfigs.find((tc) => !tc.isDetailTable),
-            documentId,
-            connection
-          );
-        } else {
-          // Usar su propia tabla
-          detailData = await DynamicTransferService.getDetailDataFromOwnTable(
-            detailConfig,
-            documentId,
-            connection
-          );
-        }
-      } catch (detailError) {
-        logger.warn(
-          `Error obteniendo detalles de ${detailConfig.name}: ${detailError.message}`
-        );
-        detailData = [];
-      }
-
-      // Transformar datos según el mapeo de campos
-      const transformedData = detailData.map((record) => {
-        const transformedRecord = {};
-
-        detailConfig.fieldMappings?.forEach((mapping) => {
-          let value = null;
-
-          if (
-            mapping.sourceField &&
-            record[mapping.sourceField] !== undefined
-          ) {
-            value = record[mapping.sourceField];
-          } else if (mapping.defaultValue !== undefined) {
-            value =
-              mapping.defaultValue === "NULL" ? null : mapping.defaultValue;
-          }
-
-          transformedRecord[mapping.targetField] = value;
-        });
-
-        // Agregar metadatos
-        transformedRecord._detailTableName = detailConfig.name;
-        transformedRecord._targetTable = detailConfig.targetTable;
-
-        return transformedRecord;
-      });
-
-      details[detailConfig.name] = transformedData || [];
-    }
+    const details = await DynamicTransferService.getDocumentDetails(
+      mapping,
+      documentId
+    );
 
     res.json({
       success: true,
-      data: {
-        documentId,
-        details,
-      },
+      data: details,
     });
   } catch (error) {
-    logger.error(`Error al obtener detalles de documento: ${error.message}`);
+    logger.error(`Error al obtener detalles del documento: ${error.message}`);
     res.status(500).json({
       success: false,
       message: error.message,
     });
-  } finally {
-    if (connection) {
-      try {
-        await ConnectionManager.releaseConnection(connection);
-      } catch (e) {
-        logger.error(`Error al liberar conexión: ${e.message}`);
-      }
-    }
   }
 };
 
 /**
- * Procesa documentos según una configuración de mapeo
+ * Procesa documentos por configuración de mapeo
  */
 const processDocumentsByMapping = async (req, res) => {
   try {
     const { mappingId } = req.params;
-    const { documentIds } = req.body;
-
-    logger.info(`Procesando documentos para mapeo ${mappingId}`);
-    logger.debug(`Documentos a procesar: ${documentIds?.length || 0}`);
-
-    if (!mappingId) {
-      return res.status(400).json({
-        success: false,
-        message: "Se requiere el ID de la configuración de mapeo",
-      });
-    }
-
-    if (
-      !documentIds ||
-      !Array.isArray(documentIds) ||
-      documentIds.length === 0
-    ) {
-      return res.status(400).json({
-        success: false,
-        message: "Se requiere un array de IDs de documentos",
-      });
-    }
-
-    try {
-      // 🔧 CORREGIDO: Obtener la configuración del mapping primero
-      const mapping = await DynamicTransferService.getMappingById(mappingId);
-
-      if (!mapping) {
-        return res.status(404).json({
-          success: false,
-          message: `No se encontró la configuración de mapeo con ID ${mappingId}`,
-        });
-      }
-
-      logger.info(`Configuración encontrada: ${mapping.name}`);
-
-      // 🔧 CORREGIDO: Pasar el objeto mapping completo, no solo el ID
-      const result = await DynamicTransferService.processDocuments(
-        documentIds,
-        mapping // Pasa el objeto mapping completo en lugar de mappingId
-      );
-
-      logger.info(
-        `Procesamiento completado: ${result.processed} éxitos, ${result.failed} fallos`
-      );
-
-      // Incluir información detallada de errores si hay algún fallo
-      if (result.failed > 0) {
-        const errorDetails = result.details
-          .filter((detail) => !detail.success)
-          .map((detail) => ({
-            documentId: detail.documentId,
-            error: detail.message || detail.error || "Error desconocido",
-            details: detail.errorDetails || null,
-          }));
-
-        result.errorDetails = errorDetails;
-      }
-
-      return res.json({
-        success: true,
-        message:
-          result.failed > 0
-            ? `Se procesaron ${result.processed} documentos correctamente y fallaron ${result.failed}`
-            : `Se procesaron ${result.processed} documentos correctamente`,
-        data: result,
-      });
-    } catch (processingError) {
-      logger.error(
-        `Error durante el procesamiento de documentos: ${processingError.message}`
-      );
-      return res.status(500).json({
-        success: false,
-        message: processingError.message || "Error al procesar documentos",
-        errorDetails: processingError.stack,
-      });
-    }
-  } catch (error) {
-    logger.error(
-      `Error general en processDocumentsByMapping: ${error.message}`
-    );
-    return res.status(500).json({
-      success: false,
-      message: error.message || "Error interno del servidor",
-      errorDetails: error.stack,
-    });
-  }
-};
-
-/**
- * 🔢 FUNCIONES DE CONSECUTIVOS
- */
-
-/**
- * Actualiza la configuración de consecutivos de un mapeo
- */
-const updateConsecutiveConfig = async (req, res) => {
-  try {
-    const { mappingId } = req.params;
-    const consecutiveConfig = req.body;
-
-    if (!mappingId) {
-      return res.status(400).json({
-        success: false,
-        message: "Se requiere el ID de la configuración",
-      });
-    }
-
-    // Actualizar solo la configuración de consecutivos
-    const mapping = await TransferMapping.findByIdAndUpdate(
-      mappingId,
-      { consecutiveConfig: consecutiveConfig },
-      { new: true }
-    );
-
-    if (!mapping) {
-      return res.status(404).json({
-        success: false,
-        message: "Configuración de mapeo no encontrada",
-      });
-    }
-
-    res.json({
-      success: true,
-      message: "Configuración de consecutivos actualizada correctamente",
-      data: mapping.consecutiveConfig,
-    });
-  } catch (error) {
-    logger.error(
-      `Error al actualizar configuración de consecutivos: ${error.message}`
-    );
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
-  }
-};
-
-/**
- * Obtiene el siguiente valor consecutivo
- */
-const getNextConsecutiveValue = async (req, res) => {
-  try {
-    const { mappingId } = req.params;
-    const { segment } = req.query;
+    const { documentIds, limit, filters = {} } = req.body;
 
     if (!mappingId) {
       return res.status(400).json({
@@ -542,7 +262,6 @@ const getNextConsecutiveValue = async (req, res) => {
     }
 
     const mapping = await DynamicTransferService.getMappingById(mappingId);
-
     if (!mapping) {
       return res.status(404).json({
         success: false,
@@ -550,42 +269,56 @@ const getNextConsecutiveValue = async (req, res) => {
       });
     }
 
-    if (!mapping.consecutiveConfig?.enabled) {
-      return res.status(400).json({
-        success: false,
-        message: "Los consecutivos no están habilitados para este mapeo",
-      });
-    }
+    let result;
 
-    let consecutiveValue;
-
-    // Verificar si usa sistema centralizado
-    if (mapping.consecutiveConfig.useCentralizedSystem) {
-      // Lógica para consecutivos centralizados
-      logger.info(
-        `Usando sistema centralizado de consecutivos para mapeo ${mappingId}`
+    if (documentIds && documentIds.length > 0) {
+      // Procesar documentos específicos
+      result = await DynamicTransferService.processDocuments(
+        documentIds,
+        mappingId
       );
-      // Aquí iría la lógica del ConsecutiveService si está disponible
-      consecutiveValue = mapping.consecutiveConfig.lastValue + 1;
     } else {
-      // Sistema local
-      logger.info(
-        `Usando sistema local de consecutivos para mapeo ${mappingId}`
+      // Obtener documentos según filtros y límite
+      const documents = await DynamicTransferService.getDocuments(mapping, {
+        ...filters,
+        limit: limit || 10,
+      });
+
+      if (documents.length === 0) {
+        return res.json({
+          success: true,
+          data: {
+            processed: 0,
+            failed: 0,
+            skipped: 0,
+            details: [],
+          },
+          message: "No se encontraron documentos para procesar",
+        });
+      }
+
+      const documentIds = documents.map(
+        (doc) =>
+          doc[
+            mapping.tableConfigs.find((tc) => !tc.isDetailTable)?.primaryKey ||
+              "NUM_PED"
+          ]
       );
-      consecutiveValue = await DynamicTransferService.generateConsecutive(
-        mapping
+      result = await DynamicTransferService.processDocuments(
+        documentIds,
+        mappingId
       );
     }
 
     res.json({
-      success: true,
-      data: {
-        value: consecutiveValue,
-        mapping: mapping.name,
-      },
+      success: result.success || true,
+      data: result,
+      message: mapping.hasBonificationProcessing
+        ? "Mapping ejecutado exitosamente con procesamiento de bonificaciones"
+        : "Mapping ejecutado exitosamente",
     });
   } catch (error) {
-    logger.error(`Error al obtener siguiente consecutivo: ${error.message}`);
+    logger.error(`Error procesando documentos: ${error.message}`);
     res.status(500).json({
       success: false,
       message: error.message,
@@ -594,12 +327,16 @@ const getNextConsecutiveValue = async (req, res) => {
 };
 
 /**
- * Resetea el consecutivo de un mapeo
+ * 🏁 FUNCIONES DE CONSECUTIVOS
  */
-const resetConsecutive = async (req, res) => {
+
+/**
+ * Actualiza configuración de consecutivos
+ */
+const updateConsecutiveConfig = async (req, res) => {
   try {
     const { mappingId } = req.params;
-    const { newValue = 0 } = req.query;
+    const { consecutiveConfig } = req.body;
 
     if (!mappingId) {
       return res.status(400).json({
@@ -608,33 +345,17 @@ const resetConsecutive = async (req, res) => {
       });
     }
 
-    const mapping = await TransferMapping.findByIdAndUpdate(
-      mappingId,
-      { "consecutiveConfig.lastValue": parseInt(newValue) },
-      { new: true }
-    );
-
-    if (!mapping) {
-      return res.status(404).json({
-        success: false,
-        message: "Configuración de mapeo no encontrada",
-      });
-    }
-
-    logger.info(
-      `Consecutivo reseteado para mapeo ${mappingId} a valor ${newValue}`
-    );
+    const mapping = await DynamicTransferService.updateMapping(mappingId, {
+      consecutiveConfig,
+    });
 
     res.json({
       success: true,
-      message: `Consecutivo reseteado a ${newValue}`,
-      data: {
-        newValue: parseInt(newValue),
-        mapping: mapping.name,
-      },
+      data: mapping,
+      message: "Configuración de consecutivos actualizada",
     });
   } catch (error) {
-    logger.error(`Error al resetear consecutivo: ${error.message}`);
+    logger.error(`Error actualizando consecutivos: ${error.message}`);
     res.status(500).json({
       success: false,
       message: error.message,
@@ -643,7 +364,74 @@ const resetConsecutive = async (req, res) => {
 };
 
 /**
- * 🎁 FUNCIONES DE BONIFICACIONES
+ * Obtiene el siguiente valor de consecutivo
+ */
+const getNextConsecutiveValue = async (req, res) => {
+  try {
+    const { mappingId } = req.params;
+
+    if (!mappingId) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requiere el ID de la configuración",
+      });
+    }
+
+    const mapping = await DynamicTransferService.getMappingById(mappingId);
+    if (!mapping || !mapping.consecutiveConfig) {
+      return res.status(404).json({
+        success: false,
+        message: "Configuración de consecutivos no encontrada",
+      });
+    }
+
+    const nextValue = await DynamicTransferService.getNextConsecutive(mapping);
+
+    res.json({
+      success: true,
+      data: { nextValue },
+    });
+  } catch (error) {
+    logger.error(`Error obteniendo consecutivo: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * Resetea consecutivo
+ */
+const resetConsecutive = async (req, res) => {
+  try {
+    const { mappingId } = req.params;
+    const { newValue = 1 } = req.body;
+
+    if (!mappingId) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requiere el ID de la configuración",
+      });
+    }
+
+    await DynamicTransferService.resetConsecutive(mappingId, newValue);
+
+    res.json({
+      success: true,
+      message: `Consecutivo reseteado a ${newValue}`,
+    });
+  } catch (error) {
+    logger.error(`Error reseteando consecutivo: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * 🎁 FUNCIONES DE BONIFICACIONES (CORREGIDAS)
  */
 
 /**
@@ -652,6 +440,7 @@ const resetConsecutive = async (req, res) => {
 const validateBonifications = async (req, res) => {
   try {
     const { mappingId } = req.params;
+    const { config } = req.body;
 
     if (!mappingId) {
       return res.status(400).json({
@@ -660,13 +449,33 @@ const validateBonifications = async (req, res) => {
       });
     }
 
-    const validation =
-      await DynamicTransferService.validateBonificationConfiguration(mappingId);
+    const mapping = await DynamicTransferService.getMappingById(mappingId);
+
+    if (!mapping) {
+      return res.status(404).json({
+        success: false,
+        message: "Mapping no encontrado",
+      });
+    }
+
+    if (!mapping.hasBonificationProcessing) {
+      return res.status(400).json({
+        success: false,
+        message:
+          "Este mapping no tiene habilitado el procesamiento de bonificaciones",
+      });
+    }
+
+    // Aquí puedes agregar lógica de validación específica
+    const validation = await DynamicTransferService.validateBonificationConfig(
+      mapping,
+      config
+    );
 
     res.json({
-      success: true,
+      success: validation.isValid,
       data: validation,
-      message: validation.valid
+      message: validation.isValid
         ? "Configuración de bonificaciones válida"
         : "Se encontraron problemas en la configuración",
     });
@@ -680,7 +489,7 @@ const validateBonifications = async (req, res) => {
 };
 
 /**
- * Preview de procesamiento de bonificaciones
+ * Preview de procesamiento de bonificaciones (FUNCIÓN CORREGIDA)
  */
 const previewBonifications = async (req, res) => {
   try {
@@ -693,17 +502,24 @@ const previewBonifications = async (req, res) => {
       });
     }
 
+    // AQUÍ ESTABA EL PROBLEMA: Asegurar que mapping esté definido
     const mapping = await DynamicTransferService.getMappingById(mappingId);
+
+    if (!mapping) {
+      return res.status(404).json({
+        success: false,
+        message: "Mapping no encontrado",
+      });
+    }
 
     if (!mapping.hasBonificationProcessing) {
       return res.status(400).json({
         success: false,
         message:
-          "Procesamiento de bonificaciones no habilitado en este mapping",
+          "Este mapping no tiene habilitado el procesamiento de bonificaciones",
       });
     }
 
-    // Obtener conexión y datos
     const sourceConnection = await ConnectionManager.getConnection(
       mapping.sourceServer
     );
@@ -728,60 +544,74 @@ const previewBonifications = async (req, res) => {
           sourceConnection
         );
       } else {
-        originalData = await DynamicTransferService.getDetailDataFromOwnTable(
+        originalData = await DynamicTransferService.getDetailData(
           detailTable,
           documentId,
           sourceConnection
         );
       }
 
-      // Procesar con bonificaciones
-      const withBonifications = DynamicTransferService.processBonifications(
-        originalData,
-        mapping.bonificationConfig,
-        documentId
-      );
+      if (originalData.length === 0) {
+        return res.status(404).json({
+          success: false,
+          message: "No se encontraron datos para el documento especificado",
+        });
+      }
 
-      const regularItems = withBonifications.filter(
-        (i) => i.ITEM_TYPE === "REGULAR"
-      );
-      const bonifications = withBonifications.filter(
-        (i) => i.ITEM_TYPE === "BONIFICATION"
-      );
-      const linkedBonifications = bonifications.filter(
-        (i) => i.HAS_VALID_REFERENCE === true
-      );
-      const orphanBonifications = bonifications.filter(
-        (i) => i.HAS_VALID_REFERENCE === false
-      );
+      // Procesar bonificaciones
+      const processedDetails =
+        await DynamicTransferService.processBonifications(
+          originalData,
+          mapping.bonificationConfig
+        );
+
+      // Obtener promociones si están habilitadas
+      let promotions = [];
+      if (mapping.bonificationConfig.applyPromotionRules) {
+        promotions = await DynamicTransferService.getPromotionsForDocument(
+          documentId,
+          sourceConnection,
+          mapping.bonificationConfig
+        );
+      }
 
       res.json({
         success: true,
         data: {
           documentId,
-          configuration: mapping.bonificationConfig,
           original: {
             totalItems: originalData.length,
-            data: originalData,
+            details: originalData,
           },
           processed: {
-            totalItems: withBonifications.length,
-            regularItems: regularItems.length,
-            bonifications: bonifications.length,
-            linkedBonifications: linkedBonifications.length,
-            orphanBonifications: orphanBonifications.length,
-            data: withBonifications,
+            totalItems: processedDetails.length,
+            regularItems: processedDetails.filter(
+              (i) => i.ITEM_TYPE === "REGULAR"
+            ).length,
+            bonifications: processedDetails.filter(
+              (i) => i.ITEM_TYPE === "BONIFICATION"
+            ).length,
+            orphanBonifications: processedDetails.filter(
+              (i) => i.ITEM_TYPE === "BONIFICATION_ORPHAN"
+            ).length,
+            details: processedDetails,
           },
-          summary: {
-            linesAdded: withBonifications.length - originalData.length,
-            bonificationsLinked: linkedBonifications.length,
-            bonificationsOrphan: orphanBonifications.length,
+          promotions,
+          transformation: {
+            linesAdded: processedDetails.length - originalData.length,
+            bonificationsLinked: processedDetails.filter(
+              (i) => i.ITEM_TYPE === "BONIFICATION" && i.PEDIDO_LINEA_BONIF
+            ).length,
+            orphanBonifications: processedDetails.filter(
+              (i) => i.ITEM_TYPE === "BONIFICATION_ORPHAN"
+            ).length,
           },
         },
-        message: "Preview de bonificaciones generado exitosamente",
       });
     } finally {
-      await ConnectionManager.releaseConnection(sourceConnection);
+      if (sourceConnection && sourceConnection.close) {
+        await sourceConnection.close();
+      }
     }
   } catch (error) {
     logger.error(`Error en preview de bonificaciones: ${error.message}`);
@@ -793,12 +623,12 @@ const previewBonifications = async (req, res) => {
 };
 
 /**
- * Obtiene estadísticas básicas de bonificaciones
+ * Obtiene estadísticas de bonificaciones
  */
 const getBonificationStats = async (req, res) => {
   try {
     const { mappingId } = req.params;
-    const { dateFrom, dateTo } = req.query;
+    const { dateFrom, dateTo, filters = {} } = req.query;
 
     if (!mappingId) {
       return res.status(400).json({
@@ -809,109 +639,44 @@ const getBonificationStats = async (req, res) => {
 
     const mapping = await DynamicTransferService.getMappingById(mappingId);
 
-    if (!mapping || !mapping.hasBonificationProcessing) {
+    if (!mapping) {
+      return res.status(404).json({
+        success: false,
+        message: "Mapping no encontrado",
+      });
+    }
+
+    if (!mapping.hasBonificationProcessing) {
       return res.status(400).json({
         success: false,
-        message: "Mapping no válido para procesamiento de bonificaciones",
+        message:
+          "Este mapping no tiene habilitado el procesamiento de bonificaciones",
       });
     }
 
-    const sourceConnection = await ConnectionManager.getConnection(
-      mapping.sourceServer
-    );
+    const stats = await DynamicTransferService.getBonificationStats(mapping, {
+      dateFrom,
+      dateTo,
+      filters,
+    });
 
-    try {
-      const bonifConfig = mapping.bonificationConfig;
-
-      // Consulta básica para estadísticas
-      const query = `
-        SELECT
-          COUNT(*) as total_records,
-          COUNT(CASE WHEN ${bonifConfig.bonificationIndicatorField} = '${
-        bonifConfig.bonificationIndicatorValue
-      }' THEN 1 END) as total_bonifications,
-          COUNT(DISTINCT ${bonifConfig.orderField}) as unique_documents,
-          SUM(CASE WHEN ${bonifConfig.bonificationIndicatorField} = '${
-        bonifConfig.bonificationIndicatorValue
-      }' THEN ISNULL(MON_DSC, 0) END) as total_discount_amount
-        FROM ${bonifConfig.sourceTable}
-        WHERE 1=1
-        ${dateFrom ? `AND CONVERT(date, GETDATE()) >= '${dateFrom}'` : ""}
-        ${dateTo ? `AND CONVERT(date, GETDATE()) <= '${dateTo}'` : ""}
-      `;
-
-      const result = await SqlService.query(sourceConnection, query);
-
-      const stats =
-        result.recordset && result.recordset.length > 0
-          ? result.recordset[0]
-          : {
-              total_records: 0,
-              total_bonifications: 0,
-              unique_documents: 0,
-              total_discount_amount: 0,
-            };
-
-      const processedStats = {
-        documentsProcessed: stats.unique_documents || 0,
-        documentsWithBonifications: Math.floor(
-          (stats.unique_documents || 0) * 0.3
-        ),
-        totalBonifications: stats.total_bonifications || 0,
-        totalRecords: stats.total_records || 0,
-        totalDiscountAmount: parseFloat(
-          stats.total_discount_amount || 0
-        ).toFixed(2),
-        bonificationRatio:
-          stats.total_records > 0
-            ? ((stats.total_bonifications / stats.total_records) * 100).toFixed(
-                2
-              )
-            : 0,
-        averageBonificationsPerDocument:
-          stats.unique_documents > 0
-            ? (stats.total_bonifications / stats.unique_documents).toFixed(2)
-            : 0,
-      };
-
-      res.json({
-        success: true,
-        data: processedStats,
-        period: {
-          from: dateFrom,
-          to: dateTo,
-        },
-      });
-    } finally {
-      await ConnectionManager.releaseConnection(sourceConnection);
-    }
+    res.json({
+      success: true,
+      data: stats,
+    });
   } catch (error) {
     logger.error(
       `Error obteniendo estadísticas de bonificaciones: ${error.message}`
     );
-
-    // Respuesta con datos básicos si falla la consulta
-    res.json({
-      success: true,
-      data: {
-        documentsProcessed: 0,
-        documentsWithBonifications: 0,
-        totalBonifications: 0,
-        totalRecords: 0,
-        totalDiscountAmount: "0.00",
-        bonificationRatio: "0.00",
-        averageBonificationsPerDocument: "0.00",
-      },
-      message: "Estadísticas básicas - error al acceder a datos detallados",
+    res.status(500).json({
+      success: false,
+      message: error.message,
     });
   }
 };
 
-/**
- * 📤 EXPORTACIONES
- */
 module.exports = {
-  // Funciones básicas de mapping
+  // Funciones básicas
   getMappings,
   getMappingById,
   createMapping,

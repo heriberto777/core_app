@@ -3895,6 +3895,87 @@ class DynamicTransferService {
       return detailsData;
     }
   }
+  /**
+   * Valida configuración de bonificaciones
+   * @param {Object} mapping - Configuración de mapeo
+   * @param {Object} config - Configuración a validar
+   * @returns {Promise<Object>} - Resultado de la validación
+   */
+  async validateBonificationConfig(mapping, config) {
+    try {
+      const issues = [];
+      const warnings = [];
+
+      if (!mapping.tableConfigs || mapping.tableConfigs.length === 0) {
+        issues.push("No hay configuración de tablas");
+      }
+
+      const detailTable = mapping.tableConfigs.find((tc) => tc.isDetailTable);
+      if (!detailTable) {
+        issues.push("No se encontró tabla de detalle");
+      }
+
+      if (mapping.hasBonificationProcessing && !mapping.bonificationConfig) {
+        issues.push(
+          "Procesamiento de bonificaciones habilitado pero sin configuración"
+        );
+      }
+
+      if (config && config.bonificationFields) {
+        const requiredFields = [
+          "quantityField",
+          "unitPriceField",
+          "totalField",
+        ];
+        requiredFields.forEach((field) => {
+          if (!config.bonificationFields[field]) {
+            warnings.push(`Campo requerido faltante: ${field}`);
+          }
+        });
+      }
+
+      return {
+        isValid: issues.length === 0,
+        issues,
+        warnings,
+      };
+    } catch (error) {
+      logger.error(
+        `Error validando configuración de bonificaciones: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene estadísticas de bonificaciones
+   * @param {Object} mapping - Configuración de mapeo
+   * @param {Object} options - Opciones de filtrado
+   * @returns {Promise<Object>} - Estadísticas
+   */
+  async getBonificationStats(mapping, options = {}) {
+    try {
+      const { dateFrom, dateTo, filters = {} } = options;
+
+      // Aquí implementarías la lógica para obtener estadísticas
+      // Esto es un ejemplo básico
+      const stats = {
+        totalDocuments: 0,
+        documentsWithBonifications: 0,
+        totalBonifications: 0,
+        totalPromotions: 0,
+        avgBonificationsPerDocument: 0,
+        dateRange: { from: dateFrom, to: dateTo },
+      };
+
+      return stats;
+    } catch (error) {
+      logger.error(
+        `Error obteniendo estadísticas de bonificaciones: ${error.message}`
+      );
+      throw error;
+    }
+  }
 }
 
 module.exports = new DynamicTransferService();

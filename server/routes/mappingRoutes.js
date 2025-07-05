@@ -60,7 +60,7 @@ router.put(
   errorHandler(mappingController.resetConsecutive)
 );
 
-// Rutas para bonificaciones
+// Rutas para bonificaciones (CORREGIDAS)
 router.post(
   "/:mappingId/validate-bonifications",
   errorHandler(mappingController.validateBonifications)
