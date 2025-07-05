@@ -226,6 +226,20 @@ class BonificationIntegrationService {
   }
 
   /**
+   * 🎁 NUEVA FUNCIÓN: Determina el tipo de bonificación
+   */
+  determineBonificationType(bonification) {
+    // Lógica básica para determinar tipo de bonificación
+    // Puedes expandir esto según tus necesidades
+    if (bonification.CANTIDAD && bonification.CANTIDAD > 0) {
+      return bonification.PRECIO === 0
+        ? "BONIFICACION_GRATUITA"
+        : "BONIFICACION_DESCUENTO";
+    }
+    return "BONIFICACION_STANDARD";
+  }
+
+  /**
    * Verifica si un mapping debe procesar bonificaciones
    */
   shouldProcessBonifications(mapping) {
@@ -250,25 +264,13 @@ class BonificationIntegrationService {
       bonificationConfig.regularArticleField,
       bonificationConfig.bonificationReferenceField,
       bonificationConfig.lineNumberField,
-    ].filter(field => field); // Filtrar campos que existen
+    ].filter((field) => field); // Filtrar campos que existen
 
     logger.debug(
       `🎁 Campos requeridos para bonificaciones: ${requiredFields.join(", ")}`
     );
 
     return baseQuery;
-  }
-}
-
-  determineBonificationType(bonification) {
-    // Lógica básica para determinar tipo de bonificación
-    // Puedes expandir esto según tus necesidades
-    if (bonification.CANTIDAD && bonification.CANTIDAD > 0) {
-      return bonification.PRECIO === 0
-        ? "BONIFICACION_GRATUITA"
-        : "BONIFICACION_DESCUENTO";
-    }
-    return "BONIFICACION_STANDARD";
   }
 }
 
