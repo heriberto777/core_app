@@ -1,6 +1,11 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
-import { ConsecutiveConfigSection, TransferApi, useAuth } from "../../index";
+import {
+  ConsecutiveConfigSection,
+  PromotionConfigSection,
+  TransferApi,
+  useAuth,
+} from "../../index";
 import { FaSave, FaPlus, FaTrash, FaTimes, FaEdit } from "react-icons/fa";
 import Swal from "sweetalert2";
 
@@ -2787,6 +2792,10 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                 handleChange={handleChange}
               />
             </FormGroup>
+            <PromotionConfigSection
+              mapping={mapping}
+              handleChange={handleChange}
+            />
           </Section>
         )}
 

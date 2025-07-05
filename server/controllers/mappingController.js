@@ -810,6 +810,177 @@ const getNextConsecutiveValue = async (req, res) => {
   }
 };
 
+/**
+ * Obtiene detalles de documento con procesamiento de promociones
+ */
+const getDocumentDetailsWithPromotions = async (req, res) => {
+  let connection = null;
+
+  try {
+    const { mappingId, documentId } = req.params;
+
+    if (!mappingId || !documentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requieren mappingId y documentId",
+      });
+    }
+
+    // Obtener configuración de mapeo
+    const mapping = await DynamicTransferService.getMappingById(mappingId);
+    if (!mapping) {
+      return res.status(404).json({
+        success: false,
+        message: "Configuración de mapeo no encontrada",
+      });
+    }
+
+    // Establecer conexión
+    connection = await ConnectionManager.getConnection(mapping.sourceServer);
+
+    // Obtener configuraciones de tablas de detalle
+    const detailConfigs = mapping.tableConfigs.filter((tc) => tc.isDetailTable);
+    const details = {};
+
+    // Procesar cada tabla de detalle
+    for (const detailConfig of detailConfigs) {
+      logger.info(
+        `Procesando detalles con promociones para tabla ${detailConfig.name}`
+      );
+
+      // Usar método con soporte para promociones
+      const detailData =
+        await DynamicTransferService.getDetailDataWithPromotions(
+          documentId,
+          detailConfig,
+          connection,
+          mapping
+        );
+
+      details[detailConfig.name] = detailData || [];
+    }
+
+    res.json({
+      success: true,
+      data: {
+        documentId,
+        details,
+        promotionConfig: mapping.promotionConfig || null,
+      },
+    });
+  } catch (error) {
+    logger.error(`Error al obtener detalles con promociones: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  } finally {
+    if (connection) {
+      try {
+        await ConnectionManager.releaseConnection(connection);
+      } catch (e) {
+        logger.error(`Error al liberar conexión: ${e.message}`);
+      }
+    }
+  }
+};
+
+/**
+ * Procesa documentos con soporte para promociones
+ */
+const processDocumentsWithPromotions = async (req, res) => {
+  try {
+    const { mappingId } = req.params;
+    const { documentIds } = req.body;
+
+    logger.info(
+      `Procesando documentos con promociones para mapeo ${mappingId}`
+    );
+
+    if (!mappingId) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requiere el ID de la configuración de mapeo",
+      });
+    }
+
+    if (
+      !documentIds ||
+      !Array.isArray(documentIds) ||
+      documentIds.length === 0
+    ) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requiere un array de IDs de documentos",
+      });
+    }
+
+    // Procesar documentos con soporte para promociones
+    const result = await DynamicTransferService.processDocuments(
+      documentIds,
+      mappingId
+    );
+
+    logger.info(
+      `Procesamiento completado: ${result.processed} éxitos, ${result.failed} fallos`
+    );
+
+    if (result.failed > 0) {
+      const errorDetails = result.details
+        .filter((detail) => !detail.success)
+        .map((detail) => ({
+          documentId: detail.documentId,
+          error: detail.message || detail.error || "Error desconocido",
+          details: detail.errorDetails || null,
+        }));
+
+      result.errorDetails = errorDetails;
+    }
+
+    return res.json({
+      success: true,
+      message:
+        result.failed > 0
+          ? `Procesamiento completado con ${result.failed} errores`
+          : "Todos los documentos fueron procesados exitosamente",
+      data: result,
+    });
+  } catch (error) {
+    logger.error(`Error en procesamiento con promociones: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+/**
+ * Valida configuración de promociones
+ */
+const validatePromotionConfig = async (token, mappingId) => {
+  try {
+    const response = await fetch(
+      `${this.baseUrl}/mapping/${mappingId}/validate-promotions`,
+      {
+        method: "GET",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${token}`,
+        },
+      }
+    );
+
+    if (!response.ok) {
+      throw new Error(`Error ${response.status}: ${response.statusText}`);
+    }
+
+    return await response.json();
+  } catch (error) {
+    console.error("Error al validar configuración de promociones:", error);
+    throw error;
+  }
+};
+
 module.exports = {
   getMappings,
   getMappingById,
@@ -822,4 +993,7 @@ module.exports = {
   updateConsecutiveConfig,
   getNextConsecutiveValue,
   resetConsecutive,
+  getDocumentDetailsWithPromotions,
+  processDocumentsWithPromotions,
+  validatePromotionConfig,
 };

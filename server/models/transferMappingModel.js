@@ -139,6 +139,68 @@ const MarkProcessedConfigSchema = new Schema({
   allowRollback: { type: Boolean, default: false }, // Si permitir rollback en errores
 });
 
+const PromotionConfigSchema = new Schema({
+  enabled: { type: Boolean, default: false },
+  detectFields: {
+    bonusField: { type: String, default: "ART_BON" }, // Campo que indica bonificación
+    referenceField: { type: String, default: "COD_ART_RFR" }, // Campo de referencia
+    discountField: { type: String, default: "MON_DSC" }, // Campo de descuento
+    lineNumberField: { type: String, default: "NUM_LN" }, // Campo número de línea
+    articleField: { type: String, default: "COD_ART" }, // Campo código artículo
+    quantityField: { type: String, default: "CND_MAX" }, // Campo cantidad
+  },
+  targetFields: {
+    bonusLineRef: { type: String, default: "PEDIDO_LINEA_BONIF" }, // Campo referencia bonificación
+    orderedQuantity: { type: String, default: "CANTIDAD_PEDIDA" }, // Campo cantidad pedida
+    invoiceQuantity: { type: String, default: "CANTIDAD_A_FACTURAR" }, // Campo cantidad a facturar
+    bonusQuantity: { type: String, default: "CANTIDAD_BONIF" }, // Campo cantidad bonificación
+  },
+  rules: [
+    {
+      name: { type: String, required: true },
+      type: {
+        type: String,
+        enum: [
+          "FAMILY_DISCOUNT",
+          "QUANTITY_BONUS",
+          "SCALED_BONUS",
+          "PRODUCT_BONUS",
+          "INVOICE_DISCOUNT",
+          "ONE_TIME_OFFER",
+        ],
+        required: true,
+      },
+      enabled: { type: Boolean, default: true },
+      conditions: {
+        familyCode: { type: String }, // Para descuentos por familia
+        minAmount: { type: Number }, // Monto mínimo
+        minQuantity: { type: Number }, // Cantidad mínima
+        productCode: { type: String }, // Código de producto específico
+        customerType: { type: String }, // Tipo de cliente
+        priceList: { type: String }, // Lista de precios
+        zone: { type: String }, // Zona
+      },
+      actions: {
+        discountPercent: { type: Number }, // Porcentaje de descuento
+        bonusQuantity: { type: Number }, // Cantidad de bonificación
+        bonusProduct: { type: String }, // Producto de bonificación
+        scaleRules: [
+          {
+            // Para bonificaciones escaladas
+            fromQuantity: { type: Number },
+            toQuantity: { type: Number },
+            bonusQuantity: { type: Number },
+            bonusProduct: { type: String },
+          },
+        ],
+      },
+      priority: { type: Number, default: 0 }, // Prioridad de aplicación
+      isOneTime: { type: Boolean, default: false }, // Si es oferta única
+      description: { type: String },
+    },
+  ],
+});
+
 // Schema principal para el mapeo
 const TransferMappingSchema = new Schema({
   name: { type: String, required: true, unique: true },
@@ -169,6 +231,7 @@ const TransferMappingSchema = new Schema({
   },
   consecutiveConfig: ConsecutiveConfigSchema,
   foreignKeyDependencies: [ForeignKeyDependencySchema],
+  promotionConfig: PromotionConfigSchema,
 });
 
 // Pre-save hook para actualizar fecha
