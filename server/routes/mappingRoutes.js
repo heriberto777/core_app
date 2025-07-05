@@ -74,4 +74,9 @@ router.get(
   errorHandler(mappingController.getBonificationStats)
 );
 
+router.get(
+  "/:mappingId/documents/:documentId/diagnose",
+  errorHandler(mappingController.diagnoseDocumentIssues)
+);
+
 module.exports = router;

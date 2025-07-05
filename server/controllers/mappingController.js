@@ -912,6 +912,54 @@ const getBonificationStats = async (req, res) => {
 };
 
 /**
+ * 🔧 NUEVA FUNCIÓN: Diagnostica problemas con documentos
+ */
+const diagnoseDocumentIssues = async (req, res) => {
+  try {
+    const { mappingId, documentId } = req.params;
+    logger.info(
+      `🔍 Diagnosticando documento: ${documentId} para mapping: ${mappingId}`
+    );
+
+    if (!mappingId || !documentId) {
+      return res.status(400).json({
+        success: false,
+        message: "Se requiere ID de mapping y ID de documento",
+      });
+    }
+
+    const mapping = await DynamicTransferService.getMappingById(mappingId);
+    if (!mapping) {
+      return res.status(404).json({
+        success: false,
+        message: "Mapping no encontrado",
+      });
+    }
+
+    const diagnosis = await DynamicTransferService.diagnoseDocumentIssues(
+      mapping,
+      documentId
+    );
+
+    res.json({
+      success: true,
+      data: diagnosis,
+      message: diagnosis.success
+        ? "Diagnóstico completado exitosamente"
+        : "Se encontraron problemas en el diagnóstico",
+    });
+
+    logger.info(`✅ Diagnóstico completado para documento: ${documentId}`);
+  } catch (error) {
+    logger.error(`❌ Error en diagnóstico de documento: ${error.message}`);
+    res.status(500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+/**
  * 📤 EXPORTACIONES CORREGIDAS
  */
 module.exports = {
@@ -936,4 +984,5 @@ module.exports = {
   validateBonifications, // ✅ Antes era validateBonificationConfig
   previewBonifications, // ✅ Antes era previewBonificationProcessing
   getBonificationStats,
+  diagnoseDocumentIssues,
 };

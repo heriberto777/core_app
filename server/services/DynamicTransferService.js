@@ -284,6 +284,13 @@ class DynamicTransferService {
             documentId,
             error: docError.message,
             timestamp: new Date(),
+            // 🔧 NUEVO: Información adicional para debugging
+            details: {
+              mappingId: mappingId,
+              mappingName: mapping.name,
+              documentType: typeof documentId,
+              stackTrace: docError.stack?.split("\n").slice(0, 3).join("\n"), // Solo primeras 3 líneas
+            },
           });
         }
       }
@@ -919,6 +926,10 @@ class DynamicTransferService {
    * Obtiene datos de un documento
    * @private
    */
+  /**
+   * Obtiene datos de un documento CON DIAGNÓSTICO AUTOMÁTICO
+   * @private
+   */
   async getDocumentData(documentId, mapping, sourceConnection) {
     const logId = `getDocData_${documentId}`;
 
@@ -931,11 +942,13 @@ class DynamicTransferService {
       }
 
       const primaryKey = mainTable.primaryKey || "NUM_PED";
-      const query = `SELECT * FROM ${mainTable.sourceTable} WHERE ${primaryKey} = @documentId`;
+      const sourceTable = mainTable.sourceTable;
 
-      logger.debug(`🔍 [${logId}] Ejecutando consulta: ${query}`);
+      // Consulta principal
+      const mainQuery = `SELECT * FROM ${sourceTable} WHERE ${primaryKey} = @documentId`;
+      logger.debug(`🔍 [${logId}] Ejecutando consulta: ${mainQuery}`);
 
-      const result = await SqlService.query(sourceConnection, query, {
+      const result = await SqlService.query(sourceConnection, mainQuery, {
         documentId: documentId,
       });
 
@@ -945,7 +958,45 @@ class DynamicTransferService {
         );
         return result.recordset[0];
       } else {
-        logger.warn(`⚠️ [${logId}] No se encontraron datos para el documento`);
+        // 🔧 NUEVO: Ejecutar diagnóstico automático cuando no se encuentra el documento
+        logger.warn(
+          `⚠️ [${logId}] No se encontraron datos, ejecutando diagnóstico automático...`
+        );
+
+        try {
+          const diagnosis = await this.diagnoseDocumentIssues(
+            mapping,
+            documentId
+          );
+
+          // Log del diagnóstico
+          logger.info(`🔍 [${logId}] Diagnóstico automático completado:`);
+          logger.info(
+            `   - Tabla: ${diagnosis.mappingInfo?.sourceTable} (${
+              diagnosis.tableInfo?.total_records || 0
+            } registros)`
+          );
+          logger.info(
+            `   - Documentos similares: ${
+              diagnosis.searchResults?.similar?.length || 0
+            }`
+          );
+          logger.info(`   - Sugerencias: ${diagnosis.suggestions?.join(", ")}`);
+
+          if (diagnosis.searchResults?.sample?.length > 0) {
+            logger.info(
+              `   - Ejemplos de IDs válidos: ${diagnosis.searchResults.sample
+                .map((r) => r[primaryKey])
+                .slice(0, 3)
+                .join(", ")}`
+            );
+          }
+        } catch (diagError) {
+          logger.warn(
+            `⚠️ [${logId}] Error en diagnóstico automático: ${diagError.message}`
+          );
+        }
+
         return null;
       }
     } catch (error) {
@@ -1006,16 +1057,38 @@ class DynamicTransferService {
     try {
       logger.debug(`📝 [${logId}] Creando registro de ejecución`);
 
+      // 🔧 CORREGIDO: Obtener información del mapping para el registro
+      let mapping = null;
+      let taskName = `Dynamic_Process_${mappingId}`;
+      let taskId = null;
+
+      try {
+        mapping = await TransferMapping.findById(mappingId);
+        if (mapping) {
+          taskName = mapping.name || taskName;
+          taskId = mapping.taskId || null;
+        }
+      } catch (mappingError) {
+        logger.warn(
+          `⚠️ [${logId}] No se pudo obtener mapping para registro: ${mappingError.message}`
+        );
+      }
+
       const execution = new TaskExecution({
+        taskId: taskId, // 🔧 CORREGIDO: Usar el taskId del mapping
+        taskName: taskName, // 🔧 CORREGIDO: Usar el nombre del mapping
         mappingId,
         status: "running",
         startTime: new Date(),
         totalRecords: documentCount,
         successfulRecords: 0,
         failedRecords: 0,
+        executionType: "dynamic_processing", // 🔧 NUEVO: Tipo de ejecución
         details: {
           phase: "initialization",
           message: "Procesamiento iniciado",
+          mappingName: taskName,
+          documentCount: documentCount,
         },
       });
 
@@ -1029,6 +1102,7 @@ class DynamicTransferService {
       logger.error(
         `❌ [${logId}] Error creando registro de ejecución: ${error.message}`
       );
+      logger.debug(`📊 [${logId}] Error details: ${error.stack}`);
       return null;
     }
   }
@@ -1092,6 +1166,20 @@ class DynamicTransferService {
           ? "partial"
           : "completed";
 
+      // 🔧 CORREGIDO: Convertir errorDetails a string si es array
+      let errorDetails = null;
+      if (hasErrors && results.errors) {
+        if (Array.isArray(results.errors)) {
+          errorDetails = results.errors
+            .map((err) =>
+              typeof err === "object" ? JSON.stringify(err) : String(err)
+            )
+            .join("; ");
+        } else {
+          errorDetails = String(results.errors);
+        }
+      }
+
       await TransferTask.findByIdAndUpdate(taskId, {
         status: finalStatus,
         progress: 100,
@@ -1102,8 +1190,17 @@ class DynamicTransferService {
             ? `Procesamiento completado con errores: ${results.processed} éxitos, ${results.failed} fallos`
             : "Procesamiento completado con éxito",
           affectedRecords: results.processed,
-          errorDetails: hasErrors ? results.errors : null,
+          errorDetails: errorDetails, // 🔧 CORREGIDO: Ahora es string
           executionTime: results.processingTime,
+          // 🎁 NUEVO: Agregar estadísticas de bonificaciones si existen
+          bonificationStats: results.bonificationStats
+            ? {
+                totalBonifications:
+                  results.bonificationStats.totalBonifications,
+                totalPromotions: results.bonificationStats.totalPromotions,
+                processedDetails: results.bonificationStats.processedDetails,
+              }
+            : null,
         },
       });
 
@@ -3399,6 +3496,179 @@ class DynamicTransferService {
         connectionPooling: true,
       },
     };
+  }
+
+  /**
+   * 🔧 NUEVA FUNCIÓN: Diagnostica problemas con documentos
+   * @param {Object} mapping - Configuración de mapeo
+   * @param {string} documentId - ID del documento
+   * @returns {Promise<Object>} - Información de diagnóstico
+   */
+  async diagnoseDocumentIssues(mapping, documentId) {
+    const logId = `diagnoseDoc_${documentId}`;
+    let sourceConnection = null;
+
+    try {
+      logger.info(`🔍 [${logId}] Iniciando diagnóstico de documento`);
+
+      sourceConnection = await ConnectionService.getConnection(
+        mapping.sourceServer
+      );
+      const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
+
+      if (!mainTable) {
+        return {
+          success: false,
+          issue: "No se encontró tabla principal en el mapping",
+          suggestions: [
+            "Verificar configuración del mapping",
+            "Agregar tabla principal",
+          ],
+        };
+      }
+
+      const primaryKey = mainTable.primaryKey || "NUM_PED";
+      const sourceTable = mainTable.sourceTable;
+
+      // Diagnóstico completo
+      const diagnosis = {
+        success: true,
+        documentId,
+        mappingInfo: {
+          mappingId: mapping._id,
+          mappingName: mapping.name,
+          sourceTable,
+          primaryKey,
+        },
+        tableInfo: {},
+        searchResults: {},
+        suggestions: [],
+      };
+
+      // 1. Verificar tabla
+      try {
+        const tableInfo = await SqlService.query(
+          sourceConnection,
+          `
+        SELECT COUNT(*) as total_records,
+               MIN(${primaryKey}) as min_value,
+               MAX(${primaryKey}) as max_value
+        FROM ${sourceTable}
+      `
+        );
+
+        diagnosis.tableInfo = tableInfo.recordset[0];
+      } catch (tableError) {
+        diagnosis.success = false;
+        diagnosis.issue = `Error accediendo a tabla: ${tableError.message}`;
+        diagnosis.suggestions.push(
+          "Verificar que la tabla existe y es accesible"
+        );
+      }
+
+      // 2. Buscar documentos similares
+      try {
+        const similarDocs = await SqlService.query(
+          sourceConnection,
+          `
+        SELECT TOP 10 ${primaryKey}
+        FROM ${sourceTable}
+        WHERE CAST(${primaryKey} AS VARCHAR) LIKE @pattern
+        ORDER BY ${primaryKey}
+      `,
+          { pattern: `%${documentId}%` }
+        );
+
+        diagnosis.searchResults.similar = similarDocs.recordset;
+      } catch (similarError) {
+        diagnosis.searchResults.similar = [];
+      }
+
+      // 3. Obtener muestra de datos
+      try {
+        const sampleData = await SqlService.query(
+          sourceConnection,
+          `
+        SELECT TOP 5 ${primaryKey}
+        FROM ${sourceTable}
+        ORDER BY ${primaryKey}
+      `
+        );
+
+        diagnosis.searchResults.sample = sampleData.recordset;
+      } catch (sampleError) {
+        diagnosis.searchResults.sample = [];
+      }
+
+      // 4. Verificar tipos de datos
+      try {
+        const dataTypeCheck = await SqlService.query(
+          sourceConnection,
+          `
+        SELECT TOP 1 ${primaryKey},
+               SQL_VARIANT_PROPERTY(${primaryKey}, 'BaseType') as data_type
+        FROM ${sourceTable}
+        WHERE ${primaryKey} IS NOT NULL
+      `
+        );
+
+        diagnosis.searchResults.dataType = dataTypeCheck.recordset[0];
+      } catch (dataTypeError) {
+        diagnosis.searchResults.dataType = null;
+      }
+
+      // 5. Generar sugerencias
+      if (diagnosis.tableInfo.total_records === 0) {
+        diagnosis.suggestions.push("La tabla está vacía");
+      } else if (diagnosis.searchResults.similar.length === 0) {
+        diagnosis.suggestions.push(
+          `El documento '${documentId}' no existe en la tabla`
+        );
+        diagnosis.suggestions.push(`Verificar que el ID sea correcto`);
+        if (diagnosis.searchResults.sample.length > 0) {
+          diagnosis.suggestions.push(
+            `Ejemplos de IDs válidos: ${diagnosis.searchResults.sample
+              .map((r) => r[primaryKey])
+              .join(", ")}`
+          );
+        }
+      } else {
+        diagnosis.suggestions.push(
+          `Se encontraron ${diagnosis.searchResults.similar.length} documentos similares`
+        );
+      }
+
+      // 6. Información adicional
+      diagnosis.metadata = {
+        searchedFor: documentId,
+        searchedType: typeof documentId,
+        tableHasData: diagnosis.tableInfo.total_records > 0,
+        diagnosticTime: new Date(),
+      };
+
+      logger.info(`✅ [${logId}] Diagnóstico completado`);
+      return diagnosis;
+    } catch (error) {
+      logger.error(`❌ [${logId}] Error en diagnóstico: ${error.message}`);
+      return {
+        success: false,
+        issue: error.message,
+        suggestions: [
+          "Verificar configuración de conexión",
+          "Revisar logs del servidor",
+        ],
+      };
+    } finally {
+      if (sourceConnection) {
+        try {
+          await ConnectionService.releaseConnection(sourceConnection);
+        } catch (connError) {
+          logger.error(
+            `❌ [${logId}] Error liberando conexión: ${connError.message}`
+          );
+        }
+      }
+    }
   }
 }
 
