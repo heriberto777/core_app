@@ -22,12 +22,14 @@ export class TransferApi {
 
       if (response.status !== 200) throw result;
 
-      return result;
+      // 🔧 ARREGLO: Extraer datos de la estructura de respuesta
+      return result.data || result || [];
     } catch (error) {
       console.log(error);
       throw error;
     }
   }
+
   async upsertTransferTask(accessToken, datos) {
     console.log(datos);
     try {
@@ -54,7 +56,6 @@ export class TransferApi {
 
   /**
    * Elimina tarea especifica
-   *
    */
   async deleteTask(accessToken, name) {
     try {
@@ -175,6 +176,29 @@ export class TransferApi {
       }
 
       throw error; // Re-lanza el error para que el frontend lo maneje
+    }
+  }
+
+  // 🆕 NUEVO: Ejecuta grupo de tareas vinculadas
+  async executeLinkedGroup(accessToken, taskId) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/execute-linked-group/${taskId}`;
+      const params = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al ejecutar grupo vinculado:", error);
+      throw error;
     }
   }
 
@@ -738,7 +762,8 @@ export class TransferApi {
 
       if (!response.ok) throw result;
 
-      return result;
+      // 🔧 ARREGLO: Extraer datos de la estructura de respuesta
+      return result.data || result || [];
     } catch (error) {
       console.error("Error al obtener vendedores:", error);
       throw error;
@@ -1222,7 +1247,11 @@ export class TransferApi {
     }
   }
 
-  // Métodos para gestión de configuraciones de mapeo
+  // 🆕 NUEVOS MÉTODOS PARA GESTIÓN DE MAPPINGS CON BONIFICACIONES
+
+  /**
+   * Métodos para gestión de configuraciones de mapeo
+   */
   async getMappings(accessToken) {
     try {
       const url = `${this.baseApi}/mappings`;
@@ -1237,7 +1266,8 @@ export class TransferApi {
 
       if (response.status !== 200) throw result;
 
-      return result.data;
+      // 🔧 ARREGLO: Extraer datos de la estructura de respuesta
+      return result.data || result || [];
     } catch (error) {
       console.error("Error al obtener configuraciones de mapeo:", error);
       throw error;
@@ -1381,28 +1411,6 @@ export class TransferApi {
     }
   }
 
-  // async resetConsecutive(accessToken, mappingId, value = 0) {
-  //   try {
-  //     const url = `${this.baseApi}/mappings/${mappingId}/reset-consecutive?value=${value}`;
-  //     const params = {
-  //       method: "GET", // O POST si prefieres
-  //       headers: {
-  //         Authorization: `Bearer ${accessToken}`,
-  //       },
-  //     };
-
-  //     const response = await fetch(url, params);
-  //     const result = await response.json();
-
-  //     if (response.status !== 200) throw result;
-
-  //     return result;
-  //   } catch (error) {
-  //     console.error("Error al resetear consecutivo:", error);
-  //     throw error;
-  //   }
-  // }
-
   async deleteMapping(accessToken, mappingId) {
     try {
       const url = `${this.baseApi}/mappings/${mappingId}`;
@@ -1538,6 +1546,7 @@ export class TransferApi {
       throw error;
     }
   }
+
   async getCustomerData(accessToken, filters = {}) {
     try {
       // Construir URL con parámetros de consulta
@@ -1626,29 +1635,7 @@ export class TransferApi {
     }
   }
 
-  // /**
-  //  * Reinicia el consecutivo a un valor específico
-  //  */
-  // async resetConsecutive(accessToken, mappingId, value = 0) {
-  //   try {
-  //     const url = `${this.baseApi}/mappings/${mappingId}/reset-consecutive?value=${value}`;
-  //     const params = {
-  //       headers: {
-  //         Authorization: `Bearer ${accessToken}`,
-  //       },
-  //     };
-
-  //     const response = await fetch(url, params);
-  //     const result = await response.json();
-
-  //     if (response.status !== 200) throw result;
-
-  //     return result;
-  //   } catch (error) {
-  //     console.error("Error al resetear consecutivo:", error);
-  //     throw error;
-  //   }
-  // }
+  // 🆕 NUEVOS MÉTODOS PARA GESTIÓN DE CONSECUTIVOS CENTRALIZADOS
 
   /**
    * Obtiene todos los consecutivos
@@ -1936,7 +1923,7 @@ export class TransferApi {
     }
   }
 
-  // Agregar métodos para manejar reservas en transferApi.jsx
+  // 🆕 NUEVOS MÉTODOS PARA RESERVAS DE CONSECUTIVOS
   async reserveConsecutiveValues(
     accessToken,
     consecutiveId,
@@ -2100,58 +2087,7 @@ export class TransferApi {
     }
   }
 
-  /**
-   * Hacer una petición GET genérica (método auxiliar)
-   */
-  async get(endpoint, accessToken) {
-    try {
-      const url = `${this.baseApi}${endpoint}`;
-      const params = {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      };
-
-      const response = await fetch(url, params);
-      const result = await response.json();
-
-      if (!response.ok) throw result;
-      return result;
-    } catch (error) {
-      console.error(`Error en petición GET a ${endpoint}:`, error);
-      throw error;
-    }
-  }
-
-  /**
-   * Hacer una petición POST genérica (método auxiliar)
-   */
-  async post(endpoint, accessToken, data = null) {
-    try {
-      const url = `${this.baseApi}${endpoint}`;
-      const params = {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-      };
-
-      if (data) {
-        params.body = JSON.stringify(data);
-      }
-
-      const response = await fetch(url, params);
-      const result = await response.json();
-
-      if (!response.ok) throw result;
-      return result;
-    } catch (error) {
-      console.error(`Error en petición POST a ${endpoint}:`, error);
-      throw error;
-    }
-  }
-
+  // 🆕 NUEVOS MÉTODOS PARA DATOS DE ORIGEN Y ENTIDADES
   async getSourceDataByMapping(accessToken, mappingId, documentId) {
     try {
       const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/source-data/${mappingId}/${documentId}`;
@@ -2195,6 +2131,7 @@ export class TransferApi {
     }
   }
 
+  // 🆕 NUEVOS MÉTODOS PARA TAREAS VINCULADAS
   // Obtener información de vinculación de una tarea
   async getTaskLinkingInfo(accessToken, taskId) {
     try {
@@ -2212,29 +2149,6 @@ export class TransferApi {
       return result;
     } catch (error) {
       console.error("Error al obtener info de vinculación:", error);
-      throw error;
-    }
-  }
-
-  // Ejecutar grupo de tareas vinculadas
-  async executeLinkedGroup(accessToken, taskId) {
-    try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/execute-linked-group/${taskId}`;
-      const params = {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-      };
-
-      const response = await fetch(url, params);
-      const result = await response.json();
-
-      if (response.status !== 200) throw result;
-      return result;
-    } catch (error) {
-      console.error("Error al ejecutar grupo vinculado:", error);
       throw error;
     }
   }
@@ -2375,6 +2289,8 @@ export class TransferApi {
     }
   }
 
+  // 🎁 NUEVOS MÉTODOS PARA BONIFICACIONES
+
   /**
    * 🎁 NUEVO: Ejecuta un mapping con soporte completo para bonificaciones
    * @param {string} accessToken - Token de autenticación
@@ -2446,41 +2362,6 @@ export class TransferApi {
   }
 
   /**
-   * 🎁 MEJORA: Actualiza el método existente validateBonificationConfig
-   * para que sea más completo
-   */
-  async validateBonificationConfig(accessToken, mappingId, config = null) {
-    try {
-      const url = `${this.baseApi}/mappings/${mappingId}/validate-bonifications`;
-      const params = {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ config }),
-      };
-
-      console.log(
-        `🔍 Validando configuración de bonificaciones para mapping ${mappingId}`
-      );
-
-      const response = await fetch(url, params);
-      const result = await response.json();
-
-      if (!response.ok) throw result;
-
-      return result;
-    } catch (error) {
-      console.error(
-        "❌ Error validando configuración de bonificaciones:",
-        error
-      );
-      throw error;
-    }
-  }
-
-  /**
    * 🎁 NUEVO: Obtiene estadísticas de bonificaciones de un mapping
    * @param {string} accessToken - Token de autenticación
    * @param {string} mappingId - ID del mapping
@@ -2518,6 +2399,33 @@ export class TransferApi {
         "❌ Error obteniendo estadísticas de bonificaciones:",
         error
       );
+      throw error;
+    }
+  }
+  /**
+   * 🎁 Previsualiza bonificaciones para un documento
+   */
+  async previewBonifications(accessToken, mappingId, documentId) {
+    try {
+      const url = `${this.baseApi}/mappings/${mappingId}/documents/${documentId}/preview-bonifications`;
+      const params = {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      };
+
+      console.log(
+        `🔍 Previsualizando bonificaciones para documento ${documentId}`
+      );
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+
+      return result;
+    } catch (error) {
+      console.error("❌ Error previsualizando bonificaciones:", error);
       throw error;
     }
   }
