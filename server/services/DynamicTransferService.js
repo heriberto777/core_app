@@ -1232,6 +1232,9 @@ class DynamicTransferService {
       logger.debug(
         `📊 [${logId}] Obteniendo documentos con límite: ${limit}, offset: ${offset}`
       );
+      logger.debug(
+        `📊 [${logId}] Filtros aplicados: ${JSON.stringify(filters)}`
+      );
 
       sourceConnection = await ConnectionService.getConnection(
         mapping.sourceServer
@@ -1243,7 +1246,15 @@ class DynamicTransferService {
       }
 
       const primaryKey = mainTable.primaryKey || "NUM_PED";
-      let query = `SELECT TOP ${limit} * FROM ${mainTable.sourceTable}`;
+      const sourceTable = mainTable.sourceTable;
+
+      // 🔍 LOGGING DE CONFIGURACIÓN
+      logger.debug(`📊 [${logId}] Configuración:`);
+      logger.debug(`   - Tabla: ${sourceTable}`);
+      logger.debug(`   - Clave primaria: ${primaryKey}`);
+      logger.debug(`   - Filtros: ${JSON.stringify(filters)}`);
+
+      let query = `SELECT TOP ${limit} * FROM ${sourceTable}`;
       const queryParams = {};
 
       // Construir condiciones WHERE
@@ -1253,7 +1264,6 @@ class DynamicTransferService {
       if (Object.keys(filters).length > 0) {
         Object.entries(filters).forEach(([key, value]) => {
           if (key !== "processedValue") {
-            // Excluir valores internos
             whereConditions.push(`${key} = @${key}`);
             queryParams[key] = value;
           }
@@ -1278,7 +1288,7 @@ class DynamicTransferService {
         query += ` OFFSET ${offset} ROWS`;
       }
 
-      logger.debug(`🔍 [${logId}] Ejecutando consulta: ${query}`);
+      logger.debug(`🔍 [${logId}] Consulta SQL: ${query}`);
       logger.debug(`📋 [${logId}] Parámetros: ${JSON.stringify(queryParams)}`);
 
       const result = await SqlService.query(
@@ -1288,7 +1298,21 @@ class DynamicTransferService {
       );
       const documents = result.recordset || [];
 
+      // 🔍 LOGGING DETALLADO DE DOCUMENTOS OBTENIDOS
       logger.info(`✅ [${logId}] ${documents.length} documentos obtenidos`);
+      documents.forEach((doc, index) => {
+        logger.debug(
+          `   - Documento ${index}: ${primaryKey} = '${
+            doc[primaryKey]
+          }' (tipo: ${typeof doc[primaryKey]})`
+        );
+        if (index === 0) {
+          logger.debug(
+            `   - Campos disponibles: ${Object.keys(doc).join(", ")}`
+          );
+        }
+      });
+
       return documents;
     } catch (error) {
       logger.error(

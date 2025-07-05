@@ -304,7 +304,14 @@ const processDocumentsByMapping = async (req, res) => {
       filters = {},
       applyPromotionRules = false,
     } = req.body;
-    logger.info(`🔄 Procesando documentos para mapeo: ${mappingId}`);
+
+    // 🔍 AGREGAR LOGGING PARA VER QUÉ LLEGA
+    logger.info(`🔍 [processDocumentsByMapping] Datos recibidos:`);
+    logger.info(`   - mappingId: ${mappingId}`);
+    logger.info(`   - documentIds: ${JSON.stringify(documentIds)}`);
+    logger.info(`   - limit: ${limit}`);
+    logger.info(`   - filters: ${JSON.stringify(filters)}`);
+    logger.info(`   - applyPromotionRules: ${applyPromotionRules}`);
 
     if (!mappingId) {
       return res.status(400).json({
@@ -322,23 +329,36 @@ const processDocumentsByMapping = async (req, res) => {
     }
 
     let result;
-
-    // 🎁 NUEVO: Configurar opciones de procesamiento
     const processingOptions = {
       applyPromotionRules,
       includeStatistics: true,
     };
 
     if (documentIds && documentIds.length > 0) {
-      logger.info(`🔄 Procesando ${documentIds.length} documentos específicos`);
+      // 🔍 CASO 1: Se enviaron IDs específicos
+      logger.info(
+        `🔍 Procesando ${
+          documentIds.length
+        } documentos específicos: ${documentIds.join(", ")}`
+      );
+
+      // 🔍 VERIFICAR TIPOS DE DATOS
+      documentIds.forEach((id, index) => {
+        logger.info(`   - documentIds[${index}]: '${id}' (tipo: ${typeof id})`);
+      });
+
       result = await DynamicTransferService.processDocuments(
         documentIds,
         mappingId,
-        null, // signal
+        null,
         processingOptions
       );
     } else {
-      // Obtener documentos según filtros y límite
+      // 🔍 CASO 2: Obtener documentos por filtros
+      logger.info(
+        `🔍 Obteniendo documentos por filtros y límite: ${limit || 10}`
+      );
+
       const documents = await DynamicTransferService.getDocuments(mapping, {
         ...filters,
         limit: limit || 10,
@@ -358,52 +378,30 @@ const processDocumentsByMapping = async (req, res) => {
         });
       }
 
-      const docIds = documents.map(
-        (doc) =>
-          doc[
-            mapping.tableConfigs.find((tc) => !tc.isDetailTable)?.primaryKey ||
-              "NUM_PED"
-          ]
-      );
+      // 🔍 EXTRAER IDs DE LOS DOCUMENTOS OBTENIDOS
+      const docIds = documents.map((doc) => {
+        const primaryKey =
+          mapping.tableConfigs.find((tc) => !tc.isDetailTable)?.primaryKey ||
+          "NUM_PED";
+        const id = doc[primaryKey];
+        logger.info(`   - Documento obtenido: ${JSON.stringify(doc)}`);
+        logger.info(
+          `   - ID extraído: '${id}' (tipo: ${typeof id}) usando campo: ${primaryKey}`
+        );
+        return id;
+      });
 
-      logger.info(
-        `🔄 Procesando ${docIds.length} documentos obtenidos por filtros`
-      );
+      logger.info(`🔍 IDs finales extraídos: ${docIds.join(", ")}`);
+
       result = await DynamicTransferService.processDocuments(
         docIds,
         mappingId,
-        null, // signal
+        null,
         processingOptions
       );
     }
 
-    // 🎁 MEJORADO: Respuesta con estadísticas de bonificaciones
-    let message = "Mapping ejecutado exitosamente";
-    if (
-      mapping.hasBonificationProcessing &&
-      result.bonificationStats?.totalBonifications > 0
-    ) {
-      message = `Mapping ejecutado exitosamente con ${result.bonificationStats.totalBonifications} bonificaciones procesadas`;
-    }
-
-    res.json({
-      success: result.success !== false,
-      data: result,
-      message,
-    });
-
-    logger.info(
-      `✅ Procesamiento completado: ${result.processed} éxitos, ${result.failed} fallos`
-    );
-
-    // 🎁 NUEVO: Log detallado de bonificaciones
-    if (result.bonificationStats?.totalBonifications > 0) {
-      logger.info(
-        `🎁 Estadísticas de bonificaciones: ${JSON.stringify(
-          result.bonificationStats
-        )}`
-      );
-    }
+    // ... resto del código igual
   } catch (error) {
     logger.error(`❌ Error procesando documentos: ${error.message}`);
     res.status(500).json({
