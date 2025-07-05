@@ -9,7 +9,7 @@ const TransferTask = require("../models/transferTaks");
 const ConsecutiveService = require("./ConsecutiveService");
 const { sendProgress } = require("./progressSse");
 const UnifiedCancellationService = require("./UnifiedCancellationService");
-const BonificationIntegrationService = require("./BonificationIntegrationService");
+const BonificationIntegrationService = require("./BonificationProcessingService");
 
 class DynamicTransferService {
   constructor() {
