@@ -3745,6 +3745,156 @@ class DynamicTransferService {
       processedTables.push(detailConfig.name);
     }
   }
+
+  /**
+   * 🎁 Procesa bonificaciones en los datos antes de insertar en destino
+   * @param {Array} detailsData - Datos de detalles obtenidos de origen
+   * @param {Object} bonificationConfig - Configuración de bonificaciones
+   * @param {string} documentId - ID del documento
+   * @returns {Array} - Datos procesados con líneas y referencias de bonificaciones
+   */
+  processBonifications(detailsData, bonificationConfig, documentId) {
+    if (
+      !bonificationConfig ||
+      !bonificationConfig.enabled ||
+      !detailsData ||
+      detailsData.length === 0
+    ) {
+      logger.debug(
+        `No hay procesamiento de bonificaciones habilitado para documento ${documentId}`
+      );
+      return detailsData;
+    }
+
+    logger.info(
+      `🎁 Procesando bonificaciones para documento ${documentId} - ${detailsData.length} registros`
+    );
+
+    try {
+      // 1. Separar artículos regulares y bonificaciones
+      const regularItems = [];
+      const bonifications = [];
+
+      detailsData.forEach((item, index) => {
+        const isBonification =
+          item[bonificationConfig.bonificationIndicatorField] ===
+          bonificationConfig.bonificationIndicatorValue;
+
+        if (isBonification) {
+          bonifications.push({
+            ...item,
+            ORIGINAL_INDEX: index,
+            ITEM_TYPE: "BONIFICATION",
+          });
+        } else {
+          regularItems.push({
+            ...item,
+            ORIGINAL_INDEX: index,
+            ITEM_TYPE: "REGULAR",
+          });
+        }
+      });
+
+      logger.info(
+        `📊 Documento ${documentId}: ${regularItems.length} regulares, ${bonifications.length} bonificaciones`
+      );
+
+      // 2. Crear mapa de artículos regulares por código para búsqueda rápida
+      const regularItemsMap = new Map();
+      regularItems.forEach((item, index) => {
+        const articleCode = item[bonificationConfig.regularArticleField];
+        if (!regularItemsMap.has(articleCode)) {
+          regularItemsMap.set(articleCode, []);
+        }
+        regularItemsMap.get(articleCode).push({
+          ...item,
+          ASSIGNED_LINE: index + 1, // Asignar línea secuencial empezando en 1
+        });
+      });
+
+      // 3. Procesar bonificaciones y asignar referencias
+      let linkedBonifications = 0;
+      let orphanBonifications = 0;
+      const processedBonifications = [];
+
+      bonifications.forEach((bonification, bonifIndex) => {
+        const referenceArticle =
+          bonification[bonificationConfig.referenceArticleField];
+
+        if (referenceArticle && regularItemsMap.has(referenceArticle)) {
+          // Bonificación con referencia válida
+          const referencedItems = regularItemsMap.get(referenceArticle);
+          const firstReference = referencedItems[0]; // Tomar la primera ocurrencia
+
+          const processedBonification = {
+            ...bonification,
+            ASSIGNED_LINE: regularItems.length + bonifIndex + 1,
+            BONIFICATION_REFERENCE_LINE: firstReference.ASSIGNED_LINE,
+            HAS_VALID_REFERENCE: true,
+            REFERENCE_ARTICLE_CODE: referenceArticle,
+          };
+
+          processedBonifications.push(processedBonification);
+          linkedBonifications++;
+
+          logger.debug(
+            `✅ Bonificación vinculada: ${
+              bonification[bonificationConfig.regularArticleField]
+            } → línea ${firstReference.ASSIGNED_LINE}`
+          );
+        } else {
+          // Bonificación huérfana
+          const orphanBonification = {
+            ...bonification,
+            ASSIGNED_LINE: regularItems.length + bonifIndex + 1,
+            BONIFICATION_REFERENCE_LINE: null,
+            HAS_VALID_REFERENCE: false,
+            REFERENCE_ARTICLE_CODE: referenceArticle,
+            WARNING: `Artículo de referencia '${referenceArticle}' no encontrado`,
+          };
+
+          processedBonifications.push(orphanBonification);
+          orphanBonifications++;
+
+          logger.warn(
+            `⚠️ Bonificación huérfana: ${
+              bonification[bonificationConfig.regularArticleField]
+            } → referencia '${referenceArticle}' no encontrada`
+          );
+        }
+      });
+
+      // 4. Consolidar todos los items procesados
+      const allProcessedItems = [];
+
+      // Agregar artículos regulares con líneas asignadas
+      regularItemsMap.forEach((items) => {
+        allProcessedItems.push(...items);
+      });
+
+      // Agregar bonificaciones procesadas
+      allProcessedItems.push(...processedBonifications);
+
+      // 5. Ordenar por línea asignada
+      allProcessedItems.sort((a, b) => a.ASSIGNED_LINE - b.ASSIGNED_LINE);
+
+      logger.info(`🎉 Bonificaciones procesadas para documento ${documentId}:`);
+      logger.info(
+        `   🔗 Vinculadas: ${linkedBonifications}, ⚠️ Huérfanas: ${orphanBonifications}`
+      );
+      logger.info(
+        `   📈 Total items: ${detailsData.length} → ${allProcessedItems.length}`
+      );
+
+      return allProcessedItems;
+    } catch (error) {
+      logger.error(
+        `💥 Error procesando bonificaciones para documento ${documentId}: ${error.message}`
+      );
+      // En caso de error, devolver datos originales para no interrumpir el flujo
+      return detailsData;
+    }
+  }
 }
 
 module.exports = new DynamicTransferService();
