@@ -412,17 +412,29 @@ const processDocumentsByMapping = async (req, res) => {
     }
 
     try {
-      // Procesar documentos usando el servicio principal
+      // 🔧 CORREGIDO: Obtener la configuración del mapping primero
+      const mapping = await DynamicTransferService.getMappingById(mappingId);
+
+      if (!mapping) {
+        return res.status(404).json({
+          success: false,
+          message: `No se encontró la configuración de mapeo con ID ${mappingId}`,
+        });
+      }
+
+      logger.info(`Configuración encontrada: ${mapping.name}`);
+
+      // 🔧 CORREGIDO: Pasar el objeto mapping completo, no solo el ID
       const result = await DynamicTransferService.processDocuments(
         documentIds,
-        mappingId
+        mapping // Pasa el objeto mapping completo en lugar de mappingId
       );
 
       logger.info(
         `Procesamiento completado: ${result.processed} éxitos, ${result.failed} fallos`
       );
 
-      // Incluir información detallada de errores si hay fallos
+      // Incluir información detallada de errores si hay algún fallo
       if (result.failed > 0) {
         const errorDetails = result.details
           .filter((detail) => !detail.success)
