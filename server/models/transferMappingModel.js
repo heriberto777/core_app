@@ -38,9 +38,9 @@ const FieldMappingSchema = new Schema({
   lookupQuery: { type: String }, // Consulta SQL para obtener el valor desde la BD destino
   lookupParams: [
     {
-      // Parámetros para la consulta de lookup
-      sourceField: { type: String }, // Campo de origen para usar como parámetro
-      paramName: { type: String }, // Nombre del parámetro en la consulta SQL
+      sourceField: { type: String }, // Campo de origen para el parámetro
+      paramName: { type: String }, // Nombre del parámetro en la consulta
+      removePrefix: { type: String }, // Prefijo a eliminar del valor
     },
   ],
   validateExistence: { type: Boolean, default: false }, // Si debe validarse que existe el registro
