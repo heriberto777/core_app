@@ -174,7 +174,7 @@ class PromotionProcessor {
       PEDIDO_LINEA_BONIF: regularLine ? regularLine.NUM_LN : null,
 
       // Mover cantidad a campo de bonificación
-      CANTIDAD_BONIF: bonusLine.CND_MAX || bonusLine.CANTIDAD || bonusLine.QTY,
+      CANTIDAD_BONIF: bonusLine.CND_MAX || bonusLine.QTY,
       CANTIDAD_PEDIDA: null,
       CANTIDAD_A_FACTURAR: null,
 
@@ -200,10 +200,8 @@ class PromotionProcessor {
     const transformed = {
       ...regularLine,
       PEDIDO_LINEA_BONIF: null,
-      CANTIDAD_PEDIDA:
-        regularLine.CND_MAX || regularLine.CANTIDAD || regularLine.QTY,
-      CANTIDAD_A_FACTURAR:
-        regularLine.CND_MAX || regularLine.CANTIDAD || regularLine.QTY,
+      CANTIDAD_PEDIDA: regularLine.CND_MAX || regularLine.QTY,
+      CANTIDAD_A_FACTURAR: regularLine.CND_MAX || regularLine.QTY,
       CANTIDAD_BONIF: null,
 
       // Marcar como línea que dispara promoción
@@ -227,10 +225,8 @@ class PromotionProcessor {
     return {
       ...normalLine,
       PEDIDO_LINEA_BONIF: null,
-      CANTIDAD_PEDIDA:
-        normalLine.CND_MAX || normalLine.CANTIDAD || normalLine.QTY,
-      CANTIDAD_A_FACTURAR:
-        normalLine.CND_MAX || normalLine.CANTIDAD || normalLine.QTY,
+      CANTIDAD_PEDIDA: normalLine.CND_MAX || normalLine.QTY,
+      CANTIDAD_A_FACTURAR: normalLine.CND_MAX || normalLine.QTY,
       CANTIDAD_BONIF: null,
 
       _IS_NORMAL_LINE: true,

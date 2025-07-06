@@ -861,9 +861,11 @@ class SqlService {
                 sql: sql.substring(0, 200) + "...",
               });
 
-              Telemetry.trackError("query_callback_aggregate_error", {
-                sqlPreview: sql.substring(0, 100),
-              });
+              if (Telemetry && typeof Telemetry.trackError === "function") {
+                Telemetry.trackError("query_execsql_aggregate_error", {
+                  sqlPreview: sql.substring(0, 100),
+                });
+              }
             }
 
             reject(err);
@@ -948,9 +950,11 @@ class SqlService {
           if (err.name === "AggregateError") {
             logger.error(`AggregateError en request event:`, err);
 
-            Telemetry.trackError("query_request_aggregate_error", {
-              sqlPreview: sql.substring(0, 100),
-            });
+            if (Telemetry && typeof Telemetry.trackError === "function") {
+              Telemetry.trackError("query_execsql_aggregate_error", {
+                sqlPreview: sql.substring(0, 100),
+              });
+            }
           }
         });
 
@@ -995,9 +999,11 @@ class SqlService {
           if (execError.name === "AggregateError") {
             logger.error(`AggregateError en execSql:`, execError);
 
-            Telemetry.trackError("query_execsql_aggregate_error", {
-              sqlPreview: sql.substring(0, 100),
-            });
+            if (Telemetry && typeof Telemetry.trackError === "function") {
+              Telemetry.trackError("query_execsql_aggregate_error", {
+                sqlPreview: sql.substring(0, 100),
+              });
+            }
           }
 
           reject(
@@ -1009,9 +1015,11 @@ class SqlService {
         if (error.name === "AggregateError") {
           logger.error(`AggregateError en executeQuery:`, error);
 
-          Telemetry.trackError("query_general_aggregate_error", {
-            sqlPreview: sql.substring(0, 100),
-          });
+          if (Telemetry && typeof Telemetry.trackError === "function") {
+            Telemetry.trackError("query_execsql_aggregate_error", {
+              sqlPreview: sql.substring(0, 100),
+            });
+          }
         }
 
         reject(error);
