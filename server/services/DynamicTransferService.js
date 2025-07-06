@@ -1635,14 +1635,22 @@ class DynamicTransferService {
       fieldMapping.sourceField = "ARTICULO";
     }
 
-    if (
-      fieldMapping.targetField === "CANTIDAD" &&
-      tableConfig.targetTable === "CATELLI.PEDIDO_LINEA"
-    ) {
-      logger.warn(
-        `Campo CANTIDAD ignorado para tabla PEDIDO_LINEA - no existe en la estructura`
+    if (fieldMapping.targetField === "CANTIDAD") {
+      // Obtener columnas de la tabla para verificar si existe
+      const tableColumns = await this.getTableColumns(
+        targetConnection,
+        tableConfig.targetTable
       );
-      return { value: null, isDirectSql: false };
+      const columnNames = tableColumns.map((col) =>
+        col.COLUMN_NAME.toLowerCase()
+      );
+
+      if (!columnNames.includes("cantidad")) {
+        logger.warn(
+          `Campo CANTIDAD ignorado para tabla ${tableConfig.targetTable} - no existe en la estructura`
+        );
+        return { value: null, isDirectSql: false };
+      }
     }
 
     let value;
@@ -1787,7 +1795,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Ejecuta la inserción en la tabla destino
+   * Ejecuta la inserción en la tabla destino con validación de campos
    * @private
    */
   async executeInsert(
@@ -1798,32 +1806,254 @@ class DynamicTransferService {
     directSqlFields,
     targetConnection
   ) {
-    const insertFieldsList = targetFields;
-    const insertValuesList = targetValues.map((value, index) => {
-      const field = targetFields[index];
-      return directSqlFields.has(field) ? targetValues[index] : `@${field}`;
-    });
+    try {
+      logger.debug(`🔍 Iniciando inserción en tabla: ${targetTable}`);
 
-    const insertQuery = `
-      INSERT INTO ${targetTable} (${insertFieldsList.join(", ")})
-      VALUES (${insertValuesList.join(", ")})
+      // PASO 1: Obtener la estructura real de la tabla destino
+      const existingColumns = await this.getTableColumns(
+        targetConnection,
+        targetTable
+      );
+
+      if (existingColumns.length === 0) {
+        // Si no se pudieron obtener las columnas, intentar la inserción sin validación
+        // pero con advertencia
+        logger.warn(
+          `⚠️ No se pudo validar estructura de ${targetTable}, procediendo sin validación`
+        );
+
+        const insertQuery = `
+        INSERT INTO ${targetTable} (${targetFields.join(", ")})
+        VALUES (${targetValues.join(", ")})
+      `;
+
+        logger.debug(`Ejecutando inserción sin validación: ${insertQuery}`);
+        await SqlService.query(targetConnection, insertQuery, targetData);
+        return;
+      }
+
+      const existingColumnNames = existingColumns.map((col) =>
+        col.COLUMN_NAME.toLowerCase()
+      );
+
+      logger.debug(
+        `Columnas disponibles en ${targetTable}: ${existingColumnNames.join(
+          ", "
+        )}`
+      );
+
+      // PASO 2: Filtrar campos que realmente existen en la tabla
+      const validFields = [];
+      const validValues = [];
+      const filteredTargetData = {};
+      const ignoredFields = [];
+
+      for (let i = 0; i < targetFields.length; i++) {
+        const fieldName = targetFields[i];
+        const fieldValue = targetValues[i];
+
+        // Verificar si el campo existe en la tabla (comparación case-insensitive)
+        if (existingColumnNames.includes(fieldName.toLowerCase())) {
+          validFields.push(fieldName);
+          validValues.push(fieldValue);
+
+          // Solo agregar a los datos si no es un campo SQL directo
+          if (!directSqlFields.has(fieldName)) {
+            filteredTargetData[fieldName] = targetData[fieldName];
+          }
+        } else {
+          ignoredFields.push(fieldName);
+        }
+      }
+
+      // PASO 3: Reportar campos ignorados
+      if (ignoredFields.length > 0) {
+        logger.warn(
+          `⚠️ Campos ignorados (no existen en ${targetTable}): ${ignoredFields.join(
+            ", "
+          )}`
+        );
+      }
+
+      // PASO 4: Verificar que tenemos campos válidos para insertar
+      if (validFields.length === 0) {
+        throw new Error(
+          `No hay campos válidos para insertar en la tabla ${targetTable}. ` +
+            `Campos intentados: ${targetFields.join(", ")}. ` +
+            `Campos disponibles: ${existingColumnNames.join(", ")}`
+        );
+      }
+
+      // PASO 5: Construir la consulta SQL con campos válidos
+      const insertQuery = `
+      INSERT INTO ${targetTable} (${validFields.join(", ")})
+      VALUES (${validValues.join(", ")})
     `;
 
-    logger.debug(`Ejecutando inserción en tabla: ${insertQuery}`);
+      logger.debug(`Ejecutando inserción validada: ${insertQuery}`);
+      logger.info(`📊 DATOS FINALES PARA INSERCIÓN en ${targetTable}:`);
+      logger.info(
+        `Campos válidos (${validFields.length}): ${validFields.join(", ")}`
+      );
+      logger.info(`Datos: ${JSON.stringify(filteredTargetData, null, 2)}`);
 
-    // Filtrar los datos para que solo contengan los campos que realmente son parámetros
-    const filteredTargetData = {};
-    for (const field in targetData) {
-      if (!directSqlFields.has(field)) {
-        filteredTargetData[field] = targetData[field];
-      }
+      // PASO 6: Ejecutar la inserción
+      await SqlService.query(targetConnection, insertQuery, filteredTargetData);
+
+      logger.debug(`✅ Inserción exitosa en ${targetTable}`);
+    } catch (error) {
+      logger.error(
+        `❌ Error en executeInsert para tabla ${targetTable}: ${error.message}`
+      );
+
+      // Información adicional para depuración
+      logger.error(`Campos intentados: ${targetFields.join(", ")}`);
+      logger.error(`Datos: ${JSON.stringify(targetData, null, 2)}`);
+
+      throw error;
     }
+  }
 
-    logger.info(`📊 DATOS FINALES PARA INSERCIÓN en ${targetTable}:`);
-    logger.info(`Campos: ${targetFields.join(", ")}`);
-    logger.info(`Datos: ${JSON.stringify(filteredTargetData, null, 2)}`);
+  /**
+   * Obtiene las columnas de una tabla específica
+   * @private
+   */
+  async getTableColumns(connection, tableName) {
+    try {
+      // Separar esquema y tabla
+      let schema = null;
+      let table = tableName;
 
-    await SqlService.query(targetConnection, insertQuery, filteredTargetData);
+      if (tableName.includes(".")) {
+        const parts = tableName.split(".");
+        schema = parts[0];
+        table = parts[1];
+      }
+
+      // Limpiar nombres de corchetes
+      if (schema) {
+        schema = schema.replace(/\[|\]/g, "");
+      }
+      table = table.replace(/\[|\]/g, "");
+
+      let query;
+      let params;
+
+      if (schema) {
+        // Si se especificó esquema, buscar en ese esquema específico
+        query = `
+        SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
+        ORDER BY ORDINAL_POSITION
+      `;
+        params = { schema, table };
+
+        logger.debug(
+          `Buscando columnas en esquema específico: ${schema}.${table}`
+        );
+      } else {
+        // Si no se especificó esquema, buscar en todos los esquemas
+        query = `
+        SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH, TABLE_SCHEMA
+        FROM INFORMATION_SCHEMA.COLUMNS
+        WHERE TABLE_NAME = @table
+        ORDER BY TABLE_SCHEMA, ORDINAL_POSITION
+      `;
+        params = { table };
+
+        logger.debug(
+          `Buscando columnas en todos los esquemas para tabla: ${table}`
+        );
+      }
+
+      const result = await SqlService.query(connection, query, params);
+
+      if (!result.recordset || result.recordset.length === 0) {
+        // Si no se encontraron columnas y no se especificó esquema, intentar con esquemas comunes
+        if (!schema) {
+          logger.warn(
+            `No se encontraron columnas para tabla ${table}, probando esquemas comunes...`
+          );
+
+          const commonSchemas = ["dbo", "CATELLI", "sys", "INFORMATION_SCHEMA"];
+
+          for (const testSchema of commonSchemas) {
+            const testQuery = `
+            SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH
+            FROM INFORMATION_SCHEMA.COLUMNS
+            WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
+            ORDER BY ORDINAL_POSITION
+          `;
+
+            try {
+              const testResult = await SqlService.query(connection, testQuery, {
+                schema: testSchema,
+                table,
+              });
+
+              if (testResult.recordset && testResult.recordset.length > 0) {
+                logger.info(
+                  `✅ Tabla encontrada en esquema: ${testSchema}.${table}`
+                );
+                return testResult.recordset;
+              }
+            } catch (testError) {
+              logger.debug(
+                `Schema ${testSchema} no contiene la tabla ${table}`
+              );
+            }
+          }
+        }
+
+        logger.warn(`No se encontraron columnas para ${tableName}`);
+        return [];
+      }
+
+      // Si se encontraron resultados
+      if (!schema && result.recordset.length > 0) {
+        // Si buscamos en todos los esquemas, mostrar cuál se encontró
+        const foundSchema = result.recordset[0].TABLE_SCHEMA;
+        logger.info(`✅ Tabla encontrada en esquema: ${foundSchema}.${table}`);
+      }
+
+      logger.debug(
+        `✅ Encontradas ${result.recordset.length} columnas para ${tableName}`
+      );
+
+      return result.recordset || [];
+    } catch (error) {
+      logger.error(
+        `Error obteniendo columnas de ${tableName}: ${error.message}`
+      );
+
+      // Como fallback, intentar listar todas las tablas disponibles para ayudar en depuración
+      try {
+        logger.debug("Listando tablas disponibles para depuración...");
+        const listTablesQuery = `
+        SELECT TOP 20 TABLE_SCHEMA, TABLE_NAME
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_NAME LIKE '%${table.replace(/\[|\]/g, "")}%'
+        ORDER BY TABLE_SCHEMA, TABLE_NAME
+      `;
+
+        const tablesResult = await SqlService.query(
+          connection,
+          listTablesQuery
+        );
+
+        if (tablesResult.recordset && tablesResult.recordset.length > 0) {
+          logger.debug("Tablas similares encontradas:");
+          tablesResult.recordset.forEach((t) => {
+            logger.debug(`  - ${t.TABLE_SCHEMA}.${t.TABLE_NAME}`);
+          });
+        }
+      } catch (listError) {
+        logger.debug(`No se pudieron listar tablas: ${listError.message}`);
+      }
+
+      return [];
+    }
   }
 
   /**
