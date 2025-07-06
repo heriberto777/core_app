@@ -183,8 +183,8 @@ class PromotionProcessor {
       _PROMOTION_TYPE: "BONUS",
     };
 
-    // ELIMINAR CAMPOS PROBLEMÁTICOS
     delete transformed.CANTIDAD;
+    delete transformed.QTY;
 
     logger.debug(
       `Línea de bonificación transformada: ${bonusLine.NUM_LN} -> referencia: ${transformed.PEDIDO_LINEA_BONIF}`
@@ -214,6 +214,7 @@ class PromotionProcessor {
 
     // ELIMINAR CAMPOS PROBLEMÁTICOS
     delete transformed.CANTIDAD;
+    delete transformed.QTY;
 
     logger.debug(
       `Línea regular transformada: ${regularLine.NUM_LN} (dispara promoción)`
@@ -241,6 +242,7 @@ class PromotionProcessor {
 
     // ELIMINAR CAMPOS PROBLEMÁTICOS
     delete transformed.CANTIDAD;
+    delete transformed.QTY;
 
     return transformed;
   }
