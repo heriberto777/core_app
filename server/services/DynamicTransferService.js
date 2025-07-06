@@ -1634,6 +1634,17 @@ class DynamicTransferService {
       );
       fieldMapping.sourceField = "ARTICULO";
     }
+
+    if (
+      fieldMapping.targetField === "CANTIDAD" &&
+      tableConfig.targetTable === "CATELLI.PEDIDO_LINEA"
+    ) {
+      logger.warn(
+        `Campo CANTIDAD ignorado para tabla PEDIDO_LINEA - no existe en la estructura`
+      );
+      return { value: null, isDirectSql: false };
+    }
+
     let value;
 
     // PRIORIDAD 1: Usar valores obtenidos por lookup si existen
