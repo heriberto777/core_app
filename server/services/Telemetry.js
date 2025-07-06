@@ -319,6 +319,29 @@ class Telemetry {
 
     return hourlySnapshot;
   }
+
+  static trackError(operation, details) {
+    try {
+      const timestamp = new Date().toISOString();
+
+      // Incrementar contador de errores
+      if (!this.metrics.errors) {
+        this.metrics.errors = 0;
+      }
+      this.metrics.errors++;
+
+      // Registrar en log
+      logger.error(`[Telemetry] Error en ${operation}:`, {
+        operation,
+        details,
+        timestamp,
+        errorCount: this.metrics.errors,
+      });
+    } catch (error) {
+      // Si falla el tracking, no debe afectar la operación principal
+      logger.warn(`Error en tracking de telemetría: ${error.message}`);
+    }
+  }
 }
 
 // Exportar instancia singleton

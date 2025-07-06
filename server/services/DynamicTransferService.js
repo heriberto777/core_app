@@ -1554,6 +1554,17 @@ class DynamicTransferService {
 
     // Procesar todos los campos
     for (const fieldMapping of tableConfig.fieldMappings) {
+      if (fieldMapping.targetField === "CODIGO_ARTICULO") {
+        logger.warn(
+          `Corrigiendo campo CODIGO_ARTICULO a ARTICULO en tabla ${tableConfig.targetTable}`
+        );
+        fieldMapping.targetField = "ARTICULO";
+      }
+
+      if (fieldMapping.sourceField === "CODIGO_ARTICULO") {
+        logger.warn(`Corrigiendo campo origen CODIGO_ARTICULO a ARTICULO`);
+        fieldMapping.sourceField = "ARTICULO";
+      }
       const processedField = await this.processField(
         fieldMapping,
         dataForProcessing,
@@ -1609,6 +1620,20 @@ class DynamicTransferService {
     targetConnection,
     columnLengthCache
   ) {
+    // VALIDACIÓN PARA CORREGIR CAMPOS PROBLEMÁTICOS
+    if (fieldMapping.targetField === "CODIGO_ARTICULO") {
+      logger.warn(
+        `Campo destino CODIGO_ARTICULO corregido automáticamente a ARTICULO para tabla ${tableConfig.targetTable}`
+      );
+      fieldMapping.targetField = "ARTICULO";
+    }
+
+    if (fieldMapping.sourceField === "CODIGO_ARTICULO") {
+      logger.warn(
+        `Campo origen CODIGO_ARTICULO corregido automáticamente a ARTICULO`
+      );
+      fieldMapping.sourceField = "ARTICULO";
+    }
     let value;
 
     // PRIORIDAD 1: Usar valores obtenidos por lookup si existen
@@ -1911,6 +1936,17 @@ class DynamicTransferService {
 
       // Procesar cada campo con lookup
       for (const fieldMapping of lookupFields) {
+        if (fieldMapping.targetField === "CODIGO_ARTICULO") {
+          logger.warn(`Corrigiendo campo lookup CODIGO_ARTICULO a ARTICULO`);
+          fieldMapping.targetField = "ARTICULO";
+        }
+
+        if (fieldMapping.sourceField === "CODIGO_ARTICULO") {
+          logger.warn(
+            `Corrigiendo campo origen lookup CODIGO_ARTICULO a ARTICULO`
+          );
+          fieldMapping.sourceField = "ARTICULO";
+        }
         try {
           let lookupQuery = fieldMapping.lookupQuery;
           logger.debug(
@@ -2125,6 +2161,17 @@ class DynamicTransferService {
 
       // Ejecutar cada consulta de lookup
       for (const fieldMapping of lookupFields) {
+        if (fieldMapping.targetField === "CODIGO_ARTICULO") {
+          logger.warn(`Corrigiendo campo lookup CODIGO_ARTICULO a ARTICULO`);
+          fieldMapping.targetField = "ARTICULO";
+        }
+
+        if (fieldMapping.sourceField === "CODIGO_ARTICULO") {
+          logger.warn(
+            `Corrigiendo campo origen lookup CODIGO_ARTICULO a ARTICULO`
+          );
+          fieldMapping.sourceField = "ARTICULO";
+        }
         try {
           let lookupQuery = fieldMapping.lookupQuery;
           logger.debug(
