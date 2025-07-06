@@ -178,65 +178,6 @@ class ConnectionCentralService {
   }
 
   /**
-   * Implementación real de inicialización de pool
-   * @private
-   */
-  async _doInitPool(serverKey, customConfig = {}) {
-    try {
-      logger.info(`Inicializando pool para ${serverKey}...`);
-
-      // Verificar si hay que cerrar un pool existente
-      if (this.pools[serverKey]) {
-        // Si hay un pool existente, cerrarlo solo si no está en proceso ya
-        if (!this._closingPools || !this._closingPools.has(serverKey)) {
-          await this.closePool(serverKey);
-        } else {
-          // Esperar a que termine el cierre en curso
-          logger.info(
-            `Esperando a que termine el cierre del pool para ${serverKey}...`
-          );
-          while (this._closingPools && this._closingPools.has(serverKey)) {
-            await new Promise((resolve) => setTimeout(resolve, 500));
-          }
-        }
-      }
-
-      // Inicializar estado del pool para este servidor
-      POOL_HEALTH.lastCheck[serverKey] = Date.now();
-      POOL_HEALTH.errorCount[serverKey] = 0;
-
-      // Cargar configuración desde MongoDB
-      const dbConfig = await this._loadConfig(serverKey);
-      if (!dbConfig) {
-        logger.error(`No se encontró configuración para ${serverKey}`);
-        return false;
-      }
-
-      // Crear factory y pool con configuración mejorada
-      const factory = this._createConnectionFactory(dbConfig, serverKey);
-
-      // Configurar timeout más largo para conexiones iniciales
-      const poolConfig = {
-        ...DEFAULT_POOL_CONFIG,
-        ...customConfig,
-        acquireTimeoutMillis: 120000, // 2 minutos para adquisición inicial
-      };
-
-      this.pools[serverKey] = createPool(factory, poolConfig);
-
-      logger.info(`Pool de conexiones inicializado para ${serverKey}`);
-
-      // Configurar renovación automática
-      this._setupAutoRenewal(serverKey);
-
-      return true;
-    } catch (error) {
-      logger.error(`Error al inicializar pool para ${serverKey}:`, error);
-      return false;
-    }
-  }
-
-  /**
    * Carga la configuración de un servidor desde MongoDB
    * @private
    * @param {string} serverKey - Clave del servidor
@@ -265,6 +206,7 @@ class ConnectionCentralService {
 
   /**
    * Convierte la configuración de MongoDB al formato requerido por Tedious
+   * MEJORADO: Configuración robusta para prevenir AggregateError
    * @private
    * @param {Object} dbConfig - Configuración de MongoDB
    * @returns {Object} - Configuración en formato Tedious
@@ -283,14 +225,44 @@ class ConnectionCentralService {
         },
       },
       options: {
+        // MEJORADO: Configuración SSL/TLS más robusta para AggregateError
         encrypt: isIpAddress ? false : dbConfig.options?.encrypt || false,
         trustServerCertificate: true,
         enableArithAbort: true,
+
+        // MEJORADO: Timeouts más largos y configuración de retry para AggregateError
+        connectTimeout: 90000, // Aumentado a 90 segundos
+        requestTimeout: 180000, // Aumentado a 3 minutos
+        cancelTimeout: 15000,
+        connectionRetryInterval: 3000,
+
+        // MEJORADO: Configuración de pool y manejo de resultados
         database: dbConfig.database,
-        connectTimeout: 30000,
-        requestTimeout: 60000,
         rowCollectionOnRequestCompletion: true,
         useColumnNames: true,
+
+        // NUEVO: Configuración adicional para estabilidad y AggregateError
+        validateParameters: false,
+        abortTransactionOnError: false,
+        enableConcurrentExecution: false,
+
+        // NUEVO: Configuración específica para prevenir AggregateError
+        enableImplicitTransactions: false,
+        isolationLevel: 2, // READ_COMMITTED
+        readOnlyIntent: false,
+
+        // NUEVO: Configuración de red mejorada para AggregateError
+        packetSize: 8192, // Aumentado para mejor rendimiento
+        useUTC: true,
+        dateFirst: 7,
+
+        // NUEVO: Configuración de debug para troubleshooting
+        debug: {
+          packet: false,
+          data: false,
+          payload: false,
+          token: false,
+        },
       },
     };
 
@@ -299,14 +271,27 @@ class ConnectionCentralService {
     }
 
     if (dbConfig.port) {
-      config.options.port = dbConfig.port;
+      config.options.port = parseInt(dbConfig.port);
     }
+
+    // NUEVO: Configuración específica por entorno para AggregateError
+    if (process.env.NODE_ENV === "production") {
+      config.options.connectTimeout = 120000; // Más tiempo en producción
+      config.options.requestTimeout = 240000;
+    }
+
+    logger.info(
+      `Configuración Tedious robusta creada para ${dbConfig.host}:${
+        dbConfig.port || 1433
+      }`
+    );
 
     return config;
   }
 
   /**
    * Crea un factory de conexiones para el pool
+   * MEJORADO: Manejo robusto de AggregateError
    * @private
    * @param {Object} config - Configuración Tedious
    * @param {string} serverKey - Clave del servidor
@@ -331,33 +316,68 @@ class ConnectionCentralService {
           logger.debug(`Intentando crear nueva conexión a ${config.server}...`);
 
           const connection = new Connection(config);
+          let isResolved = false;
 
-          // Comprobar que la conexión tiene el método execSql
-          if (typeof connection.execSql !== "function") {
-            logger.error(`La conexión creada no tiene el método execSql`);
-            reject(new Error(`Conexión inválida: no tiene el método execSql`));
-            return;
-          }
-
-          // Timeout para la creación de conexión
+          // MEJORADO: Timeout más largo y limpieza más robusta para AggregateError
           const timeout = setTimeout(() => {
-            connection.removeAllListeners();
-            try {
-              connection.close();
-            } catch (e) {}
-            reject(new Error(`Timeout al crear conexión a ${config.server}`));
-          }, config.options.connectTimeout || 30000);
+            if (!isResolved) {
+              isResolved = true;
+              logger.error(
+                `Timeout al crear conexión a ${config.server} después de ${config.options.connectTimeout}ms`
+              );
 
+              try {
+                connection.removeAllListeners();
+                connection.close();
+              } catch (e) {
+                logger.warn(
+                  `Error al cerrar conexión por timeout: ${e.message}`
+                );
+              }
+
+              reject(new Error(`Timeout al crear conexión a ${config.server}`));
+            }
+          }, config.options.connectTimeout || 90000);
+
+          // NUEVO: Manejar eventos específicos de AggregateError
           connection.on("connect", (err) => {
             clearTimeout(timeout);
 
+            if (isResolved) return;
+            isResolved = true;
+
             if (err) {
-              logger.error(`Error conectando a ${config.server}:`, err);
+              logger.error(`Error conectando a ${config.server}:`, {
+                message: err.message,
+                code: err.code,
+                name: err.name,
+                isAggregateError: err.name === "AggregateError",
+              });
+
+              // NUEVO: Manejo específico para AggregateError
+              if (err.name === "AggregateError" || err.code === "ECONNRESET") {
+                logger.warn(
+                  `AggregateError detectado, intentando configuración alternativa...`
+                );
+
+                // Crear nueva configuración con ajustes para AggregateError
+                const fallbackConfig = this._createFallbackConfig(config);
+
+                // Intentar con configuración de fallback
+                setTimeout(() => {
+                  this._createConnectionWithFallback(fallbackConfig, serverKey)
+                    .then(resolve)
+                    .catch(reject);
+                }, 3000); // Esperar 3 segundos antes del fallback
+
+                return;
+              }
+
               reject(err);
               return;
             }
 
-            // Verificar de nuevo que la conexión es válida después del evento connect
+            // Verificar validez de la conexión
             if (typeof connection.execSql !== "function") {
               logger.error(
                 `La conexión después de connect no tiene el método execSql`
@@ -366,33 +386,74 @@ class ConnectionCentralService {
               return;
             }
 
+            // NUEVO: Configurar la conexión para mejor manejo de errores
+            this._setupConnectionErrorHandling(connection, serverKey);
+
             // Añadir metadatos para seguimiento
             connection._createdAt = Date.now();
             connection._operationCount = 0;
             connection._serverKey = serverKey;
+            connection._isHealthy = true;
 
             logger.debug(
-              `Conexión establecida correctamente a ${config.server}`
+              `✅ Conexión establecida correctamente a ${config.server}`
             );
             resolve(connection);
           });
 
+          // MEJORADO: Manejo más específico de errores para AggregateError
           connection.on("error", (err) => {
             clearTimeout(timeout);
-            logger.error(`Error en la conexión a ${config.server}:`, err);
+
+            if (isResolved) return;
+            isResolved = true;
+
+            logger.error(`Error en la conexión a ${config.server}:`, {
+              message: err.message,
+              code: err.code,
+              name: err.name,
+              isAggregateError: err.name === "AggregateError",
+              stack: err.stack,
+            });
+
+            // NUEVO: Reportar error específico para AggregateError
+            if (err.name === "AggregateError") {
+              Telemetry.trackError("connection_aggregate_error", {
+                server: config.server,
+                database: config.options.database,
+              });
+            }
+
             reject(err);
           });
 
-          // Iniciar conexión
+          // NUEVO: Manejar otros eventos importantes para diagnóstico
+          connection.on("end", () => {
+            logger.debug(`Conexión terminada para ${config.server}`);
+          });
+
+          connection.on("infoMessage", (info) => {
+            logger.debug(`Info mensaje de ${config.server}: ${info.message}`);
+          });
+
+          connection.on("errorMessage", (error) => {
+            logger.warn(`Error mensaje de ${config.server}: ${error.message}`);
+          });
+
+          // Iniciar conexión con manejo de errores mejorado
           try {
             connection.connect();
           } catch (error) {
             clearTimeout(timeout);
-            logger.error(
-              `Excepción al intentar conectar a ${config.server}:`,
-              error
-            );
-            reject(error);
+
+            if (!isResolved) {
+              isResolved = true;
+              logger.error(
+                `Excepción al intentar conectar a ${config.server}:`,
+                error
+              );
+              reject(error);
+            }
           }
         });
       },
@@ -404,29 +465,30 @@ class ConnectionCentralService {
             return;
           }
 
-          // Limpiar listeners de errores para evitar memory leaks
-          connection.removeAllListeners("error");
-
-          // Eliminar de mapas de seguimiento
-          if (this.stats.activeConnections.has(connection)) {
-            this.stats.activeConnections.delete(connection);
-          }
-
-          if (connectionPoolMap.has(connection)) {
-            connectionPoolMap.delete(connection);
-          }
-
-          if (CONNECTION_LIMITS.operationCounter.has(connection)) {
-            CONNECTION_LIMITS.operationCounter.delete(connection);
-          }
-
-          // Timeout para cierre
-          const timeout = setTimeout(() => {
-            logger.warn(`Timeout al cerrar conexión después de 5 segundos`);
-            resolve();
-          }, 5000);
-
+          // MEJORADO: Limpieza más robusta para AggregateError
           try {
+            connection._isHealthy = false;
+            connection.removeAllListeners();
+
+            // Limpiar de mapas de seguimiento
+            if (this.stats.activeConnections.has(connection)) {
+              this.stats.activeConnections.delete(connection);
+            }
+
+            if (connectionPoolMap.has(connection)) {
+              connectionPoolMap.delete(connection);
+            }
+
+            if (CONNECTION_LIMITS.operationCounter.has(connection)) {
+              CONNECTION_LIMITS.operationCounter.delete(connection);
+            }
+
+            // Timeout para cierre forzado más largo para AggregateError
+            const timeout = setTimeout(() => {
+              logger.warn(`Timeout al cerrar conexión después de 15 segundos`);
+              resolve();
+            }, 15000);
+
             connection.on("end", () => {
               clearTimeout(timeout);
               resolve();
@@ -434,46 +496,8 @@ class ConnectionCentralService {
 
             connection.close();
           } catch (error) {
-            clearTimeout(timeout);
-            logger.warn(`Error al cerrar conexión (ignorando):`, error);
+            logger.warn(`Error al destruir conexión: ${error.message}`);
             resolve();
-          }
-        });
-      },
-
-      validate: (connection) => {
-        return new Promise((resolve) => {
-          if (!connection || !connection.connected) {
-            logger.debug(`Conexión inválida (no conectada), desechando`);
-            resolve(false);
-            return;
-          }
-
-          try {
-            // Verificar edad de la conexión
-            const connectionAge = Date.now() - (connection._createdAt || 0);
-
-            if (connectionAge > CONNECTION_LIMITS.maxAge) {
-              logger.debug(
-                `Descartando conexión que lleva ${connectionAge}ms abierta`
-              );
-              resolve(false);
-              return;
-            }
-
-            // Verificar número de operaciones
-            if (connection._operationCount > CONNECTION_LIMITS.maxOperations) {
-              logger.debug(
-                `Descartando conexión que ha realizado ${connection._operationCount} operaciones`
-              );
-              resolve(false);
-              return;
-            }
-
-            resolve(true);
-          } catch (error) {
-            logger.error(`Error al validar conexión:`, error);
-            resolve(false);
           }
         });
       },
@@ -481,11 +505,147 @@ class ConnectionCentralService {
   }
 
   /**
-   * Obtener una conexión optimizada y robusta con manejo de errores y reintentos
-   * @param {string} serverKey - Clave del servidor (server1, server2, etc.)
-   * @param {Object} options - Opciones adicionales
-   * @returns {Promise<Connection>} - Conexión a la base de datos
+   * NUEVO: Configuración de fallback para AggregateError
+   * @private
    */
+  _createFallbackConfig(originalConfig) {
+    const fallbackConfig = JSON.parse(JSON.stringify(originalConfig));
+
+    // Ajustes específicos para resolver AggregateError
+    fallbackConfig.options = {
+      ...fallbackConfig.options,
+      encrypt: false, // Deshabilitar encriptación como fallback
+      trustServerCertificate: true,
+      connectTimeout: 120000, // Timeout aún más largo
+      requestTimeout: 240000,
+      enableArithAbort: false, // Deshabilitar para compatibility
+      abortTransactionOnError: true,
+      connectionRetryInterval: 5000,
+      packetSize: 16384, // Packet size más grande para fallback
+      validateParameters: false,
+      enableConcurrentExecution: false,
+    };
+
+    logger.info(
+      `Configuración de fallback creada para resolver AggregateError`
+    );
+    return fallbackConfig;
+  }
+
+  /**
+   * NUEVO: Conexión con fallback para AggregateError
+   * @private
+   */
+  async _createConnectionWithFallback(config, serverKey) {
+    return new Promise((resolve, reject) => {
+      logger.info(
+        `Intentando conexión con configuración de fallback para ${serverKey}`
+      );
+
+      const connection = new Connection(config);
+      let isResolved = false;
+
+      const timeout = setTimeout(() => {
+        if (!isResolved) {
+          isResolved = true;
+          try {
+            connection.removeAllListeners();
+            connection.close();
+          } catch (e) {}
+          reject(
+            new Error(`Fallback connection timeout para ${config.server}`)
+          );
+        }
+      }, config.options.connectTimeout);
+
+      connection.on("connect", (err) => {
+        clearTimeout(timeout);
+
+        if (isResolved) return;
+        isResolved = true;
+
+        if (err) {
+          logger.error(`Error en conexión fallback:`, err);
+          reject(err);
+          return;
+        }
+
+        if (typeof connection.execSql !== "function") {
+          reject(new Error(`Conexión fallback inválida`));
+          return;
+        }
+
+        this._setupConnectionErrorHandling(connection, serverKey);
+
+        connection._createdAt = Date.now();
+        connection._operationCount = 0;
+        connection._serverKey = serverKey;
+        connection._isHealthy = true;
+        connection._isFallback = true;
+
+        logger.info(`✅ Conexión fallback establecida para ${serverKey}`);
+        resolve(connection);
+      });
+
+      connection.on("error", (err) => {
+        clearTimeout(timeout);
+        if (!isResolved) {
+          isResolved = true;
+          reject(err);
+        }
+      });
+
+      try {
+        connection.connect();
+      } catch (error) {
+        clearTimeout(timeout);
+        if (!isResolved) {
+          isResolved = true;
+          reject(error);
+        }
+      }
+    });
+  }
+
+  /**
+   * NUEVO: Configurar manejo de errores en conexión activa
+   * @private
+   */
+  _setupConnectionErrorHandling(connection, serverKey) {
+    connection.on("error", (err) => {
+      logger.error(`Error en conexión activa ${serverKey}:`, {
+        message: err.message,
+        code: err.code,
+        name: err.name,
+      });
+
+      connection._isHealthy = false;
+
+      if (err.name === "AggregateError") {
+        Telemetry.trackError("active_connection_aggregate_error", {
+          serverKey,
+          operationCount: connection._operationCount,
+        });
+      }
+    });
+
+    connection.on("infoMessage", (info) => {
+      if (info.severity > 10) {
+        logger.warn(`Info de alta severidad en ${serverKey}: ${info.message}`);
+      }
+    });
+
+    connection.on("errorMessage", (error) => {
+      logger.error(
+        `Error message en ${serverKey}: ${error.message} (Severity: ${error.class})`
+      );
+
+      if (error.class >= 20) {
+        connection._isHealthy = false;
+      }
+    });
+  }
+
   /**
    * Obtener una conexión del pool con verificación de estado
    * @param {string} serverKey - Clave del servidor
@@ -529,7 +689,7 @@ class ConnectionCentralService {
       }
 
       // Implement timeout for acquire
-      const timeout = options.timeout || 30000;
+      const timeout = options.timeout || 45000; // Aumentado para AggregateError
       const timeoutPromise = new Promise((_, reject) => {
         setTimeout(() => {
           reject(
@@ -609,6 +769,7 @@ class ConnectionCentralService {
         "connection limit exceeded",
         "econnreset",
         "etimedout",
+        "aggregateerror", // NUEVO: Añadido para AggregateError
       ];
 
       const isCriticalError = criticalErrors.some((term) =>
@@ -642,13 +803,13 @@ class ConnectionCentralService {
   }
 
   /**
-   * Obtiene una conexión con reintentos automáticos, optimizada para robustez
+   * Obtiene una conexión con reintentos automáticos, optimizada para robustez y AggregateError
    * @param {string} serverKey - Clave del servidor
    * @param {number} maxAttempts - Número máximo de intentos
    * @param {number} baseDelay - Retraso base entre intentos (ms)
    * @returns {Promise<Object>} - Resultado con conexión o error
    */
-  async enhancedRobustConnect(serverKey, maxAttempts = 5, baseDelay = 3000) {
+  async enhancedRobustConnect(serverKey, maxAttempts = 5, baseDelay = 5000) {
     let attempt = 0;
     let delay = baseDelay;
     let existingPool = false;
@@ -663,8 +824,9 @@ class ConnectionCentralService {
       if (this.pools && this.pools[serverKey]) {
         // Intentar verificar el pool existente
         try {
-          // INSTEAD OF directly passing the query string to SqlService
-          const testConnection = await this.getConnection(serverKey);
+          const testConnection = await this.getConnection(serverKey, {
+            timeout: 10000,
+          });
           if (testConnection) {
             // Create a proper Request object for verification
             const testRequest = new Request(
@@ -678,7 +840,7 @@ class ConnectionCentralService {
             await new Promise((resolve, reject) => {
               const timeout = setTimeout(() => {
                 reject(new Error("Timeout during connection test"));
-              }, 10000);
+              }, 15000); // Aumentado para AggregateError
 
               testRequest.on("done", () => {
                 clearTimeout(timeout);
@@ -693,6 +855,17 @@ class ConnectionCentralService {
               // Execute the request
               testConnection.execSql(testRequest);
             });
+
+            // Si llegamos aquí, la conexión está bien
+            await this.releaseConnection(testConnection);
+            logger.info(
+              `Pool existente para ${serverKey} está funcionando correctamente`
+            );
+
+            return {
+              success: true,
+              connection: await this.getConnection(serverKey),
+            };
           }
         } catch (poolTestError) {
           logger.warn(
@@ -733,17 +906,27 @@ class ConnectionCentralService {
         }
 
         // Obtener una conexión del pool
-        const connection = await this.getConnection(serverKey);
+        const connection = await this.getConnection(serverKey, {
+          timeout: 30000,
+        }); // Timeout aumentado
         if (!connection) {
           throw new Error(`No se pudo obtener una conexión a ${serverKey}`);
         }
 
-        // IMPORTANT CHANGE: Test the connection using tedious directly
+        // Test the connection using tedious directly with enhanced error handling
         await new Promise((resolve, reject) => {
           const testRequest = new Request(
             "SELECT 1 AS test",
             (err, rowCount) => {
               if (err) {
+                // NUEVO: Manejo específico para AggregateError en test
+                if (err.name === "AggregateError") {
+                  logger.error(`AggregateError durante test de conexión:`, err);
+                  Telemetry.trackError("connection_test_aggregate_error", {
+                    serverKey,
+                    attempt,
+                  });
+                }
                 reject(err);
               } else {
                 resolve(rowCount);
@@ -751,10 +934,10 @@ class ConnectionCentralService {
             }
           );
 
-          // Add a timeout
+          // Add a timeout - aumentado para AggregateError
           const timeout = setTimeout(() => {
             reject(new Error(`Timeout al verificar conexión a ${serverKey}`));
-          }, 10000);
+          }, 20000);
 
           // Handle request events
           testRequest.on("done", () => {
@@ -764,6 +947,9 @@ class ConnectionCentralService {
 
           testRequest.on("error", (err) => {
             clearTimeout(timeout);
+            if (err.name === "AggregateError") {
+              logger.error(`AggregateError en test request event:`, err);
+            }
             reject(err);
           });
 
@@ -780,6 +966,19 @@ class ConnectionCentralService {
           `Error en intento ${attempt} para ${serverKey}: ${error.message}`
         );
 
+        // NUEVO: Log específico para AggregateError
+        if (error.name === "AggregateError") {
+          logger.error(
+            `AggregateError en intento ${attempt} de enhancedRobustConnect:`,
+            {
+              serverKey,
+              attempt,
+              message: error.message,
+              code: error.code,
+            }
+          );
+        }
+
         // Si es el último intento, fallar
         if (attempt >= maxAttempts) {
           return {
@@ -792,12 +991,13 @@ class ConnectionCentralService {
 
         // Liberar recursos antes de reintentar
         try {
-          // Cerrar pool solo si hay un error grave
+          // Cerrar pool solo si hay un error grave o AggregateError
           if (
             error.message &&
             (error.message.includes("timeout") ||
               error.message.includes("network") ||
-              error.message.includes("state"))
+              error.message.includes("state") ||
+              error.name === "AggregateError")
           ) {
             await this.closePool(serverKey);
           }
@@ -807,9 +1007,9 @@ class ConnectionCentralService {
           );
         }
 
-        // Esperar antes del siguiente intento con backoff exponencial
+        // Esperar antes del siguiente intento con backoff exponencial - aumentado para AggregateError
         await new Promise((resolve) => setTimeout(resolve, delay));
-        delay = Math.min(delay * 1.5, 30000); // Máximo 30 segundos
+        delay = Math.min(delay * 1.5, 45000); // Máximo 45 segundos para AggregateError
       }
     }
 
@@ -1047,7 +1247,7 @@ class ConnectionCentralService {
         return { renewed: true, connection: newConnection };
       }
 
-      // Verificar que la conexión responde
+      // Verificar que la conexión responde con timeout más largo para AggregateError
       try {
         const testRequest = new Request(
           "SELECT 1 AS test",
@@ -1059,7 +1259,7 @@ class ConnectionCentralService {
         await new Promise((resolve, reject) => {
           const timeout = setTimeout(() => {
             reject(new Error("Timeout verificando conexión"));
-          }, 5000); // 5 segundos máximo
+          }, 10000); // Aumentado a 10 segundos para AggregateError
 
           testRequest.on("done", () => {
             clearTimeout(timeout);
@@ -1130,14 +1330,14 @@ class ConnectionCentralService {
         this.renewalTimers[serverKey] = null;
       }
 
-      // Set up a more robust timeout mechanism with forced cleanup
+      // Set up a more robust timeout mechanism with forced cleanup - aumentado para AggregateError
       let forcedCleanup = false;
       const drainPromise = pool.drain().catch((err) => {
         logger.error(`Error during pool drain: ${err.message}`);
         throw err;
       });
 
-      // Use Promise.race with a timeout
+      // Use Promise.race with a timeout - aumentado para AggregateError
       try {
         await Promise.race([
           drainPromise,
@@ -1145,7 +1345,7 @@ class ConnectionCentralService {
             setTimeout(() => {
               forcedCleanup = true;
               reject(new Error("Drain timeout"));
-            }, 15000);
+            }, 20000); // Aumentado a 20 segundos para AggregateError
           }),
         ]);
       } catch (timeoutError) {
@@ -1208,9 +1408,13 @@ class ConnectionCentralService {
           this.renewalTimers[serverKey] = null;
         }
 
-        // Cerrar pool
-        await pool.drain();
-        await pool.clear();
+        // Cerrar pool con timeout más largo para AggregateError
+        await Promise.race([
+          Promise.all([pool.drain(), pool.clear()]),
+          new Promise((_, reject) => {
+            setTimeout(() => reject(new Error("Force close timeout")), 25000);
+          }),
+        ]);
 
         delete this.pools[serverKey];
         results[serverKey] = true;
@@ -1219,6 +1423,9 @@ class ConnectionCentralService {
       } catch (error) {
         logger.error(`Error al cerrar pool para ${serverKey}:`, error);
         results[serverKey] = false;
+
+        // Force cleanup even on error
+        delete this.pools[serverKey];
       }
     }
 
@@ -1278,7 +1485,7 @@ class ConnectionCentralService {
         // Reemplazar el pool viejo con el nuevo
         this.pools[serverKey] = newPool;
 
-        // Cerrar el pool antiguo gradualmente
+        // Cerrar el pool antiguo gradualmente - aumentado para AggregateError
         setTimeout(async () => {
           try {
             logger.info(`Cerrando pool antiguo para ${serverKey}...`);
@@ -1295,7 +1502,7 @@ class ConnectionCentralService {
               error
             );
           }
-        }, 60000); // 1 minuto para permitir migración
+        }, 90000); // Aumentado a 90 segundos para permitir migración más lenta
 
         logger.info(`Pool para ${serverKey} renovado correctamente`);
         return true;
@@ -1311,6 +1518,7 @@ class ConnectionCentralService {
 
   /**
    * Registrar un error de conexión para monitoreo
+   * MEJORADO: Manejo específico para AggregateError
    * @private
    * @param {string} serverKey - Clave del servidor
    * @param {Error} error - Error ocurrido
@@ -1322,14 +1530,34 @@ class ConnectionCentralService {
 
     POOL_HEALTH.errorCount[serverKey]++;
 
-    logger.warn(
-      `Error de conexión en ${serverKey} (${POOL_HEALTH.errorCount[serverKey]}/${POOL_HEALTH.maxErrorThreshold}): ${error.message}`
-    );
+    // NUEVO: Log específico para AggregateError
+    if (error.name === "AggregateError") {
+      logger.error(
+        `AggregateError registrado en ${serverKey} (${POOL_HEALTH.errorCount[serverKey]}/${POOL_HEALTH.maxErrorThreshold}):`,
+        {
+          message: error.message,
+          code: error.code,
+          originalErrors: error.errors || [],
+        }
+      );
 
-    // Si superamos el umbral, renovar el pool
-    if (POOL_HEALTH.errorCount[serverKey] >= POOL_HEALTH.maxErrorThreshold) {
+      Telemetry.trackError("pool_aggregate_error", {
+        serverKey,
+        errorCount: POOL_HEALTH.errorCount[serverKey],
+      });
+    } else {
+      logger.warn(
+        `Error de conexión en ${serverKey} (${POOL_HEALTH.errorCount[serverKey]}/${POOL_HEALTH.maxErrorThreshold}): ${error.message}`
+      );
+    }
+
+    // Si superamos el umbral o hay AggregateError, renovar el pool inmediatamente
+    if (
+      POOL_HEALTH.errorCount[serverKey] >= POOL_HEALTH.maxErrorThreshold ||
+      error.name === "AggregateError"
+    ) {
       logger.info(
-        `Umbral de errores alcanzado para ${serverKey}, iniciando renovación de pool...`
+        `Umbral de errores alcanzado o AggregateError detectado para ${serverKey}, iniciando renovación de pool...`
       );
       this._renewPool(serverKey);
 
@@ -1365,8 +1593,41 @@ class ConnectionCentralService {
             // Intentar obtener y liberar una conexión como prueba
             try {
               const testConnection = await this.getConnection(serverKey, {
-                timeout: 10000,
+                timeout: 15000, // Aumentado para AggregateError
               });
+
+              // NUEVO: Test más robusto para detectar AggregateError
+              const testRequest = new Request(
+                "SELECT @@VERSION as version",
+                (err, rowCount, rows) => {
+                  if (err) throw err;
+                }
+              );
+
+              await new Promise((resolve, reject) => {
+                const timeout = setTimeout(() => {
+                  reject(new Error("Health check timeout"));
+                }, 15000);
+
+                testRequest.on("done", () => {
+                  clearTimeout(timeout);
+                  resolve();
+                });
+
+                testRequest.on("error", (err) => {
+                  clearTimeout(timeout);
+                  if (err.name === "AggregateError") {
+                    logger.error(`AggregateError durante health check:`, err);
+                    Telemetry.trackError("health_check_aggregate_error", {
+                      serverKey,
+                    });
+                  }
+                  reject(err);
+                });
+
+                testConnection.execSql(testRequest);
+              });
+
               await this.releaseConnection(testConnection);
 
               // Reset error count si la prueba fue exitosa
@@ -1395,6 +1656,7 @@ class ConnectionCentralService {
 
   /**
    * Performs a proactive health check on all pools
+   * MEJORADO: Con manejo específico para AggregateError
    * @returns {Promise<Object>} - Health check results by server
    */
   async checkPoolsHealth() {
@@ -1407,17 +1669,18 @@ class ConnectionCentralService {
           error: null,
           size: pool.size,
           borrowed: pool.borrowed,
+          aggregateErrorDetected: false,
         };
 
         try {
           // Get a connection from the pool
           const testConnection = await this.getConnection(serverKey, {
-            timeout: 5000,
+            timeout: 10000,
           });
 
-          // Run a simple test query
+          // Run a more comprehensive test query
           const testRequest = new Request(
-            "SELECT 1 AS test",
+            "SELECT @@VERSION as version, GETDATE() as current_time",
             (err, rowCount, rows) => {
               if (err) throw err;
             }
@@ -1425,8 +1688,8 @@ class ConnectionCentralService {
 
           await new Promise((resolve, reject) => {
             const timeout = setTimeout(() => {
-              reject(new Error("Query timeout"));
-            }, 5000);
+              reject(new Error("Query timeout during health check"));
+            }, 10000);
 
             testRequest.on("done", () => {
               clearTimeout(timeout);
@@ -1435,6 +1698,20 @@ class ConnectionCentralService {
 
             testRequest.on("error", (err) => {
               clearTimeout(timeout);
+
+              // NUEVO: Detectar AggregateError específicamente
+              if (err.name === "AggregateError") {
+                results[serverKey].aggregateErrorDetected = true;
+                logger.error(
+                  `AggregateError detectado en health check para ${serverKey}:`,
+                  err
+                );
+
+                Telemetry.trackError("proactive_health_check_aggregate_error", {
+                  serverKey,
+                });
+              }
+
               reject(err);
             });
 
@@ -1450,6 +1727,11 @@ class ConnectionCentralService {
           POOL_HEALTH.errorCount[serverKey] = 0;
         } catch (error) {
           results[serverKey].error = error.message;
+
+          // NUEVO: Marcar si es AggregateError
+          if (error.name === "AggregateError") {
+            results[serverKey].aggregateErrorDetected = true;
+          }
 
           // Register error for potential renewal
           this._registerConnectionError(serverKey, error);
@@ -1493,11 +1775,15 @@ class ConnectionCentralService {
       activeCount: this.stats.activeConnections.size,
       timestamp: new Date().toISOString(),
       pools: poolStats,
+      aggregateErrorsDetected: Object.values(poolStats).some(
+        (p) => p.errors > 0
+      ),
     };
   }
 
   /**
    * Inicia una transacción en una conexión
+   * MEJORADO: Con manejo robusto para AggregateError
    * @param {Connection} connection - Conexión
    * @param {Object} options - Opciones
    * @returns {Promise<Object>} - Conexión con transacción
@@ -1522,31 +1808,51 @@ class ConnectionCentralService {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error("Timeout al iniciar transacción"));
-      }, options.timeout || 30000);
+      }, options.timeout || 45000); // Aumentado para AggregateError
 
-      connection.transaction((err, transaction) => {
+      try {
+        connection.transaction((err, transaction) => {
+          clearTimeout(timeout);
+
+          if (err) {
+            logger.error(`Error al iniciar transacción: ${err.message}`);
+
+            // NUEVO: Manejo específico para AggregateError en transacciones
+            if (err.name === "AggregateError") {
+              logger.error(`AggregateError al iniciar transacción:`, err);
+              Telemetry.trackError("transaction_begin_aggregate_error", {
+                serverKey: connection._serverKey,
+              });
+            }
+
+            reject(err);
+          } else {
+            // Registrar la transacción activa
+            this.activeTransactions.set(connection, transaction);
+
+            // Añadir metadatos a la transacción
+            transaction._startTime = Date.now();
+            transaction._connection = connection;
+
+            logger.debug("Transacción iniciada correctamente");
+            resolve({ connection, transaction });
+          }
+        });
+      } catch (error) {
         clearTimeout(timeout);
 
-        if (err) {
-          logger.error(`Error al iniciar transacción: ${err.message}`);
-          reject(err);
-        } else {
-          // Registrar la transacción activa
-          this.activeTransactions.set(connection, transaction);
-
-          // Añadir metadatos a la transacción
-          transaction._startTime = Date.now();
-          transaction._connection = connection;
-
-          logger.debug("Transacción iniciada correctamente");
-          resolve({ connection, transaction });
+        if (error.name === "AggregateError") {
+          logger.error(`AggregateError en try de beginTransaction:`, error);
         }
-      });
+
+        reject(error);
+      }
     });
   }
 
   /**
    * Confirma una transacción
+   * MEJORADO: Con manejo robusto para AggregateError
    * @param {Transaction} transaction - Transacción
    * @returns {Promise<void>}
    */
@@ -1558,29 +1864,49 @@ class ConnectionCentralService {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
         reject(new Error("Timeout al confirmar transacción"));
-      }, 30000);
+      }, 45000); // Aumentado para AggregateError
 
-      transaction.commit((err) => {
+      try {
+        transaction.commit((err) => {
+          clearTimeout(timeout);
+
+          if (err) {
+            logger.error(`Error al confirmar transacción: ${err.message}`);
+
+            // NUEVO: Manejo específico para AggregateError en commit
+            if (err.name === "AggregateError") {
+              logger.error(`AggregateError al confirmar transacción:`, err);
+              Telemetry.trackError("transaction_commit_aggregate_error", {
+                serverKey: transaction._connection?._serverKey,
+              });
+            }
+
+            reject(err);
+          } else {
+            // Limpiar referencia en el mapa de transacciones activas
+            if (transaction._connection) {
+              this.activeTransactions.delete(transaction._connection);
+            }
+
+            logger.debug("Transacción confirmada correctamente");
+            resolve();
+          }
+        });
+      } catch (error) {
         clearTimeout(timeout);
 
-        if (err) {
-          logger.error(`Error al confirmar transacción: ${err.message}`);
-          reject(err);
-        } else {
-          // Limpiar referencia en el mapa de transacciones activas
-          if (transaction._connection) {
-            this.activeTransactions.delete(transaction._connection);
-          }
-
-          logger.debug("Transacción confirmada correctamente");
-          resolve();
+        if (error.name === "AggregateError") {
+          logger.error(`AggregateError en try de commitTransaction:`, error);
         }
-      });
+
+        reject(error);
+      }
     });
   }
 
   /**
    * Revierte una transacción
+   * MEJORADO: Con manejo robusto para AggregateError
    * @param {Transaction} transaction - Transacción
    * @returns {Promise<void>}
    */
@@ -1597,7 +1923,7 @@ class ConnectionCentralService {
 
           logger.warn("Timeout en rollback de transacción, continuando...");
           resolve();
-        }, 30000);
+        }, 45000); // Aumentado para AggregateError
 
         if (typeof transaction.rollback === "function") {
           transaction.rollback((err) => {
@@ -1610,6 +1936,15 @@ class ConnectionCentralService {
 
             if (err) {
               logger.error(`Error en rollback: ${err.message}`);
+
+              // NUEVO: Manejo específico para AggregateError en rollback
+              if (err.name === "AggregateError") {
+                logger.error(`AggregateError en rollback:`, err);
+                Telemetry.trackError("transaction_rollback_aggregate_error", {
+                  serverKey: transaction._connection?._serverKey,
+                });
+              }
+
               reject(err);
             } else {
               logger.debug("Rollback completado correctamente");
@@ -1632,6 +1967,11 @@ class ConnectionCentralService {
       } catch (error) {
         logger.error(`Error general en rollback: ${error.message}`);
 
+        // NUEVO: Manejo específico para AggregateError en catch general
+        if (error.name === "AggregateError") {
+          logger.error(`AggregateError en try de rollbackTransaction:`, error);
+        }
+
         // Limpiar conexión incluso en error
         if (transaction._connection) {
           this.activeTransactions.delete(transaction._connection);
@@ -1643,29 +1983,180 @@ class ConnectionCentralService {
   }
 
   /**
-   * Detiene el servicio central de conexiones
+   * NUEVO: Método para forzar limpieza de conexiones problemáticas por AggregateError
+   * @param {string} serverKey - Clave del servidor
+   * @returns {Promise<boolean>} - true si se limpió correctamente
    */
-  shutdown() {
+  async forceCleanupAggregateErrors(serverKey) {
+    try {
+      logger.info(
+        `Iniciando limpieza forzada por AggregateError para ${serverKey}...`
+      );
+
+      // Cerrar pool actual
+      const poolClosed = await this.closePool(serverKey);
+      if (!poolClosed) {
+        logger.warn(`No se pudo cerrar el pool para ${serverKey}`);
+      }
+
+      // Esperar un momento para asegurar limpieza
+      await new Promise((resolve) => setTimeout(resolve, 5000));
+
+      // Reinicializar pool con configuración robusta
+      const poolInitialized = await this.initPool(serverKey);
+      if (!poolInitialized) {
+        logger.error(`No se pudo reinicializar el pool para ${serverKey}`);
+        return false;
+      }
+
+      // Verificar que el nuevo pool funciona
+      try {
+        const testConnection = await this.getConnection(serverKey, {
+          timeout: 15000,
+        });
+        await this.releaseConnection(testConnection);
+
+        logger.info(
+          `✅ Limpieza forzada completada exitosamente para ${serverKey}`
+        );
+
+        // Resetear contadores de error
+        POOL_HEALTH.errorCount[serverKey] = 0;
+        POOL_HEALTH.lastCheck[serverKey] = Date.now();
+
+        return true;
+      } catch (testError) {
+        logger.error(
+          `Error verificando pool después de limpieza forzada: ${testError.message}`
+        );
+        return false;
+      }
+    } catch (error) {
+      logger.error(
+        `Error durante limpieza forzada para ${serverKey}: ${error.message}`
+      );
+      return false;
+    }
+  }
+
+  /**
+   * NUEVO: Obtener métricas específicas de AggregateError
+   * @returns {Object} - Métricas de AggregateError
+   */
+  getAggregateErrorMetrics() {
+    const metrics = {
+      totalErrors: 0,
+      errorsByServer: {},
+      lastErrorTime: null,
+      healthyPools: 0,
+      unhealthyPools: 0,
+      recommendedActions: [],
+    };
+
+    // Analizar errores por servidor
+    for (const [serverKey, errorCount] of Object.entries(
+      POOL_HEALTH.errorCount
+    )) {
+      if (errorCount > 0) {
+        metrics.errorsByServer[serverKey] = errorCount;
+        metrics.totalErrors += errorCount;
+        metrics.unhealthyPools++;
+      } else {
+        metrics.healthyPools++;
+      }
+    }
+
+    // Generar recomendaciones
+    if (metrics.totalErrors > 0) {
+      metrics.recommendedActions.push(
+        "Verificar conectividad de red a bases de datos"
+      );
+      metrics.recommendedActions.push("Revisar configuración SSL/TLS");
+      metrics.recommendedActions.push(
+        "Considerar aumentar timeouts de conexión"
+      );
+    }
+
+    if (metrics.unhealthyPools > metrics.healthyPools) {
+      metrics.recommendedActions.push(
+        "Ejecutar limpieza forzada de pools problemáticos"
+      );
+    }
+
+    return metrics;
+  }
+
+  /**
+   * Detiene el servicio central de conexiones
+   * MEJORADO: Con limpieza más robusta para AggregateError
+   */
+  async shutdown() {
     logger.info("Deteniendo servicio central de conexiones...");
 
-    // Limpiar intervalo de verificación de salud
-    if (this.healthCheckInterval) {
-      clearInterval(this.healthCheckInterval);
-      this.healthCheckInterval = null;
+    try {
+      // Limpiar intervalo de verificación de salud
+      if (this.healthCheckInterval) {
+        clearInterval(this.healthCheckInterval);
+        this.healthCheckInterval = null;
+      }
+
+      // Limpiar timers de renovación
+      for (const timer of Object.values(this.renewalTimers)) {
+        if (timer) clearTimeout(timer);
+      }
+      this.renewalTimers = {};
+
+      // Cerrar todas las transacciones activas
+      for (const [
+        connection,
+        transaction,
+      ] of this.activeTransactions.entries()) {
+        try {
+          logger.info(
+            `Haciendo rollback de transacción activa durante shutdown...`
+          );
+          await this.rollbackTransaction(transaction);
+        } catch (rollbackError) {
+          logger.warn(
+            `Error en rollback durante shutdown: ${rollbackError.message}`
+          );
+        }
+      }
+
+      // Cerrar pools con timeout más robusto
+      try {
+        await Promise.race([
+          this.closePools(),
+          new Promise((_, reject) => {
+            setTimeout(() => reject(new Error("Shutdown timeout")), 30000);
+          }),
+        ]);
+      } catch (closeError) {
+        logger.warn(
+          `Error cerrando pools durante shutdown: ${closeError.message}`
+        );
+
+        // Forzar limpieza si hay timeout
+        this.pools = {};
+        connectionPoolMap.clear();
+        CONNECTION_LIMITS.operationCounter.clear();
+        this.stats.activeConnections.clear();
+        this.activeTransactions.clear();
+      }
+
+      logger.info("✅ Servicio central de conexiones detenido correctamente");
+    } catch (error) {
+      logger.error(`Error durante shutdown: ${error.message}`);
+
+      // Limpieza forzada como último recurso
+      this.pools = {};
+      connectionPoolMap.clear();
+      CONNECTION_LIMITS.operationCounter.clear();
+      this.stats.activeConnections.clear();
+      this.activeTransactions.clear();
+
+      logger.info("Limpieza forzada completada durante shutdown");
     }
-
-    // Limpiar timers de renovación
-    for (const timer of Object.values(this.renewalTimers)) {
-      if (timer) clearTimeout(timer);
-    }
-    this.renewalTimers = {};
-
-    // Cerrar pools (sin esperar)
-    this.closePools().catch((err) => {
-      logger.error(`Error al cerrar pools durante shutdown: ${err.message}`);
-    });
-
-    logger.info("Servicio central de conexiones detenido");
   }
 }
 

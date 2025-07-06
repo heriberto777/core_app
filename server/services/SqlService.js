@@ -12,6 +12,10 @@ const MemoryManager = require("./MemoryManager");
  * Servicio optimizado para operaciones SQL que usa ConnectionCentralService
  */
 class SqlService {
+  constructor() {
+    logger.info("SqlService inicializado correctamente");
+  }
+
   /**
    * Obtiene los tipos de columnas de una tabla
    * @param {Connection} connection - Conexión a SQL Server
@@ -19,6 +23,11 @@ class SqlService {
    * @returns {Promise<Object>} - Mapa de columnas a tipos
    */
   async getColumnTypes(connection, tableName) {
+    const startTime = Date.now();
+    logger.info(
+      `Iniciando obtención de tipos de columnas para tabla: ${tableName}`
+    );
+
     try {
       // Limpiar nombre de tabla (quitar esquema y corchetes)
       const cleanTableName = tableName
@@ -27,22 +36,22 @@ class SqlService {
         .pop();
 
       const query = `
-      SELECT 
+      SELECT
           c.name AS column_name,
           t.name AS data_type,
           c.max_length,
           c.precision,
           c.scale,
           c.is_nullable
-      FROM 
+      FROM
           sys.columns c
-      JOIN 
+      JOIN
           sys.types t ON c.user_type_id = t.user_type_id
-      JOIN 
+      JOIN
           sys.tables tbl ON c.object_id = tbl.object_id
-      WHERE 
+      WHERE
           tbl.name = '${cleanTableName}'
-      ORDER BY 
+      ORDER BY
           c.column_id;
       `;
 
@@ -107,10 +116,18 @@ class SqlService {
         };
       }
 
+      const duration = Date.now() - startTime;
+      logger.info(
+        `Tipos de columnas obtenidos para ${tableName} en ${duration}ms: ${
+          Object.keys(typeMap).length
+        } columnas`
+      );
+
       return typeMap;
     } catch (error) {
+      const duration = Date.now() - startTime;
       logger.warn(
-        `No se pudieron obtener los tipos de columnas: ${error.message}`
+        `No se pudieron obtener los tipos de columnas para ${tableName} (${duration}ms): ${error.message}`
       );
       return {}; // Devolver un objeto vacío para continuar funcionando
     }
@@ -121,9 +138,9 @@ class SqlService {
    * @param {any} value - Valor a evaluar
    * @returns {Object} - Tipo Tedious correspondiente
    */
-  determineType(value) {
+  _getSqlType(value) {
     if (value === null || value === undefined || value === "") {
-      return TYPES.Null;
+      return TYPES.NVarChar; // Cambio: usar NVarChar en lugar de Null para mejor compatibilidad
     } else if (typeof value === "number") {
       if (Number.isInteger(value)) {
         return TYPES.Int;
@@ -147,11 +164,16 @@ class SqlService {
         }
       }
 
-      return value.trim() === "" ? TYPES.Null : TYPES.NVarChar;
+      return value.trim() === "" ? TYPES.NVarChar : TYPES.NVarChar;
     }
 
     // Por defecto
     return TYPES.NVarChar;
+  }
+
+  // Método legacy mantenido para compatibilidad
+  determineType(value) {
+    return this._getSqlType(value);
   }
 
   /**
@@ -201,7 +223,14 @@ class SqlService {
     columnTypes = {},
     transaction = null
   ) {
+    const startTime = Date.now();
+    const insertId = `INS-${Date.now()}-${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
+
     try {
+      logger.debug(`[${insertId}] Iniciando inserción en ${tableName}`);
+
       // Si pasaron un serverKey en lugar de una conexión, obtener la conexión
       if (typeof connection === "string") {
         const serverKey = connection;
@@ -272,14 +301,14 @@ class SqlService {
                 if (isNaN(date.getTime())) {
                   sanitizedRecord[key] = null; // Fecha inválida
                   logger.warn(
-                    `Fecha inválida convertida a NULL para campo ${key}: ${sanitizedRecord[key]}`
+                    `[${insertId}] Fecha inválida convertida a NULL para campo ${key}: ${sanitizedRecord[key]}`
                   );
                 }
               }
             } catch (e) {
               sanitizedRecord[key] = null;
               logger.warn(
-                `Error procesando fecha para campo ${key}: ${e.message}`
+                `[${insertId}] Error procesando fecha para campo ${key}: ${e.message}`
               );
             }
           } else if (
@@ -308,7 +337,7 @@ class SqlService {
                 colType.maxLength
               );
               logger.warn(
-                `Campo ${key} truncado de ${originalLength} a ${colType.maxLength} caracteres`
+                `[${insertId}] Campo ${key} truncado de ${originalLength} a ${colType.maxLength} caracteres`
               );
             }
           } else if (
@@ -356,39 +385,49 @@ class SqlService {
       const sql = `
       INSERT INTO ${tableName} (${columns})
       VALUES (${paramNames});
-      
+
       SELECT @@ROWCOUNT AS rowsAffected;
     `;
 
-      // MEJORA: Depuración
-      logger.debug(`Consulta de inserción para ${tableName}:`, sql);
       logger.debug(
-        `Parámetros para inserción en ${tableName}:`,
+        `[${insertId}] Consulta de inserción para ${tableName}:`,
+        sql
+      );
+      logger.debug(
+        `[${insertId}] Parámetros:`,
         JSON.stringify(sanitizedRecord)
       );
 
       // Ejecutar la consulta con tipos explícitos
-      return await this.query(
+      const result = await this.query(
         connection,
         sql,
         sanitizedRecord,
         columnTypes,
         transaction
       );
+
+      const duration = Date.now() - startTime;
+      logger.debug(`[${insertId}] Inserción completada en ${duration}ms`);
+
+      return result;
     } catch (error) {
-      // MEJORA: Captura detallada de errores
+      const duration = Date.now() - startTime;
       logger.error(
-        `Error en insertWithExplicitTypes para tabla ${tableName}:`,
+        `[${insertId}] Error en insertWithExplicitTypes para tabla ${tableName} (${duration}ms):`,
         error
       );
-      logger.error(`Detalles del error: ${error.message}`);
+      logger.error(`[${insertId}] Detalles del error: ${error.message}`);
 
       if (error.number) {
-        logger.error(`Código de error SQL: ${error.number}`);
-        logger.error(`Estado SQL: ${error.state || "N/A"}`);
+        logger.error(`[${insertId}] Código de error SQL: ${error.number}`);
+        logger.error(`[${insertId}] Estado SQL: ${error.state || "N/A"}`);
       }
 
-      logger.error(`Registro problemático: ${JSON.stringify(record, null, 2)}`);
+      logger.error(
+        `[${insertId}] Registro problemático:`,
+        JSON.stringify(record, null, 2)
+      );
 
       throw error;
     }
@@ -491,8 +530,8 @@ class SqlService {
 
       const sql = `
         SELECT COUNT(*) AS exists_count
-        FROM INFORMATION_SCHEMA.TABLES 
-        WHERE TABLE_SCHEMA = '${schema}' 
+        FROM INFORMATION_SCHEMA.TABLES
+        WHERE TABLE_SCHEMA = '${schema}'
         AND TABLE_NAME = '${table}'
       `;
 
@@ -508,8 +547,7 @@ class SqlService {
   }
 
   /**
-   * Ejecuta una consulta SQL con manejo mejorado de errores y reintentos
-   * Adaptado para usar ConnectionCentralService
+   * Ejecuta una consulta SQL con manejo mejorado de errores y reintentos para AggregateError
    * @param {Connection|string} connection - Conexión a SQL Server o serverKey
    * @param {string} sql - Consulta SQL
    * @param {Object} params - Parámetros para la consulta (opcional)
@@ -555,15 +593,140 @@ class SqlService {
       serverKey = connection._serverKey;
     }
 
+    // NUEVO: Ejecutar con reintentos para AggregateError
+    const maxRetries = 3;
+    let retryCount = 0;
+
+    while (retryCount <= maxRetries) {
+      try {
+        return await this._executeQueryWithRetries(
+          connectionObj,
+          sql,
+          params,
+          columnTypes,
+          transaction,
+          serverKey,
+          needToRelease
+        );
+      } catch (error) {
+        retryCount++;
+
+        logger.error(`Query attempt ${retryCount}/${maxRetries + 1} failed:`, {
+          message: error.message,
+          code: error.code,
+          name: error.name,
+          isAggregateError: error.name === "AggregateError",
+        });
+
+        // NUEVO: Manejo específico para AggregateError
+        if (
+          error.name === "AggregateError" ||
+          error.message?.includes("AggregateError") ||
+          error.code === "ECONNRESET" ||
+          error.code === "ETIMEOUT"
+        ) {
+          if (retryCount <= maxRetries) {
+            const delay = Math.min(2000 * Math.pow(2, retryCount - 1), 10000); // Backoff exponencial
+            logger.info(
+              `Waiting ${delay}ms before retry ${
+                retryCount + 1
+              } due to AggregateError`
+            );
+
+            // Marcar conexión como no saludable
+            if (connectionObj) {
+              connectionObj._isHealthy = false;
+            }
+
+            await new Promise((resolve) => setTimeout(resolve, delay));
+
+            // Intentar obtener nueva conexión si la actual falló
+            if (
+              needToRelease &&
+              connectionObj &&
+              connectionObj._isHealthy === false &&
+              serverKey
+            ) {
+              try {
+                logger.info(
+                  `Getting new connection for retry ${retryCount + 1}`
+                );
+
+                // Liberar conexión problemática
+                await ConnectionCentralService.releaseConnection(connectionObj);
+
+                // Obtener nueva conexión
+                connectionObj = await ConnectionCentralService.getConnection(
+                  serverKey,
+                  { timeout: 30000 }
+                );
+                logger.info(
+                  `New connection obtained for retry ${retryCount + 1}`
+                );
+              } catch (connectionError) {
+                logger.error(
+                  `Error getting new connection for retry:`,
+                  connectionError
+                );
+
+                if (retryCount > maxRetries) {
+                  throw error; // Lanzar error original si no quedan reintentos
+                }
+                continue; // Continuar con la siguiente iteración
+              }
+            }
+
+            continue; // Reintentar con la nueva conexión
+          }
+        }
+
+        // Para otros tipos de error, lanzar inmediatamente
+        if (retryCount > maxRetries) {
+          logger.error(`All retries exhausted. Final error:`, error);
+          throw error;
+        }
+
+        // Pausa breve para otros errores antes de reintentar
+        await new Promise((resolve) => setTimeout(resolve, 1000));
+      }
+    }
+  }
+
+  /**
+   * Ejecuta una consulta SQL con manejo robusto de AggregateError
+   * @private
+   */
+  async _executeQueryWithRetries(
+    connectionObj,
+    sql,
+    params,
+    columnTypes,
+    transaction,
+    serverKey,
+    needToRelease
+  ) {
+    const queryId = `Q-${Date.now()}-${Math.random()
+      .toString(36)
+      .substr(2, 9)}`;
+    const startTime = Date.now();
+
     // Medir tiempo para métricas
-    Telemetry.startTimer(`query_exec_${Date.now()}`);
+    Telemetry.startTimer(`query_exec_${queryId}`);
 
     try {
+      logger.debug(
+        `[${queryId}] Iniciando consulta SQL${
+          serverKey ? ` en ${serverKey}` : ""
+        }`
+      );
+
       // Verificar operaciones para gestión de memoria
       MemoryManager.trackOperation("sql_query");
 
       // Incrementar contador de operaciones de la conexión
-      ConnectionCentralService.incrementOperationCount(connectionObj);
+      if (connectionObj) {
+        ConnectionCentralService.incrementOperationCount(connectionObj);
+      }
 
       // Sanitizar parámetros
       const sanitizedParams = this.sanitizeParams(params);
@@ -571,6 +734,11 @@ class SqlService {
       // Registrar métricas
       if (serverKey) {
         Telemetry.trackQuery(serverKey);
+      }
+
+      // Verificar estado de la conexión antes de usar
+      if (connectionObj && connectionObj._isHealthy === false) {
+        throw new Error("Connection marked as unhealthy");
       }
 
       // Ejecutar la consulta
@@ -582,36 +750,77 @@ class SqlService {
         transaction
       );
 
+      const duration = Date.now() - startTime;
+      const recordCount = result.recordset ? result.recordset.length : 0;
+      const affectedRows = result.rowsAffected || 0;
+
+      logger.info(
+        `[${queryId}] Consulta ejecutada exitosamente. Registros: ${recordCount}, Filas afectadas: ${affectedRows}, Tiempo: ${duration}ms`
+      );
+
+      // Registrar métricas de performance
+      if (duration > 5000) {
+        logger.warn(`[${queryId}] Consulta lenta detectada: ${duration}ms`);
+      }
+
       return result;
     } catch (error) {
+      const duration = Date.now() - startTime;
+      logger.error(
+        `[${queryId}] Error en ejecución de consulta. Tiempo: ${duration}ms`,
+        error
+      );
+
       // Registrar error en métricas
       if (serverKey) {
+        logger.debug(
+          `[${queryId}] Registrando error en métricas para serverKey: ${serverKey}`
+        );
         Telemetry.trackQuery(serverKey, true);
       }
 
       // Registrar detalles del error para diagnóstico
+      logger.error(
+        `[${queryId}] SQL problemático: ${sql.substring(0, 200)}...`
+      );
+      logger.error(
+        `[${queryId}] Parámetros problemáticos: ${JSON.stringify(params)}`
+      );
       this.logQueryError("execution", sql, params, error);
       throw error;
     } finally {
       // Finalizar medición de tiempo
-      const queryTime = Telemetry.endTimer(`query_exec_${Date.now()}`);
+      logger.debug(`[${queryId}] Finalizando medición de tiempo de telemetría`);
+      const queryTime = Telemetry.endTimer(`query_exec_${queryId}`);
       if (queryTime > 0) {
         Telemetry.updateAverage("avgQueryTime", queryTime);
+        logger.debug(
+          `[${queryId}] Tiempo de consulta registrado: ${queryTime}ms`
+        );
       }
 
       // Si obtuvimos la conexión aquí, liberarla
       if (needToRelease && connectionObj) {
         try {
+          logger.debug(`[${queryId}] Liberando conexión obtenida`);
           await ConnectionCentralService.releaseConnection(connectionObj);
+          logger.debug(`[${queryId}] Conexión liberada exitosamente`);
         } catch (releaseError) {
-          logger.warn(`Error al liberar conexión: ${releaseError.message}`);
+          logger.warn(
+            `[${queryId}] Error al liberar conexión: ${releaseError.message}`
+          );
         }
       }
+
+      const totalDuration = Date.now() - startTime;
+      logger.debug(
+        `[${queryId}] Consulta finalizada. Tiempo total: ${totalDuration}ms`
+      );
     }
   }
 
   /**
-   * Implementación interna de ejecución de consulta
+   * Implementación interna de ejecución de consulta mejorada para AggregateError
    * @param {Connection} connection - Conexión a SQL Server
    * @param {string} sql - Consulta SQL
    * @param {Object} params - Parámetros sanitizados
@@ -643,6 +852,20 @@ class SqlService {
         // Crear la request directamente con la función de callback
         const request = new Request(sql, (err, rowCount) => {
           if (err) {
+            // NUEVO: Manejo específico para AggregateError en el callback
+            if (err.name === "AggregateError") {
+              logger.error(`AggregateError en callback de Request:`, {
+                message: err.message,
+                code: err.code,
+                originalErrors: err.errors || [],
+                sql: sql.substring(0, 200) + "...",
+              });
+
+              Telemetry.trackError("query_callback_aggregate_error", {
+                sqlPreview: sql.substring(0, 100),
+              });
+            }
+
             reject(err);
             return;
           }
@@ -653,11 +876,14 @@ class SqlService {
           });
         });
 
+        // NUEVO: Configurar timeouts específicos en el request para AggregateError
+        request.setTimeout(120000); // 2 minutos
+
         // Configurar parámetros manualmente sin llamar a validateParameters
         for (const [key, value] of Object.entries(params)) {
           try {
             // Determinar tipo
-            let paramType = this.determineType(value);
+            let paramType = this._getSqlType(value);
             let paramValue = value;
 
             // Si tenemos tipos de columnas explícitos, usarlos
@@ -684,7 +910,7 @@ class SqlService {
               paramValue = null;
             }
 
-            // Manejo específico para valores null
+            // Manejo específico para valores null mejorado para AggregateError
             if (paramValue === null) {
               // Para los valores null, usar un tipo específico en lugar de Null general
               // Esto es clave - algunos controladores no manejan bien TYPES.Null
@@ -716,6 +942,18 @@ class SqlService {
             }
           }
         }
+
+        // NUEVO: Manejar eventos específicos del request para AggregateError
+        request.on("error", (err) => {
+          if (err.name === "AggregateError") {
+            logger.error(`AggregateError en request event:`, err);
+
+            Telemetry.trackError("query_request_aggregate_error", {
+              sqlPreview: sql.substring(0, 100),
+            });
+          }
+        });
+
         // Manejar filas
         request.on("row", (columns) => {
           const row = {};
@@ -753,11 +991,29 @@ class SqlService {
             connection.execSql(request);
           }
         } catch (execError) {
+          // NUEVO: Manejo específico para AggregateError en execSql
+          if (execError.name === "AggregateError") {
+            logger.error(`AggregateError en execSql:`, execError);
+
+            Telemetry.trackError("query_execsql_aggregate_error", {
+              sqlPreview: sql.substring(0, 100),
+            });
+          }
+
           reject(
             new Error(`Error al ejecutar SQL (execSql): ${execError.message}`)
           );
         }
       } catch (error) {
+        // NUEVO: Manejo específico para AggregateError en el catch general
+        if (error.name === "AggregateError") {
+          logger.error(`AggregateError en executeQuery:`, error);
+
+          Telemetry.trackError("query_general_aggregate_error", {
+            sqlPreview: sql.substring(0, 100),
+          });
+        }
+
         reject(error);
       }
     });
@@ -859,11 +1115,23 @@ class SqlService {
         error.message
       }\nSQL: ${sql}\nParámetros: ${JSON.stringify(params)}\nStack: ${
         error.stack
-      }\n\n`;
+      }\n`;
 
-      fs.appendFile(logPath, logEntry, (err) => {
-        if (err) logger.error("Error al escribir log de error SQL:", err);
-      });
+      // NUEVO: Añadir información específica de AggregateError
+      if (error.name === "AggregateError") {
+        const aggregateInfo = `AggregateError Details:\n- Code: ${
+          error.code
+        }\n- Original Errors: ${JSON.stringify(error.errors || [])}\n`;
+        const finalEntry = logEntry + aggregateInfo + "\n";
+
+        fs.appendFile(logPath, finalEntry, (err) => {
+          if (err) logger.error("Error al escribir log de error SQL:", err);
+        });
+      } else {
+        fs.appendFile(logPath, logEntry + "\n", (err) => {
+          if (err) logger.error("Error al escribir log de error SQL:", err);
+        });
+      }
     } catch (logError) {
       logger.error("Error al registrar error SQL:", logError);
     }
