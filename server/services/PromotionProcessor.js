@@ -183,6 +183,9 @@ class PromotionProcessor {
       _PROMOTION_TYPE: "BONUS",
     };
 
+    // ELIMINAR CAMPOS PROBLEMÁTICOS
+    delete transformed.CANTIDAD;
+
     logger.debug(
       `Línea de bonificación transformada: ${bonusLine.NUM_LN} -> referencia: ${transformed.PEDIDO_LINEA_BONIF}`
     );
@@ -209,6 +212,9 @@ class PromotionProcessor {
       _PROMOTION_TYPE: "TRIGGER",
     };
 
+    // ELIMINAR CAMPOS PROBLEMÁTICOS
+    delete transformed.CANTIDAD;
+
     logger.debug(
       `Línea regular transformada: ${regularLine.NUM_LN} (dispara promoción)`
     );
@@ -222,7 +228,7 @@ class PromotionProcessor {
    * @returns {Object} - Línea transformada
    */
   static transformNormalLine(normalLine) {
-    return {
+    const transformed = {
       ...normalLine,
       PEDIDO_LINEA_BONIF: null,
       CANTIDAD_PEDIDA: normalLine.CND_MAX || normalLine.QTY,
@@ -232,6 +238,11 @@ class PromotionProcessor {
       _IS_NORMAL_LINE: true,
       _PROMOTION_TYPE: "NONE",
     };
+
+    // ELIMINAR CAMPOS PROBLEMÁTICOS
+    delete transformed.CANTIDAD;
+
+    return transformed;
   }
 
   /**
