@@ -17,6 +17,7 @@ import {
   ConfigurationPage,
   UserProfile,
   ModuleManager,
+  LogsPage,
 } from "../index";
 
 // ⭐ COMPONENTE DE LOADING MEJORADO ⭐
@@ -197,6 +198,15 @@ export function AdminRouter() {
               component={TransferHistoryLogs}
               title="Historial de Transferencias"
             />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/logs"
+        element={
+          <ProtectedRoute resource="logs" action="read">
+            <LayoutWrapper component={LogsPage} title="Logs" />
           </ProtectedRoute>
         }
       />

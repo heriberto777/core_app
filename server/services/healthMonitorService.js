@@ -133,8 +133,8 @@ async function checkSystemHealth() {
 
       let initialized = false;
       try {
-        await ConnectionManager.initPool("server1");
-        await ConnectionManager.initPool("server2");
+        await ConnectionService.initPool("server1");
+        await ConnectionService.initPool("server2");
         initialized = true;
       } catch (initError) {
         logger.error("Error al inicializar pools:", initError);
@@ -251,8 +251,8 @@ async function attemptDatabaseRecovery() {
 
     let poolsInitialized = false;
     try {
-      await ConnectionManager.initPool("server1");
-      await ConnectionManager.initPool("server2");
+      await ConnectionService.initPool("server1");
+      await ConnectionService.initPool("server2");
       poolsInitialized = true;
     } catch (initError) {
       logger.error("Error al inicializar pools:", initError);
@@ -338,8 +338,8 @@ async function attemptConnectionRecovery() {
     // 3. Reinicializar pools
     let poolsInitialized = false;
     try {
-      await ConnectionManager.initPool("server1");
-      await ConnectionManager.initPool("server2");
+      await ConnectionService.initPool("server1");
+      await ConnectionService.initPool("server2");
       poolsInitialized = true;
     } catch (initError) {
       logger.error("Error al inicializar pools:", initError);

@@ -987,6 +987,23 @@ class DynamicTransferService {
         );
       }
 
+      console.log("🔧 DEBUG MAPPING COMPLETO:");
+      console.log("🔧 mapping.name:", mapping.name);
+      console.log(
+        "🔧 mapping.promotionConfig existe:",
+        !!mapping.promotionConfig
+      );
+      if (mapping.promotionConfig) {
+        console.log(
+          "🔧 mapping.promotionConfig.enabled:",
+          mapping.promotionConfig.enabled
+        );
+        console.log(
+          "🔧 mapping.promotionConfig completo:",
+          JSON.stringify(mapping.promotionConfig, null, 2)
+        );
+      }
+
       // 1. Identificar las tablas principales (no de detalle)
       const mainTables = mapping.tableConfigs.filter((tc) => !tc.isDetailTable);
 
@@ -1425,6 +1442,8 @@ class DynamicTransferService {
       logger.info(
         `🎁 Obteniendo datos con promociones para documento ${documentId}`
       );
+      console.log("🎁 DEBUG getDetailDataWithPromotions - INICIANDO");
+      console.log("🎁 mapping.promotionConfig:", mapping.promotionConfig);
 
       // Obtener datos de detalle normalmente
       const detailData = await this.getDetailData(
@@ -1435,6 +1454,11 @@ class DynamicTransferService {
       );
 
       // Verificar datos obtenidos
+      console.log(
+        "🎁 DEBUG detailData obtenido:",
+        detailData?.length,
+        "registros"
+      );
       if (!detailData || detailData.length === 0) {
         logger.warn(
           `No se obtuvieron datos de detalle para documento ${documentId}`
@@ -1452,11 +1476,16 @@ class DynamicTransferService {
 
       // Verificar si hay configuración de promociones
       if (!mapping.promotionConfig || !mapping.promotionConfig.enabled) {
+        console.log(
+          "🎁 DEBUG: Promociones deshabilitadas, retornando datos normales"
+        );
         logger.debug(
           "Promociones deshabilitadas, procesando datos normalmente"
         );
         return detailData;
       }
+
+      console.log("🎁 DEBUG: Promociones habilitadas, procesando...");
 
       // Validar configuración de promociones
       if (!PromotionProcessor.validatePromotionConfig(mapping)) {
@@ -1537,6 +1566,34 @@ class DynamicTransferService {
       );
       logger.debug(`Ejecutando consulta personalizada para detalles: ${query}`);
       const result = await SqlService.query(sourceConnection, query);
+
+      // ✅ AGREGAR ESTOS LOGS AQUÍ (después de la línea anterior)
+      if (result.recordset && result.recordset.length > 0) {
+        const firstRow = result.recordset[0];
+        console.log(
+          "🔧 CAMPOS DISPONIBLES EN DATOS (customQuery):",
+          Object.keys(firstRow)
+        );
+        console.log(
+          "🔧 Tiene ART_BON:",
+          "ART_BON" in firstRow,
+          "valor:",
+          firstRow.ART_BON
+        );
+        console.log(
+          "🔧 Tiene COD_ART_RFR:",
+          "COD_ART_RFR" in firstRow,
+          "valor:",
+          firstRow.COD_ART_RFR
+        );
+        console.log(
+          "🔧 Tiene MON_DSC:",
+          "MON_DSC" in firstRow,
+          "valor:",
+          firstRow.MON_DSC
+        );
+      }
+
       return result.recordset;
     } else if (detailConfig.useSameSourceTable) {
       // Caso especial: usa la misma tabla que el encabezado
@@ -1611,6 +1668,27 @@ class DynamicTransferService {
           result.recordset[0]
         ).join(", ")}`
       );
+
+      // ✅ AGREGAR ESTOS LOGS AQUÍ
+      const firstRow = result.recordset[0];
+      console.log(
+        "🔧 Tiene ART_BON:",
+        "ART_BON" in firstRow,
+        "valor:",
+        firstRow.ART_BON
+      );
+      console.log(
+        "🔧 Tiene COD_ART_RFR:",
+        "COD_ART_RFR" in firstRow,
+        "valor:",
+        firstRow.COD_ART_RFR
+      );
+      console.log(
+        "🔧 Tiene MON_DSC:",
+        "MON_DSC" in firstRow,
+        "valor:",
+        firstRow.MON_DSC
+      );
     }
 
     return result.recordset;
@@ -1656,6 +1734,27 @@ class DynamicTransferService {
         `🔍 CAMPOS DISPONIBLES EN RESULTADO: ${Object.keys(
           result.recordset[0]
         ).join(", ")}`
+      );
+
+      // ✅ AGREGAR ESTOS LOGS AQUÍ
+      const firstRow = result.recordset[0];
+      console.log(
+        "🔧 Tiene ART_BON:",
+        "ART_BON" in firstRow,
+        "valor:",
+        firstRow.ART_BON
+      );
+      console.log(
+        "🔧 Tiene COD_ART_RFR:",
+        "COD_ART_RFR" in firstRow,
+        "valor:",
+        firstRow.COD_ART_RFR
+      );
+      console.log(
+        "🔧 Tiene MON_DSC:",
+        "MON_DSC" in firstRow,
+        "valor:",
+        firstRow.MON_DSC
       );
     }
 
@@ -5102,38 +5201,58 @@ class DynamicTransferService {
   }
 
   /**
-   * Determina automáticamente si debe usar procesamiento de promociones
-   * @param {Object} mapping - Configuración de mapping
-   * @returns {boolean} - Si debe procesar promociones
-   * @private
+   * Verifica si debe usar promociones automáticamente
+   * @param {Object} mapping - Configuración de mapeo
+   * @returns {Boolean} - True si debe usar promociones
    */
   shouldUsePromotions(mapping) {
-    // 1. Verificar si las promociones están habilitadas en la configuración
-    if (!mapping.promotionConfig || !mapping.promotionConfig.enabled) {
-      logger.debug("Promociones deshabilitadas en configuración del mapping");
-      return false;
-    }
+    console.log("🔍 DEBUG shouldUsePromotions - INICIANDO");
+    console.log("🔍 mapping.name:", mapping.name);
+    console.log("🔍 mapping.promotionConfig:", mapping.promotionConfig);
 
-    // 2. Validar que la configuración de promociones sea válida
-    if (!PromotionProcessor.validatePromotionConfig(mapping)) {
-      logger.warn(
-        "Configuración de promociones inválida, usando procesamiento estándar"
+    try {
+      // 1. Verificar si las promociones están habilitadas en la configuración
+      if (!mapping.promotionConfig || !mapping.promotionConfig.enabled) {
+        console.log("🔍 DEBUG: Promociones deshabilitadas");
+        logger.debug("Promociones deshabilitadas en configuración del mapping");
+        return false;
+      }
+
+      console.log("🔍 DEBUG: Promociones habilitadas, validando configuración");
+
+      // 2. Validar que la configuración de promociones sea válida
+      if (!PromotionProcessor.validatePromotionConfig(mapping)) {
+        console.log("🔍 DEBUG: Configuración inválida");
+        logger.warn(
+          "Configuración de promociones inválida, usando procesamiento estándar"
+        );
+        return false;
+      }
+
+      // 3. Verificar que existan tablas de detalle para procesar
+      const detailTables =
+        mapping.tableConfigs?.filter((tc) => tc.isDetailTable) || [];
+      console.log(
+        "🔍 DEBUG: Tablas de detalle encontradas:",
+        detailTables.length
       );
+
+      if (detailTables.length === 0) {
+        console.log("🔍 DEBUG: No hay tablas de detalle");
+        logger.debug("No hay tablas de detalle para procesar promociones");
+        return false;
+      }
+
+      console.log("🔍 DEBUG: ✅ Promociones activadas");
+      logger.info(
+        "✅ Condiciones para promociones cumplidas - activando procesamiento automático"
+      );
+      return true;
+    } catch (error) {
+      console.log("🔍 DEBUG: Error en shouldUsePromotions:", error.message);
+      logger.error(`Error al verificar promociones: ${error.message}`);
       return false;
     }
-
-    // 3. Verificar que existan tablas de detalle para procesar
-    const detailTables =
-      mapping.tableConfigs?.filter((tc) => tc.isDetailTable) || [];
-    if (detailTables.length === 0) {
-      logger.debug("No hay tablas de detalle para procesar promociones");
-      return false;
-    }
-
-    logger.info(
-      "✅ Condiciones para promociones cumplidas - activando procesamiento automático"
-    );
-    return true;
   }
 }
 

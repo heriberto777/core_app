@@ -1,7 +1,7 @@
 const DBConfig = require("../models/dbConfigModel");
-const {
-  loadConfig: loadConfigurations,
-} = require("../services/ConnectionManager");
+// const {
+//   loadConfig: loadConfigurations,
+// } = require("../services/ConnectionManager");
 
 /**
  * 📌 Obtener todas las configuraciones de base de datos
@@ -110,7 +110,7 @@ const deleteDBConfig = async (req, res) => {
     }
 
     await DBConfig.findOneAndDelete({ serverName });
-    await loadConfigurations(); // 🔥 Recargar configuración en memoria
+    // await loadConfigurations(); // 🔥 Recargar configuración en memoria
 
     res.json({ message: "Configuración eliminada con éxito" });
   } catch (error) {
