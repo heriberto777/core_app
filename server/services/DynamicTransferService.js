@@ -192,7 +192,9 @@ class DynamicTransferService {
           logger.info(
             `📋 Procesando documento ${i + 1}/${
               documentIds.length
-            }: ${documentId}`
+            }: ${documentId} ${
+              shouldUsePromotions ? "(CON PROMOCIONES)" : "(ESTÁNDAR)"
+            }`
           );
 
           // Generar consecutivo si es necesario
@@ -855,33 +857,92 @@ class DynamicTransferService {
         );
       }
 
-      // 1. Procesar tablas principales
+      // 1. Identificar las tablas principales (no de detalle)
       const mainTables = mapping.tableConfigs.filter((tc) => !tc.isDetailTable);
 
-      for (const tableConfig of mainTables) {
-        logger.info(`Procesando tabla principal: ${tableConfig.name}`);
+      if (mainTables.length === 0) {
+        return {
+          success: false,
+          message: "No se encontraron configuraciones de tablas principales",
+          documentType,
+          consecutiveUsed: null,
+          consecutiveValue: null,
+        };
+      }
 
-        // 2. Obtener datos principales
-        const sourceData = await this.getTableData(
-          tableConfig,
-          documentId,
-          sourceConnection,
-          mapping
-        );
+      // Ordenar tablas por executionOrder si está definido
+      const orderedMainTables = [...mainTables].sort(
+        (a, b) => (a.executionOrder || 0) - (b.executionOrder || 0)
+      );
 
-        if (!sourceData || sourceData.length === 0) {
-          logger.warn(
-            `No se encontraron datos en ${tableConfig.sourceTable} para documento ${documentId}`
+      logger.info(
+        `Procesando ${
+          orderedMainTables.length
+        } tablas principales en orden: ${orderedMainTables
+          .map((t) => t.name)
+          .join(" -> ")}`
+      );
+
+      // 2. Procesar cada tabla principal
+      for (const tableConfig of orderedMainTables) {
+        // Obtener datos de la tabla de origen usando el método existente
+        let sourceData;
+
+        try {
+          sourceData = await this.getSourceData(
+            documentId,
+            tableConfig,
+            sourceConnection
           );
-          continue;
+
+          if (!sourceData) {
+            logger.warn(
+              `No se encontraron datos en ${tableConfig.sourceTable} para documento ${documentId}`
+            );
+            continue;
+          }
+
+          logger.debug(
+            `Datos de origen obtenidos: ${JSON.stringify(sourceData)}`
+          );
+        } catch (error) {
+          logger.error(
+            `Error al obtener datos de origen para documento ${documentId}: ${error.message}`
+          );
+          throw new Error(`Error al obtener datos de origen: ${error.message}`);
         }
 
-        const firstRow = sourceData[0];
+        // Procesar dependencias de foreign key ANTES de insertar datos principales
+        try {
+          if (
+            mapping.foreignKeyDependencies &&
+            mapping.foreignKeyDependencies.length > 0
+          ) {
+            logger.info(
+              `Verificando ${mapping.foreignKeyDependencies.length} dependencias de foreign key para documento ${documentId}`
+            );
+            await this.processForeignKeyDependencies(
+              documentId,
+              mapping,
+              sourceConnection,
+              targetConnection,
+              sourceData
+            );
+            logger.info(
+              `Dependencias de foreign key procesadas exitosamente para documento ${documentId}`
+            );
+          }
+        } catch (depError) {
+          logger.error(
+            `Error en dependencias de foreign key para documento ${documentId}: ${depError.message}`
+          );
+          throw new Error(`Error en dependencias: ${depError.message}`);
+        }
 
         // 3. Determinar el tipo de documento basado en las reglas
         documentType = this.determineDocumentType(
           mapping.documentTypeRules,
-          firstRow
+          sourceData
         );
         if (documentType !== "unknown") {
           logger.info(`Tipo de documento determinado: ${documentType}`);
@@ -890,8 +951,8 @@ class DynamicTransferService {
         // 4. Insertar datos principales
         await this.processTable(
           tableConfig,
-          firstRow,
-          firstRow,
+          sourceData,
+          sourceData,
           targetConnection,
           currentConsecutive,
           mapping,
@@ -923,7 +984,7 @@ class DynamicTransferService {
               await this.processDetailTablesWithPromotions(
                 detailTables,
                 documentId,
-                firstRow,
+                sourceData,
                 tableConfig,
                 sourceConnection,
                 targetConnection,
@@ -947,7 +1008,7 @@ class DynamicTransferService {
             await this.processDetailTables(
               detailTables,
               documentId,
-              firstRow,
+              sourceData,
               tableConfig,
               sourceConnection,
               targetConnection,
