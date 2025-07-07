@@ -1502,7 +1502,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa una tabla individual
+   * Procesa una tabla individual - SOLO campos definidos en el mapping
    * @private
    */
   async processTable(
@@ -1520,9 +1520,22 @@ class DynamicTransferService {
     const targetFields = [];
     const targetValues = [];
     const directSqlFields = new Set();
+    const processedFieldNames = new Set(); // Para evitar duplicados
 
     // Determinar si los datos a procesar son para la tabla actual
     const dataForProcessing = isDetailTable ? tableData : sourceData;
+
+    logger.debug(
+      `Iniciando procesamiento de tabla ${tableConfig.name} (isDetailTable: ${isDetailTable})`
+    );
+
+    // VALIDACIÓN: Verificar que existe configuración de campos
+    if (!tableConfig.fieldMappings || tableConfig.fieldMappings.length === 0) {
+      logger.warn(
+        `⚠️ Tabla ${tableConfig.name} no tiene fieldMappings definidos, saltando procesamiento`
+      );
+      return;
+    }
 
     // Ejecutar lookup si está configurado
     let lookupResults = {};
@@ -1552,47 +1565,147 @@ class DynamicTransferService {
       );
     }
 
-    // Procesar todos los campos
-    for (const fieldMapping of tableConfig.fieldMappings) {
-      if (fieldMapping.targetField === "CODIGO_ARTICULO") {
+    logger.info(
+      `📋 Procesando ${tableConfig.fieldMappings.length} campos definidos en mapping para tabla ${tableConfig.name}`
+    );
+
+    // Procesar ÚNICAMENTE los campos definidos en el mapping
+    for (let i = 0; i < tableConfig.fieldMappings.length; i++) {
+      const fieldMapping = tableConfig.fieldMappings[i];
+
+      // Validación básica del field mapping
+      if (!fieldMapping.targetField) {
         logger.warn(
-          `Corrigiendo campo CODIGO_ARTICULO a ARTICULO en tabla ${tableConfig.targetTable}`
+          `⚠️ Campo ${i + 1} en tabla ${
+            tableConfig.name
+          } no tiene targetField definido, saltando...`
         );
-        fieldMapping.targetField = "ARTICULO";
+        continue;
       }
 
-      if (fieldMapping.sourceField === "CODIGO_ARTICULO") {
-        logger.warn(`Corrigiendo campo origen CODIGO_ARTICULO a ARTICULO`);
-        fieldMapping.sourceField = "ARTICULO";
-      }
-      const processedField = await this.processField(
-        fieldMapping,
-        dataForProcessing,
-        lookupResults,
-        currentConsecutive,
-        mapping,
-        tableConfig,
-        isDetailTable,
-        targetConnection,
-        columnLengthCache
-      );
-
-      if (processedField.isDirectSql) {
-        targetFields.push(fieldMapping.targetField);
-        targetValues.push(processedField.value); // Expresión SQL directa
-        directSqlFields.add(fieldMapping.targetField);
-      } else {
-        targetData[fieldMapping.targetField] = processedField.value;
-        targetFields.push(fieldMapping.targetField);
-        targetValues.push(`@${fieldMapping.targetField}`);
+      // Verificar duplicados (case-insensitive)
+      const targetFieldLower = fieldMapping.targetField.toLowerCase();
+      if (processedFieldNames.has(targetFieldLower)) {
+        logger.warn(
+          `⚠️ Campo duplicado detectado: ${fieldMapping.targetField} ya fue procesado para tabla ${tableConfig.name}, saltando...`
+        );
+        continue;
       }
 
       logger.debug(
-        `✅ Campo ${fieldMapping.targetField} preparado para inserción: ${
-          processedField.value
-        } (tipo: ${typeof processedField.value})`
+        `🔧 Procesando campo ${i + 1}/${tableConfig.fieldMappings.length}: ${
+          fieldMapping.sourceField || "(sin origen)"
+        } -> ${fieldMapping.targetField}`
+      );
+
+      try {
+        const processedField = await this.processField(
+          fieldMapping,
+          dataForProcessing,
+          lookupResults,
+          currentConsecutive,
+          mapping,
+          tableConfig,
+          isDetailTable,
+          targetConnection,
+          columnLengthCache
+        );
+
+        // Verificar si el procesamiento fue exitoso y el valor es válido
+        if (processedField && processedField.value !== undefined) {
+          // Marcar el campo como procesado
+          processedFieldNames.add(targetFieldLower);
+
+          if (processedField.isDirectSql) {
+            targetFields.push(fieldMapping.targetField);
+            targetValues.push(processedField.value); // Expresión SQL directa
+            directSqlFields.add(fieldMapping.targetField);
+
+            logger.debug(
+              `✅ Campo SQL directo ${fieldMapping.targetField}: ${processedField.value}`
+            );
+          } else {
+            // Solo agregar si el valor no es null o si el campo es requerido
+            if (processedField.value !== null || fieldMapping.isRequired) {
+              targetData[fieldMapping.targetField] = processedField.value;
+              targetFields.push(fieldMapping.targetField);
+              targetValues.push(`@${fieldMapping.targetField}`);
+
+              logger.debug(
+                `✅ Campo ${fieldMapping.targetField} preparado: ${
+                  processedField.value
+                } (tipo: ${typeof processedField.value})`
+              );
+            } else {
+              logger.debug(
+                `⏭️ Campo ${fieldMapping.targetField} omitido (valor null y no requerido)`
+              );
+            }
+          }
+        } else {
+          logger.debug(
+            `⏭️ Campo ${fieldMapping.targetField} omitido (procesamiento falló o valor undefined)`
+          );
+        }
+      } catch (fieldError) {
+        logger.error(
+          `❌ Error procesando campo ${fieldMapping.targetField}: ${fieldError.message}`
+        );
+
+        // Si el campo es requerido, fallar la operación
+        if (fieldMapping.isRequired) {
+          throw new Error(
+            `Campo requerido ${fieldMapping.targetField} falló: ${fieldError.message}`
+          );
+        }
+
+        // Si no es requerido, continuar con el siguiente campo
+        logger.warn(
+          `⚠️ Continuando sin campo opcional ${fieldMapping.targetField}`
+        );
+      }
+    }
+
+    // Validación final antes de la inserción
+    if (targetFields.length === 0) {
+      logger.warn(
+        `⚠️ No hay campos válidos para insertar en tabla ${tableConfig.targetTable}`
+      );
+      logger.warn(
+        `Campos intentados: ${tableConfig.fieldMappings
+          .map((fm) => fm.targetField)
+          .join(", ")}`
+      );
+      return;
+    }
+
+    // Verificación de duplicados final (por seguridad)
+    const fieldCounts = {};
+    const duplicates = [];
+
+    for (const field of targetFields) {
+      fieldCounts[field] = (fieldCounts[field] || 0) + 1;
+      if (fieldCounts[field] > 1) {
+        duplicates.push(field);
+      }
+    }
+
+    if (duplicates.length > 0) {
+      logger.error(
+        `🚨 DUPLICADOS DETECTADOS EN VALIDACIÓN FINAL: ${duplicates.join(", ")}`
+      );
+      logger.error(`Lista completa: ${targetFields.join(", ")}`);
+      throw new Error(
+        `Campos duplicados detectados: ${duplicates.join(", ")} en tabla ${
+          tableConfig.targetTable
+        }`
       );
     }
+
+    logger.info(
+      `📊 Preparados ${targetFields.length} campos para inserción en ${tableConfig.targetTable}`
+    );
+    logger.debug(`Campos finales: ${targetFields.join(", ")}`);
 
     // Construir y ejecutar la consulta INSERT
     await this.executeInsert(
@@ -1603,10 +1716,12 @@ class DynamicTransferService {
       directSqlFields,
       targetConnection
     );
+
+    logger.debug(`✅ Procesamiento completado para tabla ${tableConfig.name}`);
   }
 
   /**
-   * Procesa un campo individual - MÉTODO UNIFICADO
+   * Procesa un campo individual - BASADO ÚNICAMENTE EN EL MAPPING
    * @private
    */
   async processField(
@@ -1620,178 +1735,249 @@ class DynamicTransferService {
     targetConnection,
     columnLengthCache
   ) {
-    // VALIDACIÓN PARA CORREGIR CAMPOS PROBLEMÁTICOS
-    if (fieldMapping.targetField === "CODIGO_ARTICULO") {
-      logger.warn(
-        `Campo destino CODIGO_ARTICULO corregido automáticamente a ARTICULO para tabla ${tableConfig.targetTable}`
-      );
-      fieldMapping.targetField = "ARTICULO";
-    }
-
-    if (fieldMapping.sourceField === "CODIGO_ARTICULO") {
-      logger.warn(
-        `Campo origen CODIGO_ARTICULO corregido automáticamente a ARTICULO`
-      );
-      fieldMapping.sourceField = "ARTICULO";
-    }
-
-    if (fieldMapping.targetField === "CANTIDAD") {
-      // Obtener columnas de la tabla para verificar si existe
-      const tableColumns = await this.getTableColumns(
-        targetConnection,
-        tableConfig.targetTable
-      );
-      const columnNames = tableColumns.map((col) =>
-        col.COLUMN_NAME.toLowerCase()
-      );
-
-      if (!columnNames.includes("cantidad")) {
-        logger.warn(
-          `Campo CANTIDAD ignorado para tabla ${tableConfig.targetTable} - no existe en la estructura`
-        );
-        return { value: null, isDirectSql: false };
-      }
-    }
-
     let value;
 
-    // PRIORIDAD 1: Usar valores obtenidos por lookup si existen
-    if (
-      fieldMapping.lookupFromTarget &&
-      lookupResults[fieldMapping.targetField] !== undefined
-    ) {
-      value = lookupResults[fieldMapping.targetField];
-      logger.debug(
-        `Usando valor de lookup para ${fieldMapping.targetField}: ${value}`
-      );
-      return { value, isDirectSql: false };
-    }
+    // IMPORTANTE: NO modificar fieldMapping aquí
+    // El mapping debe ser respetado tal como está configurado por el usuario
 
-    // PRIORIDAD 2: Verificar si el campo es una función SQL nativa
-    const defaultValue = fieldMapping.defaultValue;
-    const sqlNativeFunctions = [
-      "GETDATE()",
-      "CURRENT_TIMESTAMP",
-      "NEWID()",
-      "SYSUTCDATETIME()",
-      "SYSDATETIME()",
-      "GETUTCDATE()",
-      "DAY(",
-      "MONTH(",
-      "YEAR(",
-      "GETDATE",
-      "DATEADD",
-      "DATEDIFF",
-    ];
+    logger.debug(
+      `🔧 Procesando campo: ${fieldMapping.sourceField || "(sin origen)"} -> ${
+        fieldMapping.targetField
+      }`
+    );
 
-    const isNativeFunction =
-      typeof defaultValue === "string" &&
-      sqlNativeFunctions.some((fn) => defaultValue.includes(fn));
-
-    if (isNativeFunction) {
-      logger.debug(
-        `Campo ${fieldMapping.targetField} usa función SQL nativa: ${defaultValue}`
-      );
-      return { value: defaultValue, isDirectSql: true };
-    }
-
-    // PRIORIDAD 3: Consecutivo (si está configurado)
-    if (currentConsecutive && this.isConsecutiveField(fieldMapping, mapping)) {
-      const consecutiveValue = this.getConsecutiveValue(
-        fieldMapping,
-        currentConsecutive,
-        isDetailTable
-      );
-      logger.debug(
-        `Asignando consecutivo a ${fieldMapping.targetField}: ${consecutiveValue}`
-      );
-      return { value: consecutiveValue, isDirectSql: false };
-    }
-
-    // PRIORIDAD 4: Obtener valor del campo origen
-    if (fieldMapping.sourceField) {
-      value = sourceData[fieldMapping.sourceField];
-      logger.debug(
-        `Valor original de ${
-          fieldMapping.sourceField
-        }: ${value} (tipo: ${typeof value})`
-      );
-
-      // Aplicar conversión de unidades si está configurado
-      if (fieldMapping.unitConversion && fieldMapping.unitConversion.enabled) {
+    try {
+      // PRIORIDAD 1: Usar valores obtenidos por lookup si existen
+      if (
+        fieldMapping.lookupFromTarget &&
+        lookupResults[fieldMapping.targetField] !== undefined
+      ) {
+        value = lookupResults[fieldMapping.targetField];
         logger.debug(
-          `Aplicando conversión de unidades para ${fieldMapping.targetField}`
+          `📖 Usando valor de lookup para ${fieldMapping.targetField}: ${value}`
         );
-        value = this.applyUnitConversion(sourceData, fieldMapping, value);
+        return { value, isDirectSql: false };
       }
 
-      // Aplicar eliminación de prefijo si está configurado
-      if (
-        fieldMapping.removePrefix &&
-        typeof value === "string" &&
-        value.startsWith(fieldMapping.removePrefix)
-      ) {
-        value = value.substring(fieldMapping.removePrefix.length);
+      // PRIORIDAD 2: Verificar si el campo es una función SQL nativa
+      const defaultValue = fieldMapping.defaultValue;
+      const sqlNativeFunctions = [
+        "GETDATE()",
+        "CURRENT_TIMESTAMP",
+        "NEWID()",
+        "SYSUTCDATETIME()",
+        "SYSDATETIME()",
+        "GETUTCDATE()",
+        "DAY(",
+        "MONTH(",
+        "YEAR(",
+        "GETDATE",
+        "DATEADD",
+        "DATEDIFF",
+      ];
+
+      const isNativeFunction =
+        typeof defaultValue === "string" &&
+        sqlNativeFunctions.some((fn) => defaultValue.includes(fn));
+
+      if (isNativeFunction) {
         logger.debug(
-          `Prefijo removido de ${fieldMapping.targetField}: ${value}`
+          `🔧 Campo ${fieldMapping.targetField} usa función SQL nativa: ${defaultValue}`
         );
+        return { value: defaultValue, isDirectSql: true };
       }
 
-      // Aplicar mapeo de valores si existe
+      // PRIORIDAD 3: Consecutivo (si está configurado)
       if (
-        value !== null &&
-        value !== undefined &&
-        fieldMapping.valueMappings?.length > 0
+        currentConsecutive &&
+        this.isConsecutiveField(fieldMapping, mapping)
       ) {
-        const valueMap = fieldMapping.valueMappings.find(
-          (vm) => vm.sourceValue === value
+        const consecutiveValue = this.getConsecutiveValue(
+          fieldMapping,
+          currentConsecutive,
+          isDetailTable
         );
-        if (valueMap) {
-          value = valueMap.targetValue;
+        logger.debug(
+          `🔢 Asignando consecutivo a ${fieldMapping.targetField}: ${consecutiveValue}`
+        );
+        return { value: consecutiveValue, isDirectSql: false };
+      }
+
+      // PRIORIDAD 4: Obtener valor del campo origen
+      if (fieldMapping.sourceField) {
+        // Verificar que el campo origen existe en los datos
+        if (!sourceData.hasOwnProperty(fieldMapping.sourceField)) {
+          logger.warn(
+            `⚠️ Campo origen ${fieldMapping.sourceField} no existe en los datos fuente para ${fieldMapping.targetField}`
+          );
+          value = null;
+        } else {
+          value = sourceData[fieldMapping.sourceField];
           logger.debug(
-            `Valor mapeado para ${fieldMapping.targetField}: ${value}`
+            `📥 Valor original de ${
+              fieldMapping.sourceField
+            }: ${value} (tipo: ${typeof value})`
+          );
+
+          // Aplicar conversión de unidades si está configurado
+          if (
+            fieldMapping.unitConversion &&
+            fieldMapping.unitConversion.enabled
+          ) {
+            logger.debug(
+              `🔄 Aplicando conversión de unidades para ${fieldMapping.targetField}`
+            );
+            try {
+              value = this.applyUnitConversion(sourceData, fieldMapping, value);
+              logger.debug(`🔄 Conversión de unidades completada: ${value}`);
+            } catch (conversionError) {
+              logger.warn(
+                `⚠️ Error en conversión de unidades para ${fieldMapping.targetField}: ${conversionError.message}, usando valor original`
+              );
+              // Mantener valor original si falla la conversión
+            }
+          }
+
+          // Aplicar eliminación de prefijo si está configurado
+          if (
+            fieldMapping.removePrefix &&
+            typeof value === "string" &&
+            value.startsWith(fieldMapping.removePrefix)
+          ) {
+            const originalValue = value;
+            value = value.substring(fieldMapping.removePrefix.length);
+            logger.debug(
+              `✂️ Prefijo '${fieldMapping.removePrefix}' removido de ${fieldMapping.targetField}: '${originalValue}' -> '${value}'`
+            );
+          }
+
+          // Aplicar mapeo de valores si existe
+          if (
+            value !== null &&
+            value !== undefined &&
+            fieldMapping.valueMappings?.length > 0
+          ) {
+            const valueMap = fieldMapping.valueMappings.find(
+              (vm) => vm.sourceValue === value
+            );
+            if (valueMap) {
+              const originalValue = value;
+              value = valueMap.targetValue;
+              logger.debug(
+                `🔄 Valor mapeado para ${fieldMapping.targetField}: '${originalValue}' -> '${value}'`
+              );
+            }
+          }
+        }
+      }
+
+      // PRIORIDAD 5: Usar valor por defecto si no hay valor
+      if (
+        (value === null || value === undefined) &&
+        fieldMapping.defaultValue !== undefined
+      ) {
+        value =
+          fieldMapping.defaultValue === "NULL"
+            ? null
+            : fieldMapping.defaultValue;
+        logger.debug(
+          `🎯 Valor por defecto para ${fieldMapping.targetField}: ${value}`
+        );
+      }
+
+      // PRIORIDAD 6: Validación de valor requerido
+      if (
+        fieldMapping.isRequired &&
+        (value === null || value === undefined || value === "")
+      ) {
+        const errorMsg = `Campo requerido ${fieldMapping.targetField} no tiene valor válido`;
+        logger.error(`❌ ${errorMsg}`);
+        throw new Error(errorMsg);
+      }
+
+      // PRIORIDAD 7: Truncar valor si excede la longitud máxima
+      if (typeof value === "string" && value.length > 0) {
+        try {
+          const maxLength = await this.getColumnMaxLength(
+            targetConnection,
+            tableConfig.targetTable,
+            fieldMapping.targetField,
+            columnLengthCache
+          );
+
+          if (maxLength > 0 && value.length > maxLength) {
+            const originalValue = value;
+            value = value.substring(0, maxLength);
+            logger.warn(
+              `✂️ Valor truncado para ${fieldMapping.targetField}: "${originalValue}" -> "${value}" (max: ${maxLength})`
+            );
+          }
+        } catch (lengthError) {
+          logger.warn(
+            `⚠️ No se pudo verificar longitud máxima para ${fieldMapping.targetField}: ${lengthError.message}`
+          );
+          // Continuar sin truncar
+        }
+      }
+
+      // PRIORIDAD 8: Validación de tipo de datos básica
+      if (value !== null && value !== undefined) {
+        // Convertir números si es necesario
+        if (fieldMapping.fieldType === "number" && typeof value === "string") {
+          const numericValue = parseFloat(value);
+          if (!isNaN(numericValue)) {
+            value = numericValue;
+            logger.debug(
+              `🔢 Valor convertido a número para ${fieldMapping.targetField}: ${value}`
+            );
+          }
+        }
+
+        // Convertir booleanos si es necesario
+        if (fieldMapping.fieldType === "boolean" && typeof value === "string") {
+          if (["true", "1", "yes", "y", "s"].includes(value.toLowerCase())) {
+            value = true;
+          } else if (["false", "0", "no", "n"].includes(value.toLowerCase())) {
+            value = false;
+          }
+          logger.debug(
+            `🔘 Valor convertido a booleano para ${fieldMapping.targetField}: ${value}`
           );
         }
       }
-    }
 
-    // PRIORIDAD 5: Usar valor por defecto si no hay valor
-    if (
-      (value === null || value === undefined) &&
-      fieldMapping.defaultValue !== undefined
-    ) {
-      value =
-        fieldMapping.defaultValue === "NULL" ? null : fieldMapping.defaultValue;
       logger.debug(
-        `Valor por defecto para ${fieldMapping.targetField}: ${value}`
-      );
-    }
-
-    // PRIORIDAD 6: Truncar valor si excede la longitud máxima
-    if (typeof value === "string" && value.length > 0) {
-      const maxLength = await this.getColumnMaxLength(
-        targetConnection,
-        tableConfig.targetTable,
-        fieldMapping.targetField,
-        columnLengthCache
+        `✅ Valor final para ${
+          fieldMapping.targetField
+        }: ${value} (tipo: ${typeof value})`
       );
 
-      if (maxLength > 0 && value.length > maxLength) {
-        const originalValue = value;
-        value = value.substring(0, maxLength);
-        logger.warn(
-          `Valor truncado para ${fieldMapping.targetField}: "${originalValue}" -> "${value}" (max: ${maxLength})`
-        );
+      return { value, isDirectSql: false };
+    } catch (error) {
+      logger.error(
+        `❌ Error procesando campo ${fieldMapping.targetField}: ${error.message}`
+      );
+
+      // Si el campo es requerido, re-lanzar el error
+      if (fieldMapping.isRequired) {
+        throw error;
       }
+
+      // Si no es requerido, usar valor por defecto o null
+      let fallbackValue = null;
+      if (fieldMapping.defaultValue !== undefined) {
+        fallbackValue =
+          fieldMapping.defaultValue === "NULL"
+            ? null
+            : fieldMapping.defaultValue;
+      }
+
+      logger.warn(
+        `⚠️ Usando valor de fallback para campo opcional ${fieldMapping.targetField}: ${fallbackValue}`
+      );
+
+      return { value: fallbackValue, isDirectSql: false };
     }
-
-    logger.debug(
-      `Valor final para ${
-        fieldMapping.targetField
-      }: ${value} (tipo: ${typeof value})`
-    );
-
-    return { value, isDirectSql: false };
   }
 
   /**
