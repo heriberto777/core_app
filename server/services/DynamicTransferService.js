@@ -1421,48 +1421,102 @@ class DynamicTransferService {
     sourceConnection,
     mapping
   ) {
-    // Obtener datos de detalle normalmente
-    const detailData = await this.getDetailData(
-      detailConfig,
-      parentTableConfig,
-      documentId,
-      sourceConnection
-    );
-
-    // Verificar si hay configuración de promociones
-    if (!mapping.promotionConfig || !mapping.promotionConfig.enabled) {
-      logger.debug("Promociones deshabilitadas, procesando datos normalmente");
-      return detailData;
-    }
-
-    // Validar configuración de promociones
-    if (!PromotionProcessor.validatePromotionConfig(mapping)) {
-      logger.warn(
-        "Configuración de promociones inválida, procesando sin promociones"
+    try {
+      logger.info(
+        `🎁 Obteniendo datos con promociones para documento ${documentId}`
       );
-      return detailData;
+
+      // Obtener datos de detalle normalmente
+      const detailData = await this.getDetailData(
+        detailConfig,
+        parentTableConfig,
+        documentId,
+        sourceConnection
+      );
+
+      // Verificar datos obtenidos
+      if (!detailData || detailData.length === 0) {
+        logger.warn(
+          `No se obtuvieron datos de detalle para documento ${documentId}`
+        );
+        return [];
+      }
+
+      logger.debug(`📊 Datos obtenidos: ${detailData.length} registros`);
+
+      // Validar que tenemos los campos necesarios
+      const firstRecord = detailData[0];
+      logger.debug(
+        `📊 Campos disponibles: ${Object.keys(firstRecord).join(", ")}`
+      );
+
+      // Verificar si hay configuración de promociones
+      if (!mapping.promotionConfig || !mapping.promotionConfig.enabled) {
+        logger.debug(
+          "Promociones deshabilitadas, procesando datos normalmente"
+        );
+        return detailData;
+      }
+
+      // Validar configuración de promociones
+      if (!PromotionProcessor.validatePromotionConfig(mapping)) {
+        logger.warn(
+          "Configuración de promociones inválida, procesando sin promociones"
+        );
+        return detailData;
+      }
+
+      logger.info(
+        `🎁 Procesando detalles con promociones para documento ${documentId}`
+      );
+
+      // Procesar promociones
+      const processedData = PromotionProcessor.processPromotions(
+        detailData,
+        mapping
+      );
+
+      // Aplicar reglas específicas si están configuradas
+      const finalData = PromotionProcessor.applyPromotionRules(
+        processedData,
+        mapping.promotionConfig
+      );
+
+      // Log de resultados
+      const bonusLines = finalData.filter((line) => line._IS_BONUS_LINE);
+      const triggerLines = finalData.filter((line) => line._IS_TRIGGER_LINE);
+
+      logger.info(
+        `🎁 ✅ Procesamiento completado: ${bonusLines.length} bonificaciones, ${triggerLines.length} líneas trigger`
+      );
+
+      // Validar referencias de bonificación
+      bonusLines.forEach((line) => {
+        const refLine =
+          line.PEDIDO_LINEA_BONIF ||
+          line[
+            mapping.promotionConfig?.targetFields?.bonusLineRef ||
+              "PEDIDO_LINEA_BONIF"
+          ];
+        if (refLine) {
+          logger.debug(
+            `🎁 ✅ Bonificación ${line.NUM_LN} referencia línea ${refLine}`
+          );
+        } else {
+          logger.warn(
+            `🎁 ❌ Bonificación ${line.NUM_LN} sin referencia válida`
+          );
+        }
+      });
+
+      return finalData;
+    } catch (error) {
+      logger.error(`Error en getDetailDataWithPromotions: ${error.message}`);
+      logger.error(`Stack trace: ${error.stack}`);
+      throw new Error(
+        `Error al obtener datos con promociones: ${error.message}`
+      );
     }
-
-    logger.info(
-      `Procesando detalles con promociones para documento ${documentId}`
-    );
-
-    // Procesar promociones
-    const processedData = PromotionProcessor.processPromotions(
-      detailData,
-      mapping
-    );
-
-    // Aplicar reglas específicas si están configuradas
-    const finalData = PromotionProcessor.applyPromotionRules(
-      processedData,
-      mapping.promotionConfig
-    );
-
-    logger.info(
-      `Procesamiento de promociones completado para documento ${documentId}`
-    );
-    return finalData;
   }
 
   /**
