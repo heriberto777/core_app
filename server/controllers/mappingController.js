@@ -559,8 +559,9 @@ const processDocumentsByMapping = async (req, res) => {
     const { mappingId } = req.params;
     const { documentIds } = req.body;
 
-    logger.info(`Procesando documentos para mapeo ${mappingId}`);
-    logger.debug(`Documentos a procesar: ${documentIds?.length || 0}`);
+    logger.info(
+      `📋 Procesando documentos para mapeo ${mappingId} (detección automática de promociones)`
+    );
 
     if (!mappingId) {
       return res.status(400).json({
@@ -580,57 +581,52 @@ const processDocumentsByMapping = async (req, res) => {
       });
     }
 
-    try {
-      // Procesar documentos
-      const result = await DynamicTransferService.processDocuments(
-        documentIds,
-        mappingId
-      );
-
-      logger.info(
-        `Procesamiento completado: ${result.processed} éxitos, ${result.failed} fallos`
-      );
-
-      // Incluir información detallada de errores si hay algún fallo
-      if (result.failed > 0) {
-        const errorDetails = result.details
-          .filter((detail) => !detail.success)
-          .map((detail) => ({
-            documentId: detail.documentId,
-            error: detail.message || detail.error || "Error desconocido",
-            details: detail.errorDetails || null,
-          }));
-
-        result.errorDetails = errorDetails;
-      }
-
-      return res.json({
-        success: true,
-        message:
-          result.failed > 0
-            ? `Se procesaron ${result.processed} documentos correctamente y fallaron ${result.failed}`
-            : `Se procesaron ${result.processed} documentos correctamente`,
-        data: result,
-      });
-    } catch (processingError) {
-      // Capturar explícitamente errores durante el procesamiento
-      logger.error(
-        `Error durante el procesamiento de documentos: ${processingError.message}`
-      );
-      return res.status(500).json({
-        success: false,
-        message: processingError.message || "Error al procesar documentos",
-        errorDetails: processingError.stack,
-      });
-    }
-  } catch (error) {
-    logger.error(
-      `Error general en processDocumentsByMapping: ${error.message}`
+    // ✅ USAR MÉTODO PRINCIPAL CON DETECCIÓN AUTOMÁTICA
+    const result = await DynamicTransferService.processDocuments(
+      documentIds,
+      mappingId
     );
-    return res.status(500).json({
+
+    // 📊 LOGGING CON INFORMACIÓN DE PROMOCIONES
+    const promotionsMessage = result.promotionsProcessed
+      ? `, promociones aplicadas automáticamente: ${result.promotionsProcessed}`
+      : "";
+
+    logger.info(
+      `Procesamiento completado: ${result.processed} éxitos, ${result.failed} fallos${promotionsMessage}`
+    );
+
+    if (result.failed > 0) {
+      const errorDetails = result.details
+        .filter((detail) => !detail.success)
+        .map((detail) => ({
+          documentId: detail.documentId,
+          error: detail.message || detail.error || "Error desconocido",
+          details: detail.errorDetails || null,
+        }));
+
+      result.errorDetails = errorDetails;
+    }
+
+    // 📋 RESPUESTA CON INFORMACIÓN DE PROMOCIONES
+    const successMessage =
+      result.failed > 0
+        ? `Procesamiento completado con ${result.failed} errores${promotionsMessage}`
+        : `Todos los documentos fueron procesados exitosamente${promotionsMessage}`;
+
+    return res.json({
+      success: true,
+      message: successMessage,
+      data: {
+        ...result,
+        promotionsProcessed: result.promotionsProcessed || 0, // ✅ INCLUIR CONTADOR
+      },
+    });
+  } catch (error) {
+    logger.error(`Error en procesamiento de documentos: ${error.message}`);
+    res.status(500).json({
       success: false,
-      message: error.message || "Error interno del servidor",
-      errorDetails: error.stack,
+      message: error.message,
     });
   }
 };

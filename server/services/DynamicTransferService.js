@@ -50,6 +50,18 @@ class DynamicTransferService {
         throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
       }
 
+      // 🎁 DETECCIÓN AUTOMÁTICA: Verificar si las promociones están habilitadas
+      const shouldUsePromotions = this.shouldUsePromotions(mapping);
+      if (shouldUsePromotions) {
+        logger.info(
+          `🎁 DETECCIÓN AUTOMÁTICA: Promociones habilitadas para mapping ${mapping.name}`
+        );
+      } else {
+        logger.info(
+          `📋 PROCESAMIENTO ESTÁNDAR: Sin promociones para mapping ${mapping.name}`
+        );
+      }
+
       // Asegurar configuración por defecto para mappings existentes
       if (!mapping.markProcessedStrategy) {
         mapping.markProcessedStrategy = "individual"; // Mantener comportamiento actual
@@ -64,57 +76,23 @@ class DynamicTransferService {
         };
       }
 
-      // 2. Verificar si se debe usar consecutivos centralizados
-      if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
+      // 2. Verificar consecutivos centralizados si están configurados
+      if (mapping.consecutiveConfig?.useCentralized) {
         try {
-          // NUEVO: Verificar si está configurado explícitamente para usar consecutivos centralizados
-          if (
-            mapping.consecutiveConfig.useCentralizedSystem &&
-            mapping.consecutiveConfig.selectedCentralizedConsecutive
-          ) {
-            // Verificar que el consecutivo centralizado existe y está activo
-            try {
-              const consecutive = await ConsecutiveService.getConsecutiveById(
-                mapping.consecutiveConfig.selectedCentralizedConsecutive
-              );
-              if (consecutive && consecutive.active) {
-                useCentralizedConsecutives = true;
-                centralizedConsecutiveId =
-                  mapping.consecutiveConfig.selectedCentralizedConsecutive;
-                logger.info(
-                  `Se usará consecutivo centralizado configurado para mapeo ${mappingId}: ${centralizedConsecutiveId}`
-                );
-              } else {
-                logger.warn(
-                  `Consecutivo centralizado ${mapping.consecutiveConfig.selectedCentralizedConsecutive} no está activo o no existe. Usando sistema local.`
-                );
-              }
-            } catch (error) {
-              logger.warn(
-                `Error al verificar consecutivo centralizado configurado: ${error.message}. Usando sistema local.`
-              );
-            }
-          }
-
-          // Si no se configuró explícitamente, buscar consecutivos asignados automáticamente (compatibilidad hacia atrás)
-          if (!useCentralizedConsecutives) {
-            const assignedConsecutives =
-              await ConsecutiveService.getConsecutivesByEntity(
-                "mapping",
-                mappingId
-              );
-
-            if (assignedConsecutives && assignedConsecutives.length > 0) {
-              useCentralizedConsecutives = true;
-              centralizedConsecutiveId = assignedConsecutives[0]._id;
-              logger.info(
-                `Se usará consecutivo centralizado asignado para mapeo ${mappingId}: ${centralizedConsecutiveId}`
-              );
-            } else {
-              logger.info(
-                `No se encontraron consecutivos centralizados para ${mappingId}. Se usará el sistema local.`
-              );
-            }
+          const centralizedConfig =
+            await ConsecutiveService.getCentralizedConfig(
+              mapping.consecutiveConfig.centralizedId
+            );
+          if (centralizedConfig) {
+            useCentralizedConsecutives = true;
+            centralizedConsecutiveId = mapping.consecutiveConfig.centralizedId;
+            logger.info(
+              `Se usarán consecutivos centralizados: ${centralizedConsecutiveId}`
+            );
+          } else {
+            logger.warn(
+              `Configuración de consecutivos centralizados no encontrada. Se usará el sistema local.`
+            );
           }
         } catch (consecError) {
           logger.warn(
@@ -131,6 +109,7 @@ class DynamicTransferService {
           type: "dynamicProcess",
           mappingName: mapping.name,
           documentIds,
+          promotionsEnabled: shouldUsePromotions, // ✅ AGREGAR INFO DE PROMOCIONES
         }
       );
 
@@ -143,6 +122,7 @@ class DynamicTransferService {
         details: {
           documentIds,
           mappingId,
+          promotionsEnabled: shouldUsePromotions, // ✅ AGREGAR INFO DE PROMOCIONES
         },
       });
 
@@ -150,128 +130,82 @@ class DynamicTransferService {
       executionId = taskExecution._id;
 
       // 5. Establecer conexiones
-      const sourceServerName = mapping.sourceServer;
-      const targetServerName = mapping.targetServer;
-
-      const getConnection = async (serverName, retries = 3) => {
-        for (let attempt = 0; attempt < retries; attempt++) {
-          try {
-            logger.info(
-              `Intento ${
-                attempt + 1
-              }/${retries} para conectar a ${serverName}...`
-            );
-
-            const connectionResult =
-              await ConnectionService.enhancedRobustConnect(serverName);
-
-            if (!connectionResult.success || !connectionResult.connection) {
-              const error =
-                connectionResult.error ||
-                new Error(`Conexión inválida a ${serverName}`);
-              logger.warn(`Intento ${attempt + 1} falló: ${error.message}`);
-
-              if (attempt === retries - 1) {
-                throw error;
-              }
-
-              const delay = Math.pow(2, attempt) * 1000;
-              await new Promise((resolve) => setTimeout(resolve, delay));
-              continue;
-            }
-
-            await SqlService.query(
-              connectionResult.connection,
-              "SELECT 1 AS test"
-            );
-
-            logger.info(`Conexión a ${serverName} establecida exitosamente`);
-            return connectionResult.connection;
-          } catch (error) {
-            logger.error(
-              `Error al conectar a ${serverName} (intento ${attempt + 1}): ${
-                error.message
-              }`
-            );
-
-            if (attempt === retries - 1) {
-              throw error;
-            }
-
-            const delay = Math.pow(2, attempt) * 1000;
-            await new Promise((resolve) => setTimeout(resolve, delay));
-          }
-        }
-
+      sourceConnection = await ConnectionService.getConnection(
+        mapping.sourceServer
+      );
+      if (!sourceConnection) {
         throw new Error(
-          `No se pudo establecer conexión a ${serverName} después de ${retries} intentos`
-        );
-      };
-
-      try {
-        logger.info(
-          `Estableciendo conexiones a ${sourceServerName} y ${targetServerName}...`
-        );
-        [sourceConnection, targetConnection] = await Promise.all([
-          getConnection(sourceServerName),
-          getConnection(targetServerName),
-        ]);
-        logger.info(`Conexiones establecidas exitosamente`);
-      } catch (connectionError) {
-        clearTimeout(timeoutId);
-        throw new Error(
-          `Error al establecer conexiones: ${connectionError.message}`
+          `No se pudo conectar al servidor origen: ${mapping.sourceServer}`
         );
       }
 
-      // 6. Procesar documentos - NUEVA LÓGICA CON ESTRATEGIAS DE MARCADO
+      targetConnection = await ConnectionService.getConnection(
+        mapping.targetServer
+      );
+      if (!targetConnection) {
+        throw new Error(
+          `No se pudo conectar al servidor destino: ${mapping.targetServer}`
+        );
+      }
+
+      logger.info(`Conexiones establecidas correctamente`);
+
+      // 6. Actualizar tarea principal como "en ejecución"
+      if (mapping.taskId) {
+        await TransferTask.findByIdAndUpdate(mapping.taskId, {
+          status: "running",
+          progress: 0,
+          lastExecutionDate: new Date(),
+        });
+      }
+
+      // 7. Variables para tracking de resultados
       const results = {
         processed: 0,
         failed: 0,
-        skipped: 0,
-        byType: {},
         details: [],
+        byType: {},
         consecutivesUsed: [],
+        promotionsProcessed: 0, // ✅ CONTADOR DE PROMOCIONES
       };
 
-      // NUEVO: Arrays para recopilar documentos exitosos y fallidos
       const successfulDocuments = [];
       const failedDocuments = [];
       let hasErrors = false;
 
-      // Procesar cada documento individualmente
+      // 8. BUCLE PRINCIPAL: Procesar cada documento
       for (let i = 0; i < documentIds.length; i++) {
-        // Verificar si se ha cancelado la tarea
+        // Verificar cancelación
         if (signal.aborted) {
-          clearTimeout(timeoutId);
-          throw new Error("Tarea cancelada por el usuario");
+          logger.warn(
+            `Procesamiento cancelado en documento ${i + 1}/${
+              documentIds.length
+            }`
+          );
+          break;
         }
 
         const documentId = documentIds[i];
         let currentConsecutive = null;
 
         try {
-          // GENERAR CONSECUTIVO SEGÚN EL SISTEMA DETERMINADO
-          if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
+          logger.info(
+            `📋 Procesando documento ${i + 1}/${
+              documentIds.length
+            }: ${documentId}`
+          );
+
+          // Generar consecutivo si es necesario
+          if (mapping.useConsecutive) {
             if (useCentralizedConsecutives) {
               try {
-                const reservation =
-                  await ConsecutiveService.reserveConsecutiveValues(
+                currentConsecutive =
+                  await ConsecutiveService.reserveNextConsecutive(
                     centralizedConsecutiveId,
-                    1,
-                    { segment: null },
-                    { id: mapping._id.toString(), name: "mapping" }
+                    documentId
                   );
-
-                currentConsecutive = {
-                  value: reservation.values[0].numeric,
-                  formatted: reservation.values[0].formatted,
-                  isCentralized: true,
-                  reservationId: reservation.reservationId,
-                };
-
                 logger.info(
-                  `Consecutivo centralizado generado para documento ${documentId}: ${currentConsecutive.formatted}`
+                  `Consecutivo centralizado reservado para documento ${documentId}: ${currentConsecutive.formatted}`
                 );
               } catch (consecError) {
                 logger.error(
@@ -312,7 +246,7 @@ class DynamicTransferService {
             }
           }
 
-          // Procesar documento
+          // 🧠 PROCESAR DOCUMENTO CON DETECCIÓN AUTOMÁTICA DE PROMOCIONES
           const docResult = await this.processSingleDocumentSimple(
             documentId,
             mapping,
@@ -352,10 +286,18 @@ class DynamicTransferService {
             }
           }
 
-          // NUEVA LÓGICA: Recopilar documentos exitosos y fallidos
+          // PROCESAR RESULTADOS
           if (docResult.success) {
             successfulDocuments.push(documentId);
             results.processed++;
+
+            // 📊 NUEVO: Contar promociones aplicadas automáticamente
+            if (docResult.promotionsApplied) {
+              results.promotionsProcessed++;
+              logger.info(
+                `✅ Promociones aplicadas automáticamente en documento ${documentId}`
+              );
+            }
 
             if (!results.byType[docResult.documentType]) {
               results.byType[docResult.documentType] = {
@@ -415,87 +357,101 @@ class DynamicTransferService {
             ...docResult,
           });
 
+          // 📊 LOGGING MEJORADO CON INFORMACIÓN DE PROMOCIONES
           logger.info(
             `Documento ${documentId} procesado: ${
-              docResult.success ? "Éxito" : "Error"
+              docResult.success ? "✅ ÉXITO" : "❌ ERROR"
+            }${
+              docResult.promotionsApplied
+                ? " (con promociones automáticas)"
+                : ""
             }`
           );
-        } catch (docError) {
-          // Verificar si fue cancelado
-          if (signal?.aborted) {
-            clearTimeout(timeoutId);
-            throw new Error("Tarea cancelada por el usuario");
-          }
 
+          // Actualizar progreso
+          if (mapping.taskId) {
+            const progress = Math.round(((i + 1) / documentIds.length) * 100);
+            await TransferTask.findByIdAndUpdate(mapping.taskId, {
+              progress,
+            });
+          }
+        } catch (error) {
           hasErrors = true;
           failedDocuments.push(documentId);
-          logger.error(
-            `Error procesando documento ${documentId}: ${docError.message}`
-          );
           results.failed++;
+
           results.details.push({
             documentId,
             success: false,
-            error: docError.message,
-            errorDetails: docError.stack,
+            error: error.message,
+            errorDetails: error.stack,
           });
+
+          logger.error(`❌ Error al procesar documento ${documentId}:`, error);
+
+          // Cancelar reserva si hubo error
+          if (
+            useCentralizedConsecutives &&
+            currentConsecutive &&
+            currentConsecutive.reservationId
+          ) {
+            try {
+              await ConsecutiveService.cancelReservation(
+                centralizedConsecutiveId,
+                currentConsecutive.reservationId
+              );
+              logger.info(
+                `Reserva cancelada por error en documento ${documentId}: ${currentConsecutive.formatted}`
+              );
+            } catch (cancelError) {
+              logger.error(
+                `Error cancelando reserva para documento ${documentId}: ${cancelError.message}`
+              );
+            }
+          }
         }
       }
 
-      // NUEVA LÓGICA: Marcado en lotes al final si está configurado así
+      // 9. MARCADO MASIVO si está configurado así
       if (
         mapping.markProcessedStrategy === "batch" &&
+        mapping.markProcessedField &&
         successfulDocuments.length > 0
       ) {
-        logger.info(
-          `📦 Iniciando marcado en lotes para ${successfulDocuments.length} documentos exitosos`
-        );
-
         try {
-          const markResult = await this.markDocumentsAsProcessed(
+          logger.info(
+            `Marcando ${successfulDocuments.length} documentos exitosos como procesados (modo batch)`
+          );
+          await this.markDocumentsAsProcessed(
             successfulDocuments,
             mapping,
             sourceConnection,
             true
           );
-
-          logger.info(
-            `📦 Resultado del marcado en lotes: ${markResult.message}`
-          );
-
-          // Agregar información del marcado al resultado final
-          results.markingResult = markResult;
-
-          if (markResult.failed > 0) {
-            logger.warn(
-              `⚠️ ${markResult.failed} documentos exitosos no se pudieron marcar como procesados`
-            );
-          }
+          logger.info("✅ Marcado masivo completado exitosamente");
         } catch (markError) {
-          logger.error(`❌ Error en marcado por lotes: ${markError.message}`);
-          results.markingError = markError.message;
+          logger.warn(`⚠️ Error en marcado masivo: ${markError.message}`);
+          // No afectar el resultado principal
         }
       }
 
-      // NUEVA LÓGICA: Rollback si está habilitado y hay fallos críticos
+      // 10. ROLLBACK si está configurado y hay errores
       if (
+        hasErrors &&
         mapping.markProcessedConfig?.allowRollback &&
-        failedDocuments.length > 0 &&
-        mapping.markProcessedStrategy === "batch" &&
         successfulDocuments.length > 0
       ) {
-        logger.warn(
-          `🔄 Rollback habilitado: desmarcando ${successfulDocuments.length} documentos debido a fallos`
-        );
-
         try {
+          logger.warn(
+            `Ejecutando rollback para ${successfulDocuments.length} documentos debido a errores`
+          );
           await this.markDocumentsAsProcessed(
             successfulDocuments,
             mapping,
             sourceConnection,
             false
           );
-          logger.info(`🔄 Rollback completado: documentos desmarcados`);
+          logger.info("✅ Rollback ejecutado exitosamente");
           results.rollbackExecuted = true;
         } catch (rollbackError) {
           logger.error(`❌ Error en rollback: ${rollbackError.message}`);
@@ -503,7 +459,7 @@ class DynamicTransferService {
         }
       }
 
-      // Actualizar registro de ejecución y tarea
+      // 11. FINALIZACIÓN Y ACTUALIZACIÓN DE ESTADÍSTICAS
       const executionTime = Date.now() - startTime;
 
       // Determinar el estado correcto basado en los resultados
@@ -521,8 +477,19 @@ class DynamicTransferService {
         totalRecords: documentIds.length,
         successfulRecords: results.processed,
         failedRecords: results.failed,
+        promotionsProcessed: results.promotionsProcessed, // ✅ AGREGAR CONTADOR
         details: results,
       });
+
+      // 📊 MENSAJE FINAL CON INFORMACIÓN DE PROMOCIONES
+      const promotionsMessage =
+        results.promotionsProcessed > 0
+          ? `, promociones aplicadas automáticamente: ${results.promotionsProcessed}`
+          : "";
+
+      const finalMessage = hasErrors
+        ? `Procesamiento completado con errores: ${results.processed} éxitos, ${results.failed} fallos${promotionsMessage}`
+        : `Procesamiento completado con éxito: ${results.processed} documentos procesados${promotionsMessage}`;
 
       // Actualizar la tarea principal con el resultado
       await TransferTask.findByIdAndUpdate(mapping.taskId, {
@@ -531,10 +498,9 @@ class DynamicTransferService {
         lastExecutionDate: new Date(),
         lastExecutionResult: {
           success: !hasErrors,
-          message: hasErrors
-            ? `Procesamiento completado con errores: ${results.processed} éxitos, ${results.failed} fallos`
-            : "Procesamiento completado con éxito",
+          message: finalMessage,
           affectedRecords: results.processed,
+          promotionsProcessed: results.promotionsProcessed, // ✅ AGREGAR INFO
           errorDetails: hasErrors
             ? results.details
                 .filter((d) => !d.success)
@@ -551,6 +517,11 @@ class DynamicTransferService {
 
       clearTimeout(timeoutId);
       TaskTracker.completeTask(cancelTaskId, finalStatus);
+
+      // 📋 LOGGING FINAL CON ESTADÍSTICAS COMPLETAS
+      logger.info(
+        `✅ Procesamiento completado: ${results.processed} éxitos, ${results.failed} fallos${promotionsMessage}`
+      );
 
       return {
         success: true,
@@ -653,8 +624,11 @@ class DynamicTransferService {
         await Promise.allSettled(releasePromises);
         logger.info("Conexiones liberadas correctamente");
       }
+
+      clearTimeout(timeoutId);
     }
   }
+
   /**
    * Procesa un documento con soporte para promociones
    * @param {string} documentId - ID del documento
@@ -845,7 +819,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa un único documento según la configuración (sin transacciones)
+   * Procesa un único documento según la configuración (CON DETECCIÓN AUTOMÁTICA DE PROMOCIONES)
    * @param {string} documentId - ID del documento
    * @param {Object} mapping - Configuración de mapeo
    * @param {Object} sourceConnection - Conexión a servidor origen
@@ -862,100 +836,52 @@ class DynamicTransferService {
   ) {
     let processedTables = [];
     let documentType = "unknown";
+    let promotionsApplied = false;
 
     try {
       logger.info(
-        `Procesando documento ${documentId} (modo sin transacciones)`
+        `Procesando documento ${documentId} (detección automática de promociones)`
       );
 
       // Create column length cache
       const columnLengthCache = new Map();
 
-      // 1. Identificar las tablas principales (no de detalle)
-      const mainTables = mapping.tableConfigs.filter((tc) => !tc.isDetailTable);
+      // 🧠 DETECCIÓN AUTOMÁTICA: Determinar si debe usar promociones
+      const shouldUsePromotions = this.shouldUsePromotions(mapping);
 
-      if (mainTables.length === 0) {
-        return {
-          success: false,
-          message: "No se encontraron configuraciones de tablas principales",
-          documentType,
-          consecutiveUsed: null,
-          consecutiveValue: null,
-        };
+      if (shouldUsePromotions) {
+        logger.info(
+          `🎁 DETECCIÓN AUTOMÁTICA: Promociones habilitadas para documento ${documentId}`
+        );
       }
 
-      // Ordenar tablas por executionOrder si está definido
-      const orderedMainTables = [...mainTables].sort(
-        (a, b) => (a.executionOrder || 0) - (b.executionOrder || 0)
-      );
-      logger.info(
-        `Procesando ${
-          orderedMainTables.length
-        } tablas principales en orden: ${orderedMainTables
-          .map((t) => t.name)
-          .join(" -> ")}`
-      );
+      // 1. Procesar tablas principales
+      const mainTables = mapping.tableConfigs.filter((tc) => !tc.isDetailTable);
 
-      // 2. Procesar cada tabla principal
-      for (const tableConfig of orderedMainTables) {
-        // Obtener datos de la tabla de origen
-        let sourceData;
+      for (const tableConfig of mainTables) {
+        logger.info(`Procesando tabla principal: ${tableConfig.name}`);
 
-        try {
-          sourceData = await this.getSourceData(
-            documentId,
-            tableConfig,
-            sourceConnection
+        // 2. Obtener datos principales
+        const sourceData = await this.getTableData(
+          tableConfig,
+          documentId,
+          sourceConnection,
+          mapping
+        );
+
+        if (!sourceData || sourceData.length === 0) {
+          logger.warn(
+            `No se encontraron datos en ${tableConfig.sourceTable} para documento ${documentId}`
           );
-
-          if (!sourceData) {
-            logger.warn(
-              `No se encontraron datos en ${tableConfig.sourceTable} para documento ${documentId}`
-            );
-            continue;
-          }
-
-          logger.debug(
-            `Datos de origen obtenidos: ${JSON.stringify(sourceData)}`
-          );
-        } catch (error) {
-          logger.error(
-            `Error al obtener datos de origen para documento ${documentId}: ${error.message}`
-          );
-          throw new Error(`Error al obtener datos de origen: ${error.message}`);
+          continue;
         }
 
-        // Procesar dependencias de foreign key ANTES de insertar datos principales
-        try {
-          if (
-            mapping.foreignKeyDependencies &&
-            mapping.foreignKeyDependencies.length > 0
-          ) {
-            logger.info(
-              `Verificando ${mapping.foreignKeyDependencies.length} dependencias de foreign key para documento ${documentId}`
-            );
-            await this.processForeignKeyDependencies(
-              documentId,
-              mapping,
-              sourceConnection,
-              targetConnection,
-              sourceData
-            );
-            logger.info(
-              `Dependencias de foreign key procesadas exitosamente para documento ${documentId}`
-            );
-          }
-        } catch (depError) {
-          logger.error(
-            `Error en dependencias de foreign key para documento ${documentId}: ${depError.message}`
-          );
-          throw new Error(`Error en dependencias: ${depError.message}`);
-        }
+        const firstRow = sourceData[0];
 
         // 3. Determinar el tipo de documento basado en las reglas
         documentType = this.determineDocumentType(
           mapping.documentTypeRules,
-          sourceData
+          firstRow
         );
         if (documentType !== "unknown") {
           logger.info(`Tipo de documento determinado: ${documentType}`);
@@ -964,8 +890,8 @@ class DynamicTransferService {
         // 4. Insertar datos principales
         await this.processTable(
           tableConfig,
-          sourceData,
-          sourceData,
+          firstRow,
+          firstRow,
           targetConnection,
           currentConsecutive,
           mapping,
@@ -979,7 +905,7 @@ class DynamicTransferService {
         );
         processedTables.push(tableConfig.name);
 
-        // 5. Procesar tablas de detalle
+        // 5. 🧠 PROCESAMIENTO INTELIGENTE DE TABLAS DE DETALLE
         const detailTables = mapping.tableConfigs.filter(
           (tc) =>
             tc.isDetailTable &&
@@ -987,25 +913,60 @@ class DynamicTransferService {
         );
 
         if (detailTables.length > 0) {
-          await this.processDetailTables(
-            detailTables,
-            documentId,
-            sourceData,
-            tableConfig,
-            sourceConnection,
-            targetConnection,
-            currentConsecutive,
-            mapping,
-            columnLengthCache,
-            processedTables
-          );
+          // ✅ DECISIÓN AUTOMÁTICA: usar método con o sin promociones
+          if (shouldUsePromotions) {
+            logger.info(
+              `🎁 Procesando detalles CON promociones para documento ${documentId}`
+            );
+
+            const promotionResult =
+              await this.processDetailTablesWithPromotions(
+                detailTables,
+                documentId,
+                firstRow,
+                tableConfig,
+                sourceConnection,
+                targetConnection,
+                currentConsecutive,
+                mapping,
+                columnLengthCache,
+                processedTables
+              );
+
+            if (promotionResult && promotionResult.promotionsApplied) {
+              promotionsApplied = true;
+              logger.info(
+                `✅ Promociones aplicadas automáticamente en documento ${documentId}`
+              );
+            }
+          } else {
+            logger.info(
+              `📋 Procesando detalles SIN promociones para documento ${documentId}`
+            );
+
+            await this.processDetailTables(
+              detailTables,
+              documentId,
+              firstRow,
+              tableConfig,
+              sourceConnection,
+              targetConnection,
+              currentConsecutive,
+              mapping,
+              columnLengthCache,
+              processedTables
+            );
+          }
         }
       }
 
       return {
         success: true,
-        message: "Documento procesado exitosamente",
+        message: promotionsApplied
+          ? "Documento procesado exitosamente con promociones aplicadas automáticamente"
+          : "Documento procesado exitosamente",
         documentType,
+        promotionsApplied, // ✅ INCLUIR INFORMACIÓN DE PROMOCIONES
         consecutiveUsed: currentConsecutive
           ? currentConsecutive.formatted
           : null,
@@ -1043,17 +1004,21 @@ class DynamicTransferService {
     );
 
     logger.info(
-      `Procesando ${
+      `🎁 Procesando ${
         orderedDetailTables.length
-      } tablas de detalle en orden: ${orderedDetailTables
+      } tablas de detalle CON PROMOCIONES en orden: ${orderedDetailTables
         .map((t) => t.name)
         .join(" -> ")}`
     );
 
-    for (const detailConfig of orderedDetailTables) {
-      logger.info(`Procesando tabla de detalle: ${detailConfig.name}`);
+    let totalPromotionsApplied = false;
 
-      // Obtener detalles con procesamiento de promociones
+    for (const detailConfig of orderedDetailTables) {
+      logger.info(
+        `🎁 Procesando tabla de detalle con promociones: ${detailConfig.name}`
+      );
+
+      // ✅ USAR MÉTODO CON PROMOCIONES
       const detailsData = await this.getDetailDataWithPromotions(
         detailConfig,
         parentTableConfig,
@@ -1069,8 +1034,160 @@ class DynamicTransferService {
         continue;
       }
 
+      // 🔍 Verificar si realmente se aplicaron promociones en estos datos
+      const hasPromotions = detailsData.some(
+        (row) => row._PROMOTION_TYPE && row._PROMOTION_TYPE !== "NONE"
+      );
+
+      if (hasPromotions) {
+        totalPromotionsApplied = true;
+        logger.info(
+          `✅ Promociones detectadas y aplicadas automáticamente en tabla ${detailConfig.name}`
+        );
+      } else {
+        logger.debug(
+          `ℹ️ No se encontraron promociones en los datos de tabla ${detailConfig.name}`
+        );
+      }
+
       logger.info(
-        `Procesando ${detailsData.length} registros de detalle en ${detailConfig.name}`
+        `Procesando ${detailsData.length} registros de detalle en ${
+          detailConfig.name
+        } ${hasPromotions ? "(CON promociones)" : "(SIN promociones)"}`
+      );
+
+      // Insertar detalles
+      for (const detailRow of detailsData) {
+        await this.processTable(
+          detailConfig,
+          sourceData,
+          detailRow,
+          targetConnection,
+          currentConsecutive,
+          mapping,
+          documentId,
+          columnLengthCache,
+          true // isDetailTable = true
+        );
+
+        logger.debug(
+          `✅ INSERCIÓN EXITOSA DE DETALLE en ${detailConfig.targetTable}`
+        );
+      }
+
+      logger.info(
+        `Insertados detalles en ${detailConfig.name} con promociones`
+      );
+      processedTables.push(detailConfig.name);
+    }
+
+    // ✅ RETORNAR INFORMACIÓN DE PROMOCIONES APLICADAS
+    return {
+      promotionsApplied: totalPromotionsApplied,
+    };
+  }
+
+  /**
+   * Procesa las tablas de detalle con detección automática de promociones
+   * @private
+   */
+  async processDetailTables(
+    detailTables,
+    documentId,
+    sourceData,
+    parentTableConfig,
+    sourceConnection,
+    targetConnection,
+    currentConsecutive,
+    mapping,
+    columnLengthCache,
+    processedTables
+  ) {
+    // Ordenar tablas de detalle por executionOrder
+    const orderedDetailTables = [...detailTables].sort(
+      (a, b) => (a.executionOrder || 0) - (b.executionOrder || 0)
+    );
+
+    // 🔍 DETECCIÓN AUTOMÁTICA DE PROMOCIONES
+    const shouldProcessPromotions = this.shouldUsePromotions(mapping);
+
+    if (shouldProcessPromotions) {
+      logger.info(
+        `🎁 DETECCIÓN AUTOMÁTICA: Promociones habilitadas para mapping ${mapping.name}`
+      );
+    } else {
+      logger.info(
+        `📋 PROCESAMIENTO ESTÁNDAR: Sin promociones para mapping ${mapping.name}`
+      );
+    }
+
+    logger.info(
+      `Procesando ${
+        orderedDetailTables.length
+      } tablas de detalle en orden: ${orderedDetailTables
+        .map((t) => t.name)
+        .join(" -> ")} ${
+        shouldProcessPromotions ? "(CON PROMOCIONES)" : "(ESTÁNDAR)"
+      }`
+    );
+
+    let totalPromotionsApplied = false;
+
+    for (const detailConfig of orderedDetailTables) {
+      logger.info(`Procesando tabla de detalle: ${detailConfig.name}`);
+
+      // 🧠 DECISIÓN AUTOMÁTICA: Usar método con o sin promociones
+      let detailsData;
+
+      if (shouldProcessPromotions) {
+        // Usar método con promociones
+        detailsData = await this.getDetailDataWithPromotions(
+          detailConfig,
+          parentTableConfig,
+          documentId,
+          sourceConnection,
+          mapping
+        );
+
+        // Verificar si realmente se aplicaron promociones en estos datos
+        const hasPromotions =
+          detailsData &&
+          detailsData.length > 0 &&
+          detailsData.some(
+            (row) => row._PROMOTION_TYPE && row._PROMOTION_TYPE !== "NONE"
+          );
+
+        if (hasPromotions) {
+          totalPromotionsApplied = true;
+          logger.info(
+            `✅ Promociones detectadas y aplicadas automáticamente en tabla ${detailConfig.name}`
+          );
+        } else {
+          logger.debug(
+            `ℹ️ No se encontraron promociones en los datos de tabla ${detailConfig.name}`
+          );
+        }
+      } else {
+        // Usar método estándar
+        detailsData = await this.getDetailData(
+          detailConfig,
+          parentTableConfig,
+          documentId,
+          sourceConnection
+        );
+      }
+
+      if (!detailsData || detailsData.length === 0) {
+        logger.warn(
+          `No se encontraron detalles en ${detailConfig.sourceTable} para documento ${documentId}`
+        );
+        continue;
+      }
+
+      logger.info(
+        `Procesando ${detailsData.length} registros de detalle en ${
+          detailConfig.name
+        } ${shouldProcessPromotions ? "(modo promociones)" : "(modo estándar)"}`
       );
 
       // Insertar detalles
@@ -1095,83 +1212,11 @@ class DynamicTransferService {
       logger.info(`Insertados detalles en ${detailConfig.name}`);
       processedTables.push(detailConfig.name);
     }
-  }
 
-  /**
-   * Procesa las tablas de detalle (método original)
-   * @private
-   */
-  async processDetailTables(
-    detailTables,
-    documentId,
-    sourceData,
-    parentTableConfig,
-    sourceConnection,
-    targetConnection,
-    currentConsecutive,
-    mapping,
-    columnLengthCache,
-    processedTables
-  ) {
-    // Ordenar tablas de detalle por executionOrder
-    const orderedDetailTables = [...detailTables].sort(
-      (a, b) => (a.executionOrder || 0) - (b.executionOrder || 0)
-    );
-
-    logger.info(
-      `Procesando ${
-        orderedDetailTables.length
-      } tablas de detalle en orden: ${orderedDetailTables
-        .map((t) => t.name)
-        .join(" -> ")}`
-    );
-
-    for (const detailConfig of orderedDetailTables) {
-      logger.info(`Procesando tabla de detalle: ${detailConfig.name}`);
-
-      // Obtener detalles
-      const detailsData = await this.getDetailData(
-        detailConfig,
-        parentTableConfig,
-        documentId,
-        sourceConnection
-      );
-
-      if (!detailsData || detailsData.length === 0) {
-        logger.warn(
-          `No se encontraron detalles en ${detailConfig.sourceTable} para documento ${documentId}`
-        );
-        continue;
-      }
-
-      logger.info(
-        `Procesando ${detailsData.length} registros de detalle en ${detailConfig.name}`
-      );
-
-      // Insertar detalles
-      for (const detailRow of detailsData) {
-        await this.processTable(
-          detailConfig,
-          sourceData,
-          detailRow,
-          targetConnection,
-          currentConsecutive,
-          mapping,
-          documentId,
-          columnLengthCache,
-          true // isDetailTable = true
-        );
-
-        logger.debug(
-          `✅ INSERCIÓN EXITOSA DE DETALLE en ${detailConfig.targetTable}`
-        );
-      }
-
-      logger.info(
-        `Insertados detalles en ${detailConfig.name} sin transacción`
-      );
-      processedTables.push(detailConfig.name);
-    }
+    // Retornar información sobre promociones aplicadas
+    return {
+      promotionsApplied: totalPromotionsApplied,
+    };
   }
 
   /**
@@ -4789,6 +4834,41 @@ class DynamicTransferService {
       logger.error(`Error al obtener métricas agregadas: ${error.message}`);
       throw error;
     }
+  }
+
+  /**
+   * Determina automáticamente si debe usar procesamiento de promociones
+   * @param {Object} mapping - Configuración de mapping
+   * @returns {boolean} - Si debe procesar promociones
+   * @private
+   */
+  shouldUsePromotions(mapping) {
+    // 1. Verificar si las promociones están habilitadas en la configuración
+    if (!mapping.promotionConfig || !mapping.promotionConfig.enabled) {
+      logger.debug("Promociones deshabilitadas en configuración del mapping");
+      return false;
+    }
+
+    // 2. Validar que la configuración de promociones sea válida
+    if (!PromotionProcessor.validatePromotionConfig(mapping)) {
+      logger.warn(
+        "Configuración de promociones inválida, usando procesamiento estándar"
+      );
+      return false;
+    }
+
+    // 3. Verificar que existan tablas de detalle para procesar
+    const detailTables =
+      mapping.tableConfigs?.filter((tc) => tc.isDetailTable) || [];
+    if (detailTables.length === 0) {
+      logger.debug("No hay tablas de detalle para procesar promociones");
+      return false;
+    }
+
+    logger.info(
+      "✅ Condiciones para promociones cumplidas - activando procesamiento automático"
+    );
+    return true;
   }
 }
 
