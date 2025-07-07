@@ -57,7 +57,8 @@ class PromotionProcessor {
     const promotionLines = [];
 
     for (const line of detailData) {
-      const isPromotion = this.isPromotionLine(line);
+      // ✅ CORREGIDO: Pasar detailData como parámetro
+      const isPromotion = this.isPromotionLine(line, detailData);
 
       if (isPromotion.hasPromotion) {
         promotionLines.push({
@@ -74,9 +75,10 @@ class PromotionProcessor {
   /**
    * Determina si una línea es una promoción
    * @param {Object} line - Línea de detalle
+   * @param {Array} allLines - Todas las líneas para verificar referencias
    * @returns {Object} - Información sobre la promoción
    */
-  static isPromotionLine(line) {
+  static isPromotionLine(line, allLines) {
     const result = {
       hasPromotion: false,
       type: null,
@@ -97,8 +99,8 @@ class PromotionProcessor {
       result.type = result.type ? "BONUS_WITH_DISCOUNT" : "DISCOUNT";
     }
 
-    // Verificar si es línea regular que dispara promoción (COD_ART_RFR presente en otras líneas)
-    if (line.COD_ART && this.hasReferenceInOtherLines(line, detailData)) {
+    // ✅ CORREGIDO: Usar allLines en lugar de detailData
+    if (line.COD_ART && this.hasReferenceInOtherLines(line, allLines)) {
       result.hasPromotion = true;
       result.isRegularLine = true;
       result.type = result.type ? `${result.type}_TRIGGER` : "TRIGGER";
@@ -138,7 +140,8 @@ class PromotionProcessor {
         continue;
       }
 
-      const promotionInfo = this.isPromotionLine(line);
+      // ✅ CORREGIDO: Pasar originalData como parámetro
+      const promotionInfo = this.isPromotionLine(line, originalData);
 
       if (promotionInfo.isBonusLine) {
         // Línea de bonificación
