@@ -98,6 +98,15 @@ export function Sidebar({ state, setState }) {
         isAccessible: hasPermission("history", "read"),
       },
       {
+        path: "/logs",
+        name: "Logs",
+        icon: "🪲",
+        category: "Análisis",
+        description: "Logs de operaciones",
+        order: 7,
+        isAccessible: hasPermission("logs", "read"),
+      },
+      {
         path: "/users",
         name: "Usuarios",
         icon: "👥",
