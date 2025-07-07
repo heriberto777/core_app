@@ -1904,7 +1904,7 @@ class DynamicTransferService {
           isDetailTable
         );
         logger.debug(
-          `🔢 Asignando consecutivo a ${fieldMapping.targetField}: ${consecutiveValue}`
+          `🔢 Asignando consecutivo a ${fieldMapping.targetField}: ${consecutiveValue} (isDetailTable: ${isDetailTable})`
         );
         return { value: consecutiveValue, isDirectSql: false };
       }
@@ -2349,7 +2349,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Determina si un campo es un campo de consecutivo
+   * Verifica si un campo es un campo de consecutivo
    * @private
    */
   isConsecutiveField(fieldMapping, mapping) {
@@ -2358,8 +2358,19 @@ class DynamicTransferService {
       return false;
     }
 
-    // Verificar si es el campo general
+    // Verificar si es el campo general para encabezado
     if (fieldMapping.targetField === consecutiveConfig.fieldName) {
+      logger.debug(
+        `✅ Campo ${fieldMapping.targetField} coincide con fieldName (encabezado)`
+      );
+      return true;
+    }
+
+    // ✅ NUEVA LÓGICA: Verificar si es el campo para detalle
+    if (fieldMapping.targetField === consecutiveConfig.detailFieldName) {
+      logger.debug(
+        `✅ Campo ${fieldMapping.targetField} coincide con detailFieldName (detalle)`
+      );
       return true;
     }
 
@@ -2368,11 +2379,20 @@ class DynamicTransferService {
       consecutiveConfig.applyToTables &&
       consecutiveConfig.applyToTables.length > 0
     ) {
-      return consecutiveConfig.applyToTables.some(
+      const isSpecificField = consecutiveConfig.applyToTables.some(
         (tableMapping) => tableMapping.fieldName === fieldMapping.targetField
       );
+      if (isSpecificField) {
+        logger.debug(
+          `✅ Campo ${fieldMapping.targetField} encontrado en applyToTables`
+        );
+        return true;
+      }
     }
 
+    logger.debug(
+      `❌ Campo ${fieldMapping.targetField} NO es un campo de consecutivo`
+    );
     return false;
   }
 
