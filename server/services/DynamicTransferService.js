@@ -76,7 +76,7 @@ class DynamicTransferService {
         };
       }
 
-      // 2. 🔍 DEBUGGING: Verificar consecutivos centralizados si están configurados
+      // 2. Verificar consecutivos centralizados si están configurados
       logger.info(
         `🔍 DEBUGGING: Verificando sistema de consecutivos para mapping ${mappingId}`
       );
@@ -96,7 +96,7 @@ class DynamicTransferService {
         );
 
         try {
-          // NUEVO: Verificar si está configurado explícitamente para usar consecutivos centralizados
+          // Verificar si está configurado explícitamente para usar consecutivos centralizados
           if (
             mapping.consecutiveConfig.useCentralizedSystem &&
             mapping.consecutiveConfig.selectedCentralizedConsecutive
@@ -104,6 +104,7 @@ class DynamicTransferService {
             logger.info(
               `🔍 Intentando usar consecutivo centralizado configurado explícitamente`
             );
+
             // Verificar que el consecutivo centralizado existe y está activo
             try {
               const consecutive = await ConsecutiveService.getConsecutiveById(
@@ -127,55 +128,12 @@ class DynamicTransferService {
               );
             }
           }
-
-          // Si no se configuró explícitamente, buscar consecutivos asignados automáticamente (compatibilidad hacia atrás)
-          if (!useCentralizedConsecutives) {
-            logger.info(
-              `🔍 Buscando consecutivos asignados automáticamente para mapping ${mappingId}`
-            );
-            const assignedConsecutives =
-              await ConsecutiveService.getConsecutivesByEntity(
-                "mapping",
-                mappingId
-              );
-
-            logger.info(
-              `🔍 Consecutivos encontrados: ${
-                assignedConsecutives?.length || 0
-              }`
-            );
-            if (assignedConsecutives && assignedConsecutives.length > 0) {
-              logger.info(
-                `🔍 Usando primer consecutivo encontrado: ${assignedConsecutives[0]._id}`
-              );
-              useCentralizedConsecutives = true;
-              centralizedConsecutiveId = assignedConsecutives[0]._id;
-              logger.info(
-                `✅ Se usará consecutivo centralizado asignado para mapeo ${mappingId}: ${centralizedConsecutiveId}`
-              );
-            } else {
-              logger.info(
-                `❌ No se encontraron consecutivos centralizados para ${mappingId}. Se usará el sistema local.`
-              );
-            }
-          }
-        } catch (consecError) {
-          logger.warn(
-            `❌ Error al verificar consecutivos centralizados: ${consecError.message}. Usando sistema local.`
+        } catch (error) {
+          logger.error(
+            `Error al verificar consecutivos centralizados: ${error.message}`
           );
         }
-      } else {
-        logger.info(
-          `❌ Consecutivos deshabilitados en la configuración del mapping`
-        );
       }
-
-      logger.info(
-        `🔍 RESULTADO: useCentralizedConsecutives = ${useCentralizedConsecutives}`
-      );
-      logger.info(
-        `🔍 RESULTADO: centralizedConsecutiveId = ${centralizedConsecutiveId}`
-      );
 
       // 3. Registrar en TaskTracker para permitir cancelación
       TaskTracker.registerTask(
@@ -271,86 +229,53 @@ class DynamicTransferService {
             `📋 Procesando documento ${i + 1}/${
               documentIds.length
             }: ${documentId} ${
-              shouldUsePromotions ? "(CON PROMOCIONES)" : "(ESTÁNDAR)"
+              shouldUsePromotions ? "(CON promociones)" : "(SIN promociones)"
             }`
           );
 
-          // 🔍 GENERAR CONSECUTIVO SEGÚN EL SISTEMA DETERMINADO CON DEBUGGING
+          // Generar consecutivo si es necesario
           if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
-            logger.info(
-              `🔍 Generando consecutivo para documento ${documentId}`
-            );
-            logger.info(
-              `🔍 Sistema a usar: ${
-                useCentralizedConsecutives ? "CENTRALIZADO" : "LOCAL"
-              }`
-            );
+            try {
+              logger.info(
+                `🔍 Generando consecutivo para documento ${documentId}`
+              );
 
-            if (useCentralizedConsecutives) {
-              try {
+              if (useCentralizedConsecutives) {
                 logger.info(
-                  `🔍 Reservando consecutivo centralizado ${centralizedConsecutiveId} para documento ${documentId}`
+                  `🔍 Usando consecutivo centralizado: ${centralizedConsecutiveId}`
                 );
-
-                const reservation =
-                  await ConsecutiveService.reserveConsecutiveValues(
-                    centralizedConsecutiveId,
-                    1,
-                    { segment: null },
-                    { id: mapping._id.toString(), name: "mapping" }
-                  );
-
-                currentConsecutive = {
-                  value: reservation.values[0].numeric,
-                  formatted: reservation.values[0].formatted,
-                  isCentralized: true,
-                  reservationId: reservation.reservationId,
-                };
-
-                logger.info(
-                  `✅ Consecutivo centralizado reservado para documento ${documentId}: ${currentConsecutive.formatted}`
+                currentConsecutive = await this.generateConsecutive(
+                  mapping,
+                  useCentralizedConsecutives,
+                  centralizedConsecutiveId
                 );
-              } catch (consecError) {
-                logger.error(
-                  `❌ Error generando consecutivo centralizado para documento ${documentId}: ${consecError.message}`
+              } else {
+                logger.info(`🔍 Usando consecutivo local`);
+                currentConsecutive = await this.generateConsecutive(
+                  mapping,
+                  useCentralizedConsecutives,
+                  centralizedConsecutiveId
                 );
-                failedDocuments.push(documentId);
-                results.failed++;
-                results.details.push({
-                  documentId,
-                  success: false,
-                  error: `Error generando consecutivo centralizado: ${consecError.message}`,
-                  errorDetails: consecError.stack,
-                });
-                continue;
               }
-            } else {
-              try {
+
+              if (currentConsecutive) {
                 logger.info(
-                  `🔍 Generando consecutivo local para documento ${documentId}`
+                  `🔍 Consecutivo generado para documento ${documentId}: ${currentConsecutive.formatted}`
                 );
-                currentConsecutive = await this.generateLocalConsecutive(
-                  mapping
-                );
-                if (currentConsecutive) {
-                  logger.info(
-                    `✅ Consecutivo local generado para documento ${documentId}: ${currentConsecutive.formatted}`
-                  );
-                }
-              } catch (consecError) {
-                logger.error(
-                  `❌ Error generando consecutivo local para documento ${documentId}: ${consecError.message}`
-                );
-                failedDocuments.push(documentId);
-                results.failed++;
-                results.details.push({
-                  documentId,
-                  success: false,
-                  error: `Error generando consecutivo local: ${consecError.message}`,
-                  errorDetails: consecError.stack,
-                });
-                continue;
               }
+            } catch (consecError) {
+              logger.error(
+                `❌ Error generando consecutivo local para documento ${documentId}: ${consecError.message}`
+              );
+              failedDocuments.push(documentId);
+              results.failed++;
+              results.details.push({
+                documentId,
+                success: false,
+                error: `Error generando consecutivo local: ${consecError.message}`,
+                errorDetails: consecError.stack,
+              });
+              continue;
             }
           } else {
             logger.info(
@@ -358,7 +283,7 @@ class DynamicTransferService {
             );
           }
 
-          // 🔍 DEBUGGING: Verificar que el consecutivo llegue al procesamiento
+          // Verificar que el consecutivo llegue al procesamiento
           logger.info(
             `🔍 Consecutivo para procesamiento: ${
               currentConsecutive ? currentConsecutive.formatted : "NULL"
@@ -400,109 +325,76 @@ class DynamicTransferService {
                 currentConsecutive.reservationId
               );
               logger.info(
-                `❌ Reserva cancelada para documento fallido ${documentId}: ${currentConsecutive.formatted}`
+                `❌ Reserva cancelada para documento ${documentId}: ${currentConsecutive.formatted}`
               );
             }
           }
 
-          // PROCESAR RESULTADOS
+          // ✅ NUEVA LÓGICA: Verificar si se aplicaron promociones en este documento
           if (docResult.success) {
-            successfulDocuments.push(documentId);
-            results.processed++;
-
-            // 📊 NUEVO: Contar promociones aplicadas automáticamente
             if (docResult.promotionsApplied) {
-              results.promotionsProcessed++;
+              results.promotionsProcessed++; // ✅ INCREMENTAR CONTADOR
               logger.info(
-                `✅ Promociones aplicadas automáticamente en documento ${documentId}`
+                `✅ Promociones aplicadas en documento ${documentId}`
               );
             }
 
-            if (!results.byType[docResult.documentType]) {
-              results.byType[docResult.documentType] = {
-                processed: 0,
-                failed: 0,
-              };
-            }
-            results.byType[docResult.documentType].processed++;
+            results.processed++;
+            successfulDocuments.push(documentId);
+            results.details.push({
+              documentId,
+              success: true,
+              message: docResult.message,
+              documentType: docResult.documentType,
+              promotionsApplied: docResult.promotionsApplied, // ✅ INCLUIR INFO
+              consecutiveUsed: docResult.consecutiveUsed,
+              consecutiveValue: docResult.consecutiveValue,
+            });
 
+            // Registrar tipo de documento
+            if (
+              docResult.documentType &&
+              docResult.documentType !== "unknown"
+            ) {
+              results.byType[docResult.documentType] =
+                (results.byType[docResult.documentType] || 0) + 1;
+            }
+
+            // Registrar consecutivo usado
             if (docResult.consecutiveUsed) {
               results.consecutivesUsed.push({
                 documentId,
                 consecutive: docResult.consecutiveUsed,
+                value: docResult.consecutiveValue,
               });
             }
 
-            // NUEVA LÓGICA: Marcado individual solo si está configurado así
-            if (
-              mapping.markProcessedStrategy === "individual" &&
-              mapping.markProcessedField
-            ) {
-              try {
-                await this.markDocumentsAsProcessed(
-                  [documentId],
-                  mapping,
-                  sourceConnection,
-                  true
-                );
-                logger.debug(
-                  `✅ Documento ${documentId} marcado individualmente como procesado`
-                );
-              } catch (markError) {
-                logger.warn(
-                  `⚠️ Error al marcar documento ${documentId}: ${markError.message}`
-                );
-                // No detener el proceso por errores de marcado
-              }
+            // Actualizar progreso
+            const progress = Math.round(((i + 1) / documentIds.length) * 100);
+            if (mapping.taskId) {
+              await TransferTask.findByIdAndUpdate(mapping.taskId, {
+                progress,
+              });
             }
           } else {
             hasErrors = true;
-            failedDocuments.push(documentId);
             results.failed++;
-
-            if (docResult.documentType) {
-              if (!results.byType[docResult.documentType]) {
-                results.byType[docResult.documentType] = {
-                  processed: 0,
-                  failed: 0,
-                };
-              }
-              results.byType[docResult.documentType].failed++;
-            }
-          }
-
-          results.details.push({
-            documentId,
-            ...docResult,
-          });
-
-          // 📊 LOGGING MEJORADO CON INFORMACIÓN DE PROMOCIONES
-          logger.info(
-            `Documento ${documentId} procesado: ${
-              docResult.success ? "✅ ÉXITO" : "❌ ERROR"
-            }${
-              docResult.promotionsApplied
-                ? " (con promociones automáticas)"
-                : ""
-            }${
-              currentConsecutive
-                ? ` (consecutivo: ${currentConsecutive.formatted})`
-                : ""
-            }`
-          );
-
-          // Actualizar progreso
-          if (mapping.taskId) {
-            const progress = Math.round(((i + 1) / documentIds.length) * 100);
-            await TransferTask.findByIdAndUpdate(mapping.taskId, {
-              progress,
+            failedDocuments.push(documentId);
+            results.details.push({
+              documentId,
+              success: false,
+              error: docResult.message,
+              errorDetails: docResult.error,
             });
+
+            logger.error(
+              `❌ Error procesando documento ${documentId}: ${docResult.message}`
+            );
           }
         } catch (error) {
           hasErrors = true;
-          failedDocuments.push(documentId);
           results.failed++;
-
+          failedDocuments.push(documentId);
           results.details.push({
             documentId,
             success: false,
@@ -510,40 +402,20 @@ class DynamicTransferService {
             errorDetails: error.stack,
           });
 
-          logger.error(`❌ Error al procesar documento ${documentId}:`, error);
-
-          // Cancelar reserva si hubo error
-          if (
-            useCentralizedConsecutives &&
-            currentConsecutive &&
-            currentConsecutive.reservationId
-          ) {
-            try {
-              await ConsecutiveService.cancelReservation(
-                centralizedConsecutiveId,
-                currentConsecutive.reservationId
-              );
-              logger.info(
-                `❌ Reserva cancelada por error en documento ${documentId}: ${currentConsecutive.formatted}`
-              );
-            } catch (cancelError) {
-              logger.error(
-                `❌ Error cancelando reserva para documento ${documentId}: ${cancelError.message}`
-              );
-            }
-          }
+          logger.error(
+            `❌ Error inesperado procesando documento ${documentId}: ${error.message}`
+          );
         }
       }
 
-      // 9. MARCADO MASIVO si está configurado así
+      // 9. MARCAR DOCUMENTOS COMO PROCESADOS
       if (
-        mapping.markProcessedStrategy === "batch" &&
-        mapping.markProcessedField &&
-        successfulDocuments.length > 0
+        successfulDocuments.length > 0 &&
+        mapping.markProcessedStrategy !== "none"
       ) {
         try {
           logger.info(
-            `Marcando ${successfulDocuments.length} documentos exitosos como procesados (modo batch)`
+            `Marcando ${successfulDocuments.length} documentos como procesados`
           );
           await this.markDocumentsAsProcessed(
             successfulDocuments,
@@ -551,10 +423,12 @@ class DynamicTransferService {
             sourceConnection,
             true
           );
-          logger.info("✅ Marcado masivo completado exitosamente");
+          logger.info("✅ Documentos marcados como procesados exitosamente");
         } catch (markError) {
-          logger.warn(`⚠️ Error en marcado masivo: ${markError.message}`);
-          // No afectar el resultado principal
+          logger.error(
+            `❌ Error marcando documentos como procesados: ${markError.message}`
+          );
+          // No fallar todo el proceso por este error
         }
       }
 
@@ -632,109 +506,43 @@ class DynamicTransferService {
           promotionsProcessed: results.promotionsProcessed, // ✅ AGREGAR INFO
           useCentralizedConsecutives, // ✅ DEBUGGING INFO
           errorDetails: hasErrors
-            ? results.details
-                .filter((d) => !d.success)
-                .map(
-                  (d) =>
-                    `Documento ${d.documentId}: ${
-                      d.message || d.error || "Error no especificado"
-                    }`
-                )
-                .join("\n")
+            ? results.details.filter((d) => !d.success)
             : null,
         },
       });
 
-      clearTimeout(timeoutId);
-      TaskTracker.completeTask(cancelTaskId, finalStatus);
-
-      // 📋 LOGGING FINAL CON ESTADÍSTICAS COMPLETAS
-      logger.info(
-        `✅ Procesamiento completado: ${results.processed} éxitos, ${results.failed} fallos${promotionsMessage}${consecutiveMessage}`
-      );
+      // Limpiar el registro de cancelación
+      TaskTracker.unregisterTask(cancelTaskId);
 
       return {
-        success: true,
-        executionId,
-        status: finalStatus,
-        useCentralizedConsecutives, // ✅ DEBUGGING INFO
-        centralizedConsecutiveId, // ✅ DEBUGGING INFO
-        ...results,
+        success: !hasErrors,
+        message: finalMessage, // ✅ MENSAJE DINÁMICO CON PROMOCIONES
+        processed: results.processed,
+        failed: results.failed,
+        promotionsProcessed: results.promotionsProcessed, // ✅ NUEVA PROPIEDAD
+        details: results.details,
+        executionTime: Date.now() - startTime,
+        useCentralizedConsecutives,
+        rollbackExecuted: results.rollbackExecuted || false,
       };
     } catch (error) {
-      // Limpiar timeout
-      clearTimeout(timeoutId);
+      logger.error(`Error general en processDocuments: ${error.message}`);
 
-      // Verificar si fue cancelado
-      if (signal?.aborted) {
-        logger.info("Tarea cancelada por el usuario");
+      // Limpiar recursos en caso de error
+      TaskTracker.unregisterTask(cancelTaskId);
 
-        if (executionId) {
-          await TaskExecution.findByIdAndUpdate(executionId, {
-            status: "cancelled",
-            executionTime: Date.now() - startTime,
-            errorMessage: "Cancelada por el usuario",
-          });
-        }
-
-        if (mapping?.taskId) {
-          await TransferTask.findByIdAndUpdate(mapping.taskId, {
-            status: "cancelled",
-            progress: -1,
-            lastExecutionResult: {
-              success: false,
-              message: "Tarea cancelada por el usuario",
-            },
-          });
-        }
-
-        TaskTracker.completeTask(
-          cancelTaskId || `dynamic_process_${mappingId}`,
-          "cancelled"
-        );
-
-        return {
-          success: false,
-          message: "Tarea cancelada por el usuario",
-          executionId,
-        };
-      }
-
-      logger.error(`Error al procesar documentos: ${error.message}`);
-
-      // Actualizar el registro de ejecución en caso de error
       if (executionId) {
         await TaskExecution.findByIdAndUpdate(executionId, {
           status: "failed",
           executionTime: Date.now() - startTime,
-          errorMessage: error.message,
+          error: error.message,
         });
       }
-
-      // Actualizar la tarea principal con el error
-      if (mapping?.taskId) {
-        await TransferTask.findByIdAndUpdate(mapping.taskId, {
-          status: "failed",
-          progress: -1,
-          lastExecutionResult: {
-            success: false,
-            message: `Error: ${error.message}`,
-            errorDetails: error.stack,
-          },
-        });
-      }
-
-      TaskTracker.completeTask(
-        cancelTaskId || `dynamic_process_${mappingId}`,
-        "failed"
-      );
 
       throw error;
     } finally {
-      // Cerrar conexiones de forma segura
+      // Liberar conexiones
       if (sourceConnection || targetConnection) {
-        logger.info("Liberando conexiones...");
-
         const releasePromises = [];
 
         if (sourceConnection) {
@@ -968,7 +776,7 @@ class DynamicTransferService {
   ) {
     let processedTables = [];
     let documentType = "unknown";
-    let promotionsApplied = false;
+    let promotionsApplied = false; // ✅ NUEVA VARIABLE
 
     try {
       logger.info(
@@ -984,6 +792,10 @@ class DynamicTransferService {
       if (shouldUsePromotions) {
         logger.info(
           `🎁 DETECCIÓN AUTOMÁTICA: Promociones habilitadas para documento ${documentId}`
+        );
+      } else {
+        logger.info(
+          `📋 PROCESAMIENTO ESTÁNDAR: Sin promociones para documento ${documentId}`
         );
       }
 
@@ -1012,6 +824,7 @@ class DynamicTransferService {
           success: false,
           message: "No se encontraron configuraciones de tablas principales",
           documentType,
+          promotionsApplied: false,
           consecutiveUsed: null,
           consecutiveValue: null,
         };
@@ -1032,7 +845,7 @@ class DynamicTransferService {
 
       // 2. Procesar cada tabla principal
       for (const tableConfig of orderedMainTables) {
-        // Obtener datos de la tabla de origen usando el método existente
+        // Obtener datos de la tabla de origen
         let sourceData;
 
         try {
@@ -1142,7 +955,7 @@ class DynamicTransferService {
               );
 
             if (promotionResult && promotionResult.promotionsApplied) {
-              promotionsApplied = true;
+              promotionsApplied = true; // ✅ NUEVA LÓGICA
               logger.info(
                 `✅ Promociones aplicadas automáticamente en documento ${documentId}`
               );
@@ -1152,7 +965,7 @@ class DynamicTransferService {
               `📋 Procesando detalles SIN promociones para documento ${documentId}`
             );
 
-            await this.processDetailTables(
+            const standardResult = await this.processDetailTables(
               detailTables,
               documentId,
               sourceData,
@@ -1164,17 +977,25 @@ class DynamicTransferService {
               columnLengthCache,
               processedTables
             );
+
+            // ✅ NUEVA LÓGICA: Verificar si se aplicaron promociones incluso en modo automático
+            if (standardResult && standardResult.promotionsApplied) {
+              promotionsApplied = true;
+              logger.info(
+                `✅ Promociones detectadas automáticamente en documento ${documentId}`
+              );
+            }
           }
         }
       }
 
       return {
         success: true,
-        message: promotionsApplied
+        message: promotionsApplied // ✅ MENSAJE DINÁMICO
           ? "Documento procesado exitosamente con promociones aplicadas automáticamente"
           : "Documento procesado exitosamente",
         documentType,
-        promotionsApplied, // ✅ INCLUIR INFORMACIÓN DE PROMOCIONES
+        promotionsApplied, // ✅ NUEVA PROPIEDAD
         consecutiveUsed: currentConsecutive
           ? currentConsecutive.formatted
           : null,
@@ -1192,6 +1013,10 @@ class DynamicTransferService {
 
   /**
    * Procesa las tablas de detalle con soporte para promociones
+   * @private
+   */
+  /**
+   * Procesa las tablas de detalle con soporte FORZADO para promociones
    * @private
    */
   async processDetailTablesWithPromotions(
@@ -1214,7 +1039,7 @@ class DynamicTransferService {
     logger.info(
       `🎁 Procesando ${
         orderedDetailTables.length
-      } tablas de detalle CON PROMOCIONES en orden: ${orderedDetailTables
+      } tablas de detalle CON PROMOCIONES FORZADAS en orden: ${orderedDetailTables
         .map((t) => t.name)
         .join(" -> ")}`
     );
@@ -1226,7 +1051,7 @@ class DynamicTransferService {
         `🎁 Procesando tabla de detalle con promociones: ${detailConfig.name}`
       );
 
-      // ✅ USAR MÉTODO CON PROMOCIONES
+      // ✅ SIEMPRE USAR MÉTODO CON PROMOCIONES (FORZADO)
       const detailsData = await this.getDetailDataWithPromotions(
         detailConfig,
         parentTableConfig,
@@ -1242,7 +1067,7 @@ class DynamicTransferService {
         continue;
       }
 
-      // 🔍 Verificar si realmente se aplicaron promociones en estos datos
+      // 🔍 VERIFICAR SI REALMENTE SE APLICARON PROMOCIONES EN ESTOS DATOS
       const hasPromotions = detailsData.some(
         (row) => row._PROMOTION_TYPE && row._PROMOTION_TYPE !== "NONE"
       );
@@ -1296,6 +1121,10 @@ class DynamicTransferService {
   }
 
   /**
+   * Procesa las tablas de detalle con DETECCIÓN AUTOMÁTICA de promociones
+   * @private
+   */
+  /**
    * Procesa las tablas de detalle con detección automática de promociones
    * @private
    */
@@ -1335,7 +1164,7 @@ class DynamicTransferService {
       } tablas de detalle en orden: ${orderedDetailTables
         .map((t) => t.name)
         .join(" -> ")} ${
-        shouldProcessPromotions ? "(CON PROMOCIONES)" : "(ESTÁNDAR)"
+        shouldProcessPromotions ? "(CON promociones)" : "(SIN promociones)"
       }`
     );
 
@@ -1344,11 +1173,11 @@ class DynamicTransferService {
     for (const detailConfig of orderedDetailTables) {
       logger.info(`Procesando tabla de detalle: ${detailConfig.name}`);
 
-      // 🧠 DECISIÓN AUTOMÁTICA: Usar método con o sin promociones
+      // 🧠 DECISIÓN AUTOMÁTICA: usar método con o sin promociones
       let detailsData;
 
       if (shouldProcessPromotions) {
-        // Usar método con promociones
+        // ✅ USAR MÉTODO CON PROMOCIONES
         detailsData = await this.getDetailDataWithPromotions(
           detailConfig,
           parentTableConfig,
@@ -1357,7 +1186,7 @@ class DynamicTransferService {
           mapping
         );
 
-        // Verificar si realmente se aplicaron promociones en estos datos
+        // 🔍 VERIFICAR SI REALMENTE SE APLICARON PROMOCIONES
         const hasPromotions =
           detailsData &&
           detailsData.length > 0 &&
@@ -1376,7 +1205,7 @@ class DynamicTransferService {
           );
         }
       } else {
-        // Usar método estándar
+        // ✅ USAR MÉTODO ESTÁNDAR
         detailsData = await this.getDetailData(
           detailConfig,
           parentTableConfig,
@@ -1421,7 +1250,7 @@ class DynamicTransferService {
       processedTables.push(detailConfig.name);
     }
 
-    // Retornar información sobre promociones aplicadas
+    // ✅ RETORNAR INFORMACIÓN SOBRE PROMOCIONES APLICADAS
     return {
       promotionsApplied: totalPromotionsApplied,
     };
@@ -5201,16 +5030,16 @@ class DynamicTransferService {
   }
 
   /**
-   * Verifica si debe usar promociones automáticamente
-   * @param {Object} mapping - Configuración de mapeo
-   * @returns {Boolean} - True si debe usar promociones
+   * Determina si se deben usar promociones para este mapping
+   * @param {Object} mapping - Configuración de mapping
+   * @returns {boolean} - Si se deben usar promociones
    */
   shouldUsePromotions(mapping) {
-    console.log("🔍 DEBUG shouldUsePromotions - INICIANDO");
-    console.log("🔍 mapping.name:", mapping.name);
-    console.log("🔍 mapping.promotionConfig:", mapping.promotionConfig);
-
     try {
+      console.log("🔍 DEBUG shouldUsePromotions - INICIANDO");
+      console.log("🔍 mapping.name:", mapping.name);
+      console.log("🔍 mapping.promotionConfig:", mapping.promotionConfig);
+
       // 1. Verificar si las promociones están habilitadas en la configuración
       if (!mapping.promotionConfig || !mapping.promotionConfig.enabled) {
         console.log("🔍 DEBUG: Promociones deshabilitadas");
@@ -5221,10 +5050,20 @@ class DynamicTransferService {
       console.log("🔍 DEBUG: Promociones habilitadas, validando configuración");
 
       // 2. Validar que la configuración de promociones sea válida
-      if (!PromotionProcessor.validatePromotionConfig(mapping)) {
-        console.log("🔍 DEBUG: Configuración inválida");
+      const validationResult =
+        PromotionProcessor.validatePromotionConfig(mapping);
+      if (
+        !validationResult ||
+        (typeof validationResult === "object" && !validationResult.canContinue)
+      ) {
+        console.log(
+          "🔍 DEBUG: Configuración inválida",
+          validationResult?.reason || "Sin razón específica"
+        );
         logger.warn(
-          "Configuración de promociones inválida, usando procesamiento estándar"
+          `Configuración de promociones inválida: ${
+            validationResult?.reason || "Sin razón específica"
+          }, usando procesamiento estándar`
         );
         return false;
       }
@@ -5240,6 +5079,49 @@ class DynamicTransferService {
       if (detailTables.length === 0) {
         console.log("🔍 DEBUG: No hay tablas de detalle");
         logger.debug("No hay tablas de detalle para procesar promociones");
+        return false;
+      }
+
+      // 4. Verificar que al menos una tabla de detalle tenga los campos necesarios
+      const fieldConfig = PromotionProcessor.getFieldConfiguration(mapping);
+      let hasValidTable = false;
+
+      for (const detailTable of detailTables) {
+        if (
+          !detailTable.fieldMappings ||
+          detailTable.fieldMappings.length === 0
+        ) {
+          continue;
+        }
+
+        const mappedFields = detailTable.fieldMappings.map(
+          (fm) => fm.sourceField
+        );
+        const requiredFields = [
+          fieldConfig.lineNumberField,
+          fieldConfig.articleField,
+          fieldConfig.quantityField,
+          fieldConfig.bonusField,
+        ];
+
+        const hasRequiredFields = requiredFields.every((field) =>
+          mappedFields.includes(field)
+        );
+
+        if (hasRequiredFields) {
+          hasValidTable = true;
+          console.log(
+            `🔍 DEBUG: Tabla ${detailTable.name} válida para promociones`
+          );
+          break;
+        }
+      }
+
+      if (!hasValidTable) {
+        console.log("🔍 DEBUG: No hay tablas válidas para promociones");
+        logger.warn(
+          "No hay tablas de detalle con campos requeridos para promociones"
+        );
         return false;
       }
 

@@ -130,8 +130,17 @@ class PromotionProcessor {
   static detectPromotionLines(detailData, fieldConfig) {
     const promotionLines = [];
 
+    // Verificar qué campos están disponibles en los datos
+    const firstRow = detailData[0] || {};
+    const availableFields = Object.keys(firstRow);
+
+    logger.debug(`🔧 Campos disponibles en datos: ${availableFields.join(', ')}`);
+    logger.debug(`🔧 Tiene ${fieldConfig.bonusField}: ${availableFields.includes(fieldConfig.bonusField)} valor: ${firstRow[fieldConfig.bonusField]}`);
+    logger.debug(`🔧 Tiene ${fieldConfig.referenceField}: ${availableFields.includes(fieldConfig.referenceField)} valor: ${firstRow[fieldConfig.referenceField]}`);
+    logger.debug(`🔧 Tiene ${fieldConfig.discountField}: ${availableFields.includes(fieldConfig.discountField)} valor: ${firstRow[fieldConfig.discountField]}`);
+
     detailData.forEach((line, index) => {
-      const isPromotion = this.isPromotionLine(line, detailData, fieldConfig);
+      const isPromotion = this.isPromotionLine(line, detailData, fieldConfig, availableFields);
 
       if (isPromotion.hasPromotion) {
         promotionLines.push({
@@ -139,6 +148,7 @@ class PromotionProcessor {
           promotionType: isPromotion.type,
           originalIndex: index,
           _fieldConfig: fieldConfig,
+          _availableFields: availableFields
         });
       }
     });
@@ -151,9 +161,10 @@ class PromotionProcessor {
    * @param {Object} line - Línea de detalle
    * @param {Array} allLines - Todas las líneas para verificar referencias
    * @param {Object} fieldConfig - Configuración de campos
+   * @param {Array} availableFields - Campos disponibles en los datos
    * @returns {Object} - Información sobre la promoción
    */
-  static isPromotionLine(line, allLines, fieldConfig) {
+  static isPromotionLine(line, allLines, fieldConfig, availableFields = null) {
     const result = {
       hasPromotion: false,
       type: null,
@@ -161,30 +172,38 @@ class PromotionProcessor {
       isBonusLine: false,
     };
 
-    // Verificar si es bonificación
-    const bonusValue = line[fieldConfig.bonusField];
-    if (bonusValue === "B" || bonusValue === "b") {
-      result.hasPromotion = true;
-      result.type = "BONUS";
-      result.isBonusLine = true;
+    // Si no se pasaron campos disponibles, obtenerlos
+    if (!availableFields) {
+      availableFields = Object.keys(line);
     }
 
-    // Verificar si tiene descuento
-    const discountValue = line[fieldConfig.discountField];
-    if (discountValue && parseFloat(discountValue) > 0) {
-      result.hasPromotion = true;
-      result.type = result.type ? "BONUS_WITH_DISCOUNT" : "DISCOUNT";
+    // Verificar si es bonificación (solo si el campo existe)
+    if (availableFields.includes(fieldConfig.bonusField)) {
+      const bonusValue = line[fieldConfig.bonusField];
+      if (bonusValue === "B" || bonusValue === "b") {
+        result.hasPromotion = true;
+        result.type = "BONUS";
+        result.isBonusLine = true;
+      }
     }
 
-    // Verificar si es línea regular que dispara promoción
+    // Verificar si tiene descuento (solo si el campo existe)
+    if (availableFields.includes(fieldConfig.discountField)) {
+      const discountValue = line[fieldConfig.discountField];
+      if (discountValue && parseFloat(discountValue) > 0) {
+        result.hasPromotion = true;
+        result.type = result.type ? "BONUS_WITH_DISCOUNT" : "DISCOUNT";
+      }
+    }
+
+    // Verificar si es línea regular que dispara promoción (solo si el campo de referencia existe)
     const articleCode = line[fieldConfig.articleField];
-    if (
-      articleCode &&
-      this.hasReferenceInOtherLines(line, allLines, fieldConfig)
-    ) {
-      result.hasPromotion = true;
-      result.isRegularLine = true;
-      result.type = result.type ? `${result.type}_TRIGGER` : "TRIGGER";
+    if (articleCode && availableFields.includes(fieldConfig.referenceField)) {
+      if (this.hasReferenceInOtherLines(line, allLines, fieldConfig)) {
+        result.hasPromotion = true;
+        result.isRegularLine = true;
+        result.type = result.type ? `${result.type}_TRIGGER` : "TRIGGER";
+      }
     }
 
     return result;
@@ -201,12 +220,24 @@ class PromotionProcessor {
     const currentArticle = currentLine[fieldConfig.articleField];
     const currentLineNumber = currentLine[fieldConfig.lineNumberField];
 
+    // Solo buscar referencias si el campo existe
+    if (!fieldConfig.referenceField) {
+      return false;
+    }
+
     return allLines.some((line) => {
+      // Verificar que la línea tenga el campo de referencia
+      if (!line.hasOwnProperty(fieldConfig.referenceField)) {
+        return false;
+      }
+
       const referenceArticle = line[fieldConfig.referenceField];
       const lineNumber = line[fieldConfig.lineNumberField];
 
       return (
-        referenceArticle === currentArticle && lineNumber !== currentLineNumber
+        referenceArticle === currentArticle &&
+        lineNumber !== currentLineNumber &&
+        referenceArticle // Asegurar que no sea null/undefined
       );
     });
   }
@@ -270,37 +301,42 @@ class PromotionProcessor {
    * @returns {Object} - Línea transformada
    */
   static transformBonusLine(bonusLine, fieldConfig, lineMap) {
-    const referenceArticle = bonusLine[fieldConfig.referenceField];
     const currentLineNumber = bonusLine[fieldConfig.lineNumberField];
 
-    logger.debug(
-      `🎁 Transformando línea de bonificación ${currentLineNumber}, referencia: ${referenceArticle}`
-    );
-
-    // Buscar línea regular usando el mapa
+    // Solo buscar referencia si el campo existe
+    let referenceArticle = null;
     let regularLineNumber = null;
-    if (referenceArticle && lineMap[referenceArticle]) {
-      const regularLines = lineMap[referenceArticle].filter(
-        (line) =>
-          line[fieldConfig.lineNumberField] !== currentLineNumber &&
-          line[fieldConfig.bonusField] !== "B" &&
-          line[fieldConfig.bonusField] !== "b"
+
+    if (fieldConfig.referenceField && bonusLine.hasOwnProperty(fieldConfig.referenceField)) {
+      referenceArticle = bonusLine[fieldConfig.referenceField];
+
+      logger.debug(
+        `🎁 Transformando línea de bonificación ${currentLineNumber}, referencia: ${referenceArticle}`
       );
 
-      if (regularLines.length > 0) {
-        // Tomar la primera línea regular encontrada
-        regularLineNumber = regularLines[0][fieldConfig.lineNumberField];
-        logger.debug(
-          `🎁 Línea regular encontrada: ${regularLineNumber} para artículo ${referenceArticle}`
+      // Buscar línea regular usando el mapa
+      if (referenceArticle && lineMap[referenceArticle]) {
+        const regularLines = lineMap[referenceArticle].filter(
+          (line) =>
+            line[fieldConfig.lineNumberField] !== currentLineNumber &&
+            (!fieldConfig.bonusField ||
+             (line[fieldConfig.bonusField] !== "B" && line[fieldConfig.bonusField] !== "b"))
         );
-      } else {
-        logger.warn(
-          `🎁 No se encontró línea regular para bonificación ${currentLineNumber} con referencia ${referenceArticle}`
-        );
+
+        if (regularLines.length > 0) {
+          regularLineNumber = regularLines[0][fieldConfig.lineNumberField];
+          logger.debug(
+            `🎁 Línea regular encontrada: ${regularLineNumber} para artículo ${referenceArticle}`
+          );
+        } else {
+          logger.warn(
+            `🎁 No se encontró línea regular para bonificación ${currentLineNumber} con referencia ${referenceArticle}`
+          );
+        }
       }
     } else {
-      logger.warn(
-        `🎁 Línea de bonificación ${currentLineNumber} no tiene referencia válida`
+      logger.debug(
+        `🎁 Transformando línea de bonificación ${currentLineNumber} sin campo de referencia disponible`
       );
     }
 
@@ -308,8 +344,7 @@ class PromotionProcessor {
       ...bonusLine,
       // ✅ ASIGNAR CORRECTAMENTE LA REFERENCIA
       [fieldConfig.bonusLineRef]: regularLineNumber,
-      [fieldConfig.bonusQuantity]:
-        bonusLine[fieldConfig.quantityField] || bonusLine.QTY,
+      [fieldConfig.bonusQuantity]: bonusLine[fieldConfig.quantityField] || bonusLine.QTY,
       [fieldConfig.orderedQuantity]: null,
       [fieldConfig.invoiceQuantity]: null,
 
@@ -325,7 +360,7 @@ class PromotionProcessor {
     delete transformed.QTY;
 
     logger.info(
-      `🎁 ✅ Línea bonificación ${currentLineNumber} -> referencia ${regularLineNumber}`
+      `🎁 ✅ Línea bonificación ${currentLineNumber} -> referencia ${regularLineNumber || 'N/A'}`
     );
 
     return transformed;
@@ -393,31 +428,67 @@ class PromotionProcessor {
   }
 
   /**
+   * Determina si se deben usar promociones para este mapping
+   * @param {Object} mapping - Configuración de mapping
+   * @returns {boolean} - Si se deben usar promociones
+   */
+  static shouldUsePromotions(mapping) {
+    console.log('🔍 DEBUG shouldUsePromotions - INICIANDO');
+    console.log('🔍 mapping.name:', mapping.name);
+    console.log('🔍 mapping.promotionConfig:', mapping.promotionConfig);
+
+    if (!mapping.promotionConfig?.enabled) {
+      console.log('🔍 DEBUG: Promociones deshabilitadas');
+      return false;
+    }
+
+    const validation = this.validatePromotionConfig(mapping);
+
+    if (!validation.canContinue) {
+      console.log('🔍 DEBUG: ❌ Validación falló:', validation.reason);
+      return false;
+    }
+
+    const detailTables = mapping.tableConfigs.filter(t => t.isDetailTable);
+    console.log('🔍 DEBUG: Tablas de detalle encontradas:', detailTables.length);
+
+    if (detailTables.length === 0) {
+      console.log('🔍 DEBUG: ❌ No hay tablas de detalle');
+      return false;
+    }
+
+    console.log('🔍 DEBUG: ✅ Promociones activadas');
+    return true;
+  }
+
+  /**
    * Valida la configuración de promociones
    * @param {Object} mapping - Configuración de mapping
-   * @returns {boolean} - Si la configuración es válida
+   * @returns {Object} - Resultado de validación con detalles
    */
   static validatePromotionConfig(mapping) {
     try {
-      if (
-        !mapping ||
-        !mapping.promotionConfig ||
-        !mapping.promotionConfig.enabled
-      ) {
-        return false;
+      if (!mapping || !mapping.promotionConfig || !mapping.promotionConfig.enabled) {
+        return { valid: false, canContinue: false, reason: 'Promociones deshabilitadas' };
       }
 
       const fieldConfig = this.getFieldConfiguration(mapping);
-      const requiredFields = [
-        fieldConfig.bonusField,
-        fieldConfig.referenceField,
+
+      // Separar campos críticos de opcionales
+      const criticalFields = [
         fieldConfig.lineNumberField,
         fieldConfig.articleField,
+        fieldConfig.quantityField
       ];
 
-      const detailTables = mapping.tableConfigs.filter(
-        (tc) => tc.isDetailTable
-      );
+      const optionalFields = [
+        fieldConfig.bonusField,
+        fieldConfig.referenceField,
+        fieldConfig.discountField
+      ];
+
+      const detailTables = mapping.tableConfigs.filter(tc => tc.isDetailTable);
+      let hasValidTable = false;
 
       for (const detailTable of detailTables) {
         if (!detailTable.fieldMappings) {
@@ -425,26 +496,36 @@ class PromotionProcessor {
           continue;
         }
 
-        const mappedFields = detailTable.fieldMappings.map(
-          (fm) => fm.sourceField
-        );
+        const mappedFields = detailTable.fieldMappings.map(fm => fm.sourceField);
 
-        for (const requiredField of requiredFields) {
-          if (!mappedFields.includes(requiredField)) {
-            logger.warn(
-              `Campo requerido para promociones no encontrado: ${requiredField} en tabla ${detailTable.name}`
-            );
-          }
+        // Validar campos críticos
+        const missingCritical = criticalFields.filter(field => !mappedFields.includes(field));
+
+        if (missingCritical.length === 0) {
+          hasValidTable = true;
+
+          // Solo advertir sobre campos opcionales
+          const missingOptional = optionalFields.filter(field => !mappedFields.includes(field));
+          missingOptional.forEach(field => {
+            logger.warn(`Campo requerido para promociones no encontrado: ${field} en tabla ${detailTable.name}`);
+          });
+
+          logger.info(`✅ Tabla ${detailTable.name} puede usar promociones (${missingOptional.length === 0 ? 'completa' : 'básica'})`);
+        } else {
+          logger.warn(`❌ Tabla ${detailTable.name} no puede usar promociones - faltan campos críticos: ${missingCritical.join(', ')}`);
         }
       }
 
-      logger.info("✅ Configuración de promociones validada exitosamente");
-      return true;
+      if (!hasValidTable) {
+        return { valid: false, canContinue: false, reason: 'No hay tablas válidas para promociones' };
+      }
+
+      logger.info('✅ Configuración de promociones validada exitosamente');
+      return { valid: true, canContinue: true, hasOptionalFields: true };
+
     } catch (error) {
-      logger.error(
-        `Error al validar configuración de promociones: ${error.message}`
-      );
-      return false;
+      logger.error(`Error al validar configuración de promociones: ${error.message}`);
+      return { valid: false, canContinue: false, reason: error.message };
     }
   }
 
