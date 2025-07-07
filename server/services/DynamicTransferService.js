@@ -76,30 +76,106 @@ class DynamicTransferService {
         };
       }
 
-      // 2. Verificar consecutivos centralizados si están configurados
-      if (mapping.consecutiveConfig?.useCentralized) {
+      // 2. 🔍 DEBUGGING: Verificar consecutivos centralizados si están configurados
+      logger.info(
+        `🔍 DEBUGGING: Verificando sistema de consecutivos para mapping ${mappingId}`
+      );
+      logger.info(
+        `🔍 mapping.consecutiveConfig existe: ${!!mapping.consecutiveConfig}`
+      );
+      logger.info(
+        `🔍 mapping.consecutiveConfig.enabled: ${mapping.consecutiveConfig?.enabled}`
+      );
+
+      if (mapping.consecutiveConfig?.enabled) {
+        logger.info(
+          `🔍 consecutiveConfig.useCentralizedSystem: ${mapping.consecutiveConfig?.useCentralizedSystem}`
+        );
+        logger.info(
+          `🔍 consecutiveConfig.selectedCentralizedConsecutive: ${mapping.consecutiveConfig?.selectedCentralizedConsecutive}`
+        );
+
         try {
-          const centralizedConfig =
-            await ConsecutiveService.getCentralizedConfig(
-              mapping.consecutiveConfig.centralizedId
-            );
-          if (centralizedConfig) {
-            useCentralizedConsecutives = true;
-            centralizedConsecutiveId = mapping.consecutiveConfig.centralizedId;
+          // NUEVO: Verificar si está configurado explícitamente para usar consecutivos centralizados
+          if (
+            mapping.consecutiveConfig.useCentralizedSystem &&
+            mapping.consecutiveConfig.selectedCentralizedConsecutive
+          ) {
             logger.info(
-              `Se usarán consecutivos centralizados: ${centralizedConsecutiveId}`
+              `🔍 Intentando usar consecutivo centralizado configurado explícitamente`
             );
-          } else {
-            logger.warn(
-              `Configuración de consecutivos centralizados no encontrada. Se usará el sistema local.`
+            // Verificar que el consecutivo centralizado existe y está activo
+            try {
+              const consecutive = await ConsecutiveService.getConsecutiveById(
+                mapping.consecutiveConfig.selectedCentralizedConsecutive
+              );
+              if (consecutive && consecutive.active) {
+                useCentralizedConsecutives = true;
+                centralizedConsecutiveId =
+                  mapping.consecutiveConfig.selectedCentralizedConsecutive;
+                logger.info(
+                  `✅ Se usará consecutivo centralizado configurado para mapeo ${mappingId}: ${centralizedConsecutiveId}`
+                );
+              } else {
+                logger.warn(
+                  `❌ Consecutivo centralizado ${mapping.consecutiveConfig.selectedCentralizedConsecutive} no está activo o no existe. Usando sistema local.`
+                );
+              }
+            } catch (error) {
+              logger.warn(
+                `❌ Error al verificar consecutivo centralizado configurado: ${error.message}. Usando sistema local.`
+              );
+            }
+          }
+
+          // Si no se configuró explícitamente, buscar consecutivos asignados automáticamente (compatibilidad hacia atrás)
+          if (!useCentralizedConsecutives) {
+            logger.info(
+              `🔍 Buscando consecutivos asignados automáticamente para mapping ${mappingId}`
             );
+            const assignedConsecutives =
+              await ConsecutiveService.getConsecutivesByEntity(
+                "mapping",
+                mappingId
+              );
+
+            logger.info(
+              `🔍 Consecutivos encontrados: ${
+                assignedConsecutives?.length || 0
+              }`
+            );
+            if (assignedConsecutives && assignedConsecutives.length > 0) {
+              logger.info(
+                `🔍 Usando primer consecutivo encontrado: ${assignedConsecutives[0]._id}`
+              );
+              useCentralizedConsecutives = true;
+              centralizedConsecutiveId = assignedConsecutives[0]._id;
+              logger.info(
+                `✅ Se usará consecutivo centralizado asignado para mapeo ${mappingId}: ${centralizedConsecutiveId}`
+              );
+            } else {
+              logger.info(
+                `❌ No se encontraron consecutivos centralizados para ${mappingId}. Se usará el sistema local.`
+              );
+            }
           }
         } catch (consecError) {
           logger.warn(
-            `Error al verificar consecutivos centralizados: ${consecError.message}. Usando sistema local.`
+            `❌ Error al verificar consecutivos centralizados: ${consecError.message}. Usando sistema local.`
           );
         }
+      } else {
+        logger.info(
+          `❌ Consecutivos deshabilitados en la configuración del mapping`
+        );
       }
+
+      logger.info(
+        `🔍 RESULTADO: useCentralizedConsecutives = ${useCentralizedConsecutives}`
+      );
+      logger.info(
+        `🔍 RESULTADO: centralizedConsecutiveId = ${centralizedConsecutiveId}`
+      );
 
       // 3. Registrar en TaskTracker para permitir cancelación
       TaskTracker.registerTask(
@@ -123,6 +199,8 @@ class DynamicTransferService {
           documentIds,
           mappingId,
           promotionsEnabled: shouldUsePromotions, // ✅ AGREGAR INFO DE PROMOCIONES
+          useCentralizedConsecutives, // ✅ DEBUGGING INFO
+          centralizedConsecutiveId, // ✅ DEBUGGING INFO
         },
       });
 
@@ -197,56 +275,95 @@ class DynamicTransferService {
             }`
           );
 
-          // Generar consecutivo si es necesario
-          if (mapping.useConsecutive) {
+          // 🔍 GENERAR CONSECUTIVO SEGÚN EL SISTEMA DETERMINADO CON DEBUGGING
+          if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
+            logger.info(
+              `🔍 Generando consecutivo para documento ${documentId}`
+            );
+            logger.info(
+              `🔍 Sistema a usar: ${
+                useCentralizedConsecutives ? "CENTRALIZADO" : "LOCAL"
+              }`
+            );
+
             if (useCentralizedConsecutives) {
               try {
-                currentConsecutive =
-                  await ConsecutiveService.reserveNextConsecutive(
-                    centralizedConsecutiveId,
-                    documentId
-                  );
                 logger.info(
-                  `Consecutivo centralizado reservado para documento ${documentId}: ${currentConsecutive.formatted}`
+                  `🔍 Reservando consecutivo centralizado ${centralizedConsecutiveId} para documento ${documentId}`
+                );
+
+                const reservation =
+                  await ConsecutiveService.reserveConsecutiveValues(
+                    centralizedConsecutiveId,
+                    1,
+                    { segment: null },
+                    { id: mapping._id.toString(), name: "mapping" }
+                  );
+
+                currentConsecutive = {
+                  value: reservation.values[0].numeric,
+                  formatted: reservation.values[0].formatted,
+                  isCentralized: true,
+                  reservationId: reservation.reservationId,
+                };
+
+                logger.info(
+                  `✅ Consecutivo centralizado reservado para documento ${documentId}: ${currentConsecutive.formatted}`
                 );
               } catch (consecError) {
                 logger.error(
-                  `Error generando consecutivo centralizado para documento ${documentId}: ${consecError.message}`
+                  `❌ Error generando consecutivo centralizado para documento ${documentId}: ${consecError.message}`
                 );
                 failedDocuments.push(documentId);
                 results.failed++;
                 results.details.push({
                   documentId,
                   success: false,
-                  error: `Error generando consecutivo: ${consecError.message}`,
+                  error: `Error generando consecutivo centralizado: ${consecError.message}`,
                   errorDetails: consecError.stack,
                 });
                 continue;
               }
             } else {
               try {
-                currentConsecutive = await this.generateConsecutive(mapping);
+                logger.info(
+                  `🔍 Generando consecutivo local para documento ${documentId}`
+                );
+                currentConsecutive = await this.generateLocalConsecutive(
+                  mapping
+                );
                 if (currentConsecutive) {
                   logger.info(
-                    `Consecutivo local generado para documento ${documentId}: ${currentConsecutive.formatted}`
+                    `✅ Consecutivo local generado para documento ${documentId}: ${currentConsecutive.formatted}`
                   );
                 }
               } catch (consecError) {
                 logger.error(
-                  `Error generando consecutivo local para documento ${documentId}: ${consecError.message}`
+                  `❌ Error generando consecutivo local para documento ${documentId}: ${consecError.message}`
                 );
                 failedDocuments.push(documentId);
                 results.failed++;
                 results.details.push({
                   documentId,
                   success: false,
-                  error: `Error generando consecutivo: ${consecError.message}`,
+                  error: `Error generando consecutivo local: ${consecError.message}`,
                   errorDetails: consecError.stack,
                 });
                 continue;
               }
             }
+          } else {
+            logger.info(
+              `🔍 Consecutivos deshabilitados, procesando documento ${documentId} sin consecutivo`
+            );
           }
+
+          // 🔍 DEBUGGING: Verificar que el consecutivo llegue al procesamiento
+          logger.info(
+            `🔍 Consecutivo para procesamiento: ${
+              currentConsecutive ? currentConsecutive.formatted : "NULL"
+            }`
+          );
 
           // 🧠 PROCESAR DOCUMENTO CON DETECCIÓN AUTOMÁTICA DE PROMOCIONES
           const docResult = await this.processSingleDocumentSimple(
@@ -275,7 +392,7 @@ class DynamicTransferService {
                 ]
               );
               logger.info(
-                `Reserva confirmada para documento ${documentId}: ${currentConsecutive.formatted}`
+                `✅ Reserva confirmada para documento ${documentId}: ${currentConsecutive.formatted}`
               );
             } else {
               await ConsecutiveService.cancelReservation(
@@ -283,7 +400,7 @@ class DynamicTransferService {
                 currentConsecutive.reservationId
               );
               logger.info(
-                `Reserva cancelada para documento fallido ${documentId}: ${currentConsecutive.formatted}`
+                `❌ Reserva cancelada para documento fallido ${documentId}: ${currentConsecutive.formatted}`
               );
             }
           }
@@ -367,6 +484,10 @@ class DynamicTransferService {
               docResult.promotionsApplied
                 ? " (con promociones automáticas)"
                 : ""
+            }${
+              currentConsecutive
+                ? ` (consecutivo: ${currentConsecutive.formatted})`
+                : ""
             }`
           );
 
@@ -403,11 +524,11 @@ class DynamicTransferService {
                 currentConsecutive.reservationId
               );
               logger.info(
-                `Reserva cancelada por error en documento ${documentId}: ${currentConsecutive.formatted}`
+                `❌ Reserva cancelada por error en documento ${documentId}: ${currentConsecutive.formatted}`
               );
             } catch (cancelError) {
               logger.error(
-                `Error cancelando reserva para documento ${documentId}: ${cancelError.message}`
+                `❌ Error cancelando reserva para documento ${documentId}: ${cancelError.message}`
               );
             }
           }
@@ -480,6 +601,8 @@ class DynamicTransferService {
         successfulRecords: results.processed,
         failedRecords: results.failed,
         promotionsProcessed: results.promotionsProcessed, // ✅ AGREGAR CONTADOR
+        useCentralizedConsecutives, // ✅ DEBUGGING INFO
+        centralizedConsecutiveId, // ✅ DEBUGGING INFO
         details: results,
       });
 
@@ -489,9 +612,13 @@ class DynamicTransferService {
           ? `, promociones aplicadas automáticamente: ${results.promotionsProcessed}`
           : "";
 
+      const consecutiveMessage = useCentralizedConsecutives
+        ? ` (consecutivos centralizados)`
+        : ` (consecutivos locales)`;
+
       const finalMessage = hasErrors
-        ? `Procesamiento completado con errores: ${results.processed} éxitos, ${results.failed} fallos${promotionsMessage}`
-        : `Procesamiento completado con éxito: ${results.processed} documentos procesados${promotionsMessage}`;
+        ? `Procesamiento completado con errores: ${results.processed} éxitos, ${results.failed} fallos${promotionsMessage}${consecutiveMessage}`
+        : `Procesamiento completado con éxito: ${results.processed} documentos procesados${promotionsMessage}${consecutiveMessage}`;
 
       // Actualizar la tarea principal con el resultado
       await TransferTask.findByIdAndUpdate(mapping.taskId, {
@@ -503,6 +630,7 @@ class DynamicTransferService {
           message: finalMessage,
           affectedRecords: results.processed,
           promotionsProcessed: results.promotionsProcessed, // ✅ AGREGAR INFO
+          useCentralizedConsecutives, // ✅ DEBUGGING INFO
           errorDetails: hasErrors
             ? results.details
                 .filter((d) => !d.success)
@@ -522,13 +650,15 @@ class DynamicTransferService {
 
       // 📋 LOGGING FINAL CON ESTADÍSTICAS COMPLETAS
       logger.info(
-        `✅ Procesamiento completado: ${results.processed} éxitos, ${results.failed} fallos${promotionsMessage}`
+        `✅ Procesamiento completado: ${results.processed} éxitos, ${results.failed} fallos${promotionsMessage}${consecutiveMessage}`
       );
 
       return {
         success: true,
         executionId,
         status: finalStatus,
+        useCentralizedConsecutives, // ✅ DEBUGGING INFO
+        centralizedConsecutiveId, // ✅ DEBUGGING INFO
         ...results,
       };
     } catch (error) {
