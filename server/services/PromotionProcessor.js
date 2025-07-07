@@ -174,7 +174,7 @@ class PromotionProcessor {
       PEDIDO_LINEA_BONIF: regularLine ? regularLine.NUM_LN : null,
 
       // Mover cantidad a campo de bonificación
-      CANTIDAD_BONIF: bonusLine.CND_MAX || bonusLine.QTY,
+      CANTIDAD_BONIFICAD: bonusLine.CND_MAX || bonusLine.QTY,
       CANTIDAD_PEDIDA: null,
       CANTIDAD_A_FACTURAR: null,
 
@@ -205,7 +205,7 @@ class PromotionProcessor {
       PEDIDO_LINEA_BONIF: null,
       CANTIDAD_PEDIDA: regularLine.CND_MAX || regularLine.QTY,
       CANTIDAD_A_FACTURAR: regularLine.CND_MAX || regularLine.QTY,
-      CANTIDAD_BONIF: null,
+      CANTIDAD_BONIFICAD: null,
 
       // Marcar como línea que dispara promoción
       _IS_TRIGGER_LINE: true,
@@ -234,7 +234,7 @@ class PromotionProcessor {
       PEDIDO_LINEA_BONIF: null,
       CANTIDAD_PEDIDA: normalLine.CND_MAX || normalLine.QTY,
       CANTIDAD_A_FACTURAR: normalLine.CND_MAX || normalLine.QTY,
-      CANTIDAD_BONIF: null,
+      CANTIDAD_BONIFICAD: null,
 
       _IS_NORMAL_LINE: true,
       _PROMOTION_TYPE: "NONE",
