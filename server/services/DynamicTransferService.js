@@ -8,12 +8,21 @@ const TransferTask = require("../models/transferTaks");
 const ConsecutiveService = require("./ConsecutiveService");
 const PromotionProcessor = require("./PromotionProcessor");
 
+/**
+ * Servicio dinámico de transferencia de datos con soporte completo para promociones
+ * Maneja la transferencia de datos entre bases de datos con procesamiento automático de promociones
+ */
 class DynamicTransferService {
   constructor() {
     this.cancellationSignals = new Map();
   }
+
+  // ===============================
+  // 1. MÉTODOS PRINCIPALES DE PROCESAMIENTO
+  // ===============================
+
   /**
-   * Procesa documentos según una configuración de mapeo
+   * Procesa documentos según una configuración de mapeo (MÉTODO PRINCIPAL)
    * @param {Array} documentIds - IDs de los documentos a procesar
    * @param {string} mappingId - ID de la configuración de mapeo
    * @param {Object} signal - Señal de AbortController para cancelación
@@ -24,10 +33,9 @@ class DynamicTransferService {
     const localAbortController = !signal ? new AbortController() : null;
     signal = signal || localAbortController.signal;
 
-    // Define cancelTaskId at the function level so it's available in all scopes
     const cancelTaskId = `dynamic_process_${mappingId}_${Date.now()}`;
 
-    // Configurar un timeout interno como medida de seguridad
+    // Configurar timeout interno como medida de seguridad
     const timeoutId = setTimeout(() => {
       if (localAbortController) {
         logger.warn(`Timeout interno activado para tarea ${mappingId}`);
@@ -67,7 +75,7 @@ class DynamicTransferService {
 
       // Asegurar configuración por defecto para mappings existentes
       if (!mapping.markProcessedStrategy) {
-        mapping.markProcessedStrategy = "individual"; // Mantener comportamiento actual
+        mapping.markProcessedStrategy = "individual";
       }
 
       if (!mapping.markProcessedConfig) {
@@ -79,118 +87,15 @@ class DynamicTransferService {
         };
       }
 
-      // 2. 🔍 DEBUGGING: Verificar consecutivos centralizados si están configurados
-      logger.info(
-        `🔍 DEBUGGING: Verificando sistema de consecutivos para mapping ${mappingId}`
-      );
-      logger.info(
-        `🔍 mapping.consecutiveConfig existe: ${!!mapping.consecutiveConfig}`
-      );
-      logger.info(
-        `🔍 mapping.consecutiveConfig.enabled: ${mapping.consecutiveConfig?.enabled}`
-      );
-
-      if (mapping.consecutiveConfig?.enabled) {
-        logger.info(
-          `🔍 consecutiveConfig.useCentralizedSystem: ${mapping.consecutiveConfig?.useCentralizedSystem}`
-        );
-        logger.info(
-          `🔍 consecutiveConfig.selectedCentralizedConsecutive: ${mapping.consecutiveConfig?.selectedCentralizedConsecutive}`
-        );
-
-        try {
-          // NUEVO: Verificar si está configurado explícitamente para usar consecutivos centralizados
-          if (
-            mapping.consecutiveConfig.useCentralizedSystem &&
-            mapping.consecutiveConfig.selectedCentralizedConsecutive
-          ) {
-            logger.info(
-              `🔍 Intentando usar consecutivo centralizado configurado explícitamente`
-            );
-            // Verificar que el consecutivo centralizado existe y está activo
-            try {
-              const consecutive = await ConsecutiveService.getConsecutiveById(
-                mapping.consecutiveConfig.selectedCentralizedConsecutive
-              );
-              if (consecutive && consecutive.active) {
-                useCentralizedConsecutives = true;
-                centralizedConsecutiveId =
-                  mapping.consecutiveConfig.selectedCentralizedConsecutive;
-                logger.info(
-                  `✅ Se usará consecutivo centralizado configurado para mapeo ${mappingId}: ${centralizedConsecutiveId}`
-                );
-              } else {
-                logger.warn(
-                  `❌ Consecutivo centralizado ${mapping.consecutiveConfig.selectedCentralizedConsecutive} no está activo o no existe. Usando sistema local.`
-                );
-              }
-            } catch (error) {
-              logger.warn(
-                `❌ Error al verificar consecutivo centralizado configurado: ${error.message}. Usando sistema local.`
-              );
-            }
-          }
-
-          // 3. Registrar en TaskTracker para permitir cancelación
-          TaskTracker.registerTask(
-            cancelTaskId,
-            localAbortController || { abort: () => {} },
-            {
-              type: "dynamicProcess",
-              mappingName: mapping.name,
-              documentIds,
-              promotionsEnabled: shouldUsePromotions, // ✅ AGREGAR INFO DE PROMOCIONES
-            }
-          );
-
-          // Si no se configuró explícitamente, buscar consecutivos asignados automáticamente (compatibilidad hacia atrás)
-          if (!useCentralizedConsecutives) {
-            logger.info(
-              `🔍 Buscando consecutivos asignados automáticamente para mapping ${mappingId}`
-            );
-            const assignedConsecutives =
-              await ConsecutiveService.getConsecutivesByEntity(
-                "mapping",
-                mappingId
-              );
-
-            logger.info(
-              `🔍 Consecutivos encontrados: ${
-                assignedConsecutives?.length || 0
-              }`
-            );
-            if (assignedConsecutives && assignedConsecutives.length > 0) {
-              logger.info(
-                `🔍 Usando primer consecutivo encontrado: ${assignedConsecutives[0]._id}`
-              );
-              useCentralizedConsecutives = true;
-              centralizedConsecutiveId = assignedConsecutives[0]._id;
-              logger.info(
-                `✅ Se usará consecutivo centralizado asignado para mapeo ${mappingId}: ${centralizedConsecutiveId}`
-              );
-            } else {
-              logger.info(
-                `❌ No se encontraron consecutivos centralizados para ${mappingId}. Se usará el sistema local.`
-              );
-            }
-          }
-        } catch (consecError) {
-          logger.warn(
-            `❌ Error al verificar consecutivos centralizados: ${consecError.message}. Usando sistema local.`
-          );
-        }
-      } else {
-        logger.info(
-          `❌ Consecutivos deshabilitados en la configuración del mapping`
-        );
-      }
-
-      logger.info(
-        `🔍 RESULTADO: useCentralizedConsecutives = ${useCentralizedConsecutives}`
-      );
-      logger.info(
-        `🔍 RESULTADO: centralizedConsecutiveId = ${centralizedConsecutiveId}`
-      );
+      // 2. Verificar consecutivos centralizados
+      await this.setupCentralizedConsecutives(mapping, mappingId)
+        .then((result) => {
+          useCentralizedConsecutives = result.useCentralized;
+          centralizedConsecutiveId = result.consecutiveId;
+        })
+        .catch((error) => {
+          logger.warn(`Error al configurar consecutivos: ${error.message}`);
+        });
 
       // 3. Registrar en TaskTracker para permitir cancelación
       TaskTracker.registerTask(
@@ -200,7 +105,7 @@ class DynamicTransferService {
           type: "dynamicProcess",
           mappingName: mapping.name,
           documentIds,
-          promotionsEnabled: shouldUsePromotions, // ✅ AGREGAR INFO DE PROMOCIONES
+          promotionsEnabled: shouldUsePromotions,
         }
       );
 
@@ -213,9 +118,9 @@ class DynamicTransferService {
         details: {
           documentIds,
           mappingId,
-          promotionsEnabled: shouldUsePromotions, // ✅ AGREGAR INFO DE PROMOCIONES
-          useCentralizedConsecutives, // ✅ DEBUGGING INFO
-          centralizedConsecutiveId, // ✅ DEBUGGING INFO
+          promotionsEnabled: shouldUsePromotions,
+          useCentralizedConsecutives,
+          centralizedConsecutiveId,
         },
       });
 
@@ -223,25 +128,9 @@ class DynamicTransferService {
       executionId = taskExecution._id;
 
       // 5. Establecer conexiones
-      sourceConnection = await ConnectionService.getConnection(
-        mapping.sourceServer
-      );
-      if (!sourceConnection) {
-        throw new Error(
-          `No se pudo conectar al servidor origen: ${mapping.sourceServer}`
-        );
-      }
-
-      targetConnection = await ConnectionService.getConnection(
-        mapping.targetServer
-      );
-      if (!targetConnection) {
-        throw new Error(
-          `No se pudo conectar al servidor destino: ${mapping.targetServer}`
-        );
-      }
-
-      logger.info(`Conexiones establecidas correctamente`);
+      const connections = await this.establishConnections(mapping);
+      sourceConnection = connections.source;
+      targetConnection = connections.target;
 
       // 6. Actualizar tarea principal como "en ejecución"
       if (mapping.taskId) {
@@ -259,7 +148,7 @@ class DynamicTransferService {
         details: [],
         byType: {},
         consecutivesUsed: [],
-        promotionsProcessed: 0, // ✅ CONTADOR DE PROMOCIONES
+        promotionsProcessed: 0,
       };
 
       const successfulDocuments = [];
@@ -290,95 +179,15 @@ class DynamicTransferService {
             }`
           );
 
-          // 🔍 GENERAR CONSECUTIVO SEGÚN EL SISTEMA DETERMINADO CON DEBUGGING
+          // Generar consecutivo si es necesario
           if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
-            logger.info(
-              `🔍 Generando consecutivo para documento ${documentId}`
-            );
-            logger.info(
-              `🔍 Sistema a usar: ${
-                useCentralizedConsecutives ? "CENTRALIZADO" : "LOCAL"
-              }`
-            );
-
-            if (useCentralizedConsecutives) {
-              try {
-                logger.info(
-                  `🔍 Reservando consecutivo centralizado ${centralizedConsecutiveId} para documento ${documentId}`
-                );
-
-                const reservation =
-                  await ConsecutiveService.reserveConsecutiveValues(
-                    centralizedConsecutiveId,
-                    1,
-                    { segment: null },
-                    { id: mapping._id.toString(), name: "mapping" }
-                  );
-
-                currentConsecutive = {
-                  value: reservation.values[0].numeric,
-                  formatted: reservation.values[0].formatted,
-                  isCentralized: true,
-                  reservationId: reservation.reservationId,
-                };
-
-                logger.info(
-                  `✅ Consecutivo centralizado reservado para documento ${documentId}: ${currentConsecutive.formatted}`
-                );
-              } catch (consecError) {
-                logger.error(
-                  `❌ Error generando consecutivo centralizado para documento ${documentId}: ${consecError.message}`
-                );
-                failedDocuments.push(documentId);
-                results.failed++;
-                results.details.push({
-                  documentId,
-                  success: false,
-                  error: `Error generando consecutivo centralizado: ${consecError.message}`,
-                  errorDetails: consecError.stack,
-                });
-                continue;
-              }
-            } else {
-              try {
-                logger.info(
-                  `🔍 Generando consecutivo local para documento ${documentId}`
-                );
-                currentConsecutive = await this.generateLocalConsecutive(
-                  mapping
-                );
-                if (currentConsecutive) {
-                  logger.info(
-                    `✅ Consecutivo local generado para documento ${documentId}: ${currentConsecutive.formatted}`
-                  );
-                }
-              } catch (consecError) {
-                logger.error(
-                  `❌ Error generando consecutivo local para documento ${documentId}: ${consecError.message}`
-                );
-                failedDocuments.push(documentId);
-                results.failed++;
-                results.details.push({
-                  documentId,
-                  success: false,
-                  error: `Error generando consecutivo local: ${consecError.message}`,
-                  errorDetails: consecError.stack,
-                });
-                continue;
-              }
-            }
-          } else {
-            logger.info(
-              `🔍 Consecutivos deshabilitados, procesando documento ${documentId} sin consecutivo`
+            currentConsecutive = await this.generateConsecutiveForDocument(
+              mapping,
+              documentId,
+              useCentralizedConsecutives,
+              centralizedConsecutiveId
             );
           }
-
-          // 🔍 DEBUGGING: Verificar que el consecutivo llegue al procesamiento
-          logger.info(
-            `🔍 Consecutivo para procesamiento: ${
-              currentConsecutive ? currentConsecutive.formatted : "NULL"
-            }`
-          );
 
           // 🧠 PROCESAR DOCUMENTO CON DETECCIÓN AUTOMÁTICA DE PROMOCIONES
           const docResult = await this.processSingleDocumentSimple(
@@ -389,589 +198,92 @@ class DynamicTransferService {
             currentConsecutive
           );
 
-          // CONFIRMAR O CANCELAR RESERVA DE CONSECUTIVO CENTRALIZADO
-          if (
-            useCentralizedConsecutives &&
-            currentConsecutive &&
-            currentConsecutive.reservationId
-          ) {
-            if (docResult.success) {
-              await ConsecutiveService.commitReservation(
-                centralizedConsecutiveId,
-                currentConsecutive.reservationId,
-                [
-                  {
-                    numeric: currentConsecutive.value,
-                    formatted: currentConsecutive.formatted,
-                  },
-                ]
-              );
-              logger.info(
-                `✅ Reserva confirmada para documento ${documentId}: ${currentConsecutive.formatted}`
-              );
-            } else {
-              await ConsecutiveService.cancelReservation(
-                centralizedConsecutiveId,
-                currentConsecutive.reservationId
-              );
-              logger.info(
-                `❌ Reserva cancelada para documento fallido ${documentId}: ${currentConsecutive.formatted}`
-              );
-            }
-          }
-
-          // PROCESAR RESULTADOS
-          if (docResult.success) {
-            successfulDocuments.push(documentId);
-            results.processed++;
-
-            // 📊 NUEVO: Contar promociones aplicadas automáticamente
-            if (docResult.promotionsApplied) {
-              results.promotionsProcessed++;
-              logger.info(
-                `✅ Promociones aplicadas automáticamente en documento ${documentId}`
-              );
-            }
-
-            if (!results.byType[docResult.documentType]) {
-              results.byType[docResult.documentType] = {
-                processed: 0,
-                failed: 0,
-              };
-            }
-            results.byType[docResult.documentType].processed++;
-
-            if (docResult.consecutiveUsed) {
-              results.consecutivesUsed.push({
-                documentId,
-                consecutive: docResult.consecutiveUsed,
-              });
-            }
-
-            // NUEVA LÓGICA: Marcado individual solo si está configurado así
-            if (
-              mapping.markProcessedStrategy === "individual" &&
-              mapping.markProcessedField
-            ) {
-              try {
-                await this.markDocumentsAsProcessed(
-                  [documentId],
-                  mapping,
-                  sourceConnection,
-                  true
-                );
-                logger.debug(
-                  `✅ Documento ${documentId} marcado individualmente como procesado`
-                );
-              } catch (markError) {
-                logger.warn(
-                  `⚠️ Error al marcar documento ${documentId}: ${markError.message}`
-                );
-                // No detener el proceso por errores de marcado
-              }
-            }
-          } else {
-            hasErrors = true;
-            results.failed++;
-            failedDocuments.push(documentId);
-
-            if (docResult.documentType) {
-              if (!results.byType[docResult.documentType]) {
-                results.byType[docResult.documentType] = {
-                  processed: 0,
-                  failed: 0,
-                };
-              }
-              results.byType[docResult.documentType].failed++;
-            }
-          }
-
-          results.details.push({
+          // Manejar resultado del documento
+          await this.handleDocumentResult(
+            docResult,
             documentId,
-            ...docResult,
-          });
-
-          // 📊 LOGGING MEJORADO CON INFORMACIÓN DE PROMOCIONES
-          logger.info(
-            `Documento ${documentId} procesado: ${
-              docResult.success ? "✅ ÉXITO" : "❌ ERROR"
-            }${
-              docResult.promotionsApplied
-                ? " (con promociones automáticas)"
-                : ""
-            }${
-              currentConsecutive
-                ? ` (consecutivo: ${currentConsecutive.formatted})`
-                : ""
-            }`
+            currentConsecutive,
+            useCentralizedConsecutives,
+            centralizedConsecutiveId,
+            results,
+            successfulDocuments,
+            failedDocuments,
+            mapping,
+            sourceConnection
           );
 
           // Actualizar progreso
           if (mapping.taskId) {
             const progress = Math.round(((i + 1) / documentIds.length) * 100);
-            await TransferTask.findByIdAndUpdate(mapping.taskId, {
-              progress,
-            });
+            await TransferTask.findByIdAndUpdate(mapping.taskId, { progress });
           }
         } catch (error) {
           hasErrors = true;
-          failedDocuments.push(documentId);
-          results.failed++;
-
-          results.details.push({
+          await this.handleDocumentError(
+            error,
             documentId,
-            success: false,
-            error: error.message,
-            errorDetails: error.stack,
-          });
-
-          logger.error(`❌ Error al procesar documento ${documentId}:`, error);
-
-          // Cancelar reserva si hubo error
-          if (
-            useCentralizedConsecutives &&
-            currentConsecutive &&
-            currentConsecutive.reservationId
-          ) {
-            try {
-              await ConsecutiveService.cancelReservation(
-                centralizedConsecutiveId,
-                currentConsecutive.reservationId
-              );
-              logger.info(
-                `❌ Reserva cancelada por error en documento ${documentId}: ${currentConsecutive.formatted}`
-              );
-            } catch (cancelError) {
-              logger.error(
-                `❌ Error cancelando reserva para documento ${documentId}: ${cancelError.message}`
-              );
-            }
-          }
+            currentConsecutive,
+            useCentralizedConsecutives,
+            centralizedConsecutiveId,
+            results,
+            failedDocuments
+          );
         }
       }
 
-      // 9. MARCADO MASIVO si está configurado así
-      if (
-        mapping.markProcessedStrategy === "batch" &&
-        mapping.markProcessedField &&
-        successfulDocuments.length > 0
-      ) {
-        try {
-          logger.info(
-            `Marcando ${successfulDocuments.length} documentos exitosos como procesados (modo batch)`
-          );
-          await this.markDocumentsAsProcessed(
-            successfulDocuments,
-            mapping,
-            sourceConnection,
-            true
-          );
-          logger.info("✅ Marcado masivo completado exitosamente");
-        } catch (markError) {
-          logger.warn(`⚠️ Error en marcado masivo: ${markError.message}`);
-          // No afectar el resultado principal
-        }
-      }
+      // 9. Procesos post-procesamiento
+      await this.executePostProcessing(
+        mapping,
+        successfulDocuments,
+        failedDocuments,
+        hasErrors,
+        sourceConnection,
+        results
+      );
 
-      // 10. ROLLBACK si está configurado y hay errores
-      if (
-        hasErrors &&
-        mapping.markProcessedConfig?.allowRollback &&
-        successfulDocuments.length > 0
-      ) {
-        try {
-          logger.warn(
-            `Ejecutando rollback para ${successfulDocuments.length} documentos debido a errores`
-          );
-          await this.markDocumentsAsProcessed(
-            successfulDocuments,
-            mapping,
-            sourceConnection,
-            false
-          );
-          logger.info("✅ Rollback ejecutado exitosamente");
-          results.rollbackExecuted = true;
-        } catch (rollbackError) {
-          logger.error(`❌ Error en rollback: ${rollbackError.message}`);
-          results.rollbackError = rollbackError.message;
-        }
-      }
-
-      // 11. FINALIZACIÓN Y ACTUALIZACIÓN DE ESTADÍSTICAS
-      const executionTime = Date.now() - startTime;
-
-      // Determinar el estado correcto basado en los resultados
-      let finalStatus = "completed";
-      if (results.processed === 0 && results.failed > 0) {
-        finalStatus = "failed";
-      } else if (results.failed > 0) {
-        finalStatus = "partial";
-      }
-
-      // Actualizar el registro de ejecución
-      await TaskExecution.findByIdAndUpdate(executionId, {
-        status: finalStatus,
-        executionTime,
-        totalRecords: documentIds.length,
-        successfulRecords: results.processed,
-        failedRecords: results.failed,
-        promotionsProcessed: results.promotionsProcessed, // ✅ AGREGAR CONTADOR
-        useCentralizedConsecutives, // ✅ DEBUGGING INFO
-        centralizedConsecutiveId, // ✅ DEBUGGING INFO
-        details: results,
-      });
-
-      // 📊 MENSAJE FINAL CON INFORMACIÓN DE PROMOCIONES
-      const promotionsMessage =
-        results.promotionsProcessed > 0
-          ? `, promociones aplicadas automáticamente: ${results.promotionsProcessed}`
-          : "";
-
-      const consecutiveMessage = useCentralizedConsecutives
-        ? ` (consecutivos centralizados)`
-        : ` (consecutivos locales)`;
-
-      const finalMessage = hasErrors
-        ? `Procesamiento completado con errores: ${results.processed} éxitos, ${results.failed} fallos${promotionsMessage}${consecutiveMessage}`
-        : `Procesamiento completado con éxito: ${results.processed} documentos procesados${promotionsMessage}${consecutiveMessage}`;
-
-      // Actualizar la tarea principal con el resultado
-      await TransferTask.findByIdAndUpdate(mapping.taskId, {
-        status: finalStatus,
-        progress: 100,
-        lastExecutionDate: new Date(),
-        lastExecutionResult: {
-          success: !hasErrors,
-          message: finalMessage,
-          affectedRecords: results.processed,
-          promotionsProcessed: results.promotionsProcessed, // ✅ AGREGAR INFO
-          useCentralizedConsecutives, // ✅ DEBUGGING INFO
-          errorDetails: hasErrors
-            ? results.details
-                .filter((d) => !d.success)
-                .map(
-                  (d) =>
-                    `Documento ${d.documentId}: ${
-                      d.message || d.error || "Error no especificado"
-                    }`
-                )
-                .join("\n")
-            : null,
-        },
-      });
+      // 10. Finalización y estadísticas
+      const finalResult = await this.finalizationAndStats(
+        executionId,
+        mapping,
+        results,
+        hasErrors,
+        useCentralizedConsecutives,
+        centralizedConsecutiveId,
+        startTime
+      );
 
       clearTimeout(timeoutId);
-      TaskTracker.completeTask(cancelTaskId, finalStatus);
-
-      // 📋 LOGGING FINAL CON ESTADÍSTICAS COMPLETAS
-      logger.info(
-        `✅ Procesamiento completado: ${results.processed} éxitos, ${results.failed} fallos${promotionsMessage}${consecutiveMessage}`
-      );
+      TaskTracker.completeTask(cancelTaskId, finalResult.status);
 
       return {
         success: true,
         executionId,
-        status: finalStatus,
-        useCentralizedConsecutives, // ✅ DEBUGGING INFO
-        centralizedConsecutiveId, // ✅ DEBUGGING INFO
-        ...results,
+        useCentralizedConsecutives,
+        centralizedConsecutiveId,
+        ...finalResult,
       };
     } catch (error) {
-      // Limpiar timeout
-      clearTimeout(timeoutId);
-
-      // Verificar si fue cancelado
-      if (signal?.aborted) {
-        logger.info("Tarea cancelada por el usuario");
-
-        if (executionId) {
-          await TaskExecution.findByIdAndUpdate(executionId, {
-            status: "cancelled",
-            executionTime: Date.now() - startTime,
-            errorMessage: "Cancelada por el usuario",
-          });
-        }
-
-        if (mapping?.taskId) {
-          await TransferTask.findByIdAndUpdate(mapping.taskId, {
-            status: "cancelled",
-            progress: -1,
-            lastExecutionResult: {
-              success: false,
-              message: "Tarea cancelada por el usuario",
-            },
-          });
-        }
-
-        TaskTracker.completeTask(
-          cancelTaskId || `dynamic_process_${mappingId}`,
-          "cancelled"
-        );
-
-        return {
-          success: false,
-          message: "Tarea cancelada por el usuario",
-          executionId,
-        };
-      }
-
-      logger.error(`Error al procesar documentos: ${error.message}`);
-
-      // Actualizar el registro de ejecución en caso de error
-      if (executionId) {
-        await TaskExecution.findByIdAndUpdate(executionId, {
-          status: "failed",
-          executionTime: Date.now() - startTime,
-          errorMessage: error.message,
-        });
-      }
-
-      // Actualizar la tarea principal con el error
-      if (mapping?.taskId) {
-        await TransferTask.findByIdAndUpdate(mapping.taskId, {
-          status: "failed",
-          progress: -1,
-          lastExecutionResult: {
-            success: false,
-            message: `Error: ${error.message}`,
-            errorDetails: error.stack,
-          },
-        });
-      }
-
-      TaskTracker.completeTask(
-        cancelTaskId || `dynamic_process_${mappingId}`,
-        "failed"
-      );
-
-      throw error;
-    } finally {
-      // Cerrar conexiones de forma segura
-      if (sourceConnection || targetConnection) {
-        logger.info("Liberando conexiones...");
-
-        const releasePromises = [];
-
-        if (sourceConnection) {
-          releasePromises.push(
-            ConnectionService.releaseConnection(sourceConnection).catch((e) =>
-              logger.error(`Error al liberar conexión origen: ${e.message}`)
-            )
-          );
-        }
-
-        if (targetConnection) {
-          releasePromises.push(
-            ConnectionService.releaseConnection(targetConnection).catch((e) =>
-              logger.error(`Error al liberar conexión destino: ${e.message}`)
-            )
-          );
-        }
-
-        await Promise.allSettled(releasePromises);
-        logger.info("Conexiones liberadas correctamente");
-      }
-
-      clearTimeout(timeoutId);
-    }
-  }
-
-  /**
-   * Procesa un documento con soporte para promociones
-   * @param {string} documentId - ID del documento
-   * @param {Object} mapping - Configuración de mapeo
-   * @param {Object} sourceConnection - Conexión a servidor origen
-   * @param {Object} targetConnection - Conexión a servidor destino
-   * @param {boolean} useCentralizedConsecutives - Si usar consecutivos centralizados
-   * @param {string} centralizedConsecutiveId - ID del consecutivo centralizado
-   * @returns {Promise<Object>} - Resultado del procesamiento
-   */
-  async processSingleDocumentWithPromotions(
-    documentId,
-    mapping,
-    sourceConnection,
-    targetConnection,
-    useCentralizedConsecutives = false,
-    centralizedConsecutiveId = null
-  ) {
-    let processedTables = [];
-    let documentType = "unknown";
-
-    try {
-      logger.info(
-        `Procesando documento ${documentId} con soporte para promociones`
-      );
-
-      // Create column length cache
-      const columnLengthCache = new Map();
-
-      // 1. Identificar las tablas principales (no de detalle)
-      const mainTables = mapping.tableConfigs.filter((tc) => !tc.isDetailTable);
-
-      if (mainTables.length === 0) {
-        return {
-          success: false,
-          message: "No se encontraron configuraciones de tablas principales",
-          documentType,
-          consecutiveUsed: null,
-          consecutiveValue: null,
-        };
-      }
-
-      // Ordenar tablas por executionOrder si está definido
-      const orderedMainTables = [...mainTables].sort(
-        (a, b) => (a.executionOrder || 0) - (b.executionOrder || 0)
-      );
-      logger.info(
-        `Procesando ${
-          orderedMainTables.length
-        } tablas principales en orden: ${orderedMainTables
-          .map((t) => t.name)
-          .join(" -> ")}`
-      );
-
-      // 2. Generar consecutivo si es necesario
-      let currentConsecutive = null;
-      if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
-        logger.info("Generando consecutivo para documento...");
-        currentConsecutive = await this.generateConsecutive(
-          mapping,
-          useCentralizedConsecutives,
-          centralizedConsecutiveId
-        );
-        logger.info(`Consecutivo generado: ${currentConsecutive.formatted}`);
-      }
-
-      // 3. Procesar cada tabla principal
-      for (const tableConfig of orderedMainTables) {
-        // Obtener datos de la tabla de origen
-        let sourceData;
-
-        try {
-          sourceData = await this.getSourceData(
-            documentId,
-            tableConfig,
-            sourceConnection
-          );
-
-          if (!sourceData) {
-            logger.warn(
-              `No se encontraron datos en ${tableConfig.sourceTable} para documento ${documentId}`
-            );
-            continue;
-          }
-
-          logger.debug(
-            `Datos de origen obtenidos: ${JSON.stringify(sourceData)}`
-          );
-        } catch (error) {
-          logger.error(
-            `Error al obtener datos de origen para documento ${documentId}: ${error.message}`
-          );
-          throw new Error(`Error al obtener datos de origen: ${error.message}`);
-        }
-
-        // Procesar dependencias de foreign key ANTES de insertar datos principales
-        try {
-          if (
-            mapping.foreignKeyDependencies &&
-            mapping.foreignKeyDependencies.length > 0
-          ) {
-            logger.info(
-              `Verificando ${mapping.foreignKeyDependencies.length} dependencias de foreign key para documento ${documentId}`
-            );
-            await this.processForeignKeyDependencies(
-              documentId,
-              mapping,
-              sourceConnection,
-              targetConnection,
-              sourceData
-            );
-            logger.info(
-              `Dependencias de foreign key procesadas exitosamente para documento ${documentId}`
-            );
-          }
-        } catch (depError) {
-          logger.error(
-            `Error en dependencias de foreign key para documento ${documentId}: ${depError.message}`
-          );
-          throw new Error(`Error en dependencias: ${depError.message}`);
-        }
-
-        // 4. Determinar el tipo de documento basado en las reglas
-        documentType = this.determineDocumentType(
-          mapping.documentTypeRules,
-          sourceData
-        );
-        if (documentType !== "unknown") {
-          logger.info(`Tipo de documento determinado: ${documentType}`);
-        }
-
-        // 5. Insertar datos principales
-        await this.processTable(
-          tableConfig,
-          sourceData,
-          sourceData,
-          targetConnection,
-          currentConsecutive,
-          mapping,
-          documentId,
-          columnLengthCache,
-          false // isDetailTable = false
-        );
-
-        logger.info(`Insertados datos principales en ${tableConfig.name}`);
-        processedTables.push(tableConfig.name);
-
-        // 6. Procesar tablas de detalle con promociones
-        const detailTables = mapping.tableConfigs.filter(
-          (tc) =>
-            tc.isDetailTable &&
-            (!tc.parentTableRef || tc.parentTableRef === tableConfig.name)
-        );
-
-        if (detailTables.length > 0) {
-          await this.processDetailTablesWithPromotions(
-            detailTables,
-            documentId,
-            sourceData,
-            tableConfig,
-            sourceConnection,
-            targetConnection,
-            currentConsecutive,
-            mapping,
-            columnLengthCache,
-            processedTables
-          );
-        }
-      }
-
-      return {
-        success: true,
-        message: "Documento procesado exitosamente",
-        documentType,
-        consecutiveUsed: currentConsecutive
-          ? currentConsecutive.formatted
-          : null,
-        consecutiveValue: currentConsecutive ? currentConsecutive.value : null,
-      };
-    } catch (error) {
-      return this.handleProcessingError(
+      return await this.handleProcessingError(
         error,
-        documentId,
-        currentConsecutive,
-        mapping
+        signal,
+        executionId,
+        mapping,
+        cancelTaskId,
+        timeoutId,
+        startTime
       );
+    } finally {
+      await this.cleanup(sourceConnection, targetConnection, timeoutId);
     }
   }
 
   /**
-   * Procesa un único documento según la configuración (CON DETECCIÓN AUTOMÁTICA DE PROMOCIONES)
+   * Procesa un único documento con detección automática de promociones
    * @param {string} documentId - ID del documento
    * @param {Object} mapping - Configuración de mapeo
    * @param {Object} sourceConnection - Conexión a servidor origen
    * @param {Object} targetConnection - Conexión a servidor destino
-   * @param {Object} currentConsecutive - Consecutivo generado previamente (opcional)
+   * @param {Object} currentConsecutive - Consecutivo generado previamente
    * @returns {Promise<Object>} - Resultado del procesamiento
    */
   async processSingleDocumentSimple(
@@ -990,7 +302,6 @@ class DynamicTransferService {
         `Procesando documento ${documentId} (detección automática de promociones)`
       );
 
-      // Create column length cache
       const columnLengthCache = new Map();
 
       // 🧠 DETECCIÓN AUTOMÁTICA: Determinar si debe usar promociones
@@ -999,23 +310,6 @@ class DynamicTransferService {
       if (shouldUsePromotions) {
         logger.info(
           `🎁 DETECCIÓN AUTOMÁTICA: Promociones habilitadas para documento ${documentId}`
-        );
-      }
-
-      console.log("🔧 DEBUG MAPPING COMPLETO:");
-      console.log("🔧 mapping.name:", mapping.name);
-      console.log(
-        "🔧 mapping.promotionConfig existe:",
-        !!mapping.promotionConfig
-      );
-      if (mapping.promotionConfig) {
-        console.log(
-          "🔧 mapping.promotionConfig.enabled:",
-          mapping.promotionConfig.enabled
-        );
-        console.log(
-          "🔧 mapping.promotionConfig completo:",
-          JSON.stringify(mapping.promotionConfig, null, 2)
         );
       }
 
@@ -1032,7 +326,7 @@ class DynamicTransferService {
         };
       }
 
-      // Ordenar tablas por executionOrder si está definido
+      // Ordenar tablas por executionOrder
       const orderedMainTables = [...mainTables].sort(
         (a, b) => (a.executionOrder || 0) - (b.executionOrder || 0)
       );
@@ -1047,61 +341,35 @@ class DynamicTransferService {
 
       // 2. Procesar cada tabla principal
       for (const tableConfig of orderedMainTables) {
-        // Obtener datos de la tabla de origen usando el método existente
-        let sourceData;
+        // Obtener datos de la tabla de origen
+        const sourceData = await this.getSourceData(
+          documentId,
+          tableConfig,
+          sourceConnection
+        );
 
-        try {
-          sourceData = await this.getSourceData(
-            documentId,
-            tableConfig,
-            sourceConnection
+        if (!sourceData) {
+          logger.warn(
+            `No se encontraron datos en ${tableConfig.sourceTable} para documento ${documentId}`
           );
-
-          if (!sourceData) {
-            logger.warn(
-              `No se encontraron datos en ${tableConfig.sourceTable} para documento ${documentId}`
-            );
-            continue;
-          }
-
-          logger.debug(
-            `Datos de origen obtenidos: ${JSON.stringify(sourceData)}`
-          );
-        } catch (error) {
-          logger.error(
-            `Error al obtener datos de origen para documento ${documentId}: ${error.message}`
-          );
-          throw new Error(`Error al obtener datos de origen: ${error.message}`);
+          continue;
         }
 
         // Procesar dependencias de foreign key ANTES de insertar datos principales
-        try {
-          if (
-            mapping.foreignKeyDependencies &&
-            mapping.foreignKeyDependencies.length > 0
-          ) {
-            logger.info(
-              `Verificando ${mapping.foreignKeyDependencies.length} dependencias de foreign key para documento ${documentId}`
-            );
-            await this.processForeignKeyDependencies(
-              documentId,
-              mapping,
-              sourceConnection,
-              targetConnection,
-              sourceData
-            );
-            logger.info(
-              `Dependencias de foreign key procesadas exitosamente para documento ${documentId}`
-            );
-          }
-        } catch (depError) {
-          logger.error(
-            `Error en dependencias de foreign key para documento ${documentId}: ${depError.message}`
+        if (
+          mapping.foreignKeyDependencies &&
+          mapping.foreignKeyDependencies.length > 0
+        ) {
+          await this.processForeignKeyDependencies(
+            documentId,
+            mapping,
+            sourceConnection,
+            targetConnection,
+            sourceData
           );
-          throw new Error(`Error en dependencias: ${depError.message}`);
         }
 
-        // 3. Determinar el tipo de documento basado en las reglas
+        // 3. Determinar el tipo de documento
         documentType = this.determineDocumentType(
           mapping.documentTypeRules,
           sourceData
@@ -1123,9 +391,7 @@ class DynamicTransferService {
           false // isDetailTable = false
         );
 
-        logger.info(
-          `Insertados datos principales en ${tableConfig.name} sin transacción`
-        );
+        logger.info(`Insertados datos principales en ${tableConfig.name}`);
         processedTables.push(tableConfig.name);
 
         // 5. 🧠 PROCESAMIENTO INTELIGENTE DE TABLAS DE DETALLE
@@ -1189,14 +455,14 @@ class DynamicTransferService {
           ? "Documento procesado exitosamente con promociones aplicadas automáticamente"
           : "Documento procesado exitosamente",
         documentType,
-        promotionsApplied, // ✅ INCLUIR INFORMACIÓN DE PROMOCIONES
+        promotionsApplied,
         consecutiveUsed: currentConsecutive
           ? currentConsecutive.formatted
           : null,
         consecutiveValue: currentConsecutive ? currentConsecutive.value : null,
       };
     } catch (error) {
-      return this.handleProcessingError(
+      return this.handleSingleDocumentError(
         error,
         documentId,
         currentConsecutive,
@@ -1205,9 +471,103 @@ class DynamicTransferService {
     }
   }
 
+  // ===============================
+  // 2. MÉTODOS DE PROMOCIONES
+  // ===============================
+
+  /**
+   * Determina si se deben usar promociones para este mapping
+   * @param {Object} mapping - Configuración de mapping
+   * @returns {boolean} - Si se deben usar promociones
+   */
+  shouldUsePromotions(mapping) {
+    try {
+      console.log("🔍 DEBUG shouldUsePromotions - INICIANDO");
+      console.log("🔍 mapping.name:", mapping.name);
+      console.log("🔍 mapping.promotionConfig:", mapping.promotionConfig);
+
+      // 1. Verificar si las promociones están habilitadas
+      if (!mapping.promotionConfig || !mapping.promotionConfig.enabled) {
+        console.log("🔍 DEBUG: Promociones deshabilitadas");
+        return false;
+      }
+
+      // 2. Validar configuración de promociones
+      if (!PromotionProcessor.validatePromotionConfig(mapping)) {
+        console.log("🔍 DEBUG: Configuración inválida");
+        logger.warn("Configuración de promociones inválida");
+        return false;
+      }
+
+      // 3. Verificar que existan tablas de detalle
+      const detailTables =
+        mapping.tableConfigs?.filter((tc) => tc.isDetailTable) || [];
+      console.log(
+        "🔍 DEBUG: Tablas de detalle encontradas:",
+        detailTables.length
+      );
+
+      if (detailTables.length === 0) {
+        console.log("🔍 DEBUG: No hay tablas de detalle");
+        return false;
+      }
+
+      console.log("🔍 DEBUG: ✅ Promociones activadas");
+      logger.info(
+        "✅ Condiciones para promociones cumplidas - activando procesamiento automático"
+      );
+      return true;
+    } catch (error) {
+      console.log("🔍 DEBUG: Error en shouldUsePromotions:", error.message);
+      logger.error(`Error al verificar promociones: ${error.message}`);
+      return false;
+    }
+  }
+
+  /**
+   * Obtiene configuración de campos de promociones desde el mapping
+   * @param {Object} mapping - Configuración de mapping
+   * @returns {Object} - Configuración de campos
+   */
+  getPromotionFieldConfiguration(mapping) {
+    const defaultConfig = {
+      bonusField: "ART_BON",
+      referenceField: "COD_ART_RFR",
+      discountField: "MON_DSC",
+      lineNumberField: "NUM_LN",
+      articleField: "COD_ART",
+      quantityField: "CND_MAX",
+      bonusLineRef: "PEDIDO_LINEA_BONIF",
+      orderedQuantity: "CANTIDAD_PEDIDA",
+      invoiceQuantity: "CANTIDAD_A_FACTURAR",
+      bonusQuantity: "CANTIDAD_BONIFICAD",
+    };
+
+    // Combinar con configuración del mapping si existe
+    if (mapping.promotionConfig) {
+      return {
+        ...defaultConfig,
+        ...mapping.promotionConfig.detectFields,
+        ...mapping.promotionConfig.targetFields,
+      };
+    }
+
+    return defaultConfig;
+  }
+
   /**
    * Procesa las tablas de detalle con soporte para promociones
-   * @private
+   * @param {Array} detailTables - Tablas de detalle a procesar
+   * @param {string} documentId - ID del documento
+   * @param {Object} sourceData - Datos del encabezado
+   * @param {Object} parentTableConfig - Configuración de la tabla padre
+   * @param {Object} sourceConnection - Conexión origen
+   * @param {Object} targetConnection - Conexión destino
+   * @param {Object} currentConsecutive - Consecutivo actual
+   * @param {Object} mapping - Configuración de mapping
+   * @param {Map} columnLengthCache - Cache de longitudes de columnas
+   * @param {Array} processedTables - Tablas ya procesadas
+   * @returns {Promise<Object>} - Resultado del procesamiento
    */
   async processDetailTablesWithPromotions(
     detailTables,
@@ -1267,10 +627,6 @@ class DynamicTransferService {
         logger.info(
           `✅ Promociones detectadas y aplicadas automáticamente en tabla ${detailConfig.name}`
         );
-      } else {
-        logger.debug(
-          `ℹ️ No se encontraron promociones en los datos de tabla ${detailConfig.name}`
-        );
       }
 
       logger.info(
@@ -1292,10 +648,6 @@ class DynamicTransferService {
           columnLengthCache,
           true // isDetailTable = true
         );
-
-        logger.debug(
-          `✅ INSERCIÓN EXITOSA DE DETALLE en ${detailConfig.targetTable}`
-        );
       }
 
       logger.info(
@@ -1304,15 +656,24 @@ class DynamicTransferService {
       processedTables.push(detailConfig.name);
     }
 
-    // ✅ RETORNAR INFORMACIÓN DE PROMOCIONES APLICADAS
     return {
       promotionsApplied: totalPromotionsApplied,
     };
   }
 
   /**
-   * Procesa las tablas de detalle con detección automática de promociones
-   * @private
+   * Procesa las tablas de detalle SIN promociones (método estándar)
+   * @param {Array} detailTables - Tablas de detalle a procesar
+   * @param {string} documentId - ID del documento
+   * @param {Object} sourceData - Datos del encabezado
+   * @param {Object} parentTableConfig - Configuración de la tabla padre
+   * @param {Object} sourceConnection - Conexión origen
+   * @param {Object} targetConnection - Conexión destino
+   * @param {Object} currentConsecutive - Consecutivo actual
+   * @param {Object} mapping - Configuración de mapping
+   * @param {Map} columnLengthCache - Cache de longitudes de columnas
+   * @param {Array} processedTables - Tablas ya procesadas
+   * @returns {Promise<Object>} - Resultado del procesamiento
    */
   async processDetailTables(
     detailTables,
@@ -1331,74 +692,24 @@ class DynamicTransferService {
       (a, b) => (a.executionOrder || 0) - (b.executionOrder || 0)
     );
 
-    // 🔍 DETECCIÓN AUTOMÁTICA DE PROMOCIONES
-    const shouldProcessPromotions = this.shouldUsePromotions(mapping);
-
-    if (shouldProcessPromotions) {
-      logger.info(
-        `🎁 DETECCIÓN AUTOMÁTICA: Promociones habilitadas para mapping ${mapping.name}`
-      );
-    } else {
-      logger.info(
-        `📋 PROCESAMIENTO ESTÁNDAR: Sin promociones para mapping ${mapping.name}`
-      );
-    }
-
     logger.info(
       `Procesando ${
         orderedDetailTables.length
       } tablas de detalle en orden: ${orderedDetailTables
         .map((t) => t.name)
-        .join(" -> ")} ${
-        shouldProcessPromotions ? "(CON PROMOCIONES)" : "(ESTÁNDAR)"
-      }`
+        .join(" -> ")} (ESTÁNDAR)`
     );
-
-    let totalPromotionsApplied = false;
 
     for (const detailConfig of orderedDetailTables) {
       logger.info(`Procesando tabla de detalle: ${detailConfig.name}`);
 
-      // 🧠 DECISIÓN AUTOMÁTICA: Usar método con o sin promociones
-      let detailsData;
-
-      if (shouldProcessPromotions) {
-        // Usar método con promociones
-        detailsData = await this.getDetailDataWithPromotions(
-          detailConfig,
-          parentTableConfig,
-          documentId,
-          sourceConnection,
-          mapping
-        );
-
-        // Verificar si realmente se aplicaron promociones en estos datos
-        const hasPromotions =
-          detailsData &&
-          detailsData.length > 0 &&
-          detailsData.some(
-            (row) => row._PROMOTION_TYPE && row._PROMOTION_TYPE !== "NONE"
-          );
-
-        if (hasPromotions) {
-          totalPromotionsApplied = true;
-          logger.info(
-            `✅ Promociones detectadas y aplicadas automáticamente en tabla ${detailConfig.name}`
-          );
-        } else {
-          logger.debug(
-            `ℹ️ No se encontraron promociones en los datos de tabla ${detailConfig.name}`
-          );
-        }
-      } else {
-        // Usar método estándar
-        detailsData = await this.getDetailData(
-          detailConfig,
-          parentTableConfig,
-          documentId,
-          sourceConnection
-        );
-      }
+      // Usar método estándar
+      const detailsData = await this.getDetailData(
+        detailConfig,
+        parentTableConfig,
+        documentId,
+        sourceConnection
+      );
 
       if (!detailsData || detailsData.length === 0) {
         logger.warn(
@@ -1408,9 +719,7 @@ class DynamicTransferService {
       }
 
       logger.info(
-        `Procesando ${detailsData.length} registros de detalle en ${
-          detailConfig.name
-        } ${shouldProcessPromotions ? "(modo promociones)" : "(modo estándar)"}`
+        `Procesando ${detailsData.length} registros de detalle en ${detailConfig.name} (modo estándar)`
       );
 
       // Insertar detalles
@@ -1426,25 +735,142 @@ class DynamicTransferService {
           columnLengthCache,
           true // isDetailTable = true
         );
-
-        logger.debug(
-          `✅ INSERCIÓN EXITOSA DE DETALLE en ${detailConfig.targetTable}`
-        );
       }
 
       logger.info(`Insertados detalles en ${detailConfig.name}`);
       processedTables.push(detailConfig.name);
     }
 
-    // Retornar información sobre promociones aplicadas
     return {
-      promotionsApplied: totalPromotionsApplied,
+      promotionsApplied: false,
     };
   }
 
   /**
+   * Detecta campos de promociones que deben procesarse pero no están en el mapping
+   * @param {Object} dataForProcessing - Datos a procesar
+   * @param {Object} promotionFieldConfig - Configuración de campos de promoción
+   * @param {Set} processedFieldNames - Nombres de campos ya procesados
+   * @returns {Array} - Lista de campos de promoción a procesar
+   */
+  detectPromotionFieldsToProcess(
+    dataForProcessing,
+    promotionFieldConfig,
+    processedFieldNames
+  ) {
+    const fieldsToProcess = [];
+
+    // Lista de campos de promoción que pueden necesitar procesamiento
+    const promotionFields = [
+      {
+        sourceField: promotionFieldConfig.bonusLineRef,
+        targetField: promotionFieldConfig.bonusLineRef,
+        description: "Referencia línea bonificación",
+      },
+      {
+        sourceField: promotionFieldConfig.orderedQuantity,
+        targetField: promotionFieldConfig.orderedQuantity,
+        description: "Cantidad pedida",
+      },
+      {
+        sourceField: promotionFieldConfig.invoiceQuantity,
+        targetField: promotionFieldConfig.invoiceQuantity,
+        description: "Cantidad a facturar",
+      },
+      {
+        sourceField: promotionFieldConfig.bonusQuantity,
+        targetField: promotionFieldConfig.bonusQuantity,
+        description: "Cantidad bonificación",
+      },
+    ];
+
+    // Verificar cada campo de promoción
+    for (const field of promotionFields) {
+      const targetFieldLower = field.targetField.toLowerCase();
+
+      // Si el campo NO fue procesado ya Y existe en los datos
+      if (
+        !processedFieldNames.has(targetFieldLower) &&
+        dataForProcessing.hasOwnProperty(field.sourceField)
+      ) {
+        fieldsToProcess.push(field);
+        logger.debug(
+          `🎁 Campo promoción detectado para procesar: ${field.sourceField} -> ${field.targetField} (${field.description})`
+        );
+      }
+    }
+
+    return fieldsToProcess;
+  }
+
+  /**
+   * Verifica campos alternativos para promociones
+   * @param {string} sourceField - Campo origen solicitado
+   * @param {Object} sourceData - Datos origen
+   * @param {Object} mapping - Configuración de mapping
+   * @returns {*} - Valor encontrado o null
+   */
+  checkPromotionFieldAlternatives(sourceField, sourceData, mapping) {
+    if (!mapping.promotionConfig?.enabled) {
+      return null;
+    }
+
+    const promotionConfig = this.getPromotionFieldConfiguration(mapping);
+
+    // Mapeo de campos alternativos
+    const fieldAlternatives = {
+      [promotionConfig.bonusLineRef]: [
+        "PEDIDO_LINEA_BONIF",
+        "LINEA_BONIFICACION",
+        "REF_LINEA_BONUS",
+      ],
+      [promotionConfig.orderedQuantity]: [
+        "CANTIDAD_PEDIDA",
+        "QTY_PEDIDA",
+        "CANT_PEDIDA",
+      ],
+      [promotionConfig.invoiceQuantity]: [
+        "CANTIDAD_A_FACTURAR",
+        "QTY_FACTURAR",
+        "CANT_FACTURAR",
+      ],
+      [promotionConfig.bonusQuantity]: [
+        "CANTIDAD_BONIFICAD",
+        "QTY_BONUS",
+        "CANT_BONIFICADA",
+      ],
+    };
+
+    // Buscar alternativas para el campo solicitado
+    for (const [mainField, alternatives] of Object.entries(fieldAlternatives)) {
+      if (sourceField === mainField || alternatives.includes(sourceField)) {
+        // Buscar en el orden de prioridad
+        for (const alternative of [mainField, ...alternatives]) {
+          if (sourceData.hasOwnProperty(alternative)) {
+            logger.debug(
+              `🎁 Campo promoción encontrado: ${sourceField} -> ${alternative} = ${sourceData[alternative]}`
+            );
+            return sourceData[alternative];
+          }
+        }
+      }
+    }
+
+    return null;
+  }
+
+  // ===============================
+  // 3. MÉTODOS DE OBTENCIÓN DE DATOS
+  // ===============================
+
+  /**
    * Obtiene datos de detalle con procesamiento de promociones
-   * @private
+   * @param {Object} detailConfig - Configuración de la tabla de detalle
+   * @param {Object} parentTableConfig - Configuración de la tabla padre
+   * @param {string} documentId - ID del documento
+   * @param {Object} sourceConnection - Conexión origen
+   * @param {Object} mapping - Configuración de mapping
+   * @returns {Promise<Array>} - Datos de detalle procesados
    */
   async getDetailDataWithPromotions(
     detailConfig,
@@ -1457,8 +883,6 @@ class DynamicTransferService {
       logger.info(
         `🎁 Obteniendo datos con promociones para documento ${documentId}`
       );
-      console.log("🎁 DEBUG getDetailDataWithPromotions - INICIANDO");
-      console.log("🎁 mapping.promotionConfig:", mapping.promotionConfig);
 
       // Obtener datos de detalle normalmente
       const detailData = await this.getDetailData(
@@ -1468,12 +892,6 @@ class DynamicTransferService {
         sourceConnection
       );
 
-      // Verificar datos obtenidos
-      console.log(
-        "🎁 DEBUG detailData obtenido:",
-        detailData?.length,
-        "registros"
-      );
       if (!detailData || detailData.length === 0) {
         logger.warn(
           `No se obtuvieron datos de detalle para documento ${documentId}`
@@ -1483,24 +901,13 @@ class DynamicTransferService {
 
       logger.debug(`📊 Datos obtenidos: ${detailData.length} registros`);
 
-      // Validar que tenemos los campos necesarios
-      const firstRecord = detailData[0];
-      logger.debug(
-        `📊 Campos disponibles: ${Object.keys(firstRecord).join(", ")}`
-      );
-
       // Verificar si hay configuración de promociones
       if (!mapping.promotionConfig || !mapping.promotionConfig.enabled) {
-        console.log(
-          "🎁 DEBUG: Promociones deshabilitadas, retornando datos normales"
-        );
         logger.debug(
           "Promociones deshabilitadas, procesando datos normalmente"
         );
         return detailData;
       }
-
-      console.log("🎁 DEBUG: Promociones habilitadas, procesando...");
 
       // Validar configuración de promociones
       if (!PromotionProcessor.validatePromotionConfig(mapping)) {
@@ -1534,29 +941,9 @@ class DynamicTransferService {
         `🎁 ✅ Procesamiento completado: ${bonusLines.length} bonificaciones, ${triggerLines.length} líneas trigger`
       );
 
-      // Validar referencias de bonificación
-      bonusLines.forEach((line) => {
-        const refLine =
-          line.PEDIDO_LINEA_BONIF ||
-          line[
-            mapping.promotionConfig?.targetFields?.bonusLineRef ||
-              "PEDIDO_LINEA_BONIF"
-          ];
-        if (refLine) {
-          logger.debug(
-            `🎁 ✅ Bonificación ${line.NUM_LN} referencia línea ${refLine}`
-          );
-        } else {
-          logger.warn(
-            `🎁 ❌ Bonificación ${line.NUM_LN} sin referencia válida`
-          );
-        }
-      });
-
       return finalData;
     } catch (error) {
       logger.error(`Error en getDetailDataWithPromotions: ${error.message}`);
-      logger.error(`Stack trace: ${error.stack}`);
       throw new Error(
         `Error al obtener datos con promociones: ${error.message}`
       );
@@ -1564,8 +951,12 @@ class DynamicTransferService {
   }
 
   /**
-   * Obtiene datos de detalle
-   * @private
+   * Obtiene datos de detalle (método estándar)
+   * @param {Object} detailConfig - Configuración de la tabla de detalle
+   * @param {Object} parentTableConfig - Configuración de la tabla padre
+   * @param {string} documentId - ID del documento
+   * @param {Object} sourceConnection - Conexión origen
+   * @returns {Promise<Array>} - Datos de detalle
    */
   async getDetailData(
     detailConfig,
@@ -1581,34 +972,6 @@ class DynamicTransferService {
       );
       logger.debug(`Ejecutando consulta personalizada para detalles: ${query}`);
       const result = await SqlService.query(sourceConnection, query);
-
-      // ✅ AGREGAR ESTOS LOGS AQUÍ (después de la línea anterior)
-      if (result.recordset && result.recordset.length > 0) {
-        const firstRow = result.recordset[0];
-        console.log(
-          "🔧 CAMPOS DISPONIBLES EN DATOS (customQuery):",
-          Object.keys(firstRow)
-        );
-        console.log(
-          "🔧 Tiene ART_BON:",
-          "ART_BON" in firstRow,
-          "valor:",
-          firstRow.ART_BON
-        );
-        console.log(
-          "🔧 Tiene COD_ART_RFR:",
-          "COD_ART_RFR" in firstRow,
-          "valor:",
-          firstRow.COD_ART_RFR
-        );
-        console.log(
-          "🔧 Tiene MON_DSC:",
-          "MON_DSC" in firstRow,
-          "valor:",
-          firstRow.MON_DSC
-        );
-      }
-
       return result.recordset;
     } else if (detailConfig.useSameSourceTable) {
       // Caso especial: usa la misma tabla que el encabezado
@@ -1668,43 +1031,10 @@ class DynamicTransferService {
       ${orderByColumn ? ` ORDER BY ${tableAlias}.${orderByColumn}` : ""}
     `;
 
-    console.log(`🔍 CONSULTA DETALLE CORREGIDA: ${query}`);
-    console.log(`🔍 Campos seleccionados: ${requiredFields.join(", ")}`);
-
     logger.debug(`Ejecutando consulta para detalles: ${query}`);
     const result = await SqlService.query(sourceConnection, query, {
       documentId,
     });
-
-    // DEBUG: Mostrar qué campos tenemos disponibles en el resultado
-    if (result.recordset && result.recordset.length > 0) {
-      console.log(
-        `🔍 CAMPOS DISPONIBLES EN RESULTADO: ${Object.keys(
-          result.recordset[0]
-        ).join(", ")}`
-      );
-
-      // ✅ AGREGAR ESTOS LOGS AQUÍ
-      const firstRow = result.recordset[0];
-      console.log(
-        "🔧 Tiene ART_BON:",
-        "ART_BON" in firstRow,
-        "valor:",
-        firstRow.ART_BON
-      );
-      console.log(
-        "🔧 Tiene COD_ART_RFR:",
-        "COD_ART_RFR" in firstRow,
-        "valor:",
-        firstRow.COD_ART_RFR
-      );
-      console.log(
-        "🔧 Tiene MON_DSC:",
-        "MON_DSC" in firstRow,
-        "valor:",
-        firstRow.MON_DSC
-      );
-    }
 
     return result.recordset;
   }
@@ -1719,7 +1049,7 @@ class DynamicTransferService {
     // Usar la función centralizada para obtener campos requeridos
     const requiredFields = this.getRequiredFieldsFromTableConfig(detailConfig);
 
-    // Construir la lista de campos (sin alias porque es tabla única)
+    // Construir la lista de campos
     const finalSelectFields = requiredFields.join(", ");
 
     const primaryKey = detailConfig.primaryKey || "NUM_PED";
@@ -1735,50 +1065,20 @@ class DynamicTransferService {
       ${orderByColumn ? ` ORDER BY ${orderByColumn}` : ""}
     `;
 
-    console.log(`🔍 CONSULTA DETALLE PROPIA: ${query}`);
-    console.log(`🔍 Campos seleccionados: ${requiredFields.join(", ")}`);
-
     logger.debug(`Ejecutando consulta para detalles: ${query}`);
     const result = await SqlService.query(sourceConnection, query, {
       documentId,
     });
-
-    // DEBUG: Mostrar qué campos tenemos disponibles en el resultado
-    if (result.recordset && result.recordset.length > 0) {
-      console.log(
-        `🔍 CAMPOS DISPONIBLES EN RESULTADO: ${Object.keys(
-          result.recordset[0]
-        ).join(", ")}`
-      );
-
-      // ✅ AGREGAR ESTOS LOGS AQUÍ
-      const firstRow = result.recordset[0];
-      console.log(
-        "🔧 Tiene ART_BON:",
-        "ART_BON" in firstRow,
-        "valor:",
-        firstRow.ART_BON
-      );
-      console.log(
-        "🔧 Tiene COD_ART_RFR:",
-        "COD_ART_RFR" in firstRow,
-        "valor:",
-        firstRow.COD_ART_RFR
-      );
-      console.log(
-        "🔧 Tiene MON_DSC:",
-        "MON_DSC" in firstRow,
-        "valor:",
-        firstRow.MON_DSC
-      );
-    }
 
     return result.recordset;
   }
 
   /**
    * Obtiene datos de la tabla de origen
-   * @private
+   * @param {string} documentId - ID del documento
+   * @param {Object} tableConfig - Configuración de la tabla
+   * @param {Object} sourceConnection - Conexión origen
+   * @returns {Promise<Object>} - Datos de origen
    */
   async getSourceData(documentId, tableConfig, sourceConnection) {
     if (tableConfig.customQuery) {
@@ -1814,30 +1114,1595 @@ class DynamicTransferService {
         }
       `;
 
-      console.log(`🔍 CONSULTA ENCABEZADO CORREGIDA: ${query}`);
-      console.log(`🔍 Campos seleccionados: ${requiredFields.join(", ")}`);
-
       logger.debug(`Ejecutando consulta principal: ${query}`);
       const result = await SqlService.query(sourceConnection, query, {
         documentId,
       });
-
-      // DEBUG: Mostrar qué campos tenemos disponibles en el resultado
-      if (result.recordset && result.recordset.length > 0) {
-        console.log(
-          `🔍 CAMPOS DISPONIBLES EN ENCABEZADO: ${Object.keys(
-            result.recordset[0]
-          ).join(", ")}`
-        );
-      }
 
       return result.recordset[0];
     }
   }
 
   /**
+   * Obtiene los documentos según los filtros especificados
+   * @param {Object} mapping - Configuración de mapeo
+   * @param {Object} filters - Filtros para la consulta
+   * @param {Object} connection - Conexión a la base de datos
+   * @returns {Promise<Array>} - Documentos encontrados
+   */
+  async getDocuments(mapping, filters, connection) {
+    try {
+      // Validar que el mapeo sea válido
+      if (
+        !mapping ||
+        !mapping.tableConfigs ||
+        mapping.tableConfigs.length === 0
+      ) {
+        throw new Error("Configuración de mapeo inválida");
+      }
+
+      // Determinar tabla principal
+      const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
+      if (!mainTable || !mainTable.sourceTable) {
+        throw new Error(
+          "No se encontró configuración de tabla principal válida"
+        );
+      }
+
+      logger.info(
+        `Obteniendo documentos de ${mainTable.sourceTable} en ${mapping.sourceServer}`
+      );
+
+      // Verificar y preparar tabla
+      const tableInfo = await this.prepareTableForQuery(mainTable, connection);
+
+      // Construir consulta
+      const queryBuilder = this.buildDocumentQuery(
+        mainTable,
+        filters,
+        tableInfo
+      );
+
+      logger.info(`Ejecutando consulta: ${queryBuilder.query}`);
+      const result = await SqlService.query(
+        connection,
+        queryBuilder.query,
+        queryBuilder.params
+      );
+
+      logger.info(
+        `Consulta ejecutada exitosamente. Documentos encontrados: ${result.recordset.length}`
+      );
+      return result.recordset;
+    } catch (error) {
+      logger.error(`Error al obtener documentos: ${error.message}`);
+      throw error;
+    }
+  }
+
+  // ===============================
+  // 4. MÉTODOS DE PROCESAMIENTO DE CAMPOS Y TABLAS
+  // ===============================
+
+  /**
+   * Procesa una tabla individual - CAMPOS DEL MAPPING + CAMPOS DE PROMOCIONES
+   * @param {Object} tableConfig - Configuración de la tabla
+   * @param {Object} sourceData - Datos de origen (encabezado)
+   * @param {Object} tableData - Datos específicos de la tabla
+   * @param {Object} targetConnection - Conexión destino
+   * @param {Object} currentConsecutive - Consecutivo actual
+   * @param {Object} mapping - Configuración de mapping
+   * @param {string} documentId - ID del documento
+   * @param {Map} columnLengthCache - Cache de longitudes de columnas
+   * @param {boolean} isDetailTable - Si es tabla de detalle
+   * @returns {Promise<void>}
+   */
+  async processTable(
+    tableConfig,
+    sourceData,
+    tableData,
+    targetConnection,
+    currentConsecutive,
+    mapping,
+    documentId,
+    columnLengthCache,
+    isDetailTable = false
+  ) {
+    const targetData = {};
+    const targetFields = [];
+    const targetValues = [];
+    const directSqlFields = new Set();
+    const processedFieldNames = new Set();
+
+    // Determinar qué datos usar para procesamiento
+    const dataForProcessing = isDetailTable ? tableData : sourceData;
+
+    logger.debug(
+      `Iniciando procesamiento de tabla ${tableConfig.name} (isDetailTable: ${isDetailTable})`
+    );
+
+    // 🔍 DETECTAR SI HAY DATOS DE PROMOCIONES
+    const hasPromotionData =
+      dataForProcessing &&
+      (dataForProcessing._IS_BONUS_LINE ||
+        dataForProcessing._IS_TRIGGER_LINE ||
+        dataForProcessing._PROMOTION_TYPE ||
+        dataForProcessing.PEDIDO_LINEA_BONIF !== undefined);
+
+    if (hasPromotionData) {
+      logger.info(
+        `🎁 Detectados datos de promociones en tabla ${tableConfig.name}`
+      );
+    }
+
+    // Validar configuración de campos
+    if (!tableConfig.fieldMappings || tableConfig.fieldMappings.length === 0) {
+      logger.warn(
+        `⚠️ Tabla ${tableConfig.name} no tiene fieldMappings definidos`
+      );
+      return;
+    }
+
+    // Ejecutar lookup si está configurado
+    let lookupResults = {};
+    if (this.hasLookupFields(tableConfig)) {
+      const lookupExecution = await this.executeLookupInTarget(
+        tableConfig,
+        dataForProcessing,
+        targetConnection
+      );
+      if (!lookupExecution.success) {
+        throw new Error(
+          `Falló la validación de lookup para tabla ${tableConfig.name}`
+        );
+      }
+      lookupResults = lookupExecution.results;
+    }
+
+    logger.info(
+      `📋 Procesando ${tableConfig.fieldMappings.length} campos definidos en mapping para tabla ${tableConfig.name}`
+    );
+
+    // ✅ PASO 1: Procesar campos definidos en el mapping
+    for (const fieldMapping of tableConfig.fieldMappings) {
+      if (!fieldMapping.targetField) {
+        logger.warn(
+          `⚠️ Campo sin targetField definido en tabla ${tableConfig.name}`
+        );
+        continue;
+      }
+
+      const targetFieldLower = fieldMapping.targetField.toLowerCase();
+      if (processedFieldNames.has(targetFieldLower)) {
+        logger.warn(
+          `⚠️ Campo duplicado: ${fieldMapping.targetField} en tabla ${tableConfig.name}`
+        );
+        continue;
+      }
+
+      try {
+        const processedField = await this.processField(
+          fieldMapping,
+          dataForProcessing,
+          lookupResults,
+          currentConsecutive,
+          mapping,
+          tableConfig,
+          isDetailTable,
+          targetConnection,
+          columnLengthCache
+        );
+
+        if (processedField && processedField.value !== undefined) {
+          processedFieldNames.add(targetFieldLower);
+
+          if (processedField.isDirectSql) {
+            targetFields.push(fieldMapping.targetField);
+            targetValues.push(processedField.value);
+            directSqlFields.add(fieldMapping.targetField);
+          } else {
+            if (processedField.value !== null || fieldMapping.isRequired) {
+              targetData[fieldMapping.targetField] = processedField.value;
+              targetFields.push(fieldMapping.targetField);
+              targetValues.push(`@${fieldMapping.targetField}`);
+            }
+          }
+        }
+      } catch (fieldError) {
+        logger.error(
+          `❌ Error procesando campo ${fieldMapping.targetField}: ${fieldError.message}`
+        );
+        if (fieldMapping.isRequired) {
+          throw fieldError;
+        }
+      }
+    }
+
+    // 🎁 PASO 2: Procesar campos adicionales de promociones (SI EXISTEN)
+    if (hasPromotionData && isDetailTable && mapping.promotionConfig?.enabled) {
+      logger.info(
+        `🎁 Procesando campos adicionales de promociones para tabla ${tableConfig.name}`
+      );
+
+      const promotionFieldConfig = this.getPromotionFieldConfiguration(mapping);
+      const promotionFieldsToProcess = this.detectPromotionFieldsToProcess(
+        dataForProcessing,
+        promotionFieldConfig,
+        processedFieldNames
+      );
+
+      for (const promotionField of promotionFieldsToProcess) {
+        try {
+          const promotionValue = dataForProcessing[promotionField.sourceField];
+
+          if (promotionValue !== undefined && promotionValue !== null) {
+            processedFieldNames.add(promotionField.targetField.toLowerCase());
+            targetData[promotionField.targetField] = promotionValue;
+            targetFields.push(promotionField.targetField);
+            targetValues.push(`@${promotionField.targetField}`);
+
+            logger.info(
+              `🎁 ✅ Campo promoción ${promotionField.targetField} agregado: ${promotionValue}`
+            );
+          }
+        } catch (promotionError) {
+          logger.warn(
+            `🎁 ⚠️ Error procesando campo promoción ${promotionField.targetField}: ${promotionError.message}`
+          );
+        }
+      }
+    }
+
+    // Validación final
+    if (targetFields.length === 0) {
+      logger.warn(
+        `⚠️ No hay campos válidos para insertar en tabla ${tableConfig.targetTable}`
+      );
+      return;
+    }
+
+    logger.info(
+      `📊 Preparados ${targetFields.length} campos para inserción en ${tableConfig.targetTable}`
+    );
+
+    // Ejecutar inserción
+    await this.executeInsert(
+      tableConfig.targetTable,
+      targetFields,
+      targetValues,
+      targetData,
+      directSqlFields,
+      targetConnection
+    );
+
+    logger.debug(`✅ Procesamiento completado para tabla ${tableConfig.name}`);
+  }
+
+  /**
+   * Procesa un campo individual basado únicamente en el mapping
+   * @param {Object} fieldMapping - Configuración del campo
+   * @param {Object} sourceData - Datos origen
+   * @param {Object} lookupResults - Resultados de lookup
+   * @param {Object} currentConsecutive - Consecutivo actual
+   * @param {Object} mapping - Configuración de mapping
+   * @param {Object} tableConfig - Configuración de tabla
+   * @param {boolean} isDetailTable - Si es tabla de detalle
+   * @param {Object} targetConnection - Conexión destino
+   * @param {Map} columnLengthCache - Cache de longitudes
+   * @returns {Promise<Object>} - Campo procesado
+   */
+  async processField(
+    fieldMapping,
+    sourceData,
+    lookupResults,
+    currentConsecutive,
+    mapping,
+    tableConfig,
+    isDetailTable,
+    targetConnection,
+    columnLengthCache
+  ) {
+    let value;
+
+    logger.debug(
+      `🔧 Procesando campo: ${fieldMapping.sourceField || "(sin origen)"} -> ${
+        fieldMapping.targetField
+      }`
+    );
+
+    try {
+      // PRIORIDAD 1: Usar valores obtenidos por lookup si existen
+      if (
+        fieldMapping.lookupFromTarget &&
+        lookupResults[fieldMapping.targetField] !== undefined
+      ) {
+        value = lookupResults[fieldMapping.targetField];
+        logger.debug(
+          `📖 Usando valor de lookup para ${fieldMapping.targetField}: ${value}`
+        );
+        return { value, isDirectSql: false };
+      }
+
+      // PRIORIDAD 2: Verificar si el campo es una función SQL nativa
+      const defaultValue = fieldMapping.defaultValue;
+      const sqlNativeFunctions = [
+        "GETDATE()",
+        "CURRENT_TIMESTAMP",
+        "NEWID()",
+        "SYSUTCDATETIME()",
+        "SYSDATETIME()",
+        "GETUTCDATE()",
+        "DAY(",
+        "MONTH(",
+        "YEAR(",
+      ];
+
+      const isNativeFunction =
+        typeof defaultValue === "string" &&
+        defaultValue !== "" &&
+        sqlNativeFunctions.some((fn) => defaultValue.includes(fn));
+
+      if (isNativeFunction) {
+        logger.debug(
+          `🔧 Campo ${fieldMapping.targetField} usa función SQL nativa: ${defaultValue}`
+        );
+        return { value: defaultValue, isDirectSql: true };
+      }
+
+      // PRIORIDAD 3: Consecutivo (si está configurado)
+      if (
+        currentConsecutive &&
+        this.isConsecutiveField(fieldMapping, mapping)
+      ) {
+        const consecutiveValue = this.getConsecutiveValue(
+          fieldMapping,
+          currentConsecutive,
+          isDetailTable
+        );
+        logger.debug(
+          `🔢 Asignando consecutivo a ${fieldMapping.targetField}: ${consecutiveValue}`
+        );
+        return { value: consecutiveValue, isDirectSql: false };
+      }
+
+      // PRIORIDAD 4: Obtener valor del campo origen
+      if (fieldMapping.sourceField) {
+        if (!sourceData.hasOwnProperty(fieldMapping.sourceField)) {
+          // Verificar si es un campo de promoción que puede tener nombre diferente
+          const promotionFieldValue = this.checkPromotionFieldAlternatives(
+            fieldMapping.sourceField,
+            sourceData,
+            mapping
+          );
+
+          if (promotionFieldValue !== null) {
+            value = promotionFieldValue;
+            logger.debug(
+              `🎁 Valor encontrado en campo promoción alternativo: ${value}`
+            );
+          } else {
+            logger.warn(
+              `⚠️ Campo origen ${fieldMapping.sourceField} no existe en los datos fuente`
+            );
+            value = null;
+          }
+        } else {
+          value = sourceData[fieldMapping.sourceField];
+          logger.debug(
+            `📥 Valor original de ${
+              fieldMapping.sourceField
+            }: ${value} (tipo: ${typeof value})`
+          );
+        }
+
+        // Validar objetos del procesamiento de promociones
+        if (
+          typeof value === "object" &&
+          value !== null &&
+          !Array.isArray(value)
+        ) {
+          logger.warn(
+            `🔧 Campo ${fieldMapping.targetField} contiene un objeto. Intentando extraer valor...`
+          );
+
+          const extractedValue = this.extractValueFromPromotionObject(
+            value,
+            fieldMapping.targetField,
+            fieldMapping.sourceField
+          );
+
+          if (extractedValue !== null) {
+            value = extractedValue;
+            logger.info(
+              `✅ Valor extraído de objeto promoción: ${fieldMapping.targetField} = ${value}`
+            );
+          } else {
+            if (fieldMapping.isRequired) {
+              throw new Error(
+                `Campo requerido ${fieldMapping.targetField} contiene un objeto inválido`
+              );
+            } else {
+              value = null;
+            }
+          }
+        }
+
+        // Aplicar eliminación de prefijo
+        if (
+          fieldMapping.removePrefix &&
+          typeof value === "string" &&
+          value.startsWith(fieldMapping.removePrefix)
+        ) {
+          const originalValue = value;
+          value = value.substring(fieldMapping.removePrefix.length);
+          logger.debug(
+            `✂️ Prefijo eliminado de ${fieldMapping.targetField}: '${originalValue}' → '${value}'`
+          );
+        }
+
+        // Aplicar conversión de unidades si está configurado
+        if (
+          fieldMapping.unitConversion?.enabled &&
+          value !== null &&
+          value !== undefined
+        ) {
+          const convertedValue = await this.applyUnitConversion(
+            value,
+            fieldMapping.unitConversion,
+            sourceData,
+            targetConnection,
+            columnLengthCache
+          );
+          if (convertedValue !== null) {
+            value = convertedValue;
+            logger.debug(
+              `🔄 Valor después de conversión de unidades: ${value}`
+            );
+          }
+        }
+      }
+
+      // PRIORIDAD 5: Valor por defecto
+      if (
+        (value === null || value === undefined) &&
+        fieldMapping.defaultValue !== undefined &&
+        fieldMapping.defaultValue !== null
+      ) {
+        value = fieldMapping.defaultValue;
+        logger.debug(
+          `🎯 Usando valor por defecto para ${fieldMapping.targetField}: ${value}`
+        );
+      }
+
+      // Aplicar longitud máxima si está configurado
+      if (
+        value &&
+        typeof value === "string" &&
+        fieldMapping.maxLength &&
+        value.length > fieldMapping.maxLength
+      ) {
+        const originalValue = value;
+        value = value.substring(0, fieldMapping.maxLength);
+        logger.warn(
+          `✂️ Valor truncado en ${fieldMapping.targetField}: "${originalValue}" -> "${value}"`
+        );
+      }
+
+      // Validación automática para campos de fecha críticos
+      if (
+        (value === null || value === undefined) &&
+        fieldMapping.targetField &&
+        (fieldMapping.targetField.toUpperCase().includes("FECHA") ||
+          fieldMapping.targetField.toUpperCase().includes("DATE") ||
+          fieldMapping.targetField.toUpperCase().includes("FEC_"))
+      ) {
+        logger.warn(
+          `⚠️ Campo fecha ${fieldMapping.targetField} es null, usando GETDATE() automáticamente`
+        );
+        return { value: "GETDATE()", isDirectSql: true };
+      }
+
+      logger.debug(
+        `🔧 Valor final para ${
+          fieldMapping.targetField
+        }: ${value} (tipo: ${typeof value})`
+      );
+
+      return { value, isDirectSql: false };
+    } catch (error) {
+      logger.error(
+        `❌ Error procesando campo ${fieldMapping.targetField}: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  // ===============================
+  // 5. MÉTODOS DE CONSECUTIVOS
+  // ===============================
+
+  /**
+   * Configura consecutivos centralizados para el mapping
+   * @param {Object} mapping - Configuración de mapping
+   * @param {string} mappingId - ID del mapping
+   * @returns {Promise<Object>} - Configuración de consecutivos
+   */
+  async setupCentralizedConsecutives(mapping, mappingId) {
+    logger.info(
+      `🔍 Verificando sistema de consecutivos para mapping ${mappingId}`
+    );
+
+    let useCentralized = false;
+    let consecutiveId = null;
+
+    if (!mapping.consecutiveConfig?.enabled) {
+      logger.info(
+        `❌ Consecutivos deshabilitados en la configuración del mapping`
+      );
+      return { useCentralized, consecutiveId };
+    }
+
+    try {
+      // Verificar configuración explícita
+      if (
+        mapping.consecutiveConfig.useCentralizedSystem &&
+        mapping.consecutiveConfig.selectedCentralizedConsecutive
+      ) {
+        const consecutive = await ConsecutiveService.getConsecutiveById(
+          mapping.consecutiveConfig.selectedCentralizedConsecutive
+        );
+        if (consecutive && consecutive.active) {
+          useCentralized = true;
+          consecutiveId =
+            mapping.consecutiveConfig.selectedCentralizedConsecutive;
+          logger.info(
+            `✅ Usando consecutivo centralizado configurado: ${consecutiveId}`
+          );
+        }
+      }
+
+      // Si no hay configuración explícita, buscar asignados automáticamente
+      if (!useCentralized) {
+        const assignedConsecutives =
+          await ConsecutiveService.getConsecutivesByEntity(
+            "mapping",
+            mappingId
+          );
+        if (assignedConsecutives && assignedConsecutives.length > 0) {
+          useCentralized = true;
+          consecutiveId = assignedConsecutives[0]._id;
+          logger.info(
+            `✅ Usando consecutivo centralizado asignado: ${consecutiveId}`
+          );
+        }
+      }
+
+      if (!useCentralized) {
+        logger.info(
+          `❌ No se encontraron consecutivos centralizados para ${mappingId}. Usando sistema local.`
+        );
+      }
+
+      return { useCentralized, consecutiveId };
+    } catch (error) {
+      logger.warn(
+        `❌ Error al verificar consecutivos centralizados: ${error.message}`
+      );
+      return { useCentralized: false, consecutiveId: null };
+    }
+  }
+
+  /**
+   * Genera consecutivo para un documento específico
+   * @param {Object} mapping - Configuración de mapping
+   * @param {string} documentId - ID del documento
+   * @param {boolean} useCentralized - Si usar consecutivos centralizados
+   * @param {string} centralizedId - ID del consecutivo centralizado
+   * @returns {Promise<Object>} - Consecutivo generado
+   */
+  async generateConsecutiveForDocument(
+    mapping,
+    documentId,
+    useCentralized,
+    centralizedId
+  ) {
+    logger.info(`🔍 Generando consecutivo para documento ${documentId}`);
+
+    if (useCentralized && centralizedId) {
+      try {
+        const reservation = await ConsecutiveService.reserveConsecutiveValues(
+          centralizedId,
+          1,
+          { segment: null },
+          { id: mapping._id.toString(), name: "mapping" }
+        );
+
+        const consecutive = {
+          value: reservation.values[0].numeric,
+          formatted: reservation.values[0].formatted,
+          isCentralized: true,
+          reservationId: reservation.reservationId,
+        };
+
+        logger.info(
+          `✅ Consecutivo centralizado reservado: ${consecutive.formatted}`
+        );
+        return consecutive;
+      } catch (error) {
+        logger.error(
+          `❌ Error generando consecutivo centralizado: ${error.message}`
+        );
+        throw error;
+      }
+    } else {
+      try {
+        const consecutive = await this.generateLocalConsecutive(mapping);
+        logger.info(`✅ Consecutivo local generado: ${consecutive?.formatted}`);
+        return consecutive;
+      } catch (error) {
+        logger.error(`❌ Error generando consecutivo local: ${error.message}`);
+        throw error;
+      }
+    }
+  }
+
+  /**
+   * Genera un consecutivo local
+   * @param {Object} mapping - Configuración de mapping
+   * @returns {Promise<Object>} - Consecutivo local generado
+   */
+  async generateLocalConsecutive(mapping) {
+    const consecutiveConfig = mapping.consecutiveConfig;
+    if (!consecutiveConfig || !consecutiveConfig.enabled) {
+      return null;
+    }
+
+    const nextValue = (consecutiveConfig.lastValue || 0) + 1;
+    let formatted = nextValue.toString();
+
+    if (consecutiveConfig.pattern) {
+      formatted = consecutiveConfig.pattern
+        .replace(/{PREFIX}/g, consecutiveConfig.prefix || "")
+        .replace(/{VALUE:(\d+)}/g, (match, digits) =>
+          nextValue.toString().padStart(parseInt(digits), "0")
+        )
+        .replace(/{VALUE}/g, nextValue.toString())
+        .replace(/{YEAR}/g, new Date().getFullYear().toString())
+        .replace(
+          /{MONTH}/g,
+          (new Date().getMonth() + 1).toString().padStart(2, "0")
+        )
+        .replace(/{DAY}/g, new Date().getDate().toString().padStart(2, "0"));
+    } else {
+      formatted = (consecutiveConfig.prefix || "") + nextValue;
+    }
+
+    // Actualizar el último valor en el mapping
+    await TransferMapping.findByIdAndUpdate(mapping._id, {
+      "consecutiveConfig.lastValue": nextValue,
+    });
+
+    return {
+      value: nextValue,
+      formatted: formatted,
+    };
+  }
+
+  /**
+   * Verifica si un campo es un campo de consecutivo
+   * @param {Object} fieldMapping - Configuración del campo
+   * @param {Object} mapping - Configuración de mapping
+   * @returns {boolean} - Si es campo de consecutivo
+   */
+  isConsecutiveField(fieldMapping, mapping) {
+    const consecutiveConfig = mapping.consecutiveConfig;
+    if (!consecutiveConfig || !consecutiveConfig.enabled) {
+      return false;
+    }
+
+    // Verificar si es el campo general para encabezado
+    if (fieldMapping.targetField === consecutiveConfig.fieldName) {
+      return true;
+    }
+
+    // Verificar si es el campo para detalle
+    if (fieldMapping.targetField === consecutiveConfig.detailFieldName) {
+      return true;
+    }
+
+    // Verificar si es un campo específico de tabla
+    if (
+      consecutiveConfig.applyToTables &&
+      consecutiveConfig.applyToTables.length > 0
+    ) {
+      return consecutiveConfig.applyToTables.some(
+        (tableMapping) => tableMapping.fieldName === fieldMapping.targetField
+      );
+    }
+
+    return false;
+  }
+
+  /**
+   * Obtiene el valor del consecutivo para un campo
+   * @param {Object} fieldMapping - Configuración del campo
+   * @param {Object} currentConsecutive - Consecutivo actual
+   * @param {boolean} isDetailTable - Si es tabla de detalle
+   * @returns {*} - Valor del consecutivo
+   */
+  getConsecutiveValue(fieldMapping, currentConsecutive, isDetailTable) {
+    return currentConsecutive.formatted;
+  }
+
+  // ===============================
+  // 6. MÉTODOS DE LOOKUP Y VALIDACIÓN
+  // ===============================
+
+  /**
+   * Verifica si una tabla tiene campos de lookup
+   * @param {Object} tableConfig - Configuración de la tabla
+   * @returns {boolean} - Si tiene campos de lookup
+   */
+  hasLookupFields(tableConfig) {
+    return (
+      tableConfig.fieldMappings &&
+      tableConfig.fieldMappings.some((fm) => fm.lookupFromTarget)
+    );
+  }
+
+  /**
+   * Ejecuta lookup en la base de datos destino
+   * @param {Object} tableConfig - Configuración de la tabla
+   * @param {Object} sourceData - Datos origen
+   * @param {Object} targetConnection - Conexión destino
+   * @returns {Promise<Object>} - Resultados del lookup
+   */
+  async executeLookupInTarget(tableConfig, sourceData, targetConnection) {
+    try {
+      logger.info(
+        `Realizando consultas de lookup en BD destino para tabla ${tableConfig.name}`
+      );
+
+      const lookupResults = {};
+      const failedLookups = [];
+
+      const lookupFields = tableConfig.fieldMappings.filter(
+        (fm) => fm.lookupFromTarget && fm.lookupQuery
+      );
+
+      if (lookupFields.length === 0) {
+        return { results: {}, success: true };
+      }
+
+      logger.info(`Procesando ${lookupFields.length} campos con lookup`);
+
+      for (const fieldMapping of lookupFields) {
+        try {
+          let lookupQuery = fieldMapping.lookupQuery;
+          const params = {};
+          const expectedParams = this.extractParametersFromQuery(lookupQuery);
+
+          // Extraer valores de parámetros desde datos de origen
+          if (
+            fieldMapping.lookupParams &&
+            fieldMapping.lookupParams.length > 0
+          ) {
+            for (const param of fieldMapping.lookupParams) {
+              if (!param.sourceField || !param.paramName) {
+                continue;
+              }
+
+              let paramValue = sourceData[param.sourceField];
+
+              // Aplicar eliminación de prefijo al parámetro
+              if (
+                param.removePrefix &&
+                paramValue !== null &&
+                paramValue !== undefined &&
+                typeof paramValue === "string" &&
+                paramValue.startsWith(param.removePrefix)
+              ) {
+                paramValue = paramValue.substring(param.removePrefix.length);
+              }
+
+              params[param.paramName] = paramValue;
+            }
+          }
+
+          // Validar parámetros requeridos
+          const missingParams = expectedParams.filter(
+            (p) => params[p] === undefined || params[p] === null
+          );
+
+          if (missingParams.length > 0) {
+            const errorMsg = `Parámetros faltantes: ${missingParams.join(
+              ", "
+            )}`;
+            if (fieldMapping.failIfNotFound) {
+              failedLookups.push({
+                field: fieldMapping.targetField,
+                error: errorMsg,
+                isCritical: true,
+              });
+              continue;
+            } else {
+              lookupResults[fieldMapping.targetField] =
+                fieldMapping.defaultValue || null;
+              continue;
+            }
+          }
+
+          // Ejecutar consulta
+          const result = await SqlService.query(
+            targetConnection,
+            lookupQuery,
+            params
+          );
+
+          if (result.recordset && result.recordset.length > 0) {
+            const lookupValue = Object.values(result.recordset[0])[0];
+            lookupResults[fieldMapping.targetField] = lookupValue;
+            logger.debug(
+              `✅ Lookup exitoso para ${fieldMapping.targetField}: ${lookupValue}`
+            );
+          } else {
+            if (fieldMapping.failIfNotFound) {
+              failedLookups.push({
+                field: fieldMapping.targetField,
+                error: "No se encontraron resultados",
+                isCritical: true,
+              });
+            } else {
+              lookupResults[fieldMapping.targetField] =
+                fieldMapping.defaultValue || null;
+            }
+          }
+        } catch (fieldError) {
+          const errorMsg = `Error en lookup ${fieldMapping.targetField}: ${fieldError.message}`;
+          if (fieldMapping.failIfNotFound) {
+            failedLookups.push({
+              field: fieldMapping.targetField,
+              error: errorMsg,
+              isCritical: true,
+            });
+          } else {
+            lookupResults[fieldMapping.targetField] =
+              fieldMapping.defaultValue || null;
+          }
+        }
+      }
+
+      // Verificar si hay fallos críticos
+      const criticalFailures = failedLookups.filter((f) => f.isCritical);
+      if (criticalFailures.length > 0) {
+        return {
+          results: {},
+          success: false,
+          failedFields: criticalFailures,
+        };
+      }
+
+      return {
+        results: lookupResults,
+        success: true,
+        failedFields: failedLookups,
+      };
+    } catch (error) {
+      logger.error(`Error general en lookup: ${error.message}`);
+      return {
+        results: {},
+        success: false,
+        error: error.message,
+      };
+    }
+  }
+
+  /**
+   * Extrae parámetros de una consulta SQL
+   * @param {string} query - Consulta SQL
+   * @returns {Array} - Lista de parámetros
+   */
+  extractParametersFromQuery(query) {
+    const paramRegex = /@(\w+)/g;
+    const params = [];
+    let match;
+
+    while ((match = paramRegex.exec(query)) !== null) {
+      if (!params.includes(match[1])) {
+        params.push(match[1]);
+      }
+    }
+
+    return params;
+  }
+
+  // ===============================
+  // 7. MÉTODOS DE INSERCIÓN Y BASE DE DATOS
+  // ===============================
+
+  /**
+   * Ejecuta la inserción en la tabla destino con validación de campos
+   * @param {string} targetTable - Tabla destino
+   * @param {Array} targetFields - Campos a insertar
+   * @param {Array} targetValues - Valores a insertar
+   * @param {Object} targetData - Datos para inserción
+   * @param {Set} directSqlFields - Campos SQL directos
+   * @param {Object} targetConnection - Conexión destino
+   * @returns {Promise<void>}
+   */
+  async executeInsert(
+    targetTable,
+    targetFields,
+    targetValues,
+    targetData,
+    directSqlFields,
+    targetConnection
+  ) {
+    try {
+      logger.debug(`🔍 Iniciando inserción en tabla: ${targetTable}`);
+
+      // Obtener la estructura real de la tabla destino
+      const existingColumns = await this.getTableColumns(
+        targetConnection,
+        targetTable
+      );
+
+      if (existingColumns.length === 0) {
+        logger.warn(
+          `⚠️ No se pudo validar estructura de ${targetTable}, procediendo sin validación`
+        );
+        const insertQuery = `INSERT INTO ${targetTable} (${targetFields.join(
+          ", "
+        )}) VALUES (${targetValues.join(", ")})`;
+        await SqlService.query(targetConnection, insertQuery, targetData);
+        return;
+      }
+
+      const existingColumnNames = existingColumns.map((col) =>
+        col.COLUMN_NAME.toLowerCase()
+      );
+
+      // Filtrar campos que realmente existen en la tabla
+      const validFields = [];
+      const validValues = [];
+      const filteredTargetData = {};
+      const ignoredFields = [];
+
+      for (let i = 0; i < targetFields.length; i++) {
+        const fieldName = targetFields[i];
+        const fieldValue = targetValues[i];
+
+        if (existingColumnNames.includes(fieldName.toLowerCase())) {
+          validFields.push(fieldName);
+          validValues.push(fieldValue);
+
+          if (!directSqlFields.has(fieldName)) {
+            filteredTargetData[fieldName] = targetData[fieldName];
+          }
+        } else {
+          ignoredFields.push(fieldName);
+        }
+      }
+
+      if (ignoredFields.length > 0) {
+        logger.warn(
+          `⚠️ Campos ignorados (no existen en ${targetTable}): ${ignoredFields.join(
+            ", "
+          )}`
+        );
+      }
+
+      if (validFields.length === 0) {
+        throw new Error(
+          `No hay campos válidos para insertar en la tabla ${targetTable}`
+        );
+      }
+
+      // Construir y ejecutar la consulta INSERT
+      const insertQuery = `INSERT INTO ${targetTable} (${validFields.join(
+        ", "
+      )}) VALUES (${validValues.join(", ")})`;
+
+      logger.debug(`Ejecutando inserción validada: ${insertQuery}`);
+      await SqlService.query(targetConnection, insertQuery, filteredTargetData);
+
+      logger.debug(`✅ Inserción exitosa en ${targetTable}`);
+    } catch (error) {
+      logger.error(
+        `❌ Error en executeInsert para tabla ${targetTable}: ${error.message}`
+      );
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene las columnas de una tabla específica
+   * @param {Object} connection - Conexión a la base de datos
+   * @param {string} tableName - Nombre de la tabla
+   * @returns {Promise<Array>} - Lista de columnas
+   */
+  async getTableColumns(connection, tableName) {
+    try {
+      // Separar esquema y tabla
+      let schema = null;
+      let table = tableName;
+
+      if (tableName.includes(".")) {
+        const parts = tableName.split(".");
+        schema = parts[0];
+        table = parts[1];
+      }
+
+      // Limpiar nombres de corchetes
+      if (schema) {
+        schema = schema.replace(/\[|\]/g, "");
+      }
+      table = table.replace(/\[|\]/g, "");
+
+      let query;
+      let params;
+
+      if (schema) {
+        query = `
+          SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
+          ORDER BY ORDINAL_POSITION
+        `;
+        params = { schema, table };
+      } else {
+        query = `
+          SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH, TABLE_SCHEMA
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_NAME = @table
+          ORDER BY TABLE_SCHEMA, ORDINAL_POSITION
+        `;
+        params = { table };
+      }
+
+      const result = await SqlService.query(connection, query, params);
+
+      if (!result.recordset || result.recordset.length === 0) {
+        // Intentar con esquemas comunes
+        const commonSchemas = ["dbo", "CATELLI", "sys"];
+        for (const testSchema of commonSchemas) {
+          try {
+            const testResult = await SqlService.query(
+              connection,
+              `SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH
+               FROM INFORMATION_SCHEMA.COLUMNS
+               WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
+               ORDER BY ORDINAL_POSITION`,
+              { schema: testSchema, table }
+            );
+
+            if (testResult.recordset && testResult.recordset.length > 0) {
+              logger.info(
+                `✅ Tabla encontrada en esquema: ${testSchema}.${table}`
+              );
+              return testResult.recordset;
+            }
+          } catch (testError) {
+            // Continuar con el siguiente esquema
+          }
+        }
+        logger.warn(`No se encontraron columnas para ${tableName}`);
+        return [];
+      }
+
+      return result.recordset || [];
+    } catch (error) {
+      logger.error(
+        `Error obteniendo columnas de ${tableName}: ${error.message}`
+      );
+      return [];
+    }
+  }
+
+  // ===============================
+  // 8. MÉTODOS AUXILIARES Y UTILIDADES
+  // ===============================
+
+  /**
+   * Establece conexiones con los servidores origen y destino
+   * @param {Object} mapping - Configuración de mapping
+   * @returns {Promise<Object>} - Conexiones establecidas
+   */
+  async establishConnections(mapping) {
+    const sourceConnection = await ConnectionService.getConnection(
+      mapping.sourceServer
+    );
+    if (!sourceConnection) {
+      throw new Error(
+        `No se pudo conectar al servidor origen: ${mapping.sourceServer}`
+      );
+    }
+
+    const targetConnection = await ConnectionService.getConnection(
+      mapping.targetServer
+    );
+    if (!targetConnection) {
+      throw new Error(
+        `No se pudo conectar al servidor destino: ${mapping.targetServer}`
+      );
+    }
+
+    logger.info(`Conexiones establecidas correctamente`);
+    return { source: sourceConnection, target: targetConnection };
+  }
+
+  /**
+   * Maneja el resultado de procesamiento de un documento
+   * @param {Object} docResult - Resultado del documento
+   * @param {string} documentId - ID del documento
+   * @param {Object} currentConsecutive - Consecutivo actual
+   * @param {boolean} useCentralized - Si usa consecutivos centralizados
+   * @param {string} centralizedId - ID del consecutivo centralizado
+   * @param {Object} results - Resultados acumulados
+   * @param {Array} successfulDocuments - Documentos exitosos
+   * @param {Array} failedDocuments - Documentos fallidos
+   * @param {Object} mapping - Configuración de mapping
+   * @param {Object} sourceConnection - Conexión origen
+   * @returns {Promise<void>}
+   */
+  async handleDocumentResult(
+    docResult,
+    documentId,
+    currentConsecutive,
+    useCentralized,
+    centralizedId,
+    results,
+    successfulDocuments,
+    failedDocuments,
+    mapping,
+    sourceConnection
+  ) {
+    // Confirmar o cancelar reserva de consecutivo centralizado
+    if (
+      useCentralized &&
+      currentConsecutive &&
+      currentConsecutive.reservationId
+    ) {
+      if (docResult.success) {
+        await ConsecutiveService.commitReservation(
+          centralizedId,
+          currentConsecutive.reservationId,
+          [
+            {
+              numeric: currentConsecutive.value,
+              formatted: currentConsecutive.formatted,
+            },
+          ]
+        );
+      } else {
+        await ConsecutiveService.cancelReservation(
+          centralizedId,
+          currentConsecutive.reservationId
+        );
+      }
+    }
+
+    // Procesar resultados
+    if (docResult.success) {
+      successfulDocuments.push(documentId);
+      results.processed++;
+
+      if (docResult.promotionsApplied) {
+        results.promotionsProcessed++;
+        logger.info(
+          `✅ Promociones aplicadas automáticamente en documento ${documentId}`
+        );
+      }
+
+      if (!results.byType[docResult.documentType]) {
+        results.byType[docResult.documentType] = { processed: 0, failed: 0 };
+      }
+      results.byType[docResult.documentType].processed++;
+
+      if (docResult.consecutiveUsed) {
+        results.consecutivesUsed.push({
+          documentId,
+          consecutive: docResult.consecutiveUsed,
+        });
+      }
+
+      // Marcado individual si está configurado
+      if (
+        mapping.markProcessedStrategy === "individual" &&
+        mapping.markProcessedField
+      ) {
+        try {
+          await this.markDocumentsAsProcessed(
+            [documentId],
+            mapping,
+            sourceConnection,
+            true
+          );
+        } catch (markError) {
+          logger.warn(
+            `⚠️ Error al marcar documento ${documentId}: ${markError.message}`
+          );
+        }
+      }
+    } else {
+      results.failed++;
+      failedDocuments.push(documentId);
+
+      if (docResult.documentType && !results.byType[docResult.documentType]) {
+        results.byType[docResult.documentType] = { processed: 0, failed: 0 };
+      }
+      if (docResult.documentType) {
+        results.byType[docResult.documentType].failed++;
+      }
+    }
+
+    results.details.push({ documentId, ...docResult });
+
+    logger.info(
+      `Documento ${documentId} procesado: ${
+        docResult.success ? "✅ ÉXITO" : "❌ ERROR"
+      }${docResult.promotionsApplied ? " (con promociones automáticas)" : ""}${
+        currentConsecutive
+          ? ` (consecutivo: ${currentConsecutive.formatted})`
+          : ""
+      }`
+    );
+  }
+
+  /**
+   * Maneja errores de procesamiento de documentos
+   * @param {Error} error - Error ocurrido
+   * @param {string} documentId - ID del documento
+   * @param {Object} currentConsecutive - Consecutivo actual
+   * @param {boolean} useCentralized - Si usa consecutivos centralizados
+   * @param {string} centralizedId - ID del consecutivo centralizado
+   * @param {Object} results - Resultados acumulados
+   * @param {Array} failedDocuments - Documentos fallidos
+   * @returns {Promise<void>}
+   */
+  async handleDocumentError(
+    error,
+    documentId,
+    currentConsecutive,
+    useCentralized,
+    centralizedId,
+    results,
+    failedDocuments
+  ) {
+    failedDocuments.push(documentId);
+    results.failed++;
+
+    results.details.push({
+      documentId,
+      success: false,
+      error: error.message,
+      errorDetails: error.stack,
+    });
+
+    logger.error(`❌ Error al procesar documento ${documentId}:`, error);
+
+    // Cancelar reserva si hubo error
+    if (
+      useCentralized &&
+      currentConsecutive &&
+      currentConsecutive.reservationId
+    ) {
+      try {
+        await ConsecutiveService.cancelReservation(
+          centralizedId,
+          currentConsecutive.reservationId
+        );
+      } catch (cancelError) {
+        logger.error(`❌ Error cancelando reserva: ${cancelError.message}`);
+      }
+    }
+  }
+
+  /**
+   * Ejecuta procesos post-procesamiento
+   * @param {Object} mapping - Configuración de mapping
+   * @param {Array} successfulDocuments - Documentos exitosos
+   * @param {Array} failedDocuments - Documentos fallidos
+   * @param {boolean} hasErrors - Si hubo errores
+   * @param {Object} sourceConnection - Conexión origen
+   * @param {Object} results - Resultados acumulados
+   * @returns {Promise<void>}
+   */
+  async executePostProcessing(
+    mapping,
+    successfulDocuments,
+    failedDocuments,
+    hasErrors,
+    sourceConnection,
+    results
+  ) {
+    // Marcado masivo si está configurado
+    if (
+      mapping.markProcessedStrategy === "batch" &&
+      mapping.markProcessedField &&
+      successfulDocuments.length > 0
+    ) {
+      try {
+        logger.info(
+          `Marcando ${successfulDocuments.length} documentos exitosos como procesados (modo batch)`
+        );
+        await this.markDocumentsAsProcessed(
+          successfulDocuments,
+          mapping,
+          sourceConnection,
+          true
+        );
+        logger.info("✅ Marcado masivo completado exitosamente");
+      } catch (markError) {
+        logger.warn(`⚠️ Error en marcado masivo: ${markError.message}`);
+      }
+    }
+
+    // Rollback si está configurado y hay errores
+    if (
+      hasErrors &&
+      mapping.markProcessedConfig?.allowRollback &&
+      successfulDocuments.length > 0
+    ) {
+      try {
+        logger.warn(
+          `Ejecutando rollback para ${successfulDocuments.length} documentos debido a errores`
+        );
+        await this.markDocumentsAsProcessed(
+          successfulDocuments,
+          mapping,
+          sourceConnection,
+          false
+        );
+        logger.info("✅ Rollback ejecutado exitosamente");
+        results.rollbackExecuted = true;
+      } catch (rollbackError) {
+        logger.error(`❌ Error en rollback: ${rollbackError.message}`);
+        results.rollbackError = rollbackError.message;
+      }
+    }
+  }
+
+  /**
+   * Finaliza el procesamiento y actualiza estadísticas
+   * @param {string} executionId - ID de la ejecución
+   * @param {Object} mapping - Configuración de mapping
+   * @param {Object} results - Resultados del procesamiento
+   * @param {boolean} hasErrors - Si hubo errores
+   * @param {boolean} useCentralized - Si usa consecutivos centralizados
+   * @param {string} centralizedId - ID del consecutivo centralizado
+   * @param {number} startTime - Tiempo de inicio
+   * @returns {Promise<Object>} - Resultado final
+   */
+  async finalizationAndStats(
+    executionId,
+    mapping,
+    results,
+    hasErrors,
+    useCentralized,
+    centralizedId,
+    startTime
+  ) {
+    const executionTime = Date.now() - startTime;
+
+    // Determinar estado final
+    let finalStatus = "completed";
+    if (results.processed === 0 && results.failed > 0) {
+      finalStatus = "failed";
+    } else if (results.failed > 0) {
+      finalStatus = "partial";
+    }
+
+    // Actualizar registro de ejecución
+    await TaskExecution.findByIdAndUpdate(executionId, {
+      status: finalStatus,
+      executionTime,
+      totalRecords: results.processed + results.failed,
+      successfulRecords: results.processed,
+      failedRecords: results.failed,
+      promotionsProcessed: results.promotionsProcessed,
+      useCentralizedConsecutives: useCentralized,
+      centralizedConsecutiveId: centralizedId,
+      details: results,
+    });
+
+    // Mensaje final
+    const promotionsMessage =
+      results.promotionsProcessed > 0
+        ? `, promociones aplicadas automáticamente: ${results.promotionsProcessed}`
+        : "";
+    const consecutiveMessage = useCentralized
+      ? ` (consecutivos centralizados)`
+      : ` (consecutivos locales)`;
+
+    const finalMessage = hasErrors
+      ? `Procesamiento completado con errores: ${results.processed} éxitos, ${results.failed} fallos${promotionsMessage}${consecutiveMessage}`
+      : `Procesamiento completado con éxito: ${results.processed} documentos procesados${promotionsMessage}${consecutiveMessage}`;
+
+    // Actualizar tarea principal
+    await TransferTask.findByIdAndUpdate(mapping.taskId, {
+      status: finalStatus,
+      progress: 100,
+      lastExecutionDate: new Date(),
+      lastExecutionResult: {
+        success: !hasErrors,
+        message: finalMessage,
+        affectedRecords: results.processed,
+        promotionsProcessed: results.promotionsProcessed,
+        useCentralizedConsecutives: useCentralized,
+        errorDetails: hasErrors
+          ? results.details
+              .filter((d) => !d.success)
+              .map(
+                (d) =>
+                  `Documento ${d.documentId}: ${
+                    d.message || d.error || "Error no especificado"
+                  }`
+              )
+              .join("\n")
+          : null,
+      },
+    });
+
+    logger.info(
+      `✅ Procesamiento completado: ${results.processed} éxitos, ${results.failed} fallos${promotionsMessage}${consecutiveMessage}`
+    );
+
+    return {
+      status: finalStatus,
+      ...results,
+    };
+  }
+
+  /**
+   * Maneja errores generales del procesamiento
+   * @param {Error} error - Error ocurrido
+   * @param {Object} signal - Señal de cancelación
+   * @param {string} executionId - ID de la ejecución
+   * @param {Object} mapping - Configuración de mapping
+   * @param {string} cancelTaskId - ID de la tarea de cancelación
+   * @param {number} timeoutId - ID del timeout
+   * @param {number} startTime - Tiempo de inicio
+   * @returns {Promise<Object>} - Resultado del error
+   */
+  async handleProcessingError(
+    error,
+    signal,
+    executionId,
+    mapping,
+    cancelTaskId,
+    timeoutId,
+    startTime
+  ) {
+    clearTimeout(timeoutId);
+
+    // Verificar si fue cancelado
+    if (signal?.aborted) {
+      logger.info("Tarea cancelada por el usuario");
+
+      if (executionId) {
+        await TaskExecution.findByIdAndUpdate(executionId, {
+          status: "cancelled",
+          executionTime: Date.now() - startTime,
+          errorMessage: "Cancelada por el usuario",
+        });
+      }
+
+      if (mapping?.taskId) {
+        await TransferTask.findByIdAndUpdate(mapping.taskId, {
+          status: "cancelled",
+          progress: -1,
+          lastExecutionResult: {
+            success: false,
+            message: "Tarea cancelada por el usuario",
+          },
+        });
+      }
+
+      TaskTracker.completeTask(cancelTaskId, "cancelled");
+
+      return {
+        success: false,
+        message: "Tarea cancelada por el usuario",
+        executionId,
+      };
+    }
+
+    logger.error(`Error al procesar documentos: ${error.message}`);
+
+    // Actualizar registros en caso de error
+    if (executionId) {
+      await TaskExecution.findByIdAndUpdate(executionId, {
+        status: "failed",
+        executionTime: Date.now() - startTime,
+        errorMessage: error.message,
+      });
+    }
+
+    if (mapping?.taskId) {
+      await TransferTask.findByIdAndUpdate(mapping.taskId, {
+        status: "failed",
+        progress: -1,
+        lastExecutionResult: {
+          success: false,
+          message: `Error: ${error.message}`,
+          errorDetails: error.stack,
+        },
+      });
+    }
+
+    TaskTracker.completeTask(cancelTaskId, "failed");
+
+    throw error;
+  }
+
+  /**
+   * Maneja errores de procesamiento de un documento individual
+   * @param {Error} error - Error ocurrido
+   * @param {string} documentId - ID del documento
+   * @param {Object} currentConsecutive - Consecutivo actual
+   * @param {Object} mapping - Configuración de mapping
+   * @returns {Object} - Resultado del error
+   */
+  handleSingleDocumentError(error, documentId, currentConsecutive, mapping) {
+    logger.error(`Error procesando documento ${documentId}: ${error.message}`);
+
+    if (currentConsecutive && mapping.consecutiveConfig?.updateAfterTransfer) {
+      logger.warn(
+        `Documento ${documentId} falló pero consecutivo ${currentConsecutive.formatted} ya fue generado`
+      );
+    }
+
+    return {
+      success: false,
+      message: error.message,
+      error: error.stack,
+      documentType: "unknown",
+      consecutiveUsed: currentConsecutive ? currentConsecutive.formatted : null,
+      consecutiveValue: currentConsecutive ? currentConsecutive.value : null,
+    };
+  }
+
+  /**
+   * Limpia recursos al final del procesamiento
+   * @param {Object} sourceConnection - Conexión origen
+   * @param {Object} targetConnection - Conexión destino
+   * @param {number} timeoutId - ID del timeout
+   * @returns {Promise<void>}
+   */
+  async cleanup(sourceConnection, targetConnection, timeoutId) {
+    if (sourceConnection || targetConnection) {
+      logger.info("Liberando conexiones...");
+
+      const releasePromises = [];
+
+      if (sourceConnection) {
+        releasePromises.push(
+          ConnectionService.releaseConnection(sourceConnection).catch((e) =>
+            logger.error(`Error al liberar conexión origen: ${e.message}`)
+          )
+        );
+      }
+
+      if (targetConnection) {
+        releasePromises.push(
+          ConnectionService.releaseConnection(targetConnection).catch((e) =>
+            logger.error(`Error al liberar conexión destino: ${e.message}`)
+          )
+        );
+      }
+
+      await Promise.allSettled(releasePromises);
+      logger.info("Conexiones liberadas correctamente");
+    }
+
+    clearTimeout(timeoutId);
+  }
+
+  /**
    * Método auxiliar para recopilar todos los campos necesarios de una configuración de tabla
-   * @private
+   * @param {Object} tableConfig - Configuración de la tabla
+   * @returns {Array} - Lista de campos requeridos
    */
   getRequiredFieldsFromTableConfig(tableConfig) {
     const requiredFields = new Set();
@@ -1879,7 +2744,9 @@ class DynamicTransferService {
 
   /**
    * Procesa condición de filtro agregando alias de tabla
-   * @private
+   * @param {string} filterCondition - Condición de filtro
+   * @param {string} tableAlias - Alias de la tabla
+   * @returns {string} - Condición procesada
    */
   processFilterCondition(filterCondition, tableAlias) {
     return filterCondition.replace(/\b(\w+)\b/g, (m, field) => {
@@ -1906,934 +2773,11 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa una tabla individual - CAMPOS DEL MAPPING + CAMPOS DE PROMOCIONES
-   * @private
-   */
-  async processTable(
-    tableConfig,
-    sourceData,
-    tableData,
-    targetConnection,
-    currentConsecutive,
-    mapping,
-    documentId,
-    columnLengthCache,
-    isDetailTable = false
-  ) {
-    const targetData = {};
-    const targetFields = [];
-    const targetValues = [];
-    const directSqlFields = new Set();
-    const processedFieldNames = new Set(); // Para evitar duplicados
-
-    // Determinar si los datos a procesar son para la tabla actual
-    const dataForProcessing = isDetailTable ? tableData : sourceData;
-
-    logger.debug(
-      `Iniciando procesamiento de tabla ${tableConfig.name} (isDetailTable: ${isDetailTable})`
-    );
-
-    // 🔍 DETECTAR SI HAY DATOS DE PROMOCIONES
-    const hasPromotionData =
-      dataForProcessing &&
-      (dataForProcessing._IS_BONUS_LINE ||
-        dataForProcessing._IS_TRIGGER_LINE ||
-        dataForProcessing._PROMOTION_TYPE ||
-        dataForProcessing.PEDIDO_LINEA_BONIF !== undefined);
-
-    if (hasPromotionData) {
-      logger.info(
-        `🎁 Detectados datos de promociones en tabla ${tableConfig.name}`
-      );
-    }
-
-    // VALIDACIÓN: Verificar que existe configuración de campos
-    if (!tableConfig.fieldMappings || tableConfig.fieldMappings.length === 0) {
-      logger.warn(
-        `⚠️ Tabla ${tableConfig.name} no tiene fieldMappings definidos, saltando procesamiento`
-      );
-      return;
-    }
-
-    // Ejecutar lookup si está configurado
-    let lookupResults = {};
-    if (this.hasLookupFields(tableConfig)) {
-      logger.info(`Ejecutando lookup para tabla ${tableConfig.name}...`);
-      const lookupExecution = await this.executeLookupInTarget(
-        tableConfig,
-        dataForProcessing,
-        targetConnection
-      );
-
-      if (!lookupExecution.success) {
-        const failedMsg = lookupExecution.failedFields
-          ? lookupExecution.failedFields
-              .map((f) => `${f.field}: ${f.error}`)
-              .join(", ")
-          : lookupExecution.error || "Error desconocido en lookup";
-
-        throw new Error(
-          `Falló la validación de lookup para tabla ${tableConfig.name}: ${failedMsg}`
-        );
-      }
-
-      lookupResults = lookupExecution.results;
-      logger.info(
-        `Lookup completado exitosamente. Continuando con el procesamiento...`
-      );
-    }
-
-    logger.info(
-      `📋 Procesando ${tableConfig.fieldMappings.length} campos definidos en mapping para tabla ${tableConfig.name}`
-    );
-
-    // ✅ PASO 1: Procesar ÚNICAMENTE los campos definidos en el mapping
-    for (let i = 0; i < tableConfig.fieldMappings.length; i++) {
-      const fieldMapping = tableConfig.fieldMappings[i];
-
-      // Validación básica del field mapping
-      if (!fieldMapping.targetField) {
-        logger.warn(
-          `⚠️ Campo ${i + 1} en tabla ${
-            tableConfig.name
-          } no tiene targetField definido, saltando...`
-        );
-        continue;
-      }
-
-      // Verificar duplicados (case-insensitive)
-      const targetFieldLower = fieldMapping.targetField.toLowerCase();
-      if (processedFieldNames.has(targetFieldLower)) {
-        logger.warn(
-          `⚠️ Campo duplicado detectado: ${fieldMapping.targetField} ya fue procesado para tabla ${tableConfig.name}, saltando...`
-        );
-        continue;
-      }
-
-      logger.debug(
-        `🔧 Procesando campo ${i + 1}/${tableConfig.fieldMappings.length}: ${
-          fieldMapping.sourceField || "(sin origen)"
-        } -> ${fieldMapping.targetField}`
-      );
-
-      try {
-        const processedField = await this.processField(
-          fieldMapping,
-          dataForProcessing,
-          lookupResults,
-          currentConsecutive,
-          mapping,
-          tableConfig,
-          isDetailTable,
-          targetConnection,
-          columnLengthCache
-        );
-
-        // Verificar si el procesamiento fue exitoso y el valor es válido
-        if (processedField && processedField.value !== undefined) {
-          // Marcar el campo como procesado
-          processedFieldNames.add(targetFieldLower);
-
-          if (processedField.isDirectSql) {
-            targetFields.push(fieldMapping.targetField);
-            targetValues.push(processedField.value); // Expresión SQL directa
-            directSqlFields.add(fieldMapping.targetField);
-
-            logger.debug(
-              `✅ Campo SQL directo ${fieldMapping.targetField}: ${processedField.value}`
-            );
-          } else {
-            // Solo agregar si el valor no es null o si el campo es requerido
-            if (processedField.value !== null || fieldMapping.isRequired) {
-              targetData[fieldMapping.targetField] = processedField.value;
-              targetFields.push(fieldMapping.targetField);
-              targetValues.push(`@${fieldMapping.targetField}`);
-
-              logger.debug(
-                `✅ Campo ${fieldMapping.targetField} preparado: ${
-                  processedField.value
-                } (tipo: ${typeof processedField.value})`
-              );
-            } else {
-              logger.debug(
-                `⏭️ Campo ${fieldMapping.targetField} omitido (valor null y no requerido)`
-              );
-            }
-          }
-        } else {
-          logger.debug(
-            `⏭️ Campo ${fieldMapping.targetField} omitido (procesamiento falló o valor undefined)`
-          );
-        }
-      } catch (fieldError) {
-        logger.error(
-          `❌ Error procesando campo ${fieldMapping.targetField}: ${fieldError.message}`
-        );
-
-        // Si el campo es requerido, fallar la operación
-        if (fieldMapping.isRequired) {
-          throw new Error(
-            `Campo requerido ${fieldMapping.targetField} falló: ${fieldError.message}`
-          );
-        }
-
-        // Si no es requerido, continuar con el siguiente campo
-        logger.warn(
-          `⚠️ Continuando sin campo opcional ${fieldMapping.targetField}`
-        );
-      }
-    }
-
-    // 🎁 PASO 2: Procesar campos adicionales de promociones (SI EXISTEN)
-    if (hasPromotionData && isDetailTable && mapping.promotionConfig?.enabled) {
-      logger.info(
-        `🎁 Procesando campos adicionales de promociones para tabla ${tableConfig.name}`
-      );
-
-      // Obtener configuración de campos de promociones
-      const promotionFieldConfig = this.getPromotionFieldConfiguration(mapping);
-
-      // Detectar campos de promociones que no están en el mapping pero existen en los datos
-      const promotionFieldsToProcess = this.detectPromotionFieldsToProcess(
-        dataForProcessing,
-        promotionFieldConfig,
-        processedFieldNames
-      );
-
-      // Procesar cada campo de promoción detectado
-      for (const promotionField of promotionFieldsToProcess) {
-        try {
-          logger.debug(
-            `🎁 Procesando campo de promoción: ${promotionField.sourceField} -> ${promotionField.targetField}`
-          );
-
-          const promotionValue = dataForProcessing[promotionField.sourceField];
-
-          if (promotionValue !== undefined && promotionValue !== null) {
-            // Marcar como procesado
-            processedFieldNames.add(promotionField.targetField.toLowerCase());
-
-            // Agregar a los datos a insertar
-            targetData[promotionField.targetField] = promotionValue;
-            targetFields.push(promotionField.targetField);
-            targetValues.push(`@${promotionField.targetField}`);
-
-            logger.info(
-              `🎁 ✅ Campo promoción ${promotionField.targetField} agregado: ${promotionValue}`
-            );
-          }
-        } catch (promotionError) {
-          logger.warn(
-            `🎁 ⚠️ Error procesando campo promoción ${promotionField.targetField}: ${promotionError.message}`
-          );
-        }
-      }
-    }
-
-    // Validación final antes de la inserción
-    if (targetFields.length === 0) {
-      logger.warn(
-        `⚠️ No hay campos válidos para insertar en tabla ${tableConfig.targetTable}`
-      );
-      logger.warn(
-        `Campos intentados: ${tableConfig.fieldMappings
-          .map((fm) => fm.targetField)
-          .join(", ")}`
-      );
-      if (hasPromotionData) {
-        logger.warn(
-          `Campos de promoción disponibles: ${Object.keys(dataForProcessing)
-            .filter((key) => !key.startsWith("_"))
-            .join(", ")}`
-        );
-      }
-      return;
-    }
-
-    // Verificación de duplicados final (por seguridad)
-    const fieldCounts = {};
-    const duplicates = [];
-
-    for (const field of targetFields) {
-      fieldCounts[field] = (fieldCounts[field] || 0) + 1;
-      if (fieldCounts[field] > 1) {
-        duplicates.push(field);
-      }
-    }
-
-    if (duplicates.length > 0) {
-      logger.error(
-        `🚨 DUPLICADOS DETECTADOS EN VALIDACIÓN FINAL: ${duplicates.join(", ")}`
-      );
-      logger.error(`Lista completa: ${targetFields.join(", ")}`);
-      throw new Error(
-        `Campos duplicados detectados: ${duplicates.join(", ")} en tabla ${
-          tableConfig.targetTable
-        }`
-      );
-    }
-
-    logger.info(
-      `📊 Preparados ${targetFields.length} campos para inserción en ${tableConfig.targetTable}`
-    );
-    logger.debug(`Campos finales: ${targetFields.join(", ")}`);
-
-    // Construir y ejecutar la consulta INSERT
-    await this.executeInsert(
-      tableConfig.targetTable,
-      targetFields,
-      targetValues,
-      targetData,
-      directSqlFields,
-      targetConnection
-    );
-
-    logger.debug(`✅ Procesamiento completado para tabla ${tableConfig.name}`);
-  }
-
-  /**
-   * Procesa un campo individual - BASADO ÚNICAMENTE EN EL MAPPING
-   * @private
-   */
-  async processField(
-    fieldMapping,
-    sourceData,
-    lookupResults,
-    currentConsecutive,
-    mapping,
-    tableConfig,
-    isDetailTable,
-    targetConnection,
-    columnLengthCache
-  ) {
-    let value;
-
-    // IMPORTANTE: NO modificar fieldMapping aquí
-    // El mapping debe ser respetado tal como está configurado por el usuario
-
-    logger.debug(
-      `🔧 Procesando campo: ${fieldMapping.sourceField || "(sin origen)"} -> ${
-        fieldMapping.targetField
-      }`
-    );
-
-    try {
-      // PRIORIDAD 1: Usar valores obtenidos por lookup si existen
-      if (
-        fieldMapping.lookupFromTarget &&
-        lookupResults[fieldMapping.targetField] !== undefined
-      ) {
-        value = lookupResults[fieldMapping.targetField];
-        logger.debug(
-          `📖 Usando valor de lookup para ${fieldMapping.targetField}: ${value}`
-        );
-        return { value, isDirectSql: false };
-      }
-
-      // PRIORIDAD 2: Verificar si el campo es una función SQL nativa
-      const defaultValue = fieldMapping.defaultValue;
-      const sqlNativeFunctions = [
-        "GETDATE()",
-        "CURRENT_TIMESTAMP",
-        "NEWID()",
-        "SYSUTCDATETIME()",
-        "SYSDATETIME()",
-        "GETUTCDATE()",
-        "DAY(",
-        "MONTH(",
-        "YEAR(",
-        "GETDATE",
-        "DATEADD",
-        "DATEDIFF",
-      ];
-
-      const isNativeFunction =
-        typeof defaultValue === "string" &&
-        defaultValue !== "" &&
-        sqlNativeFunctions.some((fn) => defaultValue.includes(fn));
-
-      if (isNativeFunction) {
-        logger.debug(
-          `🔧 Campo ${fieldMapping.targetField} usa función SQL nativa: ${defaultValue}`
-        );
-        return { value: defaultValue, isDirectSql: true };
-      }
-
-      // PRIORIDAD 3: Consecutivo (si está configurado)
-      if (
-        currentConsecutive &&
-        this.isConsecutiveField(fieldMapping, mapping)
-      ) {
-        const consecutiveValue = this.getConsecutiveValue(
-          fieldMapping,
-          currentConsecutive,
-          isDetailTable
-        );
-        logger.debug(
-          `🔢 Asignando consecutivo a ${fieldMapping.targetField}: ${consecutiveValue} (isDetailTable: ${isDetailTable})`
-        );
-        return { value: consecutiveValue, isDirectSql: false };
-      }
-
-      // PRIORIDAD 4: Obtener valor del campo origen
-      if (fieldMapping.sourceField) {
-        // 🎁 MEJORA: Verificar campos de promociones también
-        if (!sourceData.hasOwnProperty(fieldMapping.sourceField)) {
-          // 🎁 Verificar si es un campo de promoción que puede tener nombre diferente
-          const promotionFieldValue = this.checkPromotionFieldAlternatives(
-            fieldMapping.sourceField,
-            sourceData,
-            mapping
-          );
-
-          if (promotionFieldValue !== null) {
-            value = promotionFieldValue;
-            logger.debug(
-              `🎁 Valor encontrado en campo promoción alternativo: ${value}`
-            );
-          } else {
-            logger.warn(
-              `⚠️ Campo origen ${fieldMapping.sourceField} no existe en los datos fuente para ${fieldMapping.targetField}`
-            );
-            value = null;
-          }
-        } else {
-          value = sourceData[fieldMapping.sourceField];
-          logger.debug(
-            `📥 Valor original de ${
-              fieldMapping.sourceField
-            }: ${value} (tipo: ${typeof value})`
-          );
-        }
-
-        // ✅ NUEVA VALIDACIÓN: Detectar objetos del procesamiento de promociones
-        if (
-          typeof value === "object" &&
-          value !== null &&
-          !Array.isArray(value)
-        ) {
-          logger.warn(
-            `🔧 Campo ${fieldMapping.targetField} contiene un objeto (posiblemente del procesamiento de promociones). Intentando extraer valor correcto...`
-          );
-
-          const extractedValue = this.extractValueFromPromotionObject(
-            value,
-            fieldMapping.targetField,
-            fieldMapping.sourceField
-          );
-
-          if (extractedValue !== null) {
-            value = extractedValue;
-            logger.info(
-              `✅ Valor extraído automáticamente de objeto promoción: ${fieldMapping.targetField} = ${value}`
-            );
-          } else {
-            logger.error(
-              `❌ No se pudo extraer valor válido del objeto para ${fieldMapping.targetField}`
-            );
-            logger.error(`Objeto recibido:`, JSON.stringify(value, null, 2));
-
-            // Solo fallar si es un campo requerido
-            if (fieldMapping.isRequired) {
-              throw new Error(
-                `Campo requerido ${fieldMapping.targetField} contiene un objeto inválido del procesamiento de promociones`
-              );
-            } else {
-              value = null; // Usar null para campos opcionales
-            }
-          }
-        }
-
-        // ✅ APLICAR ELIMINACIÓN DE PREFIJO (NUEVA UBICACIÓN CORRECTA)
-        if (
-          fieldMapping.removePrefix &&
-          typeof value === "string" &&
-          value.startsWith(fieldMapping.removePrefix)
-        ) {
-          const originalValue = value;
-          value = value.substring(fieldMapping.removePrefix.length);
-          logger.debug(
-            `✂️ Prefijo '${fieldMapping.removePrefix}' eliminado del campo ${fieldMapping.targetField}: '${originalValue}' → '${value}'`
-          );
-        }
-
-        // Aplicar conversión de unidades si está configurado
-        if (
-          fieldMapping.unitConversion &&
-          fieldMapping.unitConversion.enabled &&
-          value !== null &&
-          value !== undefined
-        ) {
-          const convertedValue = await this.applyUnitConversion(
-            value,
-            fieldMapping.unitConversion,
-            sourceData,
-            targetConnection,
-            columnLengthCache
-          );
-
-          if (convertedValue !== null) {
-            value = convertedValue;
-            logger.debug(
-              `🔄 Valor después de conversión de unidades: ${value}`
-            );
-          }
-        }
-      }
-
-      // PRIORIDAD 5: Valor por defecto (CORREGIDO)
-      if (
-        (value === null || value === undefined) &&
-        fieldMapping.defaultValue !== undefined &&
-        fieldMapping.defaultValue !== null
-      ) {
-        value = fieldMapping.defaultValue;
-        logger.debug(
-          `🎯 Usando valor por defecto para ${fieldMapping.targetField}: ${value}`
-        );
-      }
-
-      // Aplicar longitud máxima si está configurado
-      if (
-        value &&
-        typeof value === "string" &&
-        fieldMapping.maxLength &&
-        value.length > fieldMapping.maxLength
-      ) {
-        const originalValue = value;
-        value = value.substring(0, fieldMapping.maxLength);
-        logger.warn(
-          `✂️ Valor truncado en ${fieldMapping.targetField}: "${originalValue}" -> "${value}"`
-        );
-      }
-
-      // ✅ SOLUCIÓN 3: Validación automática para campos de fecha críticos
-      if (
-        (value === null || value === undefined) &&
-        fieldMapping.targetField &&
-        (fieldMapping.targetField.toUpperCase().includes("FECHA") ||
-          fieldMapping.targetField.toUpperCase().includes("DATE") ||
-          fieldMapping.targetField.toUpperCase().includes("FEC_"))
-      ) {
-        logger.warn(
-          `⚠️ Campo fecha ${fieldMapping.targetField} es null, usando GETDATE() automáticamente`
-        );
-        return { value: "GETDATE()", isDirectSql: true };
-      }
-
-      logger.debug(
-        `🔧 Valor final para ${
-          fieldMapping.targetField
-        }: ${value} (tipo: ${typeof value})`
-      );
-
-      return { value, isDirectSql: false };
-    } catch (error) {
-      logger.error(
-        `❌ Error procesando campo ${fieldMapping.targetField}: ${error.message}`
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * ✅ NUEVO MÉTODO: Valida y transforma valores según el tipo esperado
-   * @private
-   */
-  validateAndTransformValue(value, fieldMapping) {
-    if (value === null || value === undefined) {
-      return value;
-    }
-
-    const targetField = fieldMapping.targetField.toUpperCase();
-
-    // Detectar tipo de campo basado en el nombre
-    const fieldType = this.detectFieldType(targetField);
-
-    try {
-      switch (fieldType) {
-        case "number":
-          return this.transformToNumber(value, targetField);
-        case "date":
-          return this.transformToDate(value, targetField);
-        case "boolean":
-          return this.transformToBoolean(value, targetField);
-        default:
-          return this.transformToString(value, targetField);
-      }
-    } catch (error) {
-      logger.error(
-        `❌ Error validando campo ${fieldMapping.targetField}: ${error.message}`
-      );
-      throw new Error(
-        `Validation failed for parameter '${fieldMapping.targetField}'. ${error.message}`
-      );
-    }
-  }
-
-  /**
-   * ✅ NUEVO MÉTODO: Detecta el tipo de campo esperado
-   * @private
-   */
-  detectFieldType(fieldName) {
-    const fieldUpper = fieldName.toUpperCase();
-
-    // Campos numéricos
-    if (
-      fieldUpper.includes("CANTIDAD") ||
-      fieldUpper.includes("QTY") ||
-      fieldUpper.includes("PRECIO") ||
-      fieldUpper.includes("MONTO") ||
-      fieldUpper.includes("VALOR") ||
-      fieldUpper.includes("NUM_") ||
-      fieldUpper.includes("_NUM") ||
-      fieldUpper.includes("ID") ||
-      fieldUpper.includes("COUNT") ||
-      fieldUpper.includes("TOTAL") ||
-      fieldUpper.includes("IMPORTE")
-    ) {
-      return "number";
-    }
-
-    // Campos de fecha
-    if (
-      fieldUpper.includes("FECHA") ||
-      fieldUpper.includes("DATE") ||
-      fieldUpper.includes("TIME") ||
-      fieldUpper.includes("CREATED") ||
-      fieldUpper.includes("UPDATED")
-    ) {
-      return "date";
-    }
-
-    // Campos booleanos
-    if (
-      fieldUpper.includes("ACTIVO") ||
-      fieldUpper.includes("ACTIVE") ||
-      fieldUpper.includes("ENABLED") ||
-      fieldUpper.includes("FLAG") ||
-      fieldUpper.includes("IS_") ||
-      fieldUpper.includes("HAS_")
-    ) {
-      return "boolean";
-    }
-
-    return "string";
-  }
-
-  /**
-   * ✅ NUEVO MÉTODO: Transforma valor a número
-   * @private
-   */
-  transformToNumber(value, fieldName) {
-    if (typeof value === "number") {
-      return value;
-    }
-
-    if (typeof value === "string") {
-      // Limpiar string de caracteres no numéricos comunes
-      const cleanValue = value.replace(/[^\d.-]/g, "");
-
-      if (cleanValue === "") {
-        throw new Error(
-          `Invalid string: cannot convert empty string to number for field ${fieldName}`
-        );
-      }
-
-      const numValue = parseFloat(cleanValue);
-
-      if (isNaN(numValue)) {
-        throw new Error(
-          `Invalid string: cannot convert '${value}' to number for field ${fieldName}`
-        );
-      }
-
-      // Si el campo parece ser un entero, devolver entero
-      if (
-        fieldName.includes("CANTIDAD") ||
-        fieldName.includes("QTY") ||
-        fieldName.includes("ID")
-      ) {
-        return Math.round(numValue);
-      }
-
-      return numValue;
-    }
-
-    throw new Error(
-      `Cannot convert ${typeof value} to number for field ${fieldName}`
-    );
-  }
-
-  /**
-   * ✅ NUEVO MÉTODO: Transforma valor a fecha
-   * @private
-   */
-  transformToDate(value, fieldName) {
-    if (value instanceof Date) {
-      return value;
-    }
-
-    if (typeof value === "string") {
-      const date = new Date(value);
-      if (isNaN(date.getTime())) {
-        throw new Error(
-          `Invalid date string: '${value}' for field ${fieldName}`
-        );
-      }
-      return date;
-    }
-
-    if (typeof value === "number") {
-      // Asumir timestamp
-      return new Date(value);
-    }
-
-    throw new Error(
-      `Cannot convert ${typeof value} to date for field ${fieldName}`
-    );
-  }
-
-  /**
-   * ✅ NUEVO MÉTODO: Transforma valor a booleano
-   * @private
-   */
-  transformToBoolean(value, fieldName) {
-    if (typeof value === "boolean") {
-      return value;
-    }
-
-    if (typeof value === "string") {
-      const lowerValue = value.toLowerCase();
-      if (["true", "1", "yes", "si", "sí", "activo"].includes(lowerValue)) {
-        return true;
-      }
-      if (["false", "0", "no", "inactivo"].includes(lowerValue)) {
-        return false;
-      }
-      throw new Error(
-        `Cannot convert string '${value}' to boolean for field ${fieldName}`
-      );
-    }
-
-    if (typeof value === "number") {
-      return value !== 0;
-    }
-
-    throw new Error(
-      `Cannot convert ${typeof value} to boolean for field ${fieldName}`
-    );
-  }
-
-  /**
-   * ✅ NUEVO MÉTODO: Transforma valor a string
-   * @private
-   */
-  transformToString(value, fieldName) {
-    if (value === null || value === undefined) {
-      return value;
-    }
-
-    return String(value);
-  }
-
-  /**
-   * Ejecuta lookup en la base de datos destino (CORREGIDO)
-   * @private
-   */
-  async executeLookupInTarget(tableConfig, sourceData, targetConnection) {
-    try {
-      logger.info(
-        `Realizando consultas de lookup en BD destino para tabla ${tableConfig.name}`
-      );
-
-      const lookupResults = {};
-      const failedLookups = [];
-
-      const lookupFields = tableConfig.fieldMappings.filter(
-        (fm) => fm.lookupFromTarget && fm.lookupQuery
-      );
-
-      if (lookupFields.length === 0) {
-        logger.debug(`No hay campos con lookup en tabla ${tableConfig.name}`);
-        return { results: {}, success: true };
-      }
-
-      logger.info(`Procesando ${lookupFields.length} campos con lookup`);
-
-      for (const fieldMapping of lookupFields) {
-        try {
-          let lookupQuery = fieldMapping.lookupQuery;
-          logger.debug(
-            `Procesando lookup para ${fieldMapping.targetField}: ${lookupQuery}`
-          );
-
-          const params = {};
-          const expectedParams = this.extractParametersFromQuery(lookupQuery);
-
-          logger.debug(`Parámetros esperados: ${expectedParams.join(", ")}`);
-
-          // ✅ CORRECCIÓN: Extraer valores de parámetros desde datos de origen
-          if (
-            fieldMapping.lookupParams &&
-            fieldMapping.lookupParams.length > 0
-          ) {
-            for (const param of fieldMapping.lookupParams) {
-              if (!param.sourceField || !param.paramName) {
-                logger.warn(
-                  `Parámetro mal configurado para ${fieldMapping.targetField}`
-                );
-                continue;
-              }
-
-              let paramValue = sourceData[param.sourceField];
-
-              // ✅ CORRECCIÓN: Aplicar eliminación de prefijo AL PARÁMETRO
-              if (
-                param.removePrefix &&
-                paramValue !== null &&
-                paramValue !== undefined &&
-                typeof paramValue === "string" &&
-                paramValue.startsWith(param.removePrefix)
-              ) {
-                const originalValue = paramValue;
-                paramValue = paramValue.substring(param.removePrefix.length);
-                logger.debug(
-                  `✂️ Prefijo '${param.removePrefix}' eliminado del parámetro ${param.paramName}: '${originalValue}' → '${paramValue}'`
-                );
-              }
-
-              params[param.paramName] = paramValue;
-
-              logger.debug(
-                `Parámetro ${param.paramName} (desde ${param.sourceField}): ${paramValue}`
-              );
-            }
-          }
-
-          // Validar parámetros requeridos
-          const missingParams = expectedParams.filter(
-            (p) => params[p] === undefined || params[p] === null
-          );
-
-          if (missingParams.length > 0) {
-            const errorMsg = `Parámetros faltantes: ${missingParams.join(
-              ", "
-            )}`;
-            logger.warn(`${fieldMapping.targetField}: ${errorMsg}`);
-
-            if (fieldMapping.failIfNotFound) {
-              failedLookups.push({
-                field: fieldMapping.targetField,
-                error: errorMsg,
-                isCritical: true,
-              });
-              continue;
-            } else {
-              lookupResults[fieldMapping.targetField] =
-                fieldMapping.defaultValue || null;
-              continue;
-            }
-          }
-
-          // Ejecutar consulta
-          logger.debug(
-            `Ejecutando consulta: ${lookupQuery} con parámetros:`,
-            params
-          );
-
-          const result = await SqlService.query(
-            targetConnection,
-            lookupQuery,
-            params
-          );
-
-          if (result.recordset && result.recordset.length > 0) {
-            const lookupValue = Object.values(result.recordset[0])[0];
-            lookupResults[fieldMapping.targetField] = lookupValue;
-
-            logger.debug(
-              `✅ Lookup exitoso para ${fieldMapping.targetField}: ${lookupValue}`
-            );
-          } else {
-            logger.warn(
-              `⚠️ No se encontraron resultados en lookup para ${fieldMapping.targetField}`
-            );
-
-            if (fieldMapping.failIfNotFound) {
-              failedLookups.push({
-                field: fieldMapping.targetField,
-                error: "No se encontraron resultados",
-                isCritical: true,
-              });
-            } else {
-              lookupResults[fieldMapping.targetField] =
-                fieldMapping.defaultValue || null;
-            }
-          }
-        } catch (fieldError) {
-          const errorMsg = `Error en lookup ${fieldMapping.targetField}: ${fieldError.message}`;
-          logger.error(errorMsg, fieldError);
-
-          if (fieldMapping.failIfNotFound) {
-            failedLookups.push({
-              field: fieldMapping.targetField,
-              error: errorMsg,
-              isCritical: true,
-            });
-          } else {
-            lookupResults[fieldMapping.targetField] =
-              fieldMapping.defaultValue || null;
-            logger.debug(
-              `Usando valor por defecto por error en ${
-                fieldMapping.targetField
-              }: ${lookupResults[fieldMapping.targetField]}`
-            );
-          }
-        }
-      }
-
-      // Verificar si hay fallos críticos
-      const criticalFailures = failedLookups.filter((f) => f.isCritical);
-      if (criticalFailures.length > 0) {
-        logger.error(
-          `Fallos críticos en lookup: ${criticalFailures.length} campos`
-        );
-        return {
-          results: {},
-          success: false,
-          failedFields: criticalFailures,
-        };
-      }
-
-      logger.info(
-        `Lookup completado exitosamente. Obtenidos ${
-          Object.keys(lookupResults).length
-        } valores`
-      );
-
-      return {
-        results: lookupResults,
-        success: true,
-        failedFields: failedLookups,
-      };
-    } catch (error) {
-      logger.error(`Error general en lookup: ${error.message}`, {
-        error,
-        stack: error.stack,
-      });
-
-      return {
-        results: {},
-        success: false,
-        error: error.message,
-      };
-    }
-  }
-
-  /**
    * Extrae valor correcto de un objeto promoción
-   * @private
+   * @param {Object} promotionObject - Objeto de promoción
+   * @param {string} targetField - Campo destino
+   * @param {string} sourceField - Campo origen
+   * @returns {*} - Valor extraído o null
    */
   extractValueFromPromotionObject(promotionObject, targetField, sourceField) {
     // Mapeo de campos comunes para extraer el valor correcto
@@ -2842,8 +2786,6 @@ class DynamicTransferService {
       CANTIDAD_A_FACTURAR: ["CNT_MAX", "CANTIDAD", "QTY", "CND_MAX"],
       CANTIDAD_FACTURADA: ["CNT_MAX", "CANTIDAD", "QTY", "CND_MAX"],
       CANTIDAD_BONIFICAD: ["CNT_MAX", "CANTIDAD", "QTY", "CND_MAX"],
-      CANTIDAD_RESERVADA: ["CNT_MAX", "CANTIDAD", "QTY", "CND_MAX"],
-      CANTIDAD_CANCELADA: ["CNT_MAX", "CANTIDAD", "QTY", "CND_MAX"],
       ARTICULO: ["COD_ART", "CODIGO_ARTICULO", "ITEM_CODE"],
       PRECIO_UNITARIO: ["MON_PRC_MN", "PRECIO", "PRICE", "UNIT_PRICE"],
       PEDIDO: ["NUM_PED", "PEDIDO_ID", "ORDER_ID"],
@@ -2876,7 +2818,6 @@ class DynamicTransferService {
       });
 
       if (numericFields.length > 0) {
-        // Preferir campos que contengan 'CNT', 'MAX', 'CANTIDAD'
         const preferredField =
           numericFields.find(
             (key) =>
@@ -2900,980 +2841,209 @@ class DynamicTransferService {
       return promotionObject[sourceField];
     }
 
-    return null; // No se pudo extraer valor válido
+    return null;
   }
 
   /**
-   * Ejecuta la inserción en la tabla destino con validación de campos
-   * @private
+   * Prepara tabla para consulta verificando existencia y estructura
+   * @param {Object} mainTable - Configuración de tabla principal
+   * @param {Object} connection - Conexión a la base de datos
+   * @returns {Promise<Object>} - Información de la tabla
    */
-  async executeInsert(
-    targetTable,
-    targetFields,
-    targetValues,
-    targetData,
-    directSqlFields,
-    targetConnection
-  ) {
-    try {
-      logger.debug(`🔍 Iniciando inserción en tabla: ${targetTable}`);
+  async prepareTableForQuery(mainTable, connection) {
+    let schema = "dbo";
+    let tableName = mainTable.sourceTable;
 
-      // PASO 1: Obtener la estructura real de la tabla destino
-      const existingColumns = await this.getTableColumns(
-        targetConnection,
-        targetTable
-      );
-
-      if (existingColumns.length === 0) {
-        // Si no se pudieron obtener las columnas, intentar la inserción sin validación
-        // pero con advertencia
-        logger.warn(
-          `⚠️ No se pudo validar estructura de ${targetTable}, procediendo sin validación`
-        );
-
-        const insertQuery = `
-        INSERT INTO ${targetTable} (${targetFields.join(", ")})
-        VALUES (${targetValues.join(", ")})
-      `;
-
-        logger.debug(`Ejecutando inserción sin validación: ${insertQuery}`);
-        await SqlService.query(targetConnection, insertQuery, targetData);
-        return;
+    if (tableName.includes(".")) {
+      const parts = tableName.split(".");
+      if (parts.length === 2) {
+        schema = parts[0];
+        tableName = parts[1];
       }
+    }
 
-      const existingColumnNames = existingColumns.map((col) =>
-        col.COLUMN_NAME.toLowerCase()
-      );
+    // Limpiar nombres de corchetes si existen
+    schema = schema.replace(/\[|\]/g, "");
+    tableName = tableName.replace(/\[|\]/g, "");
 
-      logger.debug(
-        `Columnas disponibles en ${targetTable}: ${existingColumnNames.join(
-          ", "
-        )}`
-      );
+    logger.info(`Verificando tabla ${schema}.${tableName}...`);
 
-      // PASO 2: Filtrar campos que realmente existen en la tabla
-      const validFields = [];
-      const validValues = [];
-      const filteredTargetData = {};
-      const ignoredFields = [];
-
-      for (let i = 0; i < targetFields.length; i++) {
-        const fieldName = targetFields[i];
-        const fieldValue = targetValues[i];
-
-        // Verificar si el campo existe en la tabla (comparación case-insensitive)
-        if (existingColumnNames.includes(fieldName.toLowerCase())) {
-          validFields.push(fieldName);
-          validValues.push(fieldValue);
-
-          // Solo agregar a los datos si no es un campo SQL directo
-          if (!directSqlFields.has(fieldName)) {
-            filteredTargetData[fieldName] = targetData[fieldName];
-          }
-        } else {
-          ignoredFields.push(fieldName);
-        }
-      }
-
-      // PASO 3: Reportar campos ignorados
-      if (ignoredFields.length > 0) {
-        logger.warn(
-          `⚠️ Campos ignorados (no existen en ${targetTable}): ${ignoredFields.join(
-            ", "
-          )}`
-        );
-      }
-
-      // PASO 4: Verificar que tenemos campos válidos para insertar
-      if (validFields.length === 0) {
-        throw new Error(
-          `No hay campos válidos para insertar en la tabla ${targetTable}. ` +
-            `Campos intentados: ${targetFields.join(", ")}. ` +
-            `Campos disponibles: ${existingColumnNames.join(", ")}`
-        );
-      }
-
-      // PASO 5: Construir la consulta SQL con campos válidos
-      const insertQuery = `
-      INSERT INTO ${targetTable} (${validFields.join(", ")})
-      VALUES (${validValues.join(", ")})
+    // Verificar si la tabla existe
+    const checkTableQuery = `
+      SELECT COUNT(*) as count
+      FROM INFORMATION_SCHEMA.TABLES
+      WHERE TABLE_SCHEMA = '${schema}'
+      AND TABLE_NAME = '${tableName}'
     `;
 
-      logger.debug(`Ejecutando inserción validada: ${insertQuery}`);
-      logger.info(`📊 DATOS FINALES PARA INSERCIÓN en ${targetTable}:`);
-      logger.info(
-        `Campos válidos (${validFields.length}): ${validFields.join(", ")}`
-      );
-      logger.info(`Datos: ${JSON.stringify(filteredTargetData, null, 2)}`);
-
-      // PASO 6: Ejecutar la inserción
-      await SqlService.query(targetConnection, insertQuery, filteredTargetData);
-
-      logger.debug(`✅ Inserción exitosa en ${targetTable}`);
-    } catch (error) {
-      logger.error(
-        `❌ Error en executeInsert para tabla ${targetTable}: ${error.message}`
-      );
-
-      // Información adicional para depuración
-      logger.error(`Campos intentados: ${targetFields.join(", ")}`);
-      logger.error(`Datos: ${JSON.stringify(targetData, null, 2)}`);
-
-      throw error;
-    }
-  }
-
-  /**
-   * Obtiene las columnas de una tabla específica
-   * @private
-   */
-  async getTableColumns(connection, tableName) {
-    try {
-      // Separar esquema y tabla
-      let schema = null;
-      let table = tableName;
-
-      if (tableName.includes(".")) {
-        const parts = tableName.split(".");
-        schema = parts[0];
-        table = parts[1];
-      }
-
-      // Limpiar nombres de corchetes
-      if (schema) {
-        schema = schema.replace(/\[|\]/g, "");
-      }
-      table = table.replace(/\[|\]/g, "");
-
-      let query;
-      let params;
-
-      if (schema) {
-        // Si se especificó esquema, buscar en ese esquema específico
-        query = `
-        SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
-        ORDER BY ORDINAL_POSITION
-      `;
-        params = { schema, table };
-
-        logger.debug(
-          `Buscando columnas en esquema específico: ${schema}.${table}`
-        );
-      } else {
-        // Si no se especificó esquema, buscar en todos los esquemas
-        query = `
-        SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH, TABLE_SCHEMA
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_NAME = @table
-        ORDER BY TABLE_SCHEMA, ORDINAL_POSITION
-      `;
-        params = { table };
-
-        logger.debug(
-          `Buscando columnas en todos los esquemas para tabla: ${table}`
-        );
-      }
-
-      const result = await SqlService.query(connection, query, params);
-
-      if (!result.recordset || result.recordset.length === 0) {
-        // Si no se encontraron columnas y no se especificó esquema, intentar con esquemas comunes
-        if (!schema) {
-          logger.warn(
-            `No se encontraron columnas para tabla ${table}, probando esquemas comunes...`
-          );
-
-          const commonSchemas = ["dbo", "CATELLI", "sys", "INFORMATION_SCHEMA"];
-
-          for (const testSchema of commonSchemas) {
-            const testQuery = `
-            SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH
-            FROM INFORMATION_SCHEMA.COLUMNS
-            WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
-            ORDER BY ORDINAL_POSITION
-          `;
-
-            try {
-              const testResult = await SqlService.query(connection, testQuery, {
-                schema: testSchema,
-                table,
-              });
-
-              if (testResult.recordset && testResult.recordset.length > 0) {
-                logger.info(
-                  `✅ Tabla encontrada en esquema: ${testSchema}.${table}`
-                );
-                return testResult.recordset;
-              }
-            } catch (testError) {
-              logger.debug(
-                `Schema ${testSchema} no contiene la tabla ${table}`
-              );
-            }
-          }
-        }
-
-        logger.warn(`No se encontraron columnas para ${tableName}`);
-        return [];
-      }
-
-      // Si se encontraron resultados
-      if (!schema && result.recordset.length > 0) {
-        // Si buscamos en todos los esquemas, mostrar cuál se encontró
-        const foundSchema = result.recordset[0].TABLE_SCHEMA;
-        logger.info(`✅ Tabla encontrada en esquema: ${foundSchema}.${table}`);
-      }
-
-      logger.debug(
-        `✅ Encontradas ${result.recordset.length} columnas para ${tableName}`
-      );
-
-      return result.recordset || [];
-    } catch (error) {
-      logger.error(
-        `Error obteniendo columnas de ${tableName}: ${error.message}`
-      );
-
-      // Como fallback, intentar listar todas las tablas disponibles para ayudar en depuración
-      try {
-        logger.debug("Listando tablas disponibles para depuración...");
-        const listTablesQuery = `
-        SELECT TOP 20 TABLE_SCHEMA, TABLE_NAME
-        FROM INFORMATION_SCHEMA.TABLES
-        WHERE TABLE_NAME LIKE '%${table.replace(/\[|\]/g, "")}%'
-        ORDER BY TABLE_SCHEMA, TABLE_NAME
-      `;
-
-        const tablesResult = await SqlService.query(
-          connection,
-          listTablesQuery
-        );
-
-        if (tablesResult.recordset && tablesResult.recordset.length > 0) {
-          logger.debug("Tablas similares encontradas:");
-          tablesResult.recordset.forEach((t) => {
-            logger.debug(`  - ${t.TABLE_SCHEMA}.${t.TABLE_NAME}`);
-          });
-        }
-      } catch (listError) {
-        logger.debug(`No se pudieron listar tablas: ${listError.message}`);
-      }
-
-      return [];
-    }
-  }
-
-  /**
-   * Verifica si un campo es un campo de consecutivo
-   * @private
-   */
-  isConsecutiveField(fieldMapping, mapping) {
-    const consecutiveConfig = mapping.consecutiveConfig;
-    if (!consecutiveConfig || !consecutiveConfig.enabled) {
-      return false;
-    }
-
-    // Verificar si es el campo general para encabezado
-    if (fieldMapping.targetField === consecutiveConfig.fieldName) {
-      logger.debug(
-        `✅ Campo ${fieldMapping.targetField} coincide con fieldName (encabezado)`
-      );
-      return true;
-    }
-
-    // ✅ NUEVA LÓGICA: Verificar si es el campo para detalle
-    if (fieldMapping.targetField === consecutiveConfig.detailFieldName) {
-      logger.debug(
-        `✅ Campo ${fieldMapping.targetField} coincide con detailFieldName (detalle)`
-      );
-      return true;
-    }
-
-    // Verificar si es un campo específico de tabla
-    if (
-      consecutiveConfig.applyToTables &&
-      consecutiveConfig.applyToTables.length > 0
-    ) {
-      const isSpecificField = consecutiveConfig.applyToTables.some(
-        (tableMapping) => tableMapping.fieldName === fieldMapping.targetField
-      );
-      if (isSpecificField) {
-        logger.debug(
-          `✅ Campo ${fieldMapping.targetField} encontrado en applyToTables`
-        );
-        return true;
-      }
-    }
-
-    logger.debug(
-      `❌ Campo ${fieldMapping.targetField} NO es un campo de consecutivo`
+    const tableCheckResult = await SqlService.query(
+      connection,
+      checkTableQuery
     );
-    return false;
-  }
 
-  /**
-   * Verifica si un campo debe recibir el consecutivo
-   * @private
-   */
-  shouldFieldReceiveConsecutive(
-    fieldMapping,
-    consecutiveConfig,
-    tableConfig,
-    isDetailTable
-  ) {
-    if (!consecutiveConfig || !consecutiveConfig.enabled) {
-      return false;
-    }
-
-    if (isDetailTable) {
-      return (
-        consecutiveConfig.detailFieldName === fieldMapping.targetField ||
-        (consecutiveConfig.applyToTables &&
-          consecutiveConfig.applyToTables.some(
-            (t) =>
-              t.tableName === tableConfig.name &&
-              t.fieldName === fieldMapping.targetField
-          ))
-      );
-    } else {
-      return (
-        consecutiveConfig.fieldName === fieldMapping.targetField ||
-        (consecutiveConfig.applyToTables &&
-          consecutiveConfig.applyToTables.some(
-            (t) =>
-              t.tableName === tableConfig.name &&
-              t.fieldName === fieldMapping.targetField
-          ))
+    if (tableCheckResult.recordset[0].count === 0) {
+      throw new Error(
+        `La tabla ${schema}.${tableName} no existe en la base de datos`
       );
     }
-  }
 
-  /**
-   * Obtiene el valor del consecutivo para un campo
-   * @private
-   */
-  getConsecutiveValue(fieldMapping, currentConsecutive, isDetailTable) {
-    const consecutiveConfig = fieldMapping.consecutiveConfig;
-    if (!consecutiveConfig || !consecutiveConfig.enabled) {
-      return currentConsecutive.formatted;
+    // Obtener columnas de la tabla
+    const columnsQuery = `
+      SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = '${schema}'
+      AND TABLE_NAME = '${tableName}'
+      ORDER BY ORDINAL_POSITION
+    `;
+
+    const columnsResult = await SqlService.query(connection, columnsQuery);
+
+    if (!columnsResult.recordset || columnsResult.recordset.length === 0) {
+      throw new Error(
+        `No se pudieron obtener las columnas de la tabla ${schema}.${tableName}`
+      );
     }
 
-    // Para tablas de detalle, usar el campo específico si está configurado
-    if (isDetailTable && consecutiveConfig.detailFieldName) {
-      return currentConsecutive.formatted;
-    }
-
-    return currentConsecutive.formatted;
-  }
-
-  /**
-   * Verifica si una tabla tiene campos de lookup
-   * @private
-   */
-  hasLookupFields(tableConfig) {
-    return (
-      tableConfig.fieldMappings &&
-      tableConfig.fieldMappings.some((fm) => fm.lookupFromTarget)
+    const availableColumns = columnsResult.recordset.map((c) => c.COLUMN_NAME);
+    logger.info(
+      `Tabla ${schema}.${tableName} encontrada con ${availableColumns.length} columnas`
     );
+
+    return {
+      fullTableName: `${schema}.${tableName}`,
+      availableColumns,
+      schema,
+      tableName,
+    };
   }
 
   /**
-   * Ejecuta lookup en la base de datos destino
-   * @private
+   * Construye consulta para obtener documentos
+   * @param {Object} mainTable - Configuración de tabla principal
+   * @param {Object} filters - Filtros para la consulta
+   * @param {Object} tableInfo - Información de la tabla
+   * @returns {Object} - Consulta y parámetros
    */
-  async executeLookupInTarget(tableConfig, sourceData, targetConnection) {
-    try {
-      logger.info(
-        `Realizando consultas de lookup en BD destino para tabla ${tableConfig.name}`
-      );
+  buildDocumentQuery(mainTable, filters, tableInfo) {
+    // Construir campos a seleccionar
+    let selectFields = [];
 
-      const lookupResults = {};
-      const failedLookups = [];
-
-      // Identificar campos que requieren lookup
-      const lookupFields = tableConfig.fieldMappings.filter(
-        (fm) => fm.lookupFromTarget && fm.lookupQuery
-      );
-
-      if (lookupFields.length === 0) {
-        logger.debug(`No hay campos con lookup en tabla ${tableConfig.name}`);
-        return { results: {}, success: true };
-      }
-
-      logger.info(`Procesando ${lookupFields.length} campos con lookup`);
-
-      // Procesar cada campo con lookup
-      for (const fieldMapping of lookupFields) {
-        if (fieldMapping.targetField === "CODIGO_ARTICULO") {
-          logger.warn(`Corrigiendo campo lookup CODIGO_ARTICULO a ARTICULO`);
-          fieldMapping.targetField = "ARTICULO";
+    if (mainTable.fieldMappings && mainTable.fieldMappings.length > 0) {
+      for (const mapping of mainTable.fieldMappings) {
+        if (
+          mapping.sourceField &&
+          tableInfo.availableColumns.includes(mapping.sourceField)
+        ) {
+          selectFields.push(mapping.sourceField);
         }
-
-        if (fieldMapping.sourceField === "CODIGO_ARTICULO") {
-          logger.warn(
-            `Corrigiendo campo origen lookup CODIGO_ARTICULO a ARTICULO`
-          );
-          fieldMapping.sourceField = "ARTICULO";
-        }
-        try {
-          let lookupQuery = fieldMapping.lookupQuery;
-          logger.debug(
-            `Procesando lookup para ${fieldMapping.targetField}: ${lookupQuery}`
-          );
-
-          // Preparar parámetros
-          const params = {};
-          const expectedParams = this.extractParametersFromQuery(lookupQuery);
-
-          logger.debug(`Parámetros esperados: ${expectedParams.join(", ")}`);
-
-          // Extraer valores de parámetros desde datos de origen
-          if (
-            fieldMapping.lookupParams &&
-            fieldMapping.lookupParams.length > 0
-          ) {
-            for (const param of fieldMapping.lookupParams) {
-              if (!param.sourceField || !param.paramName) {
-                logger.warn(
-                  `Parámetro mal configurado para ${fieldMapping.targetField}`
-                );
-                continue;
-              }
-
-              let paramValue = sourceData[param.sourceField];
-
-              // Aplicar eliminación de prefijo si está configurado
-              // if (
-              //   fieldMapping.removePrefix &&
-              //   typeof value === "string" &&
-              //   value.startsWith(fieldMapping.removePrefix)
-              // ) {
-              //   const originalValue = value;
-              //   value = value.substring(fieldMapping.removePrefix.length);
-              //   logger.debug(
-              //     `✂️ Prefijo '${fieldMapping.removePrefix}' removido de ${fieldMapping.targetField}: '${originalValue}' -> '${value}'`
-              //   );
-              // }
-              if (
-                param.removePrefix &&
-                typeof paramValue === "string" &&
-                paramValue.startsWith(param.removePrefix)
-              ) {
-                const originalValue = paramValue;
-                paramValue = paramValue.substring(param.removePrefix.length);
-                logger.debug(
-                  `✂️ Prefijo '${param.removePrefix}' removido del parámetro ${param.paramName}: '${originalValue}' -> '${paramValue}'`
-                );
-              }
-
-              params[param.paramName] = paramValue;
-
-              logger.debug(
-                `Parámetro ${param.paramName} (desde ${param.sourceField}): ${paramValue}`
-              );
-            }
-          }
-
-          // Validar parámetros requeridos
-          const missingParams = expectedParams.filter(
-            (p) => params[p] === undefined || params[p] === null
-          );
-
-          if (missingParams.length > 0) {
-            const errorMsg = `Parámetros faltantes: ${missingParams.join(
-              ", "
-            )}`;
-            logger.warn(`${fieldMapping.targetField}: ${errorMsg}`);
-
-            if (fieldMapping.failIfNotFound) {
-              failedLookups.push({
-                field: fieldMapping.targetField,
-                error: errorMsg,
-                isCritical: true,
-              });
-              continue;
-            } else {
-              lookupResults[fieldMapping.targetField] =
-                fieldMapping.defaultValue || null;
-              continue;
-            }
-          }
-
-          // Ejecutar consulta
-          logger.debug(
-            `Ejecutando consulta: ${lookupQuery} con parámetros:`,
-            params
-          );
-
-          const result = await SqlService.query(
-            targetConnection,
-            lookupQuery,
-            params
-          );
-
-          if (result.recordset && result.recordset.length > 0) {
-            // Tomar el primer campo del primer registro
-            const firstRecord = result.recordset[0];
-            const firstColumnName = Object.keys(firstRecord)[0];
-            const value = firstRecord[firstColumnName];
-
-            lookupResults[fieldMapping.targetField] = value;
-
-            logger.debug(`✅ ${fieldMapping.targetField}: ${value}`);
-          } else {
-            const errorMsg = `No se encontraron resultados en lookup`;
-            logger.warn(`${fieldMapping.targetField}: ${errorMsg}`);
-
-            if (fieldMapping.failIfNotFound) {
-              failedLookups.push({
-                field: fieldMapping.targetField,
-                error: errorMsg,
-                isCritical: true,
-              });
-            } else {
-              lookupResults[fieldMapping.targetField] =
-                fieldMapping.defaultValue || null;
-              logger.debug(
-                `Usando valor por defecto para ${fieldMapping.targetField}: ${
-                  lookupResults[fieldMapping.targetField]
-                }`
-              );
-            }
-          }
-        } catch (fieldError) {
-          const errorMsg = `Error en lookup: ${fieldError.message}`;
-          logger.error(`${fieldMapping.targetField}: ${errorMsg}`, fieldError);
-
-          if (fieldMapping.failIfNotFound) {
-            failedLookups.push({
-              field: fieldMapping.targetField,
-              error: errorMsg,
-              isCritical: true,
-            });
-          } else {
-            lookupResults[fieldMapping.targetField] =
-              fieldMapping.defaultValue || null;
-          }
-        }
-      }
-
-      // Verificar fallos críticos
-      const criticalFailures = failedLookups.filter((f) => f.isCritical);
-      if (criticalFailures.length > 0) {
-        logger.error(
-          `Fallos críticos en lookup: ${criticalFailures.length} campos`
-        );
-        return {
-          results: {},
-          success: false,
-          failedFields: criticalFailures,
-        };
-      }
-
-      logger.info(
-        `Lookup completado. Obtenidos ${
-          Object.keys(lookupResults).length
-        } valores`
-      );
-
-      return {
-        results: lookupResults,
-        success: true,
-        failedFields: failedLookups,
-      };
-    } catch (error) {
-      logger.error(`Error general en lookup: ${error.message}`, {
-        error,
-        stack: error.stack,
-      });
-
-      return {
-        results: {},
-        success: false,
-        error: error.message,
-      };
-    }
-  }
-
-  // Método auxiliar para extraer parámetros de la consulta
-  extractParametersFromQuery(query) {
-    const paramRegex = /@(\w+)/g;
-    const params = [];
-    let match;
-
-    while ((match = paramRegex.exec(query)) !== null) {
-      if (!params.includes(match[1])) {
-        params.push(match[1]);
       }
     }
 
-    return params;
-  }
-
-  /**
-   * Realiza consultas de lookup en la base de datos destino para enriquecer los datos
-   * @param {Object} tableConfig - Configuración de la tabla
-   * @param {Object} sourceData - Datos de origen
-   * @param {Object} targetConnection - Conexión a la base de datos destino
-   * @returns {Promise<Object>} - Objeto con los valores obtenidos del lookup
-   */
-  async lookupValuesFromTarget(tableConfig, sourceData, targetConnection) {
-    try {
-      logger.info(
-        `Realizando consultas de lookup en base de datos destino para tabla ${tableConfig.name}`
-      );
-
-      const lookupResults = {};
-      const failedLookups = [];
-
-      // Identificar todos los campos que requieren lookup
-      const lookupFields = tableConfig.fieldMappings.filter(
-        (fm) => fm.lookupFromTarget && fm.lookupQuery
-      );
-
-      if (lookupFields.length === 0) {
-        logger.debug(
-          `No se encontraron campos que requieran lookup en tabla ${tableConfig.name}`
-        );
-        return { results: {}, success: true };
-      }
-
-      logger.info(
-        `Encontrados ${lookupFields.length} campos con lookupFromTarget para procesar`
-      );
-
-      // Ejecutar cada consulta de lookup
-      for (const fieldMapping of lookupFields) {
-        if (fieldMapping.targetField === "CODIGO_ARTICULO") {
-          logger.warn(`Corrigiendo campo lookup CODIGO_ARTICULO a ARTICULO`);
-          fieldMapping.targetField = "ARTICULO";
-        }
-
-        if (fieldMapping.sourceField === "CODIGO_ARTICULO") {
-          logger.warn(
-            `Corrigiendo campo origen lookup CODIGO_ARTICULO a ARTICULO`
-          );
-          fieldMapping.sourceField = "ARTICULO";
-        }
-
-        try {
-          let lookupQuery = fieldMapping.lookupQuery;
-          logger.debug(
-            `Procesando lookup para campo ${fieldMapping.targetField}: ${lookupQuery}`
-          );
-
-          // Preparar parámetros para la consulta
-          const params = {};
-          const missingParams = [];
-
-          // Registrar todos los parámetros que se esperan en la consulta
-          const expectedParams = [];
-          const paramRegex = /@(\w+)/g;
-          let match;
-          while ((match = paramRegex.exec(lookupQuery)) !== null) {
-            expectedParams.push(match[1]);
-          }
-
-          logger.debug(
-            `Parámetros esperados en la consulta: ${expectedParams.join(", ")}`
-          );
-
-          // Si hay parámetros definidos, extraerlos de los datos de origen
-          if (
-            fieldMapping.lookupParams &&
-            fieldMapping.lookupParams.length > 0
-          ) {
-            for (const param of fieldMapping.lookupParams) {
-              if (!param.sourceField || !param.paramName) {
-                logger.warn(
-                  `Parámetro mal configurado para ${fieldMapping.targetField}. Debe tener sourceField y paramName.`
-                );
-                continue;
-              }
-
-              // Obtener el valor del campo origen
-              let paramValue = sourceData[param.sourceField];
-
-              // Registrar si el valor está presente
-              logger.debug(
-                `Parámetro ${param.paramName} (desde campo ${
-                  param.sourceField
-                }): ${
-                  paramValue !== undefined && paramValue !== null
-                    ? "PRESENTE"
-                    : "NO ENCONTRADO"
-                }`
-              );
-
-              // Comprobar si el parámetro es requerido en la consulta
-              if (
-                expectedParams.includes(param.paramName) &&
-                (paramValue === undefined || paramValue === null)
-              ) {
-                missingParams.push(
-                  `@${param.paramName} (campo: ${param.sourceField})`
-                );
-              }
-
-              // ✅ APLICAR ELIMINACIÓN DE PREFIJO (CORREGIDO - usar param.removePrefix)
-              if (
-                param.removePrefix &&
-                typeof paramValue === "string" &&
-                paramValue.startsWith(param.removePrefix)
-              ) {
-                const originalValue = paramValue;
-                paramValue = paramValue.substring(param.removePrefix.length);
-                logger.debug(
-                  `✂️ Prefijo '${param.removePrefix}' eliminado del parámetro ${param.paramName}: '${originalValue}' → '${paramValue}'`
-                );
-              }
-
-              params[param.paramName] = paramValue;
-            }
-          }
-
-          // Verificar si faltan parámetros requeridos
-          if (missingParams.length > 0) {
-            const errorMessage = `Faltan parámetros requeridos para la consulta: ${missingParams.join(
-              ", "
-            )}`;
-            logger.error(errorMessage);
-
-            if (fieldMapping.failIfNotFound) {
-              throw new Error(errorMessage);
-            } else {
-              // ✅ USAR VALOR POR DEFECTO (CORREGIDO)
-              lookupResults[fieldMapping.targetField] =
-                fieldMapping.defaultValue !== undefined &&
-                fieldMapping.defaultValue !== null
-                  ? fieldMapping.defaultValue
-                  : null;
-              logger.debug(
-                `Usando valor por defecto para ${fieldMapping.targetField}: ${
-                  lookupResults[fieldMapping.targetField]
-                }`
-              );
-              continue;
-            }
-          }
-
-          logger.debug(`Parámetros para lookup: ${JSON.stringify(params)}`);
-
-          // Ejecutar la consulta
-          try {
-            // Asegurar que es una consulta SELECT
-            if (!lookupQuery.trim().toUpperCase().startsWith("SELECT")) {
-              lookupQuery = `SELECT ${lookupQuery} AS result`;
-            }
-
-            // Verificar que los parámetros esperados tengan valor asignado
-            for (const expectedParam of expectedParams) {
-              if (params[expectedParam] === undefined) {
-                logger.warn(
-                  `El parámetro @${expectedParam} en la consulta no está definido en los parámetros proporcionados. Se usará NULL.`
-                );
-                params[expectedParam] = null;
-              }
-            }
-
-            const result = await SqlService.query(
-              targetConnection,
-              lookupQuery,
-              params
-            );
-
-            // Verificar resultados
-            if (result.recordset && result.recordset.length > 0) {
-              // Extraer el valor del resultado (primera columna o columna 'result')
-              const value =
-                result.recordset[0].result !== undefined
-                  ? result.recordset[0].result
-                  : Object.values(result.recordset[0])[0];
-
-              // Validar existencia si es requerido
-              if (
-                fieldMapping.validateExistence &&
-                (value === null || value === undefined) &&
-                fieldMapping.failIfNotFound
-              ) {
-                throw new Error(
-                  `No se encontró valor para el campo ${fieldMapping.targetField} con los parámetros proporcionados`
-                );
-              }
-
-              // Guardar el valor obtenido
-              lookupResults[fieldMapping.targetField] = value;
-              logger.debug(
-                `Lookup exitoso para ${fieldMapping.targetField}: ${value}`
-              );
-            } else if (fieldMapping.failIfNotFound) {
-              // No se encontraron resultados y es obligatorio
-              throw new Error(
-                `No se encontraron resultados para el campo ${fieldMapping.targetField}`
-              );
-            } else {
-              // ✅ USAR VALOR POR DEFECTO (CORREGIDO)
-              lookupResults[fieldMapping.targetField] =
-                fieldMapping.defaultValue !== undefined &&
-                fieldMapping.defaultValue !== null
-                  ? fieldMapping.defaultValue
-                  : null;
-              logger.debug(
-                `Usando valor por defecto para ${fieldMapping.targetField}: ${
-                  lookupResults[fieldMapping.targetField]
-                }`
-              );
-            }
-          } catch (queryError) {
-            // Error en la consulta SQL
-            const errorMessage = `Error ejecutando consulta SQL para ${fieldMapping.targetField}: ${queryError.message}`;
-            logger.error(errorMessage, {
-              sql: lookupQuery,
-              params: params,
-              error: queryError,
-            });
-
-            if (fieldMapping.failIfNotFound) {
-              throw new Error(errorMessage);
-            } else {
-              // ✅ USAR VALOR POR DEFECTO EN CASO DE ERROR (CORREGIDO)
-              lookupResults[fieldMapping.targetField] =
-                fieldMapping.defaultValue !== undefined &&
-                fieldMapping.defaultValue !== null
-                  ? fieldMapping.defaultValue
-                  : null;
-              logger.debug(
-                `Usando valor por defecto por error en ${
-                  fieldMapping.targetField
-                }: ${lookupResults[fieldMapping.targetField]}`
-              );
-            }
-          }
-        } catch (fieldError) {
-          const errorMsg = `Error en lookup para ${fieldMapping.targetField}: ${fieldError.message}`;
-          logger.error(errorMsg, fieldError);
-
-          if (fieldMapping.failIfNotFound) {
-            failedLookups.push({
-              field: fieldMapping.targetField,
-              error: errorMsg,
-              isCritical: true,
-            });
-          } else {
-            // ✅ USAR VALOR POR DEFECTO EN CASO DE ERROR (CORREGIDO)
-            lookupResults[fieldMapping.targetField] =
-              fieldMapping.defaultValue !== undefined &&
-              fieldMapping.defaultValue !== null
-                ? fieldMapping.defaultValue
-                : null;
-            logger.debug(
-              `Usando valor por defecto por error en ${
-                fieldMapping.targetField
-              }: ${lookupResults[fieldMapping.targetField]}`
-            );
-          }
-        }
-      }
-
-      // Verificar si hay fallos críticos
-      const criticalFailures = failedLookups.filter((f) => f.isCritical);
-      if (criticalFailures.length > 0) {
-        logger.error(
-          `Fallos críticos en lookup: ${criticalFailures.length} campos`
-        );
-        return {
-          results: {},
-          success: false,
-          failedFields: criticalFailures,
-        };
-      }
-
-      logger.info(
-        `Lookup en destino completado exitosamente. Obtenidos ${
-          Object.keys(lookupResults).length
-        } valores.`
-      );
-
-      return {
-        results: lookupResults,
-        success: true,
-        failedFields: failedLookups, // Incluir fallos no críticos para información
-      };
-    } catch (error) {
-      logger.error(
-        `Error general al ejecutar lookup en destino: ${error.message}`,
-        {
-          error,
-          stack: error.stack,
-        }
-      );
-
-      return {
-        results: {},
-        success: false,
-        error: error.message,
-      };
+    // Si no hay campos válidos, seleccionar todas las columnas disponibles
+    if (selectFields.length === 0) {
+      selectFields = tableInfo.availableColumns;
     }
+
+    const limit = filters.limit || 100;
+    const selectFieldsStr = selectFields.join(", ");
+
+    let query = `SELECT TOP ${limit} ${selectFieldsStr} FROM ${tableInfo.fullTableName} WHERE 1=1`;
+    const params = {};
+
+    // Verificar y aplicar filtros de fecha
+    let dateField = filters.dateField || "FEC_PED";
+    const alternativeDateFields = [
+      "FEC_PED",
+      "FECHA_PEDIDO",
+      "FECHA",
+      "DATE_CREATED",
+      "CREATED_DATE",
+      "FEC_CREACION",
+      "FEC_DOC",
+      "FECHA_DOC",
+    ];
+
+    if (!tableInfo.availableColumns.includes(dateField)) {
+      dateField = alternativeDateFields.find((field) =>
+        tableInfo.availableColumns.includes(field)
+      );
+    }
+
+    if (dateField) {
+      if (filters.dateFrom) {
+        query += ` AND ${dateField} >= @dateFrom`;
+        params.dateFrom = filters.dateFrom;
+      }
+      if (filters.dateTo) {
+        query += ` AND ${dateField} <= @dateTo`;
+        params.dateTo = filters.dateTo;
+      }
+    }
+
+    // Filtros adicionales
+    if (filters.status && tableInfo.availableColumns.includes("STATUS")) {
+      query += ` AND STATUS = @status`;
+      params.status = filters.status;
+    }
+
+    if (filters.processed !== undefined) {
+      const processedField = filters.processedField || "PROCESSED";
+      if (tableInfo.availableColumns.includes(processedField)) {
+        query += ` AND ${processedField} = @processed`;
+        params.processed = filters.processed;
+      }
+    }
+
+    // Aplicar filtro personalizado si existe
+    if (mainTable.filterCondition) {
+      query += ` AND ${mainTable.filterCondition}`;
+    }
+
+    // Ordenar por clave primaria
+    const primaryKey = mainTable.primaryKey || "NUM_PED";
+    if (tableInfo.availableColumns.includes(primaryKey)) {
+      query += ` ORDER BY ${primaryKey} DESC`;
+    } else if (selectFields.length > 0) {
+      query += ` ORDER BY ${selectFields[0]} DESC`;
+    }
+
+    return { query, params };
   }
 
   /**
    * Aplica conversión de unidades a un valor específico
-   * @private
+   * @param {*} value - Valor original
+   * @param {Object} unitConfig - Configuración de conversión
+   * @param {Object} sourceData - Datos origen
+   * @param {Object} targetConnection - Conexión destino
+   * @param {Map} columnLengthCache - Cache de longitudes
+   * @returns {Promise<*>} - Valor convertido
    */
-  applyUnitConversion(sourceData, fieldMapping, originalValue) {
+  async applyUnitConversion(
+    value,
+    unitConfig,
+    sourceData,
+    targetConnection,
+    columnLengthCache
+  ) {
     try {
-      console.log(`🐛 DEBUG applyUnitConversion llamado:`);
-      console.log(`   Campo: ${fieldMapping.targetField}`);
-      console.log(`   Valor original: ${originalValue}`);
-      console.log(
-        `   Configuración enabled: ${fieldMapping.unitConversion?.enabled}`
-      );
-      console.log(`   sourceData keys: ${Object.keys(sourceData).join(", ")}`);
-
-      // Log detallado de TODOS los campos disponibles con sus valores
-      console.log(`🔍 DATOS COMPLETOS DISPONIBLES:`);
-      Object.keys(sourceData).forEach((key) => {
-        console.log(`   ${key}: ${sourceData[key]}`);
-      });
-
-      logger.debug(
-        `🔧 Aplicando conversión de unidades para campo ${fieldMapping.targetField}`
-      );
-
-      const unitConfig = fieldMapping.unitConversion;
-      if (!unitConfig || !unitConfig.enabled) {
-        logger.debug(
-          `Conversión de unidades no habilitada para ${fieldMapping.targetField}`
-        );
-        return originalValue;
-      }
+      logger.debug(`🔧 Aplicando conversión de unidades`);
 
       // Validar que el valor original sea numérico
-      const numericValue = parseFloat(originalValue);
+      const numericValue = parseFloat(value);
       if (isNaN(numericValue)) {
-        logger.warn(
-          `Valor no numérico para conversión de unidades en ${fieldMapping.targetField}: ${originalValue}`
-        );
-        return originalValue;
+        logger.warn(`Valor no numérico para conversión: ${value}`);
+        return value;
       }
 
-      // Obtener el factor de conversión
+      // Obtener factor de conversión
       let conversionFactor = 1;
 
       if (unitConfig.conversionFactorField) {
         const factorValue = sourceData[unitConfig.conversionFactorField];
-        console.log(
-          `🔧 Factor de conversión desde campo ${unitConfig.conversionFactorField}: ${factorValue}`
-        );
-
         if (factorValue !== undefined && factorValue !== null) {
           conversionFactor = parseFloat(factorValue);
           if (isNaN(conversionFactor)) {
-            logger.warn(
-              `Factor de conversión no numérico en ${unitConfig.conversionFactorField}: ${factorValue}`
-            );
             conversionFactor = 1;
           }
         }
@@ -3882,20 +3052,15 @@ class DynamicTransferService {
       // Verificar unidad de medida si está configurada
       if (unitConfig.unitMeasureField) {
         const unitMeasure = sourceData[unitConfig.unitMeasureField];
-        console.log(
-          `🔧 Unidad de medida desde campo ${unitConfig.unitMeasureField}: ${unitMeasure}`
-        );
-
-        // Solo aplicar conversión si la unidad coincide con la unidad origen
         if (unitConfig.fromUnit && unitMeasure !== unitConfig.fromUnit) {
           logger.debug(
-            `Unidad ${unitMeasure} no coincide con unidad origen ${unitConfig.fromUnit}, sin conversión`
+            `Unidad ${unitMeasure} no coincide con ${unitConfig.fromUnit}, sin conversión`
           );
-          return originalValue;
+          return value;
         }
       }
 
-      // Aplicar la conversión
+      // Aplicar conversión
       let convertedValue;
       if (unitConfig.operation === "divide") {
         convertedValue =
@@ -3903,152 +3068,34 @@ class DynamicTransferService {
             ? numericValue / conversionFactor
             : numericValue;
       } else {
-        // Por defecto multiplicar
         convertedValue = numericValue * conversionFactor;
       }
 
       logger.info(
-        `🔧 Conversión aplicada para ${
-          fieldMapping.targetField
-        }: ${originalValue} ${
+        `🔧 Conversión aplicada: ${value} ${
           unitConfig.operation === "divide" ? "÷" : "×"
         } ${conversionFactor} = ${convertedValue}`
       );
 
       return convertedValue;
     } catch (error) {
-      logger.error(
-        `Error al aplicar conversión de unidades para ${fieldMapping.targetField}: ${error.message}`
-      );
-      return originalValue;
+      logger.error(`Error al aplicar conversión de unidades: ${error.message}`);
+      return value;
     }
   }
 
-  /**
-   * Obtiene la longitud máxima de una columna
-   * @private
-   */
-  async getColumnMaxLength(connection, tableName, columnName, cache = null) {
-    // Si se proporciona un cache, verificar si ya tenemos la información
-    if (cache && cache instanceof Map) {
-      const cacheKey = `${tableName}:${columnName}`;
-      if (cache.has(cacheKey)) {
-        return cache.get(cacheKey);
-      }
-    }
-
-    try {
-      // Extraer nombre de tabla sin esquema
-      const tableNameOnly = tableName.replace(/^.*\.|\[|\]/g, "");
-
-      // Consultar metadata de la columna
-      const query = `
-        SELECT CHARACTER_MAXIMUM_LENGTH
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_NAME = '${tableNameOnly}'
-        AND COLUMN_NAME = '${columnName}'
-      `;
-
-      const result = await SqlService.query(connection, query);
-
-      let maxLength = 0;
-      if (result.recordset && result.recordset.length > 0) {
-        maxLength = result.recordset[0].CHARACTER_MAXIMUM_LENGTH || 0;
-      }
-
-      // Guardar en cache si está disponible
-      if (cache && cache instanceof Map) {
-        const cacheKey = `${tableName}:${columnName}`;
-        cache.set(cacheKey, maxLength);
-      }
-
-      return maxLength;
-    } catch (error) {
-      logger.warn(
-        `Error al obtener longitud máxima para ${columnName}: ${error.message}`
-      );
-      return 0; // En caso de error, retornar 0 (no truncar)
-    }
-  }
-
-  /**
-   * Genera un consecutivo para el documento
-   * @private
-   */
-  async generateConsecutive(
-    mapping,
-    useCentralizedConsecutives = false,
-    centralizedConsecutiveId = null
-  ) {
-    try {
-      if (useCentralizedConsecutives && centralizedConsecutiveId) {
-        // Usar consecutivo centralizado
-        logger.info(
-          `Generando consecutivo centralizado: ${centralizedConsecutiveId}`
-        );
-        return await ConsecutiveService.generateConsecutive(
-          centralizedConsecutiveId
-        );
-      } else {
-        // Usar consecutivo local del mapping
-        logger.info("Generando consecutivo local del mapping");
-        return await this.generateLocalConsecutive(mapping);
-      }
-    } catch (error) {
-      logger.error(`Error al generar consecutivo: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Genera un consecutivo local
-   * @private
-   */
-  async generateLocalConsecutive(mapping) {
-    const consecutiveConfig = mapping.consecutiveConfig;
-    if (!consecutiveConfig || !consecutiveConfig.enabled) {
-      return null;
-    }
-
-    // Incrementar el último valor
-    const nextValue = (consecutiveConfig.lastValue || 0) + 1;
-
-    // Formatear el consecutivo
-    let formatted = nextValue.toString();
-
-    if (consecutiveConfig.pattern) {
-      // Usar patrón personalizado
-      formatted = consecutiveConfig.pattern
-        .replace(/{PREFIX}/g, consecutiveConfig.prefix || "")
-        .replace(/{VALUE:(\d+)}/g, (match, digits) => {
-          return nextValue.toString().padStart(parseInt(digits), "0");
-        })
-        .replace(/{VALUE}/g, nextValue.toString())
-        .replace(/{YEAR}/g, new Date().getFullYear().toString())
-        .replace(
-          /{MONTH}/g,
-          (new Date().getMonth() + 1).toString().padStart(2, "0")
-        )
-        .replace(/{DAY}/g, new Date().getDate().toString().padStart(2, "0"));
-    } else {
-      // Formato simple
-      formatted = (consecutiveConfig.prefix || "") + nextValue;
-    }
-
-    // Actualizar el último valor en el mapping
-    await TransferMapping.findByIdAndUpdate(mapping._id, {
-      "consecutiveConfig.lastValue": nextValue,
-    });
-
-    return {
-      value: nextValue,
-      formatted: formatted,
-    };
-  }
+  // ===============================
+  // 9. MÉTODOS DE DEPENDENCIAS Y REGLAS
+  // ===============================
 
   /**
    * Procesa dependencias de foreign key
-   * @private
+   * @param {string} documentId - ID del documento
+   * @param {Object} mapping - Configuración de mapping
+   * @param {Object} sourceConnection - Conexión origen
+   * @param {Object} targetConnection - Conexión destino
+   * @param {Object} sourceData - Datos origen
+   * @returns {Promise<void>}
    */
   async processForeignKeyDependencies(
     documentId,
@@ -4164,7 +3211,9 @@ class DynamicTransferService {
 
   /**
    * Determina el tipo de documento basado en las reglas
-   * @private
+   * @param {Array} documentTypeRules - Reglas de tipo de documento
+   * @param {Object} sourceData - Datos origen
+   * @returns {string} - Tipo de documento determinado
    */
   determineDocumentType(documentTypeRules, sourceData) {
     if (!documentTypeRules || documentTypeRules.length === 0) {
@@ -4187,65 +3236,9 @@ class DynamicTransferService {
     return "unknown";
   }
 
-  /**
-   * Maneja errores de procesamiento
-   * @private
-   */
-  handleProcessingError(error, documentId, currentConsecutive, mapping) {
-    logger.error(`Error procesando documento ${documentId}: ${error.message}`);
-
-    // Si se generó un consecutivo, podríamos querer revertirlo
-    if (currentConsecutive && mapping.consecutiveConfig?.updateAfterTransfer) {
-      logger.warn(
-        `Documento ${documentId} falló pero consecutivo ${currentConsecutive.formatted} ya fue generado`
-      );
-    }
-
-    return {
-      success: false,
-      message: error.message,
-      error: error.stack,
-      documentType: "unknown",
-      consecutiveUsed: currentConsecutive ? currentConsecutive.formatted : null,
-      consecutiveValue: currentConsecutive ? currentConsecutive.value : null,
-    };
-  }
-
-  /**
-   * Ordena las tablas según sus dependencias
-   */
-  getTablesExecutionOrder(tableConfigs) {
-    // Separar tablas principales y de detalle
-    const mainTables = tableConfigs.filter((tc) => !tc.isDetailTable);
-    const detailTables = tableConfigs.filter((tc) => tc.isDetailTable);
-
-    // Ordenar tablas principales por executionOrder
-    mainTables.sort(
-      (a, b) => (a.executionOrder || 0) - (b.executionOrder || 0)
-    );
-
-    // Para cada tabla principal, agregar sus detalles después
-    const orderedTables = [];
-
-    for (const mainTable of mainTables) {
-      orderedTables.push(mainTable);
-
-      // Agregar tablas de detalle relacionadas
-      const relatedDetails = detailTables
-        .filter((dt) => dt.parentTableRef === mainTable.name)
-        .sort((a, b) => (a.executionOrder || 0) - (b.executionOrder || 0));
-
-      orderedTables.push(...relatedDetails);
-    }
-
-    // Agregar detalles huérfanos al final
-    const orphanDetails = detailTables.filter(
-      (dt) => !mainTables.some((mt) => mt.name === dt.parentTableRef)
-    );
-    orderedTables.push(...orphanDetails);
-
-    return orderedTables;
-  }
+  // ===============================
+  // 10. MÉTODOS DE MARCADO DE DOCUMENTOS
+  // ===============================
 
   /**
    * Marca documentos como procesados según la estrategia configurada
@@ -4261,7 +3254,6 @@ class DynamicTransferService {
     connection,
     shouldMark = true
   ) {
-    // Normalizar documentIds a array
     const docArray = Array.isArray(documentIds) ? documentIds : [documentIds];
 
     logger.info(
@@ -4283,7 +3275,6 @@ class DynamicTransferService {
             shouldMark,
             config
           );
-
         case "batch":
           return await this.markDocumentsBatch(
             docArray,
@@ -4292,7 +3283,6 @@ class DynamicTransferService {
             shouldMark,
             config
           );
-
         case "flag":
           return await this.markDocumentsWithFlag(
             docArray,
@@ -4301,7 +3291,6 @@ class DynamicTransferService {
             shouldMark,
             config
           );
-
         default:
           throw new Error(`Estrategia de marcado no soportada: ${strategy}`);
       }
@@ -4317,7 +3306,12 @@ class DynamicTransferService {
 
   /**
    * Marca documentos individualmente
-   * @private
+   * @param {Array} documentIds - IDs de documentos
+   * @param {Object} mapping - Configuración de mapping
+   * @param {Object} connection - Conexión a BD
+   * @param {boolean} shouldMark - Si marcar o desmarcar
+   * @param {Object} config - Configuración de marcado
+   * @returns {Promise<Object>} - Resultado del marcado
    */
   async markDocumentsIndividually(
     documentIds,
@@ -4328,7 +3322,6 @@ class DynamicTransferService {
   ) {
     const results = { success: 0, failed: 0, errors: [] };
 
-    // Obtener tabla principal
     const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
     if (!mainTable) {
       throw new Error("No se encontró tabla principal");
@@ -4343,24 +3336,18 @@ class DynamicTransferService {
         let params = { documentId };
 
         if (shouldMark) {
-          // Marcar como procesado
           let setClause = `${processedField} = 1`;
-
           if (config.includeTimestamp) {
             const timestampField = config.timestampField || "PROCESSED_DATE";
             setClause += `, ${timestampField} = GETDATE()`;
           }
-
           query = `UPDATE ${mainTable.sourceTable} SET ${setClause} WHERE ${primaryKey} = @documentId`;
         } else {
-          // Desmarcar
           let setClause = `${processedField} = 0`;
-
           if (config.includeTimestamp) {
             const timestampField = config.timestampField || "PROCESSED_DATE";
             setClause += `, ${timestampField} = NULL`;
           }
-
           query = `UPDATE ${mainTable.sourceTable} SET ${setClause} WHERE ${primaryKey} = @documentId`;
         }
 
@@ -4374,11 +3361,7 @@ class DynamicTransferService {
         );
       } catch (error) {
         results.failed++;
-        results.errors.push({
-          documentId,
-          error: error.message,
-        });
-
+        results.errors.push({ documentId, error: error.message });
         logger.error(
           `Error al ${
             shouldMark ? "marcar" : "desmarcar"
@@ -4392,7 +3375,12 @@ class DynamicTransferService {
 
   /**
    * Marca documentos en lotes
-   * @private
+   * @param {Array} documentIds - IDs de documentos
+   * @param {Object} mapping - Configuración de mapping
+   * @param {Object} connection - Conexión a BD
+   * @param {boolean} shouldMark - Si marcar o desmarcar
+   * @param {Object} config - Configuración de marcado
+   * @returns {Promise<Object>} - Resultado del marcado
    */
   async markDocumentsBatch(
     documentIds,
@@ -4403,7 +3391,6 @@ class DynamicTransferService {
   ) {
     const results = { success: 0, failed: 0, errors: [] };
 
-    // Obtener tabla principal
     const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
     if (!mainTable) {
       throw new Error("No se encontró tabla principal");
@@ -4428,21 +3415,17 @@ class DynamicTransferService {
         let query;
         if (shouldMark) {
           let setClause = `${processedField} = 1`;
-
           if (config.includeTimestamp) {
             const timestampField = config.timestampField || "PROCESSED_DATE";
             setClause += `, ${timestampField} = GETDATE()`;
           }
-
           query = `UPDATE ${mainTable.sourceTable} SET ${setClause} WHERE ${primaryKey} IN (${placeholders})`;
         } else {
           let setClause = `${processedField} = 0`;
-
           if (config.includeTimestamp) {
             const timestampField = config.timestampField || "PROCESSED_DATE";
             setClause += `, ${timestampField} = NULL`;
           }
-
           query = `UPDATE ${mainTable.sourceTable} SET ${setClause} WHERE ${primaryKey} IN (${placeholders})`;
         }
 
@@ -4457,12 +3440,8 @@ class DynamicTransferService {
       } catch (error) {
         results.failed += batch.length;
         batch.forEach((docId) => {
-          results.errors.push({
-            documentId: docId,
-            error: error.message,
-          });
+          results.errors.push({ documentId: docId, error: error.message });
         });
-
         logger.error(
           `Error al ${
             shouldMark ? "marcar" : "desmarcar"
@@ -4476,7 +3455,12 @@ class DynamicTransferService {
 
   /**
    * Marca documentos con flag
-   * @private
+   * @param {Array} documentIds - IDs de documentos
+   * @param {Object} mapping - Configuración de mapping
+   * @param {Object} connection - Conexión a BD
+   * @param {boolean} shouldMark - Si marcar o desmarcar
+   * @param {Object} config - Configuración de marcado
+   * @returns {Promise<Object>} - Resultado del marcado
    */
   async markDocumentsWithFlag(
     documentIds,
@@ -4487,7 +3471,6 @@ class DynamicTransferService {
   ) {
     const results = { success: 0, failed: 0, errors: [] };
 
-    // Obtener tabla principal
     const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
     if (!mainTable) {
       throw new Error("No se encontró tabla principal");
@@ -4503,24 +3486,18 @@ class DynamicTransferService {
         let params = { documentId };
 
         if (shouldMark) {
-          // Marcar con flag
           let setClause = `${flagField} = '${flagValue}'`;
-
           if (config.includeTimestamp) {
             const timestampField = config.timestampField || "FLAG_DATE";
             setClause += `, ${timestampField} = GETDATE()`;
           }
-
           query = `UPDATE ${mainTable.sourceTable} SET ${setClause} WHERE ${primaryKey} = @documentId`;
         } else {
-          // Desmarcar flag
           let setClause = `${flagField} = NULL`;
-
           if (config.includeTimestamp) {
             const timestampField = config.timestampField || "FLAG_DATE";
             setClause += `, ${timestampField} = NULL`;
           }
-
           query = `UPDATE ${mainTable.sourceTable} SET ${setClause} WHERE ${primaryKey} = @documentId`;
         }
 
@@ -4534,11 +3511,7 @@ class DynamicTransferService {
         );
       } catch (error) {
         results.failed++;
-        results.errors.push({
-          documentId,
-          error: error.message,
-        });
-
+        results.errors.push({ documentId, error: error.message });
         logger.error(
           `Error al ${
             shouldMark ? "marcar" : "desmarcar"
@@ -4550,288 +3523,9 @@ class DynamicTransferService {
     return results;
   }
 
-  /**
-   * Obtiene los documentos según los filtros especificados
-   * @param {Object} mapping - Configuración de mapeo
-   * @param {Object} filters - Filtros para la consulta
-   * @param {Object} connection - Conexión a la base de datos
-   * @returns {Promise<Array>} - Documentos encontrados
-   */
-  async getDocuments(mapping, filters, connection) {
-    try {
-      // Listar tablas disponibles en la base de datos para depuración
-      try {
-        logger.info("Listando tablas disponibles en la base de datos...");
-        const listTablesQuery = `
-        SELECT TOP 50 TABLE_SCHEMA, TABLE_NAME
-        FROM INFORMATION_SCHEMA.TABLES
-        ORDER BY TABLE_SCHEMA, TABLE_NAME
-      `;
-
-        const tablesResult = await SqlService.query(
-          connection,
-          listTablesQuery
-        );
-
-        if (tablesResult.recordset && tablesResult.recordset.length > 0) {
-          const tables = tablesResult.recordset;
-          logger.info(
-            `Tablas disponibles: ${tables
-              .map((t) => `${t.TABLE_SCHEMA}.${t.TABLE_NAME}`)
-              .join(", ")}`
-          );
-        } else {
-          logger.warn("No se encontraron tablas en la base de datos");
-        }
-      } catch (listError) {
-        logger.warn(`Error al listar tablas: ${listError.message}`);
-      }
-
-      // Validar que el mapeo sea válido
-      if (!mapping) {
-        throw new Error("La configuración de mapeo es nula o indefinida");
-      }
-
-      if (
-        !mapping.tableConfigs ||
-        !Array.isArray(mapping.tableConfigs) ||
-        mapping.tableConfigs.length === 0
-      ) {
-        throw new Error(
-          "La configuración de mapeo no tiene tablas configuradas"
-        );
-      }
-
-      // Determinar tabla principal
-      const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
-      if (!mainTable) {
-        throw new Error("No se encontró configuración de tabla principal");
-      }
-
-      if (!mainTable.sourceTable) {
-        throw new Error(
-          "La tabla principal no tiene definido el campo sourceTable"
-        );
-      }
-
-      logger.info(
-        `Obteniendo documentos de ${mainTable.sourceTable} en ${mapping.sourceServer}`
-      );
-
-      // Verificar si la tabla existe, manejando correctamente esquemas
-      try {
-        // Separar esquema y nombre de tabla
-        let schema = "dbo"; // Esquema por defecto
-        let tableName = mainTable.sourceTable;
-
-        if (tableName.includes(".")) {
-          const parts = tableName.split(".");
-          if (parts.length === 2) {
-            schema = parts[0];
-            tableName = parts[1];
-          }
-        }
-
-        // Limpiar nombres de corchetes si existen
-        schema = schema.replace(/\[|\]/g, "");
-        tableName = tableName.replace(/\[|\]/g, "");
-
-        logger.info(`Verificando tabla ${schema}.${tableName}...`);
-
-        // Verificar si la tabla existe
-        const checkTableQuery = `
-        SELECT COUNT(*) as count
-        FROM INFORMATION_SCHEMA.TABLES
-        WHERE TABLE_SCHEMA = '${schema}'
-        AND TABLE_NAME = '${tableName}'
-      `;
-
-        const tableCheckResult = await SqlService.query(
-          connection,
-          checkTableQuery
-        );
-
-        if (tableCheckResult.recordset[0].count === 0) {
-          throw new Error(
-            `La tabla ${schema}.${tableName} no existe en la base de datos`
-          );
-        }
-
-        logger.info(`Tabla ${schema}.${tableName} encontrada correctamente`);
-
-        // Obtener columnas de la tabla
-        const columnsQuery = `
-        SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = '${schema}'
-        AND TABLE_NAME = '${tableName}'
-        ORDER BY ORDINAL_POSITION
-      `;
-
-        const columnsResult = await SqlService.query(connection, columnsQuery);
-
-        if (!columnsResult.recordset || columnsResult.recordset.length === 0) {
-          throw new Error(
-            `No se pudieron obtener las columnas de la tabla ${schema}.${tableName}`
-          );
-        }
-
-        const availableColumns = columnsResult.recordset.map(
-          (c) => c.COLUMN_NAME
-        );
-        logger.info(
-          `Columnas disponibles en ${schema}.${tableName}: ${availableColumns.join(
-            ", "
-          )}`
-        );
-
-        // Guardar el nombre completo de la tabla con esquema para usarlo en la consulta
-        const fullTableName = `${schema}.${tableName}`;
-
-        // Construir campos a seleccionar basados en la configuración, validando que existan
-        let selectFields = [];
-
-        if (mainTable.fieldMappings && mainTable.fieldMappings.length > 0) {
-          for (const mapping of mainTable.fieldMappings) {
-            if (mapping.sourceField) {
-              // Verificar si la columna existe
-              if (availableColumns.includes(mapping.sourceField)) {
-                selectFields.push(mapping.sourceField);
-              } else {
-                logger.warn(
-                  `Columna ${mapping.sourceField} no existe en ${fullTableName} y será omitida`
-                );
-              }
-            }
-          }
-        }
-
-        // Si no hay campos válidos, seleccionar todas las columnas disponibles
-        if (selectFields.length === 0) {
-          logger.warn(
-            `No se encontraron campos válidos para seleccionar, se usarán todas las columnas`
-          );
-          selectFields = availableColumns;
-        }
-
-        const selectFieldsStr = selectFields.join(", ");
-        logger.debug(`Campos a seleccionar: ${selectFieldsStr}`);
-
-        // CORRECCIÓN: Construir consulta directa sin subconsulta problemática
-        const limit = filters.limit || 100;
-
-        let query = `
-        SELECT TOP ${limit} ${selectFieldsStr}
-        FROM ${fullTableName}
-        WHERE 1=1
-      `;
-
-        const params = {};
-
-        // Verificar si los campos utilizados en filtros existen
-        let dateFieldExists = false;
-        let dateField = filters.dateField || "FEC_PED";
-        if (availableColumns.includes(dateField)) {
-          dateFieldExists = true;
-        } else {
-          logger.warn(
-            `Campo de fecha ${dateField} no existe en ${fullTableName}. Campos disponibles: ${availableColumns.join(
-              ", "
-            )}`
-          );
-          // Buscar campos de fecha alternativos
-          const alternativeDateFields = [
-            "FEC_PED",
-            "FECHA_PEDIDO",
-            "FECHA",
-            "DATE_CREATED",
-            "CREATED_DATE",
-            "FEC_CREACION",
-            "FEC_DOC",
-            "FECHA_DOC",
-            "FEC_REGISTRO",
-          ];
-          for (const altField of alternativeDateFields) {
-            if (availableColumns.includes(altField)) {
-              dateField = altField;
-              dateFieldExists = true;
-              logger.info(`Usando campo de fecha alternativo: ${altField}`);
-              break;
-            }
-          }
-        }
-
-        // Aplicar filtros solo si los campos existen
-        if (dateFieldExists) {
-          if (filters.dateFrom) {
-            query += ` AND ${dateField} >= @dateFrom`;
-            params.dateFrom = filters.dateFrom;
-          }
-
-          if (filters.dateTo) {
-            query += ` AND ${dateField} <= @dateTo`;
-            params.dateTo = filters.dateTo;
-          }
-        } else {
-          logger.warn(
-            `No se encontró campo de fecha válido. Consulta sin filtro de fecha.`
-          );
-        }
-
-        // Filtros adicionales
-        if (filters.status && availableColumns.includes("STATUS")) {
-          query += ` AND STATUS = @status`;
-          params.status = filters.status;
-        }
-
-        if (filters.processed !== undefined) {
-          const processedField = filters.processedField || "PROCESSED";
-          if (availableColumns.includes(processedField)) {
-            query += ` AND ${processedField} = @processed`;
-            params.processed = filters.processed;
-          }
-        }
-
-        // Aplicar filtro personalizado si existe
-        if (mainTable.filterCondition) {
-          query += ` AND ${mainTable.filterCondition}`;
-          logger.debug(
-            `Aplicando filtro personalizado: ${mainTable.filterCondition}`
-          );
-        }
-
-        // CORRECCIÓN: Agregar ORDER BY directamente en la consulta principal
-        const primaryKey = mainTable.primaryKey || "NUM_PED";
-        if (availableColumns.includes(primaryKey)) {
-          query += ` ORDER BY ${primaryKey} DESC`;
-        } else {
-          // Si no existe la clave primaria, usar el primer campo disponible
-          if (selectFields.length > 0) {
-            query += ` ORDER BY ${selectFields[0]} DESC`;
-          }
-        }
-
-        logger.info(`Ejecutando consulta: ${query}`);
-        logger.debug(`Parámetros: ${JSON.stringify(params)}`);
-
-        const result = await SqlService.query(connection, query, params);
-
-        logger.info(
-          `Consulta ejecutada exitosamente. Documentos encontrados: ${result.recordset.length}`
-        );
-
-        return result.recordset;
-      } catch (tableError) {
-        logger.error(
-          `Error al verificar/consultar tabla ${mainTable.sourceTable}: ${tableError.message}`
-        );
-        throw tableError;
-      }
-    } catch (error) {
-      logger.error(`Error al obtener documentos: ${error.message}`);
-      throw error;
-    }
-  }
+  // ===============================
+  // 11. MÉTODOS DE GESTIÓN DE CONFIGURACIÓN
+  // ===============================
 
   /**
    * Crea una nueva configuración de mapeo
@@ -4860,8 +3554,6 @@ class DynamicTransferService {
         logger.info(
           `Tarea creada automáticamente para mapeo: ${savedTask._id}`
         );
-
-        // Asignar el ID de la tarea al mapeo
         mappingData.taskId = savedTask._id;
       }
 
@@ -4907,22 +3599,14 @@ class DynamicTransferService {
         });
 
         const savedTask = await task.save();
-        logger.info(
-          `Tarea creada automáticamente para mapeo: ${savedTask._id}`
-        );
-
-        // Asignar el ID de la tarea al mapeo
         mappingData.taskId = savedTask._id;
       }
 
       const mapping = await TransferMapping.findByIdAndUpdate(
         mappingId,
         mappingData,
-        {
-          new: true,
-        }
+        { new: true }
       );
-
       return mapping;
     } catch (error) {
       logger.error(
@@ -4946,6 +3630,7 @@ class DynamicTransferService {
       throw error;
     }
   }
+
   /**
    * Obtiene una configuración de mapeo por ID
    * @param {string} mappingId - ID de la configuración
@@ -4954,11 +3639,9 @@ class DynamicTransferService {
   async getMappingById(mappingId) {
     try {
       const mapping = await TransferMapping.findById(mappingId);
-
       if (!mapping) {
         throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
       }
-
       return mapping;
     } catch (error) {
       logger.error(`Error al obtener configuración de mapeo: ${error.message}`);
@@ -4983,69 +3666,9 @@ class DynamicTransferService {
     }
   }
 
-  /**
-   * Obtiene estadísticas de un mapeo específico
-   * @param {string} mappingId - ID del mapeo
-   * @returns {Promise<Object>} - Estadísticas del mapeo
-   */
-  async getMappingStats(mappingId) {
-    try {
-      const mapping = await TransferMapping.findById(mappingId);
-      if (!mapping) {
-        throw new Error(`Mapeo ${mappingId} no encontrado`);
-      }
-
-      // Obtener ejecuciones recientes
-      const executions = await TaskExecution.find({ mapping: mappingId })
-        .sort({ startTime: -1 })
-        .limit(10);
-
-      // Calcular estadísticas
-      const totalExecutions = executions.length;
-      const successfulExecutions = executions.filter(
-        (e) => e.status === "completed"
-      ).length;
-      const failedExecutions = executions.filter(
-        (e) => e.status === "failed"
-      ).length;
-      const totalProcessed = executions.reduce(
-        (sum, e) => sum + (e.processedDocuments || 0),
-        0
-      );
-
-      const lastExecution = executions[0];
-      const avgExecutionTime =
-        totalExecutions > 0
-          ? executions.reduce((sum, e) => sum + (e.executionTime || 0), 0) /
-            totalExecutions
-          : 0;
-
-      return {
-        mappingId,
-        mappingName: mapping.name,
-        totalExecutions,
-        successfulExecutions,
-        failedExecutions,
-        totalProcessed,
-        successRate:
-          totalExecutions > 0
-            ? (successfulExecutions / totalExecutions) * 100
-            : 0,
-        avgExecutionTime: Math.round(avgExecutionTime),
-        lastExecution: lastExecution
-          ? {
-              date: lastExecution.startTime,
-              status: lastExecution.status,
-              processedDocuments: lastExecution.processedDocuments || 0,
-              executionTime: lastExecution.executionTime || 0,
-            }
-          : null,
-      };
-    } catch (error) {
-      logger.error(`Error al obtener estadísticas del mapeo: ${error.message}`);
-      throw error;
-    }
-  }
+  // ===============================
+  // 12. MÉTODOS DE VALIDACIÓN Y TESTING
+  // ===============================
 
   /**
    * Valida una configuración de mapeo
@@ -5079,10 +3702,6 @@ class DynamicTransferService {
         const mainTables = mappingData.tableConfigs.filter(
           (tc) => !tc.isDetailTable
         );
-        const detailTables = mappingData.tableConfigs.filter(
-          (tc) => tc.isDetailTable
-        );
-
         if (mainTables.length === 0) {
           errors.push("Se requiere al menos una tabla principal");
         }
@@ -5133,18 +3752,6 @@ class DynamicTransferService {
               }
             }
           }
-
-          // Validar referencias de tablas de detalle
-          if (tableConfig.isDetailTable && tableConfig.parentTableRef) {
-            const parentExists = mainTables.some(
-              (mt) => mt.name === tableConfig.parentTableRef
-            );
-            if (!parentExists) {
-              errors.push(
-                `La tabla de detalle ${tableConfig.name} referencia una tabla padre inexistente: ${tableConfig.parentTableRef}`
-              );
-            }
-          }
         }
       }
 
@@ -5154,44 +3761,6 @@ class DynamicTransferService {
           mappingData.promotionConfig
         );
         errors.push(...promotionErrors);
-      }
-
-      // Validar configuración de consecutivos si está habilitada
-      if (
-        mappingData.consecutiveConfig &&
-        mappingData.consecutiveConfig.enabled
-      ) {
-        if (!mappingData.consecutiveConfig.fieldName) {
-          errors.push(
-            "Campo de consecutivo es requerido cuando está habilitado"
-          );
-        }
-      }
-
-      // Validar dependencias de foreign key
-      if (mappingData.foreignKeyDependencies) {
-        for (const dependency of mappingData.foreignKeyDependencies) {
-          if (!dependency.fieldName) {
-            errors.push(
-              "Nombre de campo es requerido en dependencias de foreign key"
-            );
-          }
-
-          if (!dependency.dependentTable) {
-            errors.push(
-              "Tabla dependiente es requerida en dependencias de foreign key"
-            );
-          }
-
-          if (
-            !dependency.dependentFields ||
-            dependency.dependentFields.length === 0
-          ) {
-            errors.push(
-              "Campos dependientes son requeridos en dependencias de foreign key"
-            );
-          }
-        }
       }
 
       return {
@@ -5211,7 +3780,8 @@ class DynamicTransferService {
 
   /**
    * Valida la configuración de promociones
-   * @private
+   * @param {Object} promotionConfig - Configuración de promociones
+   * @returns {Array} - Lista de errores
    */
   validatePromotionConfiguration(promotionConfig) {
     const errors = [];
@@ -5224,15 +3794,12 @@ class DynamicTransferService {
       if (!detectFields.bonusField) {
         errors.push("Campo de bonificación es requerido");
       }
-
       if (!detectFields.referenceField) {
         errors.push("Campo de referencia es requerido");
       }
-
       if (!detectFields.lineNumberField) {
         errors.push("Campo de número de línea es requerido");
       }
-
       if (!detectFields.articleField) {
         errors.push("Campo de artículo es requerido");
       }
@@ -5246,38 +3813,11 @@ class DynamicTransferService {
       if (!targetFields.bonusLineRef) {
         errors.push("Campo de referencia de bonificación es requerido");
       }
-
       if (!targetFields.orderedQuantity) {
         errors.push("Campo de cantidad pedida es requerido");
       }
-
       if (!targetFields.bonusQuantity) {
         errors.push("Campo de cantidad bonificación es requerido");
-      }
-    }
-
-    // Validar reglas si existen
-    if (promotionConfig.rules) {
-      for (const rule of promotionConfig.rules) {
-        if (!rule.name) {
-          errors.push("Nombre de regla es requerido");
-        }
-
-        if (!rule.type) {
-          errors.push("Tipo de regla es requerido");
-        }
-
-        const validTypes = [
-          "FAMILY_DISCOUNT",
-          "QUANTITY_BONUS",
-          "SCALED_BONUS",
-          "PRODUCT_BONUS",
-          "INVOICE_DISCOUNT",
-          "ONE_TIME_OFFER",
-        ];
-        if (rule.type && !validTypes.includes(rule.type)) {
-          errors.push(`Tipo de regla inválido: ${rule.type}`);
-        }
       }
     }
 
@@ -5313,7 +3853,6 @@ class DynamicTransferService {
             message: "Conexión exitosa",
             server: mapping.sourceServer,
           };
-          // Liberar conexión
           await ConnectionService.releaseConnection(
             sourceConnResult.connection
           );
@@ -5343,7 +3882,6 @@ class DynamicTransferService {
             message: "Conexión exitosa",
             server: mapping.targetServer,
           };
-          // Liberar conexión
           await ConnectionService.releaseConnection(
             targetConnResult.connection
           );
@@ -5362,7 +3900,6 @@ class DynamicTransferService {
         };
       }
 
-      // Resultado general
       results.overall =
         results.sourceConnection?.success && results.targetConnection?.success;
 
@@ -5373,11 +3910,15 @@ class DynamicTransferService {
     }
   }
 
+  // ===============================
+  // 13. MÉTODOS DE ESTADÍSTICAS Y REPORTES
+  // ===============================
+
   /**
    * Obtiene una vista previa de los datos que se procesarían
    * @param {string} mappingId - ID del mapeo
    * @param {Object} filters - Filtros para la consulta
-   * @param {number} limit - Límite de registros (default: 5)
+   * @param {number} limit - Límite de registros
    * @returns {Promise<Object>} - Vista previa de los datos
    */
   async getDataPreview(mappingId, filters = {}, limit = 5) {
@@ -5501,192 +4042,22 @@ class DynamicTransferService {
         consecutiveConfig: originalMapping.consecutiveConfig
           ? {
               ...originalMapping.consecutiveConfig.toObject(),
-              enabled: false, // Deshabilitar consecutivos en la copia
-              lastValue: 0, // Resetear contador
+              enabled: false,
+              lastValue: 0,
             }
           : undefined,
         promotionConfig: originalMapping.promotionConfig,
         markProcessedStrategy: originalMapping.markProcessedStrategy,
         markProcessedConfig: originalMapping.markProcessedConfig,
-        active: false, // Crear como inactivo
+        active: false,
       };
 
-      // Crear nuevo mapeo
       const newMapping = await this.createMapping(duplicatedData);
 
       logger.info(`Mapeo duplicado: ${originalMapping.name} -> ${newName}`);
       return newMapping;
     } catch (error) {
       logger.error(`Error al duplicar mapeo: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Exporta una configuración de mapeo a JSON
-   * @param {string} mappingId - ID del mapeo
-   * @returns {Promise<Object>} - Configuración exportada
-   */
-  async exportMapping(mappingId) {
-    try {
-      const mapping = await TransferMapping.findById(mappingId);
-      if (!mapping) {
-        throw new Error(`Mapeo ${mappingId} no encontrado`);
-      }
-
-      // Crear objeto exportable (sin campos internos)
-      const exportData = {
-        version: "1.0",
-        exportDate: new Date().toISOString(),
-        mapping: {
-          name: mapping.name,
-          description: mapping.description,
-          sourceServer: mapping.sourceServer,
-          targetServer: mapping.targetServer,
-          tableConfigs: mapping.tableConfigs,
-          documentTypeRules: mapping.documentTypeRules,
-          foreignKeyDependencies: mapping.foreignKeyDependencies,
-          consecutiveConfig: mapping.consecutiveConfig,
-          promotionConfig: mapping.promotionConfig,
-          markProcessedStrategy: mapping.markProcessedStrategy,
-          markProcessedConfig: mapping.markProcessedConfig,
-        },
-      };
-
-      logger.info(`Mapeo exportado: ${mapping.name}`);
-      return exportData;
-    } catch (error) {
-      logger.error(`Error al exportar mapeo: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Importa una configuración de mapeo desde JSON
-   * @param {Object} importData - Datos importados
-   * @param {string} newName - Nuevo nombre para el mapeo (opcional)
-   * @returns {Promise<Object>} - Mapeo creado
-   */
-  async importMapping(importData, newName = null) {
-    try {
-      // Validar estructura de importación
-      if (!importData.mapping) {
-        throw new Error("Estructura de importación inválida");
-      }
-
-      const mappingData = importData.mapping;
-
-      // Asignar nuevo nombre si se proporcionó
-      if (newName) {
-        mappingData.name = newName;
-      }
-
-      // Resetear campos que no deberían importarse
-      delete mappingData._id;
-      delete mappingData.taskId;
-      delete mappingData.createdAt;
-      delete mappingData.updatedAt;
-
-      // Resetear consecutivos
-      if (mappingData.consecutiveConfig) {
-        mappingData.consecutiveConfig.enabled = false;
-        mappingData.consecutiveConfig.lastValue = 0;
-      }
-
-      // Crear mapeo importado
-      const newMapping = await this.createMapping(mappingData);
-
-      logger.info(`Mapeo importado: ${mappingData.name}`);
-      return newMapping;
-    } catch (error) {
-      logger.error(`Error al importar mapeo: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Obtiene el historial de ejecuciones de un mapeo
-   * @param {string} mappingId - ID del mapeo
-   * @param {Object} options - Opciones de consulta
-   * @returns {Promise<Array>} - Historial de ejecuciones
-   */
-  async getMappingExecutionHistory(mappingId, options = {}) {
-    try {
-      const { limit = 50, status, dateFrom, dateTo } = options;
-
-      const query = { mapping: mappingId };
-
-      if (status) {
-        query.status = status;
-      }
-
-      if (dateFrom || dateTo) {
-        query.startTime = {};
-        if (dateFrom) query.startTime.$gte = new Date(dateFrom);
-        if (dateTo) query.startTime.$lte = new Date(dateTo);
-      }
-
-      const executions = await TaskExecution.find(query)
-        .sort({ startTime: -1 })
-        .limit(limit);
-
-      // Formatear resultados
-      const formattedExecutions = executions.map((execution) => ({
-        id: execution._id,
-        startTime: execution.startTime,
-        endTime: execution.endTime,
-        status: execution.status,
-        totalDocuments: execution.totalDocuments,
-        processedDocuments: execution.processedDocuments,
-        failedDocuments: execution.failedDocuments,
-        executionTime: execution.executionTime,
-        result: execution.result,
-      }));
-
-      return formattedExecutions;
-    } catch (error) {
-      logger.error(
-        `Error al obtener historial de ejecuciones: ${error.message}`
-      );
-      throw error;
-    }
-  }
-
-  /**
-   * Limpia el historial de ejecuciones de un mapeo
-   * @param {string} mappingId - ID del mapeo
-   * @param {Object} options - Opciones de limpieza
-   * @returns {Promise<Object>} - Resultado de la limpieza
-   */
-  async cleanMappingExecutionHistory(mappingId, options = {}) {
-    try {
-      const { olderThan = 30, status } = options; // Días
-
-      const query = { mapping: mappingId };
-
-      // Limpiar ejecuciones más antiguas que X días
-      const cutoffDate = new Date();
-      cutoffDate.setDate(cutoffDate.getDate() - olderThan);
-      query.startTime = { $lt: cutoffDate };
-
-      if (status) {
-        query.status = status;
-      }
-
-      const result = await TaskExecution.deleteMany(query);
-
-      logger.info(
-        `Historial de mapeo ${mappingId} limpiado: ${result.deletedCount} registros eliminados`
-      );
-
-      return {
-        deletedCount: result.deletedCount,
-        cutoffDate: cutoffDate.toISOString(),
-      };
-    } catch (error) {
-      logger.error(
-        `Error al limpiar historial de ejecuciones: ${error.message}`
-      );
       throw error;
     }
   }
@@ -5759,224 +4130,6 @@ class DynamicTransferService {
       logger.error(`Error al obtener métricas agregadas: ${error.message}`);
       throw error;
     }
-  }
-
-  /**
-   * Verifica si debe usar promociones automáticamente
-   * @param {Object} mapping - Configuración de mapeo
-   * @returns {Boolean} - True si debe usar promociones
-   */
-  shouldUsePromotions(mapping) {
-    console.log("🔍 DEBUG shouldUsePromotions - INICIANDO");
-    console.log("🔍 mapping.name:", mapping.name);
-    console.log("🔍 mapping.promotionConfig:", mapping.promotionConfig);
-
-    try {
-      // 1. Verificar si las promociones están habilitadas en la configuración
-      if (!mapping.promotionConfig || !mapping.promotionConfig.enabled) {
-        console.log("🔍 DEBUG: Promociones deshabilitadas");
-        logger.debug("Promociones deshabilitadas en configuración del mapping");
-        return false;
-      }
-
-      console.log("🔍 DEBUG: Promociones habilitadas, validando configuración");
-
-      // 2. Validar que la configuración de promociones sea válida
-      if (!PromotionProcessor.validatePromotionConfig(mapping)) {
-        console.log("🔍 DEBUG: Configuración inválida");
-        logger.warn(
-          "Configuración de promociones inválida, usando procesamiento estándar"
-        );
-        return false;
-      }
-
-      // 3. Verificar que existan tablas de detalle para procesar
-      const detailTables =
-        mapping.tableConfigs?.filter((tc) => tc.isDetailTable) || [];
-      console.log(
-        "🔍 DEBUG: Tablas de detalle encontradas:",
-        detailTables.length
-      );
-
-      if (detailTables.length === 0) {
-        console.log("🔍 DEBUG: No hay tablas de detalle");
-        logger.debug("No hay tablas de detalle para procesar promociones");
-        return false;
-      }
-
-      console.log("🔍 DEBUG: ✅ Promociones activadas");
-      logger.info(
-        "✅ Condiciones para promociones cumplidas - activando procesamiento automático"
-      );
-      return true;
-    } catch (error) {
-      console.log("🔍 DEBUG: Error en shouldUsePromotions:", error.message);
-      logger.error(`Error al verificar promociones: ${error.message}`);
-      return false;
-    }
-  }
-
-  /**
-   * Obtiene configuración de campos de promociones desde el mapping
-   * @private
-   */
-  getPromotionFieldConfiguration(mapping) {
-    const defaultConfig = {
-      bonusField: "ART_BON",
-      referenceField: "COD_ART_RFR",
-      discountField: "MON_DSC",
-      lineNumberField: "NUM_LN",
-      articleField: "COD_ART",
-      quantityField: "CND_MAX",
-      bonusLineRef: "PEDIDO_LINEA_BONIF",
-      orderedQuantity: "CANTIDAD_PEDIDA",
-      invoiceQuantity: "CANTIDAD_A_FACTURAR",
-      bonusQuantity: "CANTIDAD_BONIF",
-    };
-
-    // Combinar con configuración del mapping si existe
-    if (mapping.promotionConfig) {
-      return {
-        ...defaultConfig,
-        ...mapping.promotionConfig.detectFields,
-        ...mapping.promotionConfig.targetFields,
-      };
-    }
-
-    return defaultConfig;
-  }
-
-  /**
-   * Detecta campos de promociones que deben procesarse pero no están en el mapping
-   * @private
-   */
-  detectPromotionFieldsToProcess(
-    dataForProcessing,
-    promotionFieldConfig,
-    processedFieldNames
-  ) {
-    const fieldsToProcess = [];
-
-    // Lista de campos de promoción que pueden necesitar procesamiento
-    const promotionFields = [
-      {
-        sourceField: promotionFieldConfig.bonusLineRef,
-        targetField: promotionFieldConfig.bonusLineRef,
-        description: "Referencia línea bonificación",
-      },
-      {
-        sourceField: promotionFieldConfig.orderedQuantity,
-        targetField: promotionFieldConfig.orderedQuantity,
-        description: "Cantidad pedida",
-      },
-      {
-        sourceField: promotionFieldConfig.invoiceQuantity,
-        targetField: promotionFieldConfig.invoiceQuantity,
-        description: "Cantidad a facturar",
-      },
-      {
-        sourceField: promotionFieldConfig.bonusQuantity,
-        targetField: promotionFieldConfig.bonusQuantity,
-        description: "Cantidad bonificación",
-      },
-    ];
-
-    // Verificar cada campo de promoción
-    for (const field of promotionFields) {
-      const targetFieldLower = field.targetField.toLowerCase();
-
-      // Si el campo NO fue procesado ya Y existe en los datos
-      if (
-        !processedFieldNames.has(targetFieldLower) &&
-        dataForProcessing.hasOwnProperty(field.sourceField)
-      ) {
-        fieldsToProcess.push(field);
-        logger.debug(
-          `🎁 Campo promoción detectado para procesar: ${field.sourceField} -> ${field.targetField} (${field.description})`
-        );
-      }
-    }
-
-    // Detectar campo especial PEDIDO_LINEA_BONIF si existe y no fue procesado
-    const bonusLineRefField = promotionFieldConfig.bonusLineRef;
-    const bonusLineRefLower = bonusLineRefField.toLowerCase();
-
-    if (
-      !processedFieldNames.has(bonusLineRefLower) &&
-      dataForProcessing.hasOwnProperty(bonusLineRefField)
-    ) {
-      // Solo agregar si no está ya en la lista
-      const alreadyAdded = fieldsToProcess.some(
-        (f) => f.targetField.toLowerCase() === bonusLineRefLower
-      );
-
-      if (!alreadyAdded) {
-        fieldsToProcess.push({
-          sourceField: bonusLineRefField,
-          targetField: bonusLineRefField,
-          description:
-            "Referencia línea bonificación (detectado automáticamente)",
-        });
-
-        logger.info(
-          `🎁 ✅ Campo PEDIDO_LINEA_BONIF detectado automáticamente: ${dataForProcessing[bonusLineRefField]}`
-        );
-      }
-    }
-
-    return fieldsToProcess;
-  }
-  /**
-   * Verifica campos alternativos para promociones
-   * @private
-   */
-  checkPromotionFieldAlternatives(sourceField, sourceData, mapping) {
-    if (!mapping.promotionConfig?.enabled) {
-      return null;
-    }
-
-    const promotionConfig = this.getPromotionFieldConfiguration(mapping);
-
-    // Mapeo de campos alternativos
-    const fieldAlternatives = {
-      [promotionConfig.bonusLineRef]: [
-        "PEDIDO_LINEA_BONIF",
-        "LINEA_BONIFICACION",
-        "REF_LINEA_BONUS",
-      ],
-      [promotionConfig.orderedQuantity]: [
-        "CANTIDAD_PEDIDA",
-        "QTY_PEDIDA",
-        "CANT_PEDIDA",
-      ],
-      [promotionConfig.invoiceQuantity]: [
-        "CANTIDAD_A_FACTURAR",
-        "QTY_FACTURAR",
-        "CANT_FACTURAR",
-      ],
-      [promotionConfig.bonusQuantity]: [
-        "CANTIDAD_BONIFICAD",
-        "QTY_BONUS",
-        "CANT_BONIFICADA",
-      ],
-    };
-
-    // Buscar alternativas para el campo solicitado
-    for (const [mainField, alternatives] of Object.entries(fieldAlternatives)) {
-      if (sourceField === mainField || alternatives.includes(sourceField)) {
-        // Buscar en el orden de prioridad
-        for (const alternative of [mainField, ...alternatives]) {
-          if (sourceData.hasOwnProperty(alternative)) {
-            logger.debug(
-              `🎁 Campo promoción encontrado: ${sourceField} -> ${alternative} = ${sourceData[alternative]}`
-            );
-            return sourceData[alternative];
-          }
-        }
-      }
-    }
-
-    return null;
   }
 }
 
