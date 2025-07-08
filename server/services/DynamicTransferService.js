@@ -1974,6 +1974,13 @@ class DynamicTransferService {
     for (let i = 0; i < tableConfig.fieldMappings.length; i++) {
       const fieldMapping = tableConfig.fieldMappings[i];
 
+      console.log(
+        "🔧 DEBUG FIELD MAPPING:",
+        fieldMapping.sourceField,
+        "->",
+        fieldMapping.targetField
+      );
+
       // Validación básica del field mapping
       if (!fieldMapping.targetField) {
         logger.warn(

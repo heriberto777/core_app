@@ -134,13 +134,32 @@ class PromotionProcessor {
     const firstRow = detailData[0] || {};
     const availableFields = Object.keys(firstRow);
 
-    logger.debug(`🔧 Campos disponibles en datos: ${availableFields.join(', ')}`);
-    logger.debug(`🔧 Tiene ${fieldConfig.bonusField}: ${availableFields.includes(fieldConfig.bonusField)} valor: ${firstRow[fieldConfig.bonusField]}`);
-    logger.debug(`🔧 Tiene ${fieldConfig.referenceField}: ${availableFields.includes(fieldConfig.referenceField)} valor: ${firstRow[fieldConfig.referenceField]}`);
-    logger.debug(`🔧 Tiene ${fieldConfig.discountField}: ${availableFields.includes(fieldConfig.discountField)} valor: ${firstRow[fieldConfig.discountField]}`);
+    logger.debug(
+      `🔧 Campos disponibles en datos: ${availableFields.join(", ")}`
+    );
+    logger.debug(
+      `🔧 Tiene ${fieldConfig.bonusField}: ${availableFields.includes(
+        fieldConfig.bonusField
+      )} valor: ${firstRow[fieldConfig.bonusField]}`
+    );
+    logger.debug(
+      `🔧 Tiene ${fieldConfig.referenceField}: ${availableFields.includes(
+        fieldConfig.referenceField
+      )} valor: ${firstRow[fieldConfig.referenceField]}`
+    );
+    logger.debug(
+      `🔧 Tiene ${fieldConfig.discountField}: ${availableFields.includes(
+        fieldConfig.discountField
+      )} valor: ${firstRow[fieldConfig.discountField]}`
+    );
 
     detailData.forEach((line, index) => {
-      const isPromotion = this.isPromotionLine(line, detailData, fieldConfig, availableFields);
+      const isPromotion = this.isPromotionLine(
+        line,
+        detailData,
+        fieldConfig,
+        availableFields
+      );
 
       if (isPromotion.hasPromotion) {
         promotionLines.push({
@@ -148,7 +167,7 @@ class PromotionProcessor {
           promotionType: isPromotion.type,
           originalIndex: index,
           _fieldConfig: fieldConfig,
-          _availableFields: availableFields
+          _availableFields: availableFields,
         });
       }
     });
@@ -307,7 +326,10 @@ class PromotionProcessor {
     let referenceArticle = null;
     let regularLineNumber = null;
 
-    if (fieldConfig.referenceField && bonusLine.hasOwnProperty(fieldConfig.referenceField)) {
+    if (
+      fieldConfig.referenceField &&
+      bonusLine.hasOwnProperty(fieldConfig.referenceField)
+    ) {
       referenceArticle = bonusLine[fieldConfig.referenceField];
 
       logger.debug(
@@ -320,7 +342,8 @@ class PromotionProcessor {
           (line) =>
             line[fieldConfig.lineNumberField] !== currentLineNumber &&
             (!fieldConfig.bonusField ||
-             (line[fieldConfig.bonusField] !== "B" && line[fieldConfig.bonusField] !== "b"))
+              (line[fieldConfig.bonusField] !== "B" &&
+                line[fieldConfig.bonusField] !== "b"))
         );
 
         if (regularLines.length > 0) {
@@ -344,7 +367,8 @@ class PromotionProcessor {
       ...bonusLine,
       // ✅ ASIGNAR CORRECTAMENTE LA REFERENCIA
       [fieldConfig.bonusLineRef]: regularLineNumber,
-      [fieldConfig.bonusQuantity]: bonusLine[fieldConfig.quantityField] || bonusLine.QTY,
+      [fieldConfig.bonusQuantity]:
+        bonusLine[fieldConfig.quantityField] || bonusLine.QTY,
       [fieldConfig.orderedQuantity]: null,
       [fieldConfig.invoiceQuantity]: null,
 
@@ -355,12 +379,25 @@ class PromotionProcessor {
       _REFERENCE_ARTICLE: referenceArticle,
     };
 
+    console.log("🔧 DEBUG TRANSFORM BONUS:");
+    console.log("🔧 fieldConfig.bonusLineRef:", fieldConfig.bonusLineRef);
+    console.log("🔧 regularLineNumber:", regularLineNumber);
+    console.log(
+      "🔧 Campo creado:",
+      fieldConfig.bonusLineRef,
+      "=",
+      transformed[fieldConfig.bonusLineRef]
+    );
+    console.log("🔧 Objeto completo transformado:", Object.keys(transformed));
+
     // Limpiar campos problemáticos
     delete transformed.CANTIDAD;
     delete transformed.QTY;
 
     logger.info(
-      `🎁 ✅ Línea bonificación ${currentLineNumber} -> referencia ${regularLineNumber || 'N/A'}`
+      `🎁 ✅ Línea bonificación ${currentLineNumber} -> referencia ${
+        regularLineNumber || "N/A"
+      }`
     );
 
     return transformed;
@@ -433,31 +470,34 @@ class PromotionProcessor {
    * @returns {boolean} - Si se deben usar promociones
    */
   static shouldUsePromotions(mapping) {
-    console.log('🔍 DEBUG shouldUsePromotions - INICIANDO');
-    console.log('🔍 mapping.name:', mapping.name);
-    console.log('🔍 mapping.promotionConfig:', mapping.promotionConfig);
+    console.log("🔍 DEBUG shouldUsePromotions - INICIANDO");
+    console.log("🔍 mapping.name:", mapping.name);
+    console.log("🔍 mapping.promotionConfig:", mapping.promotionConfig);
 
     if (!mapping.promotionConfig?.enabled) {
-      console.log('🔍 DEBUG: Promociones deshabilitadas');
+      console.log("🔍 DEBUG: Promociones deshabilitadas");
       return false;
     }
 
     const validation = this.validatePromotionConfig(mapping);
 
     if (!validation.canContinue) {
-      console.log('🔍 DEBUG: ❌ Validación falló:', validation.reason);
+      console.log("🔍 DEBUG: ❌ Validación falló:", validation.reason);
       return false;
     }
 
-    const detailTables = mapping.tableConfigs.filter(t => t.isDetailTable);
-    console.log('🔍 DEBUG: Tablas de detalle encontradas:', detailTables.length);
+    const detailTables = mapping.tableConfigs.filter((t) => t.isDetailTable);
+    console.log(
+      "🔍 DEBUG: Tablas de detalle encontradas:",
+      detailTables.length
+    );
 
     if (detailTables.length === 0) {
-      console.log('🔍 DEBUG: ❌ No hay tablas de detalle');
+      console.log("🔍 DEBUG: ❌ No hay tablas de detalle");
       return false;
     }
 
-    console.log('🔍 DEBUG: ✅ Promociones activadas');
+    console.log("🔍 DEBUG: ✅ Promociones activadas");
     return true;
   }
 
@@ -468,8 +508,16 @@ class PromotionProcessor {
    */
   static validatePromotionConfig(mapping) {
     try {
-      if (!mapping || !mapping.promotionConfig || !mapping.promotionConfig.enabled) {
-        return { valid: false, canContinue: false, reason: 'Promociones deshabilitadas' };
+      if (
+        !mapping ||
+        !mapping.promotionConfig ||
+        !mapping.promotionConfig.enabled
+      ) {
+        return {
+          valid: false,
+          canContinue: false,
+          reason: "Promociones deshabilitadas",
+        };
       }
 
       const fieldConfig = this.getFieldConfiguration(mapping);
@@ -478,16 +526,18 @@ class PromotionProcessor {
       const criticalFields = [
         fieldConfig.lineNumberField,
         fieldConfig.articleField,
-        fieldConfig.quantityField
+        fieldConfig.quantityField,
       ];
 
       const optionalFields = [
         fieldConfig.bonusField,
         fieldConfig.referenceField,
-        fieldConfig.discountField
+        fieldConfig.discountField,
       ];
 
-      const detailTables = mapping.tableConfigs.filter(tc => tc.isDetailTable);
+      const detailTables = mapping.tableConfigs.filter(
+        (tc) => tc.isDetailTable
+      );
       let hasValidTable = false;
 
       for (const detailTable of detailTables) {
@@ -496,35 +546,58 @@ class PromotionProcessor {
           continue;
         }
 
-        const mappedFields = detailTable.fieldMappings.map(fm => fm.sourceField);
+        const mappedFields = detailTable.fieldMappings.map(
+          (fm) => fm.sourceField
+        );
 
         // Validar campos críticos
-        const missingCritical = criticalFields.filter(field => !mappedFields.includes(field));
+        const missingCritical = criticalFields.filter(
+          (field) => !mappedFields.includes(field)
+        );
 
         if (missingCritical.length === 0) {
           hasValidTable = true;
 
           // Solo advertir sobre campos opcionales
-          const missingOptional = optionalFields.filter(field => !mappedFields.includes(field));
-          missingOptional.forEach(field => {
-            logger.warn(`Campo requerido para promociones no encontrado: ${field} en tabla ${detailTable.name}`);
+          const missingOptional = optionalFields.filter(
+            (field) => !mappedFields.includes(field)
+          );
+          missingOptional.forEach((field) => {
+            logger.warn(
+              `Campo requerido para promociones no encontrado: ${field} en tabla ${detailTable.name}`
+            );
           });
 
-          logger.info(`✅ Tabla ${detailTable.name} puede usar promociones (${missingOptional.length === 0 ? 'completa' : 'básica'})`);
+          logger.info(
+            `✅ Tabla ${detailTable.name} puede usar promociones (${
+              missingOptional.length === 0 ? "completa" : "básica"
+            })`
+          );
         } else {
-          logger.warn(`❌ Tabla ${detailTable.name} no puede usar promociones - faltan campos críticos: ${missingCritical.join(', ')}`);
+          logger.warn(
+            `❌ Tabla ${
+              detailTable.name
+            } no puede usar promociones - faltan campos críticos: ${missingCritical.join(
+              ", "
+            )}`
+          );
         }
       }
 
       if (!hasValidTable) {
-        return { valid: false, canContinue: false, reason: 'No hay tablas válidas para promociones' };
+        return {
+          valid: false,
+          canContinue: false,
+          reason: "No hay tablas válidas para promociones",
+        };
       }
 
-      logger.info('✅ Configuración de promociones validada exitosamente');
+      logger.info("✅ Configuración de promociones validada exitosamente");
       return { valid: true, canContinue: true, hasOptionalFields: true };
-
     } catch (error) {
-      logger.error(`Error al validar configuración de promociones: ${error.message}`);
+      logger.error(
+        `Error al validar configuración de promociones: ${error.message}`
+      );
       return { valid: false, canContinue: false, reason: error.message };
     }
   }
