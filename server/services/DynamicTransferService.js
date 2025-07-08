@@ -2820,15 +2820,26 @@ class DynamicTransferService {
               let paramValue = sourceData[param.sourceField];
 
               // Aplicar eliminación de prefijo si está configurado
+              // if (
+              //   fieldMapping.removePrefix &&
+              //   typeof value === "string" &&
+              //   value.startsWith(fieldMapping.removePrefix)
+              // ) {
+              //   const originalValue = value;
+              //   value = value.substring(fieldMapping.removePrefix.length);
+              //   logger.debug(
+              //     `✂️ Prefijo '${fieldMapping.removePrefix}' removido de ${fieldMapping.targetField}: '${originalValue}' -> '${value}'`
+              //   );
+              // }
               if (
-                fieldMapping.removePrefix &&
-                typeof value === "string" &&
-                value.startsWith(fieldMapping.removePrefix)
+                param.removePrefix &&
+                typeof paramValue === "string" &&
+                paramValue.startsWith(param.removePrefix)
               ) {
-                const originalValue = value;
-                value = value.substring(fieldMapping.removePrefix.length);
+                const originalValue = paramValue;
+                paramValue = paramValue.substring(param.removePrefix.length);
                 logger.debug(
-                  `✂️ Prefijo '${fieldMapping.removePrefix}' removido de ${fieldMapping.targetField}: '${originalValue}' -> '${value}'`
+                  `✂️ Prefijo '${param.removePrefix}' removido del parámetro ${param.paramName}: '${originalValue}' -> '${paramValue}'`
                 );
               }
 
@@ -3080,31 +3091,21 @@ class DynamicTransferService {
                 );
               }
 
-              // Aplicar eliminación de prefijo si está configurado
-              // if (
-              //   fieldMapping.removePrefix &&
-              //   typeof paramValue === "string" &&
-              //   paramValue.startsWith(fieldMapping.removePrefix)
-              // ) {
-              //   const originalValue = paramValue;
-              //   paramValue = paramValue.substring(
-              //     fieldMapping.removePrefix.length
-              //   );
-              //   logger.debug(
-              //     `Prefijo '${fieldMapping.removePrefix}' eliminado del parámetro ${param.paramName}: '${originalValue}' → '${paramValue}'`
-              //   );
-              // }
+              Aplicar eliminación de prefijo si está configurado
               if (
-                param.removePrefix &&
+                fieldMapping.removePrefix &&
                 typeof paramValue === "string" &&
-                paramValue.startsWith(param.removePrefix)
+                paramValue.startsWith(fieldMapping.removePrefix)
               ) {
                 const originalValue = paramValue;
-                paramValue = paramValue.substring(param.removePrefix.length);
+                paramValue = paramValue.substring(
+                  fieldMapping.removePrefix.length
+                );
                 logger.debug(
-                  `✂️ Prefijo '${param.removePrefix}' removido del parámetro ${param.paramName}: '${originalValue}' -> '${paramValue}'`
+                  `Prefijo '${fieldMapping.removePrefix}' eliminado del parámetro ${param.paramName}: '${originalValue}' → '${paramValue}'`
                 );
               }
+
 
               params[param.paramName] = paramValue;
             }
