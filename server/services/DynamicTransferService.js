@@ -2227,6 +2227,18 @@ class DynamicTransferService {
         return { value, isDirectSql: false };
       }
 
+       if (
+         fieldMapping.removePrefix &&
+         typeof value === "string" &&
+         value.startsWith(fieldMapping.removePrefix)
+       ) {
+         const originalValue = value;
+         value = value.substring(fieldMapping.removePrefix.length);
+         logger.debug(
+           `✂️ Prefijo '${fieldMapping.removePrefix}' eliminado del campo ${fieldMapping.targetField}: '${originalValue}' → '${value}'`
+         );
+       }
+
       // PRIORIDAD 2: Verificar si el campo es una función SQL nativa
       const defaultValue = fieldMapping.defaultValue;
       const sqlNativeFunctions = [
@@ -2769,7 +2781,6 @@ class DynamicTransferService {
 
       // Procesar cada campo con lookup
       for (const fieldMapping of lookupFields) {
-        // Correcciones para campos conocidos
         if (fieldMapping.targetField === "CODIGO_ARTICULO") {
           logger.warn(`Corrigiendo campo lookup CODIGO_ARTICULO a ARTICULO`);
           fieldMapping.targetField = "ARTICULO";
@@ -2781,30 +2792,19 @@ class DynamicTransferService {
           );
           fieldMapping.sourceField = "ARTICULO";
         }
-
         try {
           let lookupQuery = fieldMapping.lookupQuery;
           logger.debug(
-            `Procesando lookup para campo ${fieldMapping.targetField}: ${lookupQuery}`
+            `Procesando lookup para ${fieldMapping.targetField}: ${lookupQuery}`
           );
 
-          // Preparar parámetros para la consulta
+          // Preparar parámetros
           const params = {};
-          const missingParams = [];
+          const expectedParams = this.extractParametersFromQuery(lookupQuery);
 
-          // Registrar todos los parámetros que se esperan en la consulta
-          const expectedParams = [];
-          const paramRegex = /@(\w+)/g;
-          let match;
-          while ((match = paramRegex.exec(lookupQuery)) !== null) {
-            expectedParams.push(match[1]);
-          }
+          logger.debug(`Parámetros esperados: ${expectedParams.join(", ")}`);
 
-          logger.debug(
-            `Parámetros esperados en la consulta: ${expectedParams.join(", ")}`
-          );
-
-          // Si hay parámetros definidos, extraerlos de los datos de origen
+          // Extraer valores de parámetros desde datos de origen
           if (
             fieldMapping.lookupParams &&
             fieldMapping.lookupParams.length > 0
@@ -2812,143 +2812,83 @@ class DynamicTransferService {
             for (const param of fieldMapping.lookupParams) {
               if (!param.sourceField || !param.paramName) {
                 logger.warn(
-                  `Parámetro mal configurado para ${fieldMapping.targetField}. Debe tener sourceField y paramName.`
+                  `Parámetro mal configurado para ${fieldMapping.targetField}`
                 );
                 continue;
               }
 
-              // Obtener el valor del campo origen
               let paramValue = sourceData[param.sourceField];
 
-              // Registrar si el valor está presente
-              logger.debug(
-                `Parámetro ${param.paramName} (desde campo ${
-                  param.sourceField
-                }): ${
-                  paramValue !== undefined && paramValue !== null
-                    ? "PRESENTE"
-                    : "NO ENCONTRADO"
-                }`
-              );
-
-              // Comprobar si el parámetro es requerido en la consulta
+              // Aplicar eliminación de prefijo si está configurado
               if (
-                expectedParams.includes(param.paramName) &&
-                (paramValue === undefined || paramValue === null)
+                fieldMapping.removePrefix &&
+                typeof value === "string" &&
+                value.startsWith(fieldMapping.removePrefix)
               ) {
-                missingParams.push(
-                  `@${param.paramName} (campo: ${param.sourceField})`
-                );
-              }
-
-              // 🔧 CORRECCIÓN: Aplicar eliminación de prefijo del PARÁMETRO
-              if (
-                param.removePrefix && // ✅ USAR param.removePrefix
-                typeof paramValue === "string" &&
-                paramValue.startsWith(param.removePrefix)
-              ) {
-                const originalValue = paramValue;
-                paramValue = paramValue.substring(param.removePrefix.length);
-                logger.info(
-                  // Cambiar a INFO para ver el log
-                  `✂️ Prefijo '${param.removePrefix}' eliminado del parámetro ${param.paramName}: '${originalValue}' → '${paramValue}'`
+                const originalValue = value;
+                value = value.substring(fieldMapping.removePrefix.length);
+                logger.debug(
+                  `✂️ Prefijo '${fieldMapping.removePrefix}' removido de ${fieldMapping.targetField}: '${originalValue}' -> '${value}'`
                 );
               }
 
               params[param.paramName] = paramValue;
+
+              logger.debug(
+                `Parámetro ${param.paramName} (desde ${param.sourceField}): ${paramValue}`
+              );
             }
           }
 
-          // Verificar si faltan parámetros requeridos
+          // Validar parámetros requeridos
+          const missingParams = expectedParams.filter(
+            (p) => params[p] === undefined || params[p] === null
+          );
+
           if (missingParams.length > 0) {
-            const errorMessage = `Faltan parámetros requeridos para la consulta: ${missingParams.join(
+            const errorMsg = `Parámetros faltantes: ${missingParams.join(
               ", "
             )}`;
-            logger.error(errorMessage);
+            logger.warn(`${fieldMapping.targetField}: ${errorMsg}`);
 
             if (fieldMapping.failIfNotFound) {
-              throw new Error(errorMessage);
+              failedLookups.push({
+                field: fieldMapping.targetField,
+                error: errorMsg,
+                isCritical: true,
+              });
+              continue;
             } else {
-              // Usar valor por defecto
               lookupResults[fieldMapping.targetField] =
                 fieldMapping.defaultValue || null;
-              logger.debug(
-                `Usando valor por defecto para ${fieldMapping.targetField}: ${
-                  lookupResults[fieldMapping.targetField]
-                }`
-              );
+              continue;
             }
           }
 
-          logger.debug(`Parámetros para lookup: ${JSON.stringify(params)}`);
+          // Ejecutar consulta
+          logger.debug(
+            `Ejecutando consulta: ${lookupQuery} con parámetros:`,
+            params
+          );
 
-          // Ejecutar la consulta
-          try {
-            // Asegurar que es una consulta SELECT
-            if (!lookupQuery.trim().toUpperCase().startsWith("SELECT")) {
-              lookupQuery = `SELECT ${lookupQuery} AS result`;
-            }
+          const result = await SqlService.query(
+            targetConnection,
+            lookupQuery,
+            params
+          );
 
-            // Verificar que los parámetros esperados tengan valor asignado
-            for (const expectedParam of expectedParams) {
-              if (params[expectedParam] === undefined) {
-                logger.warn(
-                  `El parámetro @${expectedParam} en la consulta no está definido en los parámetros proporcionados.`
-                );
-              }
-            }
+          if (result.recordset && result.recordset.length > 0) {
+            // Tomar el primer campo del primer registro
+            const firstRecord = result.recordset[0];
+            const firstColumnName = Object.keys(firstRecord)[0];
+            const value = firstRecord[firstColumnName];
 
-            logger.debug(`Ejecutando consulta lookup: ${lookupQuery}`);
-            const result = await SqlService.query(
-              targetConnection,
-              lookupQuery,
-              params
-            );
+            lookupResults[fieldMapping.targetField] = value;
 
-            if (result.recordset && result.recordset.length > 0) {
-              // Obtener el primer valor del primer registro
-              const firstRow = result.recordset[0];
-              const firstValue = Object.values(firstRow)[0];
-
-              lookupResults[fieldMapping.targetField] = firstValue;
-              logger.debug(
-                `✅ Lookup exitoso para ${fieldMapping.targetField}: ${firstValue}`
-              );
-
-              // Validar existencia si está configurado
-              if (fieldMapping.validateExistence && !firstValue) {
-                const errorMsg = `Valor no encontrado en lookup para ${fieldMapping.targetField}`;
-
-                if (fieldMapping.failIfNotFound) {
-                  failedLookups.push({
-                    field: fieldMapping.targetField,
-                    error: errorMsg,
-                    isCritical: true,
-                  });
-                } else {
-                  logger.warn(errorMsg);
-                  lookupResults[fieldMapping.targetField] = null;
-                }
-              }
-            } else {
-              // No se encontraron resultados
-              const errorMsg = `No se encontraron resultados en lookup para ${fieldMapping.targetField}`;
-
-              if (fieldMapping.failIfNotFound) {
-                failedLookups.push({
-                  field: fieldMapping.targetField,
-                  error: errorMsg,
-                  isCritical: true,
-                });
-              } else {
-                logger.warn(errorMsg);
-                lookupResults[fieldMapping.targetField] =
-                  fieldMapping.defaultValue || null;
-              }
-            }
-          } catch (queryError) {
-            const errorMsg = `Error ejecutando lookup para ${fieldMapping.targetField}: ${queryError.message}`;
-            logger.error(errorMsg);
+            logger.debug(`✅ ${fieldMapping.targetField}: ${value}`);
+          } else {
+            const errorMsg = `No se encontraron resultados en lookup`;
+            logger.warn(`${fieldMapping.targetField}: ${errorMsg}`);
 
             if (fieldMapping.failIfNotFound) {
               failedLookups.push({
@@ -2959,41 +2899,64 @@ class DynamicTransferService {
             } else {
               lookupResults[fieldMapping.targetField] =
                 fieldMapping.defaultValue || null;
+              logger.debug(
+                `Usando valor por defecto para ${fieldMapping.targetField}: ${
+                  lookupResults[fieldMapping.targetField]
+                }`
+              );
             }
           }
-        } catch (configError) {
-          const errorMsg = `Error en configuración de lookup para ${fieldMapping.targetField}: ${configError.message}`;
-          logger.error(errorMsg);
+        } catch (fieldError) {
+          const errorMsg = `Error en lookup: ${fieldError.message}`;
+          logger.error(`${fieldMapping.targetField}: ${errorMsg}`, fieldError);
 
-          failedLookups.push({
-            field: fieldMapping.targetField,
-            error: errorMsg,
-            isCritical: fieldMapping.failIfNotFound || false,
-          });
+          if (fieldMapping.failIfNotFound) {
+            failedLookups.push({
+              field: fieldMapping.targetField,
+              error: errorMsg,
+              isCritical: true,
+            });
+          } else {
+            lookupResults[fieldMapping.targetField] =
+              fieldMapping.defaultValue || null;
+          }
         }
       }
 
-      // Verificar si hay errores críticos
+      // Verificar fallos críticos
       const criticalFailures = failedLookups.filter((f) => f.isCritical);
       if (criticalFailures.length > 0) {
+        logger.error(
+          `Fallos críticos en lookup: ${criticalFailures.length} campos`
+        );
         return {
+          results: {},
           success: false,
           failedFields: criticalFailures,
-          results: lookupResults,
         };
       }
 
+      logger.info(
+        `Lookup completado. Obtenidos ${
+          Object.keys(lookupResults).length
+        } valores`
+      );
+
       return {
-        success: true,
         results: lookupResults,
-        warnings: failedLookups.filter((f) => !f.isCritical),
+        success: true,
+        failedFields: failedLookups,
       };
     } catch (error) {
-      logger.error(`Error general en lookup: ${error.message}`);
+      logger.error(`Error general en lookup: ${error.message}`, {
+        error,
+        stack: error.stack,
+      });
+
       return {
+        results: {},
         success: false,
         error: error.message,
-        results: {},
       };
     }
   }
@@ -3118,17 +3081,28 @@ class DynamicTransferService {
               }
 
               // Aplicar eliminación de prefijo si está configurado
+              // if (
+              //   fieldMapping.removePrefix &&
+              //   typeof paramValue === "string" &&
+              //   paramValue.startsWith(fieldMapping.removePrefix)
+              // ) {
+              //   const originalValue = paramValue;
+              //   paramValue = paramValue.substring(
+              //     fieldMapping.removePrefix.length
+              //   );
+              //   logger.debug(
+              //     `Prefijo '${fieldMapping.removePrefix}' eliminado del parámetro ${param.paramName}: '${originalValue}' → '${paramValue}'`
+              //   );
+              // }
               if (
-                fieldMapping.removePrefix &&
+                param.removePrefix &&
                 typeof paramValue === "string" &&
-                paramValue.startsWith(fieldMapping.removePrefix)
+                paramValue.startsWith(param.removePrefix)
               ) {
                 const originalValue = paramValue;
-                paramValue = paramValue.substring(
-                  fieldMapping.removePrefix.length
-                );
+                paramValue = paramValue.substring(param.removePrefix.length);
                 logger.debug(
-                  `Prefijo '${fieldMapping.removePrefix}' eliminado del parámetro ${param.paramName}: '${originalValue}' → '${paramValue}'`
+                  `✂️ Prefijo '${param.removePrefix}' removido del parámetro ${param.paramName}: '${originalValue}' -> '${paramValue}'`
                 );
               }
 
