@@ -9,6 +9,9 @@ const ConsecutiveService = require("./ConsecutiveService");
 const PromotionProcessor = require("./PromotionProcessor");
 
 class DynamicTransferService {
+  constructor() {
+    this.cancellationSignals = new Map();
+  }
   /**
    * Procesa documentos según una configuración de mapeo
    * @param {Array} documentIds - IDs de los documentos a procesar
@@ -2204,9 +2207,6 @@ class DynamicTransferService {
   ) {
     let value;
 
-    // IMPORTANTE: NO modificar fieldMapping aquí
-    // El mapping debe ser respetado tal como está configurado por el usuario
-
     logger.debug(
       `🔧 Procesando campo: ${fieldMapping.sourceField || "(sin origen)"} -> ${
         fieldMapping.targetField
@@ -2223,7 +2223,11 @@ class DynamicTransferService {
         logger.debug(
           `📖 Usando valor de lookup para ${fieldMapping.targetField}: ${value}`
         );
-        return { value, isDirectSql: false };
+        // ✅ APLICAR VALIDACIÓN DE TIPOS DESPUÉS DEL LOOKUP
+        return {
+          value: this.validateAndTransformValue(value, fieldMapping),
+          isDirectSql: false,
+        };
       }
 
       // PRIORIDAD 2: Verificar si el campo es una función SQL nativa
@@ -2245,7 +2249,6 @@ class DynamicTransferService {
 
       const isNativeFunction =
         typeof defaultValue === "string" &&
-        defaultValue !== "" &&
         sqlNativeFunctions.some((fn) => defaultValue.includes(fn));
 
       if (isNativeFunction) {
@@ -2266,14 +2269,16 @@ class DynamicTransferService {
           isDetailTable
         );
         logger.debug(
-          `🔢 Asignando consecutivo a ${fieldMapping.targetField}: ${consecutiveValue} (isDetailTable: ${isDetailTable})`
+          `🔢 Asignando consecutivo a ${fieldMapping.targetField}: ${consecutiveValue}`
         );
-        return { value: consecutiveValue, isDirectSql: false };
+        return {
+          value: this.validateAndTransformValue(consecutiveValue, fieldMapping),
+          isDirectSql: false,
+        };
       }
 
       // PRIORIDAD 4: Obtener valor del campo origen
       if (fieldMapping.sourceField) {
-        // 🎁 MEJORA: Verificar campos de promociones también
         if (!sourceData.hasOwnProperty(fieldMapping.sourceField)) {
           // 🎁 Verificar si es un campo de promoción que puede tener nombre diferente
           const promotionFieldValue = this.checkPromotionFieldAlternatives(
@@ -2302,47 +2307,11 @@ class DynamicTransferService {
           );
         }
 
-        // ✅ NUEVA VALIDACIÓN: Detectar objetos del procesamiento de promociones
-        if (
-          typeof value === "object" &&
-          value !== null &&
-          !Array.isArray(value)
-        ) {
-          logger.warn(
-            `🔧 Campo ${fieldMapping.targetField} contiene un objeto (posiblemente del procesamiento de promociones). Intentando extraer valor correcto...`
-          );
-
-          const extractedValue = this.extractValueFromPromotionObject(
-            value,
-            fieldMapping.targetField,
-            fieldMapping.sourceField
-          );
-
-          if (extractedValue !== null) {
-            value = extractedValue;
-            logger.info(
-              `✅ Valor extraído automáticamente de objeto promoción: ${fieldMapping.targetField} = ${value}`
-            );
-          } else {
-            logger.error(
-              `❌ No se pudo extraer valor válido del objeto para ${fieldMapping.targetField}`
-            );
-            logger.error(`Objeto recibido:`, JSON.stringify(value, null, 2));
-
-            // Solo fallar si es un campo requerido
-            if (fieldMapping.isRequired) {
-              throw new Error(
-                `Campo requerido ${fieldMapping.targetField} contiene un objeto inválido del procesamiento de promociones`
-              );
-            } else {
-              value = null; // Usar null para campos opcionales
-            }
-          }
-        }
-
-        // ✅ APLICAR ELIMINACIÓN DE PREFIJO (NUEVA UBICACIÓN CORRECTA)
+        // ✅ CORRECCIÓN: Aplicar eliminación de prefijo AL VALOR CORRECTO
         if (
           fieldMapping.removePrefix &&
+          value !== null &&
+          value !== undefined &&
           typeof value === "string" &&
           value.startsWith(fieldMapping.removePrefix)
         ) {
@@ -2377,7 +2346,7 @@ class DynamicTransferService {
         }
       }
 
-      // PRIORIDAD 5: Valor por defecto (CORREGIDO)
+      // PRIORIDAD 5: Valor por defecto
       if (
         (value === null || value === undefined) &&
         fieldMapping.defaultValue !== undefined &&
@@ -2387,6 +2356,21 @@ class DynamicTransferService {
         logger.debug(
           `🎯 Usando valor por defecto para ${fieldMapping.targetField}: ${value}`
         );
+      }
+
+      // ✅ NUEVA VALIDACIÓN: Verificar campos requeridos
+      if (fieldMapping.isRequired && (value === null || value === undefined)) {
+        // ✅ SOLUCIÓN PARA FECHA_PEDIDO: Proporcionar fecha actual si es requerido
+        if (fieldMapping.targetField.toUpperCase().includes("FECHA")) {
+          value = new Date();
+          logger.info(
+            `📅 Campo fecha requerido ${fieldMapping.targetField} recibió fecha actual: ${value}`
+          );
+        } else {
+          throw new Error(
+            `Campo requerido ${fieldMapping.targetField} no puede ser NULL. Configure un valor por defecto o verifique los datos origen.`
+          );
+        }
       }
 
       // Aplicar longitud máxima si está configurado
@@ -2403,32 +2387,419 @@ class DynamicTransferService {
         );
       }
 
-      // ✅ SOLUCIÓN 3: Validación automática para campos de fecha críticos
-      if (
-        (value === null || value === undefined) &&
-        fieldMapping.targetField &&
-        (fieldMapping.targetField.toUpperCase().includes("FECHA") ||
-          fieldMapping.targetField.toUpperCase().includes("DATE") ||
-          fieldMapping.targetField.toUpperCase().includes("FEC_"))
-      ) {
-        logger.warn(
-          `⚠️ Campo fecha ${fieldMapping.targetField} es null, usando GETDATE() automáticamente`
-        );
-        return { value: "GETDATE()", isDirectSql: true };
-      }
+      // ✅ APLICAR VALIDACIÓN DE TIPOS FINAL
+      const validatedValue = this.validateAndTransformValue(
+        value,
+        fieldMapping
+      );
 
       logger.debug(
         `🔧 Valor final para ${
           fieldMapping.targetField
-        }: ${value} (tipo: ${typeof value})`
+        }: ${validatedValue} (tipo: ${typeof validatedValue})`
       );
 
-      return { value, isDirectSql: false };
+      return { value: validatedValue, isDirectSql: false };
     } catch (error) {
       logger.error(
         `❌ Error procesando campo ${fieldMapping.targetField}: ${error.message}`
       );
       throw error;
+    }
+  }
+
+  /**
+   * ✅ NUEVO MÉTODO: Valida y transforma valores según el tipo esperado
+   * @private
+   */
+  validateAndTransformValue(value, fieldMapping) {
+    if (value === null || value === undefined) {
+      return value;
+    }
+
+    const targetField = fieldMapping.targetField.toUpperCase();
+
+    // Detectar tipo de campo basado en el nombre
+    const fieldType = this.detectFieldType(targetField);
+
+    try {
+      switch (fieldType) {
+        case "number":
+          return this.transformToNumber(value, targetField);
+        case "date":
+          return this.transformToDate(value, targetField);
+        case "boolean":
+          return this.transformToBoolean(value, targetField);
+        default:
+          return this.transformToString(value, targetField);
+      }
+    } catch (error) {
+      logger.error(
+        `❌ Error validando campo ${fieldMapping.targetField}: ${error.message}`
+      );
+      throw new Error(
+        `Validation failed for parameter '${fieldMapping.targetField}'. ${error.message}`
+      );
+    }
+  }
+
+  /**
+   * ✅ NUEVO MÉTODO: Detecta el tipo de campo esperado
+   * @private
+   */
+  detectFieldType(fieldName) {
+    const fieldUpper = fieldName.toUpperCase();
+
+    // Campos numéricos
+    if (
+      fieldUpper.includes("CANTIDAD") ||
+      fieldUpper.includes("QTY") ||
+      fieldUpper.includes("PRECIO") ||
+      fieldUpper.includes("MONTO") ||
+      fieldUpper.includes("VALOR") ||
+      fieldUpper.includes("NUM_") ||
+      fieldUpper.includes("_NUM") ||
+      fieldUpper.includes("ID") ||
+      fieldUpper.includes("COUNT") ||
+      fieldUpper.includes("TOTAL") ||
+      fieldUpper.includes("IMPORTE")
+    ) {
+      return "number";
+    }
+
+    // Campos de fecha
+    if (
+      fieldUpper.includes("FECHA") ||
+      fieldUpper.includes("DATE") ||
+      fieldUpper.includes("TIME") ||
+      fieldUpper.includes("CREATED") ||
+      fieldUpper.includes("UPDATED")
+    ) {
+      return "date";
+    }
+
+    // Campos booleanos
+    if (
+      fieldUpper.includes("ACTIVO") ||
+      fieldUpper.includes("ACTIVE") ||
+      fieldUpper.includes("ENABLED") ||
+      fieldUpper.includes("FLAG") ||
+      fieldUpper.includes("IS_") ||
+      fieldUpper.includes("HAS_")
+    ) {
+      return "boolean";
+    }
+
+    return "string";
+  }
+
+  /**
+   * ✅ NUEVO MÉTODO: Transforma valor a número
+   * @private
+   */
+  transformToNumber(value, fieldName) {
+    if (typeof value === "number") {
+      return value;
+    }
+
+    if (typeof value === "string") {
+      // Limpiar string de caracteres no numéricos comunes
+      const cleanValue = value.replace(/[^\d.-]/g, "");
+
+      if (cleanValue === "") {
+        throw new Error(
+          `Invalid string: cannot convert empty string to number for field ${fieldName}`
+        );
+      }
+
+      const numValue = parseFloat(cleanValue);
+
+      if (isNaN(numValue)) {
+        throw new Error(
+          `Invalid string: cannot convert '${value}' to number for field ${fieldName}`
+        );
+      }
+
+      // Si el campo parece ser un entero, devolver entero
+      if (
+        fieldName.includes("CANTIDAD") ||
+        fieldName.includes("QTY") ||
+        fieldName.includes("ID")
+      ) {
+        return Math.round(numValue);
+      }
+
+      return numValue;
+    }
+
+    throw new Error(
+      `Cannot convert ${typeof value} to number for field ${fieldName}`
+    );
+  }
+
+  /**
+   * ✅ NUEVO MÉTODO: Transforma valor a fecha
+   * @private
+   */
+  transformToDate(value, fieldName) {
+    if (value instanceof Date) {
+      return value;
+    }
+
+    if (typeof value === "string") {
+      const date = new Date(value);
+      if (isNaN(date.getTime())) {
+        throw new Error(
+          `Invalid date string: '${value}' for field ${fieldName}`
+        );
+      }
+      return date;
+    }
+
+    if (typeof value === "number") {
+      // Asumir timestamp
+      return new Date(value);
+    }
+
+    throw new Error(
+      `Cannot convert ${typeof value} to date for field ${fieldName}`
+    );
+  }
+
+  /**
+   * ✅ NUEVO MÉTODO: Transforma valor a booleano
+   * @private
+   */
+  transformToBoolean(value, fieldName) {
+    if (typeof value === "boolean") {
+      return value;
+    }
+
+    if (typeof value === "string") {
+      const lowerValue = value.toLowerCase();
+      if (["true", "1", "yes", "si", "sí", "activo"].includes(lowerValue)) {
+        return true;
+      }
+      if (["false", "0", "no", "inactivo"].includes(lowerValue)) {
+        return false;
+      }
+      throw new Error(
+        `Cannot convert string '${value}' to boolean for field ${fieldName}`
+      );
+    }
+
+    if (typeof value === "number") {
+      return value !== 0;
+    }
+
+    throw new Error(
+      `Cannot convert ${typeof value} to boolean for field ${fieldName}`
+    );
+  }
+
+  /**
+   * ✅ NUEVO MÉTODO: Transforma valor a string
+   * @private
+   */
+  transformToString(value, fieldName) {
+    if (value === null || value === undefined) {
+      return value;
+    }
+
+    return String(value);
+  }
+
+  /**
+   * Ejecuta lookup en la base de datos destino (CORREGIDO)
+   * @private
+   */
+  async executeLookupInTarget(tableConfig, sourceData, targetConnection) {
+    try {
+      logger.info(
+        `Realizando consultas de lookup en BD destino para tabla ${tableConfig.name}`
+      );
+
+      const lookupResults = {};
+      const failedLookups = [];
+
+      const lookupFields = tableConfig.fieldMappings.filter(
+        (fm) => fm.lookupFromTarget && fm.lookupQuery
+      );
+
+      if (lookupFields.length === 0) {
+        logger.debug(`No hay campos con lookup en tabla ${tableConfig.name}`);
+        return { results: {}, success: true };
+      }
+
+      logger.info(`Procesando ${lookupFields.length} campos con lookup`);
+
+      for (const fieldMapping of lookupFields) {
+        try {
+          let lookupQuery = fieldMapping.lookupQuery;
+          logger.debug(
+            `Procesando lookup para ${fieldMapping.targetField}: ${lookupQuery}`
+          );
+
+          const params = {};
+          const expectedParams = this.extractParametersFromQuery(lookupQuery);
+
+          logger.debug(`Parámetros esperados: ${expectedParams.join(", ")}`);
+
+          // ✅ CORRECCIÓN: Extraer valores de parámetros desde datos de origen
+          if (
+            fieldMapping.lookupParams &&
+            fieldMapping.lookupParams.length > 0
+          ) {
+            for (const param of fieldMapping.lookupParams) {
+              if (!param.sourceField || !param.paramName) {
+                logger.warn(
+                  `Parámetro mal configurado para ${fieldMapping.targetField}`
+                );
+                continue;
+              }
+
+              let paramValue = sourceData[param.sourceField];
+
+              // ✅ CORRECCIÓN: Aplicar eliminación de prefijo AL PARÁMETRO
+              if (
+                param.removePrefix &&
+                paramValue !== null &&
+                paramValue !== undefined &&
+                typeof paramValue === "string" &&
+                paramValue.startsWith(param.removePrefix)
+              ) {
+                const originalValue = paramValue;
+                paramValue = paramValue.substring(param.removePrefix.length);
+                logger.debug(
+                  `✂️ Prefijo '${param.removePrefix}' eliminado del parámetro ${param.paramName}: '${originalValue}' → '${paramValue}'`
+                );
+              }
+
+              params[param.paramName] = paramValue;
+
+              logger.debug(
+                `Parámetro ${param.paramName} (desde ${param.sourceField}): ${paramValue}`
+              );
+            }
+          }
+
+          // Validar parámetros requeridos
+          const missingParams = expectedParams.filter(
+            (p) => params[p] === undefined || params[p] === null
+          );
+
+          if (missingParams.length > 0) {
+            const errorMsg = `Parámetros faltantes: ${missingParams.join(
+              ", "
+            )}`;
+            logger.warn(`${fieldMapping.targetField}: ${errorMsg}`);
+
+            if (fieldMapping.failIfNotFound) {
+              failedLookups.push({
+                field: fieldMapping.targetField,
+                error: errorMsg,
+                isCritical: true,
+              });
+              continue;
+            } else {
+              lookupResults[fieldMapping.targetField] =
+                fieldMapping.defaultValue || null;
+              continue;
+            }
+          }
+
+          // Ejecutar consulta
+          logger.debug(
+            `Ejecutando consulta: ${lookupQuery} con parámetros:`,
+            params
+          );
+
+          const result = await SqlService.query(
+            targetConnection,
+            lookupQuery,
+            params
+          );
+
+          if (result.recordset && result.recordset.length > 0) {
+            const lookupValue = Object.values(result.recordset[0])[0];
+            lookupResults[fieldMapping.targetField] = lookupValue;
+
+            logger.debug(
+              `✅ Lookup exitoso para ${fieldMapping.targetField}: ${lookupValue}`
+            );
+          } else {
+            logger.warn(
+              `⚠️ No se encontraron resultados en lookup para ${fieldMapping.targetField}`
+            );
+
+            if (fieldMapping.failIfNotFound) {
+              failedLookups.push({
+                field: fieldMapping.targetField,
+                error: "No se encontraron resultados",
+                isCritical: true,
+              });
+            } else {
+              lookupResults[fieldMapping.targetField] =
+                fieldMapping.defaultValue || null;
+            }
+          }
+        } catch (fieldError) {
+          const errorMsg = `Error en lookup ${fieldMapping.targetField}: ${fieldError.message}`;
+          logger.error(errorMsg, fieldError);
+
+          if (fieldMapping.failIfNotFound) {
+            failedLookups.push({
+              field: fieldMapping.targetField,
+              error: errorMsg,
+              isCritical: true,
+            });
+          } else {
+            lookupResults[fieldMapping.targetField] =
+              fieldMapping.defaultValue || null;
+            logger.debug(
+              `Usando valor por defecto por error en ${
+                fieldMapping.targetField
+              }: ${lookupResults[fieldMapping.targetField]}`
+            );
+          }
+        }
+      }
+
+      // Verificar si hay fallos críticos
+      const criticalFailures = failedLookups.filter((f) => f.isCritical);
+      if (criticalFailures.length > 0) {
+        logger.error(
+          `Fallos críticos en lookup: ${criticalFailures.length} campos`
+        );
+        return {
+          results: {},
+          success: false,
+          failedFields: criticalFailures,
+        };
+      }
+
+      logger.info(
+        `Lookup completado exitosamente. Obtenidos ${
+          Object.keys(lookupResults).length
+        } valores`
+      );
+
+      return {
+        results: lookupResults,
+        success: true,
+        failedFields: failedLookups,
+      };
+    } catch (error) {
+      logger.error(`Error general en lookup: ${error.message}`, {
+        error,
+        stack: error.stack,
+      });
+
+      return {
+        results: {},
+        success: false,
+        error: error.message,
+      };
     }
   }
 
