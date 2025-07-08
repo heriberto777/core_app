@@ -2192,6 +2192,7 @@ class DynamicTransferService {
    * Procesa un campo individual - BASADO ÚNICAMENTE EN EL MAPPING
    * @private
    */
+
   /**
    * Procesa un campo individual - BASADO ÚNICAMENTE EN EL MAPPING
    * @private
@@ -2381,10 +2382,11 @@ class DynamicTransferService {
         }
       }
 
-      // PRIORIDAD 5: Valor por defecto
+      // ✅ PRIORIDAD 5: Valor por defecto (CORREGIDO)
       if (
         (value === null || value === undefined) &&
-        fieldMapping.defaultValue
+        fieldMapping.defaultValue !== undefined &&
+        fieldMapping.defaultValue !== null
       ) {
         value = fieldMapping.defaultValue;
         logger.debug(
@@ -3147,6 +3149,7 @@ class DynamicTransferService {
           );
           fieldMapping.sourceField = "ARTICULO";
         }
+
         try {
           let lookupQuery = fieldMapping.lookupQuery;
           logger.debug(
@@ -3206,7 +3209,7 @@ class DynamicTransferService {
                 );
               }
 
-              // Aplicar eliminación de prefijo si está configurado
+              // ✅ APLICAR ELIMINACIÓN DE PREFIJO (CORREGIDO - usar param.removePrefix)
               if (
                 param.removePrefix &&
                 typeof paramValue === "string" &&
@@ -3215,7 +3218,7 @@ class DynamicTransferService {
                 const originalValue = paramValue;
                 paramValue = paramValue.substring(param.removePrefix.length);
                 logger.debug(
-                  `✂️ Prefijo '${param.removePrefix}' removido del parámetro ${param.paramName}: '${originalValue}' -> '${paramValue}'`
+                  `✂️ Prefijo '${param.removePrefix}' eliminado del parámetro ${param.paramName}: '${originalValue}' → '${paramValue}'`
                 );
               }
 
@@ -3233,14 +3236,18 @@ class DynamicTransferService {
             if (fieldMapping.failIfNotFound) {
               throw new Error(errorMessage);
             } else {
-              // Usar valor por defecto
+              // ✅ USAR VALOR POR DEFECTO (CORREGIDO)
               lookupResults[fieldMapping.targetField] =
-                fieldMapping.defaultValue || null;
+                fieldMapping.defaultValue !== undefined &&
+                fieldMapping.defaultValue !== null
+                  ? fieldMapping.defaultValue
+                  : null;
               logger.debug(
                 `Usando valor por defecto para ${fieldMapping.targetField}: ${
                   lookupResults[fieldMapping.targetField]
                 }`
               );
+              continue;
             }
           }
 
@@ -3299,9 +3306,12 @@ class DynamicTransferService {
                 `No se encontraron resultados para el campo ${fieldMapping.targetField}`
               );
             } else {
-              // Usar valor por defecto
+              // ✅ USAR VALOR POR DEFECTO (CORREGIDO)
               lookupResults[fieldMapping.targetField] =
-                fieldMapping.defaultValue || null;
+                fieldMapping.defaultValue !== undefined &&
+                fieldMapping.defaultValue !== null
+                  ? fieldMapping.defaultValue
+                  : null;
               logger.debug(
                 `Usando valor por defecto para ${fieldMapping.targetField}: ${
                   lookupResults[fieldMapping.targetField]
@@ -3320,9 +3330,12 @@ class DynamicTransferService {
             if (fieldMapping.failIfNotFound) {
               throw new Error(errorMessage);
             } else {
-              // Usar valor por defecto en caso de error
+              // ✅ USAR VALOR POR DEFECTO EN CASO DE ERROR (CORREGIDO)
               lookupResults[fieldMapping.targetField] =
-                fieldMapping.defaultValue || null;
+                fieldMapping.defaultValue !== undefined &&
+                fieldMapping.defaultValue !== null
+                  ? fieldMapping.defaultValue
+                  : null;
               logger.debug(
                 `Usando valor por defecto por error en ${
                   fieldMapping.targetField
@@ -3341,9 +3354,12 @@ class DynamicTransferService {
               isCritical: true,
             });
           } else {
-            // Usar valor por defecto en caso de error
+            // ✅ USAR VALOR POR DEFECTO EN CASO DE ERROR (CORREGIDO)
             lookupResults[fieldMapping.targetField] =
-              fieldMapping.defaultValue || null;
+              fieldMapping.defaultValue !== undefined &&
+              fieldMapping.defaultValue !== null
+                ? fieldMapping.defaultValue
+                : null;
             logger.debug(
               `Usando valor por defecto por error en ${
                 fieldMapping.targetField
