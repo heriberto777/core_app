@@ -1903,7 +1903,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa una tabla individual - SOLO campos definidos en el mapping
+   * Procesa una tabla individual - CAMPOS DEL MAPPING + CAMPOS DE PROMOCIONES
    * @private
    */
   async processTable(
@@ -1929,6 +1929,20 @@ class DynamicTransferService {
     logger.debug(
       `Iniciando procesamiento de tabla ${tableConfig.name} (isDetailTable: ${isDetailTable})`
     );
+
+    // 🔍 DETECTAR SI HAY DATOS DE PROMOCIONES
+    const hasPromotionData =
+      dataForProcessing &&
+      (dataForProcessing._IS_BONUS_LINE ||
+        dataForProcessing._IS_TRIGGER_LINE ||
+        dataForProcessing._PROMOTION_TYPE ||
+        dataForProcessing.PEDIDO_LINEA_BONIF !== undefined);
+
+    if (hasPromotionData) {
+      logger.info(
+        `🎁 Detectados datos de promociones en tabla ${tableConfig.name}`
+      );
+    }
 
     // VALIDACIÓN: Verificar que existe configuración de campos
     if (!tableConfig.fieldMappings || tableConfig.fieldMappings.length === 0) {
@@ -1970,16 +1984,9 @@ class DynamicTransferService {
       `📋 Procesando ${tableConfig.fieldMappings.length} campos definidos en mapping para tabla ${tableConfig.name}`
     );
 
-    // Procesar ÚNICAMENTE los campos definidos en el mapping
+    // ✅ PASO 1: Procesar ÚNICAMENTE los campos definidos en el mapping
     for (let i = 0; i < tableConfig.fieldMappings.length; i++) {
       const fieldMapping = tableConfig.fieldMappings[i];
-
-      console.log(
-        "🔧 DEBUG FIELD MAPPING:",
-        fieldMapping.sourceField,
-        "->",
-        fieldMapping.targetField
-      );
 
       // Validación básica del field mapping
       if (!fieldMapping.targetField) {
@@ -2074,6 +2081,52 @@ class DynamicTransferService {
       }
     }
 
+    // 🎁 PASO 2: Procesar campos adicionales de promociones (SI EXISTEN)
+    if (hasPromotionData && isDetailTable && mapping.promotionConfig?.enabled) {
+      logger.info(
+        `🎁 Procesando campos adicionales de promociones para tabla ${tableConfig.name}`
+      );
+
+      // Obtener configuración de campos de promociones
+      const promotionFieldConfig = this.getPromotionFieldConfiguration(mapping);
+
+      // Detectar campos de promociones que no están en el mapping pero existen en los datos
+      const promotionFieldsToProcess = this.detectPromotionFieldsToProcess(
+        dataForProcessing,
+        promotionFieldConfig,
+        processedFieldNames
+      );
+
+      // Procesar cada campo de promoción detectado
+      for (const promotionField of promotionFieldsToProcess) {
+        try {
+          logger.debug(
+            `🎁 Procesando campo de promoción: ${promotionField.sourceField} -> ${promotionField.targetField}`
+          );
+
+          const promotionValue = dataForProcessing[promotionField.sourceField];
+
+          if (promotionValue !== undefined && promotionValue !== null) {
+            // Marcar como procesado
+            processedFieldNames.add(promotionField.targetField.toLowerCase());
+
+            // Agregar a los datos a insertar
+            targetData[promotionField.targetField] = promotionValue;
+            targetFields.push(promotionField.targetField);
+            targetValues.push(`@${promotionField.targetField}`);
+
+            logger.info(
+              `🎁 ✅ Campo promoción ${promotionField.targetField} agregado: ${promotionValue}`
+            );
+          }
+        } catch (promotionError) {
+          logger.warn(
+            `🎁 ⚠️ Error procesando campo promoción ${promotionField.targetField}: ${promotionError.message}`
+          );
+        }
+      }
+    }
+
     // Validación final antes de la inserción
     if (targetFields.length === 0) {
       logger.warn(
@@ -2084,6 +2137,13 @@ class DynamicTransferService {
           .map((fm) => fm.targetField)
           .join(", ")}`
       );
+      if (hasPromotionData) {
+        logger.warn(
+          `Campos de promoción disponibles: ${Object.keys(dataForProcessing)
+            .filter((key) => !key.startsWith("_"))
+            .join(", ")}`
+        );
+      }
       return;
     }
 
@@ -2213,12 +2273,26 @@ class DynamicTransferService {
 
       // PRIORIDAD 4: Obtener valor del campo origen
       if (fieldMapping.sourceField) {
-        // Verificar que el campo origen existe en los datos
+        // 🎁 MEJORA: Verificar campos de promociones también
         if (!sourceData.hasOwnProperty(fieldMapping.sourceField)) {
-          logger.warn(
-            `⚠️ Campo origen ${fieldMapping.sourceField} no existe en los datos fuente para ${fieldMapping.targetField}`
+          // 🎁 Verificar si es un campo de promoción que puede tener nombre diferente
+          const promotionFieldValue = this.checkPromotionFieldAlternatives(
+            fieldMapping.sourceField,
+            sourceData,
+            mapping
           );
-          value = null;
+
+          if (promotionFieldValue !== null) {
+            value = promotionFieldValue;
+            logger.debug(
+              `🎁 Valor encontrado en campo promoción alternativo: ${value}`
+            );
+          } else {
+            logger.warn(
+              `⚠️ Campo origen ${fieldMapping.sourceField} no existe en los datos fuente para ${fieldMapping.targetField}`
+            );
+            value = null;
+          }
         } else {
           value = sourceData[fieldMapping.sourceField];
           logger.debug(
@@ -2226,136 +2300,59 @@ class DynamicTransferService {
               fieldMapping.sourceField
             }: ${value} (tipo: ${typeof value})`
           );
-
-          // Aplicar conversión de unidades si está configurado
-          if (
-            fieldMapping.unitConversion &&
-            fieldMapping.unitConversion.enabled
-          ) {
-            logger.debug(
-              `🔄 Aplicando conversión de unidades para ${fieldMapping.targetField}`
-            );
-            try {
-              value = this.applyUnitConversion(sourceData, fieldMapping, value);
-              logger.debug(`🔄 Conversión de unidades completada: ${value}`);
-            } catch (conversionError) {
-              logger.warn(
-                `⚠️ Error en conversión de unidades para ${fieldMapping.targetField}: ${conversionError.message}, usando valor original`
-              );
-              // Mantener valor original si falla la conversión
-            }
-          }
-
-          // Aplicar eliminación de prefijo si está configurado
-          if (
-            fieldMapping.removePrefix &&
-            typeof value === "string" &&
-            value.startsWith(fieldMapping.removePrefix)
-          ) {
-            const originalValue = value;
-            value = value.substring(fieldMapping.removePrefix.length);
-            logger.debug(
-              `✂️ Prefijo '${fieldMapping.removePrefix}' removido de ${fieldMapping.targetField}: '${originalValue}' -> '${value}'`
-            );
-          }
-
-          // Aplicar mapeo de valores si existe
-          if (
-            value !== null &&
-            value !== undefined &&
-            fieldMapping.valueMappings?.length > 0
-          ) {
-            const valueMap = fieldMapping.valueMappings.find(
-              (vm) => vm.sourceValue === value
-            );
-            if (valueMap) {
-              const originalValue = value;
-              value = valueMap.targetValue;
-              logger.debug(
-                `🔄 Valor mapeado para ${fieldMapping.targetField}: '${originalValue}' -> '${value}'`
-              );
-            }
-          }
         }
-      }
 
-      // PRIORIDAD 5: Usar valor por defecto si no hay valor
-      if (
-        (value === null || value === undefined) &&
-        fieldMapping.defaultValue !== undefined
-      ) {
-        value =
-          fieldMapping.defaultValue === "NULL"
-            ? null
-            : fieldMapping.defaultValue;
-        logger.debug(
-          `🎯 Valor por defecto para ${fieldMapping.targetField}: ${value}`
-        );
-      }
-
-      // PRIORIDAD 6: Validación de valor requerido
-      if (
-        fieldMapping.isRequired &&
-        (value === null || value === undefined || value === "")
-      ) {
-        const errorMsg = `Campo requerido ${fieldMapping.targetField} no tiene valor válido`;
-        logger.error(`❌ ${errorMsg}`);
-        throw new Error(errorMsg);
-      }
-
-      // PRIORIDAD 7: Truncar valor si excede la longitud máxima
-      if (typeof value === "string" && value.length > 0) {
-        try {
-          const maxLength = await this.getColumnMaxLength(
+        // Aplicar conversión de unidades si está configurado
+        if (
+          fieldMapping.unitConversion &&
+          fieldMapping.unitConversion.enabled &&
+          value !== null &&
+          value !== undefined
+        ) {
+          const convertedValue = await this.applyUnitConversion(
+            value,
+            fieldMapping.unitConversion,
+            sourceData,
             targetConnection,
-            tableConfig.targetTable,
-            fieldMapping.targetField,
             columnLengthCache
           );
 
-          if (maxLength > 0 && value.length > maxLength) {
-            const originalValue = value;
-            value = value.substring(0, maxLength);
-            logger.warn(
-              `✂️ Valor truncado para ${fieldMapping.targetField}: "${originalValue}" -> "${value}" (max: ${maxLength})`
+          if (convertedValue !== null) {
+            value = convertedValue;
+            logger.debug(
+              `🔄 Valor después de conversión de unidades: ${value}`
             );
           }
-        } catch (lengthError) {
-          logger.warn(
-            `⚠️ No se pudo verificar longitud máxima para ${fieldMapping.targetField}: ${lengthError.message}`
-          );
-          // Continuar sin truncar
         }
       }
 
-      // PRIORIDAD 8: Validación de tipo de datos básica
-      if (value !== null && value !== undefined) {
-        // Convertir números si es necesario
-        if (fieldMapping.fieldType === "number" && typeof value === "string") {
-          const numericValue = parseFloat(value);
-          if (!isNaN(numericValue)) {
-            value = numericValue;
-            logger.debug(
-              `🔢 Valor convertido a número para ${fieldMapping.targetField}: ${value}`
-            );
-          }
-        }
+      // PRIORIDAD 5: Valor por defecto
+      if (
+        (value === null || value === undefined) &&
+        fieldMapping.defaultValue
+      ) {
+        value = fieldMapping.defaultValue;
+        logger.debug(
+          `🎯 Usando valor por defecto para ${fieldMapping.targetField}: ${value}`
+        );
+      }
 
-        // Convertir booleanos si es necesario
-        if (fieldMapping.fieldType === "boolean" && typeof value === "string") {
-          if (["true", "1", "yes", "y", "s"].includes(value.toLowerCase())) {
-            value = true;
-          } else if (["false", "0", "no", "n"].includes(value.toLowerCase())) {
-            value = false;
-          }
-          logger.debug(
-            `🔘 Valor convertido a booleano para ${fieldMapping.targetField}: ${value}`
-          );
-        }
+      // Aplicar longitud máxima si está configurado
+      if (
+        value &&
+        typeof value === "string" &&
+        fieldMapping.maxLength &&
+        value.length > fieldMapping.maxLength
+      ) {
+        const originalValue = value;
+        value = value.substring(0, fieldMapping.maxLength);
+        logger.warn(
+          `✂️ Valor truncado en ${fieldMapping.targetField}: "${originalValue}" -> "${value}"`
+        );
       }
 
       logger.debug(
-        `✅ Valor final para ${
+        `🔧 Valor final para ${
           fieldMapping.targetField
         }: ${value} (tipo: ${typeof value})`
       );
@@ -2365,26 +2362,7 @@ class DynamicTransferService {
       logger.error(
         `❌ Error procesando campo ${fieldMapping.targetField}: ${error.message}`
       );
-
-      // Si el campo es requerido, re-lanzar el error
-      if (fieldMapping.isRequired) {
-        throw error;
-      }
-
-      // Si no es requerido, usar valor por defecto o null
-      let fallbackValue = null;
-      if (fieldMapping.defaultValue !== undefined) {
-        fallbackValue =
-          fieldMapping.defaultValue === "NULL"
-            ? null
-            : fieldMapping.defaultValue;
-      }
-
-      logger.warn(
-        `⚠️ Usando valor de fallback para campo opcional ${fieldMapping.targetField}: ${fallbackValue}`
-      );
-
-      return { value: fallbackValue, isDirectSql: false };
+      throw error;
     }
   }
 
@@ -5272,6 +5250,169 @@ class DynamicTransferService {
       logger.error(`Error al verificar promociones: ${error.message}`);
       return false;
     }
+  }
+
+  /**
+   * Obtiene configuración de campos de promociones desde el mapping
+   * @private
+   */
+  getPromotionFieldConfiguration(mapping) {
+    const defaultConfig = {
+      bonusField: "ART_BON",
+      referenceField: "COD_ART_RFR",
+      discountField: "MON_DSC",
+      lineNumberField: "NUM_LN",
+      articleField: "COD_ART",
+      quantityField: "CND_MAX",
+      bonusLineRef: "PEDIDO_LINEA_BONIF",
+      orderedQuantity: "CANTIDAD_PEDIDA",
+      invoiceQuantity: "CANTIDAD_A_FACTURAR",
+      bonusQuantity: "CANTIDAD_BONIF",
+    };
+
+    // Combinar con configuración del mapping si existe
+    if (mapping.promotionConfig) {
+      return {
+        ...defaultConfig,
+        ...mapping.promotionConfig.detectFields,
+        ...mapping.promotionConfig.targetFields,
+      };
+    }
+
+    return defaultConfig;
+  }
+
+  /**
+   * Detecta campos de promociones que deben procesarse pero no están en el mapping
+   * @private
+   */
+  detectPromotionFieldsToProcess(
+    dataForProcessing,
+    promotionFieldConfig,
+    processedFieldNames
+  ) {
+    const fieldsToProcess = [];
+
+    // Lista de campos de promoción que pueden necesitar procesamiento
+    const promotionFields = [
+      {
+        sourceField: promotionFieldConfig.bonusLineRef,
+        targetField: promotionFieldConfig.bonusLineRef,
+        description: "Referencia línea bonificación",
+      },
+      {
+        sourceField: promotionFieldConfig.orderedQuantity,
+        targetField: promotionFieldConfig.orderedQuantity,
+        description: "Cantidad pedida",
+      },
+      {
+        sourceField: promotionFieldConfig.invoiceQuantity,
+        targetField: promotionFieldConfig.invoiceQuantity,
+        description: "Cantidad a facturar",
+      },
+      {
+        sourceField: promotionFieldConfig.bonusQuantity,
+        targetField: promotionFieldConfig.bonusQuantity,
+        description: "Cantidad bonificación",
+      },
+    ];
+
+    // Verificar cada campo de promoción
+    for (const field of promotionFields) {
+      const targetFieldLower = field.targetField.toLowerCase();
+
+      // Si el campo NO fue procesado ya Y existe en los datos
+      if (
+        !processedFieldNames.has(targetFieldLower) &&
+        dataForProcessing.hasOwnProperty(field.sourceField)
+      ) {
+        fieldsToProcess.push(field);
+        logger.debug(
+          `🎁 Campo promoción detectado para procesar: ${field.sourceField} -> ${field.targetField} (${field.description})`
+        );
+      }
+    }
+
+    // Detectar campo especial PEDIDO_LINEA_BONIF si existe y no fue procesado
+    const bonusLineRefField = promotionFieldConfig.bonusLineRef;
+    const bonusLineRefLower = bonusLineRefField.toLowerCase();
+
+    if (
+      !processedFieldNames.has(bonusLineRefLower) &&
+      dataForProcessing.hasOwnProperty(bonusLineRefField)
+    ) {
+      // Solo agregar si no está ya en la lista
+      const alreadyAdded = fieldsToProcess.some(
+        (f) => f.targetField.toLowerCase() === bonusLineRefLower
+      );
+
+      if (!alreadyAdded) {
+        fieldsToProcess.push({
+          sourceField: bonusLineRefField,
+          targetField: bonusLineRefField,
+          description:
+            "Referencia línea bonificación (detectado automáticamente)",
+        });
+
+        logger.info(
+          `🎁 ✅ Campo PEDIDO_LINEA_BONIF detectado automáticamente: ${dataForProcessing[bonusLineRefField]}`
+        );
+      }
+    }
+
+    return fieldsToProcess;
+  }
+  /**
+   * Verifica campos alternativos para promociones
+   * @private
+   */
+  checkPromotionFieldAlternatives(sourceField, sourceData, mapping) {
+    if (!mapping.promotionConfig?.enabled) {
+      return null;
+    }
+
+    const promotionConfig = this.getPromotionFieldConfiguration(mapping);
+
+    // Mapeo de campos alternativos
+    const fieldAlternatives = {
+      [promotionConfig.bonusLineRef]: [
+        "PEDIDO_LINEA_BONIF",
+        "LINEA_BONIFICACION",
+        "REF_LINEA_BONUS",
+      ],
+      [promotionConfig.orderedQuantity]: [
+        "CANTIDAD_PEDIDA",
+        "QTY_PEDIDA",
+        "CANT_PEDIDA",
+      ],
+      [promotionConfig.invoiceQuantity]: [
+        "CANTIDAD_A_FACTURAR",
+        "QTY_FACTURAR",
+        "CANT_FACTURAR",
+      ],
+      [promotionConfig.bonusQuantity]: [
+        "CANTIDAD_BONIFICAD",
+        "QTY_BONUS",
+        "CANT_BONIFICADA",
+      ],
+    };
+
+    // Buscar alternativas para el campo solicitado
+    for (const [mainField, alternatives] of Object.entries(fieldAlternatives)) {
+      if (sourceField === mainField || alternatives.includes(sourceField)) {
+        // Buscar en el orden de prioridad
+        for (const alternative of [mainField, ...alternatives]) {
+          if (sourceData.hasOwnProperty(alternative)) {
+            logger.debug(
+              `🎁 Campo promoción encontrado: ${sourceField} -> ${alternative} = ${sourceData[alternative]}`
+            );
+            return sourceData[alternative];
+          }
+        }
+      }
+    }
+
+    return null;
   }
 }
 
