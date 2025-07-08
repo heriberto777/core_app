@@ -2227,18 +2227,6 @@ class DynamicTransferService {
         return { value, isDirectSql: false };
       }
 
-      if (
-        fieldMapping.removePrefix &&
-        typeof value === "string" &&
-        value.startsWith(fieldMapping.removePrefix)
-      ) {
-        const originalValue = value;
-        value = value.substring(fieldMapping.removePrefix.length);
-        logger.debug(
-          `✂️ Prefijo '${fieldMapping.removePrefix}' eliminado del campo ${fieldMapping.targetField}: '${originalValue}' → '${value}'`
-        );
-      }
-
       // PRIORIDAD 2: Verificar si el campo es una función SQL nativa
       const defaultValue = fieldMapping.defaultValue;
       const sqlNativeFunctions = [
@@ -2311,6 +2299,19 @@ class DynamicTransferService {
             `📥 Valor original de ${
               fieldMapping.sourceField
             }: ${value} (tipo: ${typeof value})`
+          );
+        }
+
+        // ✅ APLICAR ELIMINACIÓN DE PREFIJO (NUEVA UBICACIÓN CORRECTA)
+        if (
+          fieldMapping.removePrefix &&
+          typeof value === "string" &&
+          value.startsWith(fieldMapping.removePrefix)
+        ) {
+          const originalValue = value;
+          value = value.substring(fieldMapping.removePrefix.length);
+          logger.debug(
+            `✂️ Prefijo '${fieldMapping.removePrefix}' eliminado del campo ${fieldMapping.targetField}: '${originalValue}' → '${value}'`
           );
         }
 
@@ -3093,16 +3094,14 @@ class DynamicTransferService {
 
               // Aplicar eliminación de prefijo si está configurado
               if (
-                fieldMapping.removePrefix &&
+                param.removePrefix &&
                 typeof paramValue === "string" &&
-                paramValue.startsWith(fieldMapping.removePrefix)
+                paramValue.startsWith(param.removePrefix)
               ) {
                 const originalValue = paramValue;
-                paramValue = paramValue.substring(
-                  fieldMapping.removePrefix.length
-                );
+                paramValue = paramValue.substring(param.removePrefix.length);
                 logger.debug(
-                  `Prefijo '${fieldMapping.removePrefix}' eliminado del parámetro ${param.paramName}: '${originalValue}' → '${paramValue}'`
+                  `✂️ Prefijo '${param.removePrefix}' removido del parámetro ${param.paramName}: '${originalValue}' -> '${paramValue}'`
                 );
               }
 
