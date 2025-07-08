@@ -2190,6 +2190,7 @@ class DynamicTransferService {
 
     logger.debug(`✅ Procesamiento completado para tabla ${tableConfig.name}`);
   }
+
   /**
    * Procesa un campo individual - BASADO ÚNICAMENTE EN EL MAPPING
    * @private
@@ -2207,6 +2208,9 @@ class DynamicTransferService {
   ) {
     let value;
 
+    // IMPORTANTE: NO modificar fieldMapping aquí
+    // El mapping debe ser respetado tal como está configurado por el usuario
+
     logger.debug(
       `🔧 Procesando campo: ${fieldMapping.sourceField || "(sin origen)"} -> ${
         fieldMapping.targetField
@@ -2223,11 +2227,7 @@ class DynamicTransferService {
         logger.debug(
           `📖 Usando valor de lookup para ${fieldMapping.targetField}: ${value}`
         );
-        // ✅ APLICAR VALIDACIÓN DE TIPOS DESPUÉS DEL LOOKUP
-        return {
-          value: this.validateAndTransformValue(value, fieldMapping),
-          isDirectSql: false,
-        };
+        return { value, isDirectSql: false };
       }
 
       // PRIORIDAD 2: Verificar si el campo es una función SQL nativa
@@ -2249,6 +2249,7 @@ class DynamicTransferService {
 
       const isNativeFunction =
         typeof defaultValue === "string" &&
+        defaultValue !== "" &&
         sqlNativeFunctions.some((fn) => defaultValue.includes(fn));
 
       if (isNativeFunction) {
@@ -2269,16 +2270,14 @@ class DynamicTransferService {
           isDetailTable
         );
         logger.debug(
-          `🔢 Asignando consecutivo a ${fieldMapping.targetField}: ${consecutiveValue}`
+          `🔢 Asignando consecutivo a ${fieldMapping.targetField}: ${consecutiveValue} (isDetailTable: ${isDetailTable})`
         );
-        return {
-          value: this.validateAndTransformValue(consecutiveValue, fieldMapping),
-          isDirectSql: false,
-        };
+        return { value: consecutiveValue, isDirectSql: false };
       }
 
       // PRIORIDAD 4: Obtener valor del campo origen
       if (fieldMapping.sourceField) {
+        // 🎁 MEJORA: Verificar campos de promociones también
         if (!sourceData.hasOwnProperty(fieldMapping.sourceField)) {
           // 🎁 Verificar si es un campo de promoción que puede tener nombre diferente
           const promotionFieldValue = this.checkPromotionFieldAlternatives(
@@ -2307,11 +2306,47 @@ class DynamicTransferService {
           );
         }
 
-        // ✅ CORRECCIÓN: Aplicar eliminación de prefijo AL VALOR CORRECTO
+        // ✅ NUEVA VALIDACIÓN: Detectar objetos del procesamiento de promociones
+        if (
+          typeof value === "object" &&
+          value !== null &&
+          !Array.isArray(value)
+        ) {
+          logger.warn(
+            `🔧 Campo ${fieldMapping.targetField} contiene un objeto (posiblemente del procesamiento de promociones). Intentando extraer valor correcto...`
+          );
+
+          const extractedValue = this.extractValueFromPromotionObject(
+            value,
+            fieldMapping.targetField,
+            fieldMapping.sourceField
+          );
+
+          if (extractedValue !== null) {
+            value = extractedValue;
+            logger.info(
+              `✅ Valor extraído automáticamente de objeto promoción: ${fieldMapping.targetField} = ${value}`
+            );
+          } else {
+            logger.error(
+              `❌ No se pudo extraer valor válido del objeto para ${fieldMapping.targetField}`
+            );
+            logger.error(`Objeto recibido:`, JSON.stringify(value, null, 2));
+
+            // Solo fallar si es un campo requerido
+            if (fieldMapping.isRequired) {
+              throw new Error(
+                `Campo requerido ${fieldMapping.targetField} contiene un objeto inválido del procesamiento de promociones`
+              );
+            } else {
+              value = null; // Usar null para campos opcionales
+            }
+          }
+        }
+
+        // ✅ APLICAR ELIMINACIÓN DE PREFIJO (NUEVA UBICACIÓN CORRECTA)
         if (
           fieldMapping.removePrefix &&
-          value !== null &&
-          value !== undefined &&
           typeof value === "string" &&
           value.startsWith(fieldMapping.removePrefix)
         ) {
@@ -2346,7 +2381,7 @@ class DynamicTransferService {
         }
       }
 
-      // PRIORIDAD 5: Valor por defecto
+      // PRIORIDAD 5: Valor por defecto (CORREGIDO)
       if (
         (value === null || value === undefined) &&
         fieldMapping.defaultValue !== undefined &&
@@ -2356,21 +2391,6 @@ class DynamicTransferService {
         logger.debug(
           `🎯 Usando valor por defecto para ${fieldMapping.targetField}: ${value}`
         );
-      }
-
-      // ✅ NUEVA VALIDACIÓN: Verificar campos requeridos
-      if (fieldMapping.isRequired && (value === null || value === undefined)) {
-        // ✅ SOLUCIÓN PARA FECHA_PEDIDO: Proporcionar fecha actual si es requerido
-        if (fieldMapping.targetField.toUpperCase().includes("FECHA")) {
-          value = new Date();
-          logger.info(
-            `📅 Campo fecha requerido ${fieldMapping.targetField} recibió fecha actual: ${value}`
-          );
-        } else {
-          throw new Error(
-            `Campo requerido ${fieldMapping.targetField} no puede ser NULL. Configure un valor por defecto o verifique los datos origen.`
-          );
-        }
       }
 
       // Aplicar longitud máxima si está configurado
@@ -2387,19 +2407,27 @@ class DynamicTransferService {
         );
       }
 
-      // ✅ APLICAR VALIDACIÓN DE TIPOS FINAL
-      const validatedValue = this.validateAndTransformValue(
-        value,
-        fieldMapping
-      );
+      // ✅ SOLUCIÓN 3: Validación automática para campos de fecha críticos
+      if (
+        (value === null || value === undefined) &&
+        fieldMapping.targetField &&
+        (fieldMapping.targetField.toUpperCase().includes("FECHA") ||
+          fieldMapping.targetField.toUpperCase().includes("DATE") ||
+          fieldMapping.targetField.toUpperCase().includes("FEC_"))
+      ) {
+        logger.warn(
+          `⚠️ Campo fecha ${fieldMapping.targetField} es null, usando GETDATE() automáticamente`
+        );
+        return { value: "GETDATE()", isDirectSql: true };
+      }
 
       logger.debug(
         `🔧 Valor final para ${
           fieldMapping.targetField
-        }: ${validatedValue} (tipo: ${typeof validatedValue})`
+        }: ${value} (tipo: ${typeof value})`
       );
 
-      return { value: validatedValue, isDirectSql: false };
+      return { value, isDirectSql: false };
     } catch (error) {
       logger.error(
         `❌ Error procesando campo ${fieldMapping.targetField}: ${error.message}`
