@@ -2187,12 +2187,6 @@ class DynamicTransferService {
 
     logger.debug(`✅ Procesamiento completado para tabla ${tableConfig.name}`);
   }
-
-  /**
-   * Procesa un campo individual - BASADO ÚNICAMENTE EN EL MAPPING
-   * @private
-   */
-
   /**
    * Procesa un campo individual - BASADO ÚNICAMENTE EN EL MAPPING
    * @private
@@ -2251,6 +2245,7 @@ class DynamicTransferService {
 
       const isNativeFunction =
         typeof defaultValue === "string" &&
+        defaultValue !== "" &&
         sqlNativeFunctions.some((fn) => defaultValue.includes(fn));
 
       if (isNativeFunction) {
@@ -2382,7 +2377,7 @@ class DynamicTransferService {
         }
       }
 
-      // ✅ PRIORIDAD 5: Valor por defecto (CORREGIDO)
+      // PRIORIDAD 5: Valor por defecto (CORREGIDO)
       if (
         (value === null || value === undefined) &&
         fieldMapping.defaultValue !== undefined &&
@@ -2406,6 +2401,20 @@ class DynamicTransferService {
         logger.warn(
           `✂️ Valor truncado en ${fieldMapping.targetField}: "${originalValue}" -> "${value}"`
         );
+      }
+
+      // ✅ SOLUCIÓN 3: Validación automática para campos de fecha críticos
+      if (
+        (value === null || value === undefined) &&
+        fieldMapping.targetField &&
+        (fieldMapping.targetField.toUpperCase().includes("FECHA") ||
+          fieldMapping.targetField.toUpperCase().includes("DATE") ||
+          fieldMapping.targetField.toUpperCase().includes("FEC_"))
+      ) {
+        logger.warn(
+          `⚠️ Campo fecha ${fieldMapping.targetField} es null, usando GETDATE() automáticamente`
+        );
+        return { value: "GETDATE()", isDirectSql: true };
       }
 
       logger.debug(
