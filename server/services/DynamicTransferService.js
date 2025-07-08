@@ -2192,6 +2192,10 @@ class DynamicTransferService {
    * Procesa un campo individual - BASADO ÚNICAMENTE EN EL MAPPING
    * @private
    */
+  /**
+   * Procesa un campo individual - BASADO ÚNICAMENTE EN EL MAPPING
+   * @private
+   */
   async processField(
     fieldMapping,
     sourceData,
@@ -2302,6 +2306,44 @@ class DynamicTransferService {
           );
         }
 
+        // ✅ NUEVA VALIDACIÓN: Detectar objetos del procesamiento de promociones
+        if (
+          typeof value === "object" &&
+          value !== null &&
+          !Array.isArray(value)
+        ) {
+          logger.warn(
+            `🔧 Campo ${fieldMapping.targetField} contiene un objeto (posiblemente del procesamiento de promociones). Intentando extraer valor correcto...`
+          );
+
+          const extractedValue = this.extractValueFromPromotionObject(
+            value,
+            fieldMapping.targetField,
+            fieldMapping.sourceField
+          );
+
+          if (extractedValue !== null) {
+            value = extractedValue;
+            logger.info(
+              `✅ Valor extraído automáticamente de objeto promoción: ${fieldMapping.targetField} = ${value}`
+            );
+          } else {
+            logger.error(
+              `❌ No se pudo extraer valor válido del objeto para ${fieldMapping.targetField}`
+            );
+            logger.error(`Objeto recibido:`, JSON.stringify(value, null, 2));
+
+            // Solo fallar si es un campo requerido
+            if (fieldMapping.isRequired) {
+              throw new Error(
+                `Campo requerido ${fieldMapping.targetField} contiene un objeto inválido del procesamiento de promociones`
+              );
+            } else {
+              value = null; // Usar null para campos opcionales
+            }
+          }
+        }
+
         // ✅ APLICAR ELIMINACIÓN DE PREFIJO (NUEVA UBICACIÓN CORRECTA)
         if (
           fieldMapping.removePrefix &&
@@ -2377,6 +2419,78 @@ class DynamicTransferService {
       );
       throw error;
     }
+  }
+
+  /**
+   * Extrae valor correcto de un objeto promoción
+   * @private
+   */
+  extractValueFromPromotionObject(promotionObject, targetField, sourceField) {
+    // Mapeo de campos comunes para extraer el valor correcto
+    const fieldMappings = {
+      CANTIDAD_PEDIDA: ["CNT_MAX", "CANTIDAD", "QTY", "CND_MAX"],
+      CANTIDAD_A_FACTURAR: ["CNT_MAX", "CANTIDAD", "QTY", "CND_MAX"],
+      CANTIDAD_FACTURADA: ["CNT_MAX", "CANTIDAD", "QTY", "CND_MAX"],
+      CANTIDAD_BONIFICAD: ["CNT_MAX", "CANTIDAD", "QTY", "CND_MAX"],
+      CANTIDAD_RESERVADA: ["CNT_MAX", "CANTIDAD", "QTY", "CND_MAX"],
+      CANTIDAD_CANCELADA: ["CNT_MAX", "CANTIDAD", "QTY", "CND_MAX"],
+      ARTICULO: ["COD_ART", "CODIGO_ARTICULO", "ITEM_CODE"],
+      PRECIO_UNITARIO: ["MON_PRC_MN", "PRECIO", "PRICE", "UNIT_PRICE"],
+      PEDIDO: ["NUM_PED", "PEDIDO_ID", "ORDER_ID"],
+      LINEA_USUARIO: ["NUM_LN", "LINE_NUMBER", "LINEA"],
+    };
+
+    // Buscar campos candidatos para este target field
+    const candidates = fieldMappings[targetField.toUpperCase()] || [];
+
+    // Intentar extraer valor de campos candidatos
+    for (const candidate of candidates) {
+      if (
+        promotionObject.hasOwnProperty(candidate) &&
+        promotionObject[candidate] !== null
+      ) {
+        logger.debug(
+          `✅ Extraído valor de objeto promoción: ${targetField} <- ${candidate} = ${promotionObject[candidate]}`
+        );
+        return promotionObject[candidate];
+      }
+    }
+
+    // Si no encuentra candidatos específicos, buscar campos numéricos válidos para cantidades
+    if (targetField.toUpperCase().includes("CANTIDAD")) {
+      const numericFields = Object.keys(promotionObject).filter((key) => {
+        const val = promotionObject[key];
+        return (
+          typeof val === "number" || (!isNaN(val) && val !== null && val !== "")
+        );
+      });
+
+      if (numericFields.length > 0) {
+        // Preferir campos que contengan 'CNT', 'MAX', 'CANTIDAD'
+        const preferredField =
+          numericFields.find(
+            (key) =>
+              key.includes("CNT") ||
+              key.includes("MAX") ||
+              key.includes("CANTIDAD")
+          ) || numericFields[0];
+
+        logger.warn(
+          `⚠️ Usando campo numérico por defecto para ${targetField}: ${preferredField} = ${promotionObject[preferredField]}`
+        );
+        return promotionObject[preferredField];
+      }
+    }
+
+    // Para campos de texto, buscar campos string válidos
+    if (typeof promotionObject[sourceField] === "string") {
+      logger.debug(
+        `✅ Usando valor string del campo original: ${sourceField} = ${promotionObject[sourceField]}`
+      );
+      return promotionObject[sourceField];
+    }
+
+    return null; // No se pudo extraer valor válido
   }
 
   /**
