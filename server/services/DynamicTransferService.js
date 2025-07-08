@@ -4686,7 +4686,7 @@ class DynamicTransferService {
         "CNT_FACTURAR",
         "QTY_FACTURAR",
       ],
-      PEDIDO_LINEA_BONIF: ["LINEA_BONIF", "REF_BONIF", "BONIF_REF", "NUM_LN"],
+      PEDIDO_LINEA_BONIF: ["LINEA_BONIF", "REF_BONIF", "BONIF_REF"],
       CANTIDAD_BONIFICAD: ["QTY_BONIF", "CNT_BONIF", "CANT_BONIF"],
     };
 
