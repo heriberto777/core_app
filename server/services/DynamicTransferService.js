@@ -556,7 +556,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa las tablas de detalle con soporte para promociones - MEJORADO
+   * Procesa las tablas de detalle con soporte para promociones - CON DEBUGGING COMPLETO
    * @param {Array} detailTables - Tablas de detalle a procesar
    * @param {string} documentId - ID del documento
    * @param {Object} sourceData - Datos del encabezado
@@ -597,8 +597,8 @@ class DynamicTransferService {
     let totalPromotionsApplied = false;
 
     for (const detailConfig of orderedDetailTables) {
-      logger.info(
-        `🎁 Procesando tabla de detalle con promociones: ${detailConfig.name}`
+      logger.error(
+        `🎁 🔍 ============ PROCESANDO TABLA: ${detailConfig.name} ============`
       );
 
       // ✅ USAR MÉTODO CON PROMOCIONES
@@ -617,10 +617,16 @@ class DynamicTransferService {
         continue;
       }
 
-      // 🔍 VERIFICAR SI REALMENTE SE APLICARON PROMOCIONES EN ESTOS DATOS
+      logger.error(
+        `🎁 🔍 DATOS OBTENIDOS DE getDetailDataWithPromotions: ${detailsData.length} registros`
+      );
+
+      // 🔍 VERIFICAR SI REALMENTE SE APLICARON PROMOCIONES
       const hasPromotions = detailsData.some(
         (row) => row._PROMOTION_TYPE && row._PROMOTION_TYPE !== "NONE"
       );
+
+      logger.error(`🎁 🔍 ¿Tiene promociones aplicadas? ${hasPromotions}`);
 
       if (hasPromotions) {
         totalPromotionsApplied = true;
@@ -633,25 +639,75 @@ class DynamicTransferService {
         const triggerLines = detailsData.filter((row) => row._IS_TRIGGER_LINE);
         const normalLines = detailsData.filter((row) => row._IS_NORMAL_LINE);
 
-        logger.info(`🎁 RESUMEN DE PROMOCIONES EN ${detailConfig.name}:`);
-        logger.info(`🎁   Líneas bonificación: ${bonusLines.length}`);
-        logger.info(`🎁   Líneas trigger: ${triggerLines.length}`);
-        logger.info(`📋   Líneas normales: ${normalLines.length}`);
+        logger.error(`🎁 🔍 RESUMEN DE PROMOCIONES EN ${detailConfig.name}:`);
+        logger.error(`🎁 🔍   Líneas bonificación: ${bonusLines.length}`);
+        logger.error(`🎁 🔍   Líneas trigger: ${triggerLines.length}`);
+        logger.error(`🎁 🔍   Líneas normales: ${normalLines.length}`);
 
         // Log específico de cada bonificación
-        bonusLines.forEach((line) => {
-          logger.info(
-            `🎁 BONIFICACIÓN: Línea ${line.NUM_LN} (${line.COD_ART}) → ref línea ${line.PEDIDO_LINEA_BONIF} cantidad ${line.CANTIDAD_BONIFICAD}`
+        bonusLines.forEach((line, index) => {
+          logger.error(`🎁 🔍 BONIFICACIÓN ${index + 1}:`);
+          logger.error(
+            `🎁 🔍   Línea: ${line.NUM_LN} | Artículo: ${line.COD_ART}`
           );
+          logger.error(
+            `🎁 🔍   PEDIDO_LINEA_BONIF: ${line.PEDIDO_LINEA_BONIF}`
+          );
+          logger.error(
+            `🎁 🔍   CANTIDAD_BONIFICAD: ${line.CANTIDAD_BONIFICAD}`
+          );
+          logger.error(`🎁 🔍   CANTIDAD_PEDIDA: ${line.CANTIDAD_PEDIDA}`);
+          logger.error(
+            `🎁 🔍   CANTIDAD_A_FACTURAR: ${line.CANTIDAD_A_FACTURAR}`
+          );
+          logger.error(`🎁 🔍   _PROMOTION_TYPE: ${line._PROMOTION_TYPE}`);
         });
 
         // Log específico de cada trigger
-        triggerLines.forEach((line) => {
-          logger.info(
-            `🎯 TRIGGER: Línea ${line.NUM_LN} (${line.COD_ART}) cantidad ${line.CANTIDAD_PEDIDA}`
+        triggerLines.forEach((line, index) => {
+          logger.error(`🎯 🔍 TRIGGER ${index + 1}:`);
+          logger.error(
+            `🎯 🔍   Línea: ${line.NUM_LN} | Artículo: ${line.COD_ART}`
           );
+          logger.error(`🎯 🔍   CANTIDAD_PEDIDA: ${line.CANTIDAD_PEDIDA}`);
+          logger.error(
+            `🎯 🔍   CANTIDAD_A_FACTURAR: ${line.CANTIDAD_A_FACTURAR}`
+          );
+          logger.error(`🎯 🔍   _PROMOTION_TYPE: ${line._PROMOTION_TYPE}`);
         });
       }
+
+      logger.error(`🎁 🔍 DATOS ANTES DE PROCESAR CADA REGISTRO:`);
+      detailsData.forEach((record, index) => {
+        logger.error(`🎁 🔍 ---- REGISTRO ${index + 1} ----`);
+        logger.error(
+          `🎁 🔍   Datos completos: ${JSON.stringify(record, null, 2)}`
+        );
+
+        // Verificar campos críticos de promoción
+        const promotionFields = [
+          "PEDIDO_LINEA_BONIF",
+          "CANTIDAD_BONIFICAD",
+          "CANTIDAD_PEDIDA",
+          "CANTIDAD_A_FACTURAR",
+          "_IS_BONUS_LINE",
+          "_IS_TRIGGER_LINE",
+          "_PROMOTION_TYPE",
+        ];
+
+        const foundPromotionFields = [];
+        promotionFields.forEach((field) => {
+          if (record.hasOwnProperty(field)) {
+            foundPromotionFields.push(`${field}: ${record[field]}`);
+          }
+        });
+
+        logger.error(
+          `🎁 🔍   Campos promoción encontrados: ${
+            foundPromotionFields.join(", ") || "NINGUNO"
+          }`
+        );
+      });
 
       logger.info(
         `Procesando ${detailsData.length} registros de detalle en ${
@@ -659,42 +715,58 @@ class DynamicTransferService {
         } ${hasPromotions ? "CON PROMOCIONES" : "sin promociones"}`
       );
 
-      logger.info(
-        `Registro procesado con promociones: ${JSON.stringify(
-          detailConfig,
-          null,
-          2
-        )}`
-      );
-
       // ✅ PROCESAR CADA REGISTRO CON MAPPINGS AUTOMÁTICOS
-      for (const record of detailsData) {
-        try {
-          await this.processData(
-            detailConfig,
+      for (
+        let recordIndex = 0;
+        recordIndex < detailsData.length;
+        recordIndex++
+      ) {
+        const record = detailsData[recordIndex];
+
+        logger.error(
+          `🎁 🔍 ============ PROCESANDO REGISTRO ${recordIndex + 1}/${
+            detailsData.length
+          } ============`
+        );
+        logger.error(
+          `🎁 🔍 Datos que van a processTable: ${JSON.stringify(
             record,
+            null,
+            2
+          )}`
+        );
+
+        try {
+          await this.processTable(
+            detailConfig,
             sourceData,
-            parentTableConfig,
-            sourceConnection,
+            record, // ⬅️ ESTE DEBE CONTENER LOS CAMPOS DE PROMOCIÓN
             targetConnection,
             currentConsecutive,
             mapping,
+            documentId,
             columnLengthCache,
             true // isDetailTable
           );
+
+          logger.error(
+            `🎁 🔍 ✅ Registro ${recordIndex + 1} procesado exitosamente`
+          );
         } catch (recordError) {
           logger.error(
-            `Error procesando registro en ${detailConfig.name}: ${recordError.message}`
+            `🎁 🔍 ❌ Error procesando registro ${recordIndex + 1}: ${
+              recordError.message
+            }`
           );
 
           // Log del registro problemático
           logger.error(
-            `Registro problemático: ${JSON.stringify(record, null, 2)}`
+            `🎁 🔍 Registro problemático: ${JSON.stringify(record, null, 2)}`
           );
 
-          // Continuar con el siguiente registro si no es crítico
+          // Re-lanzar errores críticos
           if (recordError.message.includes("requerido")) {
-            throw recordError; // Re-lanzar errores críticos
+            throw recordError;
           }
         }
       }
@@ -704,12 +776,14 @@ class DynamicTransferService {
     }
 
     // ✅ RESUMEN FINAL
-    logger.info(`🎁 ✅ PROCESAMIENTO DE TABLAS DE DETALLE COMPLETADO:`);
-    logger.info(`🎁   Total tablas procesadas: ${processedTables.length}`);
-    logger.info(
-      `🎁   Promociones aplicadas: ${totalPromotionsApplied ? "SÍ" : "NO"}`
+    logger.error(
+      `🎁 🔍 ============ RESUMEN FINAL DE PROCESAMIENTO ============`
     );
-    logger.info(`🎁   Tablas procesadas: ${processedTables.join(", ")}`);
+    logger.error(`🎁 🔍 Total tablas procesadas: ${processedTables.length}`);
+    logger.error(
+      `🎁 🔍 Promociones aplicadas: ${totalPromotionsApplied ? "SÍ" : "NO"}`
+    );
+    logger.error(`🎁 🔍 Tablas procesadas: ${processedTables.join(", ")}`);
 
     return {
       promotionsApplied: totalPromotionsApplied,
@@ -1352,16 +1426,23 @@ class DynamicTransferService {
     // Determinar qué datos usar para procesamiento
     const dataForProcessing = isDetailTable ? tableData : sourceData;
 
-    logger.debug(
-      `🔧 Iniciando procesamiento de tabla ${tableConfig.name} (isDetailTable: ${isDetailTable})`
+    logger.error(
+      `🔧 🔍 ============ INICIANDO processTable: ${tableConfig.name} ============`
+    );
+    logger.error(`🔧 🔍 isDetailTable: ${isDetailTable}`);
+    logger.error(`🔧 🔍 tableData: ${JSON.stringify(tableData, null, 2)}`);
+    logger.error(
+      `🔧 🔍 dataForProcessing: ${JSON.stringify(dataForProcessing, null, 2)}`
     );
 
-    // 🔍 DEBUGGING: Mostrar datos disponibles
-    logger.info(`📊 DATOS DISPONIBLES en tabla ${tableConfig.name}:`);
-    logger.info(`📊 Campos: ${Object.keys(dataForProcessing).join(", ")}`);
+    // 🔍 MOSTRAR DATOS DISPONIBLES
+    logger.error(`🔧 🔍 DATOS DISPONIBLES en tabla ${tableConfig.name}:`);
+    logger.error(`🔧 🔍 Campos: ${Object.keys(dataForProcessing).join(", ")}`);
 
     // 🎁 VERIFICAR SI HAY DATOS DE PROMOCIONES
     const hasPromotionData = this.detectPromotionData(dataForProcessing);
+
+    logger.error(`🔧 🔍 ¿Detecta promociones? ${hasPromotionData}`);
 
     // Validar configuración de campos
     if (!tableConfig.fieldMappings || tableConfig.fieldMappings.length === 0) {
@@ -1391,11 +1472,11 @@ class DynamicTransferService {
     let allFieldMappings = [];
 
     if (hasPromotionData) {
-      logger.info(
+      logger.error(
         `🎁 ✅ DATOS DE PROMOCIONES DETECTADOS en tabla ${tableConfig.name}`
       );
 
-      // Log específico de campos de promoción
+      // Log específico de campos de promoción encontrados
       const promotionFields = [
         "PEDIDO_LINEA_BONIF",
         "CANTIDAD_PEDIDA",
@@ -1406,16 +1487,27 @@ class DynamicTransferService {
         "_PROMOTION_TYPE",
       ];
 
+      logger.error(`🎁 🔍 CAMPOS DE PROMOCIÓN ENCONTRADOS:`);
       promotionFields.forEach((field) => {
         if (dataForProcessing.hasOwnProperty(field)) {
-          logger.info(`🎁   ${field}: ${dataForProcessing[field]}`);
+          logger.error(
+            `🎁 🔍   ${field}: ${
+              dataForProcessing[field]
+            } (tipo: ${typeof dataForProcessing[field]})`
+          );
+        } else {
+          logger.error(`🎁 🔍   ${field}: NO ENCONTRADO`);
         }
       });
 
       // 🎁 GENERAR MAPPINGS AUTOMÁTICOS PARA PROMOCIONES
+      logger.error(`🎁 🔍 Campos ya procesados en mapping original:`);
       tableConfig.fieldMappings.forEach((fm) => {
         if (fm.targetField) {
           processedFieldNames.add(fm.targetField.toLowerCase());
+          logger.error(
+            `🎁 🔍   ${fm.sourceField || "null"} -> ${fm.targetField}`
+          );
         }
       });
 
@@ -1425,14 +1517,25 @@ class DynamicTransferService {
         processedFieldNames
       );
 
+      logger.error(
+        `🎁 🔍 MAPPINGS AUTOMÁTICOS GENERADOS: ${promotionFieldMappings.length}`
+      );
+      promotionFieldMappings.forEach((pm) => {
+        logger.error(
+          `🎁 🔍   ${pm.sourceField} -> ${pm.targetField} = ${
+            dataForProcessing[pm.sourceField]
+          } (${pm.description})`
+        );
+      });
+
       // ✅ INTEGRAR MAPPINGS AUTOMÁTICOS A LOS EXISTENTES
       allFieldMappings = [
         ...tableConfig.fieldMappings,
         ...promotionFieldMappings,
       ];
 
-      logger.info(
-        `🎁 MAPPINGS TOTALES: ${tableConfig.fieldMappings.length} originales + ${promotionFieldMappings.length} automáticos = ${allFieldMappings.length}`
+      logger.error(
+        `🎁 🔍 MAPPINGS TOTALES: ${tableConfig.fieldMappings.length} originales + ${promotionFieldMappings.length} automáticos = ${allFieldMappings.length}`
       );
 
       // Reset processed field names para incluir los nuevos
@@ -1440,17 +1543,23 @@ class DynamicTransferService {
     } else {
       // ✅ FLUJO NORMAL SIN PROMOCIONES
       allFieldMappings = tableConfig.fieldMappings;
-      logger.info(
-        `📋 Procesando ${allFieldMappings.length} campos del mapping normal`
+      logger.error(
+        `🔧 🔍 ❌ NO se detectaron promociones, usando ${allFieldMappings.length} mappings normales`
       );
     }
 
-    logger.info(
-      `📋 Procesando ${allFieldMappings.length} campos del mapping para tabla ${tableConfig.name}`
+    logger.error(
+      `🔧 🔍 PROCESANDO ${allFieldMappings.length} campos del mapping para tabla ${tableConfig.name}`
     );
 
     // ✅ PROCESAR TODOS LOS CAMPOS (originales + automáticos)
-    for (const fieldMapping of allFieldMappings) {
+    for (
+      let fieldIndex = 0;
+      fieldIndex < allFieldMappings.length;
+      fieldIndex++
+    ) {
+      const fieldMapping = allFieldMappings[fieldIndex];
+
       if (!fieldMapping.targetField) {
         logger.warn(
           `⚠️ Campo sin targetField definido en tabla ${tableConfig.name}`
@@ -1466,10 +1575,18 @@ class DynamicTransferService {
         continue;
       }
 
-      logger.debug(
-        `🔧 Procesando campo del mapping: ${
-          fieldMapping.sourceField || "(automático)"
-        } -> ${fieldMapping.targetField}`
+      logger.error(
+        `🔧 🔍 ---- PROCESANDO CAMPO ${fieldIndex + 1}/${
+          allFieldMappings.length
+        } ----`
+      );
+      logger.error(
+        `🔧 🔍 Campo: ${fieldMapping.sourceField || "(automático)"} -> ${
+          fieldMapping.targetField
+        }`
+      );
+      logger.error(
+        `🔧 🔍 Es promoción: ${fieldMapping.isPromotionField || false}`
       );
 
       try {
@@ -1492,8 +1609,8 @@ class DynamicTransferService {
             targetFields.push(fieldMapping.targetField);
             targetValues.push(processedField.value);
             directSqlFields.add(fieldMapping.targetField);
-            logger.debug(
-              `✅ Campo SQL directo: ${fieldMapping.targetField} = ${processedField.value}`
+            logger.error(
+              `🔧 🔍 ✅ Campo SQL directo: ${fieldMapping.targetField} = ${processedField.value}`
             );
           } else {
             if (processedField.value !== null || fieldMapping.isRequired) {
@@ -1503,16 +1620,24 @@ class DynamicTransferService {
 
               // ✅ LOG ESPECÍFICO PARA CAMPOS DE PROMOCIÓN
               if (fieldMapping.isPromotionField) {
-                logger.info(
+                logger.error(
                   `🎁 ✅ CAMPO PROMOCIÓN PROCESADO: ${fieldMapping.targetField} = ${processedField.value}`
                 );
               } else {
-                logger.debug(
-                  `✅ Campo agregado: ${fieldMapping.targetField} = ${processedField.value}`
+                logger.error(
+                  `🔧 🔍 ✅ Campo normal procesado: ${fieldMapping.targetField} = ${processedField.value}`
                 );
               }
+            } else {
+              logger.error(
+                `🔧 🔍 ❌ Campo omitido (valor null y no requerido): ${fieldMapping.targetField}`
+              );
             }
           }
+        } else {
+          logger.error(
+            `🔧 🔍 ❌ Campo no procesado: ${fieldMapping.targetField}`
+          );
         }
       } catch (fieldError) {
         logger.error(
@@ -1524,9 +1649,11 @@ class DynamicTransferService {
       }
     }
 
-    // 🔧 Log final de campos a insertar
-    logger.info(`📊 RESUMEN FINAL para ${tableConfig.targetTable}:`);
-    logger.info(`📊 Total campos: ${targetFields.length}`);
+    // 🔧 LOG FINAL DE CAMPOS A INSERTAR
+    logger.error(
+      `🔧 🔍 ============ RESUMEN FINAL PARA ${tableConfig.targetTable} ============`
+    );
+    logger.error(`🔧 🔍 Total campos a insertar: ${targetFields.length}`);
 
     // Identificar y destacar campos de promoción
     const promotionFieldsInTarget = targetFields.filter(
@@ -1537,14 +1664,17 @@ class DynamicTransferService {
     );
 
     if (promotionFieldsInTarget.length > 0) {
-      logger.info(
-        `🎁 CAMPOS DE PROMOCIÓN A INSERTAR: ${promotionFieldsInTarget.join(
+      logger.error(
+        `🎁 🔍 CAMPOS DE PROMOCIÓN A INSERTAR: ${promotionFieldsInTarget.join(
           ", "
         )}`
       );
+    } else {
+      logger.error(`🔧 🔍 ❌ NO HAY CAMPOS DE PROMOCIÓN PARA INSERTAR`);
     }
 
-    // Log detallado de todos los valores
+    // Log detallado de todos los valores que se van a insertar
+    logger.error(`🔧 🔍 VALORES DETALLADOS A INSERTAR:`);
     for (let i = 0; i < targetFields.length; i++) {
       const fieldName = targetFields[i];
       const fieldValue = directSqlFields.has(fieldName)
@@ -1552,11 +1682,12 @@ class DynamicTransferService {
         : targetData[fieldName];
       const isDirectSql = directSqlFields.has(fieldName);
       const isPromotion = promotionFieldsInTarget.includes(fieldName);
-      const prefix = isPromotion ? "🎁" : "📋";
-      logger.info(
-        `${prefix}   ${fieldName}: ${fieldValue} ${
+      const prefix = isPromotion ? "🎁" : "🔧";
+
+      logger.error(
+        `${prefix} 🔍   ${fieldName}: ${fieldValue} ${
           isDirectSql ? "(SQL directo)" : ""
-        }`
+        } ${isPromotion ? "(PROMOCIÓN)" : ""}`
       );
     }
 
@@ -1569,8 +1700,8 @@ class DynamicTransferService {
     }
 
     // Ejecutar inserción
-    logger.info(
-      `🚀 Ejecutando inserción en ${tableConfig.targetTable} con ${targetFields.length} campos`
+    logger.error(
+      `🚀 🔍 EJECUTANDO INSERCIÓN EN ${tableConfig.targetTable} con ${targetFields.length} campos`
     );
 
     await this.executeInsert(
@@ -1582,11 +1713,11 @@ class DynamicTransferService {
       targetConnection
     );
 
-    logger.info(`✅ Tabla ${tableConfig.name} procesada exitosamente`);
+    logger.error(`✅ 🔍 Tabla ${tableConfig.name} procesada exitosamente`);
   }
 
   /**
-   * Procesa un campo individual - CORREGIDO para usar lógica existente de longitudes
+   * Procesa un campo individual - MEJORADO para manejar promociones automáticamente
    * @param {Object} fieldMapping - Configuración del campo
    * @param {Object} sourceData - Datos origen
    * @param {Object} lookupResults - Resultados de lookup
@@ -1611,20 +1742,29 @@ class DynamicTransferService {
   ) {
     let value;
 
-    logger.debug(
-      `🔧 Procesando campo: ${fieldMapping.sourceField || "(sin origen)"} -> ${
-        fieldMapping.targetField
-      }`
+    logger.error(
+      `🔧 🔍 ============ PROCESANDO CAMPO: ${fieldMapping.targetField} ============`
     );
+    logger.error(`🔧 🔍 sourceField: ${fieldMapping.sourceField || "null"}`);
+    logger.error(`🔧 🔍 targetField: ${fieldMapping.targetField}`);
+    logger.error(
+      `🔧 🔍 isPromotionField: ${fieldMapping.isPromotionField || false}`
+    );
+    logger.error(`🔧 🔍 defaultValue: ${fieldMapping.defaultValue}`);
+    logger.error(`🔧 🔍 isRequired: ${fieldMapping.isRequired || false}`);
 
     // ✅ LÓGICA AUTOMÁTICA PARA CAMPOS DE PROMOCIONES
     const isPromotionField = this.isPromotionTargetField(
       fieldMapping.targetField
     );
 
+    logger.error(
+      `🔧 🔍 ¿Es campo de promoción por nombre? ${isPromotionField}`
+    );
+
     if (isPromotionField && !fieldMapping.sourceField) {
-      logger.info(
-        `🎁 CAMPO DE PROMOCIÓN DETECTADO: ${fieldMapping.targetField}`
+      logger.error(
+        `🎁 🔍 CAMPO DE PROMOCIÓN SIN sourceField DETECTADO: ${fieldMapping.targetField}`
       );
 
       // Buscar automáticamente el valor en los datos procesados
@@ -1634,14 +1774,18 @@ class DynamicTransferService {
         mapping
       );
 
+      logger.error(
+        `🎁 🔍 Valor encontrado por findPromotionValue: ${promotionValue}`
+      );
+
       if (promotionValue !== null && promotionValue !== undefined) {
-        logger.info(
+        logger.error(
           `🎁 ✅ VALOR ENCONTRADO AUTOMÁTICAMENTE: ${fieldMapping.targetField} = ${promotionValue}`
         );
         value = promotionValue;
       } else {
-        logger.debug(
-          `🎁 No se encontró valor para ${fieldMapping.targetField}, usando defaultValue`
+        logger.error(
+          `🎁 🔍 No se encontró valor para ${fieldMapping.targetField}, usando defaultValue`
         );
         value =
           fieldMapping.defaultValue === "NULL"
@@ -1651,47 +1795,77 @@ class DynamicTransferService {
     }
     // ✅ LÓGICA PARA CAMPOS DE PROMOCIÓN CON sourceField DEFINIDO
     else if (fieldMapping.isPromotionField && fieldMapping.sourceField) {
-      logger.info(
-        `🎁 CAMPO DE PROMOCIÓN CON SOURCE: ${fieldMapping.sourceField} -> ${fieldMapping.targetField}`
+      logger.error(
+        `🎁 🔍 CAMPO DE PROMOCIÓN CON sourceField: ${fieldMapping.sourceField} -> ${fieldMapping.targetField}`
       );
 
-      // Buscar valor usando múltiples estrategias
-      value = this.findFieldValueInData(
-        fieldMapping.sourceField,
-        sourceData,
-        mapping
-      );
-
-      if (value !== null && value !== undefined) {
-        logger.info(
-          `🎁 ✅ VALOR PROMOCIÓN ENCONTRADO: ${fieldMapping.targetField} = ${value}`
+      // Verificar si el campo existe en los datos
+      if (sourceData.hasOwnProperty(fieldMapping.sourceField)) {
+        value = sourceData[fieldMapping.sourceField];
+        logger.error(
+          `🎁 ✅ VALOR PROMOCIÓN ENCONTRADO DIRECTO: ${fieldMapping.targetField} = ${value}`
         );
       } else {
-        logger.debug(
-          `🎁 No se encontró valor para ${fieldMapping.sourceField}, usando defaultValue`
+        logger.error(
+          `🎁 🔍 Campo ${fieldMapping.sourceField} no encontrado en datos, buscando alternativas...`
         );
-        value =
-          fieldMapping.defaultValue === "NULL"
-            ? null
-            : fieldMapping.defaultValue;
+
+        // Buscar valor usando múltiples estrategias
+        value = this.findFieldValueInData(
+          fieldMapping.sourceField,
+          sourceData,
+          mapping
+        );
+
+        if (value !== null && value !== undefined) {
+          logger.error(
+            `🎁 ✅ VALOR PROMOCIÓN ENCONTRADO POR BÚSQUEDA: ${fieldMapping.targetField} = ${value}`
+          );
+        } else {
+          logger.error(
+            `🎁 🔍 No se encontró valor para ${fieldMapping.sourceField}, usando defaultValue`
+          );
+          value =
+            fieldMapping.defaultValue === "NULL"
+              ? null
+              : fieldMapping.defaultValue;
+        }
       }
     }
     // ✅ LÓGICA NORMAL PARA CAMPOS NO PROMOCIONALES
     else {
+      logger.error(`🔧 🔍 CAMPO NORMAL: ${fieldMapping.targetField}`);
+
       try {
         // 1. Verificar si tiene sourceField definido
         if (fieldMapping.sourceField) {
-          // Buscar valor usando múltiples estrategias
-          value = this.findFieldValueInData(
-            fieldMapping.sourceField,
-            sourceData,
-            mapping
+          logger.error(
+            `🔧 🔍 Buscando sourceField: ${fieldMapping.sourceField}`
+          );
+          logger.error(
+            `🔧 🔍 ¿Existe en datos? ${sourceData.hasOwnProperty(
+              fieldMapping.sourceField
+            )}`
           );
 
-          if (value === null || value === undefined) {
-            logger.debug(
-              `Campo ${fieldMapping.sourceField} no encontrado en datos`
+          if (sourceData.hasOwnProperty(fieldMapping.sourceField)) {
+            value = sourceData[fieldMapping.sourceField];
+            logger.error(`🔧 🔍 ✅ Valor encontrado directo: ${value}`);
+          } else {
+            // Buscar valor usando múltiples estrategias
+            value = this.findFieldValueInData(
+              fieldMapping.sourceField,
+              sourceData,
+              mapping
             );
+
+            if (value === null || value === undefined) {
+              logger.error(
+                `🔧 🔍 ❌ Campo ${fieldMapping.sourceField} no encontrado en datos`
+              );
+            } else {
+              logger.error(`🔧 🔍 ✅ Valor encontrado por búsqueda: ${value}`);
+            }
           }
         }
 
@@ -1704,9 +1878,7 @@ class DynamicTransferService {
             fieldMapping.defaultValue === "NULL"
               ? null
               : fieldMapping.defaultValue;
-          logger.debug(
-            `Usando defaultValue para ${fieldMapping.targetField}: ${value}`
-          );
+          logger.error(`🔧 🔍 Usando defaultValue: ${value}`);
         }
 
         // 3. Procesar lookup si está configurado
@@ -1715,19 +1887,17 @@ class DynamicTransferService {
           lookupResults[fieldMapping.targetField]
         ) {
           value = lookupResults[fieldMapping.targetField];
-          logger.debug(
-            `Valor obtenido por lookup: ${fieldMapping.targetField} = ${value}`
-          );
+          logger.error(`🔧 🔍 Valor obtenido por lookup: ${value}`);
         }
 
         // 4. Manejar consecutivos
         if (fieldMapping.targetField === "PEDIDO" && currentConsecutive) {
           value = currentConsecutive.formatted;
-          logger.debug(`Consecutivo asignado: ${value}`);
+          logger.error(`🔧 🔍 Consecutivo asignado: ${value}`);
         }
       } catch (error) {
         logger.error(
-          `Error procesando campo ${fieldMapping.targetField}: ${error.message}`
+          `🔧 🔍 ❌ Error procesando campo normal ${fieldMapping.targetField}: ${error.message}`
         );
         if (fieldMapping.isRequired) {
           throw error;
@@ -1740,12 +1910,18 @@ class DynamicTransferService {
     }
 
     // ✅ VALIDACIONES Y TRANSFORMACIONES FINALES
+    logger.error(
+      `🔧 🔍 Valor antes de validaciones: ${value} (tipo: ${typeof value})`
+    );
 
     // Verificar campo requerido
     if (
       fieldMapping.isRequired &&
       (value === null || value === undefined || value === "")
     ) {
+      logger.error(
+        `🔧 🔍 ❌ ERROR: Campo requerido ${fieldMapping.targetField} está vacío`
+      );
       throw new Error(`Campo requerido ${fieldMapping.targetField} está vacío`);
     }
 
@@ -1755,6 +1931,7 @@ class DynamicTransferService {
       fieldMapping.unitConversion.enabled &&
       value !== null
     ) {
+      logger.error(`🔧 🔍 Aplicando conversión de unidades...`);
       try {
         value = await this.applyUnitConversion(
           fieldMapping,
@@ -1762,9 +1939,10 @@ class DynamicTransferService {
           sourceData,
           targetConnection
         );
+        logger.error(`🔧 🔍 Valor después de conversión: ${value}`);
       } catch (conversionError) {
         logger.error(
-          `Error en conversión de unidades: ${conversionError.message}`
+          `🔧 🔍 ❌ Error en conversión de unidades: ${conversionError.message}`
         );
         if (fieldMapping.isRequired) {
           throw conversionError;
@@ -1774,18 +1952,22 @@ class DynamicTransferService {
 
     // Aplicar mapeo de valores si está configurado
     if (fieldMapping.valueMappings && fieldMapping.valueMappings.length > 0) {
+      logger.error(`🔧 🔍 Aplicando mapeo de valores...`);
       const mappedValue = this.applyValueMapping(
         fieldMapping.valueMappings,
         value
       );
       if (mappedValue !== null) {
+        logger.error(`🔧 🔍 Valor después de mapeo: ${mappedValue}`);
         value = mappedValue;
       }
     }
 
     // Remover prefijo si está configurado
     if (fieldMapping.removePrefix && value && typeof value === "string") {
+      const originalValue = value;
       value = value.replace(new RegExp(`^${fieldMapping.removePrefix}`), "");
+      logger.error(`🔧 🔍 Prefijo removido: "${originalValue}" -> "${value}"`);
     }
 
     // ✅ USAR LÓGICA EXISTENTE PARA LONGITUD MÁXIMA
@@ -1797,12 +1979,10 @@ class DynamicTransferService {
     ) {
       const originalValue = value;
       value = value.substring(0, fieldMapping.maxLength);
-      logger.warn(
-        `✂️ Valor truncado en ${fieldMapping.targetField}: "${originalValue}" -> "${value}"`
-      );
+      logger.error(`🔧 🔍 ✂️ Valor truncado: "${originalValue}" -> "${value}"`);
     }
 
-    // ✅ VALIDACIÓN AUTOMÁTICA PARA CAMPOS DE FECHA CRÍTICOS (LÓGICA EXISTENTE)
+    // ✅ VALIDACIÓN AUTOMÁTICA PARA CAMPOS DE FECHA CRÍTICOS
     if (
       (value === null || value === undefined) &&
       fieldMapping.targetField &&
@@ -1810,8 +1990,8 @@ class DynamicTransferService {
         fieldMapping.targetField.toUpperCase().includes("DATE") ||
         fieldMapping.targetField.toUpperCase().includes("FEC_"))
     ) {
-      logger.warn(
-        `⚠️ Campo fecha ${fieldMapping.targetField} es null, usando GETDATE() automáticamente`
+      logger.error(
+        `🔧 🔍 ⚠️ Campo fecha ${fieldMapping.targetField} es null, usando GETDATE() automáticamente`
       );
       return { value: "GETDATE()", isDirectSql: true };
     }
@@ -1823,10 +2003,13 @@ class DynamicTransferService {
         value.includes("NEWID()") ||
         value.includes("@@"));
 
-    logger.debug(
-      `🔧 Valor final para ${
-        fieldMapping.targetField
-      }: ${value} (tipo: ${typeof value})`
+    logger.error(`🔧 🔍 ============ RESULTADO FINAL ============`);
+    logger.error(`🔧 🔍 Campo: ${fieldMapping.targetField}`);
+    logger.error(`🔧 🔍 Valor final: ${value}`);
+    logger.error(`🔧 🔍 Tipo: ${typeof value}`);
+    logger.error(`🔧 🔍 Es SQL directo: ${isDirectSql}`);
+    logger.error(
+      `🔧 🔍 Es promoción: ${fieldMapping.isPromotionField || isPromotionField}`
     );
 
     return {
@@ -2296,7 +2479,9 @@ class DynamicTransferService {
           const value = directSqlFields.has(field)
             ? targetValues[targetFields.indexOf(field)]
             : targetData[field];
-          logger.info(`🎁 Resultado de promocion a insertar:  ${field}: ${value}`);
+          logger.info(
+            `🎁 Resultado de promocion a insertar:  ${field}: ${value}`
+          );
         });
       }
 
@@ -4629,12 +4814,24 @@ class DynamicTransferService {
   }
 
   /**
-   * 🔧 NUEVO: Detecta si hay datos de promociones en el registro
+   * 🔧 Detecta si hay datos de promociones en el registro - MEJORADO
    * @param {Object} dataForProcessing - Datos a analizar
    * @returns {boolean} - Si contiene datos de promociones
    */
   detectPromotionData(dataForProcessing) {
-    if (!dataForProcessing) return false;
+    if (!dataForProcessing) {
+      logger.error(`🔧 🔍 detectPromotionData: datos nulos`);
+      return false;
+    }
+
+    logger.error(
+      `🔧 🔍 detectPromotionData: analizando ${
+        Object.keys(dataForProcessing).length
+      } campos`
+    );
+    logger.error(
+      `🔧 🔍 Campos disponibles: ${Object.keys(dataForProcessing).join(", ")}`
+    );
 
     // Verificar indicadores directos de promociones
     const promotionIndicators = [
@@ -4645,18 +4842,49 @@ class DynamicTransferService {
       "CANTIDAD_BONIFICAD",
     ];
 
-    const hasDirectIndicators = promotionIndicators.some(
-      (indicator) =>
+    const foundIndicators = [];
+    const hasDirectIndicators = promotionIndicators.some((indicator) => {
+      const exists =
         dataForProcessing.hasOwnProperty(indicator) &&
         dataForProcessing[indicator] !== null &&
-        dataForProcessing[indicator] !== undefined
-    );
+        dataForProcessing[indicator] !== undefined;
+
+      if (exists) {
+        foundIndicators.push(`${indicator}: ${dataForProcessing[indicator]}`);
+      }
+
+      return exists;
+    });
 
     if (hasDirectIndicators) {
-      logger.debug(`🎁 Promociones detectadas por indicadores directos`);
+      logger.error(
+        `🎁 🔍 Promociones detectadas por indicadores directos: ${foundIndicators.join(
+          ", "
+        )}`
+      );
       return true;
     }
 
+    // Verificar campos que sugieren promociones
+    const promotionLikeFields = Object.keys(dataForProcessing).filter(
+      (key) =>
+        key.includes("BONIF") ||
+        key.includes("CANTIDAD_") ||
+        key.includes("PEDIDO_LINEA") ||
+        key.startsWith("_IS_") ||
+        key.startsWith("_PROMOTION")
+    );
+
+    if (promotionLikeFields.length > 0) {
+      logger.error(
+        `🎁 🔍 Campos similares a promoción encontrados: ${promotionLikeFields.join(
+          ", "
+        )}`
+      );
+      return true;
+    }
+
+    logger.error(`🔧 🔍 ❌ NO se detectaron datos de promociones`);
     return false;
   }
 
@@ -4674,176 +4902,50 @@ class DynamicTransferService {
   ) {
     const promotionFieldMappings = [];
 
-    logger.debug(`🎁 Generando fieldMappings automáticos para promociones...`);
-    logger.debug(
-      `🎁 Datos disponibles: ${Object.keys(dataForProcessing).join(", ")}`
+    logger.error(`🎁 🔍 GENERANDO MAPPINGS AUTOMÁTICOS:`);
+    logger.error(
+      `🎁 🔍   Datos disponibles: ${Object.keys(dataForProcessing).join(", ")}`
+    );
+    logger.error(
+      `🎁 🔍   Campos ya procesados: ${Array.from(processedFieldNames).join(
+        ", "
+      )}`
     );
 
-    // ✅ DETECTAR TODOS LOS CAMPOS DE PROMOCIÓN EN LOS DATOS
-    const detectedPromotionFields = [];
-
+    // ✅ DETECTAR CAMPOS DE PROMOCIÓN EN LOS DATOS
     Object.keys(dataForProcessing).forEach((field) => {
       const isPromotionField =
         field.includes("BONIF") ||
         field.includes("CANTIDAD_") ||
         field.includes("PEDIDO_LINEA") ||
-        field.includes("QTY_") ||
-        field.includes("CANT_") ||
         field.startsWith("_IS_") ||
         field.startsWith("_PROMOTION");
 
-      if (isPromotionField) {
-        detectedPromotionFields.push(field);
-      }
-    });
+      if (isPromotionField && !field.startsWith("_")) {
+        const targetFieldLower = field.toLowerCase();
 
-    logger.info(
-      `🎁 Campos de promoción detectados: ${detectedPromotionFields.join(", ")}`
-    );
-
-    // ✅ GENERAR MAPPINGS AUTOMÁTICOS PARA CAMPOS DETECTADOS
-    detectedPromotionFields.forEach((field) => {
-      const targetFieldLower = field.toLowerCase();
-
-      // Skip meta fields
-      if (field.startsWith("_")) {
-        return;
-      }
-
-      // Skip if already processed
-      if (processedFieldNames.has(targetFieldLower)) {
-        logger.debug(`🎁 Campo ya procesado: ${field}`);
-        return;
-      }
-
-      const fieldMapping = {
-        sourceField: field,
-        targetField: field,
-        isRequired: false,
-        isPromotionField: true, // ✅ Marcador para identificar
-        description: `Campo promoción auto-generado: ${field}`,
-        defaultValue: null,
-        removePrefix: null,
-        valueMappings: [],
-        lookupFromTarget: false,
-        lookupParams: [],
-        validateExistence: false,
-        failIfNotFound: false,
-        unitConversion: {
-          enabled: false,
-          operation: "multiply",
-        },
-      };
-
-      promotionFieldMappings.push(fieldMapping);
-      logger.info(`🎁 ✅ Mapping automático generado: ${field} -> ${field}`);
-    });
-
-    // ✅ GENERAR MAPPINGS PARA CAMPOS COMUNES QUE PODRÍAN ESTAR EN DIFERENTES FORMATOS
-    const commonPromotionMappings = [
-      {
-        sourceField: "PEDIDO_LINEA_BONIF",
-        targetField: "PEDIDO_LINEA_BONIF",
-        alternatives: [
-          "LINEA_BONIFICACION",
-          "REF_BONIFICACION",
-          "BONIFICACION_REF",
-          "LINEA_BONIF",
-          "REF_BONIF",
-        ],
-      },
-      {
-        sourceField: "CANTIDAD_BONIFICAD",
-        targetField: "CANTIDAD_BONIFICAD",
-        alternatives: [
-          "CANTIDAD_BONIF",
-          "QTY_BONIF",
-          "CANT_BONIF",
-          "CNT_BONIF",
-        ],
-      },
-      {
-        sourceField: "CANTIDAD_PEDIDA",
-        targetField: "CANTIDAD_PEDIDA",
-        alternatives: ["QTY_PEDIDA", "CANT_PEDIDA", "CNT_PEDIDA"],
-      },
-      {
-        sourceField: "CANTIDAD_A_FACTURAR",
-        targetField: "CANTIDAD_A_FACTURAR",
-        alternatives: ["CANTIDAD_A_FACTURA", "QTY_FACTURAR", "CANT_FACTURAR"],
-      },
-    ];
-
-    commonPromotionMappings.forEach((mapping) => {
-      const targetFieldLower = mapping.targetField.toLowerCase();
-
-      // Skip if already processed
-      if (processedFieldNames.has(targetFieldLower)) {
-        logger.debug(`🎁 Campo común ya procesado: ${mapping.targetField}`);
-        return;
-      }
-
-      // Check if main field exists
-      if (dataForProcessing.hasOwnProperty(mapping.sourceField)) {
-        const fieldMapping = {
-          sourceField: mapping.sourceField,
-          targetField: mapping.targetField,
-          isRequired: false,
-          isPromotionField: true,
-          description: `Campo promoción común: ${mapping.sourceField}`,
-          defaultValue: null,
-          removePrefix: null,
-          valueMappings: [],
-          lookupFromTarget: false,
-          lookupParams: [],
-          validateExistence: false,
-          failIfNotFound: false,
-          unitConversion: {
-            enabled: false,
-            operation: "multiply",
-          },
-        };
-
-        promotionFieldMappings.push(fieldMapping);
-        logger.info(
-          `🎁 ✅ Mapping común generado: ${mapping.sourceField} -> ${mapping.targetField}`
-        );
-        return;
-      }
-
-      // Check alternatives
-      for (const alternative of mapping.alternatives) {
-        if (dataForProcessing.hasOwnProperty(alternative)) {
+        if (!processedFieldNames.has(targetFieldLower)) {
           const fieldMapping = {
-            sourceField: alternative,
-            targetField: mapping.targetField,
+            sourceField: field,
+            targetField: field,
             isRequired: false,
             isPromotionField: true,
-            description: `Campo promoción alternativo: ${alternative} -> ${mapping.targetField}`,
+            description: `Campo promoción auto-generado: ${field}`,
             defaultValue: null,
-            removePrefix: null,
-            valueMappings: [],
-            lookupFromTarget: false,
-            lookupParams: [],
-            validateExistence: false,
-            failIfNotFound: false,
-            unitConversion: {
-              enabled: false,
-              operation: "multiply",
-            },
           };
 
           promotionFieldMappings.push(fieldMapping);
-          logger.info(
-            `🎁 ✅ Mapping alternativo generado: ${alternative} -> ${mapping.targetField}`
+          logger.error(
+            `🎁 🔍 ✅ Mapping auto-generado: ${field} -> ${field} = ${dataForProcessing[field]}`
           );
-          break;
+        } else {
+          logger.error(`🎁 🔍 ❌ Campo ya procesado: ${field}`);
         }
       }
     });
 
-    logger.info(
-      `🎁 Total mappings automáticos generados: ${promotionFieldMappings.length}`
+    logger.error(
+      `🎁 🔍 TOTAL MAPPINGS GENERADOS: ${promotionFieldMappings.length}`
     );
     return promotionFieldMappings;
   }

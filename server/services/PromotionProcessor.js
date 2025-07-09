@@ -551,69 +551,74 @@ class PromotionProcessor {
    * @returns {Object} - Línea transformada
    */
   static transformBonusLine(bonusLine, fieldConfig, lineMap) {
+    logger.error(`🎁 🔍 TRANSFORMANDO LÍNEA BONIFICACIÓN:`);
+    logger.error(
+      `🎁 🔍   Datos entrada: ${JSON.stringify(bonusLine, null, 2)}`
+    );
+    logger.error(
+      `🎁 🔍   fieldConfig: ${JSON.stringify(fieldConfig, null, 2)}`
+    );
+
     // 🔍 ENCONTRAR LA LÍNEA REGULAR QUE DISPARA ESTA BONIFICACIÓN
     const referenceArticle = bonusLine[fieldConfig.referenceField]; // COD_ART_RFR
     let referenceLineNumber = null;
 
-    logger.debug(
-      `🎁 Procesando línea bonificación: línea ${
-        bonusLine[fieldConfig.lineNumberField]
-      }, articulo bonificado: ${bonusLine[fieldConfig.articleField]}`
-    );
-    logger.debug(
-      `🎁 Buscando línea regular que referencia articulo: ${referenceArticle}`
+    logger.error(`🎁 🔍   Artículo referenciado: ${referenceArticle}`);
+    logger.error(
+      `🎁 🔍   LineMap disponible: ${JSON.stringify(lineMap, null, 2)}`
     );
 
     // Buscar la línea regular que tiene este artículo
     if (referenceArticle && lineMap[referenceArticle]) {
       referenceLineNumber =
         lineMap[referenceArticle][fieldConfig.lineNumberField];
-      logger.info(
-        `🎁 ✅ ENCONTRADA línea regular: línea ${referenceLineNumber} (artículo ${referenceArticle}) dispara bonificación línea ${
-          bonusLine[fieldConfig.lineNumberField]
-        }`
+      logger.error(
+        `🎁 🔍   ✅ Línea regular encontrada: ${referenceLineNumber}`
       );
     } else {
-      logger.warn(
-        `🎁 ❌ NO se encontró línea regular para artículo referenciado: ${referenceArticle}`
-      );
-      logger.warn(
-        `🎁 Artículos disponibles en lineMap: ${Object.keys(lineMap).join(
-          ", "
-        )}`
+      logger.error(
+        `🎁 🔍   ❌ NO se encontró línea regular para artículo: ${referenceArticle}`
       );
     }
 
     const transformed = {
       ...bonusLine,
-      [fieldConfig.bonusLineRef]: referenceLineNumber, // ✅ REFERENCIA A LA LÍNEA REGULAR
-      [fieldConfig.orderedQuantity]: null, // Línea bonificada no tiene cantidad pedida
-      [fieldConfig.invoiceQuantity]: null, // Línea bonificada no tiene cantidad a facturar
-      [fieldConfig.bonusQuantity]:
-        bonusLine[fieldConfig.quantityField] || bonusLine.QTY, // ✅ Cantidad bonificada (CND_MAX)
+      [fieldConfig.bonusLineRef]: referenceLineNumber, // PEDIDO_LINEA_BONIF
+      [fieldConfig.orderedQuantity]: null, // CANTIDAD_PEDIDA
+      [fieldConfig.invoiceQuantity]: null, // CANTIDAD_A_FACTURAR
+      [fieldConfig.bonusQuantity]: bonusLine[fieldConfig.quantityField], // CANTIDAD_BONIFICAD
 
-      // Campos de metadatos para debugging
+      // Campos de metadatos
       _IS_BONUS_LINE: true,
       _REFERENCE_ARTICLE: referenceArticle,
       _REFERENCE_LINE_NUMBER: referenceLineNumber,
       _PROMOTION_TYPE: "BONUS",
     };
 
-    // Limpiar campos problemáticos
-    delete transformed.CANTIDAD;
-    delete transformed.QTY;
+    logger.error(`🎁 🔍 LÍNEA TRANSFORMADA:`);
+    logger.error(`🎁 🔍   ${JSON.stringify(transformed, null, 2)}`);
 
-    logger.info(`🎁 Línea bonificación transformada:`);
-    logger.info(
-      `🎁   Línea bonificación: ${bonusLine[fieldConfig.lineNumberField]}`
+    // Verificar campos críticos
+    logger.error(`🎁 🔍 CAMPOS CRÍTICOS GENERADOS:`);
+    logger.error(
+      `🎁 🔍   ${fieldConfig.bonusLineRef}: ${
+        transformed[fieldConfig.bonusLineRef]
+      }`
     );
-    logger.info(
-      `🎁   Artículo bonificado: ${bonusLine[fieldConfig.articleField]}`
+    logger.error(
+      `🎁 🔍   ${fieldConfig.bonusQuantity}: ${
+        transformed[fieldConfig.bonusQuantity]
+      }`
     );
-    logger.info(`🎁   Referencia a línea regular: ${referenceLineNumber}`);
-    logger.info(`🎁   Artículo que dispara: ${referenceArticle}`);
-    logger.info(
-      `🎁   Cantidad bonificada: ${transformed[fieldConfig.bonusQuantity]}`
+    logger.error(
+      `🎁 🔍   ${fieldConfig.orderedQuantity}: ${
+        transformed[fieldConfig.orderedQuantity]
+      }`
+    );
+    logger.error(
+      `🎁 🔍   ${fieldConfig.invoiceQuantity}: ${
+        transformed[fieldConfig.invoiceQuantity]
+      }`
     );
 
     return transformed;
@@ -626,33 +631,25 @@ class PromotionProcessor {
    * @returns {Object} - Línea transformada
    */
   static transformTriggerLine(triggerLine, fieldConfig) {
-    const lineNumber = triggerLine[fieldConfig.lineNumberField];
-    const articleCode = triggerLine[fieldConfig.articleField];
+    logger.error(`🎯 🔍 TRANSFORMANDO LÍNEA TRIGGER:`);
+    logger.error(
+      `🎯 🔍   Datos entrada: ${JSON.stringify(triggerLine, null, 2)}`
+    );
 
     const transformed = {
       ...triggerLine,
-      [fieldConfig.bonusLineRef]: null, // Línea regular no tiene referencia
-      [fieldConfig.orderedQuantity]:
-        triggerLine[fieldConfig.quantityField] || triggerLine.QTY,
-      [fieldConfig.invoiceQuantity]:
-        triggerLine[fieldConfig.quantityField] || triggerLine.QTY,
-      [fieldConfig.bonusQuantity]: null, // Línea regular no tiene cantidad bonificada
+      [fieldConfig.bonusLineRef]: null, // PEDIDO_LINEA_BONIF
+      [fieldConfig.orderedQuantity]: triggerLine[fieldConfig.quantityField], // CANTIDAD_PEDIDA
+      [fieldConfig.invoiceQuantity]: triggerLine[fieldConfig.quantityField], // CANTIDAD_A_FACTURAR
+      [fieldConfig.bonusQuantity]: null, // CANTIDAD_BONIFICAD
 
       // Campos de metadatos
       _IS_TRIGGER_LINE: true,
       _PROMOTION_TYPE: "TRIGGER",
     };
 
-    // Limpiar campos problemáticos
-    delete transformed.CANTIDAD;
-    delete transformed.QTY;
-
-    logger.info(`🎁 Línea trigger transformada:`);
-    logger.info(`🎁   Línea regular: ${lineNumber}`);
-    logger.info(`🎁   Artículo que dispara: ${articleCode}`);
-    logger.info(
-      `🎁   Cantidad pedida: ${transformed[fieldConfig.orderedQuantity]}`
-    );
+    logger.error(`🎯 🔍 LÍNEA TRIGGER TRANSFORMADA:`);
+    logger.error(`🎯 🔍   ${JSON.stringify(transformed, null, 2)}`);
 
     return transformed;
   }
