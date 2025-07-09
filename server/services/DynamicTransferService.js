@@ -2265,7 +2265,17 @@ class DynamicTransferService {
           field.includes("PEDIDO_LINEA")
       );
 
-      logger.info(` promotionFields: ${promotionFields.join(", ")}`);
+      logger.info(
+        ` promotionFields: ${
+          (JSON.stringify(promotionFields.join(", ")), null, 2)
+        }`
+      );
+
+      // ${JSON.stringify(
+      //     promotionInfo,
+      //     null,
+      //     2
+      //   )}
 
       const regularFields = targetFields.filter(
         (field) => !promotionFields.includes(field)
