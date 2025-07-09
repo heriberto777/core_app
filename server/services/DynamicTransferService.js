@@ -2266,11 +2266,13 @@ class DynamicTransferService {
       );
 
       logger.info(
-        ` promotionFields: ${(JSON.stringify(promotionFields), null, 2)}`
+        ` aqui vamos mostrar targetFields: ${
+          (JSON.stringify(targetFields), null, 2)
+        }`
       );
       logger.info(
         ` aqui enviamos targetValues: ${
-          (JSON.stringify(promotionFields), null, 2)
+          (JSON.stringify(targetValues), null, 2)
         }`
       );
 
