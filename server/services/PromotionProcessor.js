@@ -87,7 +87,7 @@ class PromotionProcessor {
   }
 
   /**
-   * Crea un mapa de líneas para referencias rápidas
+   * Crea un mapa de líneas para referencias rápidas - MEJORADO
    * @param {Array} detailData - Datos de detalle
    * @param {Object} fieldConfig - Configuración de campos
    * @returns {Object} - Mapa de artículos a líneas
@@ -95,12 +95,28 @@ class PromotionProcessor {
   static createLineMap(detailData, fieldConfig) {
     const lineMap = {};
 
+    logger.debug(
+      `🎁 Creando mapa de líneas con ${detailData.length} registros`
+    );
+
     detailData.forEach((line, index) => {
       const articleCode = line[fieldConfig.articleField];
       if (articleCode) {
         lineMap[articleCode] = line;
+        logger.debug(
+          `🎁 Mapeado: artículo ${articleCode} → línea ${
+            line[fieldConfig.lineNumberField]
+          }`
+        );
       }
     });
+
+    logger.info(
+      `🎁 Mapa de líneas creado: ${
+        Object.keys(lineMap).length
+      } artículos mapeados`
+    );
+    logger.debug(`🎁 Artículos en mapa: ${Object.keys(lineMap).join(", ")}`);
 
     return lineMap;
   }
@@ -130,7 +146,7 @@ class PromotionProcessor {
   }
 
   /**
-   * Determina si una línea es de promoción
+   * Determina si una línea es de promoción - MEJORADO con mejor logging
    * @param {Object} line - Línea a evaluar
    * @param {Array} allLines - Todas las líneas del documento
    * @param {Object} fieldConfig - Configuración de campos
@@ -146,10 +162,18 @@ class PromotionProcessor {
 
     // Obtener campos disponibles en la línea
     const availableFields = Object.keys(line);
+    const lineNumber = line[fieldConfig.lineNumberField];
+    const articleCode = line[fieldConfig.articleField];
 
-    // Verificar si es línea de bonificación
+    logger.debug(`🎁 Analizando línea ${lineNumber}, artículo ${articleCode}`);
+
+    // 🔍 VERIFICAR SI ES LÍNEA DE BONIFICACIÓN
     if (availableFields.includes(fieldConfig.bonusField)) {
       const bonusValue = line[fieldConfig.bonusField];
+      logger.debug(
+        `🎁   Campo bonificación (${fieldConfig.bonusField}): ${bonusValue}`
+      );
+
       if (
         bonusValue === "S" ||
         bonusValue === "Y" ||
@@ -158,29 +182,53 @@ class PromotionProcessor {
       ) {
         result.hasPromotion = true;
         result.isBonusLine = true;
-        result.type =
+
+        // Verificar si también tiene descuento
+        if (
           availableFields.includes(fieldConfig.discountField) &&
           line[fieldConfig.discountField] > 0
-            ? "BONUS_WITH_DISCOUNT"
-            : "BONUS";
+        ) {
+          result.type = "BONUS_WITH_DISCOUNT";
+        } else {
+          result.type = "BONUS";
+        }
+
+        const referenceArticle = line[fieldConfig.referenceField];
+        logger.info(
+          `🎁 ✅ LÍNEA BONIFICACIÓN detectada: línea ${lineNumber}, artículo bonificado ${articleCode}, referencia artículo ${referenceArticle}`
+        );
       }
     }
 
-    // Verificar si es línea regular que dispara promoción
-    const articleCode = line[fieldConfig.articleField];
+    // 🔍 VERIFICAR SI ES LÍNEA REGULAR QUE DISPARA PROMOCIÓN
     if (articleCode && availableFields.includes(fieldConfig.referenceField)) {
-      if (this.hasReferenceInOtherLines(line, allLines, fieldConfig)) {
+      const hasReference = this.hasReferenceInOtherLines(
+        line,
+        allLines,
+        fieldConfig
+      );
+      if (hasReference) {
         result.hasPromotion = true;
         result.isRegularLine = true;
         result.type = result.type ? `${result.type}_TRIGGER` : "TRIGGER";
+
+        logger.info(
+          `🎁 ✅ LÍNEA TRIGGER detectada: línea ${lineNumber}, artículo ${articleCode} dispara bonificaciones`
+        );
       }
+    }
+
+    if (!result.hasPromotion) {
+      logger.debug(
+        `🎁 Línea normal: línea ${lineNumber}, artículo ${articleCode}`
+      );
     }
 
     return result;
   }
 
   /**
-   * Verifica si un artículo es referenciado por otras líneas
+   * Verifica si un artículo es referenciado por otras líneas - MEJORADO
    * @param {Object} currentLine - Línea actual
    * @param {Array} allLines - Todas las líneas
    * @param {Object} fieldConfig - Configuración de campos
@@ -190,28 +238,47 @@ class PromotionProcessor {
     const currentArticle = currentLine[fieldConfig.articleField];
     const currentLineNumber = currentLine[fieldConfig.lineNumberField];
 
+    // Solo buscar referencias si el campo existe
     if (!fieldConfig.referenceField) {
       return false;
     }
 
-    return allLines.some((line) => {
+    let foundReferences = 0;
+    const referencingLines = [];
+
+    allLines.forEach((line) => {
+      // Verificar que la línea tenga el campo de referencia
       if (!line.hasOwnProperty(fieldConfig.referenceField)) {
-        return false;
+        return;
       }
 
       const referenceArticle = line[fieldConfig.referenceField];
       const lineNumber = line[fieldConfig.lineNumberField];
 
-      return (
+      if (
         referenceArticle === currentArticle &&
         lineNumber !== currentLineNumber &&
         referenceArticle
-      );
+      ) {
+        foundReferences++;
+        referencingLines.push(lineNumber);
+      }
     });
+
+    if (foundReferences > 0) {
+      logger.debug(
+        `🎁 Artículo ${currentArticle} (línea ${currentLineNumber}) es referenciado por ${foundReferences} líneas: ${referencingLines.join(
+          ", "
+        )}`
+      );
+      return true;
+    }
+
+    return false;
   }
 
   /**
-   * Transforma los datos aplicando la lógica de promociones
+   * Transforma los datos aplicando la lógica de promociones - MEJORADO con mejor logging
    * @param {Array} originalData - Datos originales
    * @param {Array} promotionLines - Líneas con promociones
    * @param {Object} fieldConfig - Configuración de campos
@@ -227,6 +294,18 @@ class PromotionProcessor {
     const transformedData = [];
     const processedLines = new Set();
 
+    logger.info(
+      `🎁 Transformando ${originalData.length} líneas con ${promotionLines.length} promociones detectadas`
+    );
+
+    // Mostrar el mapa de líneas para debugging
+    logger.debug(`🎁 Mapa de artículos disponible:`);
+    Object.entries(lineMap).forEach(([article, line]) => {
+      logger.debug(
+        `🎁   Artículo ${article} → Línea ${line[fieldConfig.lineNumberField]}`
+      );
+    });
+
     originalData.forEach((line, index) => {
       if (processedLines.has(index)) {
         return;
@@ -237,9 +316,14 @@ class PromotionProcessor {
         originalData,
         fieldConfig
       );
+      const lineNumber = line[fieldConfig.lineNumberField];
+      const articleCode = line[fieldConfig.articleField];
 
       if (promotionInfo.isBonusLine) {
-        // Línea de bonificación
+        // 🎁 LÍNEA DE BONIFICACIÓN
+        logger.info(
+          `🎁 Procesando línea bonificación ${lineNumber} (artículo ${articleCode})`
+        );
         const transformedLine = this.transformBonusLine(
           line,
           fieldConfig,
@@ -247,11 +331,17 @@ class PromotionProcessor {
         );
         transformedData.push(transformedLine);
       } else if (promotionInfo.isRegularLine) {
-        // Línea regular que dispara promoción
+        // 🎯 LÍNEA REGULAR QUE DISPARA PROMOCIÓN
+        logger.info(
+          `🎁 Procesando línea trigger ${lineNumber} (artículo ${articleCode})`
+        );
         const transformedLine = this.transformTriggerLine(line, fieldConfig);
         transformedData.push(transformedLine);
       } else {
-        // Línea normal sin promoción
+        // 📋 LÍNEA NORMAL SIN PROMOCIÓN
+        logger.debug(
+          `📋 Procesando línea normal ${lineNumber} (artículo ${articleCode})`
+        );
         const transformedLine = this.transformNormalLine(line, fieldConfig);
         transformedData.push(transformedLine);
       }
@@ -259,74 +349,144 @@ class PromotionProcessor {
       processedLines.add(index);
     });
 
+    // 📊 RESUMEN FINAL
+    const bonusLines = transformedData.filter((line) => line._IS_BONUS_LINE);
+    const triggerLines = transformedData.filter(
+      (line) => line._IS_TRIGGER_LINE
+    );
+    const normalLines = transformedData.filter((line) => line._IS_NORMAL_LINE);
+
+    logger.info(`🎁 ✅ TRANSFORMACIÓN COMPLETADA:`);
+    logger.info(`🎁   Líneas bonificación: ${bonusLines.length}`);
+    logger.info(`🎁   Líneas trigger: ${triggerLines.length}`);
+    logger.info(`📋   Líneas normales: ${normalLines.length}`);
+
+    // Log detallado de referencias
+    bonusLines.forEach((line) => {
+      const bonusLineNum = line[fieldConfig.lineNumberField];
+      const referenceLineNum = line[fieldConfig.bonusLineRef];
+      const bonusArticle = line[fieldConfig.articleField];
+      const referenceArticle = line._REFERENCE_ARTICLE;
+
+      logger.info(
+        `🎁 BONIFICACIÓN: Línea ${bonusLineNum} (${bonusArticle}) → referencia línea ${referenceLineNum} (${referenceArticle})`
+      );
+    });
+
     return transformedData;
   }
 
   /**
-   * Transforma una línea de bonificación
+   * Transforma una línea de bonificación - CORREGIDO
    * @param {Object} bonusLine - Línea de bonificación
    * @param {Object} fieldConfig - Configuración de campos
    * @param {Object} lineMap - Mapa de líneas
    * @returns {Object} - Línea transformada
    */
   static transformBonusLine(bonusLine, fieldConfig, lineMap) {
-    const referenceArticle = bonusLine[fieldConfig.referenceField];
-    const referenceLine = lineMap[referenceArticle];
-    const referenceLineNumber = referenceLine
-      ? referenceLine[fieldConfig.lineNumberField]
-      : null;
+    // 🔍 ENCONTRAR LA LÍNEA REGULAR QUE DISPARA ESTA BONIFICACIÓN
+    const referenceArticle = bonusLine[fieldConfig.referenceField]; // COD_ART_RFR
+    let referenceLineNumber = null;
+
+    logger.debug(
+      `🎁 Procesando línea bonificación: línea ${
+        bonusLine[fieldConfig.lineNumberField]
+      }, articulo bonificado: ${bonusLine[fieldConfig.articleField]}`
+    );
+    logger.debug(
+      `🎁 Buscando línea regular que referencia articulo: ${referenceArticle}`
+    );
+
+    // Buscar la línea regular que tiene este artículo
+    if (referenceArticle && lineMap[referenceArticle]) {
+      referenceLineNumber =
+        lineMap[referenceArticle][fieldConfig.lineNumberField];
+      logger.info(
+        `🎁 ✅ ENCONTRADA línea regular: línea ${referenceLineNumber} (artículo ${referenceArticle}) dispara bonificación línea ${
+          bonusLine[fieldConfig.lineNumberField]
+        }`
+      );
+    } else {
+      logger.warn(
+        `🎁 ❌ NO se encontró línea regular para artículo referenciado: ${referenceArticle}`
+      );
+      logger.warn(
+        `🎁 Artículos disponibles en lineMap: ${Object.keys(lineMap).join(
+          ", "
+        )}`
+      );
+    }
 
     const transformed = {
       ...bonusLine,
-      [fieldConfig.bonusLineRef]: referenceLineNumber,
-      [fieldConfig.orderedQuantity]: 0,
-      [fieldConfig.invoiceQuantity]: 0,
+      [fieldConfig.bonusLineRef]: referenceLineNumber, // ✅ REFERENCIA A LA LÍNEA REGULAR
+      [fieldConfig.orderedQuantity]: 0, // Línea bonificada no tiene cantidad pedida
+      [fieldConfig.invoiceQuantity]: 0, // Línea bonificada no tiene cantidad a facturar
       [fieldConfig.bonusQuantity]:
-        bonusLine[fieldConfig.quantityField] || bonusLine.QTY,
+        bonusLine[fieldConfig.quantityField] || bonusLine.QTY, // Cantidad bonificada
 
-      // Campos de metadatos
+      // Campos de metadatos para debugging
       _IS_BONUS_LINE: true,
       _REFERENCE_ARTICLE: referenceArticle,
       _REFERENCE_LINE_NUMBER: referenceLineNumber,
       _PROMOTION_TYPE: "BONUS",
     };
 
+    // Limpiar campos problemáticos
     delete transformed.CANTIDAD;
     delete transformed.QTY;
 
-    logger.debug(
-      `🎁 Línea de bonificación transformada: ${referenceLineNumber}`
+    logger.info(`🎁 Línea bonificación transformada:`);
+    logger.info(
+      `🎁   Línea bonificación: ${bonusLine[fieldConfig.lineNumberField]}`
     );
+    logger.info(
+      `🎁   Artículo bonificado: ${bonusLine[fieldConfig.articleField]}`
+    );
+    logger.info(`🎁   Referencia a línea regular: ${referenceLineNumber}`);
+    logger.info(`🎁   Artículo que dispara: ${referenceArticle}`);
+    logger.info(
+      `🎁   Cantidad bonificada: ${transformed[fieldConfig.bonusQuantity]}`
+    );
+
     return transformed;
   }
 
   /**
-   * Transforma una línea que dispara promoción
+   * Transforma una línea que dispara promoción - MEJORADO
    * @param {Object} triggerLine - Línea que dispara promoción
    * @param {Object} fieldConfig - Configuración de campos
    * @returns {Object} - Línea transformada
    */
   static transformTriggerLine(triggerLine, fieldConfig) {
     const lineNumber = triggerLine[fieldConfig.lineNumberField];
+    const articleCode = triggerLine[fieldConfig.articleField];
 
     const transformed = {
       ...triggerLine,
-      [fieldConfig.bonusLineRef]: null,
+      [fieldConfig.bonusLineRef]: null, // Línea regular no tiene referencia
       [fieldConfig.orderedQuantity]:
         triggerLine[fieldConfig.quantityField] || triggerLine.QTY,
       [fieldConfig.invoiceQuantity]:
         triggerLine[fieldConfig.quantityField] || triggerLine.QTY,
-      [fieldConfig.bonusQuantity]: null,
+      [fieldConfig.bonusQuantity]: null, // Línea regular no tiene cantidad bonificada
 
       // Campos de metadatos
       _IS_TRIGGER_LINE: true,
       _PROMOTION_TYPE: "TRIGGER",
     };
 
+    // Limpiar campos problemáticos
     delete transformed.CANTIDAD;
     delete transformed.QTY;
 
-    logger.debug(`🎁 Línea trigger transformada: ${lineNumber}`);
+    logger.info(`🎁 Línea trigger transformada:`);
+    logger.info(`🎁   Línea regular: ${lineNumber}`);
+    logger.info(`🎁   Artículo que dispara: ${articleCode}`);
+    logger.info(
+      `🎁   Cantidad pedida: ${transformed[fieldConfig.orderedQuantity]}`
+    );
+
     return transformed;
   }
 
