@@ -124,7 +124,7 @@ class PromotionProcessor {
   }
 
   /**
-   * Detecta líneas con promociones
+   * Detecta líneas con promociones - MEJORADO con debugging completo
    * @param {Array} detailData - Datos de detalle
    * @param {Object} fieldConfig - Configuración de campos
    * @returns {Array} - Líneas con promociones
@@ -132,8 +132,26 @@ class PromotionProcessor {
   static detectPromotionLines(detailData, fieldConfig) {
     const promotionLines = [];
 
+    logger.debug(
+      `🎁 🔍 INICIANDO detectPromotionLines con ${detailData.length} líneas`
+    );
+    logger.debug(
+      `🎁 🔍 Configuración de campos: ${JSON.stringify(fieldConfig, null, 2)}`
+    );
+
     detailData.forEach((line, index) => {
+      logger.debug(`🎁 🔍 Procesando línea ${index + 1}:`);
+      logger.debug(`🎁 🔍   Datos de línea: ${JSON.stringify(line, null, 2)}`);
+
       const promotionInfo = this.isPromotionLine(line, detailData, fieldConfig);
+
+      logger.debug(
+        `🎁 🔍   Resultado isPromotionLine: ${JSON.stringify(
+          promotionInfo,
+          null,
+          2
+        )}`
+      );
 
       if (promotionInfo.hasPromotion) {
         promotionLines.push({
@@ -141,14 +159,41 @@ class PromotionProcessor {
           index,
           info: promotionInfo,
         });
+
+        logger.info(
+          `🎁 ✅ PROMOCIÓN DETECTADA en línea ${index + 1}: ${
+            promotionInfo.type
+          }`
+        );
+      } else {
+        logger.debug(`🎁 ❌ Sin promoción en línea ${index + 1}`);
       }
     });
+
+    logger.info(
+      `🎁 🔍 RESULTADO FINAL: ${promotionLines.length} promociones detectadas de ${detailData.length} líneas`
+    );
+
+    // Mostrar resumen de promociones detectadas
+    if (promotionLines.length > 0) {
+      promotionLines.forEach((promo, idx) => {
+        const lineNum = promo.line[fieldConfig.lineNumberField];
+        const articleCode = promo.line[fieldConfig.articleField];
+        logger.info(
+          `🎁   Promoción ${
+            idx + 1
+          }: Línea ${lineNum}, Artículo ${articleCode}, Tipo: ${
+            promo.info.type
+          }`
+        );
+      });
+    }
 
     return promotionLines;
   }
 
   /**
-   * Determina si una línea es de promoción - CORREGIDO con "B"
+   * Determina si una línea es de promoción - DEBUGGING COMPLETO
    * @param {Object} line - Línea a evaluar
    * @param {Array} allLines - Todas las líneas del documento
    * @param {Object} fieldConfig - Configuración de campos
@@ -167,16 +212,31 @@ class PromotionProcessor {
     const lineNumber = line[fieldConfig.lineNumberField];
     const articleCode = line[fieldConfig.articleField];
 
-    logger.debug(`🎁 Analizando línea ${lineNumber}, artículo ${articleCode}`);
+    logger.debug(
+      `🎁 🔍 ANALIZANDO línea ${lineNumber}, artículo ${articleCode}`
+    );
+    logger.debug(`🎁 🔍   Campos disponibles: ${availableFields.join(", ")}`);
+    logger.debug(
+      `🎁 🔍   Buscando campo bonificación: ${fieldConfig.bonusField}`
+    );
 
     // 🔍 VERIFICAR SI ES LÍNEA DE BONIFICACIÓN
     if (availableFields.includes(fieldConfig.bonusField)) {
       const bonusValue = line[fieldConfig.bonusField];
       logger.debug(
-        `🎁   Campo bonificación (${fieldConfig.bonusField}): ${bonusValue}`
+        `🎁 🔍   ✅ Campo bonificación encontrado: ${
+          fieldConfig.bonusField
+        } = ${bonusValue} (tipo: ${typeof bonusValue})`
       );
 
-      // ✅ CORRECCIÓN: Agregar "B" para bonificaciones
+      // Mostrar todas las condiciones
+      logger.debug(`🎁 🔍   Verificando condiciones:`);
+      logger.debug(`🎁 🔍     bonusValue === "B": ${bonusValue === "B"}`);
+      logger.debug(`🎁 🔍     bonusValue === "S": ${bonusValue === "S"}`);
+      logger.debug(`🎁 🔍     bonusValue === "Y": ${bonusValue === "Y"}`);
+      logger.debug(`🎁 🔍     bonusValue === 1: ${bonusValue === 1}`);
+      logger.debug(`🎁 🔍     bonusValue === true: ${bonusValue === true}`);
+
       if (
         bonusValue === "B" ||
         bonusValue === "S" ||
@@ -193,35 +253,72 @@ class PromotionProcessor {
           line[fieldConfig.discountField] > 0
         ) {
           result.type = "BONUS_WITH_DISCOUNT";
+          logger.debug(
+            `🎁 🔍   Bonificación CON descuento: ${
+              line[fieldConfig.discountField]
+            }`
+          );
         } else {
           result.type = "BONUS";
+          logger.debug(`🎁 🔍   Bonificación SIN descuento`);
         }
 
         const referenceArticle = line[fieldConfig.referenceField];
         logger.info(
           `🎁 ✅ LÍNEA BONIFICACIÓN detectada: línea ${lineNumber}, artículo bonificado ${articleCode}, referencia artículo ${referenceArticle}`
         );
+      } else {
+        logger.debug(
+          `🎁 🔍   ❌ Valor de bonificación NO reconocido: "${bonusValue}" (tipo: ${typeof bonusValue})`
+        );
+        logger.debug(`🎁 🔍   Valores esperados: "B", "S", "Y", 1, true`);
       }
+    } else {
+      logger.debug(
+        `🎁 🔍   ❌ Campo bonificación (${fieldConfig.bonusField}) NO encontrado`
+      );
+      logger.debug(`🎁 🔍   Campos disponibles: ${availableFields.join(", ")}`);
     }
 
     // 🔍 VERIFICAR SI ES LÍNEA REGULAR QUE DISPARA PROMOCIÓN
+    logger.debug(`🎁 🔍   Verificando si es línea trigger...`);
+    logger.debug(`🎁 🔍   articleCode: ${articleCode}`);
+    logger.debug(
+      `🎁 🔍   Campo referencia disponible: ${availableFields.includes(
+        fieldConfig.referenceField
+      )}`
+    );
+
     if (articleCode && availableFields.includes(fieldConfig.referenceField)) {
       const hasReference = this.hasReferenceInOtherLines(
         line,
         allLines,
         fieldConfig
       );
+
+      logger.debug(
+        `🎁 🔍   hasReferenceInOtherLines resultado: ${hasReference}`
+      );
+
       if (hasReference) {
         result.hasPromotion = true;
         result.isRegularLine = true;
         result.type = result.type ? `${result.type}_TRIGGER` : "TRIGGER";
 
         logger.info(
-          `🎁 ✅ LÍNEA TRIGGER detectada: línea ${lineNumber}, artículo ${articleCode} dispara bonificación`
+          `🎁 ✅ LÍNEA TRIGGER detectada: línea ${lineNumber}, artículo ${articleCode} dispara bonificaciones`
         );
       }
     }
 
+    // 📊 RESULTADO FINAL
+    if (!result.hasPromotion) {
+      logger.debug(
+        `🎁 🔍   📋 Línea NORMAL: línea ${lineNumber}, artículo ${articleCode}`
+      );
+    }
+
+    logger.debug(`🎁 🔍   RESULTADO: ${JSON.stringify(result, null, 2)}`);
     return result;
   }
 
