@@ -659,6 +659,14 @@ class DynamicTransferService {
         } ${hasPromotions ? "CON PROMOCIONES" : "sin promociones"}`
       );
 
+      logger.info(
+        `Registro procesado con promociones: ${JSON.stringify(
+          detailConfig,
+          null,
+          2
+        )}`
+      );
+
       // ✅ PROCESAR CADA REGISTRO CON MAPPINGS AUTOMÁTICOS
       for (const record of detailsData) {
         try {
@@ -2256,6 +2264,8 @@ class DynamicTransferService {
           field.includes("CANTIDAD_") ||
           field.includes("PEDIDO_LINEA")
       );
+
+      logger.info(` promotionFields: ${promotionFields.join(", ")}`);
 
       const regularFields = targetFields.filter(
         (field) => !promotionFields.includes(field)
