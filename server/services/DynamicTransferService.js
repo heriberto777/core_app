@@ -1500,7 +1500,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa un campo individual - MEJORADO para manejar promociones automáticamente
+   * Procesa un campo individual - CORREGIDO para usar lógica existente de longitudes
    * @param {Object} fieldMapping - Configuración del campo
    * @param {Object} sourceData - Datos origen
    * @param {Object} lookupResults - Resultados de lookup
@@ -1702,20 +1702,32 @@ class DynamicTransferService {
       value = value.replace(new RegExp(`^${fieldMapping.removePrefix}`), "");
     }
 
-    // Validar longitud de campo
-    if (typeof value === "string") {
-      const maxLength = await this.getColumnMaxLength(
-        tableConfig.targetTable,
-        fieldMapping.targetField,
-        targetConnection,
-        columnLengthCache
+    // ✅ USAR LÓGICA EXISTENTE PARA LONGITUD MÁXIMA
+    if (
+      value &&
+      typeof value === "string" &&
+      fieldMapping.maxLength &&
+      value.length > fieldMapping.maxLength
+    ) {
+      const originalValue = value;
+      value = value.substring(0, fieldMapping.maxLength);
+      logger.warn(
+        `✂️ Valor truncado en ${fieldMapping.targetField}: "${originalValue}" -> "${value}"`
       );
-      if (maxLength && value.length > maxLength) {
-        logger.warn(
-          `Campo ${fieldMapping.targetField} truncado de ${value.length} a ${maxLength} caracteres`
-        );
-        value = value.substring(0, maxLength);
-      }
+    }
+
+    // ✅ VALIDACIÓN AUTOMÁTICA PARA CAMPOS DE FECHA CRÍTICOS (LÓGICA EXISTENTE)
+    if (
+      (value === null || value === undefined) &&
+      fieldMapping.targetField &&
+      (fieldMapping.targetField.toUpperCase().includes("FECHA") ||
+        fieldMapping.targetField.toUpperCase().includes("DATE") ||
+        fieldMapping.targetField.toUpperCase().includes("FEC_"))
+    ) {
+      logger.warn(
+        `⚠️ Campo fecha ${fieldMapping.targetField} es null, usando GETDATE() automáticamente`
+      );
+      return { value: "GETDATE()", isDirectSql: true };
     }
 
     // Manejar valores SQL directos
@@ -1724,6 +1736,12 @@ class DynamicTransferService {
       (value.includes("GETDATE()") ||
         value.includes("NEWID()") ||
         value.includes("@@"));
+
+    logger.debug(
+      `🔧 Valor final para ${
+        fieldMapping.targetField
+      }: ${value} (tipo: ${typeof value})`
+    );
 
     return {
       value,
@@ -4947,27 +4965,7 @@ class DynamicTransferService {
       }
     }
 
-    // 4. Buscar por contenido parcial
-    for (const [key, value] of Object.entries(sourceData)) {
-      const keyUpper = key.toUpperCase();
-      if (keyUpper.includes("BONIF") && upperTargetField.includes("BONIF")) {
-        logger.info(
-          `🎁 ✅ Campo encontrado por contenido: ${key} -> ${targetField} = ${value}`
-        );
-        return value;
-      }
-      if (
-        keyUpper.includes("CANTIDAD") &&
-        upperTargetField.includes("CANTIDAD")
-      ) {
-        logger.info(
-          `🎁 ✅ Campo encontrado por contenido: ${key} -> ${targetField} = ${value}`
-        );
-        return value;
-      }
-    }
-
-    // 5. Verificar campos meta de promociones
+    // 4. Verificar campos meta de promociones
     if (sourceData._IS_BONUS_LINE || sourceData._IS_TRIGGER_LINE) {
       logger.debug(
         `🎁 Línea tiene metadatos de promoción pero no se encontró ${targetField}`
