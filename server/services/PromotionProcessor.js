@@ -224,24 +224,55 @@ class PromotionProcessor {
   }
 
   /**
-   * Verifica si una línea tiene referencia en otras líneas
-   * @param {Object} line - Línea a verificar
+   * Verifica si un artículo es referenciado por otras líneas - CORREGIDO
+   * @param {Object} currentLine - Línea actual
    * @param {Array} allLines - Todas las líneas
    * @param {Object} fieldConfig - Configuración de campos
-   * @returns {boolean} - Si tiene referencia
+   * @returns {boolean}
    */
-  static hasReferenceInOtherLines(line, allLines, fieldConfig) {
-    const articleCode = line[fieldConfig.articleField];
+  static hasReferenceInOtherLines(currentLine, allLines, fieldConfig) {
+    const currentArticle = currentLine[fieldConfig.articleField];
+    const currentLineNumber = currentLine[fieldConfig.lineNumberField];
 
-    return allLines.some((otherLine) => {
-      const otherBonusValue = otherLine[fieldConfig.bonusField];
-      const otherReference = otherLine[fieldConfig.referenceField];
+    if (!fieldConfig.referenceField) {
+      return false;
+    }
 
-      return (
-        otherBonusValue === "B" && // ✅ Buscar líneas con bonificación "B"
-        otherReference === articleCode
-      );
+    let foundReferences = 0;
+    const referencingLines = [];
+
+    allLines.forEach((line) => {
+      // Verificar que la línea tenga el campo de referencia
+      if (!line.hasOwnProperty(fieldConfig.referenceField)) {
+        return;
+      }
+
+      const referenceArticle = line[fieldConfig.referenceField];
+      const lineNumber = line[fieldConfig.lineNumberField];
+      const bonusValue = line[fieldConfig.bonusField]; // ✅ AGREGAR ESTA LÍNEA
+
+      // ✅ VERIFICAR QUE SEA UNA LÍNEA DE BONIFICACIÓN QUE REFERENCIA AL ARTÍCULO ACTUAL
+      if (
+        referenceArticle === currentArticle &&
+        lineNumber !== currentLineNumber &&
+        referenceArticle &&
+        bonusValue === "B" // ✅ AGREGAR ESTA CONDICIÓN
+      ) {
+        foundReferences++;
+        referencingLines.push(lineNumber);
+      }
     });
+
+    if (foundReferences > 0) {
+      logger.debug(
+        `🎁 Artículo ${currentArticle} (línea ${currentLineNumber}) es referenciado por ${foundReferences} líneas de bonificación: ${referencingLines.join(
+          ", "
+        )}`
+      );
+      return true;
+    }
+
+    return false;
   }
 
   /**
