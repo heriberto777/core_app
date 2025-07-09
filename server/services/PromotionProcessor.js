@@ -30,6 +30,8 @@ class PromotionProcessor {
       // Detectar líneas con promociones
       const promotionLines = this.detectPromotionLines(detailData, fieldConfig);
 
+      logger.debug(`🎁 Líneas de promoción detectadas: ${promotionLines}`);
+
       if (promotionLines.length === 0) {
         logger.debug("No se detectaron promociones en el documento");
         return detailData;
