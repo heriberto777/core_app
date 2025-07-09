@@ -536,7 +536,7 @@ class DynamicTransferService {
       discountField: "MON_DSC",
       lineNumberField: "NUM_LN",
       articleField: "COD_ART",
-      quantityField: "CNT_MAX",
+      quantityField: "CND_MAX",
       bonusLineRef: "PEDIDO_LINEA_BONIF",
       orderedQuantity: "CANTIDAD_PEDIDA",
       invoiceQuantity: "CANTIDAD_A_FACTURAR",
@@ -556,7 +556,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa las tablas de detalle con soporte para promociones - CON DEBUGGING COMPLETO
+   * Procesa las tablas de detalle con soporte para promociones
    * @param {Array} detailTables - Tablas de detalle a procesar
    * @param {string} documentId - ID del documento
    * @param {Object} sourceData - Datos del encabezado
@@ -597,8 +597,8 @@ class DynamicTransferService {
     let totalPromotionsApplied = false;
 
     for (const detailConfig of orderedDetailTables) {
-      logger.error(
-        `🎁 🔍 ============ PROCESANDO TABLA: ${detailConfig.name} ============`
+      logger.info(
+        `🎁 Procesando tabla de detalle con promociones: ${detailConfig.name}`
       );
 
       // ✅ USAR MÉTODO CON PROMOCIONES
@@ -617,178 +617,47 @@ class DynamicTransferService {
         continue;
       }
 
-      logger.error(
-        `🎁 🔍 DATOS OBTENIDOS DE getDetailDataWithPromotions: ${detailsData.length} registros`
-      );
-
-      // 🔍 VERIFICAR SI REALMENTE SE APLICARON PROMOCIONES
+      // 🔍 Verificar si realmente se aplicaron promociones en estos datos
       const hasPromotions = detailsData.some(
         (row) => row._PROMOTION_TYPE && row._PROMOTION_TYPE !== "NONE"
       );
-
-      logger.error(`🎁 🔍 ¿Tiene promociones aplicadas? ${hasPromotions}`);
 
       if (hasPromotions) {
         totalPromotionsApplied = true;
         logger.info(
           `✅ Promociones detectadas y aplicadas automáticamente en tabla ${detailConfig.name}`
         );
-
-        // ✅ LOG DETALLADO DE PROMOCIONES
-        const bonusLines = detailsData.filter((row) => row._IS_BONUS_LINE);
-        const triggerLines = detailsData.filter((row) => row._IS_TRIGGER_LINE);
-        const normalLines = detailsData.filter((row) => row._IS_NORMAL_LINE);
-
-        logger.error(`🎁 🔍 RESUMEN DE PROMOCIONES EN ${detailConfig.name}:`);
-        logger.error(`🎁 🔍   Líneas bonificación: ${bonusLines.length}`);
-        logger.error(`🎁 🔍   Líneas trigger: ${triggerLines.length}`);
-        logger.error(`🎁 🔍   Líneas normales: ${normalLines.length}`);
-
-        // Log específico de cada bonificación
-        bonusLines.forEach((line, index) => {
-          logger.error(`🎁 🔍 BONIFICACIÓN ${index + 1}:`);
-          logger.error(
-            `🎁 🔍   Línea: ${line.NUM_LN} | Artículo: ${line.COD_ART}`
-          );
-          logger.error(
-            `🎁 🔍   PEDIDO_LINEA_BONIF: ${line.PEDIDO_LINEA_BONIF}`
-          );
-          logger.error(
-            `🎁 🔍   CANTIDAD_BONIFICAD: ${line.CANTIDAD_BONIFICAD}`
-          );
-          logger.error(`🎁 🔍   CANTIDAD_PEDIDA: ${line.CANTIDAD_PEDIDA}`);
-          logger.error(
-            `🎁 🔍   CANTIDAD_A_FACTURAR: ${line.CANTIDAD_A_FACTURAR}`
-          );
-          logger.error(`🎁 🔍   _PROMOTION_TYPE: ${line._PROMOTION_TYPE}`);
-        });
-
-        // Log específico de cada trigger
-        triggerLines.forEach((line, index) => {
-          logger.error(`🎯 🔍 TRIGGER ${index + 1}:`);
-          logger.error(
-            `🎯 🔍   Línea: ${line.NUM_LN} | Artículo: ${line.COD_ART}`
-          );
-          logger.error(`🎯 🔍   CANTIDAD_PEDIDA: ${line.CANTIDAD_PEDIDA}`);
-          logger.error(
-            `🎯 🔍   CANTIDAD_A_FACTURAR: ${line.CANTIDAD_A_FACTURAR}`
-          );
-          logger.error(`🎯 🔍   _PROMOTION_TYPE: ${line._PROMOTION_TYPE}`);
-        });
       }
-
-      logger.error(`🎁 🔍 DATOS ANTES DE PROCESAR CADA REGISTRO:`);
-      detailsData.forEach((record, index) => {
-        logger.error(`🎁 🔍 ---- REGISTRO ${index + 1} ----`);
-        logger.error(
-          `🎁 🔍   Datos completos: ${JSON.stringify(record, null, 2)}`
-        );
-
-        // Verificar campos críticos de promoción
-        const promotionFields = [
-          "PEDIDO_LINEA_BONIF",
-          "CANTIDAD_BONIFICAD",
-          "CANTIDAD_PEDIDA",
-          "CANTIDAD_A_FACTURAR",
-          "_IS_BONUS_LINE",
-          "_IS_TRIGGER_LINE",
-          "_PROMOTION_TYPE",
-        ];
-
-        const foundPromotionFields = [];
-        promotionFields.forEach((field) => {
-          if (record.hasOwnProperty(field)) {
-            foundPromotionFields.push(`${field}: ${record[field]}`);
-          }
-        });
-
-        logger.error(
-          `🎁 🔍   Campos promoción encontrados: ${
-            foundPromotionFields.join(", ") || "NINGUNO"
-          }`
-        );
-      });
 
       logger.info(
         `Procesando ${detailsData.length} registros de detalle en ${
           detailConfig.name
-        } ${hasPromotions ? "CON PROMOCIONES" : "sin promociones"}`
+        } ${hasPromotions ? "(CON promociones)" : "(SIN promociones)"}`
       );
 
-      // ✅ PROCESAR CADA REGISTRO CON MAPPINGS AUTOMÁTICOS
-      for (
-        let recordIndex = 0;
-        recordIndex < detailsData.length;
-        recordIndex++
-      ) {
-        const record = detailsData[recordIndex];
-
-        logger.error(
-          `🎁 🔍 ============ PROCESANDO REGISTRO ${recordIndex + 1}/${
-            detailsData.length
-          } ============`
+      // Insertar detalles
+      for (const detailRow of detailsData) {
+        await this.processTable(
+          detailConfig,
+          sourceData,
+          detailRow,
+          targetConnection,
+          currentConsecutive,
+          mapping,
+          documentId,
+          columnLengthCache,
+          true // isDetailTable = true
         );
-        logger.error(
-          `🎁 🔍 Datos que van a processTable: ${JSON.stringify(
-            record,
-            null,
-            2
-          )}`
-        );
-
-        try {
-          await this.processTable(
-            detailConfig,
-            sourceData,
-            record, // ⬅️ ESTE DEBE CONTENER LOS CAMPOS DE PROMOCIÓN
-            targetConnection,
-            currentConsecutive,
-            mapping,
-            documentId,
-            columnLengthCache,
-            true // isDetailTable
-          );
-
-          logger.error(
-            `🎁 🔍 ✅ Registro ${recordIndex + 1} procesado exitosamente`
-          );
-        } catch (recordError) {
-          logger.error(
-            `🎁 🔍 ❌ Error procesando registro ${recordIndex + 1}: ${
-              recordError.message
-            }`
-          );
-
-          // Log del registro problemático
-          logger.error(
-            `🎁 🔍 Registro problemático: ${JSON.stringify(record, null, 2)}`
-          );
-
-          // Re-lanzar errores críticos
-          if (recordError.message.includes("requerido")) {
-            throw recordError;
-          }
-        }
       }
 
+      logger.info(
+        `Insertados detalles en ${detailConfig.name} con promociones`
+      );
       processedTables.push(detailConfig.name);
-      logger.info(`✅ Tabla ${detailConfig.name} procesada exitosamente`);
     }
-
-    // ✅ RESUMEN FINAL
-    logger.error(
-      `🎁 🔍 ============ RESUMEN FINAL DE PROCESAMIENTO ============`
-    );
-    logger.error(`🎁 🔍 Total tablas procesadas: ${processedTables.length}`);
-    logger.error(
-      `🎁 🔍 Promociones aplicadas: ${totalPromotionsApplied ? "SÍ" : "NO"}`
-    );
-    logger.error(`🎁 🔍 Tablas procesadas: ${processedTables.join(", ")}`);
 
     return {
       promotionsApplied: totalPromotionsApplied,
-      tablesProcessed: processedTables.length,
-      tableNames: processedTables,
     };
   }
 
@@ -995,7 +864,7 @@ class DynamicTransferService {
   // ===============================
 
   /**
-   * Obtiene datos de detalle con procesamiento de promociones - MEJORADO
+   * Obtiene datos de detalle con procesamiento de promociones
    * @param {Object} detailConfig - Configuración de la tabla de detalle
    * @param {Object} parentTableConfig - Configuración de la tabla padre
    * @param {string} documentId - ID del documento
@@ -1015,39 +884,12 @@ class DynamicTransferService {
         `🎁 Obteniendo datos con promociones para documento ${documentId}`
       );
 
-      // ✅ PASO 1: Verificar si las promociones están habilitadas
-      if (!mapping.promotionConfig || !mapping.promotionConfig.enabled) {
-        logger.debug(
-          "Promociones deshabilitadas, procesando datos normalmente"
-        );
-        return await this.getDetailData(
-          detailConfig,
-          parentTableConfig,
-          documentId,
-          sourceConnection
-        );
-      }
-
-      // Validar configuración de promociones
-      if (!PromotionProcessor.validatePromotionConfig(mapping)) {
-        logger.warn(
-          "Configuración de promociones inválida, procesando sin promociones"
-        );
-        return await this.getDetailData(
-          detailConfig,
-          parentTableConfig,
-          documentId,
-          sourceConnection
-        );
-      }
-
-      // ✅ PASO 2: Obtener datos CON campos de promociones garantizados
-      const detailData = await this.getDetailDataWithPromotionFields(
+      // Obtener datos de detalle normalmente
+      const detailData = await this.getDetailData(
         detailConfig,
         parentTableConfig,
         documentId,
-        sourceConnection,
-        mapping
+        sourceConnection
       );
 
       if (!detailData || detailData.length === 0) {
@@ -1059,81 +901,30 @@ class DynamicTransferService {
 
       logger.debug(`📊 Datos obtenidos: ${detailData.length} registros`);
 
-      // ✅ PASO 3: Usar configuración detectada si está disponible
-      let fieldConfigToUse = null;
-      if (detailData.length > 0 && detailData[0]._DETECTED_PROMOTION_CONFIG) {
-        fieldConfigToUse = detailData[0]._DETECTED_PROMOTION_CONFIG;
-        logger.info(
-          `🎁 ✅ Usando configuración de campos detectada automáticamente`
+      // Verificar si hay configuración de promociones
+      if (!mapping.promotionConfig || !mapping.promotionConfig.enabled) {
+        logger.debug(
+          "Promociones deshabilitadas, procesando datos normalmente"
         );
-
-        // Limpiar el campo temporal de los datos
-        detailData.forEach((record) => {
-          delete record._DETECTED_PROMOTION_CONFIG;
-        });
-      } else {
-        fieldConfigToUse = PromotionProcessor.getFieldConfiguration(mapping);
-        logger.info(`🎁 Usando configuración de campos por defecto`);
+        return detailData;
       }
 
-      // ✅ PASO 4: Verificar que llegaron los campos de promoción
-      const firstRecord = detailData[0];
-
-      logger.debug(
-        `🎁 Verificando campos de promoción en los datos obtenidos...`
-      );
-      logger.debug(
-        `🎁 Primer registro: ${JSON.stringify(firstRecord, null, 2)}`
-      );
-      logger.debug(
-        `🎁 Configuración utilizada: ${JSON.stringify(
-          fieldConfigToUse,
-          null,
-          2
-        )}`
-      );
-
-      const missingFields = [];
-      const requiredFields = [
-        fieldConfigToUse.bonusField,
-        fieldConfigToUse.referenceField,
-        fieldConfigToUse.discountField,
-        fieldConfigToUse.lineNumberField,
-        fieldConfigToUse.articleField,
-        fieldConfigToUse.quantityField,
-      ];
-
-      requiredFields.forEach((field) => {
-        if (!firstRecord.hasOwnProperty(field)) {
-          missingFields.push(field);
-        }
-      });
-
-      if (missingFields.length > 0) {
-        logger.error(
-          `🎁 ❌ CAMPOS DE PROMOCIÓN FALTANTES: ${missingFields.join(", ")}`
+      // Validar configuración de promociones
+      if (!PromotionProcessor.validatePromotionConfig(mapping)) {
+        logger.warn(
+          "Configuración de promociones inválida, procesando sin promociones"
         );
-        logger.error(
-          `🎁 Campos disponibles: ${Object.keys(firstRecord).join(", ")}`
-        );
-        throw new Error(
-          `Faltan campos requeridos para promociones: ${missingFields.join(
-            ", "
-          )}`
-        );
+        return detailData;
       }
-
-      logger.info(`🎁 ✅ Todos los campos de promoción están presentes`);
 
       logger.info(
         `🎁 Procesando detalles con promociones para documento ${documentId}`
       );
 
-      // ✅ PASO 5: Procesar promociones con configuración correcta
-      const processedData = PromotionProcessor.processPromotionsWithConfig(
+      // Procesar promociones
+      const processedData = PromotionProcessor.processPromotions(
         detailData,
-        mapping,
-        fieldConfigToUse // ✅ Pasar configuración detectada
+        mapping
       );
 
       // Aplicar reglas específicas si están configuradas
@@ -1394,7 +1185,7 @@ class DynamicTransferService {
   // ===============================
 
   /**
-   * Procesa una tabla individual - MEJORADO para manejar promociones automáticamente
+   * Procesa una tabla individual - CON AUTO-MAPPING DE PROMOCIONES (SOLUCIÓN COMPLETA)
    * @param {Object} tableConfig - Configuración de la tabla
    * @param {Object} sourceData - Datos de origen (encabezado)
    * @param {Object} tableData - Datos específicos de la tabla
@@ -1406,6 +1197,7 @@ class DynamicTransferService {
    * @param {boolean} isDetailTable - Si es tabla de detalle
    * @returns {Promise<void>}
    */
+
   async processTable(
     tableConfig,
     sourceData,
@@ -1426,23 +1218,34 @@ class DynamicTransferService {
     // Determinar qué datos usar para procesamiento
     const dataForProcessing = isDetailTable ? tableData : sourceData;
 
-    logger.error(
-      `🔧 🔍 ============ INICIANDO processTable: ${tableConfig.name} ============`
-    );
-    logger.error(`🔧 🔍 isDetailTable: ${isDetailTable}`);
-    logger.error(`🔧 🔍 tableData: ${JSON.stringify(tableData, null, 2)}`);
-    logger.error(
-      `🔧 🔍 dataForProcessing: ${JSON.stringify(dataForProcessing, null, 2)}`
+    logger.debug(
+      `🔧 Iniciando procesamiento de tabla ${tableConfig.name} (isDetailTable: ${isDetailTable})`
     );
 
-    // 🔍 MOSTRAR DATOS DISPONIBLES
-    logger.error(`🔧 🔍 DATOS DISPONIBLES en tabla ${tableConfig.name}:`);
-    logger.error(`🔧 🔍 Campos: ${Object.keys(dataForProcessing).join(", ")}`);
+    // 🔍 DEBUGGING: Mostrar datos disponibles
+    logger.info(`📊 DATOS DISPONIBLES en tabla ${tableConfig.name}:`);
+    logger.info(`📊 Campos: ${Object.keys(dataForProcessing).join(", ")}`);
 
-    // 🎁 VERIFICAR SI HAY DATOS DE PROMOCIONES
+    // 🎁 Verificar si hay datos de promociones
     const hasPromotionData = this.detectPromotionData(dataForProcessing);
+    if (hasPromotionData) {
+      logger.info(
+        `🎁 ✅ DATOS DE PROMOCIONES DETECTADOS en tabla ${tableConfig.name}`
+      );
 
-    logger.error(`🔧 🔍 ¿Detecta promociones? ${hasPromotionData}`);
+      // Log específico de campos de promoción
+      const promotionFields = [
+        "PEDIDO_LINEA_BONIF",
+        "CANTIDAD_PEDIDA",
+        "CANTIDAD_A_FACTURAR",
+        "CANTIDAD_BONIFICAD",
+      ];
+      promotionFields.forEach((field) => {
+        if (dataForProcessing.hasOwnProperty(field)) {
+          logger.info(`🎁   ${field}: ${dataForProcessing[field]}`);
+        }
+      });
+    }
 
     // Validar configuración de campos
     if (!tableConfig.fieldMappings || tableConfig.fieldMappings.length === 0) {
@@ -1468,98 +1271,12 @@ class DynamicTransferService {
       lookupResults = lookupExecution.results;
     }
 
-    // ✅ LÓGICA MEJORADA PARA PROMOCIONES
-    let allFieldMappings = [];
-
-    if (hasPromotionData) {
-      logger.error(
-        `🎁 ✅ DATOS DE PROMOCIONES DETECTADOS en tabla ${tableConfig.name}`
-      );
-
-      // Log específico de campos de promoción encontrados
-      const promotionFields = [
-        "PEDIDO_LINEA_BONIF",
-        "CANTIDAD_PEDIDA",
-        "CANTIDAD_A_FACTURAR",
-        "CANTIDAD_BONIFICAD",
-        "_IS_BONUS_LINE",
-        "_IS_TRIGGER_LINE",
-        "_PROMOTION_TYPE",
-      ];
-
-      logger.error(`🎁 🔍 CAMPOS DE PROMOCIÓN ENCONTRADOS:`);
-      promotionFields.forEach((field) => {
-        if (dataForProcessing.hasOwnProperty(field)) {
-          logger.error(
-            `🎁 🔍   ${field}: ${
-              dataForProcessing[field]
-            } (tipo: ${typeof dataForProcessing[field]})`
-          );
-        } else {
-          logger.error(`🎁 🔍   ${field}: NO ENCONTRADO`);
-        }
-      });
-
-      // 🎁 GENERAR MAPPINGS AUTOMÁTICOS PARA PROMOCIONES
-      logger.error(`🎁 🔍 Campos ya procesados en mapping original:`);
-      tableConfig.fieldMappings.forEach((fm) => {
-        if (fm.targetField) {
-          processedFieldNames.add(fm.targetField.toLowerCase());
-          logger.error(
-            `🎁 🔍   ${fm.sourceField || "null"} -> ${fm.targetField}`
-          );
-        }
-      });
-
-      const promotionFieldMappings = this.generatePromotionFieldMappings(
-        dataForProcessing,
-        mapping,
-        processedFieldNames
-      );
-
-      logger.error(
-        `🎁 🔍 MAPPINGS AUTOMÁTICOS GENERADOS: ${promotionFieldMappings.length}`
-      );
-      promotionFieldMappings.forEach((pm) => {
-        logger.error(
-          `🎁 🔍   ${pm.sourceField} -> ${pm.targetField} = ${
-            dataForProcessing[pm.sourceField]
-          } (${pm.description})`
-        );
-      });
-
-      // ✅ INTEGRAR MAPPINGS AUTOMÁTICOS A LOS EXISTENTES
-      allFieldMappings = [
-        ...tableConfig.fieldMappings,
-        ...promotionFieldMappings,
-      ];
-
-      logger.error(
-        `🎁 🔍 MAPPINGS TOTALES: ${tableConfig.fieldMappings.length} originales + ${promotionFieldMappings.length} automáticos = ${allFieldMappings.length}`
-      );
-
-      // Reset processed field names para incluir los nuevos
-      processedFieldNames.clear();
-    } else {
-      // ✅ FLUJO NORMAL SIN PROMOCIONES
-      allFieldMappings = tableConfig.fieldMappings;
-      logger.error(
-        `🔧 🔍 ❌ NO se detectaron promociones, usando ${allFieldMappings.length} mappings normales`
-      );
-    }
-
-    logger.error(
-      `🔧 🔍 PROCESANDO ${allFieldMappings.length} campos del mapping para tabla ${tableConfig.name}`
+    logger.info(
+      `📋 Procesando ${tableConfig.fieldMappings.length} campos del mapping para tabla ${tableConfig.name}`
     );
 
-    // ✅ PROCESAR TODOS LOS CAMPOS (originales + automáticos)
-    for (
-      let fieldIndex = 0;
-      fieldIndex < allFieldMappings.length;
-      fieldIndex++
-    ) {
-      const fieldMapping = allFieldMappings[fieldIndex];
-
+    // ✅ Procesar TODOS los campos del mapping (con la nueva lógica de promociones)
+    for (const fieldMapping of tableConfig.fieldMappings) {
       if (!fieldMapping.targetField) {
         logger.warn(
           `⚠️ Campo sin targetField definido en tabla ${tableConfig.name}`
@@ -1575,18 +1292,10 @@ class DynamicTransferService {
         continue;
       }
 
-      logger.error(
-        `🔧 🔍 ---- PROCESANDO CAMPO ${fieldIndex + 1}/${
-          allFieldMappings.length
-        } ----`
-      );
-      logger.error(
-        `🔧 🔍 Campo: ${fieldMapping.sourceField || "(automático)"} -> ${
-          fieldMapping.targetField
-        }`
-      );
-      logger.error(
-        `🔧 🔍 Es promoción: ${fieldMapping.isPromotionField || false}`
+      logger.debug(
+        `🔧 Procesando campo del mapping: ${
+          fieldMapping.sourceField || "(sin origen)"
+        } -> ${fieldMapping.targetField}`
       );
 
       try {
@@ -1609,35 +1318,19 @@ class DynamicTransferService {
             targetFields.push(fieldMapping.targetField);
             targetValues.push(processedField.value);
             directSqlFields.add(fieldMapping.targetField);
-            logger.error(
-              `🔧 🔍 ✅ Campo SQL directo: ${fieldMapping.targetField} = ${processedField.value}`
+            logger.debug(
+              `✅ Campo SQL directo: ${fieldMapping.targetField} = ${processedField.value}`
             );
           } else {
             if (processedField.value !== null || fieldMapping.isRequired) {
               targetData[fieldMapping.targetField] = processedField.value;
               targetFields.push(fieldMapping.targetField);
               targetValues.push(`@${fieldMapping.targetField}`);
-
-              // ✅ LOG ESPECÍFICO PARA CAMPOS DE PROMOCIÓN
-              if (fieldMapping.isPromotionField) {
-                logger.error(
-                  `🎁 ✅ CAMPO PROMOCIÓN PROCESADO: ${fieldMapping.targetField} = ${processedField.value}`
-                );
-              } else {
-                logger.error(
-                  `🔧 🔍 ✅ Campo normal procesado: ${fieldMapping.targetField} = ${processedField.value}`
-                );
-              }
-            } else {
-              logger.error(
-                `🔧 🔍 ❌ Campo omitido (valor null y no requerido): ${fieldMapping.targetField}`
+              logger.debug(
+                `✅ Campo agregado: ${fieldMapping.targetField} = ${processedField.value}`
               );
             }
           }
-        } else {
-          logger.error(
-            `🔧 🔍 ❌ Campo no procesado: ${fieldMapping.targetField}`
-          );
         }
       } catch (fieldError) {
         logger.error(
@@ -1649,11 +1342,9 @@ class DynamicTransferService {
       }
     }
 
-    // 🔧 LOG FINAL DE CAMPOS A INSERTAR
-    logger.error(
-      `🔧 🔍 ============ RESUMEN FINAL PARA ${tableConfig.targetTable} ============`
-    );
-    logger.error(`🔧 🔍 Total campos a insertar: ${targetFields.length}`);
+    // 🔧 Log final de campos a insertar
+    logger.info(`📊 RESUMEN FINAL para ${tableConfig.targetTable}:`);
+    logger.info(`📊 Total campos: ${targetFields.length}`);
 
     // Identificar y destacar campos de promoción
     const promotionFieldsInTarget = targetFields.filter(
@@ -1664,17 +1355,14 @@ class DynamicTransferService {
     );
 
     if (promotionFieldsInTarget.length > 0) {
-      logger.error(
-        `🎁 🔍 CAMPOS DE PROMOCIÓN A INSERTAR: ${promotionFieldsInTarget.join(
+      logger.info(
+        `🎁 CAMPOS DE PROMOCIÓN A INSERTAR: ${promotionFieldsInTarget.join(
           ", "
         )}`
       );
-    } else {
-      logger.error(`🔧 🔍 ❌ NO HAY CAMPOS DE PROMOCIÓN PARA INSERTAR`);
     }
 
-    // Log detallado de todos los valores que se van a insertar
-    logger.error(`🔧 🔍 VALORES DETALLADOS A INSERTAR:`);
+    // Log detallado de todos los valores
     for (let i = 0; i < targetFields.length; i++) {
       const fieldName = targetFields[i];
       const fieldValue = directSqlFields.has(fieldName)
@@ -1682,12 +1370,11 @@ class DynamicTransferService {
         : targetData[fieldName];
       const isDirectSql = directSqlFields.has(fieldName);
       const isPromotion = promotionFieldsInTarget.includes(fieldName);
-      const prefix = isPromotion ? "🎁" : "🔧";
-
-      logger.error(
-        `${prefix} 🔍   ${fieldName}: ${fieldValue} ${
+      const prefix = isPromotion ? "🎁" : "📋";
+      logger.info(
+        `${prefix}   ${fieldName}: ${fieldValue} ${
           isDirectSql ? "(SQL directo)" : ""
-        } ${isPromotion ? "(PROMOCIÓN)" : ""}`
+        }`
       );
     }
 
@@ -1700,8 +1387,8 @@ class DynamicTransferService {
     }
 
     // Ejecutar inserción
-    logger.error(
-      `🚀 🔍 EJECUTANDO INSERCIÓN EN ${tableConfig.targetTable} con ${targetFields.length} campos`
+    logger.info(
+      `🚀 Ejecutando inserción en ${tableConfig.targetTable} con ${targetFields.length} campos`
     );
 
     await this.executeInsert(
@@ -1713,11 +1400,11 @@ class DynamicTransferService {
       targetConnection
     );
 
-    logger.error(`✅ 🔍 Tabla ${tableConfig.name} procesada exitosamente`);
+    logger.info(`✅ Tabla ${tableConfig.name} procesada exitosamente`);
   }
 
   /**
-   * Procesa un campo individual - MEJORADO para manejar promociones automáticamente
+   * Procesa un campo individual - CORREGIDO para usar datos de promociones sobre defaults
    * @param {Object} fieldMapping - Configuración del campo
    * @param {Object} sourceData - Datos origen
    * @param {Object} lookupResults - Resultados de lookup
@@ -1742,281 +1429,222 @@ class DynamicTransferService {
   ) {
     let value;
 
-    logger.error(
-      `🔧 🔍 ============ PROCESANDO CAMPO: ${fieldMapping.targetField} ============`
-    );
-    logger.error(`🔧 🔍 sourceField: ${fieldMapping.sourceField || "null"}`);
-    logger.error(`🔧 🔍 targetField: ${fieldMapping.targetField}`);
-    logger.error(
-      `🔧 🔍 isPromotionField: ${fieldMapping.isPromotionField || false}`
-    );
-    logger.error(`🔧 🔍 defaultValue: ${fieldMapping.defaultValue}`);
-    logger.error(`🔧 🔍 isRequired: ${fieldMapping.isRequired || false}`);
-
-    // ✅ LÓGICA AUTOMÁTICA PARA CAMPOS DE PROMOCIONES
-    const isPromotionField = this.isPromotionTargetField(
-      fieldMapping.targetField
+    logger.debug(
+      `🔧 Procesando campo: ${fieldMapping.sourceField || "(sin origen)"} -> ${
+        fieldMapping.targetField
+      }`
     );
 
-    logger.error(
-      `🔧 🔍 ¿Es campo de promoción por nombre? ${isPromotionField}`
-    );
-
-    if (isPromotionField && !fieldMapping.sourceField) {
-      logger.error(
-        `🎁 🔍 CAMPO DE PROMOCIÓN SIN sourceField DETECTADO: ${fieldMapping.targetField}`
-      );
-
-      // Buscar automáticamente el valor en los datos procesados
-      const promotionValue = this.findPromotionValue(
-        fieldMapping.targetField,
-        sourceData,
-        mapping
-      );
-
-      logger.error(
-        `🎁 🔍 Valor encontrado por findPromotionValue: ${promotionValue}`
-      );
-
-      if (promotionValue !== null && promotionValue !== undefined) {
-        logger.error(
-          `🎁 ✅ VALOR ENCONTRADO AUTOMÁTICAMENTE: ${fieldMapping.targetField} = ${promotionValue}`
+    try {
+      // PRIORIDAD 1: Usar valores obtenidos por lookup si existen
+      if (
+        fieldMapping.lookupFromTarget &&
+        lookupResults[fieldMapping.targetField] !== undefined
+      ) {
+        value = lookupResults[fieldMapping.targetField];
+        logger.debug(
+          `📖 Usando valor de lookup para ${fieldMapping.targetField}: ${value}`
         );
-        value = promotionValue;
-      } else {
-        logger.error(
-          `🎁 🔍 No se encontró valor para ${fieldMapping.targetField}, usando defaultValue`
-        );
-        value =
-          fieldMapping.defaultValue === "NULL"
-            ? null
-            : fieldMapping.defaultValue;
+        return { value, isDirectSql: false };
       }
-    }
-    // ✅ LÓGICA PARA CAMPOS DE PROMOCIÓN CON sourceField DEFINIDO
-    else if (fieldMapping.isPromotionField && fieldMapping.sourceField) {
-      logger.error(
-        `🎁 🔍 CAMPO DE PROMOCIÓN CON sourceField: ${fieldMapping.sourceField} -> ${fieldMapping.targetField}`
-      );
 
-      // Verificar si el campo existe en los datos
-      if (sourceData.hasOwnProperty(fieldMapping.sourceField)) {
-        value = sourceData[fieldMapping.sourceField];
-        logger.error(
-          `🎁 ✅ VALOR PROMOCIÓN ENCONTRADO DIRECTO: ${fieldMapping.targetField} = ${value}`
+      // PRIORIDAD 2: Verificar si el campo es una función SQL nativa
+      const defaultValue = fieldMapping.defaultValue;
+      const sqlNativeFunctions = [
+        "GETDATE()",
+        "CURRENT_TIMESTAMP",
+        "NEWID()",
+        "SYSUTCDATETIME()",
+        "SYSDATETIME()",
+        "GETUTCDATE()",
+        "DAY(",
+        "MONTH(",
+        "YEAR(",
+      ];
+
+      const isNativeFunction =
+        typeof defaultValue === "string" &&
+        defaultValue !== "" &&
+        sqlNativeFunctions.some((fn) => defaultValue.includes(fn));
+
+      if (isNativeFunction) {
+        logger.debug(
+          `🔧 Campo ${fieldMapping.targetField} usa función SQL nativa: ${defaultValue}`
         );
-      } else {
-        logger.error(
-          `🎁 🔍 Campo ${fieldMapping.sourceField} no encontrado en datos, buscando alternativas...`
+        return { value: defaultValue, isDirectSql: true };
+      }
+
+      // PRIORIDAD 3: Consecutivo (si está configurado)
+      if (
+        currentConsecutive &&
+        this.isConsecutiveField(fieldMapping, mapping)
+      ) {
+        const consecutiveValue = this.getConsecutiveValue(
+          fieldMapping,
+          currentConsecutive,
+          isDetailTable
+        );
+        logger.debug(
+          `🔢 Asignando consecutivo a ${fieldMapping.targetField}: ${consecutiveValue}`
+        );
+        return { value: consecutiveValue, isDirectSql: false };
+      }
+
+      // 🎁 PRIORIDAD 4: VERIFICAR SI ES UN CAMPO DE PROMOCIÓN CON DATOS PROCESADOS (NUEVO)
+      if (isDetailTable && mapping.promotionConfig?.enabled) {
+        // Verificar si este campo existe en los datos procesados por promociones
+        const promotionValue = this.getPromotionFieldValueFromData(
+          fieldMapping.targetField,
+          sourceData,
+          mapping
         );
 
-        // Buscar valor usando múltiples estrategias
+        if (promotionValue !== null && promotionValue !== undefined) {
+          logger.info(
+            `🎁 ✅ USANDO VALOR DE PROMOCIÓN para ${fieldMapping.targetField}: ${promotionValue} (en lugar de default)`
+          );
+          return { value: promotionValue, isDirectSql: false };
+        }
+      }
+
+      // PRIORIDAD 5: Obtener valor del campo origen (si existe)
+      if (fieldMapping.sourceField) {
         value = this.findFieldValueInData(
           fieldMapping.sourceField,
           sourceData,
           mapping
         );
 
-        if (value !== null && value !== undefined) {
-          logger.error(
-            `🎁 ✅ VALOR PROMOCIÓN ENCONTRADO POR BÚSQUEDA: ${fieldMapping.targetField} = ${value}`
+        if (value === null || value === undefined) {
+          logger.debug(
+            `⚠️ Campo origen ${fieldMapping.sourceField} no encontrado`
           );
         } else {
-          logger.error(
-            `🎁 🔍 No se encontró valor para ${fieldMapping.sourceField}, usando defaultValue`
+          logger.debug(
+            `📥 Valor de campo origen ${fieldMapping.sourceField}: ${value}`
           );
-          value =
-            fieldMapping.defaultValue === "NULL"
-              ? null
-              : fieldMapping.defaultValue;
         }
-      }
-    }
-    // ✅ LÓGICA NORMAL PARA CAMPOS NO PROMOCIONALES
-    else {
-      logger.error(`🔧 🔍 CAMPO NORMAL: ${fieldMapping.targetField}`);
 
-      try {
-        // 1. Verificar si tiene sourceField definido
-        if (fieldMapping.sourceField) {
-          logger.error(
-            `🔧 🔍 Buscando sourceField: ${fieldMapping.sourceField}`
-          );
-          logger.error(
-            `🔧 🔍 ¿Existe en datos? ${sourceData.hasOwnProperty(
-              fieldMapping.sourceField
-            )}`
+        // Validar objetos del procesamiento de promociones
+        if (
+          typeof value === "object" &&
+          value !== null &&
+          !Array.isArray(value)
+        ) {
+          logger.warn(
+            `🔧 Campo ${fieldMapping.targetField} contiene un objeto. Intentando extraer valor...`
           );
 
-          if (sourceData.hasOwnProperty(fieldMapping.sourceField)) {
-            value = sourceData[fieldMapping.sourceField];
-            logger.error(`🔧 🔍 ✅ Valor encontrado directo: ${value}`);
-          } else {
-            // Buscar valor usando múltiples estrategias
-            value = this.findFieldValueInData(
-              fieldMapping.sourceField,
-              sourceData,
-              mapping
+          const extractedValue = this.extractValueFromPromotionObject(
+            value,
+            fieldMapping.targetField,
+            fieldMapping.sourceField
+          );
+
+          if (extractedValue !== null) {
+            value = extractedValue;
+            logger.info(
+              `✅ Valor extraído de objeto promoción: ${fieldMapping.targetField} = ${value}`
             );
-
-            if (value === null || value === undefined) {
-              logger.error(
-                `🔧 🔍 ❌ Campo ${fieldMapping.sourceField} no encontrado en datos`
+          } else {
+            if (fieldMapping.isRequired) {
+              throw new Error(
+                `Campo requerido ${fieldMapping.targetField} contiene un objeto inválido`
               );
             } else {
-              logger.error(`🔧 🔍 ✅ Valor encontrado por búsqueda: ${value}`);
+              value = null;
             }
           }
         }
 
-        // 2. Si no se encontró valor, usar defaultValue
+        // Aplicar eliminación de prefijo
         if (
-          (value === null || value === undefined) &&
-          fieldMapping.defaultValue !== undefined
+          fieldMapping.removePrefix &&
+          typeof value === "string" &&
+          value.startsWith(fieldMapping.removePrefix)
         ) {
-          value =
-            fieldMapping.defaultValue === "NULL"
-              ? null
-              : fieldMapping.defaultValue;
-          logger.error(`🔧 🔍 Usando defaultValue: ${value}`);
+          const originalValue = value;
+          value = value.substring(fieldMapping.removePrefix.length);
+          logger.debug(
+            `✂️ Prefijo eliminado de ${fieldMapping.targetField}: '${originalValue}' → '${value}'`
+          );
         }
 
-        // 3. Procesar lookup si está configurado
+        // Aplicar conversión de unidades si está configurado
         if (
-          fieldMapping.lookupFromTarget &&
-          lookupResults[fieldMapping.targetField]
+          fieldMapping.unitConversion?.enabled &&
+          value !== null &&
+          value !== undefined
         ) {
-          value = lookupResults[fieldMapping.targetField];
-          logger.error(`🔧 🔍 Valor obtenido por lookup: ${value}`);
+          const convertedValue = await this.applyUnitConversion(
+            value,
+            fieldMapping.unitConversion,
+            sourceData,
+            targetConnection,
+            columnLengthCache
+          );
+          if (convertedValue !== null) {
+            value = convertedValue;
+            logger.debug(
+              `🔄 Valor después de conversión de unidades: ${value}`
+            );
+          }
         }
-
-        // 4. Manejar consecutivos
-        if (fieldMapping.targetField === "PEDIDO" && currentConsecutive) {
-          value = currentConsecutive.formatted;
-          logger.error(`🔧 🔍 Consecutivo asignado: ${value}`);
-        }
-      } catch (error) {
-        logger.error(
-          `🔧 🔍 ❌ Error procesando campo normal ${fieldMapping.targetField}: ${error.message}`
-        );
-        if (fieldMapping.isRequired) {
-          throw error;
-        }
-        value =
-          fieldMapping.defaultValue === "NULL"
-            ? null
-            : fieldMapping.defaultValue;
       }
-    }
 
-    // ✅ VALIDACIONES Y TRANSFORMACIONES FINALES
-    logger.error(
-      `🔧 🔍 Valor antes de validaciones: ${value} (tipo: ${typeof value})`
-    );
+      // PRIORIDAD 6: Valor por defecto (SOLO si no hay valor de promoción)
+      if (
+        (value === null || value === undefined) &&
+        fieldMapping.defaultValue !== undefined &&
+        fieldMapping.defaultValue !== null
+      ) {
+        value = fieldMapping.defaultValue;
+        logger.debug(
+          `🎯 Usando valor por defecto para ${fieldMapping.targetField}: ${value}`
+        );
+      }
 
-    // Verificar campo requerido
-    if (
-      fieldMapping.isRequired &&
-      (value === null || value === undefined || value === "")
-    ) {
+      // Aplicar longitud máxima si está configurado
+      if (
+        value &&
+        typeof value === "string" &&
+        fieldMapping.maxLength &&
+        value.length > fieldMapping.maxLength
+      ) {
+        const originalValue = value;
+        value = value.substring(0, fieldMapping.maxLength);
+        logger.warn(
+          `✂️ Valor truncado en ${fieldMapping.targetField}: "${originalValue}" -> "${value}"`
+        );
+      }
+
+      // Validación automática para campos de fecha críticos
+      if (
+        (value === null || value === undefined) &&
+        fieldMapping.targetField &&
+        (fieldMapping.targetField.toUpperCase().includes("FECHA") ||
+          fieldMapping.targetField.toUpperCase().includes("DATE") ||
+          fieldMapping.targetField.toUpperCase().includes("FEC_"))
+      ) {
+        logger.warn(
+          `⚠️ Campo fecha ${fieldMapping.targetField} es null, usando GETDATE() automáticamente`
+        );
+        return { value: "GETDATE()", isDirectSql: true };
+      }
+
+      logger.debug(
+        `🔧 Valor final para ${
+          fieldMapping.targetField
+        }: ${value} (tipo: ${typeof value})`
+      );
+
+      return { value, isDirectSql: false };
+    } catch (error) {
       logger.error(
-        `🔧 🔍 ❌ ERROR: Campo requerido ${fieldMapping.targetField} está vacío`
+        `❌ Error procesando campo ${fieldMapping.targetField}: ${error.message}`
       );
-      throw new Error(`Campo requerido ${fieldMapping.targetField} está vacío`);
+      throw error;
     }
-
-    // Aplicar conversión de unidades si está habilitada
-    if (
-      fieldMapping.unitConversion &&
-      fieldMapping.unitConversion.enabled &&
-      value !== null
-    ) {
-      logger.error(`🔧 🔍 Aplicando conversión de unidades...`);
-      try {
-        value = await this.applyUnitConversion(
-          fieldMapping,
-          value,
-          sourceData,
-          targetConnection
-        );
-        logger.error(`🔧 🔍 Valor después de conversión: ${value}`);
-      } catch (conversionError) {
-        logger.error(
-          `🔧 🔍 ❌ Error en conversión de unidades: ${conversionError.message}`
-        );
-        if (fieldMapping.isRequired) {
-          throw conversionError;
-        }
-      }
-    }
-
-    // Aplicar mapeo de valores si está configurado
-    if (fieldMapping.valueMappings && fieldMapping.valueMappings.length > 0) {
-      logger.error(`🔧 🔍 Aplicando mapeo de valores...`);
-      const mappedValue = this.applyValueMapping(
-        fieldMapping.valueMappings,
-        value
-      );
-      if (mappedValue !== null) {
-        logger.error(`🔧 🔍 Valor después de mapeo: ${mappedValue}`);
-        value = mappedValue;
-      }
-    }
-
-    // Remover prefijo si está configurado
-    if (fieldMapping.removePrefix && value && typeof value === "string") {
-      const originalValue = value;
-      value = value.replace(new RegExp(`^${fieldMapping.removePrefix}`), "");
-      logger.error(`🔧 🔍 Prefijo removido: "${originalValue}" -> "${value}"`);
-    }
-
-    // ✅ USAR LÓGICA EXISTENTE PARA LONGITUD MÁXIMA
-    if (
-      value &&
-      typeof value === "string" &&
-      fieldMapping.maxLength &&
-      value.length > fieldMapping.maxLength
-    ) {
-      const originalValue = value;
-      value = value.substring(0, fieldMapping.maxLength);
-      logger.error(`🔧 🔍 ✂️ Valor truncado: "${originalValue}" -> "${value}"`);
-    }
-
-    // ✅ VALIDACIÓN AUTOMÁTICA PARA CAMPOS DE FECHA CRÍTICOS
-    if (
-      (value === null || value === undefined) &&
-      fieldMapping.targetField &&
-      (fieldMapping.targetField.toUpperCase().includes("FECHA") ||
-        fieldMapping.targetField.toUpperCase().includes("DATE") ||
-        fieldMapping.targetField.toUpperCase().includes("FEC_"))
-    ) {
-      logger.error(
-        `🔧 🔍 ⚠️ Campo fecha ${fieldMapping.targetField} es null, usando GETDATE() automáticamente`
-      );
-      return { value: "GETDATE()", isDirectSql: true };
-    }
-
-    // Manejar valores SQL directos
-    const isDirectSql =
-      typeof value === "string" &&
-      (value.includes("GETDATE()") ||
-        value.includes("NEWID()") ||
-        value.includes("@@"));
-
-    logger.error(`🔧 🔍 ============ RESULTADO FINAL ============`);
-    logger.error(`🔧 🔍 Campo: ${fieldMapping.targetField}`);
-    logger.error(`🔧 🔍 Valor final: ${value}`);
-    logger.error(`🔧 🔍 Tipo: ${typeof value}`);
-    logger.error(`🔧 🔍 Es SQL directo: ${isDirectSql}`);
-    logger.error(
-      `🔧 🔍 Es promoción: ${fieldMapping.isPromotionField || isPromotionField}`
-    );
-
-    return {
-      value,
-      isDirectSql,
-      fieldName: fieldMapping.targetField,
-    };
   }
 
   // ===============================
@@ -2423,13 +2051,14 @@ class DynamicTransferService {
   // ===============================
 
   /**
-   * Ejecuta inserción en la base de datos - MEJORADO con logging de promociones
+   * Ejecuta la inserción en la tabla destino con validación de campos (MEJORADO)
    * @param {string} targetTable - Tabla destino
    * @param {Array} targetFields - Campos a insertar
    * @param {Array} targetValues - Valores a insertar
-   * @param {Object} targetData - Datos para parámetros
-   * @param {Set} directSqlFields - Campos con SQL directo
+   * @param {Object} targetData - Datos para inserción
+   * @param {Set} directSqlFields - Campos SQL directos
    * @param {Object} targetConnection - Conexión destino
+   * @returns {Promise<void>}
    */
   async executeInsert(
     targetTable,
@@ -2440,125 +2069,144 @@ class DynamicTransferService {
     targetConnection
   ) {
     try {
-      // ✅ IDENTIFICAR CAMPOS DE PROMOCIONES
-      const promotionFields = targetFields.filter(
-        (field) =>
-          field.includes("BONIF") ||
-          field.includes("CANTIDAD_") ||
-          field.includes("PEDIDO_LINEA")
-      );
+      logger.info(`🚀 Iniciando inserción en tabla: ${targetTable}`);
+      logger.info(`🚀 Campos a insertar: ${targetFields.length}`);
+      logger.info(`🚀 Lista de campos: ${targetFields.join(", ")}`);
 
-      logger.info(
-        ` aqui vamos mostrar targetFields: ${
-          (JSON.stringify(targetFields), null, 2)
-        }`
-      );
-      logger.info(
-        ` aqui enviamos targetValues: ${
-          (JSON.stringify(targetValues), null, 2)
-        }`
-      );
-
-      // ${JSON.stringify(
-      //     promotionInfo,
-      //     null,
-      //     2
-      //   )}
-
-      const regularFields = targetFields.filter(
-        (field) => !promotionFields.includes(field)
-      );
-
-      // ✅ LOGGING DETALLADO DE PROMOCIONES
-      if (promotionFields.length > 0) {
-        logger.info(`🎁 🚀 INSERTANDO CAMPOS DE PROMOCIÓN EN ${targetTable}:`);
-        logger.info(`🎁   Total campos promoción: ${promotionFields.length}`);
-        logger.info(`📋   Total campos regulares: ${regularFields.length}`);
-
-        promotionFields.forEach((field) => {
-          const value = directSqlFields.has(field)
-            ? targetValues[targetFields.indexOf(field)]
-            : targetData[field];
-          logger.info(
-            `🎁 Resultado de promocion a insertar:  ${field}: ${value}`
-          );
-        });
-      }
-
-      // Construir query de inserción
-      const fieldsStr = targetFields.join(", ");
-      const valuesStr = targetValues.join(", ");
-      const query = `INSERT INTO ${targetTable} (${fieldsStr}) VALUES (${valuesStr})`;
-
-      logger.debug(`🚀 Ejecutando inserción en ${targetTable}`);
-      logger.debug(`🚀 Query: ${query}`);
-
-      // Preparar parámetros
-      const params = {};
-      targetFields.forEach((field, index) => {
-        if (!directSqlFields.has(field)) {
-          params[field] = targetData[field];
-        }
-      });
-
-      // ✅ LOG DE PARÁMETROS DE PROMOCIÓN
-      if (promotionFields.length > 0) {
-        logger.debug(`🎁 Parámetros de promoción:`);
-        promotionFields.forEach((field) => {
-          if (params.hasOwnProperty(field)) {
-            logger.debug(`🎁   @${field} = ${params[field]}`);
-          }
-        });
-      }
-
-      // Ejecutar inserción
-      const result = await SqlService.query(targetConnection, query, params);
-
-      // ✅ LOG DE ÉXITO CON PROMOCIONES
-      if (promotionFields.length > 0) {
-        logger.info(
-          `🎁 ✅ INSERCIÓN CON PROMOCIONES EXITOSA en ${targetTable}`
-        );
-        logger.info(
-          `🎁   Filas afectadas: ${
-            result.rowsAffected ? result.rowsAffected[0] : 1
-          }`
-        );
-        logger.info(
-          `🎁   Campos promoción insertados: ${promotionFields.join(", ")}`
-        );
-      } else {
-        logger.info(`✅ Inserción exitosa en ${targetTable}`);
-        logger.info(
-          `📋 Filas afectadas: ${
-            result.rowsAffected ? result.rowsAffected[0] : 1
+      // Log detallado de datos antes de validación
+      logger.debug(`📊 DATOS ANTES DE VALIDACIÓN:`);
+      for (let i = 0; i < targetFields.length; i++) {
+        const fieldName = targetFields[i];
+        const fieldValue = directSqlFields.has(fieldName)
+          ? targetValues[i]
+          : targetData[fieldName];
+        const isDirectSql = directSqlFields.has(fieldName);
+        logger.debug(
+          `📊   ${fieldName}: ${fieldValue} ${
+            isDirectSql ? "(SQL directo)" : ""
           }`
         );
       }
-    } catch (error) {
-      logger.error(`❌ Error en inserción en ${targetTable}: ${error.message}`);
-      logger.error(
-        `❌ Query: INSERT INTO ${targetTable} (${targetFields.join(
+
+      // Obtener la estructura real de la tabla destino
+      const existingColumns = await this.getTableColumns(
+        targetConnection,
+        targetTable
+      );
+
+      if (existingColumns.length === 0) {
+        logger.warn(
+          `⚠️ No se pudo validar estructura de ${targetTable}, procediendo sin validación`
+        );
+        const insertQuery = `INSERT INTO ${targetTable} (${targetFields.join(
           ", "
-        )}) VALUES (${targetValues.join(", ")})`
+        )}) VALUES (${targetValues.join(", ")})`;
+        await SqlService.query(targetConnection, insertQuery, targetData);
+        logger.info(`✅ Inserción sin validación completada en ${targetTable}`);
+        return;
+      }
+
+      const existingColumnNames = existingColumns.map((col) =>
+        col.COLUMN_NAME.toLowerCase()
+      );
+      logger.debug(
+        `📊 Columnas disponibles en ${targetTable}: ${existingColumnNames.join(
+          ", "
+        )}`
       );
 
-      // ✅ LOG DE ERROR CON CONTEXTO DE PROMOCIONES
-      const promotionFields = targetFields.filter(
-        (field) =>
-          field.includes("BONIF") ||
-          field.includes("CANTIDAD_") ||
-          field.includes("PEDIDO_LINEA")
-      );
+      // Filtrar campos que realmente existen en la tabla
+      const validFields = [];
+      const validValues = [];
+      const filteredTargetData = {};
+      const ignoredFields = [];
 
-      if (promotionFields.length > 0) {
-        logger.error(
-          `🎁 ❌ Error insertando campos de promoción: ${promotionFields.join(
+      for (let i = 0; i < targetFields.length; i++) {
+        const fieldName = targetFields[i];
+        const fieldValue = targetValues[i];
+
+        if (existingColumnNames.includes(fieldName.toLowerCase())) {
+          validFields.push(fieldName);
+          validValues.push(fieldValue);
+
+          if (!directSqlFields.has(fieldName)) {
+            filteredTargetData[fieldName] = targetData[fieldName];
+          }
+
+          logger.debug(`✅ Campo válido: ${fieldName}`);
+        } else {
+          ignoredFields.push(fieldName);
+          logger.debug(`❌ Campo ignorado: ${fieldName} (no existe en tabla)`);
+        }
+      }
+
+      if (ignoredFields.length > 0) {
+        logger.warn(
+          `⚠️ Campos ignorados (no existen en ${targetTable}): ${ignoredFields.join(
             ", "
           )}`
         );
       }
 
+      if (validFields.length === 0) {
+        throw new Error(
+          `No hay campos válidos para insertar en la tabla ${targetTable}`
+        );
+      }
+
+      // Log de datos finales
+      logger.info(`📊 DATOS FINALES PARA INSERCIÓN en ${targetTable}:`);
+      logger.info(
+        `📊 Campos válidos: ${validFields.length}/${targetFields.length}`
+      );
+      logger.info(`📊 Campos finales: ${validFields.join(", ")}`);
+
+      for (let i = 0; i < validFields.length; i++) {
+        const fieldName = validFields[i];
+        const fieldValue = directSqlFields.has(fieldName)
+          ? validValues[i]
+          : filteredTargetData[fieldName];
+        const isDirectSql = directSqlFields.has(fieldName);
+        logger.info(
+          `📊   ${fieldName}: ${fieldValue} ${
+            isDirectSql ? "(SQL directo)" : ""
+          }`
+        );
+      }
+
+      // Construir y ejecutar la consulta INSERT
+      const insertQuery = `INSERT INTO ${targetTable} (${validFields.join(
+        ", "
+      )}) VALUES (${validValues.join(", ")})`;
+
+      logger.info(`🚀 Ejecutando inserción: ${insertQuery}`);
+      await SqlService.query(targetConnection, insertQuery, filteredTargetData);
+
+      logger.info(
+        `✅ Inserción exitosa en ${targetTable} con ${validFields.length} campos`
+      );
+
+      // 🎁 Log especial para campos de promoción insertados
+      const promotionFieldsInserted = validFields.filter(
+        (field) =>
+          field.includes("CANTIDAD_") ||
+          field.includes("PEDIDO_LINEA_BONIF") ||
+          field.includes("BONIF")
+      );
+
+      if (promotionFieldsInserted.length > 0) {
+        logger.info(
+          `🎁 ✅ CAMPOS DE PROMOCIÓN INSERTADOS: ${promotionFieldsInserted.join(
+            ", "
+          )}`
+        );
+      }
+    } catch (error) {
+      logger.error(
+        `❌ Error en executeInsert para tabla ${targetTable}: ${error.message}`
+      );
+      logger.error(`❌ Campos intentados: ${targetFields.join(", ")}`);
+      logger.error(`❌ Datos: ${JSON.stringify(targetData, null, 2)}`);
       throw error;
     }
   }
@@ -4814,24 +4462,12 @@ class DynamicTransferService {
   }
 
   /**
-   * 🔧 Detecta si hay datos de promociones en el registro - MEJORADO
+   * 🔧 NUEVO: Detecta si hay datos de promociones en el registro
    * @param {Object} dataForProcessing - Datos a analizar
    * @returns {boolean} - Si contiene datos de promociones
    */
   detectPromotionData(dataForProcessing) {
-    if (!dataForProcessing) {
-      logger.error(`🔧 🔍 detectPromotionData: datos nulos`);
-      return false;
-    }
-
-    logger.error(
-      `🔧 🔍 detectPromotionData: analizando ${
-        Object.keys(dataForProcessing).length
-      } campos`
-    );
-    logger.error(
-      `🔧 🔍 Campos disponibles: ${Object.keys(dataForProcessing).join(", ")}`
-    );
+    if (!dataForProcessing) return false;
 
     // Verificar indicadores directos de promociones
     const promotionIndicators = [
@@ -4842,54 +4478,23 @@ class DynamicTransferService {
       "CANTIDAD_BONIFICAD",
     ];
 
-    const foundIndicators = [];
-    const hasDirectIndicators = promotionIndicators.some((indicator) => {
-      const exists =
+    const hasDirectIndicators = promotionIndicators.some(
+      (indicator) =>
         dataForProcessing.hasOwnProperty(indicator) &&
         dataForProcessing[indicator] !== null &&
-        dataForProcessing[indicator] !== undefined;
-
-      if (exists) {
-        foundIndicators.push(`${indicator}: ${dataForProcessing[indicator]}`);
-      }
-
-      return exists;
-    });
-
-    if (hasDirectIndicators) {
-      logger.error(
-        `🎁 🔍 Promociones detectadas por indicadores directos: ${foundIndicators.join(
-          ", "
-        )}`
-      );
-      return true;
-    }
-
-    // Verificar campos que sugieren promociones
-    const promotionLikeFields = Object.keys(dataForProcessing).filter(
-      (key) =>
-        key.includes("BONIF") ||
-        key.includes("CANTIDAD_") ||
-        key.includes("PEDIDO_LINEA") ||
-        key.startsWith("_IS_") ||
-        key.startsWith("_PROMOTION")
+        dataForProcessing[indicator] !== undefined
     );
 
-    if (promotionLikeFields.length > 0) {
-      logger.error(
-        `🎁 🔍 Campos similares a promoción encontrados: ${promotionLikeFields.join(
-          ", "
-        )}`
-      );
+    if (hasDirectIndicators) {
+      logger.debug(`🎁 Promociones detectadas por indicadores directos`);
       return true;
     }
 
-    logger.error(`🔧 🔍 ❌ NO se detectaron datos de promociones`);
     return false;
   }
 
   /**
-   * 🔧 Genera fieldMappings automáticos para campos de promoción - MEJORADO
+   * 🔧 NUEVO: Genera fieldMappings automáticos para campos de promoción
    * @param {Object} dataForProcessing - Datos con promociones
    * @param {Object} mapping - Configuración de mapping
    * @param {Set} processedFieldNames - Campos ya procesados
@@ -4901,51 +4506,128 @@ class DynamicTransferService {
     processedFieldNames
   ) {
     const promotionFieldMappings = [];
+    const promotionConfig = this.getPromotionFieldConfiguration(mapping);
 
-    logger.error(`🎁 🔍 GENERANDO MAPPINGS AUTOMÁTICOS:`);
-    logger.error(
-      `🎁 🔍   Datos disponibles: ${Object.keys(dataForProcessing).join(", ")}`
-    );
-    logger.error(
-      `🎁 🔍   Campos ya procesados: ${Array.from(processedFieldNames).join(
-        ", "
-      )}`
-    );
+    logger.debug(`🎁 Generando fieldMappings automáticos para promociones...`);
 
-    // ✅ DETECTAR CAMPOS DE PROMOCIÓN EN LOS DATOS
-    Object.keys(dataForProcessing).forEach((field) => {
-      const isPromotionField =
-        field.includes("BONIF") ||
-        field.includes("CANTIDAD_") ||
-        field.includes("PEDIDO_LINEA") ||
-        field.startsWith("_IS_") ||
-        field.startsWith("_PROMOTION");
+    // Lista de campos de promoción que pueden auto-mapearse
+    const promotionFieldsToMap = [
+      {
+        sourceField: "PEDIDO_LINEA_BONIF",
+        targetField: "PEDIDO_LINEA_BONIF",
+        description: "Referencia línea bonificación",
+      },
+      {
+        sourceField: "CANTIDAD_PEDIDA",
+        targetField: "CANTIDAD_PEDIDA",
+        description: "Cantidad pedida",
+      },
+      {
+        sourceField: "CANTIDAD_A_FACTURAR",
+        targetField: "CANTIDAD_A_FACTURAR",
+        description: "Cantidad a facturar",
+      },
+      {
+        sourceField: "CANTIDAD_BONIFICAD",
+        targetField: "CANTIDAD_BONIFICAD",
+        description: "Cantidad bonificación",
+      },
+      // Campos de configuración personalizada
+      {
+        sourceField: promotionConfig.bonusLineRef,
+        targetField: promotionConfig.bonusLineRef,
+        description: "Ref línea bonificación (config)",
+      },
+      {
+        sourceField: promotionConfig.orderedQuantity,
+        targetField: promotionConfig.orderedQuantity,
+        description: "Cantidad pedida (config)",
+      },
+      {
+        sourceField: promotionConfig.invoiceQuantity,
+        targetField: promotionConfig.invoiceQuantity,
+        description: "Cantidad a facturar (config)",
+      },
+      {
+        sourceField: promotionConfig.bonusQuantity,
+        targetField: promotionConfig.bonusQuantity,
+        description: "Cantidad bonificación (config)",
+      },
+    ];
 
-      if (isPromotionField && !field.startsWith("_")) {
-        const targetFieldLower = field.toLowerCase();
+    // Generar mappings para campos que existen en los datos
+    for (const field of promotionFieldsToMap) {
+      // Evitar duplicados
+      if (
+        promotionFieldMappings.some(
+          (pm) => pm.targetField === field.targetField
+        )
+      ) {
+        continue;
+      }
 
-        if (!processedFieldNames.has(targetFieldLower)) {
-          const fieldMapping = {
-            sourceField: field,
-            targetField: field,
-            isRequired: false,
-            isPromotionField: true,
-            description: `Campo promoción auto-generado: ${field}`,
-            defaultValue: null,
-          };
+      const targetFieldLower = field.targetField.toLowerCase();
 
-          promotionFieldMappings.push(fieldMapping);
-          logger.error(
-            `🎁 🔍 ✅ Mapping auto-generado: ${field} -> ${field} = ${dataForProcessing[field]}`
-          );
-        } else {
-          logger.error(`🎁 🔍 ❌ Campo ya procesado: ${field}`);
-        }
+      // Solo agregar si el campo existe en los datos y no fue procesado
+      if (
+        dataForProcessing.hasOwnProperty(field.sourceField) &&
+        !processedFieldNames.has(targetFieldLower)
+      ) {
+        const fieldMapping = {
+          sourceField: field.sourceField,
+          targetField: field.targetField,
+          isRequired: false,
+          isPromotionField: true, // Marcador especial
+          description: field.description,
+          // Valores por defecto para campos de promoción
+          defaultValue: null,
+          removePrefix: null,
+          maxLength: null,
+        };
+
+        promotionFieldMappings.push(fieldMapping);
+
+        logger.debug(
+          `🎁 Auto-mapping generado: ${field.sourceField} -> ${field.targetField} (${field.description})`
+        );
+      }
+    }
+
+    // Auto-detectar otros campos que parezcan de promoción
+    Object.keys(dataForProcessing).forEach((key) => {
+      const isPromotionLike =
+        key.includes("CANTIDAD_") ||
+        key.includes("BONIF") ||
+        key.includes("PEDIDO_LINEA") ||
+        key.includes("QTY_") ||
+        key.includes("CANT_");
+
+      const targetFieldLower = key.toLowerCase();
+      const alreadyMapped = promotionFieldMappings.some(
+        (pm) => pm.sourceField === key
+      );
+
+      if (
+        isPromotionLike &&
+        !alreadyMapped &&
+        !processedFieldNames.has(targetFieldLower)
+      ) {
+        const fieldMapping = {
+          sourceField: key,
+          targetField: key, // Mismo nombre
+          isRequired: false,
+          isPromotionField: true,
+          description: `Campo promoción auto-detectado: ${key}`,
+          defaultValue: null,
+        };
+
+        promotionFieldMappings.push(fieldMapping);
+        logger.debug(`🎁 Auto-detección: ${key} -> ${key} (auto-detectado)`);
       }
     });
 
-    logger.error(
-      `🎁 🔍 TOTAL MAPPINGS GENERADOS: ${promotionFieldMappings.length}`
+    logger.info(
+      `🎁 Generados ${promotionFieldMappings.length} fieldMappings automáticos para promociones`
     );
     return promotionFieldMappings;
   }
@@ -5035,425 +4717,6 @@ class DynamicTransferService {
     }
 
     return null;
-  }
-
-  /**
-   * ✅ Determina si un campo es de promociones
-   * @param {string} targetField - Campo destino
-   * @returns {boolean} - Si es campo de promociones
-   */
-  isPromotionTargetField(targetField) {
-    const promotionFields = [
-      "PEDIDO_LINEA_BONIF",
-      "CANTIDAD_BONIFICAD",
-      "CANTIDAD_BONIF",
-      "CANTIDAD_PEDIDA",
-      "CANTIDAD_A_FACTURA",
-      "CANTIDAD_A_FACTURAR",
-      "CANTIDAD_FACTURADA",
-      "LINEA_BONIFICACION",
-      "REF_BONIFICACION",
-      "BONIFICACION_REF",
-    ];
-
-    const upperField = targetField.toUpperCase();
-    const isPromotionField =
-      promotionFields.includes(upperField) ||
-      upperField.includes("BONIF") ||
-      upperField.includes("CANTIDAD_");
-
-    if (isPromotionField) {
-      logger.debug(`🎁 Campo identificado como promoción: ${targetField}`);
-    }
-
-    return isPromotionField;
-  }
-
-  /**
-   * ✅ Busca automáticamente el valor de un campo de promociones
-   * @param {string} targetField - Campo destino
-   * @param {Object} sourceData - Datos origen
-   * @param {Object} mapping - Configuración de mapping
-   * @returns {*} - Valor encontrado o null
-   */
-  findPromotionValue(targetField, sourceData, mapping) {
-    logger.debug(`🎁 Buscando valor para campo promoción: ${targetField}`);
-    logger.debug(`🎁 Datos disponibles: ${Object.keys(sourceData).join(", ")}`);
-
-    // 1. Buscar campo exacto
-    if (sourceData.hasOwnProperty(targetField)) {
-      logger.info(
-        `🎁 ✅ Campo encontrado exacto: ${targetField} = ${sourceData[targetField]}`
-      );
-      return sourceData[targetField];
-    }
-
-    // 2. Buscar usando patrones de promociones
-    const promotionPatterns = {
-      PEDIDO_LINEA_BONIF: [
-        "PEDIDO_LINEA_BONIF",
-        "LINEA_BONIFICACION",
-        "REF_BONIFICACION",
-        "BONIFICACION_REF",
-        "LINEA_BONIF",
-        "REF_BONIF",
-        "BONIF_REF",
-      ],
-      CANTIDAD_BONIFICAD: [
-        "CANTIDAD_BONIFICAD",
-        "CANTIDAD_BONIF",
-        "CANTIDAD_BONIFICACION",
-        "QTY_BONIFICACION",
-        "QTY_BONIF",
-        "CANT_BONIFICACION",
-        "CANT_BONIF",
-        "CNT_BONIF",
-      ],
-      CANTIDAD_BONIF: [
-        "CANTIDAD_BONIF",
-        "CANTIDAD_BONIFICAD",
-        "CANTIDAD_BONIFICACION",
-        "QTY_BONIFICACION",
-        "QTY_BONIF",
-        "CANT_BONIFICACION",
-        "CANT_BONIF",
-        "CNT_BONIF",
-      ],
-      CANTIDAD_PEDIDA: [
-        "CANTIDAD_PEDIDA",
-        "QTY_PEDIDA",
-        "CANT_PEDIDA",
-        "CNT_PEDIDA",
-        "CANTIDAD_PED",
-        "QTY_PED",
-      ],
-      CANTIDAD_A_FACTURA: [
-        "CANTIDAD_A_FACTURA",
-        "CANTIDAD_A_FACTURAR",
-        "QTY_FACTURAR",
-        "CANT_FACTURAR",
-        "CNT_FACTURAR",
-        "CANTIDAD_FACT",
-        "QTY_FACT",
-      ],
-      CANTIDAD_A_FACTURAR: [
-        "CANTIDAD_A_FACTURAR",
-        "CANTIDAD_A_FACTURA",
-        "QTY_FACTURAR",
-        "CANT_FACTURAR",
-        "CNT_FACTURAR",
-        "CANTIDAD_FACT",
-        "QTY_FACT",
-      ],
-    };
-
-    const upperTargetField = targetField.toUpperCase();
-    const patterns = promotionPatterns[upperTargetField] || [];
-
-    for (const pattern of patterns) {
-      if (sourceData.hasOwnProperty(pattern)) {
-        logger.info(
-          `🎁 ✅ Campo encontrado por patrón: ${pattern} -> ${targetField} = ${sourceData[pattern]}`
-        );
-        return sourceData[pattern];
-      }
-    }
-
-    // 3. Buscar case-insensitive
-    const lowerTargetField = targetField.toLowerCase();
-    for (const [key, value] of Object.entries(sourceData)) {
-      if (key.toLowerCase() === lowerTargetField) {
-        logger.info(
-          `🎁 ✅ Campo encontrado case-insensitive: ${key} -> ${targetField} = ${value}`
-        );
-        return value;
-      }
-    }
-
-    // 4. Verificar campos meta de promociones
-    if (sourceData._IS_BONUS_LINE || sourceData._IS_TRIGGER_LINE) {
-      logger.debug(
-        `🎁 Línea tiene metadatos de promoción pero no se encontró ${targetField}`
-      );
-      logger.debug(`🎁 Tipo de línea: ${sourceData._PROMOTION_TYPE}`);
-
-      // Para líneas de bonificación, algunos campos deben ser null
-      if (sourceData._IS_BONUS_LINE) {
-        if (
-          upperTargetField.includes("PEDIDA") ||
-          upperTargetField.includes("FACTURA")
-        ) {
-          logger.debug(`🎁 Línea bonificación: ${targetField} = null`);
-          return null;
-        }
-      }
-
-      // Para líneas regulares, algunos campos deben ser null
-      if (sourceData._IS_TRIGGER_LINE) {
-        if (upperTargetField.includes("BONIF")) {
-          logger.debug(`🎁 Línea trigger: ${targetField} = null`);
-          return null;
-        }
-      }
-    }
-
-    logger.debug(`🎁 ❌ No se encontró valor para ${targetField}`);
-    return null;
-  }
-
-  /**
-   * ✅ Obtiene datos de detalle garantizando campos de promociones - CON DETECCIÓN AUTOMÁTICA
-   * @param {Object} detailConfig - Configuración de la tabla de detalle
-   * @param {Object} parentTableConfig - Configuración de la tabla padre
-   * @param {string} documentId - ID del documento
-   * @param {Object} sourceConnection - Conexión origen
-   * @param {Object} mapping - Configuración de mapping
-   * @returns {Promise<Array>} - Datos de detalle con campos de promoción
-   */
-  async getDetailDataWithPromotionFields(
-    detailConfig,
-    parentTableConfig,
-    documentId,
-    sourceConnection,
-    mapping
-  ) {
-    logger.debug(`🎁 Obteniendo datos con campos de promoción garantizados...`);
-
-    // ✅ DETECTAR AUTOMÁTICAMENTE LOS NOMBRES CORRECTOS DE CAMPOS
-    const promotionFieldConfig = await this.detectPromotionFieldNames(
-      sourceConnection,
-      detailConfig.sourceTable,
-      mapping
-    );
-
-    // Campos requeridos para promociones (con nombres detectados)
-    const requiredPromotionFields = [
-      promotionFieldConfig.bonusField,
-      promotionFieldConfig.referenceField,
-      promotionFieldConfig.discountField,
-      promotionFieldConfig.lineNumberField,
-      promotionFieldConfig.articleField,
-      promotionFieldConfig.quantityField, // ✅ Ahora será CNT_MAX
-    ];
-
-    logger.info(
-      `🎁 Campos detectados para promociones: ${requiredPromotionFields.join(
-        ", "
-      )}`
-    );
-
-    if (detailConfig.customQuery) {
-      logger.debug(`🎁 Usando query personalizada existente`);
-      const query = detailConfig.customQuery.replace(
-        /@documentId/g,
-        documentId
-      );
-      const result = await SqlService.query(sourceConnection, query, {
-        documentId,
-      });
-
-      // ✅ Guardar configuración detectada para uso posterior
-      result.recordset.forEach((record) => {
-        record._DETECTED_PROMOTION_CONFIG = promotionFieldConfig;
-      });
-
-      return result.recordset || [];
-    }
-
-    // Construir query con campos detectados
-    const sourceTable = detailConfig.sourceTable;
-    const primaryKey = parentTableConfig.primaryKey || "NUM_PED";
-
-    // Obtener campos del mapping existente
-    const mappingFields = [];
-    if (detailConfig.fieldMappings && detailConfig.fieldMappings.length > 0) {
-      detailConfig.fieldMappings.forEach((fm) => {
-        if (fm.sourceField) {
-          mappingFields.push(fm.sourceField);
-        }
-      });
-    }
-
-    // Combinar campos del mapping + campos de promoción detectados
-    const allFields = [
-      ...new Set([...mappingFields, ...requiredPromotionFields]),
-    ];
-
-    logger.debug(`🎁 Campos finales para query: ${allFields.join(", ")}`);
-    logger.debug(
-      `🎁 Total campos: ${allFields.length} (${mappingFields.length} mapping + ${requiredPromotionFields.length} promoción)`
-    );
-
-    // Construir query
-    const fieldsStr = allFields.join(", ");
-    let query = `SELECT ${fieldsStr} FROM ${sourceTable} WHERE ${primaryKey} = @documentId`;
-
-    if (detailConfig.filterCondition) {
-      query += ` AND ${detailConfig.filterCondition}`;
-    }
-
-    if (detailConfig.orderByColumn) {
-      query += ` ORDER BY ${detailConfig.orderByColumn}`;
-    }
-
-    logger.debug(`🎁 Query construida: ${query}`);
-
-    try {
-      const result = await SqlService.query(sourceConnection, query, {
-        documentId,
-      });
-      const data = result.recordset || [];
-
-      logger.info(
-        `🎁 ✅ Datos obtenidos con promociones: ${data.length} registros`
-      );
-
-      // ✅ Agregar configuración detectada a cada registro
-      data.forEach((record) => {
-        record._DETECTED_PROMOTION_CONFIG = promotionFieldConfig;
-      });
-
-      if (data.length > 0) {
-        const firstRecord = data[0];
-        logger.debug(
-          `🎁 Campos en primer registro: ${Object.keys(firstRecord).join(", ")}`
-        );
-
-        // Verificar que los campos de promoción están presentes
-        requiredPromotionFields.forEach((field) => {
-          if (firstRecord.hasOwnProperty(field)) {
-            logger.debug(
-              `🎁 ✅ Campo presente: ${field} = ${firstRecord[field]}`
-            );
-          } else {
-            logger.warn(`🎁 ❌ Campo faltante: ${field}`);
-          }
-        });
-      }
-
-      return data;
-    } catch (error) {
-      logger.error(`Error ejecutando query con promociones: ${error.message}`);
-      logger.error(`Query: ${query}`);
-      throw error;
-    }
-  }
-
-  /**
-   * ✅ NUEVO: Detecta automáticamente los nombres de campos en la tabla
-   * @param {Object} sourceConnection - Conexión origen
-   * @param {string} tableName - Nombre de la tabla
-   * @param {Object} mapping - Configuración de mapping
-   * @returns {Promise<Object>} - Configuración de campos detectada
-   */
-  async detectPromotionFieldNames(sourceConnection, tableName, mapping) {
-    try {
-      logger.debug(`🎁 Detectando nombres de campos en tabla ${tableName}...`);
-
-      // Obtener columnas de la tabla
-      const columns = await this.getTableColumns(sourceConnection, tableName);
-      const columnNames = columns.map((col) => col.COLUMN_NAME.toUpperCase());
-
-      logger.debug(`🎁 Columnas disponibles: ${columnNames.join(", ")}`);
-
-      const defaultConfig = {
-        bonusField: "ART_BON",
-        referenceField: "COD_ART_RFR",
-        discountField: "MON_DSC",
-        lineNumberField: "NUM_LN",
-        articleField: "COD_ART",
-        quantityField: "CNT_MAX", // Valor por defecto corregido
-        bonusLineRef: "PEDIDO_LINEA_BONIF",
-        orderedQuantity: "CANTIDAD_PEDIDA",
-        invoiceQuantity: "CANTIDAD_A_FACTURAR",
-        bonusQuantity: "CANTIDAD_BONIFICAD",
-      };
-
-      // ✅ DETECTAR AUTOMÁTICAMENTE VARIANTES DE NOMBRES
-      const fieldVariants = {
-        quantityField: [
-          "CNT_MAX",
-          "CND_MAX",
-          "CANTIDAD_MAX",
-          "QTY_MAX",
-          "CANTIDAD",
-        ],
-        bonusField: ["ART_BON", "BONIFICACION", "BONUS", "IS_BONUS"],
-        referenceField: [
-          "COD_ART_RFR",
-          "ARTICULO_REF",
-          "ART_REF",
-          "CODIGO_REF",
-        ],
-        discountField: ["MON_DSC", "DESCUENTO", "DISCOUNT", "DSC_AMT"],
-        lineNumberField: ["NUM_LN", "LINEA", "LINE_NUM", "NUMERO_LINEA"],
-        articleField: ["COD_ART", "ARTICULO", "CODIGO_ARTICULO", "ITEM_CODE"],
-      };
-
-      const detectedConfig = { ...defaultConfig };
-
-      // Detectar nombres reales de campos
-      Object.keys(fieldVariants).forEach((configKey) => {
-        const variants = fieldVariants[configKey];
-
-        for (const variant of variants) {
-          if (columnNames.includes(variant.toUpperCase())) {
-            if (detectedConfig[configKey] !== variant) {
-              logger.info(
-                `🎁 ✅ Campo detectado: ${configKey} = ${variant} (era ${detectedConfig[configKey]})`
-              );
-              detectedConfig[configKey] = variant;
-            }
-            break;
-          }
-        }
-      });
-
-      // Combinar con configuración del mapping si existe
-      if (mapping.promotionConfig) {
-        const finalConfig = {
-          ...detectedConfig,
-          ...mapping.promotionConfig.detectFields,
-          ...mapping.promotionConfig.targetFields,
-        };
-
-        logger.debug(
-          `🎁 Configuración final: ${JSON.stringify(finalConfig, null, 2)}`
-        );
-        return finalConfig;
-      }
-
-      logger.debug(
-        `🎁 Configuración detectada: ${JSON.stringify(detectedConfig, null, 2)}`
-      );
-      return detectedConfig;
-    } catch (error) {
-      logger.error(`Error detectando campos de promoción: ${error.message}`);
-
-      // Fallback a configuración por defecto corregida
-      const fallbackConfig = {
-        bonusField: "ART_BON",
-        referenceField: "COD_ART_RFR",
-        discountField: "MON_DSC",
-        lineNumberField: "NUM_LN",
-        articleField: "COD_ART",
-        quantityField: "CNT_MAX", // ✅ Corregido
-        bonusLineRef: "PEDIDO_LINEA_BONIF",
-        orderedQuantity: "CANTIDAD_PEDIDA",
-        invoiceQuantity: "CANTIDAD_A_FACTURAR",
-        bonusQuantity: "CANTIDAD_BONIFICAD",
-      };
-
-      if (mapping.promotionConfig) {
-        return {
-          ...fallbackConfig,
-          ...mapping.promotionConfig.detectFields,
-          ...mapping.promotionConfig.targetFields,
-        };
-      }
-
-      return fallbackConfig;
-    }
   }
 }
 
