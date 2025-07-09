@@ -2296,7 +2296,7 @@ class DynamicTransferService {
           const value = directSqlFields.has(field)
             ? targetValues[targetFields.indexOf(field)]
             : targetData[field];
-          logger.info(`🎁   ${field}: ${value}`);
+          logger.info(`🎁 Resultado de promocion a insertar:  ${field}: ${value}`);
         });
       }
 
