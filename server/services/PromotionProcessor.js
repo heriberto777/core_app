@@ -226,6 +226,16 @@ class PromotionProcessor {
       `🎁 🔍   Buscando campo bonificación: ${fieldConfig.bonusField}`
     );
 
+    logger.debug(`🎁 🔍   Recibimos line: ${JSON.stringify(line, null, 2)}`);
+
+    logger.debug(
+      `🎁 🔍   Recibimos allLines: ${JSON.stringify(allLines, null, 2)}`
+    );
+
+    logger.debug(
+      `🎁 🔍   Recibimos fieldConfig: ${JSON.stringify(fieldConfig, null, 2)}`
+    );
+
     // 🔍 VERIFICAR SI ES LÍNEA DE BONIFICACIÓN
     if (availableFields.includes(fieldConfig.bonusField)) {
       const bonusValue = line[fieldConfig.bonusField];
