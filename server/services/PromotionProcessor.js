@@ -64,7 +64,61 @@ class PromotionProcessor {
   }
 
   /**
-   * Obtiene configuración de campos desde el mapping
+   * ✅ NUEVO: Procesa promociones con configuración específica
+   * @param {Array} detailData - Datos de detalle del documento
+   * @param {Object} mapping - Configuración de mapping
+   * @param {Object} fieldConfig - Configuración de campos detectada
+   * @returns {Array} - Datos transformados con promociones procesadas
+   */
+  static processPromotionsWithConfig(detailData, mapping, fieldConfig) {
+    try {
+      if (
+        !detailData ||
+        !Array.isArray(detailData) ||
+        detailData.length === 0
+      ) {
+        logger.debug("No hay datos de detalle para procesar promociones");
+        return detailData;
+      }
+
+      logger.info(`🎁 Procesando promociones para ${detailData.length} líneas`);
+      logger.debug(
+        `🎁 Configuración de campos utilizada: ${JSON.stringify(fieldConfig)}`
+      );
+
+      // Crear mapa de líneas para referencias rápidas
+      const lineMap = this.createLineMap(detailData, fieldConfig);
+
+      // Detectar líneas con promociones
+      const promotionLines = this.detectPromotionLines(detailData, fieldConfig);
+
+      if (promotionLines.length === 0) {
+        logger.debug("No se detectaron promociones en el documento");
+        return detailData;
+      }
+
+      logger.info(
+        `🎁 Detectadas ${promotionLines.length} líneas con promociones`
+      );
+
+      // Transformar datos según promociones
+      const transformedData = this.transformPromotionData(
+        detailData,
+        promotionLines,
+        fieldConfig,
+        lineMap
+      );
+
+      logger.info(`🎁 Transformación de promociones completada`);
+      return transformedData;
+    } catch (error) {
+      logger.error(`Error al procesar promociones: ${error.message}`);
+      throw error;
+    }
+  }
+
+  /**
+   * Obtiene configuración de campos desde el mapping - CORREGIDO
    * @param {Object} mapping - Configuración de mapping
    * @returns {Object} - Configuración de campos
    */
@@ -75,7 +129,7 @@ class PromotionProcessor {
       discountField: "MON_DSC",
       lineNumberField: "NUM_LN",
       articleField: "COD_ART",
-      quantityField: "CNT_MAX",
+      quantityField: "CNT_MAX", // ✅ CORRECCIÓN: CNT_MAX en lugar de CND_MAX
       bonusLineRef: "PEDIDO_LINEA_BONIF",
       orderedQuantity: "CANTIDAD_PEDIDA",
       invoiceQuantity: "CANTIDAD_A_FACTURAR",

@@ -913,7 +913,7 @@ class DynamicTransferService {
   // ===============================
 
   /**
-   * Obtiene datos de detalle con procesamiento de promociones - CORREGIDO
+   * Obtiene datos de detalle con procesamiento de promociones - MEJORADO
    * @param {Object} detailConfig - Configuración de la tabla de detalle
    * @param {Object} parentTableConfig - Configuración de la tabla padre
    * @param {string} documentId - ID del documento
@@ -977,10 +977,25 @@ class DynamicTransferService {
 
       logger.debug(`📊 Datos obtenidos: ${detailData.length} registros`);
 
-      // ✅ PASO 3: Verificar que llegaron los campos de promoción
+      // ✅ PASO 3: Usar configuración detectada si está disponible
+      let fieldConfigToUse = null;
+      if (detailData.length > 0 && detailData[0]._DETECTED_PROMOTION_CONFIG) {
+        fieldConfigToUse = detailData[0]._DETECTED_PROMOTION_CONFIG;
+        logger.info(
+          `🎁 ✅ Usando configuración de campos detectada automáticamente`
+        );
+
+        // Limpiar el campo temporal de los datos
+        detailData.forEach((record) => {
+          delete record._DETECTED_PROMOTION_CONFIG;
+        });
+      } else {
+        fieldConfigToUse = PromotionProcessor.getFieldConfiguration(mapping);
+        logger.info(`🎁 Usando configuración de campos por defecto`);
+      }
+
+      // ✅ PASO 4: Verificar que llegaron los campos de promoción
       const firstRecord = detailData[0];
-      const promotionFieldConfig =
-        PromotionProcessor.getFieldConfiguration(mapping);
 
       logger.debug(
         `🎁 Verificando campos de promoción en los datos obtenidos...`
@@ -989,17 +1004,21 @@ class DynamicTransferService {
         `🎁 Primer registro: ${JSON.stringify(firstRecord, null, 2)}`
       );
       logger.debug(
-        `🎁 Campos esperados: ${JSON.stringify(promotionFieldConfig, null, 2)}`
+        `🎁 Configuración utilizada: ${JSON.stringify(
+          fieldConfigToUse,
+          null,
+          2
+        )}`
       );
 
       const missingFields = [];
       const requiredFields = [
-        promotionFieldConfig.bonusField,
-        promotionFieldConfig.referenceField,
-        promotionFieldConfig.discountField,
-        promotionFieldConfig.lineNumberField,
-        promotionFieldConfig.articleField,
-        promotionFieldConfig.quantityField,
+        fieldConfigToUse.bonusField,
+        fieldConfigToUse.referenceField,
+        fieldConfigToUse.discountField,
+        fieldConfigToUse.lineNumberField,
+        fieldConfigToUse.articleField,
+        fieldConfigToUse.quantityField,
       ];
 
       requiredFields.forEach((field) => {
@@ -1028,10 +1047,11 @@ class DynamicTransferService {
         `🎁 Procesando detalles con promociones para documento ${documentId}`
       );
 
-      // ✅ PASO 4: Procesar promociones
-      const processedData = PromotionProcessor.processPromotions(
+      // ✅ PASO 5: Procesar promociones con configuración correcta
+      const processedData = PromotionProcessor.processPromotionsWithConfig(
         detailData,
-        mapping
+        mapping,
+        fieldConfigToUse // ✅ Pasar configuración detectada
       );
 
       // Aplicar reglas específicas si están configuradas
@@ -5055,7 +5075,7 @@ class DynamicTransferService {
   }
 
   /**
-   * ✅ NUEVO: Obtiene datos de detalle garantizando campos de promociones
+   * ✅ Obtiene datos de detalle garantizando campos de promociones - CON DETECCIÓN AUTOMÁTICA
    * @param {Object} detailConfig - Configuración de la tabla de detalle
    * @param {Object} parentTableConfig - Configuración de la tabla padre
    * @param {string} documentId - ID del documento
@@ -5072,28 +5092,30 @@ class DynamicTransferService {
   ) {
     logger.debug(`🎁 Obteniendo datos con campos de promoción garantizados...`);
 
-    // Obtener configuración de campos de promoción
-    const promotionFieldConfig =
-      PromotionProcessor.getFieldConfiguration(mapping);
+    // ✅ DETECTAR AUTOMÁTICAMENTE LOS NOMBRES CORRECTOS DE CAMPOS
+    const promotionFieldConfig = await this.detectPromotionFieldNames(
+      sourceConnection,
+      detailConfig.sourceTable,
+      mapping
+    );
 
-    // Campos requeridos para promociones
+    // Campos requeridos para promociones (con nombres detectados)
     const requiredPromotionFields = [
-      promotionFieldConfig.bonusField, // ART_BON
-      promotionFieldConfig.referenceField, // COD_ART_RFR
-      promotionFieldConfig.discountField, // MON_DSC
-      promotionFieldConfig.lineNumberField, // NUM_LN
-      promotionFieldConfig.articleField, // COD_ART
-      promotionFieldConfig.quantityField, // CND_MAX
+      promotionFieldConfig.bonusField,
+      promotionFieldConfig.referenceField,
+      promotionFieldConfig.discountField,
+      promotionFieldConfig.lineNumberField,
+      promotionFieldConfig.articleField,
+      promotionFieldConfig.quantityField, // ✅ Ahora será CNT_MAX
     ];
 
-    logger.debug(
-      `🎁 Campos requeridos para promociones: ${requiredPromotionFields.join(
+    logger.info(
+      `🎁 Campos detectados para promociones: ${requiredPromotionFields.join(
         ", "
       )}`
     );
 
     if (detailConfig.customQuery) {
-      // Si hay query personalizada, usarla tal como está
       logger.debug(`🎁 Usando query personalizada existente`);
       const query = detailConfig.customQuery.replace(
         /@documentId/g,
@@ -5102,10 +5124,16 @@ class DynamicTransferService {
       const result = await SqlService.query(sourceConnection, query, {
         documentId,
       });
+
+      // ✅ Guardar configuración detectada para uso posterior
+      result.recordset.forEach((record) => {
+        record._DETECTED_PROMOTION_CONFIG = promotionFieldConfig;
+      });
+
       return result.recordset || [];
     }
 
-    // ✅ CONSTRUIR QUERY ASEGURANDO CAMPOS DE PROMOCIÓN
+    // Construir query con campos detectados
     const sourceTable = detailConfig.sourceTable;
     const primaryKey = parentTableConfig.primaryKey || "NUM_PED";
 
@@ -5119,7 +5147,7 @@ class DynamicTransferService {
       });
     }
 
-    // ✅ COMBINAR campos del mapping + campos de promoción
+    // Combinar campos del mapping + campos de promoción detectados
     const allFields = [
       ...new Set([...mappingFields, ...requiredPromotionFields]),
     ];
@@ -5129,16 +5157,14 @@ class DynamicTransferService {
       `🎁 Total campos: ${allFields.length} (${mappingFields.length} mapping + ${requiredPromotionFields.length} promoción)`
     );
 
-    // Construir query con todos los campos necesarios
+    // Construir query
     const fieldsStr = allFields.join(", ");
     let query = `SELECT ${fieldsStr} FROM ${sourceTable} WHERE ${primaryKey} = @documentId`;
 
-    // Aplicar filtro adicional si existe
     if (detailConfig.filterCondition) {
       query += ` AND ${detailConfig.filterCondition}`;
     }
 
-    // Aplicar ordenamiento si existe
     if (detailConfig.orderByColumn) {
       query += ` ORDER BY ${detailConfig.orderByColumn}`;
     }
@@ -5152,16 +5178,21 @@ class DynamicTransferService {
       const data = result.recordset || [];
 
       logger.info(
-        `🎁 Datos obtenidos con promociones: ${data.length} registros`
+        `🎁 ✅ Datos obtenidos con promociones: ${data.length} registros`
       );
 
-      // Verificar que los datos incluyen campos de promoción
+      // ✅ Agregar configuración detectada a cada registro
+      data.forEach((record) => {
+        record._DETECTED_PROMOTION_CONFIG = promotionFieldConfig;
+      });
+
       if (data.length > 0) {
         const firstRecord = data[0];
         logger.debug(
           `🎁 Campos en primer registro: ${Object.keys(firstRecord).join(", ")}`
         );
 
+        // Verificar que los campos de promoción están presentes
         requiredPromotionFields.forEach((field) => {
           if (firstRecord.hasOwnProperty(field)) {
             logger.debug(
@@ -5178,6 +5209,123 @@ class DynamicTransferService {
       logger.error(`Error ejecutando query con promociones: ${error.message}`);
       logger.error(`Query: ${query}`);
       throw error;
+    }
+  }
+
+  /**
+   * ✅ NUEVO: Detecta automáticamente los nombres de campos en la tabla
+   * @param {Object} sourceConnection - Conexión origen
+   * @param {string} tableName - Nombre de la tabla
+   * @param {Object} mapping - Configuración de mapping
+   * @returns {Promise<Object>} - Configuración de campos detectada
+   */
+  async detectPromotionFieldNames(sourceConnection, tableName, mapping) {
+    try {
+      logger.debug(`🎁 Detectando nombres de campos en tabla ${tableName}...`);
+
+      // Obtener columnas de la tabla
+      const columns = await this.getTableColumns(sourceConnection, tableName);
+      const columnNames = columns.map((col) => col.COLUMN_NAME.toUpperCase());
+
+      logger.debug(`🎁 Columnas disponibles: ${columnNames.join(", ")}`);
+
+      const defaultConfig = {
+        bonusField: "ART_BON",
+        referenceField: "COD_ART_RFR",
+        discountField: "MON_DSC",
+        lineNumberField: "NUM_LN",
+        articleField: "COD_ART",
+        quantityField: "CNT_MAX", // Valor por defecto corregido
+        bonusLineRef: "PEDIDO_LINEA_BONIF",
+        orderedQuantity: "CANTIDAD_PEDIDA",
+        invoiceQuantity: "CANTIDAD_A_FACTURAR",
+        bonusQuantity: "CANTIDAD_BONIFICAD",
+      };
+
+      // ✅ DETECTAR AUTOMÁTICAMENTE VARIANTES DE NOMBRES
+      const fieldVariants = {
+        quantityField: [
+          "CNT_MAX",
+          "CND_MAX",
+          "CANTIDAD_MAX",
+          "QTY_MAX",
+          "CANTIDAD",
+        ],
+        bonusField: ["ART_BON", "BONIFICACION", "BONUS", "IS_BONUS"],
+        referenceField: [
+          "COD_ART_RFR",
+          "ARTICULO_REF",
+          "ART_REF",
+          "CODIGO_REF",
+        ],
+        discountField: ["MON_DSC", "DESCUENTO", "DISCOUNT", "DSC_AMT"],
+        lineNumberField: ["NUM_LN", "LINEA", "LINE_NUM", "NUMERO_LINEA"],
+        articleField: ["COD_ART", "ARTICULO", "CODIGO_ARTICULO", "ITEM_CODE"],
+      };
+
+      const detectedConfig = { ...defaultConfig };
+
+      // Detectar nombres reales de campos
+      Object.keys(fieldVariants).forEach((configKey) => {
+        const variants = fieldVariants[configKey];
+
+        for (const variant of variants) {
+          if (columnNames.includes(variant.toUpperCase())) {
+            if (detectedConfig[configKey] !== variant) {
+              logger.info(
+                `🎁 ✅ Campo detectado: ${configKey} = ${variant} (era ${detectedConfig[configKey]})`
+              );
+              detectedConfig[configKey] = variant;
+            }
+            break;
+          }
+        }
+      });
+
+      // Combinar con configuración del mapping si existe
+      if (mapping.promotionConfig) {
+        const finalConfig = {
+          ...detectedConfig,
+          ...mapping.promotionConfig.detectFields,
+          ...mapping.promotionConfig.targetFields,
+        };
+
+        logger.debug(
+          `🎁 Configuración final: ${JSON.stringify(finalConfig, null, 2)}`
+        );
+        return finalConfig;
+      }
+
+      logger.debug(
+        `🎁 Configuración detectada: ${JSON.stringify(detectedConfig, null, 2)}`
+      );
+      return detectedConfig;
+    } catch (error) {
+      logger.error(`Error detectando campos de promoción: ${error.message}`);
+
+      // Fallback a configuración por defecto corregida
+      const fallbackConfig = {
+        bonusField: "ART_BON",
+        referenceField: "COD_ART_RFR",
+        discountField: "MON_DSC",
+        lineNumberField: "NUM_LN",
+        articleField: "COD_ART",
+        quantityField: "CNT_MAX", // ✅ Corregido
+        bonusLineRef: "PEDIDO_LINEA_BONIF",
+        orderedQuantity: "CANTIDAD_PEDIDA",
+        invoiceQuantity: "CANTIDAD_A_FACTURAR",
+        bonusQuantity: "CANTIDAD_BONIFICAD",
+      };
+
+      if (mapping.promotionConfig) {
+        return {
+          ...fallbackConfig,
+          ...mapping.promotionConfig.detectFields,
+          ...mapping.promotionConfig.targetFields,
+        };
+      }
+
+      return fallbackConfig;
     }
   }
 }
