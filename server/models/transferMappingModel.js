@@ -147,7 +147,7 @@ const PromotionConfigSchema = new Schema({
     discountField: { type: String, default: "MON_DSC" }, // Campo de descuento
     lineNumberField: { type: String, default: "NUM_LN" }, // Campo número de línea
     articleField: { type: String, default: "COD_ART" }, // Campo código artículo
-    quantityField: { type: String, default: "CND_MAX" }, // Campo cantidad
+    quantityField: { type: String, default: "CNT_MAX" }, // Campo cantidad
   },
   targetFields: {
     bonusLineRef: { type: String, default: "PEDIDO_LINEA_BONIF" }, // Campo referencia bonificación

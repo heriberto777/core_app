@@ -75,7 +75,7 @@ class PromotionProcessor {
       discountField: "MON_DSC",
       lineNumberField: "NUM_LN",
       articleField: "COD_ART",
-      quantityField: "CND_MAX",
+      quantityField: "CNT_MAX",
       bonusLineRef: "PEDIDO_LINEA_BONIF",
       orderedQuantity: "CANTIDAD_PEDIDA",
       invoiceQuantity: "CANTIDAD_A_FACTURAR",
