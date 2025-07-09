@@ -175,8 +175,8 @@ class PromotionProcessor {
       );
 
       if (
-        bonusValue === "S" ||
-        bonusValue === "Y" ||
+        bonusValue === "b" ||
+        bonusValue === "B" ||
         bonusValue === 1 ||
         bonusValue === true
       ) {
