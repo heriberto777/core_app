@@ -165,12 +165,12 @@ class PromotionProcessor {
     const lineNumber = line[fieldConfig.lineNumberField];
     const articleCode = line[fieldConfig.articleField];
 
-    logger.info(`🎁 Analizando línea ${lineNumber}, artículo ${articleCode}`);
+    logger.debug(`🎁 Analizando línea ${lineNumber}, artículo ${articleCode}`);
 
     // 🔍 VERIFICAR SI ES LÍNEA DE BONIFICACIÓN
     if (availableFields.includes(fieldConfig.bonusField)) {
       const bonusValue = line[fieldConfig.bonusField];
-      logger.info(
+      logger.debug(
         `🎁   Campo bonificación (${fieldConfig.bonusField}): ${bonusValue}`
       );
 
