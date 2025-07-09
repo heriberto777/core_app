@@ -913,7 +913,7 @@ class DynamicTransferService {
   // ===============================
 
   /**
-   * Obtiene datos de detalle con procesamiento de promociones
+   * Obtiene datos de detalle con procesamiento de promociones - CORREGIDO
    * @param {Object} detailConfig - Configuración de la tabla de detalle
    * @param {Object} parentTableConfig - Configuración de la tabla padre
    * @param {string} documentId - ID del documento
@@ -933,12 +933,39 @@ class DynamicTransferService {
         `🎁 Obteniendo datos con promociones para documento ${documentId}`
       );
 
-      // Obtener datos de detalle normalmente
-      const detailData = await this.getDetailData(
+      // ✅ PASO 1: Verificar si las promociones están habilitadas
+      if (!mapping.promotionConfig || !mapping.promotionConfig.enabled) {
+        logger.debug(
+          "Promociones deshabilitadas, procesando datos normalmente"
+        );
+        return await this.getDetailData(
+          detailConfig,
+          parentTableConfig,
+          documentId,
+          sourceConnection
+        );
+      }
+
+      // Validar configuración de promociones
+      if (!PromotionProcessor.validatePromotionConfig(mapping)) {
+        logger.warn(
+          "Configuración de promociones inválida, procesando sin promociones"
+        );
+        return await this.getDetailData(
+          detailConfig,
+          parentTableConfig,
+          documentId,
+          sourceConnection
+        );
+      }
+
+      // ✅ PASO 2: Obtener datos CON campos de promociones garantizados
+      const detailData = await this.getDetailDataWithPromotionFields(
         detailConfig,
         parentTableConfig,
         documentId,
-        sourceConnection
+        sourceConnection,
+        mapping
       );
 
       if (!detailData || detailData.length === 0) {
@@ -950,27 +977,58 @@ class DynamicTransferService {
 
       logger.debug(`📊 Datos obtenidos: ${detailData.length} registros`);
 
-      // Verificar si hay configuración de promociones
-      if (!mapping.promotionConfig || !mapping.promotionConfig.enabled) {
-        logger.debug(
-          "Promociones deshabilitadas, procesando datos normalmente"
+      // ✅ PASO 3: Verificar que llegaron los campos de promoción
+      const firstRecord = detailData[0];
+      const promotionFieldConfig =
+        PromotionProcessor.getFieldConfiguration(mapping);
+
+      logger.debug(
+        `🎁 Verificando campos de promoción en los datos obtenidos...`
+      );
+      logger.debug(
+        `🎁 Primer registro: ${JSON.stringify(firstRecord, null, 2)}`
+      );
+      logger.debug(
+        `🎁 Campos esperados: ${JSON.stringify(promotionFieldConfig, null, 2)}`
+      );
+
+      const missingFields = [];
+      const requiredFields = [
+        promotionFieldConfig.bonusField,
+        promotionFieldConfig.referenceField,
+        promotionFieldConfig.discountField,
+        promotionFieldConfig.lineNumberField,
+        promotionFieldConfig.articleField,
+        promotionFieldConfig.quantityField,
+      ];
+
+      requiredFields.forEach((field) => {
+        if (!firstRecord.hasOwnProperty(field)) {
+          missingFields.push(field);
+        }
+      });
+
+      if (missingFields.length > 0) {
+        logger.error(
+          `🎁 ❌ CAMPOS DE PROMOCIÓN FALTANTES: ${missingFields.join(", ")}`
         );
-        return detailData;
+        logger.error(
+          `🎁 Campos disponibles: ${Object.keys(firstRecord).join(", ")}`
+        );
+        throw new Error(
+          `Faltan campos requeridos para promociones: ${missingFields.join(
+            ", "
+          )}`
+        );
       }
 
-      // Validar configuración de promociones
-      if (!PromotionProcessor.validatePromotionConfig(mapping)) {
-        logger.warn(
-          "Configuración de promociones inválida, procesando sin promociones"
-        );
-        return detailData;
-      }
+      logger.info(`🎁 ✅ Todos los campos de promoción están presentes`);
 
       logger.info(
         `🎁 Procesando detalles con promociones para documento ${documentId}`
       );
 
-      // Procesar promociones
+      // ✅ PASO 4: Procesar promociones
       const processedData = PromotionProcessor.processPromotions(
         detailData,
         mapping
@@ -4994,6 +5052,133 @@ class DynamicTransferService {
 
     logger.debug(`🎁 ❌ No se encontró valor para ${targetField}`);
     return null;
+  }
+
+  /**
+   * ✅ NUEVO: Obtiene datos de detalle garantizando campos de promociones
+   * @param {Object} detailConfig - Configuración de la tabla de detalle
+   * @param {Object} parentTableConfig - Configuración de la tabla padre
+   * @param {string} documentId - ID del documento
+   * @param {Object} sourceConnection - Conexión origen
+   * @param {Object} mapping - Configuración de mapping
+   * @returns {Promise<Array>} - Datos de detalle con campos de promoción
+   */
+  async getDetailDataWithPromotionFields(
+    detailConfig,
+    parentTableConfig,
+    documentId,
+    sourceConnection,
+    mapping
+  ) {
+    logger.debug(`🎁 Obteniendo datos con campos de promoción garantizados...`);
+
+    // Obtener configuración de campos de promoción
+    const promotionFieldConfig =
+      PromotionProcessor.getFieldConfiguration(mapping);
+
+    // Campos requeridos para promociones
+    const requiredPromotionFields = [
+      promotionFieldConfig.bonusField, // ART_BON
+      promotionFieldConfig.referenceField, // COD_ART_RFR
+      promotionFieldConfig.discountField, // MON_DSC
+      promotionFieldConfig.lineNumberField, // NUM_LN
+      promotionFieldConfig.articleField, // COD_ART
+      promotionFieldConfig.quantityField, // CND_MAX
+    ];
+
+    logger.debug(
+      `🎁 Campos requeridos para promociones: ${requiredPromotionFields.join(
+        ", "
+      )}`
+    );
+
+    if (detailConfig.customQuery) {
+      // Si hay query personalizada, usarla tal como está
+      logger.debug(`🎁 Usando query personalizada existente`);
+      const query = detailConfig.customQuery.replace(
+        /@documentId/g,
+        documentId
+      );
+      const result = await SqlService.query(sourceConnection, query, {
+        documentId,
+      });
+      return result.recordset || [];
+    }
+
+    // ✅ CONSTRUIR QUERY ASEGURANDO CAMPOS DE PROMOCIÓN
+    const sourceTable = detailConfig.sourceTable;
+    const primaryKey = parentTableConfig.primaryKey || "NUM_PED";
+
+    // Obtener campos del mapping existente
+    const mappingFields = [];
+    if (detailConfig.fieldMappings && detailConfig.fieldMappings.length > 0) {
+      detailConfig.fieldMappings.forEach((fm) => {
+        if (fm.sourceField) {
+          mappingFields.push(fm.sourceField);
+        }
+      });
+    }
+
+    // ✅ COMBINAR campos del mapping + campos de promoción
+    const allFields = [
+      ...new Set([...mappingFields, ...requiredPromotionFields]),
+    ];
+
+    logger.debug(`🎁 Campos finales para query: ${allFields.join(", ")}`);
+    logger.debug(
+      `🎁 Total campos: ${allFields.length} (${mappingFields.length} mapping + ${requiredPromotionFields.length} promoción)`
+    );
+
+    // Construir query con todos los campos necesarios
+    const fieldsStr = allFields.join(", ");
+    let query = `SELECT ${fieldsStr} FROM ${sourceTable} WHERE ${primaryKey} = @documentId`;
+
+    // Aplicar filtro adicional si existe
+    if (detailConfig.filterCondition) {
+      query += ` AND ${detailConfig.filterCondition}`;
+    }
+
+    // Aplicar ordenamiento si existe
+    if (detailConfig.orderByColumn) {
+      query += ` ORDER BY ${detailConfig.orderByColumn}`;
+    }
+
+    logger.debug(`🎁 Query construida: ${query}`);
+
+    try {
+      const result = await SqlService.query(sourceConnection, query, {
+        documentId,
+      });
+      const data = result.recordset || [];
+
+      logger.info(
+        `🎁 Datos obtenidos con promociones: ${data.length} registros`
+      );
+
+      // Verificar que los datos incluyen campos de promoción
+      if (data.length > 0) {
+        const firstRecord = data[0];
+        logger.debug(
+          `🎁 Campos en primer registro: ${Object.keys(firstRecord).join(", ")}`
+        );
+
+        requiredPromotionFields.forEach((field) => {
+          if (firstRecord.hasOwnProperty(field)) {
+            logger.debug(
+              `🎁 ✅ Campo presente: ${field} = ${firstRecord[field]}`
+            );
+          } else {
+            logger.warn(`🎁 ❌ Campo faltante: ${field}`);
+          }
+        });
+      }
+
+      return data;
+    } catch (error) {
+      logger.error(`Error ejecutando query con promociones: ${error.message}`);
+      logger.error(`Query: ${query}`);
+      throw error;
+    }
   }
 }
 
