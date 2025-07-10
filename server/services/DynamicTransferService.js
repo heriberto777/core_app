@@ -3644,7 +3644,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Aplica conversión de unidades a un valor específico
+   * Aplica conversión de unidades a un valor específico - MEJORADO
    * @param {*} value - Valor original
    * @param {Object} unitConfig - Configuración de conversión
    * @param {Object} sourceData - Datos origen
@@ -3660,7 +3660,7 @@ class DynamicTransferService {
     columnLengthCache
   ) {
     try {
-      logger.debug(`🔧 Aplicando conversión de unidades`);
+      logger.debug(`🔧 Aplicando conversión de unidades mejorada`);
 
       // Validar que el valor original sea numérico
       const numericValue = parseFloat(value);
@@ -3677,8 +3677,16 @@ class DynamicTransferService {
         if (factorValue !== undefined && factorValue !== null) {
           conversionFactor = parseFloat(factorValue);
           if (isNaN(conversionFactor)) {
+            logger.warn(
+              `Factor de conversión inválido: ${factorValue}, usando 1`
+            );
             conversionFactor = 1;
           }
+        }
+      } else if (unitConfig.factor) {
+        conversionFactor = parseFloat(unitConfig.factor);
+        if (isNaN(conversionFactor)) {
+          conversionFactor = 1;
         }
       }
 
@@ -3693,20 +3701,59 @@ class DynamicTransferService {
         }
       }
 
-      // Aplicar conversión
+      // Aplicar conversión según operación
       let convertedValue;
-      if (unitConfig.operation === "divide") {
-        convertedValue =
-          conversionFactor !== 0
-            ? numericValue / conversionFactor
-            : numericValue;
-      } else {
-        convertedValue = numericValue * conversionFactor;
+      switch (unitConfig.operation) {
+        case "divide":
+          convertedValue =
+            conversionFactor !== 0
+              ? numericValue / conversionFactor
+              : numericValue;
+          break;
+        case "multiply":
+          convertedValue = numericValue * conversionFactor;
+          break;
+        case "add":
+          convertedValue = numericValue + conversionFactor;
+          break;
+        case "subtract":
+          convertedValue = numericValue - conversionFactor;
+          break;
+        default:
+          convertedValue = numericValue * conversionFactor;
+      }
+
+      // Aplicar redondeo si está configurado
+      if (unitConfig.decimalPlaces !== undefined) {
+        convertedValue = parseFloat(
+          convertedValue.toFixed(unitConfig.decimalPlaces)
+        );
+      }
+
+      // Validar rangos si están configurados
+      if (
+        unitConfig.minValue !== undefined &&
+        convertedValue < unitConfig.minValue
+      ) {
+        logger.warn(
+          `Valor convertido ${convertedValue} menor que mínimo ${unitConfig.minValue}`
+        );
+        convertedValue = unitConfig.minValue;
+      }
+
+      if (
+        unitConfig.maxValue !== undefined &&
+        convertedValue > unitConfig.maxValue
+      ) {
+        logger.warn(
+          `Valor convertido ${convertedValue} mayor que máximo ${unitConfig.maxValue}`
+        );
+        convertedValue = unitConfig.maxValue;
       }
 
       logger.info(
         `🔧 Conversión aplicada: ${value} ${
-          unitConfig.operation === "divide" ? "÷" : "×"
+          unitConfig.operation || "multiply"
         } ${conversionFactor} = ${convertedValue}`
       );
 
