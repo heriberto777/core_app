@@ -3,7 +3,7 @@ const logger = require("./logger");
 /**
  * Procesador de Promociones - Versión Corregida y Mejorada
  * Maneja la detección, transformación y aplicación de promociones automáticamente
- * Corrige los errores identificados en los logs de producción
+ * CORRIGE: Asignación correcta de líneas de referencia para productos bonus
  */
 class PromotionProcessor {
   // ===============================
@@ -50,28 +50,25 @@ class PromotionProcessor {
         );
       }
 
-      // Crear mapa de líneas para referencias
-      const lineMap = {};
-      data.forEach((row) => {
-        const lineNumber = this.extractValue(
-          row,
+      // ✅ CORREGIDO: Crear mapa de líneas ordenado por número de línea
+      const sortedData = [...data].sort((a, b) => {
+        const lineA = this.extractValue(
+          a,
           effectiveFieldConfig.lineNumberField
         );
-        const articleCode = this.extractValue(
-          row,
-          effectiveFieldConfig.articleField
+        const lineB = this.extractValue(
+          b,
+          effectiveFieldConfig.lineNumberField
         );
-        if (lineNumber && articleCode) {
-          lineMap[articleCode] = { ...row, lineNumber };
-        }
+        return (lineA || 0) - (lineB || 0);
       });
 
       logger.info(
-        `🎁 Mapa de líneas creado: ${Object.keys(lineMap).length} artículos`
+        `🎁 Datos ordenados por línea: ${sortedData.length} registros`
       );
 
       // Procesar líneas según su tipo
-      const processedData = data.map((row, index) => {
+      const processedData = sortedData.map((row, index) => {
         try {
           const lineType = this.detectLineType(row, effectiveFieldConfig);
 
@@ -82,7 +79,7 @@ class PromotionProcessor {
               return this.transformBonusLine(
                 row,
                 effectiveFieldConfig,
-                lineMap
+                sortedData // ✅ CORREGIDO: Pasar todos los datos ordenados
               );
             case "TRIGGER":
               return this.transformTriggerLine(row, effectiveFieldConfig);
@@ -274,19 +271,19 @@ class PromotionProcessor {
   // ===============================
 
   /**
-   * Transforma línea bonificada - CORREGIDO COMPLETAMENTE
+   * ✅ CORREGIDO: Transforma línea bonificada con lógica correcta de asignación de línea de referencia
    * @param {Object} bonusLine - Línea bonificada
    * @param {Object} fieldConfig - Configuración de campos
-   * @param {Object} lineMap - Mapa de líneas para referencias
+   * @param {Array} allSortedData - Todos los datos ordenados por línea
    * @returns {Object} - Línea transformada
    */
-  static transformBonusLine(bonusLine, fieldConfig, lineMap) {
+  static transformBonusLine(bonusLine, fieldConfig, allSortedData) {
     try {
       const referenceArticle = this.extractValue(
         bonusLine,
         fieldConfig.referenceField
       );
-      const lineNumber = this.extractValue(
+      const currentLineNumber = this.extractValue(
         bonusLine,
         fieldConfig.lineNumberField
       );
@@ -299,36 +296,40 @@ class PromotionProcessor {
         fieldConfig.quantityField
       );
 
-      // Buscar línea de referencia
-      const referenceLineNumber = lineMap[referenceArticle]?.lineNumber || 1;
-
       logger.error(
         `🎁 ============ TRANSFORMANDO LÍNEA BONIFICADA ============`
       );
-      logger.error(`🎁 Línea: ${lineNumber} | Artículo: ${articleCode}`);
       logger.error(
-        `🎁 Referencia: ${referenceArticle} -> línea ${referenceLineNumber}`
+        `🎁 Línea BONUS: ${currentLineNumber} | Artículo: ${articleCode}`
       );
-      logger.error(`🎁 Cantidad bonificada: ${bonusQuantity}`);
+      logger.error(`🎁 Busca referencia a artículo: ${referenceArticle}`);
+
+      // ✅ NUEVA LÓGICA: Buscar la línea trigger más cercana
+      const referenceLineNumber = this.findBestTriggerLine(
+        referenceArticle,
+        currentLineNumber,
+        allSortedData,
+        fieldConfig
+      );
+
+      logger.error(
+        `🎁 ✅ LÍNEA TRIGGER ENCONTRADA: línea ${referenceLineNumber} (artículo ${referenceArticle})`
+      );
 
       // ✅ CREAR TRANSFORMACIÓN CORRECTA PARA LÍNEA BONIFICADA
       const transformed = {
         ...bonusLine,
 
         // ✅ CAMPOS CORRECTOS PARA LÍNEA BONIFICADA
-        PEDIDO_LINEA_BONIF: referenceLineNumber, // ✅ Referencia a línea regular
+        PEDIDO_LINEA_BONIF: referenceLineNumber, // ✅ Referencia a línea trigger correcta
         CANTIDAD_BONIFICAD: this.parseNumericValue(bonusQuantity), // ✅ Cantidad bonificada
 
         // ✅ CAMPOS QUE DEBEN SER NULL PARA LÍNEAS BONIFICADAS
-        CANTIDAD_PEDIDA: null, // ❌ Era: bonusQuantity
-        CANTIDAD_A_FACTURA: null, // ❌ Era: bonusQuantity
+        CANTIDAD_PEDIDA: null,
+        CANTIDAD_A_FACTURA: null,
         CANTIDAD_FACTURADA: 0,
         CANTIDAD_RESERVADA: 0,
         CANTIDAD_CANCELADA: 0,
-
-        // ✅ ELIMINAR CAMPOS DUPLICADOS/INCORRECTOS
-        // NO agregar CANTIDAD_BONIF
-        // NO agregar CANTIDAD_A_FACTURA
 
         // Metadatos para debugging
         _IS_BONUS_LINE: true,
@@ -352,18 +353,6 @@ class PromotionProcessor {
         `🎁 CANTIDAD_A_FACTURA: ${transformed.CANTIDAD_A_FACTURA} (debe ser null)`
       );
       logger.error(`🎁 PEDIDO_LINEA_BONIF: ${transformed.PEDIDO_LINEA_BONIF}`);
-      logger.error(
-        `🎁 DATOS FINALES BONIFICACIÓN: ${JSON.stringify(
-          {
-            CANTIDAD_BONIFICAD: transformed.CANTIDAD_BONIFICAD,
-            CANTIDAD_PEDIDA: transformed.CANTIDAD_PEDIDA,
-            CANTIDAD_A_FACTURA: transformed.CANTIDAD_A_FACTURA,
-            PEDIDO_LINEA_BONIF: transformed.PEDIDO_LINEA_BONIF,
-          },
-          null,
-          2
-        )}`
-      );
 
       return transformed;
     } catch (error) {
@@ -372,6 +361,92 @@ class PromotionProcessor {
       );
       throw error;
     }
+  }
+
+  /**
+   * ✅ NUEVO: Encuentra la línea trigger más apropiada para una línea bonus
+   * @param {string} referenceArticle - Artículo de referencia
+   * @param {number} currentLineNumber - Número de línea actual (bonus)
+   * @param {Array} allSortedData - Todos los datos ordenados
+   * @param {Object} fieldConfig - Configuración de campos
+   * @returns {number} - Número de línea trigger encontrada
+   */
+  static findBestTriggerLine(
+    referenceArticle,
+    currentLineNumber,
+    allSortedData,
+    fieldConfig
+  ) {
+    logger.error(`🎯 BUSCANDO LÍNEA TRIGGER PARA:`);
+    logger.error(`🎯   Artículo referencia: ${referenceArticle}`);
+    logger.error(`🎯   Línea bonus actual: ${currentLineNumber}`);
+
+    // ✅ ESTRATEGIA 1: Buscar hacia arriba (líneas anteriores)
+    const linesAbove = allSortedData.filter((line) => {
+      const lineNumber = this.extractValue(line, fieldConfig.lineNumberField);
+      const articleCode = this.extractValue(line, fieldConfig.articleField);
+      const bonusField = this.extractValue(line, fieldConfig.bonusField);
+
+      return (
+        lineNumber < currentLineNumber &&
+        articleCode === referenceArticle &&
+        (bonusField === 0 || bonusField === null || bonusField === "")
+      );
+    });
+
+    if (linesAbove.length > 0) {
+      // Tomar la línea más cercana hacia arriba
+      const closestAbove = linesAbove[linesAbove.length - 1];
+      const lineNumber = this.extractValue(
+        closestAbove,
+        fieldConfig.lineNumberField
+      );
+      logger.error(`🎯 ✅ ENCONTRADA línea trigger ARRIBA: ${lineNumber}`);
+      return lineNumber;
+    }
+
+    // ✅ ESTRATEGIA 2: Buscar hacia abajo (líneas posteriores)
+    const linesBelow = allSortedData.filter((line) => {
+      const lineNumber = this.extractValue(line, fieldConfig.lineNumberField);
+      const articleCode = this.extractValue(line, fieldConfig.articleField);
+      const bonusField = this.extractValue(line, fieldConfig.bonusField);
+
+      return (
+        lineNumber > currentLineNumber &&
+        articleCode === referenceArticle &&
+        (bonusField === 0 || bonusField === null || bonusField === "")
+      );
+    });
+
+    if (linesBelow.length > 0) {
+      // Tomar la línea más cercana hacia abajo
+      const closestBelow = linesBelow[0];
+      const lineNumber = this.extractValue(
+        closestBelow,
+        fieldConfig.lineNumberField
+      );
+      logger.error(`🎯 ✅ ENCONTRADA línea trigger ABAJO: ${lineNumber}`);
+      return lineNumber;
+    }
+
+    // ✅ ESTRATEGIA 3: Fallback - buscar cualquier línea con el artículo
+    const anyLine = allSortedData.find((line) => {
+      const articleCode = this.extractValue(line, fieldConfig.articleField);
+      return articleCode === referenceArticle;
+    });
+
+    if (anyLine) {
+      const lineNumber = this.extractValue(
+        anyLine,
+        fieldConfig.lineNumberField
+      );
+      logger.error(`🎯 ⚠️ FALLBACK - usando línea: ${lineNumber}`);
+      return lineNumber;
+    }
+
+    // ✅ ÚLTIMO RECURSO: Línea 1
+    logger.error(`🎯 ❌ NO encontrada línea trigger, usando línea 1`);
+    return 1;
   }
 
   /**
@@ -411,10 +486,8 @@ class PromotionProcessor {
         CANTIDAD_CANCELADA: 0,
 
         // ✅ CAMPOS QUE DEBEN SER NULL PARA LÍNEAS NORMALES
-        PEDIDO_LINEA_BONIF: null, // ❌ Era: valor
-        CANTIDAD_BONIFICAD: null, // ❌ Era: valor
-
-        // ✅ NO agregar campos duplicados/incorrectos
+        PEDIDO_LINEA_BONIF: null,
+        CANTIDAD_BONIFICAD: null,
 
         // Metadatos
         _IS_TRIGGER_LINE: true,
@@ -435,18 +508,6 @@ class PromotionProcessor {
       );
       logger.error(
         `🎯 PEDIDO_LINEA_BONIF: ${transformed.PEDIDO_LINEA_BONIF} (debe ser null)`
-      );
-      logger.error(
-        `🎯 DATOS FINALES TRIGGER: ${JSON.stringify(
-          {
-            CANTIDAD_PEDIDA: transformed.CANTIDAD_PEDIDA,
-            CANTIDAD_A_FACTURA: transformed.CANTIDAD_A_FACTURA,
-            CANTIDAD_BONIFICAD: transformed.CANTIDAD_BONIFICAD,
-            PEDIDO_LINEA_BONIF: transformed.PEDIDO_LINEA_BONIF,
-          },
-          null,
-          2
-        )}`
       );
 
       return transformed;
@@ -510,7 +571,7 @@ class PromotionProcessor {
   // ===============================
 
   /**
-   * ✅ NUEVO: Extrae valor real de configuración de campo o datos directos
+   * ✅ MEJORADO: Extrae valor real de configuración de campo o datos directos
    * @param {Object} data - Datos de la fila
    * @param {string|Object} fieldConfig - Configuración del campo
    * @returns {*} - Valor extraído
@@ -550,7 +611,7 @@ class PromotionProcessor {
   }
 
   /**
-   * ✅ NUEVO: Convierte valor a numérico de manera segura
+   * ✅ MEJORADO: Convierte valor a numérico de manera segura
    * @param {*} value - Valor a convertir
    * @returns {number|null} - Valor numérico o null
    */
@@ -572,27 +633,70 @@ class PromotionProcessor {
   }
 
   /**
-   * ✅ NUEVO: Aplica conversión de unidades de manera segura
+   * ✅ MEJORADO: Aplica conversión de unidades de manera segura y completa
    * @param {number} value - Valor a convertir
    * @param {Object} conversion - Configuración de conversión
    * @returns {number} - Valor convertido
    */
   static applyUnitConversion(value, conversion) {
-    if (!conversion.enabled || typeof value !== "number" || isNaN(value)) {
+    if (
+      !conversion ||
+      !conversion.enabled ||
+      typeof value !== "number" ||
+      isNaN(value)
+    ) {
       return value;
     }
 
     try {
-      const factor = conversion.factor || 1;
+      let factor = conversion.factor || 1;
+
+      // Si hay campo de factor dinámico, usar ese valor
+      if (conversion.conversionFactorField && conversion.sourceData) {
+        const dynamicFactor =
+          conversion.sourceData[conversion.conversionFactorField];
+        if (dynamicFactor !== undefined && dynamicFactor !== null) {
+          factor = parseFloat(dynamicFactor);
+          if (isNaN(factor)) {
+            logger.warn(
+              `🔧 Factor de conversión inválido: ${dynamicFactor}, usando factor por defecto`
+            );
+            factor = conversion.factor || 1;
+          }
+        }
+      }
+
+      let convertedValue = value;
 
       switch (conversion.operation) {
         case "multiply":
-          return value * factor;
+          convertedValue = value * factor;
+          break;
         case "divide":
-          return factor !== 0 ? value / factor : value;
+          convertedValue = factor !== 0 ? value / factor : value;
+          break;
+        case "add":
+          convertedValue = value + factor;
+          break;
+        case "subtract":
+          convertedValue = value - factor;
+          break;
         default:
-          return value;
+          convertedValue = value;
       }
+
+      // Aplicar redondeo si está configurado
+      if (conversion.decimalPlaces !== undefined) {
+        convertedValue = parseFloat(
+          convertedValue.toFixed(conversion.decimalPlaces)
+        );
+      }
+
+      logger.debug(
+        `🔧 Conversión aplicada: ${value} ${conversion.operation} ${factor} = ${convertedValue}`
+      );
+
+      return convertedValue;
     } catch (error) {
       logger.warn(`🎁 Error en conversión de unidades: ${error.message}`);
       return value;
@@ -600,7 +704,7 @@ class PromotionProcessor {
   }
 
   /**
-   * ✅ NUEVO: Limpia datos transformados de objetos problemáticos
+   * ✅ MEJORADO: Limpia datos transformados de objetos problemáticos
    * @param {Object} transformed - Datos transformados
    */
   static cleanTransformedData(transformed) {
@@ -640,9 +744,7 @@ class PromotionProcessor {
       }
     });
 
-    logger.error(
-      `🧹 DATOS DESPUÉS DE LIMPIEZA: ${JSON.stringify(transformed, null, 2)}`
-    );
+    logger.debug(`🧹 Datos limpiados para inserción`);
   }
 
   // ===============================
