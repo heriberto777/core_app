@@ -1751,7 +1751,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa un campo individual - CORREGIDO para usar tu lógica existente
+   * Procesa un campo individual - CORREGIDO para extraer valores reales
    * @param {Object} fieldMapping - Configuración del campo
    * @param {Object} sourceData - Datos origen
    * @param {Object} lookupResults - Resultados de lookup
@@ -1833,32 +1833,15 @@ class DynamicTransferService {
             : fieldMapping.defaultValue;
       }
     }
-    // ✅ LÓGICA NORMAL CORREGIDA
+    // ✅ LÓGICA NORMAL CORREGIDA COMPLETAMENTE
     else {
       try {
         if (fieldMapping.sourceField) {
-          let sourceValue = sourceData[fieldMapping.sourceField];
-
-          // ✅ DETECTAR Y CORREGIR OBJETOS DE CONFIGURACIÓN
-          if (typeof sourceValue === "object" && sourceValue !== null) {
-            if (sourceValue.sourceField) {
-              logger.warn(
-                `🔧 ⚠️ Objeto de configuración detectado para ${fieldMapping.targetField}`
-              );
-              const realSourceField = sourceValue.sourceField;
-              const realValue = sourceData[realSourceField];
-              logger.debug(
-                `🔧 Extrayendo valor real: ${realSourceField} = ${realValue}`
-              );
-              value = realValue;
-            } else if (sourceValue.hasOwnProperty("value")) {
-              value = sourceValue.value;
-            } else {
-              value = sourceValue;
-            }
-          } else {
-            value = sourceValue;
-          }
+          // ✅ NUEVA LÓGICA: Extraer valor real de configuración compleja
+          value = this.extractRealValueFromFieldMapping(
+            fieldMapping,
+            sourceData
+          );
 
           if (value === null || value === undefined) {
             logger.debug(
@@ -1972,8 +1955,8 @@ class DynamicTransferService {
 
         // 🔥 USAR TU MÉTODO EXISTENTE applyUnitConversion
         value = await this.applyUnitConversion(
-          fieldMapping, // ✅ Pasa el fieldMapping completo
-          numericValue, // ✅ Valor numérico
+          numericValue, // ✅ CORREGIDO: Pasar solo el valor numérico, no el fieldMapping
+          fieldMapping.unitConversion, // ✅ CORREGIDO: Pasar solo la configuración de conversión
           sourceData, // ✅ Datos origen
           targetConnection, // ✅ Conexión
           columnLengthCache // ✅ Cache
@@ -1998,7 +1981,10 @@ class DynamicTransferService {
               ? null
               : fieldMapping.defaultValue;
         } else {
-          value = numericValue || 0; // Mantener valor original si no hay defaultValue
+          // ✅ MANTENER VALOR ORIGINAL SI NO HAY DEFAULT
+          const originalNumeric =
+            typeof value === "number" ? value : parseFloat(value);
+          value = isNaN(originalNumeric) ? 0 : originalNumeric;
         }
 
         if (fieldMapping.isRequired) {
@@ -2057,6 +2043,30 @@ class DynamicTransferService {
       (value.includes("GETDATE()") ||
         value.includes("NEWID()") ||
         value.includes("@@"));
+
+    // ✅ VALIDACIÓN FINAL: ASEGURAR QUE NUNCA SE DEVUELVA UN OBJETO
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      logger.error(
+        `🔧 ❌ DETECTADO OBJETO EN VALOR FINAL: ${
+          fieldMapping.targetField
+        } = ${JSON.stringify(value)}`
+      );
+
+      // Intentar extraer valor real del objeto
+      if (value.hasOwnProperty("value")) {
+        value = value.value;
+        logger.warn(`🔧 ⚠️ Extraído valor desde objeto.value: ${value}`);
+      } else if (value.defaultValue !== undefined) {
+        value = value.defaultValue;
+        logger.warn(`🔧 ⚠️ Usando defaultValue desde objeto: ${value}`);
+      } else {
+        // Como último recurso, convertir a null
+        value = null;
+        logger.error(
+          `🔧 ❌ Convirtiendo objeto problemático a null para ${fieldMapping.targetField}`
+        );
+      }
+    }
 
     logger.debug(
       `🔧 Valor final para ${
@@ -3684,29 +3694,30 @@ class DynamicTransferService {
   }
 
   /**
-   * Aplica conversión de unidades a un valor específico
-   * @param {*} value - Valor original
+   * Aplica conversión de unidades a un valor específico - MÉTODO CORREGIDO
+   * @param {number} numericValue - Valor numérico original
    * @param {Object} unitConfig - Configuración de conversión
    * @param {Object} sourceData - Datos origen
    * @param {Object} targetConnection - Conexión destino
    * @param {Map} columnLengthCache - Cache de longitudes
-   * @returns {Promise<*>} - Valor convertido
+   * @returns {Promise<number>} - Valor convertido
    */
   async applyUnitConversion(
-    value,
+    numericValue,
     unitConfig,
     sourceData,
     targetConnection,
     columnLengthCache
   ) {
     try {
-      logger.debug(`🔧 Aplicando conversión de unidades`);
+      logger.debug(
+        `🔧 Aplicando conversión de unidades a valor: ${numericValue}`
+      );
 
       // Validar que el valor original sea numérico
-      const numericValue = parseFloat(value);
       if (isNaN(numericValue)) {
-        logger.warn(`Valor no numérico para conversión: ${value}`);
-        return value;
+        logger.warn(`Valor no numérico para conversión: ${numericValue}`);
+        return numericValue;
       }
 
       // Obtener factor de conversión
@@ -3720,6 +3731,11 @@ class DynamicTransferService {
             conversionFactor = 1;
           }
         }
+      } else if (unitConfig.factor) {
+        conversionFactor = parseFloat(unitConfig.factor);
+        if (isNaN(conversionFactor)) {
+          conversionFactor = 1;
+        }
       }
 
       // Verificar unidad de medida si está configurada
@@ -3729,7 +3745,7 @@ class DynamicTransferService {
           logger.debug(
             `Unidad ${unitMeasure} no coincide con ${unitConfig.fromUnit}, sin conversión`
           );
-          return value;
+          return numericValue;
         }
       }
 
@@ -3745,7 +3761,7 @@ class DynamicTransferService {
       }
 
       logger.info(
-        `🔧 Conversión aplicada: ${value} ${
+        `🔧 Conversión aplicada: ${numericValue} ${
           unitConfig.operation === "divide" ? "÷" : "×"
         } ${conversionFactor} = ${convertedValue}`
       );
@@ -3753,10 +3769,9 @@ class DynamicTransferService {
       return convertedValue;
     } catch (error) {
       logger.error(`Error al aplicar conversión de unidades: ${error.message}`);
-      return value;
+      return numericValue;
     }
   }
-
   // ===============================
   // 9. MÉTODOS DE DEPENDENCIAS Y REGLAS
   // ===============================
@@ -5719,6 +5734,67 @@ class DynamicTransferService {
 
       return fallbackConfig;
     }
+  }
+
+  /**
+   * ✅ NUEVO: Extrae valor real de configuración de campo compleja
+   * @param {Object} fieldMapping - Configuración del campo
+   * @param {Object} sourceData - Datos origen
+   * @returns {*} - Valor real extraído
+   */
+  extractRealValueFromFieldMapping(fieldMapping, sourceData) {
+    let value = null;
+
+    // ✅ 1. OBTENER VALOR INICIAL
+    if (typeof fieldMapping.sourceField === "string") {
+      value = sourceData[fieldMapping.sourceField];
+    } else if (
+      typeof fieldMapping.sourceField === "object" &&
+      fieldMapping.sourceField?.sourceField
+    ) {
+      // Caso: fieldMapping.sourceField es un objeto de configuración
+      const realSourceField = fieldMapping.sourceField.sourceField;
+      value = sourceData[realSourceField];
+      logger.debug(
+        `🔧 Extraído desde objeto sourceField: ${realSourceField} = ${value}`
+      );
+    }
+
+    // ✅ 2. DETECTAR Y CORREGIR OBJETOS DE CONFIGURACIÓN EN LOS DATOS
+    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
+      logger.warn(
+        `🔧 ⚠️ Objeto de configuración detectado en datos para ${fieldMapping.targetField}`
+      );
+      logger.debug(`🔧 Objeto: ${JSON.stringify(value, null, 2)}`);
+
+      if (value.sourceField) {
+        // Es un objeto de configuración, extraer el valor real
+        const realSourceField = value.sourceField;
+        const realValue = sourceData[realSourceField];
+        logger.debug(
+          `🔧 Extrayendo valor real: ${realSourceField} = ${realValue}`
+        );
+        value = realValue;
+      } else if (value.hasOwnProperty("value")) {
+        // El objeto tiene una propiedad 'value'
+        value = value.value;
+        logger.debug(`🔧 Extraído desde objeto.value: ${value}`);
+      } else if (value.defaultValue !== undefined) {
+        // Usar defaultValue del objeto
+        value = value.defaultValue;
+        logger.debug(`🔧 Usando defaultValue desde objeto: ${value}`);
+      } else {
+        // Como último recurso, intentar convertir a string o usar null
+        logger.error(
+          `🔧 ❌ Objeto no reconocido, convirtiendo a null: ${JSON.stringify(
+            value
+          )}`
+        );
+        value = null;
+      }
+    }
+
+    return value;
   }
 }
 
