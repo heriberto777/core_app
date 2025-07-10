@@ -1717,7 +1717,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa un campo individual - CORREGIDO para usar lógica existente de longitudes
+   * Procesa un campo individual - CORREGIDO para usar tu lógica existente
    * @param {Object} fieldMapping - Configuración del campo
    * @param {Object} sourceData - Datos origen
    * @param {Object} lookupResults - Resultados de lookup
@@ -1748,7 +1748,7 @@ class DynamicTransferService {
       }`
     );
 
-    // ✅ LÓGICA AUTOMÁTICA PARA CAMPOS DE PROMOCIONES
+    // ✅ LÓGICA AUTOMÁTICA PARA CAMPOS DE PROMOCIONES (tu lógica existente)
     const isPromotionField = this.isPromotionTargetField(
       fieldMapping.targetField
     );
@@ -1758,7 +1758,6 @@ class DynamicTransferService {
         `🎁 CAMPO DE PROMOCIÓN DETECTADO: ${fieldMapping.targetField}`
       );
 
-      // Buscar automáticamente el valor en los datos procesados
       const promotionValue = this.findPromotionValue(
         fieldMapping.targetField,
         sourceData,
@@ -1780,13 +1779,12 @@ class DynamicTransferService {
             : fieldMapping.defaultValue;
       }
     }
-    // ✅ LÓGICA PARA CAMPOS DE PROMOCIÓN CON sourceField DEFINIDO
+    // ✅ LÓGICA PARA CAMPOS DE PROMOCIÓN CON sourceField DEFINIDO (tu lógica existente)
     else if (fieldMapping.isPromotionField && fieldMapping.sourceField) {
       logger.info(
         `🎁 CAMPO DE PROMOCIÓN CON SOURCE: ${fieldMapping.sourceField} -> ${fieldMapping.targetField}`
       );
 
-      // Buscar valor usando múltiples estrategias
       value = this.findFieldValueInData(
         fieldMapping.sourceField,
         sourceData,
@@ -1807,17 +1805,39 @@ class DynamicTransferService {
             : fieldMapping.defaultValue;
       }
     }
-    // ✅ LÓGICA NORMAL PARA CAMPOS NO PROMOCIONALES
+    // ✅ LÓGICA NORMAL CORREGIDA
     else {
       try {
         // 1. Verificar si tiene sourceField definido
         if (fieldMapping.sourceField) {
-          // Buscar valor usando múltiples estrategias
-          value = this.findFieldValueInData(
-            fieldMapping.sourceField,
-            sourceData,
-            mapping
-          );
+          // 🔥 CORRECCIÓN CRÍTICA: Extraer valor real de objetos de configuración
+          let sourceValue = sourceData[fieldMapping.sourceField];
+
+          // ✅ DETECTAR Y CORREGIR OBJETOS DE CONFIGURACIÓN
+          if (typeof sourceValue === "object" && sourceValue !== null) {
+            // Si es un objeto de configuración con sourceField, extraer el valor real
+            if (sourceValue.sourceField) {
+              logger.warn(
+                `🔧 ⚠️ Objeto de configuración detectado para ${fieldMapping.targetField}`
+              );
+              const realSourceField = sourceValue.sourceField;
+              const realValue = sourceData[realSourceField];
+              logger.debug(
+                `🔧 Extrayendo valor real: ${realSourceField} = ${realValue}`
+              );
+              value = realValue;
+            }
+            // Si es un objeto con valor directo pero no es de configuración
+            else if (sourceValue.hasOwnProperty("value")) {
+              value = sourceValue.value;
+            }
+            // Si es un objeto complejo, usar como está (puede ser válido para algunos casos)
+            else {
+              value = sourceValue;
+            }
+          } else {
+            value = sourceValue;
+          }
 
           if (value === null || value === undefined) {
             logger.debug(
@@ -1851,10 +1871,19 @@ class DynamicTransferService {
           );
         }
 
-        // 4. Manejar consecutivos
-        if (fieldMapping.targetField === "PEDIDO" && currentConsecutive) {
-          value = currentConsecutive.formatted;
-          logger.debug(`Consecutivo asignado: ${value}`);
+        // 🔥 4. USAR TUS MÉTODOS EXISTENTES DE CONSECUTIVOS
+        if (
+          this.isConsecutiveField(fieldMapping, mapping) &&
+          currentConsecutive
+        ) {
+          value = this.getConsecutiveValue(
+            fieldMapping,
+            currentConsecutive,
+            isDetailTable
+          );
+          logger.debug(
+            `🔢 Consecutivo asignado usando tu sistema centralizado: ${value}`
+          );
         }
       } catch (error) {
         logger.error(
@@ -1880,30 +1909,60 @@ class DynamicTransferService {
       throw new Error(`Campo requerido ${fieldMapping.targetField} está vacío`);
     }
 
-    // Aplicar conversión de unidades si está habilitada
+    // 🔥 CORRECCIÓN CRÍTICA: Aplicar conversión de unidades SOLO con valores numéricos válidos
     if (
       fieldMapping.unitConversion &&
       fieldMapping.unitConversion.enabled &&
       value !== null
     ) {
       try {
+        // ✅ VERIFICAR QUE EL VALOR SEA REALMENTE NUMÉRICO
+        let numericValue;
+
+        if (typeof value === "number") {
+          numericValue = value;
+        } else if (typeof value === "string") {
+          numericValue = parseFloat(value);
+        } else {
+          throw new Error(`Valor no convertible a número: ${typeof value}`);
+        }
+
+        if (isNaN(numericValue)) {
+          throw new Error(`Valor no numérico para conversión: ${value}`);
+        }
+
+        // ✅ USAR TU MÉTODO EXISTENTE DE CONVERSIÓN
         value = await this.applyUnitConversion(
-          fieldMapping,
           value,
+          fieldMapping.unitConversion,
           sourceData,
-          targetConnection
+          targetConnection,
+          columnLengthCache
         );
+
+        logger.debug(`🔧 Conversión aplicada: ${numericValue} -> ${value}`);
       } catch (conversionError) {
         logger.error(
-          `Error en conversión de unidades: ${conversionError.message}`
+          `Error en conversión de unidades para ${fieldMapping.targetField}: ${conversionError.message}`
         );
+
+        // ✅ USAR VALOR POR DEFECTO EN CASO DE ERROR
+        if (fieldMapping.defaultValue !== undefined) {
+          value =
+            fieldMapping.defaultValue === "NULL"
+              ? null
+              : fieldMapping.defaultValue;
+        } else {
+          value = 0; // Valor seguro para campos numéricos
+        }
+
         if (fieldMapping.isRequired) {
           throw conversionError;
         }
       }
     }
 
-    // Aplicar mapeo de valores si está configurado
+    // Aplicar mapeo de valores si está configurado (tu lógica existente)
     if (fieldMapping.valueMappings && fieldMapping.valueMappings.length > 0) {
       const mappedValue = this.applyValueMapping(
         fieldMapping.valueMappings,
@@ -1914,12 +1973,12 @@ class DynamicTransferService {
       }
     }
 
-    // Remover prefijo si está configurado
+    // Remover prefijo si está configurado (tu lógica existente)
     if (fieldMapping.removePrefix && value && typeof value === "string") {
       value = value.replace(new RegExp(`^${fieldMapping.removePrefix}`), "");
     }
 
-    // ✅ USAR LÓGICA EXISTENTE PARA LONGITUD MÁXIMA
+    // ✅ USAR TU LÓGICA EXISTENTE PARA LONGITUD MÁXIMA
     if (
       value &&
       typeof value === "string" &&
@@ -1933,7 +1992,7 @@ class DynamicTransferService {
       );
     }
 
-    // ✅ VALIDACIÓN AUTOMÁTICA PARA CAMPOS DE FECHA CRÍTICOS (LÓGICA EXISTENTE)
+    // ✅ TU VALIDACIÓN AUTOMÁTICA EXISTENTE PARA CAMPOS DE FECHA
     if (
       (value === null || value === undefined) &&
       fieldMapping.targetField &&
@@ -1947,7 +2006,7 @@ class DynamicTransferService {
       return { value: "GETDATE()", isDirectSql: true };
     }
 
-    // Manejar valores SQL directos
+    // Manejar valores SQL directos (tu lógica existente)
     const isDirectSql =
       typeof value === "string" &&
       (value.includes("GETDATE()") ||
@@ -2371,7 +2430,7 @@ class DynamicTransferService {
   // ===============================
 
   /**
-   * Ejecuta inserción en la base de datos - MEJORADO con logging de promociones
+   * Ejecuta inserción en la base de datos - CORREGIDO con validación de objetos
    * @param {string} targetTable - Tabla destino
    * @param {Array} targetFields - Campos a insertar
    * @param {Array} targetValues - Valores a insertar
@@ -2388,36 +2447,97 @@ class DynamicTransferService {
     targetConnection
   ) {
     try {
-      // ✅ IDENTIFICAR CAMPOS DE PROMOCIONES
-      const promotionFields = targetFields.filter(
+      // ✅ VALIDACIÓN CRÍTICA: Detectar objetos de configuración antes de insertar
+      const validatedParams = {};
+      const problematicFields = [];
+
+      // Validar cada parámetro
+      Object.keys(targetData).forEach((key) => {
+        const value = targetData[key];
+
+        // ✅ DETECTAR OBJETOS DE CONFIGURACIÓN PROBLEMÁTICOS
+        if (typeof value === "object" && value !== null) {
+          // Si tiene sourceField, targetField, etc. es un objeto de configuración
+          if (value.sourceField || value.targetField || value.unitConversion) {
+            problematicFields.push({
+              field: key,
+              type: "configuration_object",
+              value: value,
+            });
+
+            logger.error(`❌ OBJETO DE CONFIGURACIÓN DETECTADO EN ${key}:`);
+            logger.error(
+              `❌ Valor problemático: ${JSON.stringify(value, null, 2)}`
+            );
+
+            // Intentar extraer valor real si es posible
+            if (value.defaultValue !== undefined) {
+              validatedParams[key] = value.defaultValue;
+              logger.warn(
+                `🔧 Usando defaultValue para ${key}: ${value.defaultValue}`
+              );
+            } else {
+              // Omitir este campo de la inserción
+              logger.error(
+                `❌ Campo ${key} omitido de la inserción por contener objeto de configuración`
+              );
+              return;
+            }
+          } else {
+            // Es un objeto válido (fecha, etc.)
+            validatedParams[key] = value;
+          }
+        } else {
+          // Es un valor primitivo válido
+          validatedParams[key] = value;
+        }
+      });
+
+      // ✅ SI HAY CAMPOS PROBLEMÁTICOS, REGISTRAR ERROR DETALLADO
+      if (problematicFields.length > 0) {
+        logger.error(`❌ CAMPOS PROBLEMÁTICOS DETECTADOS EN ${targetTable}:`);
+        problematicFields.forEach((pf) => {
+          logger.error(`❌   ${pf.field}: ${pf.type}`);
+        });
+
+        // Lanzar error específico que ayude a identificar el origen
+        throw new Error(
+          `Campos contienen objetos de configuración en lugar de valores: ${problematicFields
+            .map((pf) => pf.field)
+            .join(", ")}`
+        );
+      }
+
+      // ✅ RECONSTRUIR ARRAYS CON DATOS VALIDADOS
+      const finalFields = [];
+      const finalValues = [];
+
+      targetFields.forEach((field, index) => {
+        if (directSqlFields.has(field)) {
+          // Campo SQL directo - usar tal como está
+          finalFields.push(field);
+          finalValues.push(targetValues[index]);
+        } else if (validatedParams.hasOwnProperty(field)) {
+          // Campo con parámetro validado
+          finalFields.push(field);
+          finalValues.push(`@${field}`);
+        }
+        // Si no está en validatedParams, se omite (ya se loggeó el error arriba)
+      });
+
+      // ✅ IDENTIFICAR CAMPOS DE PROMOCIONES PARA TU LOGGING EXISTENTE
+      const promotionFields = finalFields.filter(
         (field) =>
           field.includes("BONIF") ||
           field.includes("CANTIDAD_") ||
           field.includes("PEDIDO_LINEA")
       );
 
-      logger.info(
-        ` aqui vamos mostrar targetFields: ${
-          (JSON.stringify(targetFields), null, 2)
-        }`
-      );
-      logger.info(
-        ` aqui enviamos targetValues: ${
-          (JSON.stringify(targetValues), null, 2)
-        }`
-      );
-
-      // ${JSON.stringify(
-      //     promotionInfo,
-      //     null,
-      //     2
-      //   )}
-
-      const regularFields = targetFields.filter(
+      const regularFields = finalFields.filter(
         (field) => !promotionFields.includes(field)
       );
 
-      // ✅ LOGGING DETALLADO DE PROMOCIONES
+      // ✅ TU LOGGING DETALLADO EXISTENTE PARA PROMOCIONES
       if (promotionFields.length > 0) {
         logger.info(`🎁 🚀 INSERTANDO CAMPOS DE PROMOCIÓN EN ${targetTable}:`);
         logger.info(`🎁   Total campos promoción: ${promotionFields.length}`);
@@ -2425,8 +2545,8 @@ class DynamicTransferService {
 
         promotionFields.forEach((field) => {
           const value = directSqlFields.has(field)
-            ? targetValues[targetFields.indexOf(field)]
-            : targetData[field];
+            ? finalValues[finalFields.indexOf(field)]
+            : validatedParams[field];
           logger.info(
             `🎁 Resultado de promocion a insertar:  ${field}: ${value}`
           );
@@ -2434,35 +2554,31 @@ class DynamicTransferService {
       }
 
       // Construir query de inserción
-      const fieldsStr = targetFields.join(", ");
-      const valuesStr = targetValues.join(", ");
+      const fieldsStr = finalFields.join(", ");
+      const valuesStr = finalValues.join(", ");
       const query = `INSERT INTO ${targetTable} (${fieldsStr}) VALUES (${valuesStr})`;
 
       logger.debug(`🚀 Ejecutando inserción en ${targetTable}`);
       logger.debug(`🚀 Query: ${query}`);
 
-      // Preparar parámetros
-      const params = {};
-      targetFields.forEach((field, index) => {
-        if (!directSqlFields.has(field)) {
-          params[field] = targetData[field];
-        }
-      });
-
-      // ✅ LOG DE PARÁMETROS DE PROMOCIÓN
+      // ✅ TU LOGGING DETALLADO EXISTENTE DE PARÁMETROS
       if (promotionFields.length > 0) {
         logger.debug(`🎁 Parámetros de promoción:`);
         promotionFields.forEach((field) => {
-          if (params.hasOwnProperty(field)) {
-            logger.debug(`🎁   @${field} = ${params[field]}`);
+          if (validatedParams.hasOwnProperty(field)) {
+            logger.debug(`🎁   @${field} = ${validatedParams[field]}`);
           }
         });
       }
 
-      // Ejecutar inserción
-      const result = await SqlService.query(targetConnection, query, params);
+      // Ejecutar inserción con parámetros validados
+      const result = await SqlService.query(
+        targetConnection,
+        query,
+        validatedParams
+      );
 
-      // ✅ LOG DE ÉXITO CON PROMOCIONES
+      // ✅ TU LOGGING DE ÉXITO EXISTENTE
       if (promotionFields.length > 0) {
         logger.info(
           `🎁 ✅ INSERCIÓN CON PROMOCIONES EXITOSA en ${targetTable}`
@@ -2483,6 +2599,8 @@ class DynamicTransferService {
           }`
         );
       }
+
+      return result;
     } catch (error) {
       logger.error(`❌ Error en inserción en ${targetTable}: ${error.message}`);
       logger.error(
@@ -2491,7 +2609,7 @@ class DynamicTransferService {
         )}) VALUES (${targetValues.join(", ")})`
       );
 
-      // ✅ LOG DE ERROR CON CONTEXTO DE PROMOCIONES
+      // ✅ TU LOGGING DE ERROR EXISTENTE CON CONTEXTO DE PROMOCIONES
       const promotionFields = targetFields.filter(
         (field) =>
           field.includes("BONIF") ||
@@ -3637,7 +3755,7 @@ class DynamicTransferService {
   // ===============================
 
   /**
-   * Marca documentos como procesados según la estrategia configurada
+   * Marca documentos como procesados - LIMPIO sin método flag
    * @param {Array|string} documentIds - ID(s) de documentos
    * @param {Object} mapping - Configuración de mapeo
    * @param {Object} connection - Conexión a la base de datos
@@ -3658,63 +3776,176 @@ class DynamicTransferService {
       } documento(s) como procesado(s)`
     );
 
-    const strategy = mapping.markProcessedStrategy || "individual";
-    const config = mapping.markProcessedConfig || {};
-
     try {
+      // ✅ 1. VERIFICAR SI EL MARCADO ESTÁ CONFIGURADO
+      if (
+        !mapping.markProcessedField &&
+        !mapping.markProcessedConfig?.processedField
+      ) {
+        logger.info(
+          `📋 No hay campo de marcado configurado, omitiendo marcado`
+        );
+        logger.info(
+          `✅ Documentos procesados exitosamente sin marcado: ${docArray.length}`
+        );
+        return {
+          success: docArray.length,
+          failed: 0,
+          errors: [],
+          skipped: true,
+          reason: "No processed field configured",
+        };
+      }
+
+      // ✅ 2. OBTENER CONFIGURACIÓN DE MARCADO DESDE MAPPING
+      const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
+      if (!mainTable) {
+        logger.warn(
+          "⚠️ No se encontró tabla principal para marcado, omitiendo marcado"
+        );
+        return { success: docArray.length, failed: 0, errors: [] };
+      }
+
+      // ✅ 3. DETERMINAR CAMPO DE MARCADO DESDE CONFIGURACIÓN
+      const config = mapping.markProcessedConfig || {};
+      const processedFieldName =
+        mapping.markProcessedField || config.processedField || "PROCESSED"; // fallback solo si no está configurado
+
+      logger.debug(`🔍 Campo de marcado configurado: ${processedFieldName}`);
+
+      // ✅ 4. VERIFICAR SI LA COLUMNA CONFIGURADA EXISTE
+      let hasConfiguredColumn = false;
+      try {
+        const columns = await this.getTableColumns(
+          connection,
+          mainTable.sourceTable
+        );
+        hasConfiguredColumn = columns.some(
+          (col) =>
+            col.COLUMN_NAME &&
+            col.COLUMN_NAME.toUpperCase() === processedFieldName.toUpperCase()
+        );
+
+        logger.debug(
+          `🔍 Verificación columna ${processedFieldName} en ${
+            mainTable.sourceTable
+          }: ${hasConfiguredColumn ? "EXISTE" : "NO EXISTE"}`
+        );
+      } catch (columnError) {
+        logger.warn(
+          `⚠️ Error verificando columnas en ${mainTable.sourceTable}: ${columnError.message}`
+        );
+        hasConfiguredColumn = false;
+      }
+
+      // ✅ 5. DECIDIR QUÉ HACER SEGÚN CONFIGURACIÓN
+      if (!hasConfiguredColumn) {
+        if (config.requiredForSuccess) {
+          logger.error(
+            `❌ Campo de marcado requerido ${processedFieldName} no existe en ${mainTable.sourceTable}`
+          );
+          throw new Error(
+            `Campo de marcado requerido '${processedFieldName}' no encontrado en tabla ${mainTable.sourceTable}`
+          );
+        } else {
+          logger.info(
+            `⚠️ Campo de marcado ${processedFieldName} no existe en ${mainTable.sourceTable}, omitiendo marcado`
+          );
+          logger.info(
+            `📋 Documentos procesados exitosamente sin marcado: ${docArray.length}`
+          );
+          return {
+            success: docArray.length,
+            failed: 0,
+            errors: [],
+            skipped: true,
+            reason: `Column '${processedFieldName}' does not exist`,
+          };
+        }
+      }
+
+      // ✅ 6. EJECUTAR ESTRATEGIA DE MARCADO (SIN FLAG)
+      const strategy = mapping.markProcessedStrategy || "individual";
+      logger.info(
+        `📋 Ejecutando estrategia de marcado: ${strategy} con campo ${processedFieldName}`
+      );
+
+      let result;
       switch (strategy) {
         case "individual":
-          return await this.markDocumentsIndividually(
+          result = await this.markDocumentsIndividually(
             docArray,
             mapping,
             connection,
             shouldMark,
-            config
+            config,
+            processedFieldName
           );
+          break;
         case "batch":
-          return await this.markDocumentsBatch(
+          result = await this.markDocumentsBatch(
             docArray,
             mapping,
             connection,
             shouldMark,
-            config
+            config,
+            processedFieldName
           );
-        case "flag":
-          return await this.markDocumentsWithFlag(
-            docArray,
-            mapping,
-            connection,
-            shouldMark,
-            config
-          );
+          break;
+        case "none":
+          logger.info(`📋 Estrategia 'none' configurada, omitiendo marcado`);
+          result = { success: docArray.length, failed: 0, errors: [] };
+          break;
         default:
-          throw new Error(`Estrategia de marcado no soportada: ${strategy}`);
+          logger.warn(
+            `⚠️ Estrategia desconocida: ${strategy}, usando 'individual' por defecto`
+          );
+          result = await this.markDocumentsIndividually(
+            docArray,
+            mapping,
+            connection,
+            shouldMark,
+            config,
+            processedFieldName
+          );
       }
+
+      return result;
     } catch (error) {
       logger.error(
         `Error al ${shouldMark ? "marcar" : "desmarcar"} documentos: ${
           error.message
         }`
       );
-      throw error;
+
+      // ✅ DECIDIR SI EL ERROR ES CRÍTICO O NO
+      const config = mapping.markProcessedConfig || {};
+      if (config.requiredForSuccess) {
+        throw error;
+      } else {
+        logger.warn(
+          `⚠️ Continuando procesamiento a pesar del error de marcado no crítico`
+        );
+        return {
+          success: 0,
+          failed: docArray.length,
+          errors: [{ error: error.message }],
+          nonCritical: true,
+        };
+      }
     }
   }
 
   /**
-   * Marca documentos individualmente
-   * @param {Array} documentIds - IDs de documentos
-   * @param {Object} mapping - Configuración de mapping
-   * @param {Object} connection - Conexión a BD
-   * @param {boolean} shouldMark - Si marcar o desmarcar
-   * @param {Object} config - Configuración de marcado
-   * @returns {Promise<Object>} - Resultado del marcado
+   * Marca documentos individualmente - MÉTODO MANTENIDO
    */
   async markDocumentsIndividually(
     documentIds,
     mapping,
     connection,
     shouldMark,
-    config
+    config,
+    processedFieldName
   ) {
     const results = { success: 0, failed: 0, errors: [] };
 
@@ -3724,7 +3955,6 @@ class DynamicTransferService {
     }
 
     const primaryKey = mainTable.primaryKey || "NUM_PED";
-    const processedField = config.processedField || "PROCESSED";
 
     for (const documentId of documentIds) {
       try {
@@ -3732,14 +3962,14 @@ class DynamicTransferService {
         let params = { documentId };
 
         if (shouldMark) {
-          let setClause = `${processedField} = 1`;
+          let setClause = `${processedFieldName} = 1`;
           if (config.includeTimestamp) {
             const timestampField = config.timestampField || "PROCESSED_DATE";
             setClause += `, ${timestampField} = GETDATE()`;
           }
           query = `UPDATE ${mainTable.sourceTable} SET ${setClause} WHERE ${primaryKey} = @documentId`;
         } else {
-          let setClause = `${processedField} = 0`;
+          let setClause = `${processedFieldName} = 0`;
           if (config.includeTimestamp) {
             const timestampField = config.timestampField || "PROCESSED_DATE";
             setClause += `, ${timestampField} = NULL`;
@@ -3751,15 +3981,15 @@ class DynamicTransferService {
         results.success++;
 
         logger.debug(
-          `Documento ${documentId} ${
+          `✅ Documento ${documentId} ${
             shouldMark ? "marcado" : "desmarcado"
-          } exitosamente`
+          } exitosamente usando campo ${processedFieldName}`
         );
       } catch (error) {
         results.failed++;
         results.errors.push({ documentId, error: error.message });
         logger.error(
-          `Error al ${
+          `❌ Error al ${
             shouldMark ? "marcar" : "desmarcar"
           } documento ${documentId}: ${error.message}`
         );
@@ -3770,20 +4000,15 @@ class DynamicTransferService {
   }
 
   /**
-   * Marca documentos en lotes
-   * @param {Array} documentIds - IDs de documentos
-   * @param {Object} mapping - Configuración de mapping
-   * @param {Object} connection - Conexión a BD
-   * @param {boolean} shouldMark - Si marcar o desmarcar
-   * @param {Object} config - Configuración de marcado
-   * @returns {Promise<Object>} - Resultado del marcado
+   * Marca documentos en lotes - MÉTODO MANTENIDO
    */
   async markDocumentsBatch(
     documentIds,
     mapping,
     connection,
     shouldMark,
-    config
+    config,
+    processedFieldName
   ) {
     const results = { success: 0, failed: 0, errors: [] };
 
@@ -3793,10 +4018,8 @@ class DynamicTransferService {
     }
 
     const primaryKey = mainTable.primaryKey || "NUM_PED";
-    const processedField = config.processedField || "PROCESSED";
     const batchSize = config.batchSize || 100;
 
-    // Procesar en lotes
     for (let i = 0; i < documentIds.length; i += batchSize) {
       const batch = documentIds.slice(i, i + batchSize);
 
@@ -3810,14 +4033,14 @@ class DynamicTransferService {
 
         let query;
         if (shouldMark) {
-          let setClause = `${processedField} = 1`;
+          let setClause = `${processedFieldName} = 1`;
           if (config.includeTimestamp) {
             const timestampField = config.timestampField || "PROCESSED_DATE";
             setClause += `, ${timestampField} = GETDATE()`;
           }
           query = `UPDATE ${mainTable.sourceTable} SET ${setClause} WHERE ${primaryKey} IN (${placeholders})`;
         } else {
-          let setClause = `${processedField} = 0`;
+          let setClause = `${processedFieldName} = 0`;
           if (config.includeTimestamp) {
             const timestampField = config.timestampField || "PROCESSED_DATE";
             setClause += `, ${timestampField} = NULL`;
@@ -3829,9 +4052,9 @@ class DynamicTransferService {
         results.success += batch.length;
 
         logger.debug(
-          `Lote de ${batch.length} documentos ${
+          `✅ Lote de ${batch.length} documentos ${
             shouldMark ? "marcados" : "desmarcados"
-          } exitosamente`
+          } exitosamente usando campo ${processedFieldName}`
         );
       } catch (error) {
         results.failed += batch.length;
@@ -3839,79 +4062,9 @@ class DynamicTransferService {
           results.errors.push({ documentId: docId, error: error.message });
         });
         logger.error(
-          `Error al ${
+          `❌ Error al ${
             shouldMark ? "marcar" : "desmarcar"
           } lote de documentos: ${error.message}`
-        );
-      }
-    }
-
-    return results;
-  }
-
-  /**
-   * Marca documentos con flag
-   * @param {Array} documentIds - IDs de documentos
-   * @param {Object} mapping - Configuración de mapping
-   * @param {Object} connection - Conexión a BD
-   * @param {boolean} shouldMark - Si marcar o desmarcar
-   * @param {Object} config - Configuración de marcado
-   * @returns {Promise<Object>} - Resultado del marcado
-   */
-  async markDocumentsWithFlag(
-    documentIds,
-    mapping,
-    connection,
-    shouldMark,
-    config
-  ) {
-    const results = { success: 0, failed: 0, errors: [] };
-
-    const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
-    if (!mainTable) {
-      throw new Error("No se encontró tabla principal");
-    }
-
-    const primaryKey = mainTable.primaryKey || "NUM_PED";
-    const flagField = config.flagField || "TRANSFER_FLAG";
-    const flagValue = config.flagValue || "PROCESSED";
-
-    for (const documentId of documentIds) {
-      try {
-        let query;
-        let params = { documentId };
-
-        if (shouldMark) {
-          let setClause = `${flagField} = '${flagValue}'`;
-          if (config.includeTimestamp) {
-            const timestampField = config.timestampField || "FLAG_DATE";
-            setClause += `, ${timestampField} = GETDATE()`;
-          }
-          query = `UPDATE ${mainTable.sourceTable} SET ${setClause} WHERE ${primaryKey} = @documentId`;
-        } else {
-          let setClause = `${flagField} = NULL`;
-          if (config.includeTimestamp) {
-            const timestampField = config.timestampField || "FLAG_DATE";
-            setClause += `, ${timestampField} = NULL`;
-          }
-          query = `UPDATE ${mainTable.sourceTable} SET ${setClause} WHERE ${primaryKey} = @documentId`;
-        }
-
-        await SqlService.query(connection, query, params);
-        results.success++;
-
-        logger.debug(
-          `Documento ${documentId} ${
-            shouldMark ? "marcado" : "desmarcado"
-          } con flag exitosamente`
-        );
-      } catch (error) {
-        results.failed++;
-        results.errors.push({ documentId, error: error.message });
-        logger.error(
-          `Error al ${
-            shouldMark ? "marcar" : "desmarcar"
-          } documento ${documentId} con flag: ${error.message}`
         );
       }
     }
