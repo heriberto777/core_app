@@ -174,7 +174,12 @@ class PromotionProcessor {
       const articleCode = this.extractValue(row, fieldConfig.articleField);
       const quantity = this.extractValue(row, fieldConfig.quantityField);
 
-      if (articleCode && quantity && parseFloat(quantity) > 0) {
+      if (
+        articleCode &&
+        bonusIndicator === 0 &&
+        quantity &&
+        parseFloat(quantity) > 0
+      ) {
         logger.debug(
           `🎁 Línea trigger detectada: ${articleCode} (qty: ${quantity})`
         );
@@ -474,7 +479,7 @@ class PromotionProcessor {
           this.parseNumericValue(quantity),
         [fieldConfig.invoiceQuantity || "CANTIDAD_A_FACTURA"]:
           this.parseNumericValue(quantity),
-        [fieldConfig.bonusQuantity || "CANTIDAD_BONIF"]: null,
+        [fieldConfig.bonusQuantity || "CANTIDAD_BONIFICAD"]: null,
 
         // ✅ CAMPOS ESPECÍFICOS ADICIONALES
         PEDIDO_LINEA_BONIF: null,
