@@ -297,31 +297,35 @@ class PromotionProcessor {
       // Buscar línea de referencia
       const referenceLineNumber = lineMap[referenceArticle]?.lineNumber || 1;
 
-      logger.info(`🎁 Transformando línea bonificada:`);
-      logger.info(`🎁   Línea: ${lineNumber} | Artículo: ${articleCode}`);
-      logger.info(
-        `🎁   Referencia: ${referenceArticle} -> línea ${referenceLineNumber}`
+      logger.error(
+        `🎁 ============ TRANSFORMANDO LÍNEA BONIFICADA ============`
       );
-      logger.info(`🎁   Cantidad bonificada: ${bonusQuantity}`);
+      logger.error(`🎁 Línea: ${lineNumber} | Artículo: ${articleCode}`);
+      logger.error(
+        `🎁 Referencia: ${referenceArticle} -> línea ${referenceLineNumber}`
+      );
+      logger.error(`🎁 Cantidad bonificada: ${bonusQuantity}`);
 
-      // ✅ CREAR TRANSFORMACIÓN CORREGIDA
+      // ✅ CREAR TRANSFORMACIÓN CORRECTA PARA LÍNEA BONIFICADA
       const transformed = {
         ...bonusLine,
 
-        // ✅ CAMPOS DE PROMOCIÓN CON VALORES REALES
-        [fieldConfig.bonusLineRef]: referenceLineNumber,
-        [fieldConfig.orderedQuantity]: null, // Línea bonificada no tiene cantidad pedida
-        [fieldConfig.invoiceQuantity]: null, // Línea bonificada no factura inicialmente
-        [fieldConfig.bonusQuantity]: this.parseNumericValue(bonusQuantity),
+        // ✅ CAMPOS CORRECTOS PARA LÍNEA BONIFICADA
+        PEDIDO_LINEA_BONIF: referenceLineNumber, // ✅ Referencia a línea regular
+        CANTIDAD_BONIFICAD: this.parseNumericValue(bonusQuantity), // ✅ Cantidad bonificada
 
-        // ✅ CAMPOS ESPECÍFICOS ADICIONALES
-        PEDIDO_LINEA_BONIF: referenceLineNumber,
-        CANTIDAD_PEDIDA: null,
-        CANTIDAD_A_FACTURAR: null,
-        CANTIDAD_BONIFICAD: this.parseNumericValue(bonusQuantity),
-        CANTIDAD_BONIF: this.parseNumericValue(bonusQuantity),
+        // ✅ CAMPOS QUE DEBEN SER NULL PARA LÍNEAS BONIFICADAS
+        CANTIDAD_PEDIDA: null, // ❌ Era: bonusQuantity
+        CANTIDAD_A_FACTURA: null, // ❌ Era: bonusQuantity
+        CANTIDAD_FACTURADA: 0,
+        CANTIDAD_RESERVADA: 0,
+        CANTIDAD_CANCELADA: 0,
 
-        // Metadatos para debugging y control
+        // ✅ ELIMINAR CAMPOS DUPLICADOS/INCORRECTOS
+        // NO agregar CANTIDAD_BONIF
+        // NO agregar CANTIDAD_A_FACTURA
+
+        // Metadatos para debugging
         _IS_BONUS_LINE: true,
         _REFERENCE_ARTICLE: referenceArticle,
         _REFERENCE_LINE_NUMBER: referenceLineNumber,
@@ -331,13 +335,36 @@ class PromotionProcessor {
       // ✅ LIMPIAR DATOS PROBLEMÁTICOS
       this.cleanTransformedData(transformed);
 
-      logger.info(`🎁 ✅ Línea bonificada transformada exitosamente`);
+      // ✅ LOG DETALLADO DE DATOS CORRECTOS
+      logger.error(
+        `🎁 ============ DATOS LÍNEA BONIFICADA CORREGIDOS ============`
+      );
+      logger.error(`🎁 CANTIDAD_BONIFICAD: ${transformed.CANTIDAD_BONIFICAD}`);
+      logger.error(
+        `🎁 CANTIDAD_PEDIDA: ${transformed.CANTIDAD_PEDIDA} (debe ser null)`
+      );
+      logger.error(
+        `🎁 CANTIDAD_A_FACTURA: ${transformed.CANTIDAD_A_FACTURA} (debe ser null)`
+      );
+      logger.error(`🎁 PEDIDO_LINEA_BONIF: ${transformed.PEDIDO_LINEA_BONIF}`);
+      logger.error(
+        `🎁 DATOS FINALES BONIFICACIÓN: ${JSON.stringify(
+          {
+            CANTIDAD_BONIFICAD: transformed.CANTIDAD_BONIFICAD,
+            CANTIDAD_PEDIDA: transformed.CANTIDAD_PEDIDA,
+            CANTIDAD_A_FACTURA: transformed.CANTIDAD_A_FACTURA,
+            PEDIDO_LINEA_BONIF: transformed.PEDIDO_LINEA_BONIF,
+          },
+          null,
+          2
+        )}`
+      );
+
       return transformed;
     } catch (error) {
       logger.error(
         `🎁 ❌ Error transformando línea bonificada: ${error.message}`
       );
-      logger.error(`🎁 Datos de línea: ${JSON.stringify(bonusLine, null, 2)}`);
       throw error;
     }
   }
@@ -363,26 +390,26 @@ class PromotionProcessor {
         fieldConfig.quantityField
       );
 
-      logger.info(`🎁 Transformando línea trigger:`);
-      logger.info(`🎁   Línea: ${lineNumber} | Artículo: ${articleCode}`);
-      logger.info(`🎁   Cantidad: ${quantity}`);
+      logger.error(`🎯 ============ TRANSFORMANDO LÍNEA TRIGGER ============`);
+      logger.error(`🎯 Línea: ${lineNumber} | Artículo: ${articleCode}`);
+      logger.error(`🎯 Cantidad: ${quantity}`);
 
-      // ✅ CREAR TRANSFORMACIÓN CORREGIDA
+      // ✅ CREAR TRANSFORMACIÓN CORRECTA PARA LÍNEA TRIGGER
       const transformed = {
         ...triggerLine,
 
-        // ✅ CAMPOS DE PROMOCIÓN CON VALORES REALES
-        [fieldConfig.bonusLineRef]: null, // Línea regular no tiene referencia
-        [fieldConfig.orderedQuantity]: this.parseNumericValue(quantity),
-        [fieldConfig.invoiceQuantity]: this.parseNumericValue(quantity),
-        [fieldConfig.bonusQuantity]: null, // Línea regular no es bonificada
+        // ✅ CAMPOS CORRECTOS PARA LÍNEA TRIGGER (NORMAL)
+        CANTIDAD_PEDIDA: this.parseNumericValue(quantity), // ✅ Cantidad real
+        CANTIDAD_A_FACTURA: this.parseNumericValue(quantity), // ✅ Cantidad real
+        CANTIDAD_FACTURADA: 0,
+        CANTIDAD_RESERVADA: 0,
+        CANTIDAD_CANCELADA: 0,
 
-        // ✅ CAMPOS ESPECÍFICOS ADICIONALES
-        PEDIDO_LINEA_BONIF: null,
-        CANTIDAD_PEDIDA: this.parseNumericValue(quantity),
-        CANTIDAD_A_FACTURAR: this.parseNumericValue(quantity),
-        CANTIDAD_BONIFICAD: null,
-        CANTIDAD_BONIF: null,
+        // ✅ CAMPOS QUE DEBEN SER NULL PARA LÍNEAS NORMALES
+        PEDIDO_LINEA_BONIF: null, // ❌ Era: valor
+        CANTIDAD_BONIFICAD: null, // ❌ Era: valor
+
+        // ✅ NO agregar campos duplicados/incorrectos
 
         // Metadatos
         _IS_TRIGGER_LINE: true,
@@ -392,13 +419,34 @@ class PromotionProcessor {
       // ✅ LIMPIAR DATOS PROBLEMÁTICOS
       this.cleanTransformedData(transformed);
 
-      logger.info(`🎁 ✅ Línea trigger transformada exitosamente`);
+      // ✅ LOG DETALLADO DE DATOS CORRECTOS
+      logger.error(
+        `🎯 ============ DATOS LÍNEA TRIGGER CORREGIDOS ============`
+      );
+      logger.error(`🎯 CANTIDAD_PEDIDA: ${transformed.CANTIDAD_PEDIDA}`);
+      logger.error(`🎯 CANTIDAD_A_FACTURA: ${transformed.CANTIDAD_A_FACTURA}`);
+      logger.error(
+        `🎯 CANTIDAD_BONIFICAD: ${transformed.CANTIDAD_BONIFICAD} (debe ser null)`
+      );
+      logger.error(
+        `🎯 PEDIDO_LINEA_BONIF: ${transformed.PEDIDO_LINEA_BONIF} (debe ser null)`
+      );
+      logger.error(
+        `🎯 DATOS FINALES TRIGGER: ${JSON.stringify(
+          {
+            CANTIDAD_PEDIDA: transformed.CANTIDAD_PEDIDA,
+            CANTIDAD_A_FACTURA: transformed.CANTIDAD_A_FACTURA,
+            CANTIDAD_BONIFICAD: transformed.CANTIDAD_BONIFICAD,
+            PEDIDO_LINEA_BONIF: transformed.PEDIDO_LINEA_BONIF,
+          },
+          null,
+          2
+        )}`
+      );
+
       return transformed;
     } catch (error) {
-      logger.error(`🎁 ❌ Error transformando línea trigger: ${error.message}`);
-      logger.error(
-        `🎁 Datos de línea: ${JSON.stringify(triggerLine, null, 2)}`
-      );
+      logger.error(`🎯 ❌ Error transformando línea trigger: ${error.message}`);
       throw error;
     }
   }
@@ -424,14 +472,14 @@ class PromotionProcessor {
         [fieldConfig.bonusLineRef || "PEDIDO_LINEA_BONIF"]: null,
         [fieldConfig.orderedQuantity || "CANTIDAD_PEDIDA"]:
           this.parseNumericValue(quantity),
-        [fieldConfig.invoiceQuantity || "CANTIDAD_A_FACTURAR"]:
+        [fieldConfig.invoiceQuantity || "CANTIDAD_A_FACTURA"]:
           this.parseNumericValue(quantity),
         [fieldConfig.bonusQuantity || "CANTIDAD_BONIF"]: null,
 
         // ✅ CAMPOS ESPECÍFICOS ADICIONALES
         PEDIDO_LINEA_BONIF: null,
         CANTIDAD_PEDIDA: this.parseNumericValue(quantity),
-        CANTIDAD_A_FACTURAR: this.parseNumericValue(quantity),
+        CANTIDAD_A_FACTURA: this.parseNumericValue(quantity),
         CANTIDAD_BONIFICAD: null,
         CANTIDAD_BONIF: null,
 
@@ -552,31 +600,44 @@ class PromotionProcessor {
    */
   static cleanTransformedData(transformed) {
     // ✅ ELIMINAR CAMPOS PROBLEMÁTICOS CONOCIDOS
-    const problematicFields = ["CANTIDAD", "QTY"];
+    const problematicFields = [
+      "CANTIDAD",
+      "QTY",
+      "CANTIDAD_BONIF", // ❌ Campo incorrecto
+      "CANTIDAD_A_FACTURAR", // ❌ Duplicado de CANTIDAD_A_FACTURA
+    ];
+
     problematicFields.forEach((field) => {
-      delete transformed[field];
+      if (transformed.hasOwnProperty(field)) {
+        logger.warn(
+          `🧹 Removiendo campo problemático: ${field} = ${transformed[field]}`
+        );
+        delete transformed[field];
+      }
     });
 
-    // ✅ LIMPIAR OBJETOS DE CONFIGURACIÓN QUE SE FILTRARON
+    // ✅ LIMPIAR OBJETOS DE CONFIGURACIÓN
     Object.keys(transformed).forEach((key) => {
       const value = transformed[key];
 
-      // Si es un objeto de configuración, eliminarlo
       if (
         typeof value === "object" &&
         value !== null &&
         value.sourceField &&
         value.targetField
       ) {
-        logger.warn(`🎁 ⚠️ Removiendo objeto de configuración: ${key}`);
+        logger.warn(`🧹 Removiendo objeto de configuración: ${key}`);
         delete transformed[key];
       }
 
-      // Si es un valor inválido para SQL, limpiarlo
       if (value === undefined) {
         transformed[key] = null;
       }
     });
+
+    logger.error(
+      `🧹 DATOS DESPUÉS DE LIMPIEZA: ${JSON.stringify(transformed, null, 2)}`
+    );
   }
 
   // ===============================
@@ -602,7 +663,7 @@ class PromotionProcessor {
       // Campos destino
       bonusLineRef: "PEDIDO_LINEA_BONIF",
       orderedQuantity: "CANTIDAD_PEDIDA",
-      invoiceQuantity: "CANTIDAD_A_FACTURAR",
+      invoiceQuantity: "CANTIDAD_A_FACTURA",
       bonusQuantity: "CANTIDAD_BONIFICAD",
     };
 
@@ -852,7 +913,7 @@ class PromotionProcessor {
       // Validar que los valores numéricos sean válidos
       const numericFields = [
         "CANTIDAD_PEDIDA",
-        "CANTIDAD_A_FACTURAR",
+        "CANTIDAD_A_FACTURA",
         "CANTIDAD_BONIFICAD",
       ];
       numericFields.forEach((field) => {
