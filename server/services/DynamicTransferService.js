@@ -1782,7 +1782,7 @@ class DynamicTransferService {
       }`
     );
 
-    // ✅ LÓGICA AUTOMÁTICA PARA CAMPOS DE PROMOCIONES (tu lógica existente)
+    // ✅ LÓGICA AUTOMÁTICA PARA CAMPOS DE PROMOCIONES
     const isPromotionField = this.isPromotionTargetField(
       fieldMapping.targetField
     );
@@ -1804,16 +1804,13 @@ class DynamicTransferService {
         );
         value = promotionValue;
       } else {
-        logger.debug(
-          `🎁 No se encontró valor para ${fieldMapping.targetField}, usando defaultValue`
-        );
         value =
           fieldMapping.defaultValue === "NULL"
             ? null
             : fieldMapping.defaultValue;
       }
     }
-    // ✅ LÓGICA PARA CAMPOS DE PROMOCIÓN CON sourceField DEFINIDO (tu lógica existente)
+    // ✅ LÓGICA PARA CAMPOS DE PROMOCIÓN CON sourceField DEFINIDO
     else if (fieldMapping.isPromotionField && fieldMapping.sourceField) {
       logger.info(
         `🎁 CAMPO DE PROMOCIÓN CON SOURCE: ${fieldMapping.sourceField} -> ${fieldMapping.targetField}`
@@ -1830,9 +1827,6 @@ class DynamicTransferService {
           `🎁 ✅ VALOR PROMOCIÓN ENCONTRADO: ${fieldMapping.targetField} = ${value}`
         );
       } else {
-        logger.debug(
-          `🎁 No se encontró valor para ${fieldMapping.sourceField}, usando defaultValue`
-        );
         value =
           fieldMapping.defaultValue === "NULL"
             ? null
@@ -1842,14 +1836,11 @@ class DynamicTransferService {
     // ✅ LÓGICA NORMAL CORREGIDA
     else {
       try {
-        // 1. Verificar si tiene sourceField definido
         if (fieldMapping.sourceField) {
-          // 🔥 CORRECCIÓN CRÍTICA: Extraer valor real de objetos de configuración
           let sourceValue = sourceData[fieldMapping.sourceField];
 
           // ✅ DETECTAR Y CORREGIR OBJETOS DE CONFIGURACIÓN
           if (typeof sourceValue === "object" && sourceValue !== null) {
-            // Si es un objeto de configuración con sourceField, extraer el valor real
             if (sourceValue.sourceField) {
               logger.warn(
                 `🔧 ⚠️ Objeto de configuración detectado para ${fieldMapping.targetField}`
@@ -1860,13 +1851,9 @@ class DynamicTransferService {
                 `🔧 Extrayendo valor real: ${realSourceField} = ${realValue}`
               );
               value = realValue;
-            }
-            // Si es un objeto con valor directo pero no es de configuración
-            else if (sourceValue.hasOwnProperty("value")) {
+            } else if (sourceValue.hasOwnProperty("value")) {
               value = sourceValue.value;
-            }
-            // Si es un objeto complejo, usar como está (puede ser válido para algunos casos)
-            else {
+            } else {
               value = sourceValue;
             }
           } else {
@@ -1905,7 +1892,7 @@ class DynamicTransferService {
           );
         }
 
-        // 🔥 4. USAR TUS MÉTODOS EXISTENTES DE CONSECUTIVOS
+        // 4. USAR TUS MÉTODOS EXISTENTES DE CONSECUTIVOS
         if (
           this.isConsecutiveField(fieldMapping, mapping) &&
           currentConsecutive
@@ -1916,7 +1903,7 @@ class DynamicTransferService {
             isDetailTable
           );
           logger.debug(
-            `🔢 Consecutivo asignado usando tu sistema centralizado: ${value}`
+            `🔢 Consecutivo asignado usando sistema centralizado: ${value}`
           );
         }
       } catch (error) {
@@ -1943,14 +1930,32 @@ class DynamicTransferService {
       throw new Error(`Campo requerido ${fieldMapping.targetField} está vacío`);
     }
 
-    // 🔥 CORRECCIÓN CRÍTICA: Aplicar conversión de unidades SOLO con valores numéricos válidos
+    // 🔥 CORRECCIÓN CRÍTICA: USAR TU MÉTODO EXISTENTE applyUnitConversion PARA CAMPOS DE CANTIDAD
     if (
       fieldMapping.unitConversion &&
       fieldMapping.unitConversion.enabled &&
       value !== null
     ) {
+      // ✅ VERIFICAR SI ES CAMPO DE CANTIDAD PARA APLICAR CONVERSIÓN
+      const isQuantityField = this.isQuantityField(fieldMapping.targetField);
+
+      if (isQuantityField) {
+        logger.info(
+          `📦 ============ APLICANDO CONVERSIÓN DE EMPAQUE A CAMPO CANTIDAD ============`
+        );
+        logger.info(`📦 Campo: ${fieldMapping.targetField}`);
+        logger.info(`📦 Valor original: ${value}`);
+        logger.info(
+          `📦 Configuración: ${JSON.stringify(
+            fieldMapping.unitConversion,
+            null,
+            2
+          )}`
+        );
+      }
+
       try {
-        // ✅ VERIFICAR QUE EL VALOR SEA REALMENTE NUMÉRICO
+        // ✅ VERIFICAR QUE EL VALOR SEA NUMÉRICO
         let numericValue;
 
         if (typeof value === "number") {
@@ -1965,19 +1970,25 @@ class DynamicTransferService {
           throw new Error(`Valor no numérico para conversión: ${value}`);
         }
 
-        // ✅ USAR TU MÉTODO EXISTENTE DE CONVERSIÓN
+        // 🔥 USAR TU MÉTODO EXISTENTE applyUnitConversion
         value = await this.applyUnitConversion(
-          value,
-          fieldMapping.unitConversion,
-          sourceData,
-          targetConnection,
-          columnLengthCache
+          fieldMapping, // ✅ Pasa el fieldMapping completo
+          numericValue, // ✅ Valor numérico
+          sourceData, // ✅ Datos origen
+          targetConnection, // ✅ Conexión
+          columnLengthCache // ✅ Cache
         );
 
-        logger.debug(`🔧 Conversión aplicada: ${numericValue} -> ${value}`);
+        if (isQuantityField) {
+          logger.info(
+            `📦 ✅ CONVERSIÓN DE EMPAQUE APLICADA: ${numericValue} -> ${value}`
+          );
+        } else {
+          logger.debug(`🔧 Conversión aplicada: ${numericValue} -> ${value}`);
+        }
       } catch (conversionError) {
         logger.error(
-          `Error en conversión de unidades para ${fieldMapping.targetField}: ${conversionError.message}`
+          `📦 ❌ Error en conversión para ${fieldMapping.targetField}: ${conversionError.message}`
         );
 
         // ✅ USAR VALOR POR DEFECTO EN CASO DE ERROR
@@ -1987,7 +1998,7 @@ class DynamicTransferService {
               ? null
               : fieldMapping.defaultValue;
         } else {
-          value = 0; // Valor seguro para campos numéricos
+          value = numericValue || 0; // Mantener valor original si no hay defaultValue
         }
 
         if (fieldMapping.isRequired) {
@@ -1996,7 +2007,7 @@ class DynamicTransferService {
       }
     }
 
-    // Aplicar mapeo de valores si está configurado (tu lógica existente)
+    // Aplicar mapeo de valores si está configurado
     if (fieldMapping.valueMappings && fieldMapping.valueMappings.length > 0) {
       const mappedValue = this.applyValueMapping(
         fieldMapping.valueMappings,
@@ -2007,7 +2018,7 @@ class DynamicTransferService {
       }
     }
 
-    // Remover prefijo si está configurado (tu lógica existente)
+    // Remover prefijo si está configurado
     if (fieldMapping.removePrefix && value && typeof value === "string") {
       value = value.replace(new RegExp(`^${fieldMapping.removePrefix}`), "");
     }
@@ -2026,7 +2037,7 @@ class DynamicTransferService {
       );
     }
 
-    // ✅ TU VALIDACIÓN AUTOMÁTICA EXISTENTE PARA CAMPOS DE FECHA
+    // ✅ VALIDACIÓN AUTOMÁTICA PARA CAMPOS DE FECHA
     if (
       (value === null || value === undefined) &&
       fieldMapping.targetField &&
@@ -2040,7 +2051,7 @@ class DynamicTransferService {
       return { value: "GETDATE()", isDirectSql: true };
     }
 
-    // Manejar valores SQL directos (tu lógica existente)
+    // Manejar valores SQL directos
     const isDirectSql =
       typeof value === "string" &&
       (value.includes("GETDATE()") ||
@@ -2058,6 +2069,35 @@ class DynamicTransferService {
       isDirectSql,
       fieldName: fieldMapping.targetField,
     };
+  }
+
+  /**
+   * 🔧 MEJORADO: Determina si un campo es de cantidad
+   */
+  isQuantityField(fieldName) {
+    const quantityFields = [
+      "CANTIDAD_PEDIDA",
+      "CANTIDAD_A_FACTURA",
+      "CANTIDAD_BONIFICAD",
+      "CANTIDAD_FACTURADA",
+      "CANTIDAD_RESERVADA",
+      "CANTIDAD_CANCELADA",
+      "CNT_MAX",
+    ];
+
+    const upperFieldName = fieldName.toUpperCase();
+    const isQuantityField =
+      quantityFields.includes(upperFieldName) ||
+      upperFieldName.includes("CANTIDAD_") ||
+      upperFieldName.includes("QTY_");
+
+    if (isQuantityField) {
+      logger.debug(
+        `📦 Campo de cantidad detectado para conversión de empaque: ${fieldName}`
+      );
+    }
+
+    return isQuantityField;
   }
 
   // ===============================
