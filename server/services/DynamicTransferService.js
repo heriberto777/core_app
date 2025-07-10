@@ -2464,7 +2464,7 @@ class DynamicTransferService {
   // ===============================
 
   /**
-   * Ejecuta inserción en la base de datos - CON DEBUGGING COMPLETO
+   * Ejecuta inserción en la base de datos - CON VISUALIZACIÓN COMPLETA JSON
    * @param {string} targetTable - Tabla destino
    * @param {Array} targetFields - Campos a insertar
    * @param {Array} targetValues - Valores a insertar
@@ -2481,75 +2481,37 @@ class DynamicTransferService {
     targetConnection
   ) {
     try {
-      // ✅ 1. LOGGING DETALLADO DE TODO LO QUE LLEGA
+      // ✅ 1. MOSTRAR DATOS COMPLETOS EN JSON ANTES DE PROCESAR
       logger.error(
-        `🔍 ============ DEBUGGING COMPLETO EXECUTESINSERT ============`
+        `🔍 ============ DATOS RECIBIDOS PARA INSERCIÓN ============`
       );
       logger.error(`🔍 Tabla destino: ${targetTable}`);
-      logger.error(`🔍 Total campos recibidos: ${targetFields.length}`);
-      logger.error(`🔍 Campos recibidos: ${targetFields.join(", ")}`);
-      logger.error(`🔍 Valores recibidos: ${targetValues.join(", ")}`);
       logger.error(
-        `🔍 DirectSqlFields: ${Array.from(directSqlFields).join(", ")}`
-      );
-
-      // ✅ 2. MOSTRAR TARGETDATA COMPLETO
-      logger.error(`🔍 TargetData recibido:`);
-      Object.keys(targetData).forEach((key) => {
-        const value = targetData[key];
-        const valueType = typeof value;
-        const isObject = valueType === "object" && value !== null;
-        logger.error(
-          `🔍   ${key}: ${value} (tipo: ${valueType}${
-            isObject ? ", keys: " + Object.keys(value).join(",") : ""
-          })`
-        );
-      });
-
-      // ✅ 3. IDENTIFICAR CAMPOS DE PROMOCIÓN QUE LLEGARON
-      const promotionFieldsReceived = targetFields.filter(
-        (field) =>
-          field.includes("BONIF") ||
-          field.includes("CANTIDAD_") ||
-          field.includes("PEDIDO_LINEA")
-      );
-
-      const regularFieldsReceived = targetFields.filter(
-        (field) => !promotionFieldsReceived.includes(field)
-      );
-
-      logger.error(`🔍 ============ ANÁLISIS DE CAMPOS RECIBIDOS ============`);
-      logger.error(
-        `🔍 Campos PROMOCIÓN recibidos (${promotionFieldsReceived.length}): ${
-          promotionFieldsReceived.join(", ") || "NINGUNO"
-        }`
+        `🔍 CAMPOS RECIBIDOS (${targetFields.length}): ${JSON.stringify(
+          targetFields,
+          null,
+          2
+        )}`
       );
       logger.error(
-        `🔍 Campos REGULARES recibidos (${
-          regularFieldsReceived.length
-        }): ${regularFieldsReceived.join(", ")}`
+        `🔍 VALUES RECIBIDOS (${targetValues.length}): ${JSON.stringify(
+          targetValues,
+          null,
+          2
+        )}`
+      );
+      logger.error(
+        `🔍 TARGET DATA RECIBIDO: ${JSON.stringify(targetData, null, 2)}`
+      );
+      logger.error(
+        `🔍 DIRECT SQL FIELDS: ${JSON.stringify(
+          Array.from(directSqlFields),
+          null,
+          2
+        )}`
       );
 
-      // ✅ 4. VERIFICAR CAMPOS DE PROMOCIÓN UNO POR UNO
-      if (promotionFieldsReceived.length > 0) {
-        logger.error(
-          `🎁 ============ DETALLES DE CAMPOS PROMOCIÓN ============`
-        );
-        promotionFieldsReceived.forEach((field) => {
-          const index = targetFields.indexOf(field);
-          const value = directSqlFields.has(field)
-            ? targetValues[index]
-            : targetData[field];
-          const source = directSqlFields.has(field)
-            ? "SQL_DIRECTO"
-            : "PARAMETRO";
-          logger.error(`🎁 ${field}: ${value} (${source})`);
-        });
-      } else {
-        logger.error(`🎁 ❌ NO SE RECIBIERON CAMPOS DE PROMOCIÓN`);
-      }
-
-      // ✅ 5. VALIDACIÓN CRÍTICA: Detectar objetos de configuración
+      // ✅ 2. VALIDAR Y LIMPIAR DATOS
       const validatedParams = {};
       const problematicFields = [];
 
@@ -2557,7 +2519,6 @@ class DynamicTransferService {
         const value = targetData[key];
 
         if (typeof value === "object" && value !== null) {
-          // Verificar si es objeto de configuración
           if (value.sourceField || value.targetField || value.unitConversion) {
             problematicFields.push({
               field: key,
@@ -2565,48 +2526,25 @@ class DynamicTransferService {
               value: value,
             });
 
-            logger.error(`🔍 ❌ OBJETO DE CONFIGURACIÓN DETECTADO EN ${key}:`);
-            logger.error(
-              `🔍 ❌ Valor problemático: ${JSON.stringify(value, null, 2)}`
-            );
-
-            // Intentar extraer valor real
             if (value.defaultValue !== undefined) {
               validatedParams[key] = value.defaultValue;
-              logger.error(
-                `🔍 🔧 Usando defaultValue para ${key}: ${value.defaultValue}`
-              );
-            } else {
-              logger.error(
-                `🔍 ❌ Campo ${key} omitido por ser objeto de configuración`
-              );
-              return;
             }
           } else {
-            // Es un objeto válido (fecha, etc.)
             validatedParams[key] = value;
-            logger.error(
-              `🔍 ✅ Objeto válido: ${key} = ${JSON.stringify(value)}`
-            );
           }
         } else {
-          // Es un valor primitivo válido
           validatedParams[key] = value;
-          logger.error(
-            `🔍 ✅ Valor primitivo: ${key} = ${value} (${typeof value})`
-          );
         }
       });
 
-      // ✅ 6. REPORTAR CAMPOS PROBLEMÁTICOS
       if (problematicFields.length > 0) {
         logger.error(
-          `🔍 ❌ CAMPOS PROBLEMÁTICOS DETECTADOS EN ${targetTable}:`
+          `🔍 ❌ OBJETOS DE CONFIGURACIÓN PROBLEMÁTICOS: ${JSON.stringify(
+            problematicFields,
+            null,
+            2
+          )}`
         );
-        problematicFields.forEach((pf) => {
-          logger.error(`🔍 ❌   ${pf.field}: ${pf.type}`);
-        });
-
         throw new Error(
           `Campos contienen objetos de configuración: ${problematicFields
             .map((pf) => pf.field)
@@ -2614,146 +2552,197 @@ class DynamicTransferService {
         );
       }
 
-      // ✅ 7. RECONSTRUIR ARRAYS CON DATOS VALIDADOS
-      const finalFields = [];
-      const finalValues = [];
-      const finalParams = {};
+      // ✅ 3. CONSTRUIR DATOS FINALES PARA INSERCIÓN
+      const finalInsertData = {
+        tabla: targetTable,
+        campos: [],
+        valores: [],
+        parametros: {},
+        camposSQL: [],
+        query: "",
+        resumenCampos: {
+          total: 0,
+          promocion: 0,
+          regulares: 0,
+          sqlDirecto: 0,
+        },
+      };
 
+      // Procesar cada campo
       targetFields.forEach((field, index) => {
+        const fieldInfo = {
+          nombre: field,
+          tipo: "",
+          valor: null,
+          esPromocion:
+            field.includes("BONIF") ||
+            field.includes("CANTIDAD_") ||
+            field.includes("PEDIDO_LINEA"),
+          esSqlDirecto: directSqlFields.has(field),
+        };
+
         if (directSqlFields.has(field)) {
           // Campo SQL directo
-          finalFields.push(field);
-          finalValues.push(targetValues[index]);
-          logger.error(`🔍 📝 SQL directo: ${field} = ${targetValues[index]}`);
+          fieldInfo.tipo = "SQL_DIRECTO";
+          fieldInfo.valor = targetValues[index];
+          finalInsertData.campos.push(field);
+          finalInsertData.valores.push(targetValues[index]);
+          finalInsertData.camposSQL.push(field);
+          finalInsertData.resumenCampos.sqlDirecto++;
         } else if (validatedParams.hasOwnProperty(field)) {
-          // Campo con parámetro validado
-          finalFields.push(field);
-          finalValues.push(`@${field}`);
-          finalParams[field] = validatedParams[field];
-          logger.error(
-            `🔍 📝 Parámetro: ${field} = ${validatedParams[field]} (@${field})`
-          );
+          // Campo con parámetro
+          fieldInfo.tipo = "PARAMETRO";
+          fieldInfo.valor = validatedParams[field];
+          finalInsertData.campos.push(field);
+          finalInsertData.valores.push(`@${field}`);
+          finalInsertData.parametros[field] = validatedParams[field];
         } else {
-          logger.error(
-            `🔍 ❌ Campo omitido (no encontrado en validatedParams): ${field}`
-          );
+          // Campo omitido
+          fieldInfo.tipo = "OMITIDO";
+          fieldInfo.valor = null;
+        }
+
+        if (fieldInfo.tipo !== "OMITIDO") {
+          finalInsertData.resumenCampos.total++;
+          if (fieldInfo.esPromocion) {
+            finalInsertData.resumenCampos.promocion++;
+          } else {
+            finalInsertData.resumenCampos.regulares++;
+          }
         }
       });
 
-      // ✅ 8. VERIFICACIÓN FINAL DE CAMPOS DE PROMOCIÓN
-      const finalPromotionFields = finalFields.filter(
-        (field) =>
-          field.includes("BONIF") ||
-          field.includes("CANTIDAD_") ||
-          field.includes("PEDIDO_LINEA")
-      );
+      // Construir query
+      finalInsertData.query = `INSERT INTO ${targetTable} (${finalInsertData.campos.join(
+        ", "
+      )}) VALUES (${finalInsertData.valores.join(", ")})`;
 
-      logger.error(`🔍 ============ VERIFICACIÓN FINAL ============`);
-      logger.error(`🔍 Campos finales a insertar: ${finalFields.length}`);
+      // ✅ 4. MOSTRAR TODOS LOS VALORES A INSERTAR EN FORMATO JSON SÚPER CLARO
       logger.error(
-        `🔍 Campos promoción finales: ${finalPromotionFields.length}`
+        `🎁 ============ ESTOS SON LOS VALORES A INSERTAR YA CON PROMOCIONES INCLUIDA ============`
       );
-      logger.error(`🔍 Lista campos finales: ${finalFields.join(", ")}`);
+      logger.error(
+        `🎁 DATOS COMPLETOS PARA INSERCIÓN: ${JSON.stringify(
+          finalInsertData,
+          null,
+          2
+        )}`
+      );
 
-      if (finalPromotionFields.length > 0) {
-        logger.error(`🎁 ✅ CAMPOS PROMOCIÓN QUE SE VAN A INSERTAR:`);
-        finalPromotionFields.forEach((field) => {
-          const value = directSqlFields.has(field)
-            ? finalValues[finalFields.indexOf(field)]
-            : finalParams[field];
-          logger.error(`🎁    ${field}: ${value}`);
-        });
+      // ✅ 5. MOSTRAR RESUMEN EJECUTIVO
+      logger.error(`🎁 ============ RESUMEN EJECUTIVO ============`);
+      logger.error(`🎁 Tabla destino: ${finalInsertData.tabla}`);
+      logger.error(
+        `🎁 Total campos a insertar: ${finalInsertData.resumenCampos.total}`
+      );
+      logger.error(
+        `🎁 Campos de PROMOCIÓN: ${finalInsertData.resumenCampos.promocion}`
+      );
+      logger.error(
+        `🎁 Campos REGULARES: ${finalInsertData.resumenCampos.regulares}`
+      );
+      logger.error(
+        `🎁 Campos SQL directo: ${finalInsertData.resumenCampos.sqlDirecto}`
+      );
+
+      // ✅ 6. MOSTRAR ESPECÍFICAMENTE LOS CAMPOS DE PROMOCIÓN
+      const camposPromocion = [];
+      Object.keys(finalInsertData.parametros).forEach((campo) => {
+        if (
+          campo.includes("BONIF") ||
+          campo.includes("CANTIDAD_") ||
+          campo.includes("PEDIDO_LINEA")
+        ) {
+          camposPromocion.push({
+            campo: campo,
+            valor: finalInsertData.parametros[campo],
+            tipo: typeof finalInsertData.parametros[campo],
+          });
+        }
+      });
+
+      if (camposPromocion.length > 0) {
+        logger.error(
+          `🎁 ============ CAMPOS DE PROMOCIÓN INCLUIDOS ============`
+        );
+        logger.error(
+          `🎁 CAMPOS DE PROMOCIÓN (${camposPromocion.length}): ${JSON.stringify(
+            camposPromocion,
+            null,
+            2
+          )}`
+        );
       } else {
-        logger.error(`🎁 ❌ NO HAY CAMPOS DE PROMOCIÓN EN LA INSERCIÓN FINAL`);
+        logger.error(`🎁 ❌ NO HAY CAMPOS DE PROMOCIÓN EN LA INSERCIÓN`);
       }
 
-      // ✅ 9. CONSTRUIR Y MOSTRAR QUERY FINAL
-      const fieldsStr = finalFields.join(", ");
-      const valuesStr = finalValues.join(", ");
-      const query = `INSERT INTO ${targetTable} (${fieldsStr}) VALUES (${valuesStr})`;
+      // ✅ 7. MOSTRAR QUERY Y PARÁMETROS FINALES
+      logger.error(`🎁 ============ QUERY Y PARÁMETROS FINALES ============`);
+      logger.error(`🎁 QUERY SQL: ${finalInsertData.query}`);
+      logger.error(
+        `🎁 PARÁMETROS: ${JSON.stringify(finalInsertData.parametros, null, 2)}`
+      );
 
-      logger.error(`🔍 ============ QUERY FINAL ============`);
-      logger.error(`🔍 Query: ${query}`);
-      logger.error(`🔍 Parámetros: ${JSON.stringify(finalParams, null, 2)}`);
-
-      // ✅ 10. VALIDACIÓN ANTES DE EJECUTAR
-      if (finalFields.length === 0) {
+      // ✅ 8. VALIDACIÓN FINAL
+      if (finalInsertData.campos.length === 0) {
         throw new Error(
           `No hay campos válidos para insertar en ${targetTable}`
         );
       }
 
-      // ✅ 11. EJECUTAR INSERCIÓN
-      logger.error(`🚀 EJECUTANDO INSERCIÓN EN ${targetTable}...`);
+      // ✅ 9. EJECUTAR INSERCIÓN
+      logger.error(`🚀 EJECUTANDO INSERCIÓN...`);
 
       const startTime = Date.now();
       const result = await SqlService.query(
         targetConnection,
-        query,
-        finalParams
+        finalInsertData.query,
+        finalInsertData.parametros
       );
       const executionTime = Date.now() - startTime;
 
-      // ✅ 12. LOGGING DE RESULTADO
-      logger.error(`🔍 ============ RESULTADO DE INSERCIÓN ============`);
-      logger.error(`🔍 Tiempo ejecución: ${executionTime}ms`);
-      logger.error(
-        `🔍 Filas afectadas: ${
-          result.rowsAffected ? result.rowsAffected[0] : "N/A"
-        }`
-      );
-      logger.error(`🔍 Estado: ÉXITO`);
+      // ✅ 10. MOSTRAR RESULTADO FINAL
+      const resultadoFinal = {
+        estado: "ÉXITO",
+        tabla: targetTable,
+        tiempoEjecucion: `${executionTime}ms`,
+        filasAfectadas: result.rowsAffected ? result.rowsAffected[0] : "N/A",
+        camposInsertados: finalInsertData.campos,
+        camposPromocionInsertados: camposPromocion.map((cp) => cp.campo),
+        totalCampos: finalInsertData.resumenCampos.total,
+        camposPromocion: finalInsertData.resumenCampos.promocion,
+      };
 
-      if (finalPromotionFields.length > 0) {
+      logger.error(`🎁 ============ RESULTADO FINAL DE INSERCIÓN ============`);
+      logger.error(
+        `🎁 RESULTADO COMPLETO: ${JSON.stringify(resultadoFinal, null, 2)}`
+      );
+
+      if (finalInsertData.resumenCampos.promocion > 0) {
+        logger.error(`🎁 ✅ ¡INSERCIÓN CON PROMOCIONES EXITOSA!`);
         logger.error(
-          `🎁 ✅ INSERCIÓN CON PROMOCIONES EXITOSA en ${targetTable}`
-        );
-        logger.error(
-          `🎁   Campos promoción insertados: ${finalPromotionFields.join(", ")}`
-        );
-        logger.error(
-          `🎁   Total campos: ${finalFields.length} (${
-            finalPromotionFields.length
-          } promoción + ${
-            finalFields.length - finalPromotionFields.length
-          } regulares)`
+          `🎁 Se insertaron ${finalInsertData.resumenCampos.promocion} campos de promoción en ${targetTable}`
         );
       } else {
-        logger.error(`📋 ✅ Inserción estándar exitosa en ${targetTable}`);
-        logger.error(`📋 Total campos: ${finalFields.length}`);
+        logger.error(`📋 ✅ Inserción estándar exitosa (sin promociones)`);
       }
 
       return result;
     } catch (error) {
-      logger.error(`🔍 ============ ERROR EN INSERCIÓN ============`);
-      logger.error(`🔍 Tabla: ${targetTable}`);
-      logger.error(`🔍 Error: ${error.message}`);
-      logger.error(`🔍 Stack: ${error.stack}`);
+      logger.error(`🎁 ============ ERROR EN INSERCIÓN ============`);
+      const errorInfo = {
+        estado: "ERROR",
+        tabla: targetTable,
+        mensaje: error.message,
+        stack: error.stack,
+        datosProblematicos: {
+          targetFields: targetFields,
+          targetValues: targetValues,
+          targetData: targetData,
+        },
+      };
 
-      // Log detallado del error
-      logger.error(
-        `🔍 Query problemática: INSERT INTO ${targetTable} (${targetFields.join(
-          ", "
-        )}) VALUES (${targetValues.join(", ")})`
-      );
-      logger.error(
-        `🔍 TargetData problemático: ${JSON.stringify(targetData, null, 2)}`
-      );
-
-      const promotionFields = targetFields.filter(
-        (field) =>
-          field.includes("BONIF") ||
-          field.includes("CANTIDAD_") ||
-          field.includes("PEDIDO_LINEA")
-      );
-
-      if (promotionFields.length > 0) {
-        logger.error(
-          `🎁 ❌ Error insertando campos de promoción: ${promotionFields.join(
-            ", "
-          )}`
-        );
-      }
+      logger.error(`🎁 ERROR COMPLETO: ${JSON.stringify(errorInfo, null, 2)}`);
 
       throw error;
     }
