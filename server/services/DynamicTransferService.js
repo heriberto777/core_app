@@ -539,7 +539,7 @@ class DynamicTransferService {
       quantityField: "CNT_MAX",
       bonusLineRef: "PEDIDO_LINEA_BONIF",
       orderedQuantity: "CANTIDAD_PEDIDA",
-      invoiceQuantity: "CANTIDAD_A_FACTURAR",
+      invoiceQuantity: "CANTIDAD_A_FACTURA",
       bonusQuantity: "CANTIDAD_BONIFICAD",
     };
 
@@ -658,7 +658,7 @@ class DynamicTransferService {
           );
           logger.error(`🎁 🔍   CANTIDAD_PEDIDA: ${line.CANTIDAD_PEDIDA}`);
           logger.error(
-            `🎁 🔍   CANTIDAD_A_FACTURAR: ${line.CANTIDAD_A_FACTURAR}`
+            `🎁 🔍   CANTIDAD_A_FACTURA: ${line.CANTIDAD_A_FACTURA}`
           );
           logger.error(`🎁 🔍   _PROMOTION_TYPE: ${line._PROMOTION_TYPE}`);
         });
@@ -671,7 +671,7 @@ class DynamicTransferService {
           );
           logger.error(`🎯 🔍   CANTIDAD_PEDIDA: ${line.CANTIDAD_PEDIDA}`);
           logger.error(
-            `🎯 🔍   CANTIDAD_A_FACTURAR: ${line.CANTIDAD_A_FACTURAR}`
+            `🎯 🔍   CANTIDAD_A_FACTURA: ${line.CANTIDAD_A_FACTURA}`
           );
           logger.error(`🎯 🔍   _PROMOTION_TYPE: ${line._PROMOTION_TYPE}`);
         });
@@ -689,7 +689,7 @@ class DynamicTransferService {
           "PEDIDO_LINEA_BONIF",
           "CANTIDAD_BONIFICAD",
           "CANTIDAD_PEDIDA",
-          "CANTIDAD_A_FACTURAR",
+          "CANTIDAD_A_FACTURA",
           "_IS_BONUS_LINE",
           "_IS_TRIGGER_LINE",
           "_PROMOTION_TYPE",
@@ -961,7 +961,7 @@ class DynamicTransferService {
         "CANT_PEDIDA",
       ],
       [promotionConfig.invoiceQuantity]: [
-        "CANTIDAD_A_FACTURAR",
+        "CANTIDAD_A_FACTURA",
         "QTY_FACTURAR",
         "CANT_FACTURAR",
       ],
@@ -3416,7 +3416,7 @@ class DynamicTransferService {
     // Mapeo de campos comunes para extraer el valor correcto
     const fieldMappings = {
       CANTIDAD_PEDIDA: ["CNT_MAX", "CANTIDAD", "QTY", "CND_MAX"],
-      CANTIDAD_A_FACTURAR: ["CNT_MAX", "CANTIDAD", "QTY", "CND_MAX"],
+      CANTIDAD_A_FACTURA: ["CNT_MAX", "CANTIDAD", "QTY", "CND_MAX"],
       CANTIDAD_FACTURADA: ["CNT_MAX", "CANTIDAD", "QTY", "CND_MAX"],
       CANTIDAD_BONIFICAD: ["CNT_MAX", "CANTIDAD", "QTY", "CND_MAX"],
       ARTICULO: ["COD_ART", "CODIGO_ARTICULO", "ITEM_CODE"],
@@ -4835,8 +4835,8 @@ class DynamicTransferService {
         description: "Cantidad pedida",
       },
       {
-        sourceField: "CANTIDAD_A_FACTURAR",
-        targetField: "CANTIDAD_A_FACTURAR",
+        sourceField: "CANTIDAD_A_FACTURA",
+        targetField: "CANTIDAD_A_FACTURA",
         description: "Cantidad a facturar",
       },
       {
@@ -4873,7 +4873,7 @@ class DynamicTransferService {
       },
       {
         sourceField: "QTY_FACTURAR",
-        targetField: "CANTIDAD_A_FACTURAR",
+        targetField: "CANTIDAD_A_FACTURA",
         description: "Cantidad a facturar (alternativo)",
       },
       {
@@ -4997,7 +4997,7 @@ class DynamicTransferService {
     // 5. Buscar por patrones comunes
     const patterns = {
       CANTIDAD_PEDIDA: ["QTY_PEDIDA", "CANT_PEDIDA", "CNT_PED", "CANTIDAD_PED"],
-      CANTIDAD_A_FACTURAR: [
+      CANTIDAD_A_FACTURA: [
         "QTY_FACTURAR",
         "CANT_FACTURAR",
         "CNT_FACT",
@@ -5079,69 +5079,71 @@ class DynamicTransferService {
   ) {
     const promotionFieldMappings = [];
 
-    logger.error(`🎁 🔍 GENERANDO MAPPINGS AUTOMÁTICOS COMPLETOS:`);
-    logger.error(
-      `🎁 🔍   Datos disponibles: ${Object.keys(dataForProcessing).join(", ")}`
-    );
-    logger.error(
-      `🎁 🔍   Campos ya procesados: ${Array.from(processedFieldNames).join(
-        ", "
-      )}`
-    );
+    logger.error(`🎁 🔍 GENERANDO MAPPINGS AUTOMÁTICOS SIN DUPLICADOS:`);
 
-    // ✅ LISTA COMPLETA DE CAMPOS DE PROMOCIÓN REQUERIDOS
+    // ✅ LISTA CORRECTA DE CAMPOS DE PROMOCIÓN (SIN DUPLICADOS)
     const requiredPromotionFields = [
-      // Campos principales de promoción
       {
         sourceField: "PEDIDO_LINEA_BONIF",
         targetField: "PEDIDO_LINEA_BONIF",
         description: "Referencia línea bonificación",
+        fieldType: "number",
       },
       {
         sourceField: "CANTIDAD_BONIFICAD",
         targetField: "CANTIDAD_BONIFICAD",
-        description: "Cantidad bonificación",
-      },
-      {
-        sourceField: "CANTIDAD_BONIF",
-        targetField: "CANTIDAD_BONIF",
-        description: "Cantidad bonificación (alt)",
+        description: "Cantidad bonificación CORRECTA",
+        fieldType: "number",
       },
       {
         sourceField: "CANTIDAD_PEDIDA",
         targetField: "CANTIDAD_PEDIDA",
         description: "Cantidad pedida",
-      },
-      {
-        sourceField: "CANTIDAD_A_FACTURAR",
-        targetField: "CANTIDAD_A_FACTURAR",
-        description: "Cantidad a facturar",
+        fieldType: "number",
       },
       {
         sourceField: "CANTIDAD_A_FACTURA",
         targetField: "CANTIDAD_A_FACTURA",
-        description: "Cantidad a factura (alt)",
+        description: "Cantidad a facturar CORRECTA",
+        fieldType: "number",
       },
       {
         sourceField: "CANTIDAD_FACTURADA",
         targetField: "CANTIDAD_FACTURADA",
         description: "Cantidad facturada",
+        fieldType: "number",
       },
       {
         sourceField: "CANTIDAD_RESERVADA",
         targetField: "CANTIDAD_RESERVADA",
         description: "Cantidad reservada",
+        fieldType: "number",
       },
       {
         sourceField: "CANTIDAD_CANCELADA",
         targetField: "CANTIDAD_CANCELADA",
         description: "Cantidad cancelada",
+        fieldType: "number",
       },
     ];
 
-    // ✅ DETECTAR Y AGREGAR CAMPOS QUE EXISTEN EN LOS DATOS
+    // ✅ CAMPOS EXPLÍCITAMENTE PROHIBIDOS (DUPLICADOS/INCORRECTOS)
+    const prohibitedFields = [
+      "CANTIDAD_BONIF", // ❌ Incorrecto, debe ser CANTIDAD_BONIFICAD
+      "CANTIDAD_A_FACTURAR", // ❌ Duplicado, debe ser CANTIDAD_A_FACTURA
+    ];
+
+    logger.error(`🎁 🔍 CAMPOS PROHIBIDOS: ${prohibitedFields.join(", ")}`);
+
+    // ✅ DETECTAR Y AGREGAR SOLO CAMPOS VÁLIDOS
     requiredPromotionFields.forEach((field) => {
       const targetFieldLower = field.targetField.toLowerCase();
+
+      // Verificar que no esté prohibido
+      if (prohibitedFields.includes(field.sourceField)) {
+        logger.error(`🎁 🔍 ❌ Campo prohibido omitido: ${field.sourceField}`);
+        return;
+      }
 
       // Solo procesar si no fue procesado ya y existe en los datos
       if (
@@ -5155,65 +5157,20 @@ class DynamicTransferService {
           isPromotionField: true,
           description: field.description,
           defaultValue: null,
-          isEditable: true,
-          showInList: false,
-          displayOrder: 1000, // Al final
-          fieldType: "number",
+          fieldType: field.fieldType || "number",
         };
 
         promotionFieldMappings.push(fieldMapping);
         logger.error(
-          `🎁 🔍 ✅ Mapping auto-generado: ${field.sourceField} -> ${
+          `🎁 🔍 ✅ Mapping CORRECTO generado: ${field.sourceField} -> ${
             field.targetField
           } = ${dataForProcessing[field.sourceField]}`
-        );
-      } else if (processedFieldNames.has(targetFieldLower)) {
-        logger.error(`🎁 🔍 ❌ Campo ya procesado: ${field.targetField}`);
-      } else {
-        logger.error(
-          `🎁 🔍 ❌ Campo no encontrado en datos: ${field.sourceField}`
-        );
-      }
-    });
-
-    // ✅ DETECTAR CAMPOS ADICIONALES QUE EMPIECEN CON CANTIDAD_ o contengan BONIF
-    Object.keys(dataForProcessing).forEach((key) => {
-      const isPromotionField =
-        key.includes("BONIF") ||
-        key.includes("CANTIDAD_") ||
-        key.includes("PEDIDO_LINEA") ||
-        key.includes("_PEDIDA") ||
-        key.includes("_FACTURA");
-
-      const targetFieldLower = key.toLowerCase();
-
-      if (
-        isPromotionField &&
-        !processedFieldNames.has(targetFieldLower) &&
-        !promotionFieldMappings.some((pm) => pm.targetField === key)
-      ) {
-        const fieldMapping = {
-          sourceField: key,
-          targetField: key,
-          isRequired: false,
-          isPromotionField: true,
-          description: `Campo promoción auto-detectado: ${key}`,
-          defaultValue: null,
-          isEditable: true,
-          showInList: false,
-          displayOrder: 1001,
-          fieldType: "number",
-        };
-
-        promotionFieldMappings.push(fieldMapping);
-        logger.error(
-          `🎁 🔍 ✅ Campo adicional detectado: ${key} = ${dataForProcessing[key]}`
         );
       }
     });
 
     logger.error(
-      `🎁 🔍 TOTAL MAPPINGS GENERADOS: ${promotionFieldMappings.length}`
+      `🎁 🔍 TOTAL MAPPINGS CORRECTOS: ${promotionFieldMappings.length}`
     );
     return promotionFieldMappings;
   }
@@ -5231,7 +5188,7 @@ class DynamicTransferService {
       "PEDIDO_LINEA_BONIF",
       "CANTIDAD_BONIFICAD",
       "CANTIDAD_PEDIDA",
-      "CANTIDAD_A_FACTURAR",
+      "CANTIDAD_A_FACTURA",
       "CANTIDAD_A_FACTURA", // Variante
     ];
 
@@ -5260,14 +5217,14 @@ class DynamicTransferService {
       return value;
     }
 
-    // Buscar campos relacionados (para casos como CANTIDAD_A_FACTURA vs CANTIDAD_A_FACTURAR)
+    // Buscar campos relacionados (para casos como CANTIDAD_A_FACTURA vs CANTIDAD_A_FACTURA)
     const fieldMappings = {
       CANTIDAD_A_FACTURA: [
-        "CANTIDAD_A_FACTURAR",
+        "CANTIDAD_A_FACTURA",
         "CNT_FACTURAR",
         "QTY_FACTURAR",
       ],
-      CANTIDAD_A_FACTURAR: [
+      CANTIDAD_A_FACTURA: [
         "CANTIDAD_A_FACTURA",
         "CNT_FACTURAR",
         "QTY_FACTURAR",
@@ -5317,7 +5274,7 @@ class DynamicTransferService {
       "CANTIDAD_BONIF",
       "CANTIDAD_PEDIDA",
       "CANTIDAD_A_FACTURA",
-      "CANTIDAD_A_FACTURAR",
+      "CANTIDAD_A_FACTURA",
       "CANTIDAD_FACTURADA",
       "LINEA_BONIFICACION",
       "REF_BONIFICACION",
@@ -5397,15 +5354,15 @@ class DynamicTransferService {
       ],
       CANTIDAD_A_FACTURA: [
         "CANTIDAD_A_FACTURA",
-        "CANTIDAD_A_FACTURAR",
+        "CANTIDAD_A_FACTURA",
         "QTY_FACTURAR",
         "CANT_FACTURAR",
         "CNT_FACTURAR",
         "CANTIDAD_FACT",
         "QTY_FACT",
       ],
-      CANTIDAD_A_FACTURAR: [
-        "CANTIDAD_A_FACTURAR",
+      CANTIDAD_A_FACTURA: [
+        "CANTIDAD_A_FACTURA",
         "CANTIDAD_A_FACTURA",
         "QTY_FACTURAR",
         "CANT_FACTURAR",
@@ -5633,7 +5590,7 @@ class DynamicTransferService {
         quantityField: "CNT_MAX", // Valor por defecto corregido
         bonusLineRef: "PEDIDO_LINEA_BONIF",
         orderedQuantity: "CANTIDAD_PEDIDA",
-        invoiceQuantity: "CANTIDAD_A_FACTURAR",
+        invoiceQuantity: "CANTIDAD_A_FACTURA",
         bonusQuantity: "CANTIDAD_BONIFICAD",
       };
 
@@ -5708,7 +5665,7 @@ class DynamicTransferService {
         quantityField: "CNT_MAX", // ✅ Corregido
         bonusLineRef: "PEDIDO_LINEA_BONIF",
         orderedQuantity: "CANTIDAD_PEDIDA",
-        invoiceQuantity: "CANTIDAD_A_FACTURAR",
+        invoiceQuantity: "CANTIDAD_A_FACTURA",
         bonusQuantity: "CANTIDAD_BONIFICAD",
       };
 
