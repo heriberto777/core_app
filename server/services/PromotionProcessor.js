@@ -50,9 +50,9 @@ class PromotionProcessor {
         );
       }
 
-      // ✅ CREAR MAPA DE LÍNEAS CORREGIDO - ALMACENAR MÚLTIPLES LÍNEAS POR ARTÍCULO
+      // Crear mapa de líneas para referencias
       const lineMap = {};
-      data.forEach((row, index) => {
+      data.forEach((row) => {
         const lineNumber = this.extractValue(
           row,
           effectiveFieldConfig.lineNumberField
@@ -61,28 +61,8 @@ class PromotionProcessor {
           row,
           effectiveFieldConfig.articleField
         );
-        const lineType = this.detectLineType(row, effectiveFieldConfig);
-
         if (lineNumber && articleCode) {
-          // ✅ NUEVO: Solo almacenar líneas TRIGGER/NORMAL (no bonificaciones)
-          if (lineType !== "BONUS") {
-            if (!lineMap[articleCode]) {
-              lineMap[articleCode] = [];
-            }
-            lineMap[articleCode].push({
-              ...row,
-              lineNumber,
-              _originalIndex: index,
-            });
-
-            logger.debug(
-              `🎁 Línea ${lineType} mapeada: artículo ${articleCode} → línea ${lineNumber} (índice ${index})`
-            );
-          } else {
-            logger.debug(
-              `🎁 Línea BONUS omitida del mapa: artículo ${articleCode} → línea ${lineNumber}`
-            );
-          }
+          lineMap[articleCode] = { ...row, lineNumber };
         }
       });
 
@@ -90,13 +70,7 @@ class PromotionProcessor {
         `🎁 Mapa de líneas creado: ${Object.keys(lineMap).length} artículos`
       );
 
-      // ✅ Log detallado del mapa para debugging
-      Object.entries(lineMap).forEach(([article, lines]) => {
-        const lineNumbers = lines.map((l) => l.lineNumber).join(", ");
-        logger.debug(`🎁 Artículo ${article}: líneas trigger [${lineNumbers}]`);
-      });
-
-      // ✅ PROCESAR LÍNEAS SEGÚN SU TIPO - PASANDO ÍNDICE PARA REFERENCIAS
+      // Procesar líneas según su tipo
       const processedData = data.map((row, index) => {
         try {
           const lineType = this.detectLineType(row, effectiveFieldConfig);
@@ -105,12 +79,10 @@ class PromotionProcessor {
 
           switch (lineType) {
             case "BONUS":
-              return this.transformBonusLineWithIndex(
+              return this.transformBonusLine(
                 row,
                 effectiveFieldConfig,
-                lineMap,
-                index,
-                data
+                lineMap
               );
             case "TRIGGER":
               return this.transformTriggerLine(row, effectiveFieldConfig);
@@ -328,25 +300,7 @@ class PromotionProcessor {
       );
 
       // Buscar línea de referencia
-      // const referenceLineNumber = lineMap[referenceArticle]?.lineNumber || 1;
-      let referenceLineNumber = null;
-
-      if (referenceArticle && lineMap[referenceArticle]) {
-        referenceLineNumber = lineMap[referenceArticle].lineNumber;
-        logger.error(
-          `🎁 ✅ Línea trigger encontrada: artículo ${referenceArticle} está en línea ${referenceLineNumber}`
-        );
-      } else {
-        logger.warn(
-          `🎁 ⚠️ No se encontró línea trigger para artículo ${referenceArticle}`
-        );
-        logger.error(
-          `🎁 Artículos disponibles en lineMap: ${Object.keys(lineMap).join(
-            ", "
-          )}`
-        );
-        referenceLineNumber = 1; // Fallback
-      }
+      const referenceLineNumber = lineMap[referenceArticle]?.lineNumber || 1;
 
       logger.error(
         `🎁 ============ TRANSFORMANDO LÍNEA BONIFICADA ============`
@@ -381,7 +335,6 @@ class PromotionProcessor {
         _REFERENCE_ARTICLE: referenceArticle,
         _REFERENCE_LINE_NUMBER: referenceLineNumber,
         _PROMOTION_TYPE: "BONUS",
-        _ORIGINAL_LINE_NUMBER: lineNumber,
       };
 
       // ✅ LIMPIAR DATOS PROBLEMÁTICOS
@@ -466,23 +419,7 @@ class PromotionProcessor {
         // Metadatos
         _IS_TRIGGER_LINE: true,
         _PROMOTION_TYPE: "TRIGGER",
-        _ORIGINAL_LINE_NUMBER: lineNumber,
       };
-
-      // ✅ FORZAR CAMPOS A null SI VIENEN CON VALORES INCORRECTOS
-      if (transformed.PEDIDO_LINEA_BONIF !== null) {
-        logger.warn(
-          `🎯 ⚠️ CORRIGIENDO PEDIDO_LINEA_BONIF de ${transformed.PEDIDO_LINEA_BONIF} a null`
-        );
-        transformed.PEDIDO_LINEA_BONIF = null;
-      }
-
-      if (transformed.CANTIDAD_BONIFICAD !== null) {
-        logger.warn(
-          `🎯 ⚠️ CORRIGIENDO CANTIDAD_BONIFICAD de ${transformed.CANTIDAD_BONIFICAD} a null`
-        );
-        transformed.CANTIDAD_BONIFICAD = null;
-      }
 
       // ✅ LIMPIAR DATOS PROBLEMÁTICOS
       this.cleanTransformedData(transformed);
@@ -520,187 +457,51 @@ class PromotionProcessor {
   }
 
   /**
-   * Transforma línea bonificada - MÉTODO ORIGINAL MANTENIDO COMO FALLBACK
-   * @param {Object} bonusLine - Línea bonificada
+   * Transforma línea normal sin promoción - CORREGIDO
+   * @param {Object} normalLine - Línea normal
    * @param {Object} fieldConfig - Configuración de campos
-   * @param {Object} lineMap - Mapa de líneas para referencias
    * @returns {Object} - Línea transformada
    */
-  static transformBonusLine(bonusLine, fieldConfig, lineMap) {
-    // Usar el nuevo método con índice 0 como fallback
-    return this.transformBonusLineWithIndex(
-      bonusLine,
-      fieldConfig,
-      lineMap,
-      0,
-      []
-    );
-  }
-
-  /**
-   * Transforma línea bonificada con búsqueda de línea trigger más cercana - NUEVO MÉTODO
-   * @param {Object} bonusLine - Línea bonificada
-   * @param {Object} fieldConfig - Configuración de campos
-   * @param {Object} lineMap - Mapa de líneas para referencias (ahora con arrays)
-   * @param {number} bonusLineIndex - Índice de la línea bonificada en el array original
-   * @param {Array} originalData - Array completo de datos originales
-   * @returns {Object} - Línea transformada
-   */
-  static transformBonusLineWithIndex(
-    bonusLine,
-    fieldConfig,
-    lineMap,
-    bonusLineIndex,
-    originalData
-  ) {
+  static transformNormalLine(normalLine, fieldConfig) {
     try {
-      const referenceArticle = this.extractValue(
-        bonusLine,
-        fieldConfig.referenceField
-      );
-      const lineNumber = this.extractValue(
-        bonusLine,
-        fieldConfig.lineNumberField
-      );
-      const articleCode = this.extractValue(
-        bonusLine,
-        fieldConfig.articleField
-      );
-      const bonusQuantity = this.extractValue(
-        bonusLine,
-        fieldConfig.quantityField
+      const quantity = this.extractValue(
+        normalLine,
+        fieldConfig.quantityField || "CNT_MAX"
       );
 
-      // ✅ NUEVO: Buscar línea trigger más cercana hacia atrás
-      let referenceLineNumber = null;
-
-      if (referenceArticle && lineMap[referenceArticle]) {
-        const triggerLines = lineMap[referenceArticle];
-
-        logger.debug(
-          `🎁 Buscando línea trigger para artículo ${referenceArticle}. Disponibles: ${triggerLines.length} líneas`
-        );
-
-        // Filtrar líneas que están ANTES de la línea de bonificación
-        const eligibleTriggerLines = triggerLines.filter(
-          (tLine) => tLine._originalIndex < bonusLineIndex
-        );
-
-        logger.debug(
-          `🎁 Líneas trigger elegibles (antes de índice ${bonusLineIndex}): ${eligibleTriggerLines.length}`
-        );
-
-        if (eligibleTriggerLines.length > 0) {
-          // Tomar la línea trigger más cercana (mayor índice menor al de bonificación)
-          const closestTriggerLine = eligibleTriggerLines.reduce(
-            (closest, current) =>
-              current._originalIndex > closest._originalIndex
-                ? current
-                : closest
-          );
-
-          referenceLineNumber = closestTriggerLine.lineNumber;
-
-          logger.error(
-            `🎁 ✅ Línea trigger más cercana encontrada: línea ${referenceLineNumber} (artículo ${referenceArticle}, índice ${closestTriggerLine._originalIndex}) dispara bonificación línea ${lineNumber} (índice ${bonusLineIndex})`
-          );
-        } else {
-          logger.warn(
-            `🎁 ❌ NO hay líneas trigger de artículo ${referenceArticle} ANTES de la línea bonificación ${lineNumber} (índice ${bonusLineIndex})`
-          );
-
-          // Como fallback, usar la primera línea trigger disponible
-          if (triggerLines.length > 0) {
-            referenceLineNumber = triggerLines[0].lineNumber;
-            logger.warn(
-              `🎁 ⚠️ Usando primera línea trigger disponible como fallback: línea ${referenceLineNumber}`
-            );
-          } else {
-            referenceLineNumber = 1; // Fallback absoluto
-            logger.warn(`🎁 ⚠️ Usando fallback absoluto: línea 1`);
-          }
-        }
-      } else {
-        logger.warn(
-          `🎁 ⚠️ No se encontró ninguna línea trigger para artículo ${referenceArticle}`
-        );
-        logger.error(
-          `🎁 Artículos disponibles en lineMap: ${Object.keys(lineMap).join(
-            ", "
-          )}`
-        );
-        referenceLineNumber = 1; // Fallback
-      }
-
-      logger.error(
-        `🎁 ============ TRANSFORMANDO LÍNEA BONIFICADA ============`
-      );
-      logger.error(
-        `🎁 Línea: ${lineNumber} (índice ${bonusLineIndex}) | Artículo: ${articleCode}`
-      );
-      logger.error(
-        `🎁 Referencia: ${referenceArticle} -> línea ${referenceLineNumber}`
-      );
-      logger.error(`🎁 Cantidad bonificada: ${bonusQuantity}`);
-
-      // ✅ CREAR TRANSFORMACIÓN CORRECTA PARA LÍNEA BONIFICADA
+      // ✅ CREAR TRANSFORMACIÓN ESTÁNDAR
       const transformed = {
-        ...bonusLine,
+        ...normalLine,
 
-        // ✅ CAMPOS CORRECTOS PARA LÍNEA BONIFICADA
-        PEDIDO_LINEA_BONIF: referenceLineNumber, // ✅ Referencia a línea trigger más cercana
-        CANTIDAD_BONIFICAD: this.parseNumericValue(bonusQuantity), // ✅ Cantidad bonificada
+        // ✅ CAMPOS ESTÁNDAR CON VALORES REALES
+        [fieldConfig.bonusLineRef || "PEDIDO_LINEA_BONIF"]: null,
+        [fieldConfig.orderedQuantity || "CANTIDAD_PEDIDA"]:
+          this.parseNumericValue(quantity),
+        [fieldConfig.invoiceQuantity || "CANTIDAD_A_FACTURA"]:
+          this.parseNumericValue(quantity),
+        [fieldConfig.bonusQuantity || "CANTIDAD_BONIFICAD"]: null,
 
-        // ✅ CAMPOS QUE DEBEN SER NULL PARA LÍNEAS BONIFICADAS
-        CANTIDAD_PEDIDA: null,
-        CANTIDAD_A_FACTURA: null,
-        CANTIDAD_FACTURADA: 0,
-        CANTIDAD_RESERVADA: 0,
-        CANTIDAD_CANCELADA: 0,
+        // ✅ CAMPOS ESPECÍFICOS ADICIONALES
+        PEDIDO_LINEA_BONIF: null,
+        CANTIDAD_PEDIDA: this.parseNumericValue(quantity),
+        CANTIDAD_A_FACTURA: this.parseNumericValue(quantity),
+        CANTIDAD_BONIFICAD: null,
+        CANTIDAD_BONIF: null,
 
-        // Metadatos para debugging
-        _IS_BONUS_LINE: true,
-        _REFERENCE_ARTICLE: referenceArticle,
-        _REFERENCE_LINE_NUMBER: referenceLineNumber,
-        _PROMOTION_TYPE: "BONUS",
-        _ORIGINAL_LINE_NUMBER: lineNumber,
-        _BONUS_LINE_INDEX: bonusLineIndex,
+        // Metadatos
+        _IS_NORMAL_LINE: true,
+        _PROMOTION_TYPE: "NONE",
       };
 
       // ✅ LIMPIAR DATOS PROBLEMÁTICOS
       this.cleanTransformedData(transformed);
 
-      // ✅ LOG DETALLADO DE DATOS CORRECTOS
-      logger.error(
-        `🎁 ============ DATOS LÍNEA BONIFICADA CORREGIDOS ============`
-      );
-      logger.error(`🎁 CANTIDAD_BONIFICAD: ${transformed.CANTIDAD_BONIFICAD}`);
-      logger.error(
-        `🎁 CANTIDAD_PEDIDA: ${transformed.CANTIDAD_PEDIDA} (debe ser null)`
-      );
-      logger.error(
-        `🎁 CANTIDAD_A_FACTURA: ${transformed.CANTIDAD_A_FACTURA} (debe ser null)`
-      );
-      logger.error(`🎁 PEDIDO_LINEA_BONIF: ${transformed.PEDIDO_LINEA_BONIF}`);
-      logger.error(
-        `🎁 DATOS FINALES BONIFICACIÓN: ${JSON.stringify(
-          {
-            CANTIDAD_BONIFICAD: transformed.CANTIDAD_BONIFICAD,
-            CANTIDAD_PEDIDA: transformed.CANTIDAD_PEDIDA,
-            CANTIDAD_A_FACTURA: transformed.CANTIDAD_A_FACTURA,
-            PEDIDO_LINEA_BONIF: transformed.PEDIDO_LINEA_BONIF,
-          },
-          null,
-          2
-        )}`
-      );
-
       return transformed;
     } catch (error) {
-      logger.error(
-        `🎁 ❌ Error transformando línea bonificada: ${error.message}`
-      );
-      throw error;
+      logger.error(`🎁 ❌ Error transformando línea normal: ${error.message}`);
+      logger.error(`🎁 Datos de línea: ${JSON.stringify(normalLine, null, 2)}`);
+      // Devolver línea original si hay error
+      return { ...normalLine, _IS_NORMAL_LINE: true, _PROMOTION_TYPE: "NONE" };
     }
   }
 

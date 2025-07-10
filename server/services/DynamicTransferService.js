@@ -1751,7 +1751,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa un campo individual - CORREGIDO para extraer valores reales
+   * Procesa un campo individual - CORREGIDO para usar tu lógica existente
    * @param {Object} fieldMapping - Configuración del campo
    * @param {Object} sourceData - Datos origen
    * @param {Object} lookupResults - Resultados de lookup
@@ -1782,7 +1782,7 @@ class DynamicTransferService {
       }`
     );
 
-    // ✅ LÓGICA AUTOMÁTICA PARA CAMPOS DE PROMOCIONES
+    // ✅ LÓGICA AUTOMÁTICA PARA CAMPOS DE PROMOCIONES (tu lógica existente)
     const isPromotionField = this.isPromotionTargetField(
       fieldMapping.targetField
     );
@@ -1804,13 +1804,16 @@ class DynamicTransferService {
         );
         value = promotionValue;
       } else {
+        logger.debug(
+          `🎁 No se encontró valor para ${fieldMapping.targetField}, usando defaultValue`
+        );
         value =
           fieldMapping.defaultValue === "NULL"
             ? null
             : fieldMapping.defaultValue;
       }
     }
-    // ✅ LÓGICA PARA CAMPOS DE PROMOCIÓN CON sourceField DEFINIDO
+    // ✅ LÓGICA PARA CAMPOS DE PROMOCIÓN CON sourceField DEFINIDO (tu lógica existente)
     else if (fieldMapping.isPromotionField && fieldMapping.sourceField) {
       logger.info(
         `🎁 CAMPO DE PROMOCIÓN CON SOURCE: ${fieldMapping.sourceField} -> ${fieldMapping.targetField}`
@@ -1827,21 +1830,48 @@ class DynamicTransferService {
           `🎁 ✅ VALOR PROMOCIÓN ENCONTRADO: ${fieldMapping.targetField} = ${value}`
         );
       } else {
+        logger.debug(
+          `🎁 No se encontró valor para ${fieldMapping.sourceField}, usando defaultValue`
+        );
         value =
           fieldMapping.defaultValue === "NULL"
             ? null
             : fieldMapping.defaultValue;
       }
     }
-    // ✅ LÓGICA NORMAL CORREGIDA COMPLETAMENTE
+    // ✅ LÓGICA NORMAL CORREGIDA
     else {
       try {
+        // 1. Verificar si tiene sourceField definido
         if (fieldMapping.sourceField) {
-          // ✅ NUEVA LÓGICA: Extraer valor real de configuración compleja
-          value = this.extractRealValueFromFieldMapping(
-            fieldMapping,
-            sourceData
-          );
+          // 🔥 CORRECCIÓN CRÍTICA: Extraer valor real de objetos de configuración
+          let sourceValue = sourceData[fieldMapping.sourceField];
+
+          // ✅ DETECTAR Y CORREGIR OBJETOS DE CONFIGURACIÓN
+          if (typeof sourceValue === "object" && sourceValue !== null) {
+            // Si es un objeto de configuración con sourceField, extraer el valor real
+            if (sourceValue.sourceField) {
+              logger.warn(
+                `🔧 ⚠️ Objeto de configuración detectado para ${fieldMapping.targetField}`
+              );
+              const realSourceField = sourceValue.sourceField;
+              const realValue = sourceData[realSourceField];
+              logger.debug(
+                `🔧 Extrayendo valor real: ${realSourceField} = ${realValue}`
+              );
+              value = realValue;
+            }
+            // Si es un objeto con valor directo pero no es de configuración
+            else if (sourceValue.hasOwnProperty("value")) {
+              value = sourceValue.value;
+            }
+            // Si es un objeto complejo, usar como está (puede ser válido para algunos casos)
+            else {
+              value = sourceValue;
+            }
+          } else {
+            value = sourceValue;
+          }
 
           if (value === null || value === undefined) {
             logger.debug(
@@ -1875,7 +1905,7 @@ class DynamicTransferService {
           );
         }
 
-        // 4. USAR TUS MÉTODOS EXISTENTES DE CONSECUTIVOS
+        // 🔥 4. USAR TUS MÉTODOS EXISTENTES DE CONSECUTIVOS
         if (
           this.isConsecutiveField(fieldMapping, mapping) &&
           currentConsecutive
@@ -1886,7 +1916,7 @@ class DynamicTransferService {
             isDetailTable
           );
           logger.debug(
-            `🔢 Consecutivo asignado usando sistema centralizado: ${value}`
+            `🔢 Consecutivo asignado usando tu sistema centralizado: ${value}`
           );
         }
       } catch (error) {
@@ -1913,32 +1943,14 @@ class DynamicTransferService {
       throw new Error(`Campo requerido ${fieldMapping.targetField} está vacío`);
     }
 
-    // 🔥 CORRECCIÓN CRÍTICA: USAR TU MÉTODO EXISTENTE applyUnitConversion PARA CAMPOS DE CANTIDAD
+    // 🔥 CORRECCIÓN CRÍTICA: Aplicar conversión de unidades SOLO con valores numéricos válidos
     if (
       fieldMapping.unitConversion &&
       fieldMapping.unitConversion.enabled &&
       value !== null
     ) {
-      // ✅ VERIFICAR SI ES CAMPO DE CANTIDAD PARA APLICAR CONVERSIÓN
-      const isQuantityField = this.isQuantityField(fieldMapping.targetField);
-
-      if (isQuantityField) {
-        logger.info(
-          `📦 ============ APLICANDO CONVERSIÓN DE EMPAQUE A CAMPO CANTIDAD ============`
-        );
-        logger.info(`📦 Campo: ${fieldMapping.targetField}`);
-        logger.info(`📦 Valor original: ${value}`);
-        logger.info(
-          `📦 Configuración: ${JSON.stringify(
-            fieldMapping.unitConversion,
-            null,
-            2
-          )}`
-        );
-      }
-
       try {
-        // ✅ VERIFICAR QUE EL VALOR SEA NUMÉRICO
+        // ✅ VERIFICAR QUE EL VALOR SEA REALMENTE NUMÉRICO
         let numericValue;
 
         if (typeof value === "number") {
@@ -1953,25 +1965,19 @@ class DynamicTransferService {
           throw new Error(`Valor no numérico para conversión: ${value}`);
         }
 
-        // 🔥 USAR TU MÉTODO EXISTENTE applyUnitConversion
+        // ✅ USAR TU MÉTODO EXISTENTE DE CONVERSIÓN
         value = await this.applyUnitConversion(
-          numericValue, // ✅ CORREGIDO: Pasar solo el valor numérico, no el fieldMapping
-          fieldMapping.unitConversion, // ✅ CORREGIDO: Pasar solo la configuración de conversión
-          sourceData, // ✅ Datos origen
-          targetConnection, // ✅ Conexión
-          columnLengthCache // ✅ Cache
+          value,
+          fieldMapping.unitConversion,
+          sourceData,
+          targetConnection,
+          columnLengthCache
         );
 
-        if (isQuantityField) {
-          logger.info(
-            `📦 ✅ CONVERSIÓN DE EMPAQUE APLICADA: ${numericValue} -> ${value}`
-          );
-        } else {
-          logger.debug(`🔧 Conversión aplicada: ${numericValue} -> ${value}`);
-        }
+        logger.debug(`🔧 Conversión aplicada: ${numericValue} -> ${value}`);
       } catch (conversionError) {
         logger.error(
-          `📦 ❌ Error en conversión para ${fieldMapping.targetField}: ${conversionError.message}`
+          `Error en conversión de unidades para ${fieldMapping.targetField}: ${conversionError.message}`
         );
 
         // ✅ USAR VALOR POR DEFECTO EN CASO DE ERROR
@@ -1981,10 +1987,7 @@ class DynamicTransferService {
               ? null
               : fieldMapping.defaultValue;
         } else {
-          // ✅ MANTENER VALOR ORIGINAL SI NO HAY DEFAULT
-          const originalNumeric =
-            typeof value === "number" ? value : parseFloat(value);
-          value = isNaN(originalNumeric) ? 0 : originalNumeric;
+          value = 0; // Valor seguro para campos numéricos
         }
 
         if (fieldMapping.isRequired) {
@@ -1993,7 +1996,7 @@ class DynamicTransferService {
       }
     }
 
-    // Aplicar mapeo de valores si está configurado
+    // Aplicar mapeo de valores si está configurado (tu lógica existente)
     if (fieldMapping.valueMappings && fieldMapping.valueMappings.length > 0) {
       const mappedValue = this.applyValueMapping(
         fieldMapping.valueMappings,
@@ -2004,7 +2007,7 @@ class DynamicTransferService {
       }
     }
 
-    // Remover prefijo si está configurado
+    // Remover prefijo si está configurado (tu lógica existente)
     if (fieldMapping.removePrefix && value && typeof value === "string") {
       value = value.replace(new RegExp(`^${fieldMapping.removePrefix}`), "");
     }
@@ -2023,7 +2026,7 @@ class DynamicTransferService {
       );
     }
 
-    // ✅ VALIDACIÓN AUTOMÁTICA PARA CAMPOS DE FECHA
+    // ✅ TU VALIDACIÓN AUTOMÁTICA EXISTENTE PARA CAMPOS DE FECHA
     if (
       (value === null || value === undefined) &&
       fieldMapping.targetField &&
@@ -2037,36 +2040,12 @@ class DynamicTransferService {
       return { value: "GETDATE()", isDirectSql: true };
     }
 
-    // Manejar valores SQL directos
+    // Manejar valores SQL directos (tu lógica existente)
     const isDirectSql =
       typeof value === "string" &&
       (value.includes("GETDATE()") ||
         value.includes("NEWID()") ||
         value.includes("@@"));
-
-    // ✅ VALIDACIÓN FINAL: ASEGURAR QUE NUNCA SE DEVUELVA UN OBJETO
-    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-      logger.error(
-        `🔧 ❌ DETECTADO OBJETO EN VALOR FINAL: ${
-          fieldMapping.targetField
-        } = ${JSON.stringify(value)}`
-      );
-
-      // Intentar extraer valor real del objeto
-      if (value.hasOwnProperty("value")) {
-        value = value.value;
-        logger.warn(`🔧 ⚠️ Extraído valor desde objeto.value: ${value}`);
-      } else if (value.defaultValue !== undefined) {
-        value = value.defaultValue;
-        logger.warn(`🔧 ⚠️ Usando defaultValue desde objeto: ${value}`);
-      } else {
-        // Como último recurso, convertir a null
-        value = null;
-        logger.error(
-          `🔧 ❌ Convirtiendo objeto problemático a null para ${fieldMapping.targetField}`
-        );
-      }
-    }
 
     logger.debug(
       `🔧 Valor final para ${
@@ -2079,35 +2058,6 @@ class DynamicTransferService {
       isDirectSql,
       fieldName: fieldMapping.targetField,
     };
-  }
-
-  /**
-   * 🔧 MEJORADO: Determina si un campo es de cantidad
-   */
-  isQuantityField(fieldName) {
-    const quantityFields = [
-      "CANTIDAD_PEDIDA",
-      "CANTIDAD_A_FACTURA",
-      "CANTIDAD_BONIFICAD",
-      "CANTIDAD_FACTURADA",
-      "CANTIDAD_RESERVADA",
-      "CANTIDAD_CANCELADA",
-      "CNT_MAX",
-    ];
-
-    const upperFieldName = fieldName.toUpperCase();
-    const isQuantityField =
-      quantityFields.includes(upperFieldName) ||
-      upperFieldName.includes("CANTIDAD_") ||
-      upperFieldName.includes("QTY_");
-
-    if (isQuantityField) {
-      logger.debug(
-        `📦 Campo de cantidad detectado para conversión de empaque: ${fieldName}`
-      );
-    }
-
-    return isQuantityField;
   }
 
   // ===============================
@@ -3694,30 +3644,29 @@ class DynamicTransferService {
   }
 
   /**
-   * Aplica conversión de unidades a un valor específico - MÉTODO CORREGIDO
-   * @param {number} numericValue - Valor numérico original
+   * Aplica conversión de unidades a un valor específico
+   * @param {*} value - Valor original
    * @param {Object} unitConfig - Configuración de conversión
    * @param {Object} sourceData - Datos origen
    * @param {Object} targetConnection - Conexión destino
    * @param {Map} columnLengthCache - Cache de longitudes
-   * @returns {Promise<number>} - Valor convertido
+   * @returns {Promise<*>} - Valor convertido
    */
   async applyUnitConversion(
-    numericValue,
+    value,
     unitConfig,
     sourceData,
     targetConnection,
     columnLengthCache
   ) {
     try {
-      logger.debug(
-        `🔧 Aplicando conversión de unidades a valor: ${numericValue}`
-      );
+      logger.debug(`🔧 Aplicando conversión de unidades`);
 
       // Validar que el valor original sea numérico
+      const numericValue = parseFloat(value);
       if (isNaN(numericValue)) {
-        logger.warn(`Valor no numérico para conversión: ${numericValue}`);
-        return numericValue;
+        logger.warn(`Valor no numérico para conversión: ${value}`);
+        return value;
       }
 
       // Obtener factor de conversión
@@ -3731,11 +3680,6 @@ class DynamicTransferService {
             conversionFactor = 1;
           }
         }
-      } else if (unitConfig.factor) {
-        conversionFactor = parseFloat(unitConfig.factor);
-        if (isNaN(conversionFactor)) {
-          conversionFactor = 1;
-        }
       }
 
       // Verificar unidad de medida si está configurada
@@ -3745,7 +3689,7 @@ class DynamicTransferService {
           logger.debug(
             `Unidad ${unitMeasure} no coincide con ${unitConfig.fromUnit}, sin conversión`
           );
-          return numericValue;
+          return value;
         }
       }
 
@@ -3761,7 +3705,7 @@ class DynamicTransferService {
       }
 
       logger.info(
-        `🔧 Conversión aplicada: ${numericValue} ${
+        `🔧 Conversión aplicada: ${value} ${
           unitConfig.operation === "divide" ? "÷" : "×"
         } ${conversionFactor} = ${convertedValue}`
       );
@@ -3769,9 +3713,10 @@ class DynamicTransferService {
       return convertedValue;
     } catch (error) {
       logger.error(`Error al aplicar conversión de unidades: ${error.message}`);
-      return numericValue;
+      return value;
     }
   }
+
   // ===============================
   // 9. MÉTODOS DE DEPENDENCIAS Y REGLAS
   // ===============================
@@ -5734,67 +5679,6 @@ class DynamicTransferService {
 
       return fallbackConfig;
     }
-  }
-
-  /**
-   * ✅ NUEVO: Extrae valor real de configuración de campo compleja
-   * @param {Object} fieldMapping - Configuración del campo
-   * @param {Object} sourceData - Datos origen
-   * @returns {*} - Valor real extraído
-   */
-  extractRealValueFromFieldMapping(fieldMapping, sourceData) {
-    let value = null;
-
-    // ✅ 1. OBTENER VALOR INICIAL
-    if (typeof fieldMapping.sourceField === "string") {
-      value = sourceData[fieldMapping.sourceField];
-    } else if (
-      typeof fieldMapping.sourceField === "object" &&
-      fieldMapping.sourceField?.sourceField
-    ) {
-      // Caso: fieldMapping.sourceField es un objeto de configuración
-      const realSourceField = fieldMapping.sourceField.sourceField;
-      value = sourceData[realSourceField];
-      logger.debug(
-        `🔧 Extraído desde objeto sourceField: ${realSourceField} = ${value}`
-      );
-    }
-
-    // ✅ 2. DETECTAR Y CORREGIR OBJETOS DE CONFIGURACIÓN EN LOS DATOS
-    if (typeof value === "object" && value !== null && !Array.isArray(value)) {
-      logger.warn(
-        `🔧 ⚠️ Objeto de configuración detectado en datos para ${fieldMapping.targetField}`
-      );
-      logger.debug(`🔧 Objeto: ${JSON.stringify(value, null, 2)}`);
-
-      if (value.sourceField) {
-        // Es un objeto de configuración, extraer el valor real
-        const realSourceField = value.sourceField;
-        const realValue = sourceData[realSourceField];
-        logger.debug(
-          `🔧 Extrayendo valor real: ${realSourceField} = ${realValue}`
-        );
-        value = realValue;
-      } else if (value.hasOwnProperty("value")) {
-        // El objeto tiene una propiedad 'value'
-        value = value.value;
-        logger.debug(`🔧 Extraído desde objeto.value: ${value}`);
-      } else if (value.defaultValue !== undefined) {
-        // Usar defaultValue del objeto
-        value = value.defaultValue;
-        logger.debug(`🔧 Usando defaultValue desde objeto: ${value}`);
-      } else {
-        // Como último recurso, intentar convertir a string o usar null
-        logger.error(
-          `🔧 ❌ Objeto no reconocido, convirtiendo a null: ${JSON.stringify(
-            value
-          )}`
-        );
-        value = null;
-      }
-    }
-
-    return value;
   }
 }
 
