@@ -300,7 +300,25 @@ class PromotionProcessor {
       );
 
       // Buscar línea de referencia
-      const referenceLineNumber = lineMap[referenceArticle]?.lineNumber || 1;
+      // const referenceLineNumber = lineMap[referenceArticle]?.lineNumber || 1;
+      let referenceLineNumber = null;
+
+      if (referenceArticle && lineMap[referenceArticle]) {
+        referenceLineNumber = lineMap[referenceArticle].lineNumber;
+        logger.error(
+          `🎁 ✅ Línea trigger encontrada: artículo ${referenceArticle} está en línea ${referenceLineNumber}`
+        );
+      } else {
+        logger.warn(
+          `🎁 ⚠️ No se encontró línea trigger para artículo ${referenceArticle}`
+        );
+        logger.error(
+          `🎁 Artículos disponibles en lineMap: ${Object.keys(lineMap).join(
+            ", "
+          )}`
+        );
+        referenceLineNumber = 1; // Fallback
+      }
 
       logger.error(
         `🎁 ============ TRANSFORMANDO LÍNEA BONIFICADA ============`
@@ -335,6 +353,7 @@ class PromotionProcessor {
         _REFERENCE_ARTICLE: referenceArticle,
         _REFERENCE_LINE_NUMBER: referenceLineNumber,
         _PROMOTION_TYPE: "BONUS",
+        _ORIGINAL_LINE_NUMBER: lineNumber,
       };
 
       // ✅ LIMPIAR DATOS PROBLEMÁTICOS
@@ -419,7 +438,23 @@ class PromotionProcessor {
         // Metadatos
         _IS_TRIGGER_LINE: true,
         _PROMOTION_TYPE: "TRIGGER",
+        _ORIGINAL_LINE_NUMBER: lineNumber,
       };
+
+      // ✅ FORZAR CAMPOS A null SI VIENEN CON VALORES INCORRECTOS
+      if (transformed.PEDIDO_LINEA_BONIF !== null) {
+        logger.warn(
+          `🎯 ⚠️ CORRIGIENDO PEDIDO_LINEA_BONIF de ${transformed.PEDIDO_LINEA_BONIF} a null`
+        );
+        transformed.PEDIDO_LINEA_BONIF = null;
+      }
+
+      if (transformed.CANTIDAD_BONIFICAD !== null) {
+        logger.warn(
+          `🎯 ⚠️ CORRIGIENDO CANTIDAD_BONIFICAD de ${transformed.CANTIDAD_BONIFICAD} a null`
+        );
+        transformed.CANTIDAD_BONIFICAD = null;
+      }
 
       // ✅ LIMPIAR DATOS PROBLEMÁTICOS
       this.cleanTransformedData(transformed);
