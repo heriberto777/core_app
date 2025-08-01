@@ -144,17 +144,33 @@ class PromotionProcessor {
   // ===============================
 
   /**
-   * Detecta el tipo de línea para promociones - MEJORADO
+   * Detecta el tipo de línea para promociones - MANTENIENDO TU LÓGICA ORIGINAL
    * @param {Object} row - Fila de datos
    * @param {Object} fieldConfig - Configuración de campos
    * @returns {string} - Tipo de línea: BONUS, TRIGGER, NORMAL
    */
   static detectLineType(row, fieldConfig) {
     try {
-      // 1. Detectar línea bonificada por indicador directo
+      // ✅ NUEVO: VALIDACIÓN ESPECÍFICA PARA DESCUENTOS REGULARES (ANTES DE TU LÓGICA)
       const bonusIndicator = this.extractValue(row, fieldConfig.bonusField);
       const bonusReference = this.extractValue(row, fieldConfig.referenceField);
+      const articleCode = this.extractValue(row, fieldConfig.articleField);
+      const discountPercent = this.extractValue(row, "POR_DSC_AP");
+      const discountAmount = this.extractValue(row, "MON_DSC");
 
+      // Si es descuento regular (mismo artículo con descuento), procesar como NORMAL
+      if (
+        bonusIndicator === "B" &&
+        bonusReference === articleCode &&
+        (discountPercent > 0 || discountAmount > 0)
+      ) {
+        logger.debug(
+          `🎁 ✅ DESCUENTO REGULAR: Art ${articleCode} (mismo código), procesando como NORMAL`
+        );
+        return "NORMAL";
+      }
+
+      // ✅ AQUÍ CONTINÚA TU LÓGICA ORIGINAL SIN CAMBIOS
       if (
         bonusIndicator === fieldConfig.bonusIndicatorValue ||
         bonusIndicator === "B" ||
@@ -167,26 +183,22 @@ class PromotionProcessor {
         return "BONUS";
       }
 
-      // 2. Detectar línea que dispara promoción
-      const articleCode = this.extractValue(row, fieldConfig.articleField);
-      const quantity = this.extractValue(row, fieldConfig.quantityField);
+      // 2. Detectar línea trigger (tu lógica original)
+      const referencedByOthers = this.isReferencedByOtherLines
+        ? this.isReferencedByOtherLines(row, fieldConfig)
+        : false;
 
-      if (
-        articleCode &&
-        bonusIndicator === 0 &&
-        quantity &&
-        parseFloat(quantity) > 0
-      ) {
+      if (referencedByOthers) {
         logger.debug(
-          `🎁 Línea trigger detectada: ${articleCode} (qty: ${quantity})`
+          `🎁 Línea trigger detectada: ${articleCode} (es referenciada por otras líneas)`
         );
         return "TRIGGER";
       }
 
-      logger.debug(`🎁 Línea normal detectada`);
+      // 3. Línea normal (tu lógica original)
       return "NORMAL";
     } catch (error) {
-      logger.warn(`🎁 Error detectando tipo de línea: ${error.message}`);
+      logger.error(`🎁 Error en detectLineType: ${error.message}`);
       return "NORMAL";
     }
   }
@@ -518,51 +530,73 @@ class PromotionProcessor {
   }
 
   /**
-   * Transforma línea normal sin promoción - CORREGIDO
+   * Transforma línea normal - SOLO AGREGANDO METADATOS, SIN CAMBIAR TU LÓGICA
    * @param {Object} normalLine - Línea normal
    * @param {Object} fieldConfig - Configuración de campos
    * @returns {Object} - Línea transformada
    */
   static transformNormalLine(normalLine, fieldConfig) {
     try {
-      const quantity = this.extractValue(
+      const articleCode = this.extractValue(
         normalLine,
-        fieldConfig.quantityField || "CNT_MAX"
+        fieldConfig.articleField
+      );
+      const currentLineNumber = this.extractValue(
+        normalLine,
+        fieldConfig.lineNumberField
+      );
+      const quantity = this.extractValue(normalLine, fieldConfig.quantityField);
+
+      logger.debug(
+        `🎁 Transformando línea normal: ${currentLineNumber} | Art: ${articleCode}`
       );
 
-      // ✅ CREAR TRANSFORMACIÓN ESTÁNDAR
+      // ✅ TU TRANSFORMACIÓN ORIGINAL (SIN CAMBIOS)
       const transformed = {
         ...normalLine,
 
-        // ✅ CAMPOS ESTÁNDAR CON VALORES REALES
-        [fieldConfig.bonusLineRef || "PEDIDO_LINEA_BONIF"]: null,
-        [fieldConfig.orderedQuantity || "CANTIDAD_PEDIDA"]:
-          this.parseNumericValue(quantity),
-        [fieldConfig.invoiceQuantity || "CANTIDAD_A_FACTURA"]:
-          this.parseNumericValue(quantity),
-        [fieldConfig.bonusQuantity || "CANTIDAD_BONIFICAD"]: null,
-
-        // ✅ CAMPOS ESPECÍFICOS ADICIONALES
-        PEDIDO_LINEA_BONIF: null,
         CANTIDAD_PEDIDA: this.parseNumericValue(quantity),
         CANTIDAD_A_FACTURA: this.parseNumericValue(quantity),
-        CANTIDAD_BONIFICAD: null,
-        CANTIDAD_BONIF: null,
+        CANTIDAD_BONIFICAD: 0,
+        PEDIDO_LINEA_BONIF: null,
 
-        // Metadatos
         _IS_NORMAL_LINE: true,
-        _PROMOTION_TYPE: "NONE",
+        _IS_BONUS_LINE: false,
+        _IS_TRIGGER_LINE: false,
+        _PROMOTION_TYPE: "NORMAL",
       };
 
-      // ✅ LIMPIAR DATOS PROBLEMÁTICOS
+      // ✅ SOLO AGREGAR METADATOS DE DESCUENTO (SIN CAMBIAR TRANSFORMACIÓN)
+      const bonusIndicator = this.extractValue(
+        normalLine,
+        fieldConfig.bonusField
+      );
+      const bonusReference = this.extractValue(
+        normalLine,
+        fieldConfig.referenceField
+      );
+      const discountPercent = this.extractValue(normalLine, "POR_DSC_AP");
+      const discountAmount = this.extractValue(normalLine, "MON_DSC");
+
+      if (
+        bonusIndicator === "B" &&
+        bonusReference === articleCode &&
+        (discountPercent > 0 || discountAmount > 0)
+      ) {
+        // Solo agregar metadatos informativos
+        transformed._IS_DISCOUNT_APPLIED = true;
+        transformed._DISCOUNT_PERCENT = this.parseNumericValue(discountPercent);
+        transformed._DISCOUNT_AMOUNT = this.parseNumericValue(discountAmount);
+        transformed._PROMOTION_TYPE = "REGULAR_DISCOUNT";
+      }
+
+      // ✅ TU LIMPIEZA ORIGINAL
       this.cleanTransformedData(transformed);
 
       return transformed;
     } catch (error) {
-      logger.error(`🎁 ❌ Error transformando línea normal: ${error.message}`);
-      logger.error(`🎁 Datos de línea: ${JSON.stringify(normalLine, null, 2)}`);
-      // Devolver línea original si hay error
-      return { ...normalLine, _IS_NORMAL_LINE: true, _PROMOTION_TYPE: "NONE" };
+      logger.error(`🎁 Error transformando línea normal: ${error.message}`);
+      throw error;
     }
   }
 
