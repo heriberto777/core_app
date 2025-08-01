@@ -623,7 +623,7 @@ const processDocumentsByMapping = async (req, res) => {
       },
     });
   } catch (error) {
-    logger.error(`Error en procesamiento de documentos: ${error.message}`);
+    logger.error(`Error en procesamiento de documentos: ${error}`);
     res.status(500).json({
       success: false,
       message: error.message,
