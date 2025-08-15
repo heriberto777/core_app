@@ -3644,123 +3644,393 @@ class DynamicTransferService {
   }
 
   /**
-   * Aplica conversión de unidades a un valor específico - MEJORADO
-   * @param {*} value - Valor original
-   * @param {Object} unitConfig - Configuración de conversión
-   * @param {Object} sourceData - Datos origen
-   * @param {Object} targetConnection - Conexión destino
-   * @param {Map} columnLengthCache - Cache de longitudes
-   * @returns {Promise<*>} - Valor convertido
+   * Aplica conversión de unidades a un valor específico - VERSIÓN CORREGIDA
+   * @param {Object} sourceData - Datos completos del registro
+   * @param {Object} fieldMapping - Configuración del campo con conversión
+   * @param {any} originalValue - Valor original del campo
+   * @returns {any} - Valor convertido
    */
-  async applyUnitConversion(
-    value,
-    unitConfig,
-    sourceData,
-    targetConnection,
-    columnLengthCache
-  ) {
+  applyUnitConversion(sourceData, fieldMapping, originalValue) {
     try {
-      logger.debug(`🔧 Aplicando conversión de unidades mejorada`);
+      console.log(`🐛 DEBUG applyUnitConversion llamado:`);
+      console.log(`   Campo: ${fieldMapping.targetField}`);
+      console.log(`   Valor original: ${originalValue}`);
+      console.log(
+        `   Configuración enabled: ${fieldMapping.unitConversion?.enabled}`
+      );
+      console.log(`   sourceData keys: ${Object.keys(sourceData).join(", ")}`);
 
-      // Validar que el valor original sea numérico
-      const numericValue = parseFloat(value);
-      if (isNaN(numericValue)) {
-        logger.warn(`Valor no numérico para conversión: ${value}`);
-        return value;
+      // Log detallado de TODOS los campos disponibles con sus valores
+      console.log(`🔍 DATOS COMPLETOS DISPONIBLES:`);
+      Object.keys(sourceData).forEach((key) => {
+        console.log(`   ${key}: ${sourceData[key]}`);
+      });
+
+      logger.info(
+        `🔄 Iniciando conversión para campo: ${fieldMapping.targetField}`
+      );
+
+      // Validación inicial
+      if (
+        !fieldMapping.unitConversion ||
+        !fieldMapping.unitConversion.enabled
+      ) {
+        logger.debug(
+          `❌ Conversión no habilitada para ${fieldMapping.targetField}`
+        );
+        return originalValue;
       }
 
-      // Obtener factor de conversión
-      let conversionFactor = 1;
+      const config = fieldMapping.unitConversion;
 
-      if (unitConfig.conversionFactorField) {
-        const factorValue = sourceData[unitConfig.conversionFactorField];
-        if (factorValue !== undefined && factorValue !== null) {
-          conversionFactor = parseFloat(factorValue);
-          if (isNaN(conversionFactor)) {
-            logger.warn(
-              `Factor de conversión inválido: ${factorValue}, usando 1`
-            );
-            conversionFactor = 1;
+      // Validar configuración completa
+      if (
+        !config.unitMeasureField ||
+        !config.conversionFactorField ||
+        !config.fromUnit ||
+        !config.toUnit
+      ) {
+        logger.error(
+          `⚠️ Configuración de conversión incompleta para ${fieldMapping.targetField}:`,
+          {
+            unitMeasureField: config.unitMeasureField,
+            conversionFactorField: config.conversionFactorField,
+            fromUnit: config.fromUnit,
+            toUnit: config.toUnit,
+            operation: config.operation,
           }
-        }
-      } else if (unitConfig.factor) {
-        conversionFactor = parseFloat(unitConfig.factor);
-        if (isNaN(conversionFactor)) {
-          conversionFactor = 1;
-        }
+        );
+        return originalValue;
       }
 
-      // Verificar unidad de medida si está configurada
-      if (unitConfig.unitMeasureField) {
-        const unitMeasure = sourceData[unitConfig.unitMeasureField];
-        if (unitConfig.fromUnit && unitMeasure !== unitConfig.fromUnit) {
-          logger.debug(
-            `Unidad ${unitMeasure} no coincide con ${unitConfig.fromUnit}, sin conversión`
+      // IMPORTANTE: Buscar los campos con diferentes variaciones de nombres
+      let unitMeasureValue = null;
+      let conversionFactorValue = null;
+
+      // Lista de posibles nombres para Unit_Measure
+      const possibleUnitFields = [
+        config.unitMeasureField, // Unit_Measure
+        "Unit_Measure",
+        "UNIT_MEASURE",
+        "UNI_MED",
+        "UNIDAD",
+        "TIPO_UNIDAD",
+      ];
+
+      // Lista de posibles nombres para Factor_Conversion
+      const possibleFactorFields = [
+        config.conversionFactorField, // Factor_Conversion
+        "Factor_Conversion",
+        "FACTOR_CONVERSION",
+        "CNT_MAX", // Este podría ser el factor
+        "FACTOR",
+        "CONV_FACTOR",
+      ];
+
+      // Buscar campo de unidad de medida
+      for (const fieldName of possibleUnitFields) {
+        if (
+          sourceData[fieldName] !== undefined &&
+          sourceData[fieldName] !== null
+        ) {
+          unitMeasureValue = sourceData[fieldName];
+          console.log(
+            `✅ Campo unidad encontrado: ${fieldName} = ${unitMeasureValue}`
           );
-          return value;
+          break;
         }
       }
 
-      // Aplicar conversión según operación
-      let convertedValue;
-      switch (unitConfig.operation) {
-        case "divide":
-          convertedValue =
-            conversionFactor !== 0
-              ? numericValue / conversionFactor
-              : numericValue;
+      // Buscar campo de factor de conversión
+      for (const fieldName of possibleFactorFields) {
+        if (
+          sourceData[fieldName] !== undefined &&
+          sourceData[fieldName] !== null
+        ) {
+          conversionFactorValue = sourceData[fieldName];
+          console.log(
+            `✅ Campo factor encontrado: ${fieldName} = ${conversionFactorValue}`
+          );
           break;
-        case "multiply":
-          convertedValue = numericValue * conversionFactor;
-          break;
-        case "add":
-          convertedValue = numericValue + conversionFactor;
-          break;
-        case "subtract":
-          convertedValue = numericValue - conversionFactor;
-          break;
-        default:
-          convertedValue = numericValue * conversionFactor;
+        }
       }
 
-      // Aplicar redondeo si está configurado
-      if (unitConfig.decimalPlaces !== undefined) {
-        convertedValue = parseFloat(
-          convertedValue.toFixed(unitConfig.decimalPlaces)
-        );
-      }
+      console.log(`🐛 VALORES ENCONTRADOS:`);
+      console.log(`   unitMeasureValue: ${unitMeasureValue}`);
+      console.log(`   conversionFactorValue: ${conversionFactorValue}`);
+      console.log(`   fromUnit configurado: "${config.fromUnit}"`);
 
-      // Validar rangos si están configurados
-      if (
-        unitConfig.minValue !== undefined &&
-        convertedValue < unitConfig.minValue
-      ) {
+      if (unitMeasureValue === undefined || unitMeasureValue === null) {
         logger.warn(
-          `Valor convertido ${convertedValue} menor que mínimo ${unitConfig.minValue}`
+          `⚠️ Campo de unidad de medida no encontrado en datos de origen`
         );
-        convertedValue = unitConfig.minValue;
+        logger.debug(`Campos buscados: ${possibleUnitFields.join(", ")}`);
+        logger.debug(
+          `Campos disponibles: ${Object.keys(sourceData).join(", ")}`
+        );
+        return originalValue;
       }
 
       if (
-        unitConfig.maxValue !== undefined &&
-        convertedValue > unitConfig.maxValue
+        conversionFactorValue === undefined ||
+        conversionFactorValue === null
       ) {
         logger.warn(
-          `Valor convertido ${convertedValue} mayor que máximo ${unitConfig.maxValue}`
+          `⚠️ Campo de factor de conversión no encontrado en datos de origen`
         );
-        convertedValue = unitConfig.maxValue;
+        logger.debug(`Campos buscados: ${possibleFactorFields.join(", ")}`);
+        logger.debug(
+          `Campos disponibles: ${Object.keys(sourceData).join(", ")}`
+        );
+        return originalValue;
+      }
+
+      // Validación del factor de conversión
+      const conversionFactor = parseFloat(conversionFactorValue);
+      if (isNaN(conversionFactor)) {
+        logger.error(
+          `❌ Factor de conversión no es un número válido: '${conversionFactorValue}'`
+        );
+        return originalValue;
+      }
+
+      if (conversionFactor <= 0) {
+        logger.error(
+          `❌ Factor de conversión debe ser mayor que cero: ${conversionFactor}`
+        );
+        return originalValue;
+      }
+
+      // Logging detallado de valores
+      logger.info(
+        `📏 Unidad actual: '${unitMeasureValue}', Unidad origen configurada: '${config.fromUnit}'`
+      );
+      logger.info(
+        `🔢 Factor de conversión: ${conversionFactor} (origen: '${conversionFactorValue}')`
+      );
+      logger.info(`⚙️ Operación: ${config.operation}`);
+      logger.info(`🎯 Convertir de '${config.fromUnit}' a '${config.toUnit}'`);
+
+      // Verificar si necesita conversión
+      const shouldConvert = this.shouldApplyUnitConversion(
+        unitMeasureValue,
+        config.fromUnit
+      );
+      if (!shouldConvert) {
+        logger.info(
+          `❌ No se aplica conversión: unidad actual '${unitMeasureValue}' no requiere conversión desde '${config.fromUnit}'`
+        );
+        return originalValue;
       }
 
       logger.info(
-        `🔧 Conversión aplicada: ${value} ${
-          unitConfig.operation || "multiply"
-        } ${conversionFactor} = ${convertedValue}`
+        `✅ Se aplicará conversión: unidad '${unitMeasureValue}' coincide con patrón '${config.fromUnit}'`
       );
 
-      return convertedValue;
+      // Validación del valor original
+      const numericValue = parseFloat(originalValue);
+      if (isNaN(numericValue)) {
+        logger.warn(
+          `⚠️ Valor original no es numérico: '${originalValue}', manteniendo valor original`
+        );
+        return originalValue;
+      }
+
+      // Realizar conversión
+      let convertedValue;
+      if (config.operation === "multiply") {
+        // Para cantidades: cantidad_en_cajas * factor = cantidad_en_unidades
+        // Ejemplo: 10 Cajas × 144 = 1440 Unidades
+        convertedValue = numericValue * conversionFactor;
+        logger.info(
+          `🔢 Conversión (multiplicar): ${numericValue} × ${conversionFactor} = ${convertedValue}`
+        );
+      } else if (config.operation === "divide") {
+        // Para precios: precio_por_caja / factor = precio_por_unidad
+        // Ejemplo: $1000 por Caja ÷ 144 = $6.94 por Unidad
+        if (conversionFactor === 0) {
+          logger.error(
+            `❌ No se puede dividir por cero (factor: ${conversionFactor})`
+          );
+          return originalValue;
+        }
+        convertedValue = numericValue / conversionFactor;
+        logger.info(
+          `🔢 Conversión (dividir): ${numericValue} ÷ ${conversionFactor} = ${convertedValue}`
+        );
+      } else {
+        logger.error(
+          `❌ Operación de conversión no válida: '${config.operation}'. Debe ser 'multiply' o 'divide'`
+        );
+        return originalValue;
+      }
+
+      // Redondeo para evitar decimales excesivos
+      const roundedValue = Math.round(convertedValue * 100) / 100;
+
+      logger.info(`🎉 Conversión completada exitosamente:`);
+      logger.info(`   📦 Valor original: ${originalValue} ${config.fromUnit}`);
+      logger.info(`   🔄 Factor: ${conversionFactor}`);
+      logger.info(`   📊 Valor convertido: ${roundedValue} ${config.toUnit}`);
+      logger.info(`   ⚙️ Operación: ${config.operation}`);
+
+      return roundedValue;
     } catch (error) {
-      logger.error(`Error al aplicar conversión de unidades: ${error.message}`);
-      return value;
+      logger.error(
+        `💥 Error en conversión de unidades para campo ${fieldMapping.targetField}:`,
+        {
+          error: error.message,
+          stack: error.stack,
+          originalValue,
+          config: fieldMapping.unitConversion,
+        }
+      );
+      return originalValue;
+    }
+  }
+
+  /**
+   * Verifica si debe aplicarse conversión basado en la unidad de medida - VERSIÓN MEJORADA
+   * @param {string} currentUnit - Unidad actual
+   * @param {string} fromUnit - Unidad que requiere conversión
+   * @returns {boolean}
+   */
+  shouldApplyUnitConversion(currentUnit, fromUnit) {
+    try {
+      if (!currentUnit || !fromUnit) {
+        logger.debug(
+          `❌ Unidades faltantes: actual='${currentUnit}', configurada='${fromUnit}'`
+        );
+        return false;
+      }
+
+      const normalizedCurrent = String(currentUnit).toUpperCase().trim();
+      const normalizedFrom = String(fromUnit).toUpperCase().trim();
+
+      logger.debug(
+        `🔍 Comparando unidades: '${normalizedCurrent}' vs '${normalizedFrom}'`
+      );
+
+      // MEJORA: Más variaciones y mejor cobertura
+      const unitVariations = {
+        CAJA: [
+          "CAJA",
+          "CJA",
+          "CAJAS",
+          "CJ",
+          "CAJ",
+          "BOX",
+          "BOXES",
+          "CJTA",
+          "CAJITA",
+        ],
+        UNIDAD: [
+          "UNIDAD",
+          "UND",
+          "UNIDADES",
+          "U",
+          "UN",
+          "UNIT",
+          "UNITS",
+          "PCS",
+          "PIEZAS",
+          "PZ",
+          "PIEZA",
+        ],
+        KILO: ["KILO", "KG", "KILOS", "K", "KILOGRAMO", "KILOGRAMOS", "KGR"],
+        LITRO: ["LITRO", "LT", "LITROS", "L", "LTR", "LITR"],
+        METRO: ["METRO", "M", "METROS", "MTS", "MT"],
+        GRAMO: ["GRAMO", "G", "GRAMOS", "GR", "GRM"],
+        DOCENA: ["DOCENA", "DOC", "DOCENAS", "DZ"],
+        PAR: ["PAR", "PARES", "PR"],
+        ROLLO: ["ROLLO", "ROLLOS", "RL", "ROLL"],
+        PAQUETE: ["PAQUETE", "PAQUETES", "PAQ", "PACK", "PKG"],
+      };
+
+      // Buscar en variaciones predefinidas
+      for (const [baseUnit, variations] of Object.entries(unitVariations)) {
+        if (variations.includes(normalizedFrom)) {
+          const isMatch = variations.includes(normalizedCurrent);
+          logger.debug(
+            `🔍 Verificación por variaciones '${baseUnit}': ${
+              isMatch ? "✅" : "❌"
+            }`
+          );
+          if (isMatch) return true;
+        }
+      }
+
+      // MEJORA: Comparación de contenido (más flexible)
+      if (
+        normalizedCurrent.includes(normalizedFrom) ||
+        normalizedFrom.includes(normalizedCurrent)
+      ) {
+        logger.debug(
+          `🔍 Verificación por contenido: ✅ (una contiene a la otra)`
+        );
+        return true;
+      }
+
+      // MEJORA: Comparación sin espacios y caracteres especiales
+      const cleanCurrent = normalizedCurrent.replace(/[^A-Z0-9]/g, "");
+      const cleanFrom = normalizedFrom.replace(/[^A-Z0-9]/g, "");
+
+      if (cleanCurrent === cleanFrom) {
+        logger.debug(
+          `🔍 Verificación limpia: ✅ ('${cleanCurrent}' === '${cleanFrom}')`
+        );
+        return true;
+      }
+
+      // MEJORA: Verificación de abreviaciones comunes
+      const abbreviationMap = {
+        CAJA: ["CJ", "CJA", "CAJ"],
+        UNIDAD: ["UN", "UND", "U"],
+        KILO: ["K", "KG"],
+        LITRO: ["L", "LT"],
+        METRO: ["M", "MT"],
+        GRAMO: ["G", "GR"],
+      };
+
+      for (const [full, abbrevs] of Object.entries(abbreviationMap)) {
+        if (
+          (full === normalizedCurrent && abbrevs.includes(normalizedFrom)) ||
+          (full === normalizedFrom && abbrevs.includes(normalizedCurrent)) ||
+          (abbrevs.includes(normalizedCurrent) &&
+            abbrevs.includes(normalizedFrom))
+        ) {
+          logger.debug(`🔍 Verificación por abreviación '${full}': ✅`);
+          return true;
+        }
+      }
+
+      // Comparación exacta final
+      const exactMatch = normalizedCurrent === normalizedFrom;
+      logger.debug(
+        `🔍 Verificación exacta: ${
+          exactMatch ? "✅" : "❌"
+        } ('${normalizedCurrent}' === '${normalizedFrom}')`
+      );
+
+      if (!exactMatch) {
+        logger.info(
+          `❌ Unidad '${currentUnit}' no coincide con patrón '${fromUnit}' para conversión`
+        );
+        logger.debug(`   Normalizada actual: '${normalizedCurrent}'`);
+        logger.debug(`   Normalizada configurada: '${normalizedFrom}'`);
+        logger.debug(
+          `   Sugerencia: Verifique la configuración de unidades o añada variaciones`
+        );
+      }
+
+      return exactMatch;
+    } catch (error) {
+      logger.error(`💥 Error en verificación de unidades: ${error.message}`, {
+        currentUnit,
+        fromUnit,
+        error: error.stack,
+      });
+      return false;
     }
   }
 
