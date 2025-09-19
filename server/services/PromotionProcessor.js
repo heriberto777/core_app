@@ -1,9 +1,9 @@
 const logger = require("./logger");
 
 /**
- * Procesador de Promociones - Versión Corregida y Mejorada
+ * Procesador de Promociones - Versión Completa y Mejorada
  * Maneja la detección, transformación y aplicación de promociones automáticamente
- * CORRIGE: Asignación correcta de líneas de referencia para productos bonus
+ * INCLUYE: Conversiones de cantidades, referencias de líneas, y lógica de bonificación completa
  */
 class PromotionProcessor {
   // ===============================
@@ -11,7 +11,7 @@ class PromotionProcessor {
   // ===============================
 
   /**
-   * Procesa datos con promociones automáticamente - MÉTODO PRINCIPAL CORREGIDO
+   * Procesa datos con promociones automáticamente - MÉTODO PRINCIPAL MEJORADO
    * @param {Array} data - Datos a procesar
    * @param {Object} mapping - Configuración de mapping
    * @param {Object} fieldConfig - Configuración de campos (opcional, detectada automáticamente)
@@ -19,7 +19,7 @@ class PromotionProcessor {
    */
   static processPromotionsWithConfig(data, mapping, fieldConfig = null) {
     try {
-      logger.info("🎁 INICIANDO PROCESAMIENTO DE PROMOCIONES CORREGIDO");
+      logger.info("🎁 INICIANDO PROCESAMIENTO DE PROMOCIONES MEJORADO");
 
       if (!this.shouldUsePromotions(mapping)) {
         logger.info("📋 Procesamiento estándar - sin promociones");
@@ -50,198 +50,429 @@ class PromotionProcessor {
         );
       }
 
-      // ✅ CORREGIDO: Crear mapa de líneas ordenado por número de línea
-      const sortedData = [...data].sort((a, b) => {
-        const lineA = this.extractValue(
-          a,
-          effectiveFieldConfig.lineNumberField
-        );
-        const lineB = this.extractValue(
-          b,
-          effectiveFieldConfig.lineNumberField
-        );
-        return (lineA || 0) - (lineB || 0);
+      // ✅ PASO 1: APLICAR CONVERSIONES DE CANTIDAD A TODOS LOS DATOS
+      logger.info("🔧 Aplicando conversiones de cantidades...");
+      let processedData = data.map((row) => {
+        return this.applyQuantityConversions(row, effectiveFieldConfig);
       });
 
-      logger.info(
-        `🎁 Datos ordenados por línea: ${sortedData.length} registros`
-      );
-
-      // Procesar líneas según su tipo
-      const processedData = sortedData.map((row, index) => {
-        try {
-          const lineType = this.detectLineType(row, effectiveFieldConfig);
-
-          logger.debug(`🎁 Procesando línea ${index + 1}: tipo ${lineType}`);
-
-          switch (lineType) {
-            case "BONUS":
-              return this.transformBonusLine(
-                row,
-                effectiveFieldConfig,
-                sortedData // ✅ CORREGIDO: Pasar todos los datos ordenados
-              );
-            case "TRIGGER":
-              return this.transformTriggerLine(row, effectiveFieldConfig);
-            default:
-              return this.transformNormalLine(row, effectiveFieldConfig);
-          }
-        } catch (lineError) {
-          logger.error(
-            `🎁 ❌ Error procesando línea ${index + 1}: ${lineError.message}`
-          );
-          logger.error(
-            `🎁 Datos de línea problemática: ${JSON.stringify(row, null, 2)}`
-          );
-          // Procesar como línea normal en caso de error
-          return this.transformNormalLine(row, effectiveFieldConfig);
-        }
-      });
-
-      // Aplicar reglas específicas si están configuradas
-      const finalData = this.applyPromotionRules(
+      // ✅ PASO 2: CONSTRUIR REFERENCIAS DE LÍNEAS
+      logger.info("🔗 Construyendo referencias de líneas...");
+      const lineReferences = this.buildLineReferences(
         processedData,
-        mapping.promotionConfig
+        effectiveFieldConfig
+      );
+
+      // ✅ PASO 3: PROCESAR CADA FILA CON PROMOCIONES
+      logger.info("🎁 Procesando promociones por fila...");
+      processedData = processedData.map((row) => {
+        return this.processPromotionRow(
+          row,
+          processedData,
+          effectiveFieldConfig,
+          lineReferences
+        );
+      });
+
+      // ✅ PASO 4: APLICAR REGLAS ESPECÍFICAS SI ESTÁN CONFIGURADAS
+      if (
+        mapping.promotionConfig?.rules &&
+        mapping.promotionConfig.rules.length > 0
+      ) {
+        logger.info("📏 Aplicando reglas específicas de promociones...");
+        processedData = this.applyPromotionRules(
+          processedData,
+          mapping.promotionConfig
+        );
+      }
+
+      // ✅ PASO 5: LIMPIAR DATOS PROCESADOS
+      processedData.forEach((row) => {
+        this.cleanTransformedData(row);
+      });
+
+      // ✅ ESTADÍSTICAS FINALES
+      const bonusLines = processedData.filter((line) => line._IS_BONUS_LINE);
+      const triggerLines = processedData.filter(
+        (line) => line._IS_TRIGGER_LINE
+      );
+      const regularLines = processedData.filter(
+        (line) => !line._IS_BONUS_LINE && !line._IS_TRIGGER_LINE
       );
 
       logger.info(
-        `🎁 ✅ Promociones procesadas: ${finalData.length} líneas transformadas`
+        `🎁 ✅ Procesamiento completado: ${regularLines.length} regulares, ${bonusLines.length} bonificaciones, ${triggerLines.length} triggers`
       );
 
-      // Log de resumen
-      const bonusLines = finalData.filter((line) => line._IS_BONUS_LINE);
-      const triggerLines = finalData.filter((line) => line._IS_TRIGGER_LINE);
-      const normalLines = finalData.filter((line) => line._IS_NORMAL_LINE);
-
-      logger.info(
-        `🎁 Resumen: ${bonusLines.length} bonificaciones, ${triggerLines.length} triggers, ${normalLines.length} normales`
-      );
-
-      return finalData;
+      return processedData;
     } catch (error) {
-      logger.error("❌ Error en procesamiento de promociones:", error);
-      logger.error("❌ Stack trace:", error.stack);
-      // En caso de error, devolver datos sin procesar
-      logger.warn(
-        "🎁 Devolviendo datos sin procesamiento de promociones debido al error"
+      logger.error(
+        `🎁 Error en procesamiento de promociones: ${error.message}`
       );
-      return data;
+      throw new Error(`Error procesando promociones: ${error.message}`);
     }
   }
 
   /**
-   * Método compatible con la lógica anterior (wrapper)
-   * @param {Array} data - Datos a procesar
-   * @param {Object} mapping - Configuración de mapping
-   * @returns {Array} - Datos procesados
-   */
-  static processPromotions(data, mapping) {
-    return this.processPromotionsWithConfig(data, mapping, null);
-  }
-
-  // ===============================
-  // 2. MÉTODOS DE DETECCIÓN Y VALIDACIÓN
-  // ===============================
-
-  /**
-   * Detecta el tipo de línea para promociones - MANTENIENDO TU LÓGICA ORIGINAL
+   * ✅ NUEVO: Aplica conversiones de cantidad según Unit_Measure y Factor_Conversion
    * @param {Object} row - Fila de datos
-   * @param {Object} fieldConfig - Configuración de campos
-   * @returns {string} - Tipo de línea: BONUS, TRIGGER, NORMAL
+   * @param {Object} config - Configuración de campos
+   * @returns {Object} - Fila con cantidades convertidas
    */
-  static detectLineType(row, fieldConfig) {
+  static applyQuantityConversions(row, config) {
     try {
-      // ✅ NUEVO: VALIDACIÓN ESPECÍFICA PARA DESCUENTOS REGULARES (ANTES DE TU LÓGICA)
-      const bonusIndicator = this.extractValue(row, fieldConfig.bonusField);
-      const bonusReference = this.extractValue(row, fieldConfig.referenceField);
-      const articleCode = this.extractValue(row, fieldConfig.articleField);
-      const discountPercent = this.extractValue(row, "POR_DSC_AP");
-      const discountAmount = this.extractValue(row, "MON_DSC");
+      const unitMeasure =
+        row["Unit_Measure"] || row["UNIT_MEASURE"] || row["UNI_MED"];
+      const factorConversion =
+        row["Factor_Conversion"] || row["FACTOR_CONVERSION"] || row["CNT_MAX"];
 
-      // Si es descuento regular (mismo artículo con descuento), procesar como NORMAL
-      if (
-        bonusIndicator === "B" &&
-        bonusReference === articleCode &&
-        (discountPercent > 0 || discountAmount > 0)
-      ) {
+      if (!unitMeasure || !factorConversion) {
         logger.debug(
-          `🎁 ✅ DESCUENTO REGULAR: Art ${articleCode} (mismo código), procesando como NORMAL`
+          `🔧 Sin conversión de unidades: Unit_Measure=${unitMeasure}, Factor=${factorConversion}`
         );
-        return "NORMAL";
+        return { ...row };
       }
 
-      // ✅ AQUÍ CONTINÚA TU LÓGICA ORIGINAL SIN CAMBIOS
-      if (
-        bonusIndicator === fieldConfig.bonusIndicatorValue ||
-        bonusIndicator === "B" ||
-        bonusIndicator === "BONUS" ||
-        bonusReference
-      ) {
-        logger.debug(
-          `🎁 Línea bonificada detectada: ${bonusIndicator} / ${bonusReference}`
-        );
-        return "BONUS";
+      const factor = parseFloat(factorConversion);
+      if (isNaN(factor) || factor <= 0) {
+        logger.warn(`🔧 Factor de conversión inválido: ${factorConversion}`);
+        return { ...row };
       }
 
-      // 2. Detectar línea trigger (tu lógica original)
-      const referencedByOthers = this.isReferencedByOtherLines
-        ? this.isReferencedByOtherLines(row, fieldConfig)
-        : false;
+      // ✅ Lista de campos de cantidad que pueden necesitar conversión
+      const quantityFields = [
+        "CNT_MAX",
+        "CANTIDAD_BONIFICA",
+        "CANTIDAD_BONIFICADA",
+        "CANTIDAD_PEDIDA",
+        "CANTIDAD_A_FACTURA",
+        "CANTIDAD_FACTURADA",
+        "CANTIDAD_RESERVADA",
+        "CANTIDAD_CANCELADA",
+      ];
 
-      if (referencedByOthers) {
-        logger.debug(
-          `🎁 Línea trigger detectada: ${articleCode} (es referenciada por otras líneas)`
-        );
-        return "TRIGGER";
-      }
-
-      // 3. Línea normal (tu lógica original)
-      return "NORMAL";
-    } catch (error) {
-      logger.error(`🎁 Error en detectLineType: ${error.message}`);
-      return "NORMAL";
-    }
-  }
-
-  /**
-   * Valida que los datos contengan los campos requeridos para promociones
-   * @param {Array} data - Datos a validar
-   * @param {Object} fieldConfig - Configuración de campos
-   * @returns {boolean} - Si los datos son válidos para promociones
-   */
-  static validateDataFields(data, fieldConfig) {
-    if (!data || data.length === 0) {
-      return false;
-    }
-
-    const firstRecord = data[0];
-    const requiredFields = [
-      fieldConfig.bonusField,
-      fieldConfig.articleField,
-      fieldConfig.quantityField,
-      fieldConfig.lineNumberField,
-    ];
-
-    const missingFields = requiredFields.filter(
-      (field) => !field || !firstRecord.hasOwnProperty(field)
-    );
-
-    if (missingFields.length > 0) {
-      logger.warn(
-        `🎁 ⚠️ Campos faltantes para promociones: ${missingFields.join(", ")}`
-      );
       logger.debug(
-        `🎁 Campos disponibles: ${Object.keys(firstRecord).join(", ")}`
+        `🔧 Aplicando conversión: Unit_Measure=${unitMeasure}, Factor=${factor}`
       );
-      return false;
-    }
 
-    logger.info(`🎁 ✅ Validación de campos completada exitosamente`);
-    return true;
+      // ✅ Aplicar conversión solo si la unidad requiere conversión (ej: CAJA)
+      const unitsRequiringConversion = [
+        "CAJA",
+        "CAJAS",
+        "PACK",
+        "PAQUETE",
+        "BOX",
+      ];
+
+      const convertedRow = { ...row };
+
+      if (unitsRequiringConversion.includes(unitMeasure.toUpperCase())) {
+        quantityFields.forEach((field) => {
+          if (
+            convertedRow[field] !== undefined &&
+            convertedRow[field] !== null
+          ) {
+            const originalValue = parseFloat(convertedRow[field]);
+            if (!isNaN(originalValue)) {
+              const convertedValue = originalValue * factor;
+              logger.debug(
+                `🔧 ${field}: ${originalValue} * ${factor} = ${convertedValue}`
+              );
+              convertedRow[field] = convertedValue;
+            }
+          }
+        });
+      } else {
+        logger.debug(`🔧 Unidad ${unitMeasure} no requiere conversión`);
+      }
+
+      return convertedRow;
+    } catch (error) {
+      logger.error(`🔧 Error en conversión de cantidades: ${error.message}`);
+      return { ...row };
+    }
   }
 
   /**
-   * Valida configuración de promociones - MEJORADO
+   * ✅ NUEVO: Construye referencias entre líneas regulares y bonificaciones
+   * @param {Array} allRows - Todas las filas de datos
+   * @param {Object} config - Configuración de campos
+   * @returns {Map} - Mapa de referencias línea -> NUM_LN
+   */
+  static buildLineReferences(allRows, config) {
+    const lineReferences = new Map();
+    const articleToLineMap = new Map(); // COD_ART -> NUM_LN
+
+    logger.debug(`🎁 Construyendo mapa de referencias de líneas...`);
+
+    // ✅ PRIMERA PASADA: Mapear códigos de artículo a números de línea
+    allRows.forEach((row) => {
+      const codArt = row[config.articleField]; // COD_ART
+      const numLn = row[config.lineNumberField]; // NUM_LN
+
+      if (codArt && numLn) {
+        // Si ya existe el artículo, mantener una lista de líneas
+        if (articleToLineMap.has(codArt)) {
+          const existingLines = articleToLineMap.get(codArt);
+          if (Array.isArray(existingLines)) {
+            existingLines.push(numLn);
+          } else {
+            articleToLineMap.set(codArt, [existingLines, numLn]);
+          }
+        } else {
+          articleToLineMap.set(codArt, numLn);
+        }
+      }
+    });
+
+    // ✅ SEGUNDA PASADA: Construir referencias para bonificaciones
+    allRows.forEach((row) => {
+      const artBon = row[config.bonusField]; // ART_BON
+      const codArtRfr = row[config.referenceField]; // COD_ART_RFR
+      const numLn = row[config.lineNumberField]; // NUM_LN
+
+      if (artBon === "B" && codArtRfr) {
+        // ✅ Buscar el NUM_LN del artículo de referencia
+        let referencedLineNumber = null;
+
+        if (articleToLineMap.has(codArtRfr)) {
+          const lineRef = articleToLineMap.get(codArtRfr);
+
+          // Si hay múltiples líneas para el mismo artículo, usar la primera
+          if (Array.isArray(lineRef)) {
+            referencedLineNumber = lineRef[0];
+            logger.debug(
+              `🎁 Múltiples líneas para ${codArtRfr}, usando línea ${referencedLineNumber}`
+            );
+          } else {
+            referencedLineNumber = lineRef;
+          }
+        }
+
+        if (referencedLineNumber) {
+          lineReferences.set(numLn, referencedLineNumber);
+          logger.debug(
+            `🎁 Referencia creada: Línea ${numLn} -> Línea ${referencedLineNumber} (${codArtRfr})`
+          );
+        } else {
+          logger.warn(
+            `🎁 No se encontró línea de referencia para ${codArtRfr}`
+          );
+        }
+      }
+    });
+
+    logger.debug(
+      `🎁 Referencias de líneas construidas: ${lineReferences.size} referencias`
+    );
+    return lineReferences;
+  }
+
+  /**
+   * ✅ MEJORADO: Identifica tipo de promoción con lógica más precisa
+   * @param {Object} row - Fila de datos
+   * @param {Object} config - Configuración de campos
+   * @returns {string} - Tipo de promoción identificado
+   */
+  static identifyPromotionType(row, config) {
+    const artBon = row[config.bonusField]; // ART_BON
+    const codArtRfr = row[config.referenceField]; // COD_ART_RFR
+    const cantidadBonifica =
+      row["CANTIDAD_BONIFICA"] || row["CANTIDAD_BONIFICADA"];
+    const porDscAp = row["POR_DSC_AP"];
+    const monDsc = row["MON_DSC"] || row[config.discountField];
+    const codArt = row[config.articleField]; // COD_ART
+
+    logger.debug(`🎁 Analizando línea para promoción:`, {
+      artBon,
+      codArtRfr,
+      cantidadBonifica: cantidadBonifica || 0,
+      porDscAp: porDscAp || 0,
+      monDsc: monDsc || 0,
+      codArt,
+    });
+
+    // ✅ CASO 1: Línea marcada como bonificación con ART_BON = 'B'
+    if (artBon === "B" || artBon === config.bonusIndicatorValue) {
+      // ✅ SUBCASO 1A: Bonificación real con cantidad
+      if (cantidadBonifica && parseFloat(cantidadBonifica) > 0) {
+        logger.debug(
+          `🎁 Bonificación por cantidad detectada: ${cantidadBonifica}`
+        );
+        return "BONUS_QUANTITY";
+      }
+
+      // ✅ SUBCASO 1B: "Bonificación" que es realmente descuento (tratar como regular)
+      if (
+        (!cantidadBonifica || parseFloat(cantidadBonifica) === 0) &&
+        ((porDscAp && parseFloat(porDscAp) > 0) ||
+          (monDsc && parseFloat(monDsc) > 0))
+      ) {
+        logger.debug(
+          `🎁 Línea con descuento (no bonificación real) - tratando como regular`
+        );
+        return "REGULAR_WITH_DISCOUNT";
+      }
+
+      // ✅ SUBCASO 1C: COD_ART_RFR hace referencia al mismo artículo
+      if (codArtRfr === codArt) {
+        logger.debug(`🎁 Bonificación del mismo producto detectada`);
+        return "SELF_BONUS";
+      }
+
+      // ✅ SUBCASO 1D: COD_ART_RFR hace referencia a otro artículo
+      if (codArtRfr && codArtRfr !== codArt) {
+        logger.debug(
+          `🎁 Bonificación cruzada detectada: ${codArtRfr} -> ${codArt}`
+        );
+        return "CROSS_BONUS";
+      }
+
+      logger.debug(`🎁 Bonificación genérica detectada`);
+      return "BONUS_GENERIC";
+    }
+
+    // ✅ CASO 2: Línea regular
+    logger.debug(`🎁 Línea regular detectada`);
+    return "REGULAR";
+  }
+
+  /**
+   * ✅ NUEVO: Procesa una fila individual aplicando toda la lógica de promociones
+   * @param {Object} row - Fila de datos original
+   * @param {Array} allRows - Todas las filas para referencias
+   * @param {Object} config - Configuración de campos
+   * @param {Map} lineReferences - Mapa de referencias de líneas
+   * @returns {Object} - Fila procesada
+   */
+  static processPromotionRow(row, allRows, config, lineReferences) {
+    try {
+      // ✅ 1. Crear copia de la fila para no modificar original
+      let processedRow = { ...row };
+
+      // ✅ 2. Identificar tipo de promoción
+      const promotionType = this.identifyPromotionType(processedRow, config);
+
+      // ✅ 3. Procesar según tipo identificado
+      switch (promotionType) {
+        case "REGULAR_WITH_DISCOUNT":
+          // Tratar como línea regular, mantener descuentos
+          logger.debug(`🎁 Procesando como regular con descuento`);
+          processedRow = this.processRegularLine(processedRow, config);
+          break;
+
+        case "BONUS_QUANTITY":
+        case "SELF_BONUS":
+        case "CROSS_BONUS":
+        case "BONUS_GENERIC":
+          // Procesar como bonificación real
+          logger.debug(`🎁 Procesando bonificación tipo: ${promotionType}`);
+          processedRow = this.processBonusLine(
+            processedRow,
+            config,
+            lineReferences
+          );
+          break;
+
+        case "REGULAR":
+        default:
+          // Línea regular sin promoción
+          logger.debug(`🎁 Procesando línea regular`);
+          processedRow = this.processRegularLine(processedRow, config);
+          break;
+      }
+
+      // ✅ 4. Agregar metadatos de promoción
+      processedRow._promotionType = promotionType;
+      processedRow._processed = true;
+
+      return processedRow;
+    } catch (error) {
+      logger.error(`🎁 Error procesando fila de promoción: ${error.message}`);
+      return { ...row, _error: error.message };
+    }
+  }
+
+  /**
+   * ✅ NUEVO: Procesa línea regular (sin bonificación)
+   * @param {Object} row - Fila de datos
+   * @param {Object} config - Configuración de campos
+   * @returns {Object} - Fila procesada
+   */
+  static processRegularLine(row, config) {
+    const processedRow = { ...row };
+
+    // ✅ Establecer campos de promoción estándar para línea regular
+    processedRow.PEDIDO_LINEA_BONIF = null;
+    processedRow.CANTIDAD_BONIFICAD = 0;
+
+    // ✅ Asegurar que cantidades principales estén definidas
+    processedRow.CANTIDAD_PEDIDA =
+      processedRow.CANTIDAD_PEDIDA || processedRow[config.quantityField] || 0;
+    processedRow.CANTIDAD_A_FACTURA =
+      processedRow.CANTIDAD_A_FACTURA || processedRow.CANTIDAD_PEDIDA || 0;
+
+    // ✅ Marcar como línea regular
+    processedRow._IS_BONUS_LINE = false;
+    processedRow._IS_TRIGGER_LINE = false;
+
+    logger.debug(
+      `📋 Línea regular procesada: ${processedRow[config.articleField]}`
+    );
+    return processedRow;
+  }
+
+  /**
+   * ✅ NUEVO: Procesa línea de bonificación
+   * @param {Object} row - Fila de datos
+   * @param {Object} config - Configuración de campos
+   * @param {Map} lineReferences - Referencias de líneas
+   * @returns {Object} - Fila procesada
+   */
+  static processBonusLine(row, config, lineReferences) {
+    const processedRow = { ...row };
+    const numLn = row[config.lineNumberField];
+
+    // ✅ Establecer referencia de línea si existe
+    if (lineReferences && lineReferences.has(numLn)) {
+      processedRow.PEDIDO_LINEA_BONIF = lineReferences.get(numLn);
+      logger.debug(
+        `🎁 Referencia asignada: Línea ${numLn} -> Línea ${processedRow.PEDIDO_LINEA_BONIF}`
+      );
+    } else {
+      processedRow.PEDIDO_LINEA_BONIF = null;
+      logger.warn(
+        `🎁 No se encontró referencia para línea de bonificación ${numLn}`
+      );
+    }
+
+    // ✅ Establecer cantidad de bonificación
+    const cantidadBonifica =
+      row["CANTIDAD_BONIFICA"] || row["CANTIDAD_BONIFICADA"] || 0;
+    processedRow.CANTIDAD_BONIFICAD = parseFloat(cantidadBonifica) || 0;
+
+    // ✅ Para bonificaciones, cantidad pedida puede ser 0 o igual a bonificación
+    processedRow.CANTIDAD_PEDIDA = processedRow.CANTIDAD_BONIFICAD;
+    processedRow.CANTIDAD_A_FACTURA = 0; // Bonificaciones no se facturan normalmente
+
+    // ✅ Marcar como línea de bonificación
+    processedRow._IS_BONUS_LINE = true;
+    processedRow._IS_TRIGGER_LINE = false;
+
+    logger.debug(
+      `🎁 Línea bonificación procesada: ${processedRow[config.articleField]} (${
+        processedRow.CANTIDAD_BONIFICAD
+      })`
+    );
+    return processedRow;
+  }
+
+  // ===============================
+  // 2. MÉTODOS DE VALIDACIÓN Y CONFIGURACIÓN
+  // ===============================
+
+  /**
+   * Valida configuración de promociones
    * @param {Object} mapping - Configuración de mapping
    * @returns {boolean} - Si la configuración es válida
    */
@@ -252,396 +483,170 @@ class PromotionProcessor {
         return false;
       }
 
-      if (!mapping.promotionConfig.enabled) {
+      const config = mapping.promotionConfig;
+
+      // Validaciones básicas
+      if (!config.enabled) {
         logger.debug("🎁 Promociones deshabilitadas");
         return false;
       }
 
-      // Validar campos requeridos básicos
-      const detectFields = mapping.promotionConfig.detectFields;
-      const targetFields = mapping.promotionConfig.targetFields;
+      // Validar campos requeridos si están definidos
+      const requiredFields = ["bonusField", "referenceField", "articleField"];
+      const missingFields = requiredFields.filter(
+        (field) =>
+          config.detectFields &&
+          config.detectFields[field] &&
+          !config.detectFields[field]
+      );
 
-      if (!detectFields || !targetFields) {
+      if (missingFields.length > 0) {
         logger.warn(
-          "🎁 Configuración de promociones incompleta: faltan detectFields o targetFields"
+          `🎁 Campos requeridos faltantes en configuración: ${missingFields.join(
+            ", "
+          )}`
         );
         return false;
       }
 
-      logger.info("🎁 ✅ Configuración de promociones válida");
+      logger.debug("🎁 ✅ Configuración de promociones válida");
       return true;
     } catch (error) {
-      logger.error(
-        `🎁 Error validando configuración de promociones: ${error.message}`
-      );
+      logger.error(`🎁 Error validando configuración: ${error.message}`);
       return false;
     }
   }
 
-  // ===============================
-  // 3. MÉTODOS DE TRANSFORMACIÓN DE LÍNEAS
-  // ===============================
-
   /**
-   * ✅ CORREGIDO: Transforma línea bonificada con lógica correcta de asignación de línea de referencia
-   * @param {Object} bonusLine - Línea bonificada
-   * @param {Object} fieldConfig - Configuración de campos
-   * @param {Array} allSortedData - Todos los datos ordenados por línea
-   * @returns {Object} - Línea transformada
+   * Obtiene configuración de campos de promociones - MEJORADO
+   * @param {Object} mapping - Configuración de mapping
+   * @returns {Object} - Configuración de campos
    */
-  static transformBonusLine(bonusLine, fieldConfig, allSortedData) {
-    try {
-      const referenceArticle = this.extractValue(
-        bonusLine,
-        fieldConfig.referenceField
-      );
-      const currentLineNumber = this.extractValue(
-        bonusLine,
-        fieldConfig.lineNumberField
-      );
-      const articleCode = this.extractValue(
-        bonusLine,
-        fieldConfig.articleField
-      );
-      const bonusQuantity = this.extractValue(
-        bonusLine,
-        fieldConfig.quantityField
-      );
+  static getFieldConfiguration(mapping) {
+    const defaultConfig = {
+      // Campos de detección
+      bonusField: "ART_BON",
+      bonusIndicatorValue: "B",
+      referenceField: "COD_ART_RFR",
+      discountField: "MON_DSC",
+      lineNumberField: "NUM_LN",
+      articleField: "COD_ART",
+      quantityField: "CNT_MAX",
 
-      logger.error(
-        `🎁 ============ TRANSFORMANDO LÍNEA BONIFICADA ============`
-      );
-      logger.error(
-        `🎁 Línea BONUS: ${currentLineNumber} | Artículo: ${articleCode}`
-      );
-      logger.error(`🎁 Busca referencia a artículo: ${referenceArticle}`);
+      // Campos destino
+      bonusLineRef: "PEDIDO_LINEA_BONIF",
+      orderedQuantity: "CANTIDAD_PEDIDA",
+      invoiceQuantity: "CANTIDAD_A_FACTURA",
+      bonusQuantity: "CANTIDAD_BONIFICAD",
+    };
 
-      // ✅ NUEVA LÓGICA: Buscar la línea trigger más cercana
-      const referenceLineNumber = this.findBestTriggerLine(
-        referenceArticle,
-        currentLineNumber,
-        allSortedData,
-        fieldConfig
-      );
-
-      logger.error(
-        `🎁 ✅ LÍNEA TRIGGER ENCONTRADA: línea ${referenceLineNumber} (artículo ${referenceArticle})`
-      );
-
-      // ✅ CREAR TRANSFORMACIÓN CORRECTA PARA LÍNEA BONIFICADA
-      const transformed = {
-        ...bonusLine,
-
-        // ✅ CAMPOS CORRECTOS PARA LÍNEA BONIFICADA
-        PEDIDO_LINEA_BONIF: referenceLineNumber, // ✅ Referencia a línea trigger correcta
-        CANTIDAD_BONIFICAD: this.parseNumericValue(bonusQuantity), // ✅ Cantidad bonificada
-
-        // ✅ CAMPOS QUE DEBEN SER NULL PARA LÍNEAS BONIFICADAS
-        CANTIDAD_PEDIDA: null,
-        CANTIDAD_A_FACTURA: null,
-        CANTIDAD_FACTURADA: 0,
-        CANTIDAD_RESERVADA: 0,
-        CANTIDAD_CANCELADA: 0,
-
-        // Metadatos para debugging
-        _IS_BONUS_LINE: true,
-        _REFERENCE_ARTICLE: referenceArticle,
-        _REFERENCE_LINE_NUMBER: referenceLineNumber,
-        _PROMOTION_TYPE: "BONUS",
+    // ✅ COMBINAR CON CONFIGURACIÓN DEL MAPPING
+    if (mapping.promotionConfig) {
+      return {
+        ...defaultConfig,
+        ...mapping.promotionConfig.detectFields,
+        ...mapping.promotionConfig.targetFields,
       };
-
-      // ✅ LIMPIAR DATOS PROBLEMÁTICOS
-      this.cleanTransformedData(transformed);
-
-      // ✅ LOG DETALLADO DE DATOS CORRECTOS
-      logger.error(
-        `🎁 ============ DATOS LÍNEA BONIFICADA CORREGIDOS ============`
-      );
-      logger.error(`🎁 CANTIDAD_BONIFICAD: ${transformed.CANTIDAD_BONIFICAD}`);
-      logger.error(
-        `🎁 CANTIDAD_PEDIDA: ${transformed.CANTIDAD_PEDIDA} (debe ser null)`
-      );
-      logger.error(
-        `🎁 CANTIDAD_A_FACTURA: ${transformed.CANTIDAD_A_FACTURA} (debe ser null)`
-      );
-      logger.error(`🎁 PEDIDO_LINEA_BONIF: ${transformed.PEDIDO_LINEA_BONIF}`);
-
-      return transformed;
-    } catch (error) {
-      logger.error(
-        `🎁 ❌ Error transformando línea bonificada: ${error.message}`
-      );
-      throw error;
     }
+
+    return defaultConfig;
   }
 
   /**
-   * ✅ NUEVO: Encuentra la línea trigger más apropiada para una línea bonus
-   * @param {string} referenceArticle - Artículo de referencia
-   * @param {number} currentLineNumber - Número de línea actual (bonus)
-   * @param {Array} allSortedData - Todos los datos ordenados
-   * @param {Object} fieldConfig - Configuración de campos
-   * @returns {number} - Número de línea trigger encontrada
+   * Determina si se deben usar promociones para este mapping
+   * @param {Object} mapping - Configuración de mapping
+   * @returns {boolean} - Si se deben usar promociones
    */
-  static findBestTriggerLine(
-    referenceArticle,
-    currentLineNumber,
-    allSortedData,
-    fieldConfig
-  ) {
-    logger.error(`🎯 BUSCANDO LÍNEA TRIGGER PARA:`);
-    logger.error(`🎯   Artículo referencia: ${referenceArticle}`);
-    logger.error(`🎯   Línea bonus actual: ${currentLineNumber}`);
-
-    // ✅ ESTRATEGIA 1: Buscar hacia arriba (líneas anteriores)
-    const linesAbove = allSortedData.filter((line) => {
-      const lineNumber = this.extractValue(line, fieldConfig.lineNumberField);
-      const articleCode = this.extractValue(line, fieldConfig.articleField);
-      const bonusField = this.extractValue(line, fieldConfig.bonusField);
-
-      return (
-        lineNumber < currentLineNumber &&
-        articleCode === referenceArticle &&
-        (bonusField === 0 || bonusField === null || bonusField === "")
-      );
-    });
-
-    if (linesAbove.length > 0) {
-      // Tomar la línea más cercana hacia arriba
-      const closestAbove = linesAbove[linesAbove.length - 1];
-      const lineNumber = this.extractValue(
-        closestAbove,
-        fieldConfig.lineNumberField
-      );
-      logger.error(`🎯 ✅ ENCONTRADA línea trigger ARRIBA: ${lineNumber}`);
-      return lineNumber;
-    }
-
-    // ✅ ESTRATEGIA 2: Buscar hacia abajo (líneas posteriores)
-    const linesBelow = allSortedData.filter((line) => {
-      const lineNumber = this.extractValue(line, fieldConfig.lineNumberField);
-      const articleCode = this.extractValue(line, fieldConfig.articleField);
-      const bonusField = this.extractValue(line, fieldConfig.bonusField);
-
-      return (
-        lineNumber > currentLineNumber &&
-        articleCode === referenceArticle &&
-        (bonusField === 0 || bonusField === null || bonusField === "")
-      );
-    });
-
-    if (linesBelow.length > 0) {
-      // Tomar la línea más cercana hacia abajo
-      const closestBelow = linesBelow[0];
-      const lineNumber = this.extractValue(
-        closestBelow,
-        fieldConfig.lineNumberField
-      );
-      logger.error(`🎯 ✅ ENCONTRADA línea trigger ABAJO: ${lineNumber}`);
-      return lineNumber;
-    }
-
-    // ✅ ESTRATEGIA 3: Fallback - buscar cualquier línea con el artículo
-    const anyLine = allSortedData.find((line) => {
-      const articleCode = this.extractValue(line, fieldConfig.articleField);
-      return articleCode === referenceArticle;
-    });
-
-    if (anyLine) {
-      const lineNumber = this.extractValue(
-        anyLine,
-        fieldConfig.lineNumberField
-      );
-      logger.error(`🎯 ⚠️ FALLBACK - usando línea: ${lineNumber}`);
-      return lineNumber;
-    }
-
-    // ✅ ÚLTIMO RECURSO: Línea 1
-    logger.error(`🎯 ❌ NO encontrada línea trigger, usando línea 1`);
-    return 1;
-  }
-
-  /**
-   * Transforma línea que dispara promoción - CORREGIDO
-   * @param {Object} triggerLine - Línea que dispara promoción
-   * @param {Object} fieldConfig - Configuración de campos
-   * @returns {Object} - Línea transformada
-   */
-  static transformTriggerLine(triggerLine, fieldConfig) {
+  static shouldUsePromotions(mapping) {
     try {
-      const lineNumber = this.extractValue(
-        triggerLine,
-        fieldConfig.lineNumberField
-      );
-      const articleCode = this.extractValue(
-        triggerLine,
-        fieldConfig.articleField
-      );
-      const quantity = this.extractValue(
-        triggerLine,
-        fieldConfig.quantityField
-      );
-
-      logger.error(`🎯 ============ TRANSFORMANDO LÍNEA TRIGGER ============`);
-      logger.error(`🎯 Línea: ${lineNumber} | Artículo: ${articleCode}`);
-      logger.error(`🎯 Cantidad: ${quantity}`);
-
-      // ✅ CREAR TRANSFORMACIÓN CORRECTA PARA LÍNEA TRIGGER
-      const transformed = {
-        ...triggerLine,
-
-        // ✅ CAMPOS CORRECTOS PARA LÍNEA TRIGGER (NORMAL)
-        CANTIDAD_PEDIDA: this.parseNumericValue(quantity), // ✅ Cantidad real
-        CANTIDAD_A_FACTURA: this.parseNumericValue(quantity), // ✅ Cantidad real
-        CANTIDAD_FACTURADA: 0,
-        CANTIDAD_RESERVADA: 0,
-        CANTIDAD_CANCELADA: 0,
-
-        // ✅ CAMPOS QUE DEBEN SER NULL PARA LÍNEAS NORMALES
-        PEDIDO_LINEA_BONIF: null,
-        CANTIDAD_BONIFICAD: null,
-
-        // Metadatos
-        _IS_TRIGGER_LINE: true,
-        _PROMOTION_TYPE: "TRIGGER",
-      };
-
-      // ✅ LIMPIAR DATOS PROBLEMÁTICOS
-      this.cleanTransformedData(transformed);
-
-      // ✅ LOG DETALLADO DE DATOS CORRECTOS
-      logger.error(
-        `🎯 ============ DATOS LÍNEA TRIGGER CORREGIDOS ============`
-      );
-      logger.error(`🎯 CANTIDAD_PEDIDA: ${transformed.CANTIDAD_PEDIDA}`);
-      logger.error(`🎯 CANTIDAD_A_FACTURA: ${transformed.CANTIDAD_A_FACTURA}`);
-      logger.error(
-        `🎯 CANTIDAD_BONIFICAD: ${transformed.CANTIDAD_BONIFICAD} (debe ser null)`
-      );
-      logger.error(
-        `🎯 PEDIDO_LINEA_BONIF: ${transformed.PEDIDO_LINEA_BONIF} (debe ser null)`
-      );
-
-      return transformed;
-    } catch (error) {
-      logger.error(`🎯 ❌ Error transformando línea trigger: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Transforma línea normal - SOLO AGREGANDO METADATOS, SIN CAMBIAR TU LÓGICA
-   * @param {Object} normalLine - Línea normal
-   * @param {Object} fieldConfig - Configuración de campos
-   * @returns {Object} - Línea transformada
-   */
-  static transformNormalLine(normalLine, fieldConfig) {
-    try {
-      const articleCode = this.extractValue(
-        normalLine,
-        fieldConfig.articleField
-      );
-      const currentLineNumber = this.extractValue(
-        normalLine,
-        fieldConfig.lineNumberField
-      );
-      const quantity = this.extractValue(normalLine, fieldConfig.quantityField);
-
-      logger.debug(
-        `🎁 Transformando línea normal: ${currentLineNumber} | Art: ${articleCode}`
-      );
-
-      // ✅ TU TRANSFORMACIÓN ORIGINAL (SIN CAMBIOS)
-      const transformed = {
-        ...normalLine,
-
-        CANTIDAD_PEDIDA: this.parseNumericValue(quantity),
-        CANTIDAD_A_FACTURA: this.parseNumericValue(quantity),
-        CANTIDAD_BONIFICAD: 0,
-        PEDIDO_LINEA_BONIF: null,
-
-        _IS_NORMAL_LINE: true,
-        _IS_BONUS_LINE: false,
-        _IS_TRIGGER_LINE: false,
-        _PROMOTION_TYPE: "NORMAL",
-      };
-
-      // ✅ SOLO AGREGAR METADATOS DE DESCUENTO (SIN CAMBIAR TRANSFORMACIÓN)
-      const bonusIndicator = this.extractValue(
-        normalLine,
-        fieldConfig.bonusField
-      );
-      const bonusReference = this.extractValue(
-        normalLine,
-        fieldConfig.referenceField
-      );
-      const discountPercent = this.extractValue(normalLine, "POR_DSC_AP");
-      const discountAmount = this.extractValue(normalLine, "MON_DSC");
-
-      if (
-        bonusIndicator === "B" &&
-        bonusReference === articleCode &&
-        (discountPercent > 0 || discountAmount > 0)
-      ) {
-        // Solo agregar metadatos informativos
-        transformed._IS_DISCOUNT_APPLIED = true;
-        transformed._DISCOUNT_PERCENT = this.parseNumericValue(discountPercent);
-        transformed._DISCOUNT_AMOUNT = this.parseNumericValue(discountAmount);
-        transformed._PROMOTION_TYPE = "REGULAR_DISCOUNT";
+      // 1. Verificar si las promociones están habilitadas
+      if (!mapping.promotionConfig?.enabled) {
+        logger.debug("🎁 Promociones deshabilitadas en configuración");
+        return false;
       }
 
-      // ✅ TU LIMPIEZA ORIGINAL
-      this.cleanTransformedData(transformed);
+      // 2. Validar configuración de promociones
+      if (!this.validatePromotionConfig(mapping)) {
+        logger.debug("🎁 Configuración de promociones inválida");
+        return false;
+      }
 
-      return transformed;
+      // 3. Verificar que existan tablas de detalle
+      const detailTables =
+        mapping.tableConfigs?.filter((tc) => tc.isDetailTable) || [];
+      if (detailTables.length === 0) {
+        logger.debug("🎁 No hay tablas de detalle configuradas");
+        return false;
+      }
+
+      logger.info("🎁 ✅ Condiciones para promociones cumplidas");
+      return true;
     } catch (error) {
-      logger.error(`🎁 Error transformando línea normal: ${error.message}`);
-      throw error;
+      logger.error(`🎁 Error verificando promociones: ${error.message}`);
+      return false;
     }
   }
 
+  /**
+   * Valida que los datos contengan campos requeridos para promociones
+   * @param {Array} data - Datos a validar
+   * @param {Object} config - Configuración de campos
+   * @returns {boolean} - Si los datos son válidos para promociones
+   */
+  static validateDataFields(data, config) {
+    if (!data || data.length === 0) {
+      return false;
+    }
+
+    const firstRecord = data[0];
+    const requiredFields = [
+      config.bonusField,
+      config.referenceField,
+      config.articleField,
+      config.lineNumberField,
+    ];
+
+    const missingFields = requiredFields.filter(
+      (field) => !firstRecord.hasOwnProperty(field)
+    );
+
+    if (missingFields.length > 0) {
+      logger.warn(
+        `🎁 Campos requeridos faltantes en datos: ${missingFields.join(", ")}`
+      );
+      return false;
+    }
+
+    return true;
+  }
+
   // ===============================
-  // 4. MÉTODOS DE EXTRACCIÓN Y LIMPIEZA DE DATOS
+  // 3. MÉTODOS DE TRANSFORMACIÓN Y LIMPIEZA
   // ===============================
 
   /**
-   * ✅ MEJORADO: Extrae valor real de configuración de campo o datos directos
-   * @param {Object} data - Datos de la fila
-   * @param {string|Object} fieldConfig - Configuración del campo
-   * @returns {*} - Valor extraído
+   * Transforma línea normal (sin promociones)
+   * @param {Object} row - Fila de datos
+   * @param {Object} config - Configuración
+   * @returns {Object} - Fila transformada
    */
-  static extractValue(data, fieldConfig) {
-    if (!fieldConfig) {
-      return null;
+  static transformNormalLine(row, config) {
+    const transformed = { ...row };
+
+    // Establecer valores por defecto para campos de promoción
+    transformed.PEDIDO_LINEA_BONIF = null;
+    transformed.CANTIDAD_BONIFICAD = 0;
+
+    // Asegurar cantidades básicas
+    if (!transformed.CANTIDAD_PEDIDA && config.quantityField) {
+      transformed.CANTIDAD_PEDIDA = transformed[config.quantityField] || 0;
     }
 
-    // Si es string simple, buscar directamente
-    if (typeof fieldConfig === "string") {
-      return data[fieldConfig];
+    if (!transformed.CANTIDAD_A_FACTURA) {
+      transformed.CANTIDAD_A_FACTURA = transformed.CANTIDAD_PEDIDA || 0;
     }
 
-    // Si es objeto de configuración, extraer correctamente
-    if (typeof fieldConfig === "object" && fieldConfig.sourceField) {
-      let value = data[fieldConfig.sourceField];
-
-      // ✅ APLICAR CONVERSIONES SI ESTÁN CONFIGURADAS
-      if (fieldConfig.unitConversion?.enabled && typeof value === "number") {
-        value = this.applyUnitConversion(value, fieldConfig.unitConversion);
-      }
-
-      // ✅ USAR VALOR POR DEFECTO SI NO HAY VALOR
-      if (
-        (value === null || value === undefined) &&
-        fieldConfig.defaultValue !== undefined
-      ) {
-        value = fieldConfig.defaultValue;
-      }
-
-      return value;
-    }
-
-    // Si es valor directo
-    return fieldConfig;
+    return transformed;
   }
 
   /**
@@ -781,128 +786,92 @@ class PromotionProcessor {
     logger.debug(`🧹 Datos limpiados para inserción`);
   }
 
-  // ===============================
-  // 5. MÉTODOS DE CONFIGURACIÓN
-  // ===============================
-
   /**
-   * Obtiene configuración de campos de promociones - MEJORADO
-   * @param {Object} mapping - Configuración de mapping
-   * @returns {Object} - Configuración de campos
+   * ✅ MEJORADO: Extrae valor real de configuración de campo o datos directos
+   * @param {Object} data - Datos de la fila
+   * @param {string|Object} fieldConfig - Configuración del campo
+   * @returns {*} - Valor extraído
    */
-  static getFieldConfiguration(mapping) {
-    const defaultConfig = {
-      // Campos de detección
-      bonusField: "ART_BON",
-      bonusIndicatorValue: "B",
-      referenceField: "COD_ART_RFR",
-      discountField: "MON_DSC",
-      lineNumberField: "NUM_LN",
-      articleField: "COD_ART",
-      quantityField: "CNT_MAX",
-
-      // Campos destino
-      bonusLineRef: "PEDIDO_LINEA_BONIF",
-      orderedQuantity: "CANTIDAD_PEDIDA",
-      invoiceQuantity: "CANTIDAD_A_FACTURA",
-      bonusQuantity: "CANTIDAD_BONIFICAD",
-    };
-
-    // ✅ COMBINAR CON CONFIGURACIÓN DEL MAPPING
-    if (mapping.promotionConfig) {
-      return {
-        ...defaultConfig,
-        ...mapping.promotionConfig.detectFields,
-        ...mapping.promotionConfig.targetFields,
-      };
+  static extractValue(data, fieldConfig) {
+    if (!fieldConfig) {
+      return null;
     }
 
-    return defaultConfig;
-  }
-
-  /**
-   * Determina si se deben usar promociones para este mapping
-   * @param {Object} mapping - Configuración de mapping
-   * @returns {boolean} - Si se deben usar promociones
-   */
-  static shouldUsePromotions(mapping) {
-    try {
-      // 1. Verificar si las promociones están habilitadas
-      if (!mapping.promotionConfig?.enabled) {
-        logger.debug("🎁 Promociones deshabilitadas en configuración");
-        return false;
-      }
-
-      // 2. Validar configuración de promociones
-      if (!this.validatePromotionConfig(mapping)) {
-        logger.debug("🎁 Configuración de promociones inválida");
-        return false;
-      }
-
-      // 3. Verificar que existan tablas de detalle
-      const detailTables =
-        mapping.tableConfigs?.filter((tc) => tc.isDetailTable) || [];
-      if (detailTables.length === 0) {
-        logger.debug("🎁 No hay tablas de detalle configuradas");
-        return false;
-      }
-
-      logger.info("🎁 ✅ Condiciones para promociones cumplidas");
-      return true;
-    } catch (error) {
-      logger.error(`🎁 Error verificando promociones: ${error.message}`);
-      return false;
+    // Si es string simple, buscar directamente
+    if (typeof fieldConfig === "string") {
+      return data[fieldConfig];
     }
+
+    // Si es objeto de configuración, extraer correctamente
+    if (typeof fieldConfig === "object" && fieldConfig.sourceField) {
+      let value = data[fieldConfig.sourceField];
+
+      // ✅ APLICAR CONVERSIONES SI ESTÁN CONFIGURADAS
+      if (fieldConfig.unitConversion?.enabled && typeof value === "number") {
+        value = this.applyUnitConversion(value, fieldConfig.unitConversion);
+      }
+
+      // ✅ USAR VALOR POR DEFECTO SI NO HAY VALOR
+      if (
+        (value === null || value === undefined) &&
+        fieldConfig.defaultValue !== undefined
+      ) {
+        value = fieldConfig.defaultValue;
+      }
+
+      return value;
+    }
+
+    // Si es valor directo
+    return fieldConfig;
   }
 
   // ===============================
-  // 6. MÉTODOS DE REGLAS Y APLICACIÓN
+  // 4. MÉTODOS DE REGLAS DE PROMOCIÓN
   // ===============================
 
   /**
-   * Aplica reglas específicas de promoción
+   * Aplica reglas específicas de promociones
    * @param {Array} data - Datos procesados
    * @param {Object} promotionConfig - Configuración de promociones
    * @returns {Array} - Datos con reglas aplicadas
    */
   static applyPromotionRules(data, promotionConfig) {
-    if (!promotionConfig?.rules || promotionConfig.rules.length === 0) {
-      logger.debug("🎁 No hay reglas específicas de promoción configuradas");
-      return data;
-    }
+    try {
+      if (!promotionConfig.rules || promotionConfig.rules.length === 0) {
+        logger.debug("🎁 No hay reglas específicas de promoción configuradas");
+        return data;
+      }
 
-    logger.info(
-      `🎁 Aplicando ${promotionConfig.rules.length} reglas de promoción`
-    );
+      logger.info(
+        `🎁 Aplicando ${promotionConfig.rules.length} reglas de promoción`
+      );
 
-    let processedData = [...data];
+      let processedData = [...data];
 
-    promotionConfig.rules.forEach((rule, index) => {
-      if (rule.enabled) {
-        try {
-          logger.debug(
-            `🎁 Aplicando regla ${index + 1}: ${rule.name} (${rule.type})`
-          );
-          processedData = this.applyRule(processedData, rule);
-        } catch (ruleError) {
-          logger.error(
-            `🎁 ❌ Error aplicando regla ${rule.name}: ${ruleError.message}`
-          );
+      for (const rule of promotionConfig.rules) {
+        if (rule.enabled !== false) {
+          processedData = this.applyPromotionRule(processedData, rule);
         }
       }
-    });
 
-    return processedData;
+      return processedData;
+    } catch (error) {
+      logger.error(`🎁 Error aplicando reglas de promoción: ${error.message}`);
+      return data;
+    }
   }
 
   /**
    * Aplica una regla específica de promoción
-   * @param {Array} data - Datos a procesar
+   * @param {Array} data - Datos
    * @param {Object} rule - Regla a aplicar
-   * @returns {Array} - Datos con regla aplicada
+   * @returns {Array} - Datos procesados
    */
-  static applyRule(data, rule) {
+  static applyPromotionRule(data, rule) {
     try {
+      logger.debug(`🎁 Aplicando regla: ${rule.name} (${rule.type})`);
+
       switch (rule.type) {
         case "FAMILY_DISCOUNT":
           return this.applyFamilyDiscountRule(data, rule);
@@ -916,6 +885,10 @@ class PromotionProcessor {
           return this.applyInvoiceDiscountRule(data, rule);
         case "ONE_TIME_OFFER":
           return this.applyOneTimeOfferRule(data, rule);
+        case "MINIMUM_QUANTITY":
+          return this.applyMinimumQuantityRule(data, rule);
+        case "PERCENTAGE_BONUS":
+          return this.applyPercentageBonusRule(data, rule);
         default:
           logger.warn(`🎁 Tipo de regla no soportado: ${rule.type}`);
           return data;
@@ -934,8 +907,30 @@ class PromotionProcessor {
    */
   static applyFamilyDiscountRule(data, rule) {
     logger.debug(`🎁 Aplicando regla de descuento por familia: ${rule.name}`);
-    // Implementar lógica específica según necesidades
-    return data;
+
+    return data.map((row) => {
+      // Lógica específica para descuentos por familia
+      if (
+        rule.conditions &&
+        this.evaluateRuleConditions(row, rule.conditions)
+      ) {
+        const processedRow = { ...row };
+
+        if (rule.actions?.discount) {
+          const discount = parseFloat(rule.actions.discount);
+          if (!isNaN(discount)) {
+            processedRow.POR_DSC_AP = discount;
+            processedRow._FAMILY_DISCOUNT_APPLIED = true;
+            logger.debug(
+              `🎁 Descuento familia aplicado: ${discount}% a ${row.COD_ART}`
+            );
+          }
+        }
+
+        return processedRow;
+      }
+      return row;
+    });
   }
 
   /**
@@ -948,8 +943,49 @@ class PromotionProcessor {
     logger.debug(
       `🎁 Aplicando regla de bonificación por cantidad: ${rule.name}`
     );
-    // Implementar lógica específica según necesidades
-    return data;
+
+    const enhancedData = [...data];
+
+    data.forEach((row, index) => {
+      if (
+        rule.conditions &&
+        this.evaluateRuleConditions(row, rule.conditions)
+      ) {
+        const quantity = parseFloat(row.CANTIDAD_PEDIDA || row.CNT_MAX || 0);
+
+        if (
+          rule.actions?.bonusThreshold &&
+          quantity >= rule.actions.bonusThreshold
+        ) {
+          const bonusQuantity =
+            Math.floor(quantity / rule.actions.bonusThreshold) *
+            (rule.actions.bonusAmount || 1);
+
+          if (bonusQuantity > 0) {
+            // Crear línea de bonificación
+            const bonusLine = {
+              ...row,
+              ART_BON: "B",
+              COD_ART_RFR: row.COD_ART,
+              CANTIDAD_BONIFICAD: bonusQuantity,
+              CANTIDAD_PEDIDA: bonusQuantity,
+              CANTIDAD_A_FACTURA: 0,
+              PEDIDO_LINEA_BONIF: row.NUM_LN,
+              _IS_BONUS_LINE: true,
+              _QUANTITY_BONUS_APPLIED: true,
+              NUM_LN: data.length + enhancedData.length - data.length + 1, // Nuevo número de línea
+            };
+
+            enhancedData.push(bonusLine);
+            logger.debug(
+              `🎁 Bonificación por cantidad creada: ${bonusQuantity} de ${row.COD_ART}`
+            );
+          }
+        }
+      }
+    });
+
+    return enhancedData;
   }
 
   /**
@@ -960,8 +996,37 @@ class PromotionProcessor {
    */
   static applyScaledBonusRule(data, rule) {
     logger.debug(`🎁 Aplicando regla de bonificación escalada: ${rule.name}`);
-    // Implementar lógica específica según necesidades
-    return data;
+
+    return data.map((row) => {
+      if (
+        rule.conditions &&
+        this.evaluateRuleConditions(row, rule.conditions)
+      ) {
+        const processedRow = { ...row };
+        const quantity = parseFloat(row.CANTIDAD_PEDIDA || row.CNT_MAX || 0);
+
+        // Evaluar escalas de bonificación
+        if (rule.actions?.scales) {
+          for (const scale of rule.actions.scales) {
+            if (
+              quantity >= scale.minQuantity &&
+              (scale.maxQuantity === undefined || quantity <= scale.maxQuantity)
+            ) {
+              processedRow.CANTIDAD_BONIFICAD =
+                (processedRow.CANTIDAD_BONIFICAD || 0) + scale.bonusAmount;
+              processedRow._SCALED_BONUS_APPLIED = true;
+              logger.debug(
+                `🎁 Bonificación escalada aplicada: ${scale.bonusAmount} por escala`
+              );
+              break;
+            }
+          }
+        }
+
+        return processedRow;
+      }
+      return row;
+    });
   }
 
   /**
@@ -974,8 +1039,40 @@ class PromotionProcessor {
     logger.debug(
       `🎁 Aplicando regla de bonificación por producto: ${rule.name}`
     );
-    // Implementar lógica específica según necesidades
-    return data;
+
+    const enhancedData = [...data];
+
+    data.forEach((row) => {
+      if (
+        rule.conditions &&
+        this.evaluateRuleConditions(row, rule.conditions)
+      ) {
+        if (rule.actions?.bonusProducts) {
+          rule.actions.bonusProducts.forEach((bonusProduct) => {
+            const bonusLine = {
+              ...row,
+              COD_ART: bonusProduct.productCode,
+              ART_BON: "B",
+              COD_ART_RFR: row.COD_ART,
+              CANTIDAD_BONIFICAD: bonusProduct.quantity || 1,
+              CANTIDAD_PEDIDA: bonusProduct.quantity || 1,
+              CANTIDAD_A_FACTURA: 0,
+              PEDIDO_LINEA_BONIF: row.NUM_LN,
+              _IS_BONUS_LINE: true,
+              _PRODUCT_BONUS_APPLIED: true,
+              NUM_LN: data.length + enhancedData.length - data.length + 1,
+            };
+
+            enhancedData.push(bonusLine);
+            logger.debug(
+              `🎁 Producto bonificación creado: ${bonusProduct.productCode}`
+            );
+          });
+        }
+      }
+    });
+
+    return enhancedData;
   }
 
   /**
@@ -986,7 +1083,29 @@ class PromotionProcessor {
    */
   static applyInvoiceDiscountRule(data, rule) {
     logger.debug(`🎁 Aplicando regla de descuento en factura: ${rule.name}`);
-    // Implementar lógica específica según necesidades
+
+    const totalInvoice = data.reduce((sum, row) => {
+      const amount = parseFloat(row.MON_TOT || row.MONTO_TOTAL || 0);
+      return sum + amount;
+    }, 0);
+
+    if (
+      rule.actions?.minimumAmount &&
+      totalInvoice >= rule.actions.minimumAmount
+    ) {
+      return data.map((row) => {
+        const processedRow = { ...row };
+        if (rule.actions.discountPercentage) {
+          processedRow.POR_DSC_FACTURA = rule.actions.discountPercentage;
+          processedRow._INVOICE_DISCOUNT_APPLIED = true;
+          logger.debug(
+            `🎁 Descuento factura aplicado: ${rule.actions.discountPercentage}%`
+          );
+        }
+        return processedRow;
+      });
+    }
+
     return data;
   }
 
@@ -998,40 +1117,212 @@ class PromotionProcessor {
    */
   static applyOneTimeOfferRule(data, rule) {
     logger.debug(`🎁 Aplicando regla de oferta única: ${rule.name}`);
-    // Implementar lógica específica según necesidades
-    return data;
+
+    let offerApplied = false;
+
+    return data.map((row) => {
+      if (
+        !offerApplied &&
+        rule.conditions &&
+        this.evaluateRuleConditions(row, rule.conditions)
+      ) {
+        const processedRow = { ...row };
+
+        if (rule.actions?.specialPrice) {
+          processedRow.PRECIO_ESPECIAL = rule.actions.specialPrice;
+          processedRow._ONE_TIME_OFFER_APPLIED = true;
+          offerApplied = true;
+          logger.debug(
+            `🎁 Oferta única aplicada: precio especial ${rule.actions.specialPrice}`
+          );
+        }
+
+        return processedRow;
+      }
+      return row;
+    });
+  }
+
+  /**
+   * Aplica regla de cantidad mínima
+   * @param {Array} data - Datos
+   * @param {Object} rule - Regla
+   * @returns {Array} - Datos procesados
+   */
+  static applyMinimumQuantityRule(data, rule) {
+    logger.debug(`🎁 Aplicando regla de cantidad mínima: ${rule.name}`);
+
+    return data.map((row) => {
+      if (
+        rule.conditions &&
+        this.evaluateRuleConditions(row, rule.conditions)
+      ) {
+        const processedRow = { ...row };
+        const currentQuantity = parseFloat(
+          row.CANTIDAD_PEDIDA || row.CNT_MAX || 0
+        );
+
+        if (
+          rule.actions?.minimumQuantity &&
+          currentQuantity < rule.actions.minimumQuantity
+        ) {
+          processedRow.CANTIDAD_PEDIDA = rule.actions.minimumQuantity;
+          processedRow.CANTIDAD_A_FACTURA = rule.actions.minimumQuantity;
+          processedRow._MINIMUM_QUANTITY_APPLIED = true;
+          logger.debug(
+            `🎁 Cantidad mínima aplicada: ${rule.actions.minimumQuantity}`
+          );
+        }
+
+        return processedRow;
+      }
+      return row;
+    });
+  }
+
+  /**
+   * Aplica regla de bonificación por porcentaje
+   * @param {Array} data - Datos
+   * @param {Object} rule - Regla
+   * @returns {Array} - Datos procesados
+   */
+  static applyPercentageBonusRule(data, rule) {
+    logger.debug(
+      `🎁 Aplicando regla de bonificación por porcentaje: ${rule.name}`
+    );
+
+    return data.map((row) => {
+      if (
+        rule.conditions &&
+        this.evaluateRuleConditions(row, rule.conditions)
+      ) {
+        const processedRow = { ...row };
+        const baseQuantity = parseFloat(
+          row.CANTIDAD_PEDIDA || row.CNT_MAX || 0
+        );
+
+        if (rule.actions?.bonusPercentage && baseQuantity > 0) {
+          const bonusAmount = Math.floor(
+            baseQuantity * (rule.actions.bonusPercentage / 100)
+          );
+          processedRow.CANTIDAD_BONIFICAD =
+            (processedRow.CANTIDAD_BONIFICAD || 0) + bonusAmount;
+          processedRow._PERCENTAGE_BONUS_APPLIED = true;
+          logger.debug(
+            `🎁 Bonificación porcentaje aplicada: ${bonusAmount} (${rule.actions.bonusPercentage}%)`
+          );
+        }
+
+        return processedRow;
+      }
+      return row;
+    });
+  }
+
+  /**
+   * Evalúa condiciones de una regla
+   * @param {Object} row - Fila de datos
+   * @param {Object} conditions - Condiciones a evaluar
+   * @returns {boolean} - Si las condiciones se cumplen
+   */
+  static evaluateRuleConditions(row, conditions) {
+    try {
+      if (!conditions) return true;
+
+      // Evaluar condiciones simples
+      for (const [field, condition] of Object.entries(conditions)) {
+        const value = row[field];
+
+        if (condition.equals !== undefined && value !== condition.equals) {
+          return false;
+        }
+
+        if (
+          condition.greaterThan !== undefined &&
+          parseFloat(value) <= condition.greaterThan
+        ) {
+          return false;
+        }
+
+        if (
+          condition.lessThan !== undefined &&
+          parseFloat(value) >= condition.lessThan
+        ) {
+          return false;
+        }
+
+        if (
+          condition.includes !== undefined &&
+          !condition.includes.includes(value)
+        ) {
+          return false;
+        }
+
+        if (
+          condition.excludes !== undefined &&
+          condition.excludes.includes(value)
+        ) {
+          return false;
+        }
+      }
+
+      return true;
+    } catch (error) {
+      logger.error(`🎁 Error evaluando condiciones: ${error.message}`);
+      return false;
+    }
   }
 
   // ===============================
-  // 7. MÉTODOS DE UTILIDADES Y DEBUGGING
+  // 5. MÉTODOS DE UTILIDAD Y ESTADÍSTICAS
   // ===============================
 
   /**
-   * Obtiene estadísticas de procesamiento de promociones
+   * Genera estadísticas de procesamiento de promociones
+   * @param {Array} originalData - Datos originales
    * @param {Array} processedData - Datos procesados
    * @returns {Object} - Estadísticas
    */
-  static getProcessingStats(processedData) {
-    const stats = {
-      total: processedData.length,
-      bonusLines: processedData.filter((line) => line._IS_BONUS_LINE).length,
-      triggerLines: processedData.filter((line) => line._IS_TRIGGER_LINE)
-        .length,
-      normalLines: processedData.filter((line) => line._IS_NORMAL_LINE).length,
-      promotionTypes: {},
-    };
+  static generatePromotionStats(originalData, processedData) {
+    try {
+      const stats = {
+        original: {
+          totalLines: originalData.length,
+          bonusLines: originalData.filter((row) => row.ART_BON === "B").length,
+          regularLines: originalData.filter((row) => row.ART_BON !== "B")
+            .length,
+        },
+        processed: {
+          totalLines: processedData.length,
+          bonusLines: processedData.filter((row) => row._IS_BONUS_LINE).length,
+          triggerLines: processedData.filter((row) => row._IS_TRIGGER_LINE)
+            .length,
+          regularLines: processedData.filter(
+            (row) => !row._IS_BONUS_LINE && !row._IS_TRIGGER_LINE
+          ).length,
+        },
+        changes: {
+          linesAdded: processedData.length - originalData.length,
+          promotionsDetected: processedData.filter(
+            (row) => row._promotionType && row._promotionType !== "REGULAR"
+          ).length,
+          conversionsApplied: processedData.filter((row) => row._processed)
+            .length,
+        },
+      };
 
-    // Contar tipos de promoción
-    processedData.forEach((line) => {
-      const type = line._PROMOTION_TYPE || "UNKNOWN";
-      stats.promotionTypes[type] = (stats.promotionTypes[type] || 0) + 1;
-    });
-
-    return stats;
+      logger.info(
+        `🎁 📊 Estadísticas de promociones: ${JSON.stringify(stats, null, 2)}`
+      );
+      return stats;
+    } catch (error) {
+      logger.error(`🎁 Error generando estadísticas: ${error.message}`);
+      return null;
+    }
   }
 
   /**
-   * Valida datos después del procesamiento
+   * Valida integridad de datos procesados
    * @param {Array} processedData - Datos procesados
    * @returns {Object} - Resultado de validación
    */
@@ -1042,61 +1333,66 @@ class PromotionProcessor {
       warnings: [],
     };
 
-    processedData.forEach((line, index) => {
-      // Validar que las líneas bonificadas tengan referencia
-      if (line._IS_BONUS_LINE && !line.PEDIDO_LINEA_BONIF) {
-        validation.errors.push(
-          `Línea ${index + 1}: Bonificación sin referencia`
-        );
-        validation.isValid = false;
-      }
+    try {
+      processedData.forEach((row, index) => {
+        // Validar que las bonificaciones tengan referencia
+        if (row._IS_BONUS_LINE && !row.PEDIDO_LINEA_BONIF) {
+          validation.warnings.push(
+            `Línea ${index + 1}: Bonificación sin referencia de línea`
+          );
+        }
 
-      // Validar que los valores numéricos sean válidos
-      const numericFields = [
-        "CANTIDAD_PEDIDA",
-        "CANTIDAD_A_FACTURA",
-        "CANTIDAD_BONIFICAD",
-      ];
-      numericFields.forEach((field) => {
-        if (line[field] !== null && line[field] !== undefined) {
-          if (isNaN(parseFloat(line[field]))) {
-            validation.warnings.push(
-              `Línea ${index + 1}: ${field} no es numérico`
+        // Validar cantidades numéricas
+        const quantityFields = [
+          "CANTIDAD_PEDIDA",
+          "CANTIDAD_A_FACTURA",
+          "CANTIDAD_BONIFICAD",
+        ];
+        quantityFields.forEach((field) => {
+          if (
+            row[field] !== null &&
+            row[field] !== undefined &&
+            isNaN(parseFloat(row[field]))
+          ) {
+            validation.errors.push(
+              `Línea ${index + 1}: ${field} no es numérico: ${row[field]}`
             );
+            validation.isValid = false;
           }
+        });
+
+        // Validar coherencia de bonificaciones
+        if (
+          row._IS_BONUS_LINE &&
+          parseFloat(row.CANTIDAD_BONIFICAD || 0) <= 0
+        ) {
+          validation.warnings.push(
+            `Línea ${index + 1}: Bonificación sin cantidad válida`
+          );
         }
       });
-    });
 
-    return validation;
-  }
+      logger.info(
+        `🎁 ✅ Validación completada: ${
+          validation.isValid ? "VÁLIDO" : "ERRORES"
+        }`
+      );
+      if (validation.errors.length > 0) {
+        logger.error(`🎁 Errores encontrados: ${validation.errors.join(", ")}`);
+      }
+      if (validation.warnings.length > 0) {
+        logger.warn(`🎁 Advertencias: ${validation.warnings.join(", ")}`);
+      }
 
-  /**
-   * Genera reporte de procesamiento de promociones
-   * @param {Array} originalData - Datos originales
-   * @param {Array} processedData - Datos procesados
-   * @returns {Object} - Reporte detallado
-   */
-  static generateProcessingReport(originalData, processedData) {
-    const originalStats = {
-      total: originalData.length,
-    };
-
-    const processedStats = this.getProcessingStats(processedData);
-    const validation = this.validateProcessedData(processedData);
-
-    return {
-      timestamp: new Date().toISOString(),
-      original: originalStats,
-      processed: processedStats,
-      validation,
-      summary: {
-        promotionsApplied: processedStats.bonusLines > 0,
-        totalPromotions: processedStats.bonusLines,
-        isValid: validation.isValid,
-        hasWarnings: validation.warnings.length > 0,
-      },
-    };
+      return validation;
+    } catch (error) {
+      logger.error(`🎁 Error en validación: ${error.message}`);
+      return {
+        isValid: false,
+        errors: [`Error de validación: ${error.message}`],
+        warnings: [],
+      };
+    }
   }
 }
 
