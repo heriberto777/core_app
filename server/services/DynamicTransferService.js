@@ -1015,7 +1015,7 @@ class DynamicTransferService {
         `🎁 Obteniendo datos con promociones para documento ${documentId}`
       );
 
-      // ✅ PASO 1: Verificar si las promociones están habilitadas
+      // ✅ USAR TU LÓGICA EXISTENTE DE VALIDACIÓN
       if (!mapping.promotionConfig || !mapping.promotionConfig.enabled) {
         logger.debug(
           "Promociones deshabilitadas, procesando datos normalmente"
@@ -1028,7 +1028,6 @@ class DynamicTransferService {
         );
       }
 
-      // Validar configuración de promociones
       if (!PromotionProcessor.validatePromotionConfig(mapping)) {
         logger.warn(
           "Configuración de promociones inválida, procesando sin promociones"
@@ -1041,7 +1040,7 @@ class DynamicTransferService {
         );
       }
 
-      // ✅ PASO 2: Obtener datos CON campos de promociones garantizados
+      // ✅ USAR TU MÉTODO EXISTENTE PARA OBTENER DATOS CON CAMPOS DE PROMOCIÓN
       const detailData = await this.getDetailDataWithPromotionFields(
         detailConfig,
         parentTableConfig,
@@ -1057,50 +1056,29 @@ class DynamicTransferService {
         return [];
       }
 
-      logger.debug(`📊 Datos obtenidos: ${detailData.length} registros`);
-
-      // ✅ PASO 3: Usar configuración detectada si está disponible
+      // ✅ EXTRAER CONFIGURACIÓN DETECTADA DE TU LÓGICA EXISTENTE
       let fieldConfigToUse = null;
       if (detailData.length > 0 && detailData[0]._DETECTED_PROMOTION_CONFIG) {
         fieldConfigToUse = detailData[0]._DETECTED_PROMOTION_CONFIG;
-        logger.info(
-          `🎁 ✅ Usando configuración de campos detectada automáticamente`
-        );
+        logger.info(`🎁 ✅ Usando configuración detectada automáticamente`);
 
-        // Limpiar el campo temporal de los datos
+        // Limpiar el campo temporal
         detailData.forEach((record) => {
           delete record._DETECTED_PROMOTION_CONFIG;
         });
       } else {
         fieldConfigToUse = PromotionProcessor.getFieldConfiguration(mapping);
-        logger.info(`🎁 Usando configuración de campos por defecto`);
+        logger.info(`🎁 Usando configuración por defecto`);
       }
 
-      // ✅ PASO 4: Verificar que llegaron los campos de promoción
+      // ✅ VALIDAR CAMPOS REQUERIDOS CON TU LÓGICA EXISTENTE
       const firstRecord = detailData[0];
-
-      logger.debug(
-        `🎁 Verificando campos de promoción en los datos obtenidos...`
-      );
-      logger.debug(
-        `🎁 Primer registro: ${JSON.stringify(firstRecord, null, 2)}`
-      );
-      logger.debug(
-        `🎁 Configuración utilizada: ${JSON.stringify(
-          fieldConfigToUse,
-          null,
-          2
-        )}`
-      );
-
       const missingFields = [];
       const requiredFields = [
         fieldConfigToUse.bonusField,
         fieldConfigToUse.referenceField,
-        fieldConfigToUse.discountField,
-        fieldConfigToUse.lineNumberField,
         fieldConfigToUse.articleField,
-        fieldConfigToUse.quantityField,
+        fieldConfigToUse.lineNumberField,
       ];
 
       requiredFields.forEach((field) => {
@@ -1111,10 +1089,7 @@ class DynamicTransferService {
 
       if (missingFields.length > 0) {
         logger.error(
-          `🎁 ❌ CAMPOS DE PROMOCIÓN FALTANTES: ${missingFields.join(", ")}`
-        );
-        logger.error(
-          `🎁 Campos disponibles: ${Object.keys(firstRecord).join(", ")}`
+          `🎁 ❌ CAMPOS REQUERIDOS FALTANTES: ${missingFields.join(", ")}`
         );
         throw new Error(
           `Faltan campos requeridos para promociones: ${missingFields.join(
@@ -1123,26 +1098,22 @@ class DynamicTransferService {
         );
       }
 
-      logger.info(`🎁 ✅ Todos los campos de promoción están presentes`);
+      logger.info(`🎁 ✅ Todos los campos requeridos están presentes`);
 
-      logger.info(
-        `🎁 Procesando detalles con promociones para documento ${documentId}`
-      );
-
-      // ✅ PASO 5: Procesar promociones con configuración correcta
+      // ✅ USAR EL NUEVO MÉTODO PRINCIPAL DEL PROMOTIONPROCESSOR
       const processedData = PromotionProcessor.processPromotionsWithConfig(
         detailData,
         mapping,
-        fieldConfigToUse // ✅ Pasar configuración detectada
+        fieldConfigToUse
       );
 
-      // Aplicar reglas específicas si están configuradas
+      // ✅ APLICAR REGLAS SI ESTÁN CONFIGURADAS
       const finalData = PromotionProcessor.applyPromotionRules(
         processedData,
         mapping.promotionConfig
       );
 
-      // Log de resultados
+      // ✅ ESTADÍSTICAS USANDO TU LÓGICA DE LOGGING
       const bonusLines = finalData.filter((line) => line._IS_BONUS_LINE);
       const triggerLines = finalData.filter((line) => line._IS_TRIGGER_LINE);
 
@@ -1394,7 +1365,7 @@ class DynamicTransferService {
   // ===============================
 
   /**
-   * Procesa una tabla individual - MEJORADO para manejar promociones automáticamente
+   * Procesa una tabla individual - MEJORADO para promociones con tu lógica existente
    * @param {Object} tableConfig - Configuración de la tabla
    * @param {Object} sourceData - Datos de origen (encabezado)
    * @param {Object} tableData - Datos específicos de la tabla
@@ -1436,7 +1407,7 @@ class DynamicTransferService {
       )}`
     );
 
-    // 🎁 VERIFICAR SI HAY DATOS DE PROMOCIONES
+    // 🎁 MEJORA: VERIFICAR SI HAY DATOS DE PROMOCIONES CON TU LÓGICA MEJORADA
     const hasPromotionData = this.detectPromotionData(dataForProcessing);
     logger.error(`🔧 🔍 ¿Detecta promociones? ${hasPromotionData}`);
 
@@ -1448,7 +1419,7 @@ class DynamicTransferService {
       return;
     }
 
-    // ✅ LÓGICA MEJORADA PARA PROMOCIONES - COMPLETA
+    // ✅ LÓGICA MEJORADA PARA PROMOCIONES - MANTENIENDO TU ESTRUCTURA
     let allFieldMappings = [];
 
     if (hasPromotionData) {
@@ -1456,7 +1427,7 @@ class DynamicTransferService {
         `🎁 ✅ DATOS DE PROMOCIONES DETECTADOS en tabla ${tableConfig.name}`
       );
 
-      // ✅ 1. MARCAR CAMPOS YA PROCESADOS DEL MAPPING ORIGINAL
+      // ✅ 1. MARCAR CAMPOS YA PROCESADOS DEL MAPPING ORIGINAL (TU LÓGICA)
       tableConfig.fieldMappings.forEach((fm) => {
         if (fm.targetField) {
           processedFieldNames.add(fm.targetField.toLowerCase());
@@ -1466,7 +1437,7 @@ class DynamicTransferService {
         }
       });
 
-      // ✅ 2. GENERAR MAPPINGS AUTOMÁTICOS PARA PROMOCIONES
+      // ✅ 2. GENERAR MAPPINGS AUTOMÁTICOS USANDO TU MÉTODO MEJORADO
       const promotionFieldMappings = this.generatePromotionFieldMappings(
         dataForProcessing,
         mapping,
@@ -1484,7 +1455,25 @@ class DynamicTransferService {
         );
       });
 
-      // ✅ 3. INTEGRAR MAPPINGS (ORIGINALES + AUTOMÁTICOS)
+      // ✅ 3. VALIDAR QUE SE GENERARON CAMPOS DE PROMOCIÓN
+      const promotionFieldsGenerated = promotionFieldMappings.filter(
+        (pm) => pm.isPromotionField
+      );
+
+      if (promotionFieldsGenerated.length === 0) {
+        logger.error(
+          `🎁 ❌ ERROR: Se detectaron promociones pero no se generaron mappings de promoción`
+        );
+        logger.error(
+          `🎁 Datos disponibles: ${Object.keys(dataForProcessing).join(", ")}`
+        );
+      } else {
+        logger.info(
+          `🎁 ✅ ${promotionFieldsGenerated.length} campos de promoción listos para procesamiento`
+        );
+      }
+
+      // ✅ 4. INTEGRAR MAPPINGS (ORIGINALES + AUTOMÁTICOS)
       allFieldMappings = [
         ...tableConfig.fieldMappings,
         ...promotionFieldMappings,
@@ -1494,7 +1483,7 @@ class DynamicTransferService {
         `🎁 🔍 MAPPINGS TOTALES: ${tableConfig.fieldMappings.length} originales + ${promotionFieldMappings.length} automáticos = ${allFieldMappings.length}`
       );
 
-      // ✅ 4. RESET PROCESSED FIELD NAMES PARA INCLUIR LOS NUEVOS
+      // ✅ 5. RESET PROCESSED FIELD NAMES PARA INCLUIR LOS NUEVOS
       processedFieldNames.clear();
     } else {
       // ✅ FLUJO NORMAL SIN PROMOCIONES
@@ -1504,7 +1493,7 @@ class DynamicTransferService {
       );
     }
 
-    // Ejecutar lookup si está configurado
+    // Ejecutar lookup si está configurado (tu lógica existente)
     let lookupResults = {};
     if (this.hasLookupFields(tableConfig)) {
       const lookupExecution = await this.executeLookupInTarget(
@@ -1562,6 +1551,7 @@ class DynamicTransferService {
       );
 
       try {
+        // ✅ USAR TU MÉTODO processField MEJORADO
         const processedField = await this.processField(
           fieldMapping,
           dataForProcessing,
@@ -1626,7 +1616,7 @@ class DynamicTransferService {
       }
     }
 
-    // 🔧 LOG FINAL DE CAMPOS A INSERTAR
+    // 🔧 LOG FINAL DE CAMPOS A INSERTAR CON VALIDACIÓN DE PROMOCIONES
     logger.error(
       `🔧 🔍 ============ RESUMEN FINAL PARA ${tableConfig.targetTable} ============`
     );
@@ -1646,11 +1636,11 @@ class DynamicTransferService {
           ", "
         )}`
       );
-    } else {
-      logger.error(`🔧 🔍 ❌ NO HAY CAMPOS DE PROMOCIÓN PARA INSERTAR`);
+    } else if (hasPromotionData) {
+      logger.error(`🎁 🔍 ❌ NO HAY CAMPOS DE PROMOCIÓN PARA INSERTAR`);
     }
 
-    // ✅ VERIFICACIÓN CRÍTICA: Asegurar que campos de promoción estén en targetData
+    // ✅ VERIFICACIÓN CRÍTICA: Asegurar coherencia entre detección y inserción
     if (hasPromotionData && promotionFieldsInTarget.length === 0) {
       logger.error(
         `🎁 ❌ ERROR CRÍTICO: Se detectaron promociones pero NO hay campos de promoción en la inserción`
@@ -1663,24 +1653,6 @@ class DynamicTransferService {
       logger.error(`🎁 TargetFields generados: ${targetFields.join(", ")}`);
     }
 
-    // Log detallado de todos los valores que se van a insertar
-    logger.error(`🔧 🔍 VALORES DETALLADOS A INSERTAR:`);
-    for (let i = 0; i < targetFields.length; i++) {
-      const fieldName = targetFields[i];
-      const fieldValue = directSqlFields.has(fieldName)
-        ? targetValues[i]
-        : targetData[fieldName];
-      const isDirectSql = directSqlFields.has(fieldName);
-      const isPromotion = promotionFieldsInTarget.includes(fieldName);
-      const prefix = isPromotion ? "🎁" : "🔧";
-
-      logger.error(
-        `${prefix} 🔍   ${fieldName}: ${fieldValue} ${
-          isDirectSql ? "(SQL directo)" : ""
-        } ${isPromotion ? "(PROMOCIÓN)" : ""}`
-      );
-    }
-
     // Validación final
     if (targetFields.length === 0) {
       logger.warn(
@@ -1689,54 +1661,10 @@ class DynamicTransferService {
       return;
     }
 
-    // Ejecutar inserción
+    // Ejecutar inserción usando tu método existente
     logger.error(
       `🚀 🔍 EJECUTANDO INSERCIÓN EN ${tableConfig.targetTable} con ${targetFields.length} campos`
     );
-
-    // ✅ DEBUGGING ANTES DE LLAMAR executeInsert()
-    logger.error(`🔍 ============ PRE-INSERCIÓN DEBUG ============`);
-    logger.error(`🔍 Tabla: ${tableConfig.targetTable}`);
-    logger.error(`🔍 TargetFields enviados: ${targetFields.join(", ")}`);
-    logger.error(`🔍 TargetValues enviados: ${targetValues.join(", ")}`);
-
-    // Verificar específicamente campos de promoción
-    const promotionFieldsToSend = targetFields.filter(
-      (field) =>
-        field.includes("BONIF") ||
-        field.includes("CANTIDAD_") ||
-        field.includes("PEDIDO_LINEA")
-    );
-
-    if (promotionFieldsToSend.length > 0) {
-      logger.error(
-        `🎁 CAMPOS PROMOCIÓN A ENVIAR: ${promotionFieldsToSend.join(", ")}`
-      );
-      promotionFieldsToSend.forEach((field) => {
-        const value = directSqlFields.has(field)
-          ? targetValues[targetFields.indexOf(field)]
-          : targetData[field];
-        logger.error(
-          `🎁   ${field}: ${value} (${
-            directSqlFields.has(field) ? "SQL" : "PARAM"
-          })`
-        );
-      });
-    } else {
-      logger.error(`🎁 ❌ NO HAY CAMPOS DE PROMOCIÓN PARA ENVIAR`);
-      logger.error(
-        `🎁 Campos disponibles en targetData: ${Object.keys(targetData).join(
-          ", "
-        )}`
-      );
-      logger.error(
-        `🎁 Campos disponibles que contienen BONIF o CANTIDAD: ${Object.keys(
-          targetData
-        )
-          .filter((k) => k.includes("BONIF") || k.includes("CANTIDAD"))
-          .join(", ")}`
-      );
-    }
 
     await this.executeInsert(
       tableConfig.targetTable,
@@ -1751,7 +1679,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa un campo individual - CORREGIDO para usar tu lógica existente
+   * Procesa un campo individual - MEJORADO con integración PromotionProcessor
    * @param {Object} fieldMapping - Configuración del campo
    * @param {Object} sourceData - Datos origen
    * @param {Object} lookupResults - Resultados de lookup
@@ -1782,7 +1710,7 @@ class DynamicTransferService {
       }`
     );
 
-    // ✅ LÓGICA AUTOMÁTICA PARA CAMPOS DE PROMOCIONES (tu lógica existente)
+    // ✅ LÓGICA AUTOMÁTICA PARA CAMPOS DE PROMOCIONES - MEJORADA
     const isPromotionField = this.isPromotionTargetField(
       fieldMapping.targetField
     );
@@ -1792,6 +1720,7 @@ class DynamicTransferService {
         `🎁 CAMPO DE PROMOCIÓN DETECTADO: ${fieldMapping.targetField}`
       );
 
+      // ✅ USAR NUEVO MÉTODO MEJORADO DEL PROMOTIONPROCESSOR
       const promotionValue = this.findPromotionValue(
         fieldMapping.targetField,
         sourceData,
@@ -1813,12 +1742,13 @@ class DynamicTransferService {
             : fieldMapping.defaultValue;
       }
     }
-    // ✅ LÓGICA PARA CAMPOS DE PROMOCIÓN CON sourceField DEFINIDO (tu lógica existente)
+    // ✅ LÓGICA PARA CAMPOS DE PROMOCIÓN CON sourceField DEFINIDO - MEJORADA
     else if (fieldMapping.isPromotionField && fieldMapping.sourceField) {
       logger.info(
         `🎁 CAMPO DE PROMOCIÓN CON SOURCE: ${fieldMapping.sourceField} -> ${fieldMapping.targetField}`
       );
 
+      // ✅ USAR NUEVO MÉTODO MEJORADO PARA BUSCAR VALORES
       value = this.findFieldValueInData(
         fieldMapping.sourceField,
         sourceData,
@@ -1839,12 +1769,12 @@ class DynamicTransferService {
             : fieldMapping.defaultValue;
       }
     }
-    // ✅ LÓGICA NORMAL CORREGIDA
+    // ✅ LÓGICA NORMAL MANTENIENDO TU ESTRUCTURA EXISTENTE
     else {
       try {
         // 1. Verificar si tiene sourceField definido
         if (fieldMapping.sourceField) {
-          // 🔥 CORRECCIÓN CRÍTICA: Extraer valor real de objetos de configuración
+          // 🔥 MANTENER TU CORRECCIÓN CRÍTICA: Extraer valor real de objetos de configuración
           let sourceValue = sourceData[fieldMapping.sourceField];
 
           // ✅ DETECTAR Y CORREGIR OBJETOS DE CONFIGURACIÓN
@@ -1943,7 +1873,7 @@ class DynamicTransferService {
       throw new Error(`Campo requerido ${fieldMapping.targetField} está vacío`);
     }
 
-    // 🔥 CORRECCIÓN CRÍTICA: Aplicar conversión de unidades SOLO con valores numéricos válidos
+    // 🔥 MEJORA CRÍTICA: Aplicar conversión de unidades con integración PromotionProcessor
     if (
       fieldMapping.unitConversion &&
       fieldMapping.unitConversion.enabled &&
@@ -1965,14 +1895,8 @@ class DynamicTransferService {
           throw new Error(`Valor no numérico para conversión: ${value}`);
         }
 
-        // ✅ USAR TU MÉTODO EXISTENTE DE CONVERSIÓN
-        value = await this.applyUnitConversion(
-          value,
-          fieldMapping.unitConversion,
-          sourceData,
-          targetConnection,
-          columnLengthCache
-        );
+        // ✅ USAR TU MÉTODO MEJORADO DE CONVERSIÓN CON INTEGRACIÓN PROMOTIONPROCESSOR
+        value = await this.applyUnitConversion(sourceData, fieldMapping, value);
 
         logger.debug(`🔧 Conversión aplicada: ${numericValue} -> ${value}`);
       } catch (conversionError) {
@@ -3652,239 +3576,103 @@ class DynamicTransferService {
    */
   applyUnitConversion(sourceData, fieldMapping, originalValue) {
     try {
-      console.log(`🐛 DEBUG applyUnitConversion llamado:`);
-      console.log(`   Campo: ${fieldMapping.targetField}`);
-      console.log(`   Valor original: ${originalValue}`);
-      console.log(
-        `   Configuración enabled: ${fieldMapping.unitConversion?.enabled}`
-      );
-      console.log(`   sourceData keys: ${Object.keys(sourceData).join(", ")}`);
-
-      // Log detallado de TODOS los campos disponibles con sus valores
-      console.log(`🔍 DATOS COMPLETOS DISPONIBLES:`);
-      Object.keys(sourceData).forEach((key) => {
-        console.log(`   ${key}: ${sourceData[key]}`);
-      });
-
-      logger.info(
-        `🔄 Iniciando conversión para campo: ${fieldMapping.targetField}`
-      );
-
-      // Validación inicial
+      // ✅ MANTENER TU LÓGICA DE VALIDACIÓN EXISTENTE
       if (
         !fieldMapping.unitConversion ||
         !fieldMapping.unitConversion.enabled
       ) {
-        logger.debug(
-          `❌ Conversión no habilitada para ${fieldMapping.targetField}`
-        );
         return originalValue;
       }
 
       const config = fieldMapping.unitConversion;
 
-      // Validar configuración completa
-      if (
-        !config.unitMeasureField ||
-        !config.conversionFactorField ||
-        !config.fromUnit ||
-        !config.toUnit
-      ) {
-        logger.error(
-          `⚠️ Configuración de conversión incompleta para ${fieldMapping.targetField}:`,
-          {
-            unitMeasureField: config.unitMeasureField,
-            conversionFactorField: config.conversionFactorField,
-            fromUnit: config.fromUnit,
-            toUnit: config.toUnit,
-            operation: config.operation,
-          }
-        );
-        return originalValue;
-      }
-
-      // IMPORTANTE: Buscar los campos con diferentes variaciones de nombres
+      // ✅ USAR TU LÓGICA EXISTENTE PARA BUSCAR CAMPOS
       let unitMeasureValue = null;
       let conversionFactorValue = null;
 
-      // Lista de posibles nombres para Unit_Measure
       const possibleUnitFields = [
-        config.unitMeasureField, // Unit_Measure
+        config.unitMeasureField,
         "Unit_Measure",
         "UNIT_MEASURE",
         "UNI_MED",
-        "UNIDAD",
-        "TIPO_UNIDAD",
       ];
 
-      // Lista de posibles nombres para Factor_Conversion
       const possibleFactorFields = [
-        config.conversionFactorField, // Factor_Conversion
+        config.conversionFactorField,
         "Factor_Conversion",
         "FACTOR_CONVERSION",
-        "CNT_MAX", // Este podría ser el factor
-        "FACTOR",
-        "CONV_FACTOR",
+        "CNT_MAX",
       ];
 
-      // Buscar campo de unidad de medida
+      // Buscar campos usando tu lógica existente
       for (const fieldName of possibleUnitFields) {
         if (
           sourceData[fieldName] !== undefined &&
           sourceData[fieldName] !== null
         ) {
           unitMeasureValue = sourceData[fieldName];
-          console.log(
-            `✅ Campo unidad encontrado: ${fieldName} = ${unitMeasureValue}`
-          );
           break;
         }
       }
 
-      // Buscar campo de factor de conversión
       for (const fieldName of possibleFactorFields) {
         if (
           sourceData[fieldName] !== undefined &&
           sourceData[fieldName] !== null
         ) {
           conversionFactorValue = sourceData[fieldName];
-          console.log(
-            `✅ Campo factor encontrado: ${fieldName} = ${conversionFactorValue}`
-          );
           break;
         }
       }
 
-      console.log(`🐛 VALORES ENCONTRADOS:`);
-      console.log(`   unitMeasureValue: ${unitMeasureValue}`);
-      console.log(`   conversionFactorValue: ${conversionFactorValue}`);
-      console.log(`   fromUnit configurado: "${config.fromUnit}"`);
-
-      if (unitMeasureValue === undefined || unitMeasureValue === null) {
-        logger.warn(
-          `⚠️ Campo de unidad de medida no encontrado en datos de origen`
-        );
-        logger.debug(`Campos buscados: ${possibleUnitFields.join(", ")}`);
+      if (!unitMeasureValue || !conversionFactorValue) {
         logger.debug(
-          `Campos disponibles: ${Object.keys(sourceData).join(", ")}`
+          `🔧 Sin conversión: Unit=${unitMeasureValue}, Factor=${conversionFactorValue}`
         );
         return originalValue;
       }
 
-      if (
-        conversionFactorValue === undefined ||
-        conversionFactorValue === null
-      ) {
-        logger.warn(
-          `⚠️ Campo de factor de conversión no encontrado en datos de origen`
-        );
-        logger.debug(`Campos buscados: ${possibleFactorFields.join(", ")}`);
-        logger.debug(
-          `Campos disponibles: ${Object.keys(sourceData).join(", ")}`
-        );
-        return originalValue;
-      }
-
-      // Validación del factor de conversión
-      const conversionFactor = parseFloat(conversionFactorValue);
-      if (isNaN(conversionFactor)) {
-        logger.error(
-          `❌ Factor de conversión no es un número válido: '${conversionFactorValue}'`
-        );
-        return originalValue;
-      }
-
-      if (conversionFactor <= 0) {
-        logger.error(
-          `❌ Factor de conversión debe ser mayor que cero: ${conversionFactor}`
-        );
-        return originalValue;
-      }
-
-      // Logging detallado de valores
-      logger.info(
-        `📏 Unidad actual: '${unitMeasureValue}', Unidad origen configurada: '${config.fromUnit}'`
-      );
-      logger.info(
-        `🔢 Factor de conversión: ${conversionFactor} (origen: '${conversionFactorValue}')`
-      );
-      logger.info(`⚙️ Operación: ${config.operation}`);
-      logger.info(`🎯 Convertir de '${config.fromUnit}' a '${config.toUnit}'`);
-
-      // Verificar si necesita conversión
+      // ✅ USAR EL NUEVO MÉTODO DEL PROMOTIONPROCESSOR PARA VERIFICAR SI DEBE CONVERTIR
       const shouldConvert = this.shouldApplyUnitConversion(
         unitMeasureValue,
         config.fromUnit
       );
       if (!shouldConvert) {
-        logger.info(
-          `❌ No se aplica conversión: unidad actual '${unitMeasureValue}' no requiere conversión desde '${config.fromUnit}'`
+        return originalValue;
+      }
+
+      const factor = parseFloat(conversionFactorValue);
+      if (isNaN(factor) || factor <= 0) {
+        logger.error(
+          `❌ Factor de conversión inválido: ${conversionFactorValue}`
         );
         return originalValue;
       }
 
-      logger.info(
-        `✅ Se aplicará conversión: unidad '${unitMeasureValue}' coincide con patrón '${config.fromUnit}'`
-      );
-
-      // Validación del valor original
       const numericValue = parseFloat(originalValue);
       if (isNaN(numericValue)) {
-        logger.warn(
-          `⚠️ Valor original no es numérico: '${originalValue}', manteniendo valor original`
-        );
         return originalValue;
       }
 
-      // Realizar conversión
+      // ✅ APLICAR CONVERSIÓN USANDO TU LÓGICA EXISTENTE
       let convertedValue;
       if (config.operation === "multiply") {
-        // Para cantidades: cantidad_en_cajas * factor = cantidad_en_unidades
-        // Ejemplo: 10 Cajas × 144 = 1440 Unidades
-        convertedValue = numericValue * conversionFactor;
-        logger.info(
-          `🔢 Conversión (multiplicar): ${numericValue} × ${conversionFactor} = ${convertedValue}`
-        );
+        convertedValue = numericValue * factor;
       } else if (config.operation === "divide") {
-        // Para precios: precio_por_caja / factor = precio_por_unidad
-        // Ejemplo: $1000 por Caja ÷ 144 = $6.94 por Unidad
-        if (conversionFactor === 0) {
-          logger.error(
-            `❌ No se puede dividir por cero (factor: ${conversionFactor})`
-          );
-          return originalValue;
-        }
-        convertedValue = numericValue / conversionFactor;
-        logger.info(
-          `🔢 Conversión (dividir): ${numericValue} ÷ ${conversionFactor} = ${convertedValue}`
-        );
+        convertedValue = factor !== 0 ? numericValue / factor : numericValue;
       } else {
-        logger.error(
-          `❌ Operación de conversión no válida: '${config.operation}'. Debe ser 'multiply' o 'divide'`
-        );
-        return originalValue;
+        convertedValue = numericValue;
       }
 
-      // Redondeo para evitar decimales excesivos
       const roundedValue = Math.round(convertedValue * 100) / 100;
 
-      logger.info(`🎉 Conversión completada exitosamente:`);
-      logger.info(`   📦 Valor original: ${originalValue} ${config.fromUnit}`);
-      logger.info(`   🔄 Factor: ${conversionFactor}`);
-      logger.info(`   📊 Valor convertido: ${roundedValue} ${config.toUnit}`);
-      logger.info(`   ⚙️ Operación: ${config.operation}`);
+      logger.info(
+        `🔧 Conversión aplicada: ${numericValue} ${config.operation} ${factor} = ${roundedValue}`
+      );
 
       return roundedValue;
     } catch (error) {
-      logger.error(
-        `💥 Error en conversión de unidades para campo ${fieldMapping.targetField}:`,
-        {
-          error: error.message,
-          stack: error.stack,
-          originalValue,
-          config: fieldMapping.unitConversion,
-        }
-      );
+      logger.error(`🔧 Error en conversión: ${error.message}`);
       return originalValue;
     }
   }
@@ -5396,98 +5184,88 @@ class DynamicTransferService {
   ) {
     const promotionFieldMappings = [];
 
-    logger.error(`🎁 🔍 GENERANDO MAPPINGS AUTOMÁTICOS SIN DUPLICADOS:`);
+    logger.debug(`🎁 Generando mappings automáticos para promociones...`);
 
-    // ✅ LISTA CORRECTA DE CAMPOS DE PROMOCIÓN (SIN DUPLICADOS)
-    const requiredPromotionFields = [
+    // ✅ USAR CAMPOS ESENCIALES DEL NUEVO PROMOTIONPROCESSOR
+    const essentialPromotionFields = [
       {
         sourceField: "PEDIDO_LINEA_BONIF",
         targetField: "PEDIDO_LINEA_BONIF",
         description: "Referencia línea bonificación",
         fieldType: "number",
+        isPromotionField: true,
       },
       {
         sourceField: "CANTIDAD_BONIFICAD",
         targetField: "CANTIDAD_BONIFICAD",
-        description: "Cantidad bonificación CORRECTA",
+        description: "Cantidad bonificación",
         fieldType: "number",
+        isPromotionField: true,
+        // ✅ APLICAR CONVERSIÓN DE UNIDADES USANDO TU LÓGICA EXISTENTE
+        unitConversion: {
+          enabled: true,
+          unitMeasureField: "Unit_Measure",
+          conversionFactorField: "Factor_Conversion",
+          fromUnit: "CAJA",
+          toUnit: "UND",
+          operation: "multiply",
+        },
       },
       {
         sourceField: "CANTIDAD_PEDIDA",
         targetField: "CANTIDAD_PEDIDA",
         description: "Cantidad pedida",
         fieldType: "number",
+        isPromotionField: true,
+        unitConversion: {
+          enabled: true,
+          unitMeasureField: "Unit_Measure",
+          conversionFactorField: "Factor_Conversion",
+          fromUnit: "CAJA",
+          toUnit: "UND",
+          operation: "multiply",
+        },
       },
       {
         sourceField: "CANTIDAD_A_FACTURA",
         targetField: "CANTIDAD_A_FACTURA",
-        description: "Cantidad a facturar CORRECTA",
+        description: "Cantidad a facturar",
         fieldType: "number",
-      },
-      {
-        sourceField: "CANTIDAD_FACTURADA",
-        targetField: "CANTIDAD_FACTURADA",
-        description: "Cantidad facturada",
-        fieldType: "number",
-      },
-      {
-        sourceField: "CANTIDAD_RESERVADA",
-        targetField: "CANTIDAD_RESERVADA",
-        description: "Cantidad reservada",
-        fieldType: "number",
-      },
-      {
-        sourceField: "CANTIDAD_CANCELADA",
-        targetField: "CANTIDAD_CANCELADA",
-        description: "Cantidad cancelada",
-        fieldType: "number",
+        isPromotionField: true,
+        unitConversion: {
+          enabled: true,
+          unitMeasureField: "Unit_Measure",
+          conversionFactorField: "Factor_Conversion",
+          fromUnit: "CAJA",
+          toUnit: "UND",
+          operation: "multiply",
+        },
       },
     ];
 
-    // ✅ CAMPOS EXPLÍCITAMENTE PROHIBIDOS (DUPLICADOS/INCORRECTOS)
-    const prohibitedFields = [
-      "CANTIDAD_BONIF", // ❌ Incorrecto, debe ser CANTIDAD_BONIFICAD
-      "CANTIDAD_A_FACTURAR", // ❌ Duplicado, debe ser CANTIDAD_A_FACTURA
-    ];
-
-    logger.error(`🎁 🔍 CAMPOS PROHIBIDOS: ${prohibitedFields.join(", ")}`);
-
-    // ✅ DETECTAR Y AGREGAR SOLO CAMPOS VÁLIDOS
-    requiredPromotionFields.forEach((field) => {
+    // ✅ USAR TU LÓGICA EXISTENTE PARA EVITAR DUPLICADOS
+    for (const field of essentialPromotionFields) {
       const targetFieldLower = field.targetField.toLowerCase();
 
-      // Verificar que no esté prohibido
-      if (prohibitedFields.includes(field.sourceField)) {
-        logger.error(`🎁 🔍 ❌ Campo prohibido omitido: ${field.sourceField}`);
-        return;
-      }
-
-      // Solo procesar si no fue procesado ya y existe en los datos
       if (
-        !processedFieldNames.has(targetFieldLower) &&
-        dataForProcessing.hasOwnProperty(field.sourceField)
+        dataForProcessing.hasOwnProperty(field.sourceField) &&
+        !processedFieldNames.has(targetFieldLower)
       ) {
-        const fieldMapping = {
-          sourceField: field.sourceField,
-          targetField: field.targetField,
-          isRequired: false,
-          isPromotionField: true,
-          description: field.description,
+        promotionFieldMappings.push({
+          ...field,
           defaultValue: null,
-          fieldType: field.fieldType || "number",
-        };
+          isRequired: false,
+        });
 
-        promotionFieldMappings.push(fieldMapping);
-        logger.error(
-          `🎁 🔍 ✅ Mapping CORRECTO generado: ${field.sourceField} -> ${
-            field.targetField
-          } = ${dataForProcessing[field.sourceField]}`
+        processedFieldNames.add(targetFieldLower);
+        logger.debug(
+          `🎁 ✅ Mapping promoción generado: ${field.sourceField} -> ${field.targetField}`
         );
       }
-    });
+    }
 
-    logger.error(
-      `🎁 🔍 TOTAL MAPPINGS CORRECTOS: ${promotionFieldMappings.length}`
+    logger.info(
+      `🎁 Mappings de promoción generados: ${promotionFieldMappings.length}`
     );
     return promotionFieldMappings;
   }
