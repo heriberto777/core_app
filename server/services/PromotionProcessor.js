@@ -119,8 +119,10 @@ class PromotionProcessor {
    * @param {Object} config - Configuración de campos
    * @returns {Object} - Fila con cantidades convertidas
    */
+  // En PromotionProcessor.js - método applyQuantityConversions CORREGIDO
   static applyQuantityConversions(row, config) {
     try {
+      // ✅ SOLO MARCAR PARA CONVERSIÓN POSTERIOR - NO CONVERTIR AQUÍ
       const unitMeasure =
         row["Unit_Measure"] || row["UNIT_MEASURE"] || row["UNI_MED"];
       const factorConversion =
@@ -130,62 +132,20 @@ class PromotionProcessor {
         return { ...row };
       }
 
-      const factor = parseFloat(factorConversion);
-      if (isNaN(factor) || factor <= 0) {
-        return { ...row };
-      }
-
-      // ✅ TODOS los campos de cantidad que necesitan conversión
-      const quantityFields = [
-        "CNT_MAX",
-        "CANTIDAD_BONIFICA",
-        "CANTIDAD_BONIFICADA",
-        "CANTIDAD_PEDIDA",
-        "CANTIDAD_A_FACTURA",
-        "CANTIDAD_FACTURADA",
-        "CANTIDAD_RESERVADA",
-        "CANTIDAD_CANCELADA",
-      ];
-
       const convertedRow = { ...row };
 
-      // ✅ VERIFICAR SI LA UNIDAD REQUIERE CONVERSIÓN
-      const unitsRequiringConversion = [
-        "CAJA",
-        "CAJAS",
-        "PACK",
-        "PAQUETE",
-        "BOX",
-      ];
+      // Solo marcar que necesita conversión - DynamicTransferService se encargará
+      convertedRow._needsUnitConversion = true;
+      convertedRow._originalUnit = unitMeasure;
+      convertedRow._conversionFactor = factorConversion;
 
-      if (unitsRequiringConversion.includes(unitMeasure.toUpperCase())) {
-        quantityFields.forEach((field) => {
-          if (
-            convertedRow[field] !== undefined &&
-            convertedRow[field] !== null
-          ) {
-            const originalValue = parseFloat(convertedRow[field]);
-            if (!isNaN(originalValue)) {
-              const convertedValue = originalValue * factor;
-              logger.debug(
-                `🔧 ${field}: ${originalValue} * ${factor} = ${convertedValue}`
-              );
-              convertedRow[field] = convertedValue;
-            }
-          }
-        });
-
-        // ✅ IMPORTANTE: También convertir el factor mismo si se usa como cantidad
-        if (convertedRow["CNT_MAX"] !== undefined) {
-          logger.info(
-            `🔧 ✅ Conversión aplicada: ${unitMeasure} con factor ${factor}`
-          );
-        }
-      }
+      logger.debug(
+        `🎁 Promoción marcada para conversión posterior: ${unitMeasure} con factor ${factorConversion}`
+      );
 
       return convertedRow;
     } catch (error) {
-      logger.error(`🔧 Error en conversión de cantidades: ${error.message}`);
+      logger.error(`🎁 Error marcando para conversión: ${error.message}`);
       return { ...row };
     }
   }
@@ -443,24 +403,26 @@ class PromotionProcessor {
       );
     }
 
-    // ✅ Establecer cantidad de bonificación
+    // ✅ CORREGIR: Establecer cantidad de bonificación CORRECTAMENTE
     const cantidadBonifica =
       row["CANTIDAD_BONIFICA"] || row["CANTIDAD_BONIFICADA"] || 0;
-    processedRow.CANTIDAD_BONIFICAD = parseFloat(cantidadBonifica) || 0;
 
-    // ✅ Para bonificaciones, cantidad pedida puede ser 0 o igual a bonificación
-    processedRow.CANTIDAD_PEDIDA = 0;
-    processedRow.CANTIDAD_A_FACTURA = 0; // Bonificaciones no se facturan normalmente
+    // ✅ CAMPOS CORRECTOS PARA BONIFICACIONES
+    processedRow.CANTIDAD_PEDIDA = 0; // ✅ Bonificaciones NO se piden
+    processedRow.CANTIDAD_A_FACTURA = 0; // ✅ Bonificaciones NO se facturan
+    processedRow.CANTIDAD_BONIFICAD = parseFloat(cantidadBonifica) || 0; // ✅ AQUÍ va la cantidad
 
     // ✅ Marcar como línea de bonificación
     processedRow._IS_BONUS_LINE = true;
     processedRow._IS_TRIGGER_LINE = false;
+    processedRow._PROMOTION_TYPE = "BONUS";
 
     logger.debug(
-      `🎁 Línea bonificación procesada: ${processedRow[config.articleField]} (${
-        processedRow.CANTIDAD_BONIFICAD
-      })`
+      `🎁 Línea bonificación procesada CORRECTAMENTE: ${
+        processedRow[config.articleField]
+      } - CANTIDAD_BONIFICAD: ${processedRow.CANTIDAD_BONIFICAD}`
     );
+
     return processedRow;
   }
 
