@@ -995,7 +995,7 @@ class DynamicTransferService {
   // ===============================
 
   /**
-   * Obtiene datos de detalle con procesamiento de promociones - MEJORADO
+   * Obtiene datos de detalle con procesamiento de promociones - COMPLETO CORREGIDO
    * @param {Object} detailConfig - Configuración de la tabla de detalle
    * @param {Object} parentTableConfig - Configuración de la tabla padre
    * @param {string} documentId - ID del documento
@@ -1015,7 +1015,7 @@ class DynamicTransferService {
         `🎁 Obteniendo datos con promociones para documento ${documentId}`
       );
 
-      // ✅ USAR TU LÓGICA EXISTENTE DE VALIDACIÓN
+      // ✅ PASO 1: Verificar si las promociones están habilitadas
       if (!mapping.promotionConfig || !mapping.promotionConfig.enabled) {
         logger.debug(
           "Promociones deshabilitadas, procesando datos normalmente"
@@ -1040,7 +1040,7 @@ class DynamicTransferService {
         );
       }
 
-      // ✅ USAR TU MÉTODO EXISTENTE PARA OBTENER DATOS CON CAMPOS DE PROMOCIÓN
+      // ✅ PASO 2: Obtener datos CON campos de promociones garantizados
       const detailData = await this.getDetailDataWithPromotionFields(
         detailConfig,
         parentTableConfig,
@@ -1056,29 +1056,35 @@ class DynamicTransferService {
         return [];
       }
 
-      // ✅ EXTRAER CONFIGURACIÓN DETECTADA DE TU LÓGICA EXISTENTE
+      logger.debug(`📊 Datos obtenidos: ${detailData.length} registros`);
+
+      // ✅ PASO 3: Usar configuración detectada si está disponible
       let fieldConfigToUse = null;
       if (detailData.length > 0 && detailData[0]._DETECTED_PROMOTION_CONFIG) {
         fieldConfigToUse = detailData[0]._DETECTED_PROMOTION_CONFIG;
-        logger.info(`🎁 ✅ Usando configuración detectada automáticamente`);
+        logger.info(
+          `🎁 ✅ Usando configuración de campos detectada automáticamente`
+        );
 
-        // Limpiar el campo temporal
+        // Limpiar el campo temporal de los datos
         detailData.forEach((record) => {
           delete record._DETECTED_PROMOTION_CONFIG;
         });
       } else {
         fieldConfigToUse = PromotionProcessor.getFieldConfiguration(mapping);
-        logger.info(`🎁 Usando configuración por defecto`);
+        logger.info(`🎁 Usando configuración de campos por defecto`);
       }
 
-      // ✅ VALIDAR CAMPOS REQUERIDOS CON TU LÓGICA EXISTENTE
+      // ✅ PASO 4: Verificar que llegaron los campos de promoción
       const firstRecord = detailData[0];
       const missingFields = [];
       const requiredFields = [
         fieldConfigToUse.bonusField,
         fieldConfigToUse.referenceField,
-        fieldConfigToUse.articleField,
+        fieldConfigToUse.discountField,
         fieldConfigToUse.lineNumberField,
+        fieldConfigToUse.articleField,
+        fieldConfigToUse.quantityField,
       ];
 
       requiredFields.forEach((field) => {
@@ -1089,7 +1095,10 @@ class DynamicTransferService {
 
       if (missingFields.length > 0) {
         logger.error(
-          `🎁 ❌ CAMPOS REQUERIDOS FALTANTES: ${missingFields.join(", ")}`
+          `🎁 ❌ CAMPOS DE PROMOCIÓN FALTANTES: ${missingFields.join(", ")}`
+        );
+        logger.error(
+          `🎁 Campos disponibles: ${Object.keys(firstRecord).join(", ")}`
         );
         throw new Error(
           `Faltan campos requeridos para promociones: ${missingFields.join(
@@ -1098,28 +1107,90 @@ class DynamicTransferService {
         );
       }
 
-      logger.info(`🎁 ✅ Todos los campos requeridos están presentes`);
+      logger.info(`🎁 ✅ Todos los campos de promoción están presentes`);
 
-      // ✅ USAR EL NUEVO MÉTODO PRINCIPAL DEL PROMOTIONPROCESSOR
+      // ✅ PASO 5: APLICAR CONVERSIONES DE UNIDADES PRIMERO (CRÍTICO)
+      logger.info(
+        `🔧 Aplicando conversiones de unidades ANTES de procesar promociones`
+      );
+
+      let dataWithConversions = detailData.map((row) => {
+        const originalRow = { ...row };
+        const convertedRow = PromotionProcessor.applyQuantityConversions(
+          originalRow,
+          fieldConfigToUse
+        );
+
+        // Marcar que ya fue convertido para evitar doble conversión
+        convertedRow._conversionApplied = true;
+
+        // Log detallado de conversiones aplicadas
+        const quantityFields = [
+          "CNT_MAX",
+          "CANTIDAD_BONIFICA",
+          "CANTIDAD_BONIFICADA",
+        ];
+        quantityFields.forEach((field) => {
+          if (originalRow[field] !== convertedRow[field]) {
+            logger.info(
+              `🔧 Conversión aplicada en ${field}: ${originalRow[field]} → ${convertedRow[field]}`
+            );
+          }
+        });
+
+        return convertedRow;
+      });
+
+      logger.info(
+        `🔧 ✅ Conversiones aplicadas a ${dataWithConversions.length} registros`
+      );
+
+      // ✅ PASO 6: PROCESAR PROMOCIONES CON DATOS YA CONVERTIDOS
+      logger.info(
+        `🎁 Procesando promociones con datos convertidos para documento ${documentId}`
+      );
+
       const processedData = PromotionProcessor.processPromotionsWithConfig(
-        detailData,
+        dataWithConversions, // ← Datos ya convertidos
         mapping,
         fieldConfigToUse
       );
 
-      // ✅ APLICAR REGLAS SI ESTÁN CONFIGURADAS
+      // ✅ PASO 7: Aplicar reglas específicas si están configuradas
       const finalData = PromotionProcessor.applyPromotionRules(
         processedData,
         mapping.promotionConfig
       );
 
-      // ✅ ESTADÍSTICAS USANDO TU LÓGICA DE LOGGING
+      // ✅ PASO 8: Log de resultados y verificación
       const bonusLines = finalData.filter((line) => line._IS_BONUS_LINE);
       const triggerLines = finalData.filter((line) => line._IS_TRIGGER_LINE);
+      const regularLines = finalData.filter(
+        (line) => !line._IS_BONUS_LINE && !line._IS_TRIGGER_LINE
+      );
 
       logger.info(
-        `🎁 ✅ Procesamiento completado: ${bonusLines.length} bonificaciones, ${triggerLines.length} líneas trigger`
+        `🎁 ✅ Procesamiento completado: ${regularLines.length} regulares, ${bonusLines.length} bonificaciones, ${triggerLines.length} líneas trigger`
       );
+
+      // ✅ PASO 9: Verificación crítica de cantidades
+      finalData.forEach((line, index) => {
+        if (line._IS_BONUS_LINE) {
+          logger.debug(`🎁 Línea bonificación ${index + 1}:`);
+          logger.debug(
+            `  CANTIDAD_PEDIDA: ${line.CANTIDAD_PEDIDA} (debe ser 0)`
+          );
+          logger.debug(
+            `  CANTIDAD_A_FACTURA: ${line.CANTIDAD_A_FACTURA} (debe ser 0)`
+          );
+          logger.debug(
+            `  CANTIDAD_BONIFICAD: ${line.CANTIDAD_BONIFICAD} (debe tener valor)`
+          );
+          logger.debug(
+            `  PEDIDO_LINEA_BONIF: ${line.PEDIDO_LINEA_BONIF} (referencia)`
+          );
+        }
+      });
 
       return finalData;
     } catch (error) {
@@ -1679,7 +1750,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa un campo individual - MEJORADO con integración PromotionProcessor
+   * Procesa un campo individual - COMPLETO CORREGIDO con conversiones mejoradas
    * @param {Object} fieldMapping - Configuración del campo
    * @param {Object} sourceData - Datos origen
    * @param {Object} lookupResults - Resultados de lookup
@@ -1710,7 +1781,7 @@ class DynamicTransferService {
       }`
     );
 
-    // ✅ LÓGICA AUTOMÁTICA PARA CAMPOS DE PROMOCIONES - MEJORADA
+    // ✅ LÓGICA AUTOMÁTICA PARA CAMPOS DE PROMOCIONES MEJORADA
     const isPromotionField = this.isPromotionTargetField(
       fieldMapping.targetField
     );
@@ -1742,7 +1813,7 @@ class DynamicTransferService {
             : fieldMapping.defaultValue;
       }
     }
-    // ✅ LÓGICA PARA CAMPOS DE PROMOCIÓN CON sourceField DEFINIDO - MEJORADA
+    // ✅ LÓGICA PARA CAMPOS DE PROMOCIÓN CON sourceField DEFINIDO MEJORADA
     else if (fieldMapping.isPromotionField && fieldMapping.sourceField) {
       logger.info(
         `🎁 CAMPO DE PROMOCIÓN CON SOURCE: ${fieldMapping.sourceField} -> ${fieldMapping.targetField}`
@@ -1873,32 +1944,47 @@ class DynamicTransferService {
       throw new Error(`Campo requerido ${fieldMapping.targetField} está vacío`);
     }
 
-    // 🔥 MEJORA CRÍTICA: Aplicar conversión de unidades con integración PromotionProcessor
+    // 🔥 MEJORA CRÍTICA: Aplicar conversión de unidades EVITANDO DOBLE CONVERSIÓN
     if (
       fieldMapping.unitConversion &&
       fieldMapping.unitConversion.enabled &&
       value !== null
     ) {
       try {
-        // ✅ VERIFICAR QUE EL VALOR SEA REALMENTE NUMÉRICO
-        let numericValue;
-
-        if (typeof value === "number") {
-          numericValue = value;
-        } else if (typeof value === "string") {
-          numericValue = parseFloat(value);
+        // ✅ VERIFICAR SI YA FUE CONVERTIDO EN PROCESAMIENTO DE PROMOCIONES
+        if (sourceData._conversionApplied || fieldMapping.isPromotionField) {
+          logger.debug(
+            `🔧 Campo ya convertido en promociones: ${fieldMapping.targetField} = ${value}`
+          );
+          // No aplicar conversión adicional para evitar doble conversión
         } else {
-          throw new Error(`Valor no convertible a número: ${typeof value}`);
+          // ✅ VERIFICAR QUE EL VALOR SEA REALMENTE NUMÉRICO
+          let numericValue;
+
+          if (typeof value === "number") {
+            numericValue = value;
+          } else if (typeof value === "string") {
+            numericValue = parseFloat(value);
+          } else {
+            throw new Error(`Valor no convertible a número: ${typeof value}`);
+          }
+
+          if (isNaN(numericValue)) {
+            throw new Error(`Valor no numérico para conversión: ${value}`);
+          }
+
+          // ✅ APLICAR CONVERSIÓN SOLO SI NO FUE APLICADA ANTES
+          const originalValue = value;
+          value = await this.applyUnitConversion(
+            sourceData,
+            fieldMapping,
+            value
+          );
+
+          logger.debug(
+            `🔧 Conversión aplicada en processField: ${originalValue} -> ${value}`
+          );
         }
-
-        if (isNaN(numericValue)) {
-          throw new Error(`Valor no numérico para conversión: ${value}`);
-        }
-
-        // ✅ USAR TU MÉTODO MEJORADO DE CONVERSIÓN CON INTEGRACIÓN PROMOTIONPROCESSOR
-        value = await this.applyUnitConversion(sourceData, fieldMapping, value);
-
-        logger.debug(`🔧 Conversión aplicada: ${numericValue} -> ${value}`);
       } catch (conversionError) {
         logger.error(
           `Error en conversión de unidades para ${fieldMapping.targetField}: ${conversionError.message}`
@@ -1971,16 +2057,26 @@ class DynamicTransferService {
         value.includes("NEWID()") ||
         value.includes("@@"));
 
-    logger.debug(
-      `🔧 Valor final para ${
-        fieldMapping.targetField
-      }: ${value} (tipo: ${typeof value})`
-    );
+    // ✅ LOG DETALLADO FINAL PARA CAMPOS DE PROMOCIÓN
+    if (fieldMapping.isPromotionField) {
+      logger.info(
+        `🎁 CAMPO PROMOCIÓN FINAL: ${
+          fieldMapping.targetField
+        } = ${value} (tipo: ${typeof value})`
+      );
+    } else {
+      logger.debug(
+        `🔧 Valor final para ${
+          fieldMapping.targetField
+        }: ${value} (tipo: ${typeof value})`
+      );
+    }
 
     return {
       value,
       isDirectSql,
       fieldName: fieldMapping.targetField,
+      success: true,
     };
   }
 
