@@ -1776,7 +1776,7 @@ class DynamicTransferService {
     let value;
 
     logger.debug(
-      `🔧 Procesando campo: ${fieldMapping.sourceField || "(sin origen)"} -> ${
+      `🔧 Procesando campo: ${fieldMapping.sourceField || "(automático)"} -> ${
         fieldMapping.targetField
       }`
     );
@@ -1981,9 +1981,11 @@ class DynamicTransferService {
             value
           );
 
-          logger.debug(
-            `🔧 Conversión aplicada en processField: ${originalValue} -> ${value}`
-          );
+          if (value !== originalValue) {
+            logger.debug(
+              `🔧 Conversión aplicada en processField: ${originalValue} -> ${value}`
+            );
+          }
         }
       } catch (conversionError) {
         logger.error(
@@ -2320,6 +2322,7 @@ class DynamicTransferService {
    * @param {Object} targetConnection - Conexión destino
    * @returns {Promise<Object>} - Resultados del lookup
    */
+  // En DynamicTransferService.js - método executeLookupInTarget
   async executeLookupInTarget(tableConfig, sourceData, targetConnection) {
     try {
       logger.info(
@@ -2337,19 +2340,17 @@ class DynamicTransferService {
         return { results: {}, success: true };
       }
 
-      logger.info(`Procesando ${lookupFields.length} campos con lookup`);
-
       for (const fieldMapping of lookupFields) {
         try {
-          let lookupQuery = fieldMapping.lookupQuery;
           const params = {};
-          const expectedParams = this.extractParametersFromQuery(lookupQuery);
 
-          // Extraer valores de parámetros desde datos de origen
+          // ✅ CORREGIR: Validar parámetros requeridos correctamente
           if (
             fieldMapping.lookupParams &&
             fieldMapping.lookupParams.length > 0
           ) {
+            let allParamsAvailable = true;
+
             for (const param of fieldMapping.lookupParams) {
               if (!param.sourceField || !param.paramName) {
                 continue;
@@ -2357,48 +2358,50 @@ class DynamicTransferService {
 
               let paramValue = sourceData[param.sourceField];
 
-              // Aplicar eliminación de prefijo al parámetro
+              // Aplicar eliminación de prefijo
               if (
                 param.removePrefix &&
-                paramValue !== null &&
-                paramValue !== undefined &&
-                typeof paramValue === "string" &&
-                paramValue.startsWith(param.removePrefix)
+                paramValue &&
+                typeof paramValue === "string"
               ) {
-                paramValue = paramValue.substring(param.removePrefix.length);
+                paramValue = paramValue.replace(
+                  new RegExp(`^${param.removePrefix}`),
+                  ""
+                );
               }
 
-              params[param.paramName] = paramValue;
+              if (paramValue === null || paramValue === undefined) {
+                if (param.required !== false) {
+                  // Si no está marcado como opcional
+                  allParamsAvailable = false;
+                  break;
+                }
+              } else {
+                params[param.paramName] = paramValue;
+              }
             }
-          }
 
-          // Validar parámetros requeridos
-          const missingParams = expectedParams.filter(
-            (p) => params[p] === undefined || params[p] === null
-          );
-
-          if (missingParams.length > 0) {
-            const errorMsg = `Parámetros faltantes: ${missingParams.join(
-              ", "
-            )}`;
-            if (fieldMapping.failIfNotFound) {
-              failedLookups.push({
-                field: fieldMapping.targetField,
-                error: errorMsg,
-                isCritical: true,
-              });
-              continue;
-            } else {
-              lookupResults[fieldMapping.targetField] =
-                fieldMapping.defaultValue || null;
-              continue;
+            // Si faltan parámetros requeridos
+            if (!allParamsAvailable) {
+              if (fieldMapping.failIfNotFound) {
+                failedLookups.push({
+                  field: fieldMapping.targetField,
+                  error: "Parámetros requeridos faltantes",
+                  isCritical: true,
+                });
+                continue;
+              } else {
+                lookupResults[fieldMapping.targetField] =
+                  fieldMapping.defaultValue || null;
+                continue;
+              }
             }
           }
 
           // Ejecutar consulta
           const result = await SqlService.query(
             targetConnection,
-            lookupQuery,
+            fieldMapping.lookupQuery,
             params
           );
 
@@ -2421,11 +2424,13 @@ class DynamicTransferService {
             }
           }
         } catch (fieldError) {
-          const errorMsg = `Error en lookup ${fieldMapping.targetField}: ${fieldError.message}`;
+          logger.error(
+            `Error en lookup ${fieldMapping.targetField}: ${fieldError.message}`
+          );
           if (fieldMapping.failIfNotFound) {
             failedLookups.push({
               field: fieldMapping.targetField,
-              error: errorMsg,
+              error: fieldError.message,
               isCritical: true,
             });
           } else {
@@ -2435,7 +2440,7 @@ class DynamicTransferService {
         }
       }
 
-      // Verificar si hay fallos críticos
+      // Verificar fallos críticos
       const criticalFailures = failedLookups.filter((f) => f.isCritical);
       if (criticalFailures.length > 0) {
         return {
@@ -3670,9 +3675,9 @@ class DynamicTransferService {
    * @param {any} originalValue - Valor original del campo
    * @returns {any} - Valor convertido
    */
-  applyUnitConversion(sourceData, fieldMapping, originalValue) {
+
+  async applyUnitConversion(sourceData, fieldMapping, originalValue) {
     try {
-      // ✅ MANTENER TU LÓGICA DE VALIDACIÓN EXISTENTE
       if (
         !fieldMapping.unitConversion ||
         !fieldMapping.unitConversion.enabled
@@ -3682,10 +3687,11 @@ class DynamicTransferService {
 
       const config = fieldMapping.unitConversion;
 
-      // ✅ USAR TU LÓGICA EXISTENTE PARA BUSCAR CAMPOS
+      // Buscar campos de unidad y factor
       let unitMeasureValue = null;
       let conversionFactorValue = null;
 
+      // Campos posibles para unidad de medida
       const possibleUnitFields = [
         config.unitMeasureField,
         "Unit_Measure",
@@ -3693,6 +3699,7 @@ class DynamicTransferService {
         "UNI_MED",
       ];
 
+      // Campos posibles para factor de conversión
       const possibleFactorFields = [
         config.conversionFactorField,
         "Factor_Conversion",
@@ -3700,7 +3707,7 @@ class DynamicTransferService {
         "CNT_MAX",
       ];
 
-      // Buscar campos usando tu lógica existente
+      // Buscar unidad de medida
       for (const fieldName of possibleUnitFields) {
         if (
           sourceData[fieldName] !== undefined &&
@@ -3711,6 +3718,7 @@ class DynamicTransferService {
         }
       }
 
+      // Buscar factor de conversión
       for (const fieldName of possibleFactorFields) {
         if (
           sourceData[fieldName] !== undefined &&
@@ -3723,25 +3731,24 @@ class DynamicTransferService {
 
       if (!unitMeasureValue || !conversionFactorValue) {
         logger.debug(
-          `🔧 Sin conversión: Unit=${unitMeasureValue}, Factor=${conversionFactorValue}`
+          `Conversión omitida: Unit=${unitMeasureValue}, Factor=${conversionFactorValue}`
         );
         return originalValue;
       }
 
-      // ✅ USAR EL NUEVO MÉTODO DEL PROMOTIONPROCESSOR PARA VERIFICAR SI DEBE CONVERTIR
+      // Verificar si debe aplicarse conversión basado en la unidad
       const shouldConvert = this.shouldApplyUnitConversion(
         unitMeasureValue,
         config.fromUnit
       );
       if (!shouldConvert) {
+        logger.debug(`Unidad ${unitMeasureValue} no requiere conversión`);
         return originalValue;
       }
 
       const factor = parseFloat(conversionFactorValue);
       if (isNaN(factor) || factor <= 0) {
-        logger.error(
-          `❌ Factor de conversión inválido: ${conversionFactorValue}`
-        );
+        logger.error(`Factor de conversión inválido: ${conversionFactorValue}`);
         return originalValue;
       }
 
@@ -3750,7 +3757,7 @@ class DynamicTransferService {
         return originalValue;
       }
 
-      // ✅ APLICAR CONVERSIÓN USANDO TU LÓGICA EXISTENTE
+      // Aplicar conversión usando tu lógica existente
       let convertedValue;
       if (config.operation === "multiply") {
         convertedValue = numericValue * factor;
@@ -3760,15 +3767,15 @@ class DynamicTransferService {
         convertedValue = numericValue;
       }
 
-      const roundedValue = Math.round(convertedValue * 100) / 100;
+      const roundedValue = Math.round(convertedValue);
 
       logger.info(
-        `🔧 Conversión aplicada: ${numericValue} ${config.operation} ${factor} = ${roundedValue}`
+        `Conversión aplicada: ${numericValue} ${unitMeasureValue} ${config.operation} ${factor} = ${roundedValue} UND`
       );
 
       return roundedValue;
     } catch (error) {
-      logger.error(`🔧 Error en conversión: ${error.message}`);
+      logger.error(`Error en conversión: ${error.message}`);
       return originalValue;
     }
   }
@@ -3779,11 +3786,12 @@ class DynamicTransferService {
    * @param {string} fromUnit - Unidad que requiere conversión
    * @returns {boolean}
    */
+  // En DynamicTransferService.js - método shouldApplyUnitConversion MEJORADO
   shouldApplyUnitConversion(currentUnit, fromUnit) {
     try {
       if (!currentUnit || !fromUnit) {
         logger.debug(
-          `❌ Unidades faltantes: actual='${currentUnit}', configurada='${fromUnit}'`
+          `Unidades faltantes: actual='${currentUnit}', configurada='${fromUnit}'`
         );
         return false;
       }
@@ -3792,128 +3800,154 @@ class DynamicTransferService {
       const normalizedFrom = String(fromUnit).toUpperCase().trim();
 
       logger.debug(
-        `🔍 Comparando unidades: '${normalizedCurrent}' vs '${normalizedFrom}'`
+        `Comparando unidades: '${normalizedCurrent}' vs '${normalizedFrom}'`
       );
 
-      // MEJORA: Más variaciones y mejor cobertura
-      const unitVariations = {
+      // **MAPEO COMPLETO DE UNIDADES QUE REQUIEREN CONVERSIÓN**
+      const unitsRequiringConversion = {
+        // Cajas y empaques
         CAJA: [
           "CAJA",
-          "CJA",
           "CAJAS",
+          "CJA",
           "CJ",
           "CAJ",
+          "CAJITA",
+          "CJTA",
           "BOX",
           "BOXES",
-          "CJTA",
-          "CAJITA",
         ],
-        UNIDAD: [
-          "UNIDAD",
-          "UND",
-          "UNIDADES",
-          "U",
-          "UN",
-          "UNIT",
-          "UNITS",
-          "PCS",
-          "PIEZAS",
-          "PZ",
-          "PIEZA",
-        ],
-        KILO: ["KILO", "KG", "KILOS", "K", "KILOGRAMO", "KILOGRAMOS", "KGR"],
-        LITRO: ["LITRO", "LT", "LITROS", "L", "LTR", "LITR"],
-        METRO: ["METRO", "M", "METROS", "MTS", "MT"],
-        GRAMO: ["GRAMO", "G", "GRAMOS", "GR", "GRM"],
-        DOCENA: ["DOCENA", "DOC", "DOCENAS", "DZ"],
-        PAR: ["PAR", "PARES", "PR"],
-        ROLLO: ["ROLLO", "ROLLOS", "RL", "ROLL"],
-        PAQUETE: ["PAQUETE", "PAQUETES", "PAQ", "PACK", "PKG"],
+        PACK: ["PACK", "PAQUETE", "PAQUETES", "PAQ", "PACKAGE", "PKG"],
+
+        // Docenas y múltiplos
+        DOCENA: ["DOCENA", "DOCENAS", "DOC", "DZ", "DOZEN"],
+        MEDIA_DOCENA: ["MEDIA_DOCENA", "MEDIA_DOC", "6UND"],
+
+        // Rollos y bobinas
+        ROLLO: ["ROLLO", "ROLLOS", "RL", "ROLL", "BOBINA", "BOBINAS"],
+
+        // Otros contenedores
+        BOLSA: ["BOLSA", "BOLSAS", "SACO", "SACOS", "BAG", "BAGS"],
+        DISPLAY: ["DISPLAY", "DISPLAYS", "DSP", "EXHIBIDOR"],
+
+        // Medidas de peso que pueden venir en múltiplos
+        KILO_MULTIPLE: ["KILO_X", "KG_X", "KILOS_X"], // Para casos como "KILO_X_12"
       };
 
-      // Buscar en variaciones predefinidas
-      for (const [baseUnit, variations] of Object.entries(unitVariations)) {
+      // **UNIDADES QUE NO REQUIEREN CONVERSIÓN (ya están en unidades base)**
+      const unitsNotRequiringConversion = [
+        "UNIDAD",
+        "UNIDADES",
+        "UND",
+        "U",
+        "UN",
+        "UNIT",
+        "UNITS",
+        "PCS",
+        "PIEZAS",
+        "PZ",
+        "PIEZA",
+        "CADA",
+        "C/U",
+      ];
+
+      // **1. VERIFICAR SI LA UNIDAD ACTUAL NO REQUIERE CONVERSIÓN**
+      if (unitsNotRequiringConversion.includes(normalizedCurrent)) {
+        logger.debug(
+          `Unidad ${normalizedCurrent} ya está en unidades base - no requiere conversión`
+        );
+        return false;
+      }
+
+      // **2. VERIFICAR SI fromUnit ESTÁ EN UNIDADES QUE REQUIEREN CONVERSIÓN**
+      let fromUnitRequiresConversion = false;
+      let matchedGroup = null;
+
+      for (const [group, variations] of Object.entries(
+        unitsRequiringConversion
+      )) {
         if (variations.includes(normalizedFrom)) {
-          const isMatch = variations.includes(normalizedCurrent);
-          logger.debug(
-            `🔍 Verificación por variaciones '${baseUnit}': ${
-              isMatch ? "✅" : "❌"
-            }`
-          );
-          if (isMatch) return true;
+          fromUnitRequiresConversion = true;
+          matchedGroup = group;
+          break;
         }
       }
 
-      // MEJORA: Comparación de contenido (más flexible)
-      if (
-        normalizedCurrent.includes(normalizedFrom) ||
-        normalizedFrom.includes(normalizedCurrent)
-      ) {
+      if (!fromUnitRequiresConversion) {
         logger.debug(
-          `🔍 Verificación por contenido: ✅ (una contiene a la otra)`
+          `fromUnit '${normalizedFrom}' no está configurado para conversión`
+        );
+        return false;
+      }
+
+      // **3. VERIFICAR SI LA UNIDAD ACTUAL COINCIDE CON EL GRUPO**
+      const groupVariations = unitsRequiringConversion[matchedGroup];
+      const isMatch = groupVariations.includes(normalizedCurrent);
+
+      if (isMatch) {
+        logger.info(
+          `✅ Conversión requerida: ${normalizedCurrent} coincide con grupo ${matchedGroup}`
         );
         return true;
       }
 
-      // MEJORA: Comparación sin espacios y caracteres especiales
-      const cleanCurrent = normalizedCurrent.replace(/[^A-Z0-9]/g, "");
-      const cleanFrom = normalizedFrom.replace(/[^A-Z0-9]/g, "");
+      // **4. VERIFICACIONES ADICIONALES MÁS FLEXIBLES**
 
-      if (cleanCurrent === cleanFrom) {
-        logger.debug(
-          `🔍 Verificación limpia: ✅ ('${cleanCurrent}' === '${cleanFrom}')`
-        );
-        return true;
-      }
-
-      // MEJORA: Verificación de abreviaciones comunes
-      const abbreviationMap = {
-        CAJA: ["CJ", "CJA", "CAJ"],
-        UNIDAD: ["UN", "UND", "U"],
-        KILO: ["K", "KG"],
-        LITRO: ["L", "LT"],
-        METRO: ["M", "MT"],
-        GRAMO: ["G", "GR"],
-      };
-
-      for (const [full, abbrevs] of Object.entries(abbreviationMap)) {
+      // Verificación por contenido parcial
+      for (const variation of groupVariations) {
         if (
-          (full === normalizedCurrent && abbrevs.includes(normalizedFrom)) ||
-          (full === normalizedFrom && abbrevs.includes(normalizedCurrent)) ||
-          (abbrevs.includes(normalizedCurrent) &&
-            abbrevs.includes(normalizedFrom))
+          normalizedCurrent.includes(variation) ||
+          variation.includes(normalizedCurrent)
         ) {
-          logger.debug(`🔍 Verificación por abreviación '${full}': ✅`);
+          logger.info(
+            `✅ Conversión requerida: ${normalizedCurrent} contiene variación ${variation}`
+          );
           return true;
         }
       }
 
-      // Comparación exacta final
-      const exactMatch = normalizedCurrent === normalizedFrom;
-      logger.debug(
-        `🔍 Verificación exacta: ${
-          exactMatch ? "✅" : "❌"
-        } ('${normalizedCurrent}' === '${normalizedFrom}')`
-      );
+      // Verificación sin caracteres especiales
+      const cleanCurrent = normalizedCurrent.replace(/[^A-Z0-9]/g, "");
+      const cleanFrom = normalizedFrom.replace(/[^A-Z0-9]/g, "");
 
-      if (!exactMatch) {
+      if (cleanCurrent === cleanFrom) {
         logger.info(
-          `❌ Unidad '${currentUnit}' no coincide con patrón '${fromUnit}' para conversión`
+          `✅ Conversión requerida: coincidencia limpia ${cleanCurrent}`
         );
-        logger.debug(`   Normalizada actual: '${normalizedCurrent}'`);
-        logger.debug(`   Normalizada configurada: '${normalizedFrom}'`);
-        logger.debug(
-          `   Sugerencia: Verifique la configuración de unidades o añada variaciones`
-        );
+        return true;
       }
 
-      return exactMatch;
+      // **5. CASOS ESPECIALES DE MÚLTIPLOS**
+      // Ejemplo: "CAJA_X_12", "PACK_DE_6", etc.
+      const multiplePattern = /(\w+)[_\-\s]*(X|DE|OF)[_\-\s]*(\d+)/i;
+      const currentMatch = normalizedCurrent.match(multiplePattern);
+
+      if (currentMatch) {
+        const baseUnit = currentMatch[1];
+        const multiplier = parseInt(currentMatch[3]);
+
+        // Verificar si la unidad base requiere conversión
+        for (const [group, variations] of Object.entries(
+          unitsRequiringConversion
+        )) {
+          if (
+            variations.includes(baseUnit) &&
+            variations.includes(normalizedFrom)
+          ) {
+            logger.info(
+              `✅ Conversión requerida: múltiple detectado ${baseUnit} x ${multiplier}`
+            );
+            return true;
+          }
+        }
+      }
+
+      logger.debug(
+        `❌ No se requiere conversión: ${normalizedCurrent} vs ${normalizedFrom}`
+      );
+      return false;
     } catch (error) {
-      logger.error(`💥 Error en verificación de unidades: ${error.message}`, {
-        currentUnit,
-        fromUnit,
-        error: error.stack,
-      });
+      logger.error(`Error en verificación de unidades: ${error.message}`);
       return false;
     }
   }
@@ -5349,7 +5383,6 @@ class DynamicTransferService {
       ) {
         promotionFieldMappings.push({
           ...field,
-          defaultValue: null,
           isRequired: false,
         });
 
