@@ -127,19 +127,15 @@ class PromotionProcessor {
         row["Factor_Conversion"] || row["FACTOR_CONVERSION"] || row["CNT_MAX"];
 
       if (!unitMeasure || !factorConversion) {
-        logger.debug(
-          `🔧 Sin conversión de unidades: Unit_Measure=${unitMeasure}, Factor=${factorConversion}`
-        );
         return { ...row };
       }
 
       const factor = parseFloat(factorConversion);
       if (isNaN(factor) || factor <= 0) {
-        logger.warn(`🔧 Factor de conversión inválido: ${factorConversion}`);
         return { ...row };
       }
 
-      // ✅ Lista de campos de cantidad que pueden necesitar conversión
+      // ✅ TODOS los campos de cantidad que necesitan conversión
       const quantityFields = [
         "CNT_MAX",
         "CANTIDAD_BONIFICA",
@@ -151,11 +147,9 @@ class PromotionProcessor {
         "CANTIDAD_CANCELADA",
       ];
 
-      logger.debug(
-        `🔧 Aplicando conversión: Unit_Measure=${unitMeasure}, Factor=${factor}`
-      );
+      const convertedRow = { ...row };
 
-      // ✅ Aplicar conversión solo si la unidad requiere conversión (ej: CAJA)
+      // ✅ VERIFICAR SI LA UNIDAD REQUIERE CONVERSIÓN
       const unitsRequiringConversion = [
         "CAJA",
         "CAJAS",
@@ -163,8 +157,6 @@ class PromotionProcessor {
         "PAQUETE",
         "BOX",
       ];
-
-      const convertedRow = { ...row };
 
       if (unitsRequiringConversion.includes(unitMeasure.toUpperCase())) {
         quantityFields.forEach((field) => {
@@ -182,8 +174,13 @@ class PromotionProcessor {
             }
           }
         });
-      } else {
-        logger.debug(`🔧 Unidad ${unitMeasure} no requiere conversión`);
+
+        // ✅ IMPORTANTE: También convertir el factor mismo si se usa como cantidad
+        if (convertedRow["CNT_MAX"] !== undefined) {
+          logger.info(
+            `🔧 ✅ Conversión aplicada: ${unitMeasure} con factor ${factor}`
+          );
+        }
       }
 
       return convertedRow;
@@ -452,7 +449,7 @@ class PromotionProcessor {
     processedRow.CANTIDAD_BONIFICAD = parseFloat(cantidadBonifica) || 0;
 
     // ✅ Para bonificaciones, cantidad pedida puede ser 0 o igual a bonificación
-    processedRow.CANTIDAD_PEDIDA = processedRow.CANTIDAD_BONIFICAD;
+    processedRow.CANTIDAD_PEDIDA = 0;
     processedRow.CANTIDAD_A_FACTURA = 0; // Bonificaciones no se facturan normalmente
 
     // ✅ Marcar como línea de bonificación
