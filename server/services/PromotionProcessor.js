@@ -56,6 +56,10 @@ class PromotionProcessor {
       //   return this.applyQuantityConversions(row, effectiveFieldConfig);
       // });
 
+      // ✅ CAMBIAR POR: Usar datos originales sin conversión
+      logger.info("🎁 Procesando promociones sin conversión previa");
+      let processedData = data.map((row) => ({ ...row }));
+
       // ✅ PASO 2: CONSTRUIR REFERENCIAS DE LÍNEAS
       logger.info("🔗 Construyendo referencias de líneas...");
       const lineReferences = this.buildLineReferences(
