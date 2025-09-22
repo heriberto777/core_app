@@ -1109,40 +1109,9 @@ class DynamicTransferService {
 
       logger.info(`🎁 ✅ Todos los campos de promoción están presentes`);
 
-      // ✅ PASO 5: APLICAR CONVERSIONES DE UNIDADES PRIMERO (CRÍTICO)
+      // ✅ PASO 5: Los datos pasan directamente sin conversión (se aplicará en processField)
       logger.info(
-        `🔧 Aplicando conversiones de unidades ANTES de procesar promociones`
-      );
-
-      let dataWithConversions = detailData.map((row) => {
-        const originalRow = { ...row };
-        const convertedRow = PromotionProcessor.applyQuantityConversions(
-          originalRow,
-          fieldConfigToUse
-        );
-
-        // Marcar que ya fue convertido para evitar doble conversión
-        convertedRow._conversionApplied = true;
-
-        // Log detallado de conversiones aplicadas
-        const quantityFields = [
-          "CNT_MAX",
-          "CANTIDAD_BONIFICA",
-          "CANTIDAD_BONIFICADA",
-        ];
-        quantityFields.forEach((field) => {
-          if (originalRow[field] !== convertedRow[field]) {
-            logger.info(
-              `🔧 Conversión aplicada en ${field}: ${originalRow[field]} → ${convertedRow[field]}`
-            );
-          }
-        });
-
-        return convertedRow;
-      });
-
-      logger.info(
-        `🔧 ✅ Conversiones aplicadas a ${dataWithConversions.length} registros`
+        `🎁 Procesando promociones para documento ${documentId} (conversión se aplicará después)`
       );
 
       // ✅ PASO 6: PROCESAR PROMOCIONES CON DATOS YA CONVERTIDOS
@@ -1151,7 +1120,7 @@ class DynamicTransferService {
       );
 
       const processedData = PromotionProcessor.processPromotionsWithConfig(
-        dataWithConversions, // ← Datos ya convertidos
+        detailData, // ← Datos originales sin conversión
         mapping,
         fieldConfigToUse
       );
