@@ -1750,7 +1750,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Procesa un campo individual - COMPLETO CORREGIDO con conversiones mejoradas
+   * Procesa un campo individual - COMPLETO CORREGIDO con conversiones universales
    * @param {Object} fieldMapping - Configuración del campo
    * @param {Object} sourceData - Datos origen
    * @param {Object} lookupResults - Resultados de lookup
@@ -1791,7 +1791,7 @@ class DynamicTransferService {
         `🎁 CAMPO DE PROMOCIÓN DETECTADO: ${fieldMapping.targetField}`
       );
 
-      // ✅ USAR NUEVO MÉTODO MEJORADO DEL PROMOTIONPROCESSOR
+      // ✅ USAR MÉTODO MEJORADO PARA ENCONTRAR VALOR DE PROMOCIÓN
       const promotionValue = this.findPromotionValue(
         fieldMapping.targetField,
         sourceData,
@@ -1812,121 +1812,54 @@ class DynamicTransferService {
             ? null
             : fieldMapping.defaultValue;
       }
-    }
-    // ✅ LÓGICA PARA CAMPOS DE PROMOCIÓN CON sourceField DEFINIDO MEJORADA
-    else if (fieldMapping.isPromotionField && fieldMapping.sourceField) {
-      logger.info(
-        `🎁 CAMPO DE PROMOCIÓN CON SOURCE: ${fieldMapping.sourceField} -> ${fieldMapping.targetField}`
-      );
+    } else {
+      // ✅ PROCESAMIENTO NORMAL DE CAMPOS (tu lógica existente)
 
-      // ✅ USAR NUEVO MÉTODO MEJORADO PARA BUSCAR VALORES
-      value = this.findFieldValueInData(
-        fieldMapping.sourceField,
-        sourceData,
-        mapping
-      );
-
-      if (value !== null && value !== undefined) {
-        logger.info(
-          `🎁 ✅ VALOR PROMOCIÓN ENCONTRADO: ${fieldMapping.targetField} = ${value}`
-        );
-      } else {
+      // Valor directo SQL
+      if (fieldMapping.isDirectSql) {
+        value = fieldMapping.directSqlValue;
         logger.debug(
-          `🎁 No se encontró valor para ${fieldMapping.sourceField}, usando defaultValue`
+          `🔧 Campo SQL directo: ${fieldMapping.targetField} = ${value}`
         );
-        value =
-          fieldMapping.defaultValue === "NULL"
-            ? null
-            : fieldMapping.defaultValue;
+        return {
+          value: value,
+          isDirectSql: true,
+        };
       }
-    }
-    // ✅ LÓGICA NORMAL MANTENIENDO TU ESTRUCTURA EXISTENTE
-    else {
-      try {
-        // 1. Verificar si tiene sourceField definido
-        if (fieldMapping.sourceField) {
-          // 🔥 MANTENER TU CORRECCIÓN CRÍTICA: Extraer valor real de objetos de configuración
-          let sourceValue = sourceData[fieldMapping.sourceField];
 
-          // ✅ DETECTAR Y CORREGIR OBJETOS DE CONFIGURACIÓN
-          if (typeof sourceValue === "object" && sourceValue !== null) {
-            // Si es un objeto de configuración con sourceField, extraer el valor real
-            if (sourceValue.sourceField) {
-              logger.warn(
-                `🔧 ⚠️ Objeto de configuración detectado para ${fieldMapping.targetField}`
-              );
-              const realSourceField = sourceValue.sourceField;
-              const realValue = sourceData[realSourceField];
-              logger.debug(
-                `🔧 Extrayendo valor real: ${realSourceField} = ${realValue}`
-              );
-              value = realValue;
-            }
-            // Si es un objeto con valor directo pero no es de configuración
-            else if (sourceValue.hasOwnProperty("value")) {
-              value = sourceValue.value;
-            }
-            // Si es un objeto complejo, usar como está (puede ser válido para algunos casos)
-            else {
-              value = sourceValue;
-            }
-          } else {
-            value = sourceValue;
-          }
-
-          if (value === null || value === undefined) {
-            logger.debug(
-              `Campo ${fieldMapping.sourceField} no encontrado en datos`
-            );
-          }
-        }
-
-        // 2. Si no se encontró valor, usar defaultValue
-        if (
-          (value === null || value === undefined) &&
-          fieldMapping.defaultValue !== undefined
-        ) {
-          value =
-            fieldMapping.defaultValue === "NULL"
-              ? null
-              : fieldMapping.defaultValue;
-          logger.debug(
-            `Usando defaultValue para ${fieldMapping.targetField}: ${value}`
-          );
-        }
-
-        // 3. Procesar lookup si está configurado
-        if (
-          fieldMapping.lookupFromTarget &&
-          lookupResults[fieldMapping.targetField]
-        ) {
-          value = lookupResults[fieldMapping.targetField];
-          logger.debug(
-            `Valor obtenido por lookup: ${fieldMapping.targetField} = ${value}`
-          );
-        }
-
-        // 🔥 4. USAR TUS MÉTODOS EXISTENTES DE CONSECUTIVOS
-        if (
-          this.isConsecutiveField(fieldMapping, mapping) &&
-          currentConsecutive
-        ) {
-          value = this.getConsecutiveValue(
-            fieldMapping,
-            currentConsecutive,
-            isDetailTable
-          );
-          logger.debug(
-            `🔢 Consecutivo asignado usando tu sistema centralizado: ${value}`
-          );
-        }
-      } catch (error) {
-        logger.error(
-          `Error procesando campo ${fieldMapping.targetField}: ${error.message}`
+      // Consecutivo
+      if (fieldMapping.useConsecutive && currentConsecutive) {
+        value =
+          currentConsecutive[fieldMapping.targetField] ||
+          currentConsecutive.value;
+        logger.debug(
+          `🔧 Consecutivo aplicado: ${fieldMapping.targetField} = ${value}`
         );
-        if (fieldMapping.isRequired) {
-          throw error;
+      }
+      // Lookup en tabla destino
+      else if (fieldMapping.lookupFromTarget) {
+        value = lookupResults[fieldMapping.targetField] || null;
+        logger.debug(
+          `🔧 Lookup aplicado: ${fieldMapping.targetField} = ${value}`
+        );
+      }
+      // Campo con transformación de datos
+      else if (fieldMapping.sourceField) {
+        // Obtener valor base
+        let rawValue = sourceData[fieldMapping.sourceField];
+
+        // Aplicar transformación si está configurada
+        if (fieldMapping.transformation) {
+          rawValue = this.applyTransformation(
+            rawValue,
+            fieldMapping.transformation
+          );
         }
+
+        value = rawValue;
+      }
+      // Valor por defecto
+      else {
         value =
           fieldMapping.defaultValue === "NULL"
             ? null
@@ -1944,141 +1877,142 @@ class DynamicTransferService {
       throw new Error(`Campo requerido ${fieldMapping.targetField} está vacío`);
     }
 
-    // 🔥 MEJORA CRÍTICA: Aplicar conversión de unidades EVITANDO DOBLE CONVERSIÓN
-    if (
-      fieldMapping.unitConversion &&
-      fieldMapping.unitConversion.enabled &&
-      value !== null
-    ) {
+    // ✅ NUEVA LÓGICA: CONVERSIÓN UNIVERSAL DE UNIDADES
+    if (this.isQuantityField(fieldMapping.targetField) && value !== null) {
       try {
-        // ✅ VERIFICAR SI YA FUE CONVERTIDO EN PROCESAMIENTO DE PROMOCIONES
-        if (sourceData._conversionApplied || fieldMapping.isPromotionField) {
-          logger.debug(
-            `🔧 Campo ya convertido en promociones: ${fieldMapping.targetField} = ${value}`
+        const convertedValue = await this.applyUniversalUnitConversion(
+          sourceData,
+          value,
+          fieldMapping.targetField
+        );
+
+        if (convertedValue !== value) {
+          logger.info(
+            `🔄 ${fieldMapping.targetField}: ${value} → ${convertedValue} (conversión universal)`
           );
-          // No aplicar conversión adicional para evitar doble conversión
-        } else {
-          // ✅ VERIFICAR QUE EL VALOR SEA REALMENTE NUMÉRICO
-          let numericValue;
-
-          if (typeof value === "number") {
-            numericValue = value;
-          } else if (typeof value === "string") {
-            numericValue = parseFloat(value);
-          } else {
-            throw new Error(`Valor no convertible a número: ${typeof value}`);
-          }
-
-          if (isNaN(numericValue)) {
-            throw new Error(`Valor no numérico para conversión: ${value}`);
-          }
-
-          // ✅ APLICAR CONVERSIÓN SOLO SI NO FUE APLICADA ANTES
-          const originalValue = value;
-          value = await this.applyUnitConversion(
-            sourceData,
-            fieldMapping,
-            value
-          );
-
-          if (value !== originalValue) {
-            logger.debug(
-              `🔧 Conversión aplicada en processField: ${originalValue} -> ${value}`
-            );
-          }
+          value = convertedValue;
         }
       } catch (conversionError) {
         logger.error(
-          `Error en conversión de unidades para ${fieldMapping.targetField}: ${conversionError.message}`
+          `Error en conversión universal para ${fieldMapping.targetField}: ${conversionError.message}`
+        );
+        // Mantener valor original si falla la conversión
+      }
+    }
+
+    // ✅ APLICAR CONVERSIONES DE TIPO DE DATOS
+    if (fieldMapping.fieldType && value !== null) {
+      try {
+        switch (fieldMapping.fieldType.toLowerCase()) {
+          case "number":
+          case "int":
+          case "decimal":
+          case "float":
+            if (typeof value === "string") {
+              value = parseFloat(value);
+              if (isNaN(value)) {
+                value = fieldMapping.defaultValue || 0;
+              }
+            }
+            break;
+
+          case "string":
+          case "varchar":
+          case "text":
+            value = String(value);
+
+            // Aplicar truncamiento si hay límite de longitud
+            if (
+              columnLengthCache &&
+              columnLengthCache.has(fieldMapping.targetField)
+            ) {
+              const maxLength = columnLengthCache.get(fieldMapping.targetField);
+              if (value.length > maxLength) {
+                value = value.substring(0, maxLength);
+                logger.warn(
+                  `📏 Campo truncado: ${fieldMapping.targetField} a ${maxLength} caracteres`
+                );
+              }
+            }
+            break;
+
+          case "date":
+          case "datetime":
+            if (typeof value === "string") {
+              const dateValue = new Date(value);
+              if (!isNaN(dateValue.getTime())) {
+                value = dateValue;
+              } else {
+                value = fieldMapping.defaultValue || null;
+              }
+            }
+            break;
+
+          case "boolean":
+          case "bit":
+            if (typeof value === "string") {
+              value = value.toLowerCase() === "true" || value === "1";
+            } else if (typeof value === "number") {
+              value = value === 1;
+            }
+            break;
+        }
+      } catch (typeError) {
+        logger.warn(
+          `⚠️ Error conversión de tipo para ${fieldMapping.targetField}: ${typeError.message}`
+        );
+        value = fieldMapping.defaultValue || null;
+      }
+    }
+
+    // ✅ APLICAR VALIDACIONES ADICIONALES
+    if (fieldMapping.validation) {
+      try {
+        if (fieldMapping.validation.minLength && typeof value === "string") {
+          if (value.length < fieldMapping.validation.minLength) {
+            throw new Error(
+              `Campo ${fieldMapping.targetField} debe tener al menos ${fieldMapping.validation.minLength} caracteres`
+            );
+          }
+        }
+
+        if (fieldMapping.validation.maxLength && typeof value === "string") {
+          if (value.length > fieldMapping.validation.maxLength) {
+            value = value.substring(0, fieldMapping.validation.maxLength);
+            logger.warn(
+              `📏 Campo validado y truncado: ${fieldMapping.targetField}`
+            );
+          }
+        }
+
+        if (fieldMapping.validation.pattern && typeof value === "string") {
+          const regex = new RegExp(fieldMapping.validation.pattern);
+          if (!regex.test(value)) {
+            throw new Error(
+              `Campo ${fieldMapping.targetField} no cumple el patrón requerido`
+            );
+          }
+        }
+      } catch (validationError) {
+        logger.error(
+          `Validación fallida para ${fieldMapping.targetField}: ${validationError.message}`
         );
 
-        // ✅ USAR VALOR POR DEFECTO EN CASO DE ERROR
-        if (fieldMapping.defaultValue !== undefined) {
-          value =
-            fieldMapping.defaultValue === "NULL"
-              ? null
-              : fieldMapping.defaultValue;
-        } else {
-          value = 0; // Valor seguro para campos numéricos
-        }
-
         if (fieldMapping.isRequired) {
-          throw conversionError;
+          throw validationError;
+        } else {
+          value = fieldMapping.defaultValue || null;
         }
       }
     }
 
-    // Aplicar mapeo de valores si está configurado (tu lógica existente)
-    if (fieldMapping.valueMappings && fieldMapping.valueMappings.length > 0) {
-      const mappedValue = this.applyValueMapping(
-        fieldMapping.valueMappings,
-        value
-      );
-      if (mappedValue !== null) {
-        value = mappedValue;
-      }
-    }
-
-    // Remover prefijo si está configurado (tu lógica existente)
-    if (fieldMapping.removePrefix && value && typeof value === "string") {
-      value = value.replace(new RegExp(`^${fieldMapping.removePrefix}`), "");
-    }
-
-    // ✅ USAR TU LÓGICA EXISTENTE PARA LONGITUD MÁXIMA
-    if (
-      value &&
-      typeof value === "string" &&
-      fieldMapping.maxLength &&
-      value.length > fieldMapping.maxLength
-    ) {
-      const originalValue = value;
-      value = value.substring(0, fieldMapping.maxLength);
-      logger.warn(
-        `✂️ Valor truncado en ${fieldMapping.targetField}: "${originalValue}" -> "${value}"`
-      );
-    }
-
-    // ✅ TU VALIDACIÓN AUTOMÁTICA EXISTENTE PARA CAMPOS DE FECHA
-    if (
-      (value === null || value === undefined) &&
-      fieldMapping.targetField &&
-      (fieldMapping.targetField.toUpperCase().includes("FECHA") ||
-        fieldMapping.targetField.toUpperCase().includes("DATE") ||
-        fieldMapping.targetField.toUpperCase().includes("FEC_"))
-    ) {
-      logger.warn(
-        `⚠️ Campo fecha ${fieldMapping.targetField} es null, usando GETDATE() automáticamente`
-      );
-      return { value: "GETDATE()", isDirectSql: true };
-    }
-
-    // Manejar valores SQL directos (tu lógica existente)
-    const isDirectSql =
-      typeof value === "string" &&
-      (value.includes("GETDATE()") ||
-        value.includes("NEWID()") ||
-        value.includes("@@"));
-
-    // ✅ LOG DETALLADO FINAL PARA CAMPOS DE PROMOCIÓN
-    if (fieldMapping.isPromotionField) {
-      logger.info(
-        `🎁 CAMPO PROMOCIÓN FINAL: ${
-          fieldMapping.targetField
-        } = ${value} (tipo: ${typeof value})`
-      );
-    } else {
-      logger.debug(
-        `🔧 Valor final para ${
-          fieldMapping.targetField
-        }: ${value} (tipo: ${typeof value})`
-      );
-    }
+    logger.debug(
+      `🔧 ✅ Campo procesado: ${fieldMapping.targetField} = ${value}`
+    );
 
     return {
-      value,
-      isDirectSql,
-      fieldName: fieldMapping.targetField,
-      success: true,
+      value: value,
+      isDirectSql: false,
     };
   }
 
@@ -3669,86 +3603,58 @@ class DynamicTransferService {
   }
 
   /**
-   * Aplica conversión de unidades a un valor específico - VERSIÓN CORREGIDA
-   * @param {Object} sourceData - Datos completos del registro
-   * @param {Object} fieldMapping - Configuración del campo con conversión
-   * @param {any} originalValue - Valor original del campo
-   * @returns {any} - Valor convertido
+   * ✅ NUEVO: Identifica si un campo es de cantidad
+   * @param {string} fieldName - Nombre del campo
+   * @returns {boolean}
    */
+  isQuantityField(fieldName) {
+    const quantityFields = [
+      "CANTIDAD_PEDIDA",
+      "CANTIDAD_A_FACTURA",
+      "CANTIDAD_BONIFICAD",
+      "CANTIDAD_BONIF",
+      "CNT_MAX",
+      "CANTIDAD_BONIFICACION",
+      "QTY_PEDIDA",
+      "QTY_BONIF",
+    ];
 
-  async applyUnitConversion(sourceData, fieldMapping, originalValue) {
+    return quantityFields.includes(fieldName.toUpperCase());
+  }
+
+  /**
+   * ✅ NUEVO: Aplica conversión universal a cualquier campo de cantidad
+   * @param {Object} sourceData - Datos completos de la línea
+   * @param {number} originalValue - Valor original
+   * @param {string} fieldName - Nombre del campo
+   * @returns {number} - Valor convertido
+   */
+  async applyUniversalUnitConversion(sourceData, originalValue, fieldName) {
     try {
-      if (
-        !fieldMapping.unitConversion ||
-        !fieldMapping.unitConversion.enabled
-      ) {
+      // Buscar Unit_Measure
+      const unitMeasure =
+        sourceData["Unit_Measure"] ||
+        sourceData["UNIT_MEASURE"] ||
+        sourceData["UNI_MED"];
+
+      // Buscar Factor_Conversion (tu lógica actual)
+      const conversionFactor =
+        sourceData["Factor_Conversion"] ||
+        sourceData["FACTOR_CONVERSION"] ||
+        sourceData["CNT_MAX"];
+
+      if (!unitMeasure || !conversionFactor) {
         return originalValue;
       }
 
-      const config = fieldMapping.unitConversion;
-
-      // Buscar campos de unidad y factor
-      let unitMeasureValue = null;
-      let conversionFactorValue = null;
-
-      // Campos posibles para unidad de medida
-      const possibleUnitFields = [
-        config.unitMeasureField,
-        "Unit_Measure",
-        "UNIT_MEASURE",
-        "UNI_MED",
-      ];
-
-      // Campos posibles para factor de conversión
-      const possibleFactorFields = [
-        config.conversionFactorField,
-        "Factor_Conversion",
-        "FACTOR_CONVERSION",
-        "CNT_MAX",
-      ];
-
-      // Buscar unidad de medida
-      for (const fieldName of possibleUnitFields) {
-        if (
-          sourceData[fieldName] !== undefined &&
-          sourceData[fieldName] !== null
-        ) {
-          unitMeasureValue = sourceData[fieldName];
-          break;
-        }
-      }
-
-      // Buscar factor de conversión
-      for (const fieldName of possibleFactorFields) {
-        if (
-          sourceData[fieldName] !== undefined &&
-          sourceData[fieldName] !== null
-        ) {
-          conversionFactorValue = sourceData[fieldName];
-          break;
-        }
-      }
-
-      if (!unitMeasureValue || !conversionFactorValue) {
-        logger.debug(
-          `Conversión omitida: Unit=${unitMeasureValue}, Factor=${conversionFactorValue}`
-        );
+      // Usar tu método existente shouldApplyUnitConversion
+      if (!this.shouldApplyUnitConversion(unitMeasure, "CAJA")) {
         return originalValue;
       }
 
-      // Verificar si debe aplicarse conversión basado en la unidad
-      const shouldConvert = this.shouldApplyUnitConversion(
-        unitMeasureValue,
-        config.fromUnit
-      );
-      if (!shouldConvert) {
-        logger.debug(`Unidad ${unitMeasureValue} no requiere conversión`);
-        return originalValue;
-      }
-
-      const factor = parseFloat(conversionFactorValue);
+      const factor = parseFloat(conversionFactor);
       if (isNaN(factor) || factor <= 0) {
-        logger.error(`Factor de conversión inválido: ${conversionFactorValue}`);
+        logger.error(`Factor inválido: ${conversionFactor}`);
         return originalValue;
       }
 
@@ -3757,25 +3663,16 @@ class DynamicTransferService {
         return originalValue;
       }
 
-      // Aplicar conversión usando tu lógica existente
-      let convertedValue;
-      if (config.operation === "multiply") {
-        convertedValue = numericValue * factor;
-      } else if (config.operation === "divide") {
-        convertedValue = factor !== 0 ? numericValue / factor : numericValue;
-      } else {
-        convertedValue = numericValue;
-      }
-
-      const roundedValue = Math.round(convertedValue);
+      // ✅ APLICAR TU LÓGICA: cantidad * factor = unidades
+      const convertedValue = Math.round(numericValue * factor);
 
       logger.info(
-        `Conversión aplicada: ${numericValue} ${unitMeasureValue} ${config.operation} ${factor} = ${roundedValue} UND`
+        `🔄 Conversión universal: ${numericValue} ${unitMeasure} × ${factor} = ${convertedValue} UND`
       );
 
-      return roundedValue;
+      return convertedValue;
     } catch (error) {
-      logger.error(`Error en conversión: ${error.message}`);
+      logger.error(`Error en conversión universal: ${error.message}`);
       return originalValue;
     }
   }
@@ -5331,15 +5228,6 @@ class DynamicTransferService {
         description: "Cantidad bonificación",
         fieldType: "number",
         isPromotionField: true,
-        // ✅ APLICAR CONVERSIÓN DE UNIDADES USANDO TU LÓGICA EXISTENTE
-        unitConversion: {
-          enabled: true,
-          unitMeasureField: "Unit_Measure",
-          conversionFactorField: "Factor_Conversion",
-          fromUnit: "CAJA",
-          toUnit: "UND",
-          operation: "multiply",
-        },
       },
       {
         sourceField: "CANTIDAD_PEDIDA",
@@ -5347,14 +5235,6 @@ class DynamicTransferService {
         description: "Cantidad pedida",
         fieldType: "number",
         isPromotionField: true,
-        unitConversion: {
-          enabled: true,
-          unitMeasureField: "Unit_Measure",
-          conversionFactorField: "Factor_Conversion",
-          fromUnit: "CAJA",
-          toUnit: "UND",
-          operation: "multiply",
-        },
       },
       {
         sourceField: "CANTIDAD_A_FACTURA",
@@ -5362,14 +5242,6 @@ class DynamicTransferService {
         description: "Cantidad a facturar",
         fieldType: "number",
         isPromotionField: true,
-        unitConversion: {
-          enabled: true,
-          unitMeasureField: "Unit_Measure",
-          conversionFactorField: "Factor_Conversion",
-          fromUnit: "CAJA",
-          toUnit: "UND",
-          operation: "multiply",
-        },
       },
     ];
 
