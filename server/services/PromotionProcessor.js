@@ -50,11 +50,11 @@ class PromotionProcessor {
         );
       }
 
-      // ✅ PASO 1: APLICAR CONVERSIONES DE CANTIDAD A TODOS LOS DATOS
-      logger.info("🔧 Aplicando conversiones de cantidades...");
-      let processedData = data.map((row) => {
-        return this.applyQuantityConversions(row, effectiveFieldConfig);
-      });
+      // // ✅ PASO 1: APLICAR CONVERSIONES DE CANTIDAD A TODOS LOS DATOS
+      // logger.info("🔧 Aplicando conversiones de cantidades...");
+      // let processedData = data.map((row) => {
+      //   return this.applyQuantityConversions(row, effectiveFieldConfig);
+      // });
 
       // ✅ PASO 2: CONSTRUIR REFERENCIAS DE LÍNEAS
       logger.info("🔗 Construyendo referencias de líneas...");
@@ -113,42 +113,6 @@ class PromotionProcessor {
     }
   }
 
-  /**
-   * ✅ NUEVO: Aplica conversiones de cantidad según Unit_Measure y Factor_Conversion
-   * @param {Object} row - Fila de datos
-   * @param {Object} config - Configuración de campos
-   * @returns {Object} - Fila con cantidades convertidas
-   */
-  // En PromotionProcessor.js - método applyQuantityConversions CORREGIDO
-  static applyQuantityConversions(row, config) {
-    try {
-      // ✅ SOLO MARCAR PARA CONVERSIÓN POSTERIOR - NO CONVERTIR AQUÍ
-      const unitMeasure =
-        row["Unit_Measure"] || row["UNIT_MEASURE"] || row["UNI_MED"];
-      const factorConversion =
-        row["Factor_Conversion"] || row["FACTOR_CONVERSION"] || row["CNT_MAX"];
-
-      if (!unitMeasure || !factorConversion) {
-        return { ...row };
-      }
-
-      const convertedRow = { ...row };
-
-      // Solo marcar que necesita conversión - DynamicTransferService se encargará
-      convertedRow._needsUnitConversion = true;
-      convertedRow._originalUnit = unitMeasure;
-      convertedRow._conversionFactor = factorConversion;
-
-      logger.debug(
-        `🎁 Promoción marcada para conversión posterior: ${unitMeasure} con factor ${factorConversion}`
-      );
-
-      return convertedRow;
-    } catch (error) {
-      logger.error(`🎁 Error marcando para conversión: ${error.message}`);
-      return { ...row };
-    }
-  }
 
   /**
    * ✅ NUEVO: Construye referencias entre líneas regulares y bonificaciones
@@ -156,6 +120,7 @@ class PromotionProcessor {
    * @param {Object} config - Configuración de campos
    * @returns {Map} - Mapa de referencias línea -> NUM_LN
    */
+
   static buildLineReferences(allRows, config) {
     const lineReferences = new Map();
     const articleToLineMap = new Map(); // COD_ART -> NUM_LN
