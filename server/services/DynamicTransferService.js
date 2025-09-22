@@ -3654,9 +3654,7 @@ class DynamicTransferService {
   }
 
   /**
-   * ✅ NUEVO: Identifica si un campo es de cantidad
-   * @param {string} fieldName - Nombre del campo
-   * @returns {boolean}
+   * ✅ ACTUALIZADO: Identifica campos de cantidad incluyendo CNT_MAX
    */
   isQuantityField(fieldName) {
     const quantityFields = [
@@ -3664,66 +3662,110 @@ class DynamicTransferService {
       "CANTIDAD_A_FACTURA",
       "CANTIDAD_BONIFICAD",
       "CANTIDAD_BONIF",
-      "CNT_MAX",
+      "CNT_MAX", // ✅ CNT_MAX es cantidad en cajas
       "CANTIDAD_BONIFICACION",
       "QTY_PEDIDA",
       "QTY_BONIF",
+      "QTY_FACTURAR",
+      "CANT_PEDIDA",
+      "CANT_BONIF",
     ];
 
-    return quantityFields.includes(fieldName.toUpperCase());
+    const isQuantity = quantityFields.includes(fieldName.toUpperCase());
+
+    logger.info(`🔄 ¿Es campo de cantidad? ${fieldName} → ${isQuantity}`);
+
+    return isQuantity;
   }
 
   /**
-   * ✅ NUEVO: Aplica conversión universal a cualquier campo de cantidad
+   * ✅ CORREGIDO: Aplica conversión universal CNT_MAX * Factor_Conversion
    * @param {Object} sourceData - Datos completos de la línea
-   * @param {number} originalValue - Valor original
+   * @param {number} originalValue - Valor original (CNT_MAX)
    * @param {string} fieldName - Nombre del campo
-   * @returns {number} - Valor convertido
+   * @returns {number} - Valor convertido a unidades
    */
   async applyUniversalUnitConversion(sourceData, originalValue, fieldName) {
     try {
-      // Buscar Unit_Measure
+      logger.info(`🔄 === CONVERSIÓN PARA ${fieldName} ===`);
+
+      // ✅ Buscar Unit_Measure
       const unitMeasure =
         sourceData["Unit_Measure"] ||
         sourceData["UNIT_MEASURE"] ||
         sourceData["UNI_MED"];
 
-      // Buscar Factor_Conversion (tu lógica actual)
-      const conversionFactor =
-        sourceData["Factor_Conversion"] ||
-        sourceData["FACTOR_CONVERSION"] ||
-        sourceData["CNT_MAX"];
+      logger.info(`🔄 Unit_Measure: '${unitMeasure}'`);
 
-      if (!unitMeasure || !conversionFactor) {
-        return originalValue;
-      }
-
-      // Usar tu método existente shouldApplyUnitConversion
-      if (!this.shouldApplyUnitConversion(unitMeasure, "CAJA")) {
-        return originalValue;
-      }
-
-      const factor = parseFloat(conversionFactor);
-      if (isNaN(factor) || factor <= 0) {
-        logger.error(`Factor inválido: ${conversionFactor}`);
-        return originalValue;
-      }
-
-      const numericValue = parseFloat(originalValue);
-      if (isNaN(numericValue)) {
-        return originalValue;
-      }
-
-      // ✅ APLICAR TU LÓGICA: cantidad * factor = unidades
-      const convertedValue = Math.round(numericValue * factor);
+      // ✅ Buscar Factor_Conversion (unidades por caja)
+      let factorConversion =
+        sourceData["Factor_Conversion"] || sourceData["FACTOR_CONVERSION"];
 
       logger.info(
-        `🔄 Conversión universal: ${numericValue} ${unitMeasure} × ${factor} = ${convertedValue} UND`
+        `🔄 Factor_Conversion encontrado: '${factorConversion}' (tipo: ${typeof factorConversion})`
       );
 
-      return convertedValue;
+      if (!unitMeasure || !factorConversion) {
+        logger.warn(
+          `🔄 ❌ Datos faltantes - Unit: '${unitMeasure}', Factor: '${factorConversion}'`
+        );
+        return originalValue;
+      }
+
+      // ✅ Verificar si debe aplicarse conversión
+      if (!this.shouldApplyUnitConversion(unitMeasure, "CAJA")) {
+        logger.info(`🔄 ⏭️ Unidad ${unitMeasure} no requiere conversión`);
+        return originalValue;
+      }
+
+      // ✅ CONVERSIÓN STRING A NUMÉRICO para Factor_Conversion
+      let factor;
+      if (typeof factorConversion === "string") {
+        factor = parseInt(factorConversion.trim(), 10);
+        logger.info(
+          `🔄 Factor convertido de string '${factorConversion}' → ${factor}`
+        );
+      } else {
+        factor = parseInt(factorConversion, 10);
+        logger.info(`🔄 Factor convertido a entero: ${factor}`);
+      }
+
+      if (isNaN(factor) || factor <= 0) {
+        logger.error(
+          `🔄 ❌ Factor inválido después de conversión: ${factor} (original: ${factorConversion})`
+        );
+        return originalValue;
+      }
+
+      // ✅ CONVERSIÓN STRING A NUMÉRICO para CNT_MAX (cantidad en cajas)
+      let cantidadCajas;
+      if (typeof originalValue === "string") {
+        cantidadCajas = parseInt(originalValue.trim(), 10);
+        logger.info(
+          `🔄 Cantidad convertida de string '${originalValue}' → ${cantidadCajas}`
+        );
+      } else {
+        cantidadCajas = parseInt(originalValue, 10);
+        logger.info(`🔄 Cantidad convertida a entero: ${cantidadCajas}`);
+      }
+
+      if (isNaN(cantidadCajas) || cantidadCajas < 0) {
+        logger.error(
+          `🔄 ❌ Cantidad inválida: ${cantidadCajas} (original: ${originalValue})`
+        );
+        return originalValue;
+      }
+
+      // ✅ FÓRMULA CORRECTA: CNT_MAX * Factor_Conversion
+      const unidadesTotales = cantidadCajas * factor;
+
+      logger.info(
+        `🔄 ✅ CONVERSIÓN: ${cantidadCajas} ${unitMeasure} × ${factor} unidades/caja = ${unidadesTotales} UND`
+      );
+
+      return unidadesTotales;
     } catch (error) {
-      logger.error(`Error en conversión universal: ${error.message}`);
+      logger.error(`🔄 ❌ ERROR en conversión: ${error.message}`);
       return originalValue;
     }
   }
