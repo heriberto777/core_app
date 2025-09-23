@@ -5511,25 +5511,126 @@ class DynamicTransferService {
   }
 
   /**
-   * ✅ Busca automáticamente el valor de un campo de promociones
+   * ✅ COMPLETO: Busca automáticamente el valor de un campo de promociones
    * @param {string} targetField - Campo destino
    * @param {Object} sourceData - Datos origen
    * @param {Object} mapping - Configuración de mapping
    * @returns {*} - Valor encontrado o null
    */
   findPromotionValue(targetField, sourceData, mapping) {
-    logger.debug(`🎁 Buscando valor para campo promoción: ${targetField}`);
-    logger.debug(`🎁 Datos disponibles: ${Object.keys(sourceData).join(", ")}`);
+    logger.error(`🎁 🔍 ============ findPromotionValue ============`);
+    logger.error(`🎁 🔍 Campo solicitado: ${targetField}`);
+    logger.error(`🎁 🔍 _IS_BONUS_LINE: ${sourceData._IS_BONUS_LINE}`);
+    logger.error(
+      `🎁 🔍 _IS_REGULAR_WITH_DISCOUNT: ${sourceData._IS_REGULAR_WITH_DISCOUNT}`
+    );
+    logger.error(`🎁 🔍 _IS_NORMAL_LINE: ${sourceData._IS_NORMAL_LINE}`);
+    logger.error(
+      `🎁 🔍 Datos disponibles: ${Object.keys(sourceData).join(", ")}`
+    );
 
-    // 1. Buscar campo exacto
+    // ✅ NUEVA LÓGICA CRÍTICA: Para líneas regulares con descuento
+    if (sourceData._IS_REGULAR_WITH_DISCOUNT) {
+      logger.error(
+        `🔍 ✅ Procesando REGULAR_WITH_DISCOUNT para ${targetField}`
+      );
+
+      if (targetField === "CANTIDAD_PEDIDA") {
+        const valor = sourceData.CANTIDAD_PEDIDA || sourceData.CNT_MAX || 0;
+        logger.error(
+          `🔍 ✅ REGULAR_WITH_DISCOUNT - CANTIDAD_PEDIDA = ${valor}`
+        );
+        return valor;
+      }
+
+      if (targetField === "CANTIDAD_A_FACTURA") {
+        const valor = sourceData.CANTIDAD_A_FACTURA || sourceData.CNT_MAX || 0;
+        logger.error(
+          `🔍 ✅ REGULAR_WITH_DISCOUNT - CANTIDAD_A_FACTURA = ${valor}`
+        );
+        return valor;
+      }
+
+      if (targetField === "CANTIDAD_BONIFICAD") {
+        logger.error(
+          `🔍 ✅ REGULAR_WITH_DISCOUNT - CANTIDAD_BONIFICAD = 0 (forzado)`
+        );
+        return 0; // SIEMPRE 0 para líneas regulares
+      }
+
+      if (targetField === "PEDIDO_LINEA_BONIF") {
+        logger.error(`🔍 ✅ REGULAR_WITH_DISCOUNT - PEDIDO_LINEA_BONIF = null`);
+        return null; // No tiene referencia
+      }
+    }
+
+    // ✅ LÓGICA PARA LÍNEAS REGULARES NORMALES
+    if (sourceData._IS_NORMAL_LINE && !sourceData._IS_BONUS_LINE) {
+      logger.error(`📋 ✅ Procesando LÍNEA NORMAL para ${targetField}`);
+
+      if (targetField === "CANTIDAD_PEDIDA") {
+        const valor = sourceData.CANTIDAD_PEDIDA || sourceData.CNT_MAX || 0;
+        logger.error(`📋 ✅ NORMAL - CANTIDAD_PEDIDA = ${valor}`);
+        return valor;
+      }
+
+      if (targetField === "CANTIDAD_A_FACTURA") {
+        const valor = sourceData.CANTIDAD_A_FACTURA || sourceData.CNT_MAX || 0;
+        logger.error(`📋 ✅ NORMAL - CANTIDAD_A_FACTURA = ${valor}`);
+        return valor;
+      }
+
+      if (targetField === "CANTIDAD_BONIFICAD") {
+        logger.error(`📋 ✅ NORMAL - CANTIDAD_BONIFICAD = 0`);
+        return 0;
+      }
+
+      if (targetField === "PEDIDO_LINEA_BONIF") {
+        logger.error(`📋 ✅ NORMAL - PEDIDO_LINEA_BONIF = null`);
+        return null;
+      }
+    }
+
+    // ✅ LÓGICA PARA BONIFICACIONES REALES
+    if (sourceData._IS_BONUS_LINE) {
+      logger.error(`🎁 ✅ Procesando BONIFICACIÓN REAL para ${targetField}`);
+
+      if (targetField === "CANTIDAD_PEDIDA") {
+        logger.error(
+          `🎁 ✅ BONUS - CANTIDAD_PEDIDA = 0 (bonificaciones no se piden)`
+        );
+        return 0;
+      }
+
+      if (targetField === "CANTIDAD_A_FACTURA") {
+        logger.error(
+          `🎁 ✅ BONUS - CANTIDAD_A_FACTURA = 0 (bonificaciones no se facturan)`
+        );
+        return 0;
+      }
+
+      if (targetField === "CANTIDAD_BONIFICAD") {
+        const valor = sourceData.CANTIDAD_BONIFICAD || sourceData.CNT_MAX || 0;
+        logger.error(`🎁 ✅ BONUS - CANTIDAD_BONIFICAD = ${valor}`);
+        return valor;
+      }
+
+      if (targetField === "PEDIDO_LINEA_BONIF") {
+        const valor = sourceData.PEDIDO_LINEA_BONIF || null;
+        logger.error(`🎁 ✅ BONUS - PEDIDO_LINEA_BONIF = ${valor}`);
+        return valor;
+      }
+    }
+
+    // ✅ FALLBACK: Buscar campo exacto
     if (sourceData.hasOwnProperty(targetField)) {
-      logger.info(
-        `🎁 ✅ Campo encontrado exacto: ${targetField} = ${sourceData[targetField]}`
+      logger.error(
+        `🔍 ✅ Campo encontrado exacto: ${targetField} = ${sourceData[targetField]}`
       );
       return sourceData[targetField];
     }
 
-    // 2. Buscar usando patrones de promociones
+    // ✅ BÚSQUEDA POR PATRONES DE PROMOCIONES
     const promotionPatterns = {
       PEDIDO_LINEA_BONIF: [
         "PEDIDO_LINEA_BONIF",
@@ -5543,16 +5644,6 @@ class DynamicTransferService {
       CANTIDAD_BONIFICAD: [
         "CANTIDAD_BONIFICAD",
         "CANTIDAD_BONIF",
-        "CANTIDAD_BONIFICACION",
-        "QTY_BONIFICACION",
-        "QTY_BONIF",
-        "CANT_BONIFICACION",
-        "CANT_BONIF",
-        "CNT_BONIF",
-      ],
-      CANTIDAD_BONIF: [
-        "CANTIDAD_BONIF",
-        "CANTIDAD_BONIFICAD",
         "CANTIDAD_BONIFICACION",
         "QTY_BONIFICACION",
         "QTY_BONIF",
@@ -5577,15 +5668,6 @@ class DynamicTransferService {
         "CANTIDAD_FACT",
         "QTY_FACT",
       ],
-      CANTIDAD_A_FACTURA: [
-        "CANTIDAD_A_FACTURA",
-        "CANTIDAD_A_FACTURA",
-        "QTY_FACTURAR",
-        "CANT_FACTURAR",
-        "CNT_FACTURAR",
-        "CANTIDAD_FACT",
-        "QTY_FACT",
-      ],
     };
 
     const upperTargetField = targetField.toUpperCase();
@@ -5593,52 +5675,52 @@ class DynamicTransferService {
 
     for (const pattern of patterns) {
       if (sourceData.hasOwnProperty(pattern)) {
-        logger.info(
-          `🎁 ✅ Campo encontrado por patrón: ${pattern} -> ${targetField} = ${sourceData[pattern]}`
+        logger.error(
+          `🔍 ✅ Campo encontrado por patrón: ${pattern} -> ${targetField} = ${sourceData[pattern]}`
         );
         return sourceData[pattern];
       }
     }
 
-    // 3. Buscar case-insensitive
+    // ✅ BÚSQUEDA CASE-INSENSITIVE
     const lowerTargetField = targetField.toLowerCase();
     for (const [key, value] of Object.entries(sourceData)) {
       if (key.toLowerCase() === lowerTargetField) {
-        logger.info(
-          `🎁 ✅ Campo encontrado case-insensitive: ${key} -> ${targetField} = ${value}`
+        logger.error(
+          `🔍 ✅ Campo encontrado case-insensitive: ${key} -> ${targetField} = ${value}`
         );
         return value;
       }
     }
 
-    // 4. Verificar campos meta de promociones
+    // ✅ VERIFICAR CAMPOS META DE PROMOCIONES
     if (sourceData._IS_BONUS_LINE || sourceData._IS_TRIGGER_LINE) {
-      logger.debug(
+      logger.error(
         `🎁 Línea tiene metadatos de promoción pero no se encontró ${targetField}`
       );
-      logger.debug(`🎁 Tipo de línea: ${sourceData._PROMOTION_TYPE}`);
+      logger.error(`🎁 Tipo de línea: ${sourceData._PROMOTION_TYPE}`);
 
-      // Para líneas de bonificación, algunos campos deben ser null
+      // Para líneas de bonificación, algunos campos deben ser null/0
       if (sourceData._IS_BONUS_LINE) {
         if (
           upperTargetField.includes("PEDIDA") ||
           upperTargetField.includes("FACTURA")
         ) {
-          logger.debug(`🎁 Línea bonificación: ${targetField} = null`);
-          return null;
+          logger.error(`🎁 Línea bonificación: ${targetField} = 0`);
+          return 0;
         }
       }
 
-      // Para líneas regulares, algunos campos deben ser null
+      // Para líneas regulares, algunos campos deben ser null/0
       if (sourceData._IS_TRIGGER_LINE) {
         if (upperTargetField.includes("BONIF")) {
-          logger.debug(`🎁 Línea trigger: ${targetField} = null`);
-          return null;
+          logger.error(`🎁 Línea trigger: ${targetField} = 0`);
+          return 0;
         }
       }
     }
 
-    logger.debug(`🎁 ❌ No se encontró valor para ${targetField}`);
+    logger.error(`🔍 ❌ No se encontró valor para ${targetField}`);
     return null;
   }
 
