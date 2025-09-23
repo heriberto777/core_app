@@ -337,27 +337,18 @@ class PromotionProcessor {
 
     // ✅ Establecer campos de promoción estándar para línea regular
     processedRow.PEDIDO_LINEA_BONIF = null;
-    processedRow.CANTIDAD_BONIFICAD = 0;
+
 
     // ✅ Para líneas regulares, CNT_MAX es la cantidad pedida
     processedRow.CANTIDAD_PEDIDA = parseInt(cantidadPedida) || 0; // En cajas (se convertirá después)
     processedRow.CANTIDAD_A_FACTURA = parseInt(cantidadPedida) || 0; // En cajas (se convertirá después)
+    processedRow.CANTIDAD_BONIFICAD = 0;
 
     // ✅ Marcar como línea regular
     processedRow._IS_BONUS_LINE = false;
     processedRow._IS_TRIGGER_LINE = false;
+    processedRow._IS_NORMAL_LINE = true;
 
-    // NUEVO: Identificar si es regular con descuento
-    const hasDiscount =
-      (row["MON_DSC"] && parseFloat(row["MON_DSC"]) > 0) ||
-      (row["POR_DSC_AP"] && parseFloat(row["POR_DSC_AP"]) > 0);
-
-    if (hasDiscount && row["ART_BON"] === "B") {
-      processedRow._IS_REGULAR_WITH_DISCOUNT = true;
-      logger.info(
-        `LÍNEA REGULAR CON DESCUENTO detectada - mantiene cantidades normales`
-      );
-    }
 
     logger.info(
       `🔍 ✅ Línea regular procesada: ${
