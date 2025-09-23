@@ -284,6 +284,7 @@ class PromotionProcessor {
           // Tratar como línea regular, mantener descuentos
           logger.debug(`🎁 Procesando como regular con descuento`);
           processedRow = this.processRegularLine(processedRow, config);
+          processedRow._IS_REGULAR_WITH_DISCOUNT = true;
           break;
 
         case "BONUS_QUANTITY":
@@ -345,6 +346,18 @@ class PromotionProcessor {
     // ✅ Marcar como línea regular
     processedRow._IS_BONUS_LINE = false;
     processedRow._IS_TRIGGER_LINE = false;
+
+    // NUEVO: Identificar si es regular con descuento
+    const hasDiscount =
+      (row["MON_DSC"] && parseFloat(row["MON_DSC"]) > 0) ||
+      (row["POR_DSC_AP"] && parseFloat(row["POR_DSC_AP"]) > 0);
+
+    if (hasDiscount && row["ART_BON"] === "B") {
+      processedRow._IS_REGULAR_WITH_DISCOUNT = true;
+      logger.info(
+        `LÍNEA REGULAR CON DESCUENTO detectada - mantiene cantidades normales`
+      );
+    }
 
     logger.info(
       `🔍 ✅ Línea regular procesada: ${
