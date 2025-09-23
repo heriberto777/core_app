@@ -623,7 +623,11 @@ class DynamicTransferService {
 
       // 🔍 VERIFICAR SI REALMENTE SE APLICARON PROMOCIONES
       const hasPromotions = detailsData.some(
-        (row) => row._PROMOTION_TYPE && row._PROMOTION_TYPE !== "NONE"
+        (row) =>
+          row._PROMOTION_TYPE &&
+          row._PROMOTION_TYPE !== "NONE" &&
+          row._PROMOTION_TYPE !== "REGULAR" &&
+          row._PROMOTION_TYPE !== "REGULAR_WITH_DISCOUNT" // AGREGAR ESTA LÍNEA
       );
 
       logger.error(`🎁 🔍 ¿Tiene promociones aplicadas? ${hasPromotions}`);
@@ -1459,10 +1463,21 @@ class DynamicTransferService {
       return;
     }
 
+    // DEBUGGING ESPECÍFICO
+    if (dataForProcessing._IS_REGULAR_WITH_DISCOUNT) {
+      logger.error(`🔍 LÍNEA REGULAR CON DESCUENTO - debe usar flujo normal`);
+    }
+
+    if (dataForProcessing._IS_BONUS_LINE) {
+      logger.error(
+        `🎁 LÍNEA BONIFICACIÓN REAL - debe usar flujo de promociones`
+      );
+    }
+
     // ✅ LÓGICA MEJORADA PARA PROMOCIONES - MANTENIENDO TU ESTRUCTURA
     let allFieldMappings = [];
 
-    if (hasPromotionData) {
+    if (hasPromotionData && dataForProcessing._IS_BONUS_LINE) {
       logger.error(
         `🎁 ✅ DATOS DE PROMOCIONES DETECTADOS en tabla ${tableConfig.name}`
       );
@@ -5332,6 +5347,25 @@ class DynamicTransferService {
     const promotionFieldMappings = [];
 
     logger.debug(`🎁 Generando mappings automáticos para promociones...`);
+
+    // CRÍTICO: NO generar mappings de promoción para líneas regulares
+    if (
+      dataForProcessing._IS_REGULAR_WITH_DISCOUNT ||
+      dataForProcessing._IS_NORMAL_LINE
+    ) {
+      logger.debug(
+        `🔍 Línea regular detectada - NO generar mappings de promoción`
+      );
+      return promotionFieldMappings; // Retorna array vacío
+    }
+
+    // SOLO generar mappings si es bonificación REAL
+    if (!dataForProcessing._IS_BONUS_LINE) {
+      logger.debug(
+        `📋 No es bonificación real - NO generar mappings de promoción`
+      );
+      return promotionFieldMappings;
+    }
 
     // ✅ USAR CAMPOS ESENCIALES DEL NUEVO PROMOTIONPROCESSOR
     const essentialPromotionFields = [
