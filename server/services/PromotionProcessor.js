@@ -285,6 +285,8 @@ class PromotionProcessor {
           logger.debug(`🎁 Procesando como regular con descuento`);
           processedRow = this.processRegularLine(processedRow, config);
           processedRow._IS_REGULAR_WITH_DISCOUNT = true;
+          processedRow._IS_BONUS_LINE = false; // ✅ IMPORTANTE: NO es bonificación
+          processedRow._IS_NORMAL_LINE = false; // ✅ Es especial por tener descuento
           break;
 
         case "BONUS_QUANTITY":
@@ -338,7 +340,6 @@ class PromotionProcessor {
     // ✅ Establecer campos de promoción estándar para línea regular
     processedRow.PEDIDO_LINEA_BONIF = null;
 
-
     // ✅ Para líneas regulares, CNT_MAX es la cantidad pedida
     processedRow.CANTIDAD_PEDIDA = parseInt(cantidadPedida) || 0; // En cajas (se convertirá después)
     processedRow.CANTIDAD_A_FACTURA = parseInt(cantidadPedida) || 0; // En cajas (se convertirá después)
@@ -347,8 +348,7 @@ class PromotionProcessor {
     // ✅ Marcar como línea regular
     processedRow._IS_BONUS_LINE = false;
     processedRow._IS_TRIGGER_LINE = false;
-    processedRow._IS_NORMAL_LINE = true;
-
+    processedRow._IS_NORMAL_LINE = !processedRow._IS_REGULAR_WITH_DISCOUNT; // Solo si no es descuento
 
     logger.info(
       `🔍 ✅ Línea regular procesada: ${
@@ -384,7 +384,8 @@ class PromotionProcessor {
     }
 
     // ✅ CORRECCIÓN CRÍTICA: Usar CNT_MAX para bonificaciones, NO para pedidos
-     const cantidadBonifica = row["CNT_MAX"] || 0;
+    //  const cantidadBonifica = row["CNT_MAX"] || 0;
+    const cantidadBonifica = row.CNT_MAX || row.CANTIDAD_BONIFICAD || 0;
 
     // ✅ CAMPOS CORRECTOS PARA BONIFICACIONES
     processedRow.CANTIDAD_PEDIDA = 0; // ✅ Bonificaciones NO se piden
