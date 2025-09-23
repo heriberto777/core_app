@@ -1977,7 +1977,7 @@ class DynamicTransferService {
 
           // ✅ APLICAR TU MÉTODO EXISTENTE DE CONVERSIÓN
           const originalValue = value;
-          value = await this.applyUnitConversion(
+          value = await this.applyUniversalUnitConversion(
             sourceData,
             fieldMapping,
             value
@@ -2465,18 +2465,6 @@ class DynamicTransferService {
         error: error.message,
       };
     }
-  }
-
-  /**
-   * ✅ MÉTODO ACTUALIZADO: Aplica conversión universal CNT_MAX * Factor_Conversion
-   */
-  async applyUnitConversion(sourceData, fieldMapping, originalValue) {
-    // ✅ REDIRECCIONAR AL MÉTODO UNIVERSAL
-    return await this.applyUniversalUnitConversion(
-      sourceData,
-      originalValue,
-      fieldMapping.targetField
-    );
   }
 
   /**
@@ -3793,29 +3781,42 @@ class DynamicTransferService {
       const normalizedCurrent = String(currentUnit).toUpperCase().trim();
       const normalizedFrom = String(fromUnit).toUpperCase().trim();
 
-      // ✅ MAPEO SIMPLIFICADO DE UNIDADES QUE REQUIEREN CONVERSIÓN
-      const unitsRequiringConversion = [
-        "CAJA",
-        "CAJAS",
-        "CJA",
-        "CJ",
-        "CAJ",
-        "BOX",
-        "BOXES",
-        "PACK",
-        "PAQUETE",
-        "PAQUETES",
-        "PAQ",
-        "PACKAGE",
-        "PKG",
-        "DOCENA",
-        "DOCENAS",
-        "DOC",
-        "DZ",
-        "DOZEN",
-      ];
+      logger.debug(
+        `Comparando unidades: '${normalizedCurrent}' vs '${normalizedFrom}'`
+      );
 
-      // ✅ UNIDADES QUE NO REQUIEREN CONVERSIÓN
+      // **MAPEO COMPLETO DE UNIDADES QUE REQUIEREN CONVERSIÓN**
+      const unitsRequiringConversion = {
+        // Cajas y empaques
+        CAJA: [
+          "CAJA",
+          "CAJAS",
+          "CJA",
+          "CJ",
+          "CAJ",
+          "CAJITA",
+          "CJTA",
+          "BOX",
+          "BOXES",
+        ],
+        PACK: ["PACK", "PAQUETE", "PAQUETES", "PAQ", "PACKAGE", "PKG"],
+
+        // Docenas y múltiplos
+        DOCENA: ["DOCENA", "DOCENAS", "DOC", "DZ", "DOZEN"],
+        MEDIA_DOCENA: ["MEDIA_DOCENA", "MEDIA_DOC", "6UND"],
+
+        // Rollos y bobinas
+        ROLLO: ["ROLLO", "ROLLOS", "RL", "ROLL", "BOBINA", "BOBINAS"],
+
+        // Otros contenedores
+        BOLSA: ["BOLSA", "BOLSAS", "SACO", "SACOS", "BAG", "BAGS"],
+        DISPLAY: ["DISPLAY", "DISPLAYS", "DSP", "EXHIBIDOR"],
+
+        // Medidas de peso que pueden venir en múltiplos
+        KILO_MULTIPLE: ["KILO_X", "KG_X", "KILOS_X"], // Para casos como "KILO_X_12"
+      };
+
+      // **UNIDADES QUE NO REQUIEREN CONVERSIÓN (ya están en unidades base)**
       const unitsNotRequiringConversion = [
         "UNIDAD",
         "UNIDADES",
@@ -3832,24 +3833,100 @@ class DynamicTransferService {
         "C/U",
       ];
 
-      // 1. Si ya está en unidades base, no convertir
+      // **1. VERIFICAR SI LA UNIDAD ACTUAL NO REQUIERE CONVERSIÓN**
       if (unitsNotRequiringConversion.includes(normalizedCurrent)) {
-        logger.debug(`Unidad ${normalizedCurrent} ya está en unidades base`);
+        logger.debug(
+          `Unidad ${normalizedCurrent} ya está en unidades base - no requiere conversión`
+        );
         return false;
       }
 
-      // 2. Si la unidad actual requiere conversión
-      const requiresConversion = unitsRequiringConversion.some(
-        (unit) =>
-          normalizedCurrent.includes(unit) || unit.includes(normalizedCurrent)
-      );
+      // **2. VERIFICAR SI fromUnit ESTÁ EN UNIDADES QUE REQUIEREN CONVERSIÓN**
+      let fromUnitRequiresConversion = false;
+      let matchedGroup = null;
 
-      if (requiresConversion) {
-        logger.info(`✅ Conversión requerida: ${normalizedCurrent} → UND`);
+      for (const [group, variations] of Object.entries(
+        unitsRequiringConversion
+      )) {
+        if (variations.includes(normalizedFrom)) {
+          fromUnitRequiresConversion = true;
+          matchedGroup = group;
+          break;
+        }
+      }
+
+      if (!fromUnitRequiresConversion) {
+        logger.debug(
+          `fromUnit '${normalizedFrom}' no está configurado para conversión`
+        );
+        return false;
+      }
+
+      // **3. VERIFICAR SI LA UNIDAD ACTUAL COINCIDE CON EL GRUPO**
+      const groupVariations = unitsRequiringConversion[matchedGroup];
+      const isMatch = groupVariations.includes(normalizedCurrent);
+
+      if (isMatch) {
+        logger.info(
+          `✅ Conversión requerida: ${normalizedCurrent} coincide con grupo ${matchedGroup}`
+        );
         return true;
       }
 
-      logger.debug(`❌ No se requiere conversión: ${normalizedCurrent}`);
+      // **4. VERIFICACIONES ADICIONALES MÁS FLEXIBLES**
+
+      // Verificación por contenido parcial
+      for (const variation of groupVariations) {
+        if (
+          normalizedCurrent.includes(variation) ||
+          variation.includes(normalizedCurrent)
+        ) {
+          logger.info(
+            `✅ Conversión requerida: ${normalizedCurrent} contiene variación ${variation}`
+          );
+          return true;
+        }
+      }
+
+      // Verificación sin caracteres especiales
+      const cleanCurrent = normalizedCurrent.replace(/[^A-Z0-9]/g, "");
+      const cleanFrom = normalizedFrom.replace(/[^A-Z0-9]/g, "");
+
+      if (cleanCurrent === cleanFrom) {
+        logger.info(
+          `✅ Conversión requerida: coincidencia limpia ${cleanCurrent}`
+        );
+        return true;
+      }
+
+      // **5. CASOS ESPECIALES DE MÚLTIPLOS**
+      // Ejemplo: "CAJA_X_12", "PACK_DE_6", etc.
+      const multiplePattern = /(\w+)[_\-\s]*(X|DE|OF)[_\-\s]*(\d+)/i;
+      const currentMatch = normalizedCurrent.match(multiplePattern);
+
+      if (currentMatch) {
+        const baseUnit = currentMatch[1];
+        const multiplier = parseInt(currentMatch[3]);
+
+        // Verificar si la unidad base requiere conversión
+        for (const [group, variations] of Object.entries(
+          unitsRequiringConversion
+        )) {
+          if (
+            variations.includes(baseUnit) &&
+            variations.includes(normalizedFrom)
+          ) {
+            logger.info(
+              `✅ Conversión requerida: múltiple detectado ${baseUnit} x ${multiplier}`
+            );
+            return true;
+          }
+        }
+      }
+
+      logger.debug(
+        `❌ No se requiere conversión: ${normalizedCurrent} vs ${normalizedFrom}`
+      );
       return false;
     } catch (error) {
       logger.error(`Error en verificación de unidades: ${error.message}`);
