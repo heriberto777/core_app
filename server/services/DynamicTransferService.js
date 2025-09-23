@@ -3658,22 +3658,16 @@ class DynamicTransferService {
    */
   isQuantityField(fieldName) {
     const quantityFields = [
-      "CANTIDAD_PEDIDA",
-      "CANTIDAD_A_FACTURA",
-      "CANTIDAD_BONIFICAD",
+      "CANTIDAD_PEDIDA", // ✅ CNT_MAX para regulares
+      "CANTIDAD_A_FACTURA", // ✅ CNT_MAX para regulares
+      "CANTIDAD_BONIFICAD", // ✅ CNT_MAX para bonificaciones
       "CANTIDAD_BONIF",
-      "CNT_MAX", // ✅ CNT_MAX es cantidad en cajas
-      "CANTIDAD_BONIFICACION",
-      "QTY_PEDIDA",
-      "QTY_BONIF",
-      "QTY_FACTURAR",
-      "CANT_PEDIDA",
-      "CANT_BONIF",
+      "CNT_MAX", // ✅ Por si acaso viene directo
     ];
 
     const isQuantity = quantityFields.includes(fieldName.toUpperCase());
 
-    logger.info(`🔄 ¿Es campo de cantidad? ${fieldName} → ${isQuantity}`);
+    logger.info(`🔄 ¿${fieldName} es campo de cantidad? → ${isQuantity}`);
 
     return isQuantity;
   }
@@ -3687,7 +3681,10 @@ class DynamicTransferService {
    */
   async applyUniversalUnitConversion(sourceData, originalValue, fieldName) {
     try {
-      logger.info(`🔄 === CONVERSIÓN PARA ${fieldName} ===`);
+      logger.info(`🔄 === CONVERSIÓN ${fieldName} ===`);
+      logger.info(
+        `🔄 Valor original: ${originalValue} (${typeof originalValue})`
+      );
 
       // ✅ Buscar Unit_Measure
       const unitMeasure =
@@ -3695,14 +3692,13 @@ class DynamicTransferService {
         sourceData["UNIT_MEASURE"] ||
         sourceData["UNI_MED"];
 
-      logger.info(`🔄 Unit_Measure: '${unitMeasure}'`);
-
-      // ✅ Buscar Factor_Conversion (unidades por caja)
+      // ✅ Buscar Factor_Conversion
       let factorConversion =
         sourceData["Factor_Conversion"] || sourceData["FACTOR_CONVERSION"];
 
+      logger.info(`🔄 Unit_Measure: '${unitMeasure}'`);
       logger.info(
-        `🔄 Factor_Conversion encontrado: '${factorConversion}' (tipo: ${typeof factorConversion})`
+        `🔄 Factor_Conversion: '${factorConversion}' (${typeof factorConversion})`
       );
 
       if (!unitMeasure || !factorConversion) {
@@ -3718,54 +3714,33 @@ class DynamicTransferService {
         return originalValue;
       }
 
-      // ✅ CONVERSIÓN STRING A NUMÉRICO para Factor_Conversion
-      let factor;
-      if (typeof factorConversion === "string") {
-        factor = parseInt(factorConversion.trim(), 10);
-        logger.info(
-          `🔄 Factor convertido de string '${factorConversion}' → ${factor}`
-        );
-      } else {
-        factor = parseInt(factorConversion, 10);
-        logger.info(`🔄 Factor convertido a entero: ${factor}`);
-      }
+      // ✅ Convertir a números enteros
+      const factor = parseInt(String(factorConversion).trim(), 10);
+      const cantidad = parseInt(String(originalValue).trim(), 10);
+
+      logger.info(`🔄 Factor parseado: ${factor}`);
+      logger.info(`🔄 Cantidad parseada: ${cantidad}`);
 
       if (isNaN(factor) || factor <= 0) {
-        logger.error(
-          `🔄 ❌ Factor inválido después de conversión: ${factor} (original: ${factorConversion})`
-        );
+        logger.error(`🔄 ❌ Factor inválido: ${factor}`);
         return originalValue;
       }
 
-      // ✅ CONVERSIÓN STRING A NUMÉRICO para CNT_MAX (cantidad en cajas)
-      let cantidadCajas;
-      if (typeof originalValue === "string") {
-        cantidadCajas = parseInt(originalValue.trim(), 10);
-        logger.info(
-          `🔄 Cantidad convertida de string '${originalValue}' → ${cantidadCajas}`
-        );
-      } else {
-        cantidadCajas = parseInt(originalValue, 10);
-        logger.info(`🔄 Cantidad convertida a entero: ${cantidadCajas}`);
-      }
-
-      if (isNaN(cantidadCajas) || cantidadCajas < 0) {
-        logger.error(
-          `🔄 ❌ Cantidad inválida: ${cantidadCajas} (original: ${originalValue})`
-        );
+      if (isNaN(cantidad) || cantidad < 0) {
+        logger.error(`🔄 ❌ Cantidad inválida: ${cantidad}`);
         return originalValue;
       }
 
-      // ✅ FÓRMULA CORRECTA: CNT_MAX * Factor_Conversion
-      const unidadesTotales = cantidadCajas * factor;
+      // ✅ FÓRMULA: cantidad_en_cajas * unidades_por_caja = total_unidades
+      const unidadesTotales = cantidad * factor;
 
       logger.info(
-        `🔄 ✅ CONVERSIÓN: ${cantidadCajas} ${unitMeasure} × ${factor} unidades/caja = ${unidadesTotales} UND`
+        `🔄 ✅ CONVERSIÓN: ${cantidad} ${unitMeasure} × ${factor} = ${unidadesTotales} UND`
       );
 
       return unidadesTotales;
     } catch (error) {
-      logger.error(`🔄 ❌ ERROR en conversión: ${error.message}`);
+      logger.error(`🔄 ❌ ERROR: ${error.message}`);
       return originalValue;
     }
   }
@@ -3939,6 +3914,50 @@ class DynamicTransferService {
     } catch (error) {
       logger.error(`Error en verificación de unidades: ${error.message}`);
       return false;
+    }
+  }
+
+  /**
+   * ✅ NUEVO: Convierte string a numérico de manera robusta
+   * @param {*} value - Valor a convertir
+   * @param {string} fieldName - Nombre del campo (para logs)
+   * @returns {number} - Valor numérico
+   */
+  parseToNumeric(value, fieldName) {
+    try {
+      // Si ya es número
+      if (typeof value === "number" && !isNaN(value)) {
+        return Math.round(value);
+      }
+
+      // Si es string
+      if (typeof value === "string") {
+        // Limpiar espacios y caracteres extraños
+        const cleaned = value.trim().replace(/[^\d.-]/g, "");
+
+        // Intentar conversión a entero primero
+        const intValue = parseInt(cleaned, 10);
+        if (!isNaN(intValue)) {
+          logger.debug(`🔄 ${fieldName}: '${value}' → ${intValue} (int)`);
+          return intValue;
+        }
+
+        // Si falla, intentar float
+        const floatValue = parseFloat(cleaned);
+        if (!isNaN(floatValue)) {
+          const rounded = Math.round(floatValue);
+          logger.debug(`🔄 ${fieldName}: '${value}' → ${rounded} (float→int)`);
+          return rounded;
+        }
+      }
+
+      logger.warn(
+        `🔄 ⚠️ No se pudo convertir ${fieldName}: '${value}' (tipo: ${typeof value})`
+      );
+      return 0;
+    } catch (error) {
+      logger.error(`🔄 ❌ Error convirtiendo ${fieldName}: ${error.message}`);
+      return 0;
     }
   }
 
