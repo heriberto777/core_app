@@ -5348,13 +5348,25 @@ class DynamicTransferService {
 
     logger.debug(`🎁 Generando mappings automáticos para promociones...`);
 
-    // CRÍTICO: NO generar mappings de promoción para líneas regulares
+    // 🚨 CRÍTICO: NO generar mappings de promoción para líneas regulares con descuento
+    if (dataForProcessing._IS_REGULAR_WITH_DISCOUNT) {
+      logger.debug(
+        `📋 Línea REGULAR_WITH_DISCOUNT - NO generar mappings de promoción especiales`
+      );
+      logger.debug(
+        `📋 Esta línea usará mappings normales del fieldMapping original`
+      );
+      return promotionFieldMappings; // Retorna array vacío
+    }
+
+    // CRÍTICO: NO generar mappings de promoción para líneas regulares normales
     if (
-      dataForProcessing._IS_REGULAR_WITH_DISCOUNT ||
-      dataForProcessing._IS_NORMAL_LINE
+      dataForProcessing._IS_NORMAL_LINE ||
+      (!dataForProcessing._IS_BONUS_LINE &&
+        !dataForProcessing._IS_REGULAR_WITH_DISCOUNT)
     ) {
       logger.debug(
-        `🔍 Línea regular detectada - NO generar mappings de promoción`
+        `📋 Línea regular normal - NO generar mappings de promoción`
       );
       return promotionFieldMappings; // Retorna array vacío
     }
@@ -5566,35 +5578,36 @@ class DynamicTransferService {
     // ✅ NUEVA LÓGICA CRÍTICA: Para líneas regulares con descuento
     if (sourceData._IS_REGULAR_WITH_DISCOUNT) {
       logger.error(
-        `🔍 ✅ Procesando REGULAR_WITH_DISCOUNT para ${targetField}`
+        `📋 ✅ Procesando REGULAR_WITH_DISCOUNT para ${targetField}`
       );
 
+      // 🚨 CRÍTICO: Para REGULAR_WITH_DISCOUNT, CNT_MAX va a CANTIDAD_PEDIDA
       if (targetField === "CANTIDAD_PEDIDA") {
-        const valor = sourceData.CANTIDAD_PEDIDA || sourceData.CNT_MAX || 0;
+        const valor = sourceData.CNT_MAX || sourceData.CANTIDAD_PEDIDA || 0;
         logger.error(
-          `🔍 ✅ REGULAR_WITH_DISCOUNT - CANTIDAD_PEDIDA = ${valor}`
+          `📋 ✅ REGULAR_WITH_DISCOUNT - CANTIDAD_PEDIDA = ${valor} (desde CNT_MAX)`
         );
         return valor;
       }
 
       if (targetField === "CANTIDAD_A_FACTURA") {
-        const valor = sourceData.CANTIDAD_A_FACTURA || sourceData.CNT_MAX || 0;
+        const valor = sourceData.CNT_MAX || sourceData.CANTIDAD_A_FACTURA || 0;
         logger.error(
-          `🔍 ✅ REGULAR_WITH_DISCOUNT - CANTIDAD_A_FACTURA = ${valor}`
+          `📋 ✅ REGULAR_WITH_DISCOUNT - CANTIDAD_A_FACTURA = ${valor} (desde CNT_MAX)`
         );
         return valor;
       }
 
       if (targetField === "CANTIDAD_BONIFICAD") {
         logger.error(
-          `🔍 ✅ REGULAR_WITH_DISCOUNT - CANTIDAD_BONIFICAD = 0 (forzado)`
+          `📋 ✅ REGULAR_WITH_DISCOUNT - CANTIDAD_BONIFICAD = 0 (forzado)`
         );
-        return 0; // SIEMPRE 0 para líneas regulares
+        return 0; // SIEMPRE 0 para líneas con descuento (no son bonificaciones reales)
       }
 
       if (targetField === "PEDIDO_LINEA_BONIF") {
-        logger.error(`🔍 ✅ REGULAR_WITH_DISCOUNT - PEDIDO_LINEA_BONIF = null`);
-        return null; // No tiene referencia
+        logger.error(`📋 ✅ REGULAR_WITH_DISCOUNT - PEDIDO_LINEA_BONIF = null`);
+        return null; // No tiene referencia de bonificación
       }
     }
 
@@ -5603,13 +5616,13 @@ class DynamicTransferService {
       logger.error(`📋 ✅ Procesando LÍNEA NORMAL para ${targetField}`);
 
       if (targetField === "CANTIDAD_PEDIDA") {
-        const valor = sourceData.CANTIDAD_PEDIDA || sourceData.CNT_MAX || 0;
+        const valor = sourceData.CNT_MAX || sourceData.CANTIDAD_PEDIDA || 0;
         logger.error(`📋 ✅ NORMAL - CANTIDAD_PEDIDA = ${valor}`);
         return valor;
       }
 
       if (targetField === "CANTIDAD_A_FACTURA") {
-        const valor = sourceData.CANTIDAD_A_FACTURA || sourceData.CNT_MAX || 0;
+        const valor = sourceData.CNT_MAX || sourceData.CANTIDAD_A_FACTURA || 0;
         logger.error(`📋 ✅ NORMAL - CANTIDAD_A_FACTURA = ${valor}`);
         return valor;
       }
@@ -5644,8 +5657,10 @@ class DynamicTransferService {
       }
 
       if (targetField === "CANTIDAD_BONIFICAD") {
-        const valor = sourceData.CANTIDAD_BONIFICAD || sourceData.CNT_MAX || 0;
-        logger.error(`🎁 ✅ BONUS - CANTIDAD_BONIFICAD = ${valor}`);
+        const valor = sourceData.CNT_MAX || sourceData.CANTIDAD_BONIFICAD || 0;
+        logger.error(
+          `🎁 ✅ BONUS - CANTIDAD_BONIFICAD = ${valor} (desde CNT_MAX)`
+        );
         return valor;
       }
 
