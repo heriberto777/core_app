@@ -1744,23 +1744,6 @@ class DynamicTransferService {
   ) {
     let value;
 
-    // ✅ DEBUGGING COMPLETO DE sourceData
-    logger.info(
-      `🔍 === DEBUGGING processField para ${fieldMapping.targetField} ===`
-    );
-    logger.info(`🔍 sourceData keys: ${Object.keys(sourceData).join(", ")}`);
-    logger.info(`🔍 sourceData Unit_Measure: '${sourceData.Unit_Measure}'`);
-    logger.info(`🔍 sourceData UNIT_MEASURE: '${sourceData.UNIT_MEASURE}'`);
-    logger.info(
-      `🔍 sourceData Factor_Conversion: '${sourceData.Factor_Conversion}'`
-    );
-    logger.info(
-      `🔍 sourceData FACTOR_CONVERSION: '${sourceData.FACTOR_CONVERSION}'`
-    );
-    logger.info(`🔍 sourceData CNT_MAX: '${sourceData.CNT_MAX}'`);
-    logger.info(
-      `🔍 sourceData completo: ${JSON.stringify(sourceData, null, 2)}`
-    );
     logger.debug(
       `🔧 Procesando campo: ${fieldMapping.sourceField || "(automático)"} -> ${
         fieldMapping.targetField
@@ -1979,8 +1962,8 @@ class DynamicTransferService {
           const originalValue = value;
           value = await this.applyUniversalUnitConversion(
             sourceData,
+            value,
             fieldMapping,
-            value
           );
 
           if (value !== originalValue) {
