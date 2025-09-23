@@ -117,7 +117,6 @@ class PromotionProcessor {
     }
   }
 
-
   /**
    * ✅ NUEVO: Construye referencias entre líneas regulares y bonificaciones
    * @param {Array} allRows - Todas las filas de datos
@@ -204,7 +203,7 @@ class PromotionProcessor {
     const artBon = row[config.bonusField]; // ART_BON
     const codArtRfr = row[config.referenceField]; // COD_ART_RFR
     const cantidadBonifica =
-      row["CANTIDAD_BONIFICA"] || row["CANTIDAD_BONIFICADA"];
+      row["CANTIDAD_BONIFICAD"] || row["CANTIDAD_BONIFICADA"];
     const porDscAp = row["POR_DSC_AP"];
     const monDsc = row["MON_DSC"] || row[config.discountField];
     const codArt = row[config.articleField]; // COD_ART
@@ -328,23 +327,31 @@ class PromotionProcessor {
   static processRegularLine(row, config) {
     const processedRow = { ...row };
 
+    // ✅ Para líneas REGULARES, CNT_MAX va a CANTIDAD_PEDIDA
+    const cantidadPedida = row["CNT_MAX"] || row["CANTIDAD_PEDIDA"] || 0;
+
+    logger.info(`🔍 🔍 DEBUGGING LÍNEA REGULAR:`);
+    logger.info(`🔍 🔍 CNT_MAX original: ${row["CNT_MAX"]}`);
+    logger.info(`🔍 🔍 Cantidad pedida: ${cantidadPedida}`);
+
     // ✅ Establecer campos de promoción estándar para línea regular
     processedRow.PEDIDO_LINEA_BONIF = null;
     processedRow.CANTIDAD_BONIFICAD = 0;
 
-    // ✅ Asegurar que cantidades principales estén definidas
-    processedRow.CANTIDAD_PEDIDA =
-      processedRow.CANTIDAD_PEDIDA || processedRow[config.quantityField] || 0;
-    processedRow.CANTIDAD_A_FACTURA =
-      processedRow.CANTIDAD_A_FACTURA || processedRow.CANTIDAD_PEDIDA || 0;
+    // ✅ Para líneas regulares, CNT_MAX es la cantidad pedida
+    processedRow.CANTIDAD_PEDIDA = parseInt(cantidadPedida) || 0; // En cajas (se convertirá después)
+    processedRow.CANTIDAD_A_FACTURA = parseInt(cantidadPedida) || 0; // En cajas (se convertirá después)
 
     // ✅ Marcar como línea regular
     processedRow._IS_BONUS_LINE = false;
     processedRow._IS_TRIGGER_LINE = false;
 
-    logger.debug(
-      `📋 Línea regular procesada: ${processedRow[config.articleField]}`
+    logger.info(
+      `🔍 ✅ Línea regular procesada: ${
+        processedRow[config.articleField]
+      } - CANTIDAD_PEDIDA: ${processedRow.CANTIDAD_PEDIDA} cajas`
     );
+
     return processedRow;
   }
 
@@ -372,9 +379,12 @@ class PromotionProcessor {
       );
     }
 
-    // ✅ CORREGIR: Establecer cantidad de bonificación CORRECTAMENTE
+    // ✅ CORRECCIÓN CRÍTICA: Usar CNT_MAX para bonificaciones, NO para pedidos
     const cantidadBonifica =
-      row["CANTIDAD_BONIFICA"] || row["CANTIDAD_BONIFICADA"] || 0;
+      row["CNT_MAX"] ||
+      row["CANTIDAD_BONIFICA"] ||
+      row["CANTIDAD_BONIFICADA"] ||
+      0;
 
     // ✅ CAMPOS CORRECTOS PARA BONIFICACIONES
     processedRow.CANTIDAD_PEDIDA = 0; // ✅ Bonificaciones NO se piden
