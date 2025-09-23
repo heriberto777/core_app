@@ -1693,25 +1693,67 @@ class DynamicTransferService {
       logger.error(`🎁 TargetFields generados: ${targetFields.join(", ")}`);
     }
 
+    // ✅ NUEVA FUNCIONALIDAD: FILTRAR CAMPOS AUXILIARES ANTES DE INSERCIÓN
+    const auxiliaryFields = [
+      "Unit_Measure",
+      "Factor_Conversion",
+      "_IS_BONUS_LINE",
+      "_IS_TRIGGER_LINE",
+      "_promotionType",
+      "_processed",
+      "_DETECTED_PROMOTION_CONFIG",
+      "_PROMOTION_TYPE",
+    ];
+
+    const filteredTargetFields = [];
+    const filteredTargetValues = [];
+    const filteredTargetData = {};
+    const filteredDirectSqlFields = new Set();
+
+    targetFields.forEach((field, index) => {
+      if (!auxiliaryFields.includes(field)) {
+        filteredTargetFields.push(field);
+        filteredTargetValues.push(targetValues[index]);
+
+        if (targetData.hasOwnProperty(field)) {
+          filteredTargetData[field] = targetData[field];
+        }
+
+        if (directSqlFields.has(field)) {
+          filteredDirectSqlFields.add(field);
+        }
+      } else {
+        logger.debug(`🔧 Campo auxiliar filtrado: ${field}`);
+      }
+    });
+
+    logger.info(
+      `🔧 Campos después del filtro: ${
+        filteredTargetFields.length
+      } (eliminados ${
+        targetFields.length - filteredTargetFields.length
+      } auxiliares)`
+    );
+
     // Validación final
-    if (targetFields.length === 0) {
+    if (filteredTargetFields.length === 0) {
       logger.warn(
-        `⚠️ No hay campos válidos para insertar en tabla ${tableConfig.targetTable}`
+        `⚠️ No hay campos válidos para insertar en tabla ${tableConfig.targetTable} después del filtrado`
       );
       return;
     }
 
-    // Ejecutar inserción usando tu método existente
+    // Ejecutar inserción usando campos filtrados
     logger.error(
-      `🚀 🔍 EJECUTANDO INSERCIÓN EN ${tableConfig.targetTable} con ${targetFields.length} campos`
+      `🚀 🔍 EJECUTANDO INSERCIÓN EN ${tableConfig.targetTable} con ${filteredTargetFields.length} campos`
     );
 
     await this.executeInsert(
       tableConfig.targetTable,
-      targetFields,
-      targetValues,
-      targetData,
-      directSqlFields,
+      filteredTargetFields, // ← Campos filtrados
+      filteredTargetValues, // ← Valores filtrados
+      filteredTargetData, // ← Datos filtrados
+      filteredDirectSqlFields, // ← DirectSql filtrados
       targetConnection
     );
 
