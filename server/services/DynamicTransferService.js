@@ -3724,6 +3724,20 @@ class DynamicTransferService {
    */
   async applyUniversalUnitConversion(sourceData, originalValue, fieldName) {
     try {
+
+      // ✅ NUEVA VALIDACIÓN: No convertir CANTIDAD_PEDIDA si es línea de bonificación
+    if (fieldName === "CANTIDAD_PEDIDA" && sourceData._IS_BONUS_LINE) {
+      logger.info(`🎁 Saltando conversión para CANTIDAD_PEDIDA en línea bonificación`);
+      return 0; // Las bonificaciones NO tienen cantidad pedida
+    }
+
+    // ✅ NUEVA VALIDACIÓN: No convertir CANTIDAD_A_FACTURA si es línea de bonificación
+    if (fieldName === "CANTIDAD_A_FACTURA" && sourceData._IS_BONUS_LINE) {
+      logger.info(`🎁 Saltando conversión para CANTIDAD_A_FACTURA en línea bonificación`);
+      return 0; // Las bonificaciones NO se facturan
+    }
+
+
       // Buscar Unit_Measure
       const unitMeasure =
         sourceData["Unit_Measure"] ||

@@ -380,16 +380,12 @@ class PromotionProcessor {
     }
 
     // ✅ CORRECCIÓN CRÍTICA: Usar CNT_MAX para bonificaciones, NO para pedidos
-    const cantidadBonifica =
-      row["CNT_MAX"] ||
-      row["CANTIDAD_BONIFICA"] ||
-      row["CANTIDAD_BONIFICADA"] ||
-      0;
+     const cantidadBonifica = row["CNT_MAX"] || 0;
 
     // ✅ CAMPOS CORRECTOS PARA BONIFICACIONES
     processedRow.CANTIDAD_PEDIDA = 0; // ✅ Bonificaciones NO se piden
     processedRow.CANTIDAD_A_FACTURA = 0; // ✅ Bonificaciones NO se facturan
-    processedRow.CANTIDAD_BONIFICAD = parseFloat(cantidadBonifica) || 0; // ✅ AQUÍ va la cantidad
+     processedRow.CANTIDAD_BONIFICAD = parseInt(cantidadBonifica) || 0;
 
     // ✅ Marcar como línea de bonificación
     processedRow._IS_BONUS_LINE = true;
