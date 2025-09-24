@@ -194,7 +194,7 @@ class PromotionProcessor {
   }
 
   /**
-   * ✅ MEJORADO: Identifica tipo de promoción con lógica más precisa
+   * ✅ Identifica tipo de promoción con lógica más precisa
    * @param {Object} row - Fila de datos
    * @param {Object} config - Configuración de campos
    * @returns {string} - Tipo de promoción identificado
@@ -202,64 +202,113 @@ class PromotionProcessor {
   static identifyPromotionType(row, config) {
     const artBon = row[config.bonusField]; // ART_BON
     const codArtRfr = row[config.referenceField]; // COD_ART_RFR
-    const cantidadBonifica =
-      row["CANTIDAD_BONIFICAD"] || row["CANTIDAD_BONIFICADA"];
-    const porDscAp = row["POR_DSC_AP"];
-    const monDsc = row["MON_DSC"] || row[config.discountField];
+    const cantidadBonificada = row["CANTIDAD_BONIFICADA"] || 0;
+    const porDscAp = row["POR_DSC_AP"] || 0;
+    const monDsc = row["MON_DSC"] || row[config.discountField] || 0;
     const codArt = row[config.articleField]; // COD_ART
+    const codePromotion = row["Code_Promotion"];
 
     logger.debug(`🎁 Analizando línea para promoción:`, {
       artBon,
       codArtRfr,
-      cantidadBonifica: cantidadBonifica || 0,
-      porDscAp: porDscAp || 0,
-      monDsc: monDsc || 0,
+      cantidadBonificada,
+      porDscAp,
+      monDsc,
       codArt,
+      codePromotion,
     });
 
-    // ✅ CASO 1: Línea marcada como bonificación con ART_BON = 'B'
-    if (artBon === "B" || artBon === config.bonusIndicatorValue) {
-      // ✅ SUBCASO 1A: Bonificación real con cantidad
-      if (cantidadBonifica && parseFloat(cantidadBonifica) > 0) {
-        logger.debug(
-          `🎁 Bonificación por cantidad detectada: ${cantidadBonifica}`
-        );
-        return "BONUS_QUANTITY";
-      }
-
-      // ✅ SUBCASO 1B: "Bonificación" que es realmente descuento (tratar como regular)
-      if (
-        (!cantidadBonifica || parseFloat(cantidadBonifica) === 0) &&
-        ((porDscAp && parseFloat(porDscAp) > 0) ||
-          (monDsc && parseFloat(monDsc) > 0))
-      ) {
-        logger.debug(
-          `🎁 Línea con descuento (no bonificación real) - tratando como regular`
-        );
-        return "REGULAR_WITH_DISCOUNT";
-      }
-
-      // ✅ SUBCASO 1C: COD_ART_RFR hace referencia al mismo artículo
-      if (codArtRfr === codArt) {
-        logger.debug(`🎁 Bonificación del mismo producto detectada`);
-        return "SELF_BONUS";
-      }
-
-      // ✅ SUBCASO 1D: COD_ART_RFR hace referencia a otro artículo
-      if (codArtRfr && codArtRfr !== codArt) {
-        logger.debug(
-          `🎁 Bonificación cruzada detectada: ${codArtRfr} -> ${codArt}`
-        );
-        return "CROSS_BONUS";
-      }
-
-      logger.debug(`🎁 Bonificación genérica detectada`);
-      return "BONUS_GENERIC";
+    // Solo procesar si ART_BON = 'B'
+    if (artBon !== "B") {
+      logger.debug(`📋 Línea regular detectada (ART_BON != B)`);
+      return "REGULAR";
     }
 
-    // ✅ CASO 2: Línea regular
-    logger.debug(`🎁 Línea regular detectada`);
-    return "REGULAR";
+    // CASO 1: Bonificación Regular
+    // ART_BON = B, POR_DSC_AP = NULL o 0, MON_DSC = NULL o 0,
+    // COD_ART_RFR = código disparador, CANTIDAD_BONIFICADA > 0, Code_Promotion != NULL
+    if (
+      (porDscAp === null || porDscAp === 0) &&
+      (monDsc === null || monDsc === 0) &&
+      codArtRfr &&
+      codArtRfr !== codArt &&
+      parseFloat(cantidadBonificada) > 0 &&
+      codePromotion !== null &&
+      codePromotion !== undefined
+    ) {
+      logger.debug(`🎁 Bonificación Regular detectada`);
+      return "BONUS_REGULAR";
+    }
+
+    // CASO 2: Bonificación Regular con Descuento
+    // ART_BON = B, POR_DSC_AP > 0, MON_DSC = NULL,
+    // COD_ART_RFR = código disparador, CANTIDAD_BONIFICADA > 0, Code_Promotion != NULL
+    if (
+      parseFloat(porDscAp) > 0 &&
+      (monDsc === null || monDsc === 0) &&
+      codArtRfr &&
+      codArtRfr !== codArt &&
+      parseFloat(cantidadBonificada) > 0 &&
+      codePromotion !== null &&
+      codePromotion !== undefined
+    ) {
+      logger.debug(`🎁 Bonificación Regular con Descuento detectada`);
+      return "BONUS_WITH_DISCOUNT";
+    }
+
+    // CASO 3: Bonificación al mismo código (SELF_BONUS) - CORREGIDO
+    // ART_BON = B, POR_DSC_AP = NULL o 0, MON_DSC contiene valor (+ o -),
+    // COD_ART_RFR = NULL o 0, CANTIDAD_BONIFICADA = 0 o NULL, Code_Promotion != NULL
+    // TRATAR COMO ARTÍCULO REGULAR - cantidad en CANTIDAD_PEDIDA
+    if (
+      (porDscAp === null || porDscAp === 0) &&
+      monDsc !== null &&
+      monDsc !== 0 &&
+      (!codArtRfr || codArtRfr === 0 || codArtRfr === null) &&
+      (cantidadBonificada === 0 || cantidadBonificada === null) &&
+      codePromotion !== null &&
+      codePromotion !== undefined
+    ) {
+      logger.debug(`🎁 SELF_BONUS detectada - tratar como regular`);
+      return "SELF_BONUS";
+    }
+
+    // CASO 4: Bonificación Cruzada (CROSS_BONUS)
+    // ART_BON = B, COD_ART_RFR = código disparador,
+    // CANTIDAD_BONIFICADA > 0, Code_Promotion != NULL
+    if (
+      codArtRfr &&
+      codArtRfr !== codArt &&
+      parseFloat(cantidadBonificada) > 0 &&
+      codePromotion !== null &&
+      codePromotion !== undefined
+    ) {
+      logger.debug(
+        `🎁 Bonificación Cruzada detectada: ${codArtRfr} -> ${codArt}`
+      );
+      return "CROSS_BONUS";
+    }
+
+    // CASO 5: SELF_BONUS (CORRECCIÓN PRINCIPAL)
+    // ART_BON = B, POR_DSC_AP = NULL o 0, MON_DSC contiene valor,
+    // COD_ART_RFR = NULL o 0, CANTIDAD_BONIFICADA = 0 o NULL
+    if (
+      (porDscAp === null || porDscAp === 0) &&
+      monDsc !== null &&
+      monDsc !== 0 &&
+      (!codArtRfr || codArtRfr === 0 || codArtRfr === null) &&
+      (cantidadBonificada === 0 || cantidadBonificada === null) &&
+      codePromotion !== null &&
+      codePromotion !== undefined
+    ) {
+      logger.debug(`🎁 SELF_BONUS detectada`);
+      return "SELF_BONUS";
+    }
+
+    // CASO 6: Bonificaciones adicionales no marcadas (por implementar)
+    // Por ahora retornar genérico
+    logger.debug(`🎁 Bonificación genérica detectada`);
+    return "BONUS_GENERIC";
   }
 
   /**
@@ -280,17 +329,25 @@ class PromotionProcessor {
 
       // ✅ 3. Procesar según tipo identificado
       switch (promotionType) {
+
+        case "SELF_BONUS":
+        // USAR MÉTODO EXISTENTE processRegularLine PERO CON LÓGICA ESPECIAL
+        processedRow = this.processRegularLine(processedRow, config);
+        // Agregar flags especiales para SELF_BONUS
+        processedRow._IS_SELF_BONUS = true;
+        processedRow._IS_BONUS_LINE = false; // NO es bonificación real
+        processedRow._IS_NORMAL_LINE = false; // Es especial
+        logger.debug(`🎁 SELF_BONUS procesada como regular con descuento`);
+        break;
+
         case "REGULAR_WITH_DISCOUNT":
           // Tratar como línea regular, mantener descuentos
           logger.debug(`🎁 Procesando como regular con descuento`);
           processedRow = this.processRegularLine(processedRow, config);
           processedRow._IS_REGULAR_WITH_DISCOUNT = true;
-          processedRow._IS_BONUS_LINE = false; // ✅ IMPORTANTE: NO es bonificación
-          processedRow._IS_NORMAL_LINE = false; // ✅ Es especial por tener descuento
           break;
 
         case "BONUS_QUANTITY":
-        case "SELF_BONUS":
         case "CROSS_BONUS":
         case "BONUS_GENERIC":
           // Procesar como bonificación real
@@ -333,9 +390,12 @@ class PromotionProcessor {
     // ✅ Para líneas REGULARES, CNT_MAX va a CANTIDAD_PEDIDA
     const cantidadPedida = row["CNT_MAX"] || row["CANTIDAD_PEDIDA"] || 0;
 
-    logger.info(`🔍 🔍 DEBUGGING LÍNEA REGULAR:`);
-    logger.info(`🔍 🔍 CNT_MAX original: ${row["CNT_MAX"]}`);
-    logger.info(`🔍 🔍 Cantidad pedida: ${cantidadPedida}`);
+    logger.info(`📋 🔍 DEBUGGING LÍNEA REGULAR:`);
+    logger.info(`📋 🔍 CNT_MAX original: ${row.CNT_MAX}`);
+    logger.info(`📋 🔍 Cantidad pedida final: ${cantidadPedida}`);
+    logger.info(
+      `📋 🔍 Es REGULAR_WITH_DISCOUNT: ${!!row._IS_REGULAR_WITH_DISCOUNT}`
+    );
 
     // ✅ Establecer campos de promoción estándar para línea regular
     processedRow.PEDIDO_LINEA_BONIF = null;
@@ -348,12 +408,22 @@ class PromotionProcessor {
     // ✅ Marcar como línea regular
     processedRow._IS_BONUS_LINE = false;
     processedRow._IS_TRIGGER_LINE = false;
-    processedRow._IS_NORMAL_LINE = !processedRow._IS_REGULAR_WITH_DISCOUNT; // Solo si no es descuento
+     if (!processedRow._IS_SELF_BONUS) {
+       processedRow._IS_NORMAL_LINE = true;
+     }
 
     logger.info(
       `🔍 ✅ Línea regular procesada: ${
         processedRow[config.articleField]
       } - CANTIDAD_PEDIDA: ${processedRow.CANTIDAD_PEDIDA} cajas`
+    );
+
+    logger.info(
+      `📋 ✅ Línea regular procesada: ${
+        processedRow[config.articleField]
+      } - CANTIDAD_PEDIDA: ${processedRow.CANTIDAD_PEDIDA} cajas${
+        processedRow._IS_REGULAR_WITH_DISCOUNT ? " (CON DESCUENTO)" : ""
+      }`
     );
 
     return processedRow;
@@ -390,7 +460,7 @@ class PromotionProcessor {
     // ✅ CAMPOS CORRECTOS PARA BONIFICACIONES
     processedRow.CANTIDAD_PEDIDA = 0; // ✅ Bonificaciones NO se piden
     processedRow.CANTIDAD_A_FACTURA = 0; // ✅ Bonificaciones NO se facturan
-     processedRow.CANTIDAD_BONIFICAD = parseInt(cantidadBonifica) || 0;
+    processedRow.CANTIDAD_BONIFICAD = parseInt(cantidadBonifica) || 0;
 
     // ✅ Marcar como línea de bonificación
     processedRow._IS_BONUS_LINE = true;

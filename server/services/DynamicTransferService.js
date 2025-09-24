@@ -5576,9 +5576,9 @@ class DynamicTransferService {
     );
 
     // ✅ NUEVA LÓGICA CRÍTICA: Para líneas regulares con descuento
-    if (sourceData._IS_REGULAR_WITH_DISCOUNT) {
+    if (sourceData._IS_SELF_BONUS) {
       logger.error(
-        `📋 ✅ Procesando REGULAR_WITH_DISCOUNT para ${targetField}`
+        `📋 ✅ Procesando SELF_BONUS para ${targetField}`
       );
 
       // 🚨 CRÍTICO: Para REGULAR_WITH_DISCOUNT, CNT_MAX va a CANTIDAD_PEDIDA
