@@ -728,23 +728,43 @@ class DynamicTransferService {
         const record = detailsData[recordIndex];
 
         logger.error(
-          `🎁 🔍 ============ PROCESANDO REGISTRO ${recordIndex + 1}/${
-            detailsData.length
-          } ============`
-        );
-        logger.error(
-          `🎁 🔍 Datos que van a processTable: ${JSON.stringify(
-            record,
-            null,
-            2
-          )}`
+          `Procesando registro ${recordIndex + 1}/${detailsData.length}`
         );
 
         try {
+          // EJECUTAR LOOKUPS DINÁMICOS PARA ESTA LÍNEA
+          if (this.hasLookupFields(detailConfig)) {
+            logger.debug(`Ejecutando lookups para línea ${recordIndex + 1}`);
+
+            const lineLookupResults = await this.executeDetailLineLookups(
+              record,
+              detailConfig,
+              targetConnection
+            );
+
+            // Agregar resultados de lookup al registro
+            Object.assign(record, lineLookupResults);
+
+            if (Object.keys(lineLookupResults).length > 0) {
+              logger.info(
+                `Lookups aplicados a línea ${recordIndex + 1}: ${Object.keys(
+                  lineLookupResults
+                )
+                  .map((key) => `${key}=${lineLookupResults[key]}`)
+                  .join(", ")}`
+              );
+            }
+          }
+
+          logger.error(
+            `Datos que van a processTable: ${JSON.stringify(record, null, 2)}`
+          );
+
+          // Procesar con processTable (modificado para no ejecutar lookup interno)
           await this.processTable(
             detailConfig,
             sourceData,
-            record, // ⬅️ ESTE DEBE CONTENER LOS CAMPOS DE PROMOCIÓN
+            record, // Ya contiene los campos de promoción Y lookup
             targetConnection,
             currentConsecutive,
             mapping,
@@ -753,19 +773,17 @@ class DynamicTransferService {
             true // isDetailTable
           );
 
-          logger.error(
-            `🎁 🔍 ✅ Registro ${recordIndex + 1} procesado exitosamente`
-          );
+          logger.error(`Registro ${recordIndex + 1} procesado exitosamente`);
         } catch (recordError) {
           logger.error(
-            `🎁 🔍 ❌ Error procesando registro ${recordIndex + 1}: ${
+            `Error procesando registro ${recordIndex + 1}: ${
               recordError.message
             }`
           );
 
           // Log del registro problemático
           logger.error(
-            `🎁 🔍 Registro problemático: ${JSON.stringify(record, null, 2)}`
+            `Registro problemático: ${JSON.stringify(record, null, 2)}`
           );
 
           // Re-lanzar errores críticos
@@ -1440,60 +1458,53 @@ class DynamicTransferService {
 
     // Determinar qué datos usar para procesamiento
     const dataForProcessing = isDetailTable ? tableData : sourceData;
-    const dataForLookup = isDetailTable ? tableData : sourceData;
 
     logger.error(
-      `🔧 🔍 ============ INICIANDO processTable: ${tableConfig.name} ============`
+      `============ INICIANDO processTable: ${tableConfig.name} ============`
     );
-    logger.error(`🔧 🔍 isDetailTable: ${isDetailTable}`);
+    logger.error(`isDetailTable: ${isDetailTable}`);
     logger.error(
-      `🔧 🔍 dataForProcessing claves: ${Object.keys(dataForProcessing).join(
-        ", "
-      )}`
+      `dataForProcessing claves: ${Object.keys(dataForProcessing).join(", ")}`
     );
 
-    // 🎁 MEJORA: VERIFICAR SI HAY DATOS DE PROMOCIONES CON TU LÓGICA MEJORADA
+    // Verificar si hay datos de promociones
     const hasPromotionData = this.detectPromotionData(dataForProcessing);
-    logger.error(`🔧 🔍 ¿Detecta promociones? ${hasPromotionData}`);
+    logger.error(`¿Detecta promociones? ${hasPromotionData}`);
 
     // Validar configuración de campos
     if (!tableConfig.fieldMappings || tableConfig.fieldMappings.length === 0) {
-      logger.warn(
-        `⚠️ Tabla ${tableConfig.name} no tiene fieldMappings definidos`
-      );
+      logger.warn(`Tabla ${tableConfig.name} no tiene fieldMappings definidos`);
       return;
     }
 
-    // DEBUGGING ESPECÍFICO
+    // DEBUGGING específico
     if (dataForProcessing._IS_REGULAR_WITH_DISCOUNT) {
-      logger.error(`🔍 LÍNEA REGULAR CON DESCUENTO - debe usar flujo normal`);
+      logger.error(`LÍNEA REGULAR CON DESCUENTO - debe usar flujo normal`);
     }
 
     if (dataForProcessing._IS_BONUS_LINE) {
-      logger.error(
-        `🎁 LÍNEA BONIFICACIÓN REAL - debe usar flujo de promociones`
-      );
+      logger.error(`LÍNEA BONIFICACIÓN REAL - debe usar flujo de promociones`);
     }
 
-    // ✅ LÓGICA MEJORADA PARA PROMOCIONES - MANTENIENDO TU ESTRUCTURA
+    // Lógica mejorada para promociones
     let allFieldMappings = [];
 
     if (hasPromotionData && dataForProcessing._IS_BONUS_LINE) {
       logger.error(
-        `🎁 ✅ DATOS DE PROMOCIONES DETECTADOS en tabla ${tableConfig.name}`
+        `DATOS DE PROMOCIONES DETECTADOS en tabla ${tableConfig.name}`
       );
 
-      // ✅ 1. MARCAR CAMPOS YA PROCESADOS DEL MAPPING ORIGINAL (TU LÓGICA)
+      // Marcar campos ya procesados del mapping original
       tableConfig.fieldMappings.forEach((fm) => {
         if (fm.targetField) {
           processedFieldNames.add(fm.targetField.toLowerCase());
           logger.error(
-            `🎁 🔍   Original: ${fm.sourceField || "null"} -> ${fm.targetField}`
+            `Original: ${fm.sourceField || "null"} -> ${fm.targetField}`
           );
         }
       });
 
-      // ✅ 2. GENERAR MAPPINGS AUTOMÁTICOS USANDO TU MÉTODO MEJORADO
+      // Generar mappings automáticos
       const promotionFieldMappings = this.generatePromotionFieldMappings(
         dataForProcessing,
         mapping,
@@ -1501,75 +1512,55 @@ class DynamicTransferService {
       );
 
       logger.error(
-        `🎁 🔍 MAPPINGS AUTOMÁTICOS GENERADOS: ${promotionFieldMappings.length}`
-      );
-      promotionFieldMappings.forEach((pm) => {
-        logger.error(
-          `🎁 🔍   Auto: ${pm.sourceField} -> ${pm.targetField} = ${
-            dataForProcessing[pm.sourceField]
-          } (${pm.description})`
-        );
-      });
-
-      // ✅ 3. VALIDAR QUE SE GENERARON CAMPOS DE PROMOCIÓN
-      const promotionFieldsGenerated = promotionFieldMappings.filter(
-        (pm) => pm.isPromotionField
+        `MAPPINGS AUTOMÁTICOS GENERADOS: ${promotionFieldMappings.length}`
       );
 
-      if (promotionFieldsGenerated.length === 0) {
-        logger.error(
-          `🎁 ❌ ERROR: Se detectaron promociones pero no se generaron mappings de promoción`
-        );
-        logger.error(
-          `🎁 Datos disponibles: ${Object.keys(dataForProcessing).join(", ")}`
-        );
-      } else {
-        logger.info(
-          `🎁 ✅ ${promotionFieldsGenerated.length} campos de promoción listos para procesamiento`
-        );
-      }
-
-      // ✅ 4. INTEGRAR MAPPINGS (ORIGINALES + AUTOMÁTICOS)
+      // Integrar mappings (originales + automáticos)
       allFieldMappings = [
         ...tableConfig.fieldMappings,
         ...promotionFieldMappings,
       ];
 
       logger.error(
-        `🎁 🔍 MAPPINGS TOTALES: ${tableConfig.fieldMappings.length} originales + ${promotionFieldMappings.length} automáticos = ${allFieldMappings.length}`
+        `MAPPINGS TOTALES: ${tableConfig.fieldMappings.length} originales + ${promotionFieldMappings.length} automáticos = ${allFieldMappings.length}`
       );
 
-      // ✅ 5. RESET PROCESSED FIELD NAMES PARA INCLUIR LOS NUEVOS
+      // Reset processed field names para incluir los nuevos
       processedFieldNames.clear();
     } else {
-      // ✅ FLUJO NORMAL SIN PROMOCIONES
+      // Flujo normal sin promociones
       allFieldMappings = tableConfig.fieldMappings;
       logger.error(
-        `🔧 🔍 ❌ NO se detectaron promociones, usando ${allFieldMappings.length} mappings normales`
+        `NO se detectaron promociones, usando ${allFieldMappings.length} mappings normales`
       );
     }
 
-    // Ejecutar lookup si está configurado (tu lógica existente)
-     let lookupResults = {};
-     if (this.hasLookupFields(tableConfig)) {
-       const lookupExecution = await this.executeLookupInTarget(
-         tableConfig,
-         dataForLookup, // ← Usar datos originales sin procesar
-         targetConnection
-       );
-       if (!lookupExecution.success) {
-         throw new Error(
-           `Falló la validación de lookup para tabla ${tableConfig.name}`
-         );
-       }
-       lookupResults = lookupExecution.results;
-     }
+    // MODIFICADO: Ejecutar lookup SOLO si no es detalle (los detalles ya tienen lookup aplicado)
+    let lookupResults = {};
+    if (this.hasLookupFields(tableConfig) && !isDetailTable) {
+      logger.info("Ejecutando lookup para tabla de encabezado");
+      const lookupExecution = await this.executeLookupInTarget(
+        tableConfig,
+        dataForProcessing,
+        targetConnection
+      );
+      if (!lookupExecution.success) {
+        throw new Error(
+          `Falló la validación de lookup para tabla ${tableConfig.name}`
+        );
+      }
+      lookupResults = lookupExecution.results;
+    } else if (isDetailTable) {
+      logger.debug(
+        "Omitiendo lookup interno para detalle (ya aplicado previamente)"
+      );
+    }
 
     logger.error(
-      `🔧 🔍 PROCESANDO ${allFieldMappings.length} campos del mapping para tabla ${tableConfig.name}`
+      `PROCESANDO ${allFieldMappings.length} campos del mapping para tabla ${tableConfig.name}`
     );
 
-    // ✅ PROCESAR TODOS LOS CAMPOS (originales + automáticos)
+    // Procesar todos los campos (originales + automáticos)
     for (
       let fieldIndex = 0;
       fieldIndex < allFieldMappings.length;
@@ -1579,7 +1570,7 @@ class DynamicTransferService {
 
       if (!fieldMapping.targetField) {
         logger.warn(
-          `⚠️ Campo sin targetField definido en tabla ${tableConfig.name}`
+          `Campo sin targetField definido en tabla ${tableConfig.name}`
         );
         continue;
       }
@@ -1587,27 +1578,25 @@ class DynamicTransferService {
       const targetFieldLower = fieldMapping.targetField.toLowerCase();
       if (processedFieldNames.has(targetFieldLower)) {
         logger.warn(
-          `⚠️ Campo duplicado: ${fieldMapping.targetField} en tabla ${tableConfig.name}`
+          `Campo duplicado: ${fieldMapping.targetField} en tabla ${tableConfig.name}`
         );
         continue;
       }
 
       logger.error(
-        `🔧 🔍 ---- PROCESANDO CAMPO ${fieldIndex + 1}/${
+        `---- PROCESANDO CAMPO ${fieldIndex + 1}/${
           allFieldMappings.length
         } ----`
       );
       logger.error(
-        `🔧 🔍 Campo: ${fieldMapping.sourceField || "(automático)"} -> ${
+        `Campo: ${fieldMapping.sourceField || "(automático)"} -> ${
           fieldMapping.targetField
         }`
       );
-      logger.error(
-        `🔧 🔍 Es promoción: ${fieldMapping.isPromotionField || false}`
-      );
+      logger.error(`Es promoción: ${fieldMapping.isPromotionField || false}`);
 
       try {
-        // ✅ USAR TU MÉTODO processField MEJORADO
+        // Usar método processField mejorado
         const processedField = await this.processField(
           fieldMapping,
           dataForProcessing,
@@ -1628,10 +1617,10 @@ class DynamicTransferService {
             targetValues.push(processedField.value);
             directSqlFields.add(fieldMapping.targetField);
             logger.error(
-              `🔧 🔍 ✅ Campo SQL directo: ${fieldMapping.targetField} = ${processedField.value}`
+              `Campo SQL directo: ${fieldMapping.targetField} = ${processedField.value}`
             );
           } else {
-            // ✅ INCLUIR TODOS LOS CAMPOS, INCLUSO NULL SI NO ES REQUERIDO
+            // Incluir todos los campos, incluso null si no es requerido
             if (
               processedField.value !== null ||
               fieldMapping.isRequired ||
@@ -1641,30 +1630,28 @@ class DynamicTransferService {
               targetFields.push(fieldMapping.targetField);
               targetValues.push(`@${fieldMapping.targetField}`);
 
-              // ✅ LOG ESPECÍFICO PARA CAMPOS DE PROMOCIÓN
+              // Log específico para campos de promoción
               if (fieldMapping.isPromotionField) {
                 logger.error(
-                  `🎁 ✅ CAMPO PROMOCIÓN PROCESADO: ${fieldMapping.targetField} = ${processedField.value}`
+                  `CAMPO PROMOCIÓN PROCESADO: ${fieldMapping.targetField} = ${processedField.value}`
                 );
               } else {
                 logger.error(
-                  `🔧 🔍 ✅ Campo normal procesado: ${fieldMapping.targetField} = ${processedField.value}`
+                  `Campo normal procesado: ${fieldMapping.targetField} = ${processedField.value}`
                 );
               }
             } else {
               logger.error(
-                `🔧 🔍 ❌ Campo omitido (valor null y no requerido): ${fieldMapping.targetField}`
+                `Campo omitido (valor null y no requerido): ${fieldMapping.targetField}`
               );
             }
           }
         } else {
-          logger.error(
-            `🔧 🔍 ❌ Campo no procesado: ${fieldMapping.targetField}`
-          );
+          logger.error(`Campo no procesado: ${fieldMapping.targetField}`);
         }
       } catch (fieldError) {
         logger.error(
-          `❌ Error procesando campo ${fieldMapping.targetField}: ${fieldError.message}`
+          `Error procesando campo ${fieldMapping.targetField}: ${fieldError.message}`
         );
         if (fieldMapping.isRequired) {
           throw fieldError;
@@ -1672,13 +1659,13 @@ class DynamicTransferService {
       }
     }
 
-    // 🔧 LOG FINAL DE CAMPOS A INSERTAR CON VALIDACIÓN DE PROMOCIONES
+    // Log final de campos a insertar
     logger.error(
-      `🔧 🔍 ============ RESUMEN FINAL PARA ${tableConfig.targetTable} ============`
+      `============ RESUMEN FINAL PARA ${tableConfig.targetTable} ============`
     );
-    logger.error(`🔧 🔍 Total campos a insertar: ${targetFields.length}`);
+    logger.error(`Total campos a insertar: ${targetFields.length}`);
 
-    // Identificar y destacar campos de promoción
+    // Identificar campos de promoción
     const promotionFieldsInTarget = targetFields.filter(
       (field) =>
         field.includes("CANTIDAD_") ||
@@ -1688,28 +1675,11 @@ class DynamicTransferService {
 
     if (promotionFieldsInTarget.length > 0) {
       logger.error(
-        `🎁 🔍 CAMPOS DE PROMOCIÓN A INSERTAR: ${promotionFieldsInTarget.join(
-          ", "
-        )}`
+        `CAMPOS DE PROMOCIÓN A INSERTAR: ${promotionFieldsInTarget.join(", ")}`
       );
-    } else if (hasPromotionData) {
-      logger.error(`🎁 🔍 ❌ NO HAY CAMPOS DE PROMOCIÓN PARA INSERTAR`);
     }
 
-    // ✅ VERIFICACIÓN CRÍTICA: Asegurar coherencia entre detección y inserción
-    if (hasPromotionData && promotionFieldsInTarget.length === 0) {
-      logger.error(
-        `🎁 ❌ ERROR CRÍTICO: Se detectaron promociones pero NO hay campos de promoción en la inserción`
-      );
-      logger.error(
-        `🎁 Datos de promoción disponibles: ${Object.keys(dataForProcessing)
-          .filter((k) => k.includes("BONIF") || k.includes("CANTIDAD_"))
-          .join(", ")}`
-      );
-      logger.error(`🎁 TargetFields generados: ${targetFields.join(", ")}`);
-    }
-
-    // ✅ NUEVA FUNCIONALIDAD: FILTRAR CAMPOS AUXILIARES ANTES DE INSERCIÓN
+    // Filtrar campos auxiliares antes de inserción
     const auxiliaryFields = [
       "Unit_Measure",
       "Factor_Conversion",
@@ -1739,14 +1709,12 @@ class DynamicTransferService {
           filteredDirectSqlFields.add(field);
         }
       } else {
-        logger.debug(`🔧 Campo auxiliar filtrado: ${field}`);
+        logger.debug(`Campo auxiliar filtrado: ${field}`);
       }
     });
 
     logger.info(
-      `🔧 Campos después del filtro: ${
-        filteredTargetFields.length
-      } (eliminados ${
+      `Campos después del filtro: ${filteredTargetFields.length} (eliminados ${
         targetFields.length - filteredTargetFields.length
       } auxiliares)`
     );
@@ -1754,26 +1722,26 @@ class DynamicTransferService {
     // Validación final
     if (filteredTargetFields.length === 0) {
       logger.warn(
-        `⚠️ No hay campos válidos para insertar en tabla ${tableConfig.targetTable} después del filtrado`
+        `No hay campos válidos para insertar en tabla ${tableConfig.targetTable} después del filtrado`
       );
       return;
     }
 
     // Ejecutar inserción usando campos filtrados
     logger.error(
-      `🚀 🔍 EJECUTANDO INSERCIÓN EN ${tableConfig.targetTable} con ${filteredTargetFields.length} campos`
+      `EJECUTANDO INSERCIÓN EN ${tableConfig.targetTable} con ${filteredTargetFields.length} campos`
     );
 
     await this.executeInsert(
       tableConfig.targetTable,
-      filteredTargetFields, // ← Campos filtrados
-      filteredTargetValues, // ← Valores filtrados
-      filteredTargetData, // ← Datos filtrados
-      filteredDirectSqlFields, // ← DirectSql filtrados
+      filteredTargetFields,
+      filteredTargetValues,
+      filteredTargetData,
+      filteredDirectSqlFields,
       targetConnection
     );
 
-    logger.error(`✅ 🔍 Tabla ${tableConfig.name} procesada exitosamente`);
+    logger.error(`Tabla ${tableConfig.name} procesada exitosamente`);
   }
 
   /**
@@ -6071,6 +6039,104 @@ class DynamicTransferService {
 
       return fallbackConfig;
     }
+  }
+
+  async executeDetailLineLookups(detailLine, tableConfig, targetConnection) {
+    const lookupResults = {};
+
+    // Encontrar todos los campos con lookup configurado
+    const lookupFields = tableConfig.fieldMappings.filter(
+      (fm) => fm.lookupFromTarget && fm.lookupQuery
+    );
+
+    if (lookupFields.length === 0) {
+      return lookupResults;
+    }
+
+    for (const fieldMapping of lookupFields) {
+      try {
+        const params = {};
+        let allParamsAvailable = true;
+
+        // Construir parámetros desde la línea de detalle
+        if (fieldMapping.lookupParams && fieldMapping.lookupParams.length > 0) {
+          for (const param of fieldMapping.lookupParams) {
+            if (!param.sourceField || !param.paramName) continue;
+
+            let paramValue = detailLine[param.sourceField];
+
+            // Aplicar eliminación de prefijo si está configurado
+            if (
+              param.removePrefix &&
+              paramValue &&
+              typeof paramValue === "string"
+            ) {
+              paramValue = paramValue.replace(
+                new RegExp(`^${param.removePrefix}`),
+                ""
+              );
+            }
+
+            if (paramValue === null || paramValue === undefined) {
+              if (param.required !== false) {
+                allParamsAvailable = false;
+                break;
+              }
+            } else {
+              params[param.paramName] = paramValue;
+            }
+          }
+        }
+
+        if (!allParamsAvailable) {
+          if (fieldMapping.failIfNotFound) {
+            throw new Error(
+              `Parámetros requeridos faltantes para ${fieldMapping.targetField}`
+            );
+          } else {
+            lookupResults[fieldMapping.targetField] =
+              fieldMapping.defaultValue || null;
+            continue;
+          }
+        }
+
+        // Ejecutar consulta
+        const result = await SqlService.query(
+          targetConnection,
+          fieldMapping.lookupQuery,
+          params
+        );
+
+        if (result.recordset && result.recordset.length > 0) {
+          const lookupValue = Object.values(result.recordset[0])[0];
+          lookupResults[fieldMapping.targetField] = lookupValue;
+          logger.debug(
+            `Lookup exitoso: ${fieldMapping.targetField} = ${lookupValue} para línea`
+          );
+        } else {
+          if (fieldMapping.failIfNotFound) {
+            throw new Error(
+              `No se encontraron resultados para ${fieldMapping.targetField}`
+            );
+          } else {
+            lookupResults[fieldMapping.targetField] =
+              fieldMapping.defaultValue || null;
+          }
+        }
+      } catch (error) {
+        logger.error(
+          `Error en lookup ${fieldMapping.targetField}: ${error.message}`
+        );
+        if (fieldMapping.failIfNotFound) {
+          throw error;
+        } else {
+          lookupResults[fieldMapping.targetField] =
+            fieldMapping.defaultValue || null;
+        }
+      }
+    }
+
+    return lookupResults;
   }
 }
 
