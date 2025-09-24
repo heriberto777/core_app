@@ -1554,7 +1554,8 @@ class DynamicTransferService {
       const lookupExecution = await this.executeLookupInTarget(
         tableConfig,
         dataForProcessing,
-        targetConnection
+        targetConnection,
+        isDetailTable ? sourceData : null // ← PASAR headerData si es detalle
       );
       if (!lookupExecution.success) {
         throw new Error(
@@ -2364,8 +2365,12 @@ class DynamicTransferService {
    * @param {Object} targetConnection - Conexión destino
    * @returns {Promise<Object>} - Resultados del lookup
    */
-  // En DynamicTransferService.js - método executeLookupInTarget
-  async executeLookupInTarget(tableConfig, sourceData, targetConnection) {
+  async executeLookupInTarget(
+    tableConfig,
+    sourceData,
+    targetConnection,
+    headerData = null
+  ) {
     try {
       logger.info(
         `Realizando consultas de lookup en BD destino para tabla ${tableConfig.name}`
@@ -2386,7 +2391,6 @@ class DynamicTransferService {
         try {
           const params = {};
 
-          // ✅ CORREGIR: Validar parámetros requeridos correctamente
           if (
             fieldMapping.lookupParams &&
             fieldMapping.lookupParams.length > 0
@@ -2398,23 +2402,48 @@ class DynamicTransferService {
                 continue;
               }
 
-              let paramValue = sourceData[param.sourceField];
+              // MEJORA: Buscar en múltiples fuentes de datos
+              let paramValue = null;
 
-              // Aplicar eliminación de prefijo
+              // 1. Buscar primero en datos actuales (detalle o encabezado)
+              if (sourceData[param.sourceField] !== undefined) {
+                paramValue = sourceData[param.sourceField];
+                logger.debug(
+                  `Param ${param.paramName} encontrado en sourceData: ${paramValue}`
+                );
+              }
+              // 2. Si no se encuentra y hay headerData, buscar allí
+              else if (
+                headerData &&
+                headerData[param.sourceField] !== undefined
+              ) {
+                paramValue = headerData[param.sourceField];
+                logger.debug(
+                  `Param ${param.paramName} encontrado en headerData: ${paramValue}`
+                );
+              }
+
+              // Aplicar eliminación de prefijo si está configurado
               if (
                 param.removePrefix &&
                 paramValue &&
                 typeof paramValue === "string"
               ) {
+                const originalValue = paramValue;
                 paramValue = paramValue.replace(
                   new RegExp(`^${param.removePrefix}`),
                   ""
+                );
+                logger.debug(
+                  `Prefijo removido: "${originalValue}" -> "${paramValue}"`
                 );
               }
 
               if (paramValue === null || paramValue === undefined) {
                 if (param.required !== false) {
-                  // Si no está marcado como opcional
+                  logger.warn(
+                    `Parámetro requerido faltante: ${param.sourceField} para ${param.paramName}`
+                  );
                   allParamsAvailable = false;
                   break;
                 }
@@ -2423,7 +2452,6 @@ class DynamicTransferService {
               }
             }
 
-            // Si faltan parámetros requeridos
             if (!allParamsAvailable) {
               if (fieldMapping.failIfNotFound) {
                 failedLookups.push({
@@ -2435,12 +2463,19 @@ class DynamicTransferService {
               } else {
                 lookupResults[fieldMapping.targetField] =
                   fieldMapping.defaultValue || null;
+                logger.debug(
+                  `Usando defaultValue para ${fieldMapping.targetField}: ${fieldMapping.defaultValue}`
+                );
                 continue;
               }
             }
           }
 
-          // Ejecutar consulta
+          // Ejecutar consulta con debugging mejorado
+          logger.debug(`Ejecutando lookup para ${fieldMapping.targetField}:`);
+          logger.debug(`Query: ${fieldMapping.lookupQuery}`);
+          logger.debug(`Params: ${JSON.stringify(params)}`);
+
           const result = await SqlService.query(
             targetConnection,
             fieldMapping.lookupQuery,
@@ -2450,10 +2485,14 @@ class DynamicTransferService {
           if (result.recordset && result.recordset.length > 0) {
             const lookupValue = Object.values(result.recordset[0])[0];
             lookupResults[fieldMapping.targetField] = lookupValue;
-            logger.debug(
-              `✅ Lookup exitoso para ${fieldMapping.targetField}: ${lookupValue}`
+            logger.info(
+              `Lookup exitoso para ${fieldMapping.targetField}: ${lookupValue}`
             );
           } else {
+            logger.warn(
+              `No se encontraron resultados para lookup ${fieldMapping.targetField}`
+            );
+
             if (fieldMapping.failIfNotFound) {
               failedLookups.push({
                 field: fieldMapping.targetField,
@@ -2485,6 +2524,9 @@ class DynamicTransferService {
       // Verificar fallos críticos
       const criticalFailures = failedLookups.filter((f) => f.isCritical);
       if (criticalFailures.length > 0) {
+        logger.error(
+          `Fallos críticos en lookup: ${JSON.stringify(criticalFailures)}`
+        );
         return {
           results: {},
           success: false,
@@ -2492,6 +2534,11 @@ class DynamicTransferService {
         };
       }
 
+      logger.info(
+        `Lookup completado: ${
+          Object.keys(lookupResults).length
+        } campos procesados`
+      );
       return {
         results: lookupResults,
         success: true,
@@ -5577,9 +5624,7 @@ class DynamicTransferService {
 
     // ✅ NUEVA LÓGICA CRÍTICA: Para líneas regulares con descuento
     if (sourceData._IS_SELF_BONUS) {
-      logger.error(
-        `📋 ✅ Procesando SELF_BONUS para ${targetField}`
-      );
+      logger.error(`📋 ✅ Procesando SELF_BONUS para ${targetField}`);
 
       // 🚨 CRÍTICO: Para REGULAR_WITH_DISCOUNT, CNT_MAX va a CANTIDAD_PEDIDA
       if (targetField === "CANTIDAD_PEDIDA") {
