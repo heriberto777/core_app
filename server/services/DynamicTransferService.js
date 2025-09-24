@@ -1440,6 +1440,7 @@ class DynamicTransferService {
 
     // Determinar qué datos usar para procesamiento
     const dataForProcessing = isDetailTable ? tableData : sourceData;
+    const dataForLookup = isDetailTable ? tableData : sourceData;
 
     logger.error(
       `🔧 🔍 ============ INICIANDO processTable: ${tableConfig.name} ============`
@@ -1549,21 +1550,20 @@ class DynamicTransferService {
     }
 
     // Ejecutar lookup si está configurado (tu lógica existente)
-    let lookupResults = {};
-    if (this.hasLookupFields(tableConfig)) {
-      const lookupExecution = await this.executeLookupInTarget(
-        tableConfig,
-        dataForProcessing,
-        targetConnection,
-        isDetailTable ? sourceData : null // ← PASAR headerData si es detalle
-      );
-      if (!lookupExecution.success) {
-        throw new Error(
-          `Falló la validación de lookup para tabla ${tableConfig.name}`
-        );
-      }
-      lookupResults = lookupExecution.results;
-    }
+     let lookupResults = {};
+     if (this.hasLookupFields(tableConfig)) {
+       const lookupExecution = await this.executeLookupInTarget(
+         tableConfig,
+         dataForLookup, // ← Usar datos originales sin procesar
+         targetConnection
+       );
+       if (!lookupExecution.success) {
+         throw new Error(
+           `Falló la validación de lookup para tabla ${tableConfig.name}`
+         );
+       }
+       lookupResults = lookupExecution.results;
+     }
 
     logger.error(
       `🔧 🔍 PROCESANDO ${allFieldMappings.length} campos del mapping para tabla ${tableConfig.name}`
