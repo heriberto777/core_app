@@ -1535,7 +1535,7 @@ class DynamicTransferService {
       );
     }
 
-    // MODIFICADO: Ejecutar lookup SOLO si no es detalle (los detalles ya tienen lookup aplicado)
+    // Ejecutar lookup SOLO si no es detalle (los detalles ya tienen lookup aplicado)
     let lookupResults = {};
     if (this.hasLookupFields(tableConfig) && !isDetailTable) {
       logger.info("Ejecutando lookup para tabla de encabezado");
@@ -1659,6 +1659,58 @@ class DynamicTransferService {
       }
     }
 
+    // NUEVO: Agregar campos de lookup que están en los datos pero no en fieldMappings (SOLO para detalles)
+    if (isDetailTable) {
+      logger.info(
+        "Verificando campos de lookup adicionales en datos de detalle..."
+      );
+
+      // Buscar campos que sean resultados de lookup pero no están procesados
+      const lookupFieldsFromData = Object.keys(dataForProcessing).filter(
+        (key) => {
+          // Verificar si este campo tiene configuración de lookup
+          const hasLookupConfig = tableConfig.fieldMappings.some(
+            (fm) => fm.lookupFromTarget && fm.targetField === key
+          );
+
+          // Si hay configuración de lookup para este campo Y no está ya procesado
+          const isAlreadyProcessed = processedFieldNames.has(key.toLowerCase());
+
+          if (hasLookupConfig && !isAlreadyProcessed) {
+            logger.info(
+              `Campo lookup encontrado en datos: ${key} = ${dataForProcessing[key]}`
+            );
+            return true;
+          }
+
+          return false;
+        }
+      );
+
+      logger.info(
+        `Campos de lookup encontrados en datos: ${lookupFieldsFromData.join(
+          ", "
+        )}`
+      );
+
+      // Agregar estos campos a la inserción
+      for (const lookupField of lookupFieldsFromData) {
+        const value = dataForProcessing[lookupField];
+        if (value !== null && value !== undefined) {
+          targetData[lookupField] = value;
+          targetFields.push(lookupField);
+          targetValues.push(`@${lookupField}`);
+          processedFieldNames.add(lookupField.toLowerCase());
+
+          logger.info(
+            `Campo lookup agregado para inserción: ${lookupField} = ${value}`
+          );
+        } else {
+          logger.warn(`Campo lookup con valor nulo omitido: ${lookupField}`);
+        }
+      }
+    }
+
     // Log final de campos a insertar
     logger.error(
       `============ RESUMEN FINAL PARA ${tableConfig.targetTable} ============`
@@ -1676,6 +1728,21 @@ class DynamicTransferService {
     if (promotionFieldsInTarget.length > 0) {
       logger.error(
         `CAMPOS DE PROMOCIÓN A INSERTAR: ${promotionFieldsInTarget.join(", ")}`
+      );
+    }
+
+    // Identificar campos de lookup
+    const lookupFieldsInTarget = targetFields.filter((field) => {
+      return tableConfig.fieldMappings.some(
+        (fm) => fm.lookupFromTarget && fm.targetField === field
+      );
+    });
+
+    if (lookupFieldsInTarget.length > 0) {
+      logger.error(
+        `CAMPOS DE LOOKUP A INSERTAR: ${lookupFieldsInTarget
+          .map((field) => `${field}=${targetData[field]}`)
+          .join(", ")}`
       );
     }
 
