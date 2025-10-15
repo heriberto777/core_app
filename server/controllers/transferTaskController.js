@@ -1144,12 +1144,17 @@ async function insertLoadsDetail(req, res) {
       Unit_Type: record.Unit_Measure,
       Code_Warehouse_Sou: bodega,
       Code_Route: route,
-      Source_Create: null,
+      Source_Create: 0,
       Transfer_status: "1",
       Status_SAP: null,
       Code_Unit_Org: "CATELLI",
       Code_Sales_Org: "CATELLI",
     }));
+
+      logger.info("Datos modificados para inserción:", {
+        sample: modifiedData.slice(0, 200), // Mostrar solo los primeros 3 registros como muestra
+        totalRecords: modifiedData.length,
+      });
 
     // Ejecutar la inserción en lotes con SSE
     const result = await insertInBatchesSSE(task._id, modifiedData, 100);
@@ -1406,7 +1411,7 @@ const getVendedores = async (req, res) => {
       // Consulta para obtener los vendedores y sus bodegas asignadas
       const query = `
        SELECT VENDEDOR, NOMBRE, U_BODEGA
-       FROM CATELLI.VENDEDOR 
+       FROM CATELLI.VENDEDOR
        WHERE ACTIVO = 'S' and U_ESVENDEDOR = 'Re'
        ORDER BY VENDEDOR
      `;
