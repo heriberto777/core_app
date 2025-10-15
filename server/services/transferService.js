@@ -1390,7 +1390,7 @@ class TransferService {
 
         // CORREGIDO: Usar targetTableName y targetConnection
         const keysQuery = `
-        SELECT DISTINCT ${mergeKeys.map((k) => `[${k}]`).join(", ")} 
+        SELECT DISTINCT ${mergeKeys.map((k) => `[${k}]`).join(", ")}
         FROM ${targetTableName} WITH (NOLOCK)
       `;
 
@@ -1501,9 +1501,9 @@ class TransferService {
 
                   // CORREGIDO: Usar conexión correcta
                   const lengthQuery = `
-                  SELECT CHARACTER_MAXIMUM_LENGTH 
-                  FROM INFORMATION_SCHEMA.COLUMNS 
-                  WHERE TABLE_NAME = '${tableNameOnly}' 
+                  SELECT CHARACTER_MAXIMUM_LENGTH
+                  FROM INFORMATION_SCHEMA.COLUMNS
+                  WHERE TABLE_NAME = '${tableNameOnly}'
                     AND COLUMN_NAME = '${column}'
                 `;
                   const lengthResult = await SqlService.query(
@@ -1581,7 +1581,7 @@ class TransferService {
                 targetConnection, // Conexión correcta según tipo
                 targetTableName, // Nombre de tabla correcto
                 validatedRecord,
-                connections.columnTypes
+                columnTypes
               );
 
               const rowsAffected = insertResult?.rowsAffected || 0;
@@ -1653,7 +1653,7 @@ class TransferService {
                       : connections.server2,
                     targetTableName,
                     validatedRecord,
-                    connections.columnTypes
+                    columnTypes
                   );
 
                   const rowsAffected = retryResult?.rowsAffected || 0;
@@ -1759,7 +1759,7 @@ class TransferService {
                     : connections.server2,
                   targetTableName,
                   validatedRecord,
-                  connections.columnTypes
+                  columnTypes
                 );
 
                 const rowsAffected = retryResult?.rowsAffected || 0;
@@ -2876,9 +2876,9 @@ class TransferService {
                 } else {
                   // Consultar longitud máxima de la columna
                   const lengthQuery = `
-                  SELECT CHARACTER_MAXIMUM_LENGTH 
-                  FROM INFORMATION_SCHEMA.COLUMNS 
-                  WHERE TABLE_NAME = '${task.name}' 
+                  SELECT CHARACTER_MAXIMUM_LENGTH
+                  FROM INFORMATION_SCHEMA.COLUMNS
+                  WHERE TABLE_NAME = '${task.name}'
                     AND COLUMN_NAME = '${column}'
                 `;
                   const lengthResult = await SqlService.query(
