@@ -781,7 +781,7 @@ class SqlService {
 
       // Registrar detalles del error para diagnóstico
       logger.error(
-        `[${queryId}] SQL problemático: ${sql.substring(0, 200)}...`
+        `[${queryId}] SQL problemático: ${sql.substring(0, 800)}...`
       );
       logger.error(
         `[${queryId}] Parámetros problemáticos: ${JSON.stringify(params)}`
