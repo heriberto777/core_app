@@ -136,6 +136,7 @@ app.use(`/api/${API_VERSION}/modules`, require("./routes/moduleRoutes"));
 app.use(`/api/${API_VERSION}/task`, require("./routes/transferTaskRoutes"));
 app.use(`/api/${API_VERSION}/users`, require("./routes/userRoutes"));
 app.use(`/api/${API_VERSION}/config`, require("./routes/dbRoutes"));
+app.use(`/api/${API_VERSION}/loads`, require("./routes/loadsRoutes"));
 app.use(
   `/api/${API_VERSION}/email-recipients`,
   require("./routes/emailRecipientRoutes")
