@@ -17,5 +17,14 @@ build/              # Excluye la carpeta de construcción
 *.swp               # Archivos temporales de Vim
 
 
-/server/logs/
-/server/node_modules/ 
+server/logs/       # no cargas los logs
+server/node_modules/ #no carga modules
+server/logs/combined.log
+server/logs/error.log
+
+app/node_modules/ #no carga modules
+#app/core_app/node_modules/ #no carga modules
+app/build/ #no carga modules
+app/dist/ #no carga modules
+
+server/logs/*.log
