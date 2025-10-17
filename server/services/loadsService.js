@@ -343,15 +343,44 @@ class LoadsService {
    */
   static async processOrderLoad(selectedPedidos, deliveryPersonCode, userId) {
     try {
-      // Obtener información del repartidor
-      const deliveryPerson = await DeliveryPerson.findOne({
-        code: deliveryPersonCode,
-        isActive: true,
-      });
+      // ⭐ OBTENER INFORMACIÓN DEL REPARTIDOR DESDE SQL SERVER ⭐
+      const deliveryPerson = await withConnection(
+        "server1",
+        async (connection) => {
+          const query = `
+        SELECT
+          v.VENDEDOR as code,
+          v.NOMBRE as name,
+          v.ACTIVO,
+          v.U_BODEGA as assignedWarehouse,
+          v.U_ESVENDEDOR as isVendedor
+        FROM CATELLI.VENDEDOR v
+        WHERE v.VENDEDOR = @deliveryPersonCode
+          AND v.ACTIVO = 'S'
+          AND v.U_ESVENDEDOR = 'Re'
+      `;
+
+          const result = await SqlService.query(connection, query, {
+            deliveryPersonCode: deliveryPersonCode,
+          });
+
+          if (!result.recordset || result.recordset.length === 0) {
+            return null;
+          }
+
+          return result.recordset[0];
+        }
+      );
 
       if (!deliveryPerson) {
-        throw new Error("Repartidor no encontrado o inactivo");
+        throw new Error(
+          `Repartidor '${deliveryPersonCode}' no encontrado o inactivo. Verifique que sea un repartidor válido (U_ESVENDEDOR = 'Re')`
+        );
       }
+
+      console.log(
+        `✅ Repartidor encontrado: ${deliveryPerson.name} - Bodega: ${deliveryPerson.assignedWarehouse}`
+      );
 
       // Generar nuevo loadId
       const loadId = await this.generateLoadId();
