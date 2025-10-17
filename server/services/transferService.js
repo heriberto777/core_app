@@ -10,7 +10,7 @@ const {
   sendCriticalErrorEmail,
 } = require("./emailService");
 const TaskTracker = require("./TaskTracker");
-const RetryService = require("./RetryService");
+const {RetryService} = require("./RetryService");
 const MemoryManager = require("./MemoryManager");
 const Telemetry = require("./Telemetry");
 const TaskExecution = require("../models/taskExecutionModel");
