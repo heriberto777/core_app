@@ -87,22 +87,23 @@ class LoadsController {
   }
 
   /**
-   * Obtiene lista de repartidores con sus bodegas asignadas
+   * Obtiene vendedores que actúan como repartidores
    */
   static async getDeliveryPersons(req, res) {
     try {
-      const result = await LoadsService.getDeliveryPersons();
+      // Usar el mismo método que getSellers
+      const result = await LoadsService.getSellers();
 
       res.json({
         success: true,
-        message: "Repartidores obtenidos correctamente",
+        message: "Vendedores/Repartidores obtenidos correctamente",
         data: result.data,
       });
     } catch (error) {
       logger.error("Error en getDeliveryPersons:", error);
       res.status(500).json({
         success: false,
-        message: "Error al obtener repartidores",
+        message: "Error al obtener vendedores/repartidores",
         error: error.message,
       });
     }

@@ -1,9 +1,10 @@
 import { ENV } from "../index";
 
 class LoadsApi {
-  constructor() {
-    this.baseApi = ENV.API_BASE_URL;
-  }
+  baseApi = ENV.BASE_API;
+  // constructor() {
+  //   this.baseApi = ENV.BASE_API;
+  // }
 
   /**
    * Obtiene pedidos pendientes de cargar
@@ -21,7 +22,7 @@ class LoadsApi {
       if (filters.includeLoaded)
         queryParams.append("includeLoaded", filters.includeLoaded);
 
-      const url = `${this.baseApi}/loads/pending-orders${
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/pending-orders${
         queryParams.toString() ? `?${queryParams.toString()}` : ""
       }`;
 
@@ -45,7 +46,7 @@ class LoadsApi {
    */
   async getOrderDetails(accessToken, pedidoId) {
     try {
-      const url = `${this.baseApi}/loads/order-details/${pedidoId}`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/order-details/${pedidoId}`;
 
       const response = await fetch(url, {
         headers: {
@@ -67,7 +68,7 @@ class LoadsApi {
    */
   async getSellers(accessToken) {
     try {
-      const url = `${this.baseApi}/loads/sellers`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/sellers`;
 
       const response = await fetch(url, {
         headers: {
@@ -89,7 +90,7 @@ class LoadsApi {
    */
   async getDeliveryPersons(accessToken) {
     try {
-      const url = `${this.baseApi}/loads/delivery-persons`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/sellers`;
 
       const response = await fetch(url, {
         headers: {
@@ -109,9 +110,9 @@ class LoadsApi {
   /**
    * Procesa la carga de pedidos seleccionados
    */
-  async processOrderLoad(accessToken, selectedPedidos, deliveryPersonCode) {
+  async processOrderLoad(accessToken, selectedPedidos, vendedorCode) {
     try {
-      const url = `${this.baseApi}/loads/process-load`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/process-load`;
 
       const response = await fetch(url, {
         method: "POST",
@@ -121,7 +122,7 @@ class LoadsApi {
         },
         body: JSON.stringify({
           selectedPedidos,
-          deliveryPersonCode,
+          deliveryPersonCode: vendedorCode,
         }),
       });
 
@@ -139,7 +140,7 @@ class LoadsApi {
    */
   async cancelOrders(accessToken, selectedPedidos, reason) {
     try {
-      const url = `${this.baseApi}/loads/cancel-orders`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/cancel-orders`;
 
       const response = await fetch(url, {
         method: "POST",
@@ -167,7 +168,7 @@ class LoadsApi {
    */
   async removeOrderLines(accessToken, pedidoId, lineasToRemove) {
     try {
-      const url = `${this.baseApi}/loads/order-lines/${pedidoId}`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/order-lines/${pedidoId}`;
 
       const response = await fetch(url, {
         method: "DELETE",
@@ -189,30 +190,7 @@ class LoadsApi {
     }
   }
 
-  /**
-   * Crea un nuevo repartidor
-   */
-  async createDeliveryPerson(accessToken, deliveryPersonData) {
-    try {
-      const url = `${this.baseApi}/loads/delivery-persons`;
 
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify(deliveryPersonData),
-      });
-
-      const result = await response.json();
-      if (!response.ok) throw result;
-      return result;
-    } catch (error) {
-      console.error("Error al crear repartidor:", error);
-      throw error;
-    }
-  }
 
   /**
    * Obtiene historial de cargas
@@ -228,7 +206,7 @@ class LoadsApi {
       if (filters.dateFrom) queryParams.append("dateFrom", filters.dateFrom);
       if (filters.dateTo) queryParams.append("dateTo", filters.dateTo);
 
-      const url = `${this.baseApi}/loads/history${
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/history${
         queryParams.toString() ? `?${queryParams.toString()}` : ""
       }`;
 
@@ -252,7 +230,7 @@ class LoadsApi {
    */
   async processInventoryTransfer(accessToken, loadId, bodegaDestino) {
     try {
-      const url = `${this.baseApi}/loads/inventory-transfer`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/inventory-transfer`;
 
       const response = await fetch(url, {
         method: "POST",

@@ -1,5 +1,5 @@
 import styled from "styled-components";
-import { FilterInput, LoadsButton } from "../../index";
+import { FilterInput, LoadsButton, MultiSelectInput } from "../../index";
 import { FaFilter, FaSync, FaSearch } from "react-icons/fa";
 
 const Panel = styled.div`
@@ -100,38 +100,48 @@ const SearchInput = styled.input`
   }
 `;
 
+const SearchButton = styled(LoadsButton)`
+  min-width: 120px;
+`;
+
 export function FiltersPanel({
   filters,
   onFiltersChange,
   onReset,
   onRefresh,
+  onSearch,
   search,
   onSearchChange,
   sellers = [],
-  loading = false
+  loading = false,
 }) {
   const handleFilterChange = (key, value) => {
     onFiltersChange({
       ...filters,
-      [key]: value
+      [key]: value,
     });
   };
 
   const transferStatusOptions = [
-    { value: 'all', label: 'Todos los estados' },
-    { value: 'pending', label: 'Pendientes' },
-    { value: 'processing', label: 'Procesando' },
-    { value: 'completed', label: 'Completados' },
-    { value: 'cancelled', label: 'Cancelados' }
+    { value: "all", label: "Todos los estados" },
+    { value: "pending", label: "Pendientes" },
+    { value: "processing", label: "Procesando" },
+    { value: "completed", label: "Completados" },
+    { value: "cancelled", label: "Cancelados" },
   ];
 
-  const sellerOptions = [
-    { value: 'all', label: 'Todos los vendedores' },
-    ...sellers.map(seller => ({
-      value: seller.VENDEDOR,
-      label: seller.NOMBRE
-    }))
-  ];
+
+
+  // Map sellers to options for the select input
+ const sellerOptions = [
+   { value: "all", label: "Todos los vendedores" },
+   ...sellers
+     .filter((seller) => seller.isVendedor === "Si")
+     .map((seller) => ({
+       value: seller.code,
+       label: seller.name,
+     })),
+ ];
 
   return (
     <Panel>
@@ -145,29 +155,31 @@ export function FiltersPanel({
           label="Fecha Desde"
           type="date"
           value={filters.dateFrom}
-          onChange={(value) => handleFilterChange('dateFrom', value)}
+          onChange={(value) => handleFilterChange("dateFrom", value)}
         />
 
         <FilterInput
           label="Fecha Hasta"
           type="date"
           value={filters.dateTo}
-          onChange={(value) => handleFilterChange('dateTo', value)}
+          onChange={(value) => handleFilterChange("dateTo", value)}
         />
 
-        <FilterInput
-          label="Vendedor"
-          type="select"
-          value={filters.seller}
-          onChange={(value) => handleFilterChange('seller', value)}
+        <MultiSelectInput
+          label="Vendedores"
+          value={filters.sellers || []} // Cambiar a array
+          onChange={(value) => handleFilterChange("sellers", value)}
           options={sellerOptions}
+          placeholder="Todos los vendedores"
+          showTags={true}
+          maxTagsShown={2}
         />
 
         <FilterInput
           label="Estado"
           type="select"
           value={filters.transferStatus}
-          onChange={(value) => handleFilterChange('transferStatus', value)}
+          onChange={(value) => handleFilterChange("transferStatus", value)}
           options={transferStatusOptions}
         />
       </FiltersGrid>
@@ -182,19 +194,15 @@ export function FiltersPanel({
           />
         </SearchContainer>
 
-        <LoadsButton
-          variant="secondary"
-          onClick={onReset}
-          disabled={loading}
-        >
+        <SearchButton variant="primary" onClick={onSearch} loading={loading}>
+          <FaSearch /> Buscar
+        </SearchButton>
+
+        <LoadsButton variant="secondary" onClick={onReset} disabled={loading}>
           Limpiar
         </LoadsButton>
 
-        <LoadsButton
-          variant="primary"
-          onClick={onRefresh}
-          loading={loading}
-        >
+        <LoadsButton variant="secondary" onClick={onRefresh} loading={loading}>
           <FaSync /> Actualizar
         </LoadsButton>
       </ActionsRow>

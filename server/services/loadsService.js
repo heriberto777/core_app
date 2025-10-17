@@ -138,7 +138,7 @@ class LoadsService {
             SUM(Cantidad) as TOTAL_CANTIDAD,
             MIN(BODEGA) as BODEGA_PRINCIPAL,
             U_Code_Load,
-            RUBRO4,
+            RUBRO5,
             'pending' as TRANSFER_STATUS
           FROM Calc
           GROUP BY PEDIDO, CLIENTE, FECHA_PEDIDO, VENDEDOR, NOMBRE_VENDEDOR, U_Code_Load, RUBRO5
@@ -294,14 +294,17 @@ class LoadsService {
     return await withConnection("server1", async (connection) => {
       try {
         const query = `
-          SELECT DISTINCT
-            v.VENDEDOR,
-            v.NOMBRE,
-            v.ACTIVO
-          FROM CATELLI.VENDEDOR v
-          WHERE v.ACTIVO = 'S'
-          ORDER BY v.NOMBRE
-        `;
+        SELECT DISTINCT
+        v.VENDEDOR as code,
+        v.NOMBRE as name,
+        v.ACTIVO,
+        v.U_BODEGA as assignedWarehouse,
+        v.U_ESVENDEDOR as isVendedor,
+        'S' as isActive
+      FROM CATELLI.VENDEDOR v
+      WHERE v.ACTIVO = 'S'
+      ORDER BY v.NOMBRE
+      `;
 
         const result = await SqlService.query(connection, query);
 

@@ -20,7 +20,8 @@ import {
   FaSync,
   FaTruck,
   FaExclamationTriangle,
-  FaCheckCircle
+  FaCheckCircle,
+  FaSearch,
 } from "react-icons/fa";
 import Swal from "sweetalert2";
 import { Helmet } from "react-helmet-async";
@@ -204,27 +205,48 @@ const LoadingOverlay = styled.div`
   font-size: 16px;
 `;
 
+const NoDataMessage = styled.div`
+  text-align: center;
+  padding: 60px 20px;
+  color: ${(props) => props.theme.textSecondary};
+  background: ${(props) => props.theme.cardBg};
+  border-radius: 8px;
+  border: 1px solid ${(props) => props.theme.border};
+
+  h3 {
+    margin: 0 0 12px 0;
+    color: ${(props) => props.theme.text};
+  }
+
+  p {
+    margin: 0 0 20px 0;
+    line-height: 1.5;
+  }
+`;
+
 export function LoadsManagement() {
   const { accessToken, user } = useAuth();
   const { hasPermission } = usePermissions();
 
   // Estados principales
-  const [selectedOrders, setSelectedOrders] = useState([]);
+  const[selectedOrders, setSelectedOrders] = useState([]);
   const [search, setSearch] = useState("");
   const [showDetailsModal, setShowDetailsModal] = useState(false);
   const [showDeliverySelector, setShowDeliverySelector] = useState(false);
   const [selectedOrderForDetails, setSelectedOrderForDetails] = useState(null);
   const [orderDetails, setOrderDetails] = useState([]);
   const [processing, setProcessing] = useState(false);
+  const [hasSearched, setHasSearched] = useState(false);
 
   // Estados para filtros
   const [filters, setFilters] = useState({
     dateFrom: new Date(new Date().setDate(new Date().getDate() - 30))
-      .toISOString().split('T')[0],
-    dateTo: new Date().toISOString().split('T')[0],
-    seller: 'all',
-    transferStatus: 'all',
-    includeLoaded: false
+      .toISOString()
+      .split("T")[0],
+    dateTo: new Date().toISOString().split("T")[0],
+    seller: "all",
+    transferStatus: "all",
+    includeLoaded: false,
   });
 
   // Verificar permisos
@@ -234,52 +256,56 @@ export function LoadsManagement() {
   const canManage = hasPermission('loads', 'manage');
 
   // Callbacks para fetch
-  const fetchOrdersCallback = useCallback(async () => {
-    if (!canRead) return { data: [], totalRecords: 0 };
-    return await loadsApi.getPendingOrders(accessToken, filters);
-  }, [accessToken, filters, canRead]);
+   const fetchOrdersCallback = useCallback(async () => {
+     if (!canRead) return { data: [], totalRecords: 0 };
+     return await loadsApi.getPendingOrders(accessToken, filters);
+   }, [accessToken, filters, canRead]);
 
-  const fetchSellersCallback = useCallback(async () => {
-    if (!canRead) return { data: [] };
-    return await loadsApi.getSellers(accessToken);
-  }, [accessToken, canRead]);
+ const fetchSellersCallback = useCallback(async () => {
+   if (!canRead) return { data: [] };
+   return await loadsApi.getSellers(accessToken);
+ }, [accessToken, canRead]);
 
-  const fetchDeliveryPersonsCallback = useCallback(async () => {
-    if (!canRead) return { data: [] };
-    return await loadsApi.getDeliveryPersons(accessToken);
-  }, [accessToken, canRead]);
+ const fetchDeliveryPersonsCallback = useCallback(async () => {
+   if (!canRead) return { data: [] };
+   return await loadsApi.getDeliveryPersons(accessToken);
+ }, [accessToken, canRead]);
 
   // Fetch de datos
   const {
     data: ordersResponse,
     loading: ordersLoading,
     error: ordersError,
-    refetch: fetchOrders
-  } = useFetchData(fetchOrdersCallback, [accessToken, filters], {
-    autoRefresh: true,
-    refreshInterval: 30000,
-    enableCache: true,
-    cacheTime: 60000,
-    initialData: { data: [], totalRecords: 0 }
-  });
+    refetch: fetchOrders,
+  } = useFetchData(
+    fetchOrdersCallback,
+    [], // Sin dependencias para evitar auto-trigger
+    {
+      autoRefresh: false, // Sin auto-refresh
+      manual: true, // Solo manual
+      enableCache: false, // Sin cache para datos frescos
+      initialData: { data: [], totalRecords: 0 },
+    }
+  );
 
-  const {
-    data: sellersResponse,
-    loading: sellersLoading
-  } = useFetchData(fetchSellersCallback, [accessToken], {
-    enableCache: true,
-    cacheTime: 300000,
-    initialData: { data: [] }
-  });
+  const { data: sellersResponse, loading: sellersLoading } = useFetchData(
+    fetchSellersCallback,
+    [accessToken],
+    {
+      enableCache: true,
+      cacheTime: 600000, // 10 minutos
+      initialData: { data: [] },
+    }
+  );
 
   const {
     data: deliveryPersonsResponse,
     loading: deliveryPersonsLoading,
-    refetch: fetchDeliveryPersons
+    refetch: fetchDeliveryPersons,
   } = useFetchData(fetchDeliveryPersonsCallback, [accessToken], {
     enableCache: true,
-    cacheTime: 300000,
-    initialData: { data: [] }
+    cacheTime: 600000, // 10 minutos
+    initialData: { data: [] },
   });
 
   // Datos procesados
@@ -288,16 +314,17 @@ export function LoadsManagement() {
   const deliveryPersons = deliveryPersonsResponse?.data || [];
 
   // Filtrar órdenes por búsqueda
-  const filteredOrders = useMemo(() => {
-    if (!search.trim()) return orders;
+   const filteredOrders = useMemo(() => {
+     if (!search.trim()) return orders;
 
-    const searchLower = search.toLowerCase();
-    return orders.filter(order =>
-      order.pedido.toString().includes(searchLower) ||
-      order.cliente.toLowerCase().includes(searchLower) ||
-      order.nombreVendedor.toLowerCase().includes(searchLower)
-    );
-  }, [orders, search]);
+     const searchLower = search.toLowerCase();
+     return orders.filter(
+       (order) =>
+         order.pedido.toString().includes(searchLower) ||
+         order.cliente.toLowerCase().includes(searchLower) ||
+         order.nombreVendedor.toLowerCase().includes(searchLower)
+     );
+   }, [orders, search]);
 
   // Estadísticas
   const stats = useMemo(() => {
@@ -330,35 +357,43 @@ export function LoadsManagement() {
   const handleReset = () => {
     setFilters({
       dateFrom: new Date(new Date().setDate(new Date().getDate() - 30))
-        .toISOString().split('T')[0],
-      dateTo: new Date().toISOString().split('T')[0],
-      seller: 'all',
-      transferStatus: 'all',
-      includeLoaded: false
+        .toISOString()
+        .split("T")[0],
+      dateTo: new Date().toISOString().split("T")[0],
+      seller: "all",
+      transferStatus: "all",
+      includeLoaded: false,
     });
     setSearch("");
     setSelectedOrders([]);
+    setHasSearched(false);
   };
 
-  const handleViewOrder = async (orderId) => {
-    try {
-      setSelectedOrderForDetails(orderId);
-      setOrderDetails([]);
-      setShowDetailsModal(true);
 
-      const response = await loadsApi.getOrderDetails(accessToken, orderId);
-      if (response.success) {
-        setOrderDetails(response.data);
-      }
-    } catch (error) {
-      console.error('Error al cargar detalles:', error);
-      Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: 'No se pudieron cargar los detalles del pedido'
-      });
-    }
-  };
+  const handleSearch = useCallback(async () => {
+    setHasSearched(true);
+    await fetchOrders();
+  }, [fetchOrders]);
+
+   const handleViewOrder = async (orderId) => {
+     try {
+       setSelectedOrderForDetails(orderId);
+       setOrderDetails([]);
+       setShowDetailsModal(true);
+
+       const response = await loadsApi.getOrderDetails(accessToken, orderId);
+       if (response.success) {
+         setOrderDetails(response.data);
+       }
+     } catch (error) {
+       console.error("Error al cargar detalles:", error);
+       Swal.fire({
+         icon: "error",
+         title: "Error",
+         text: "No se pudieron cargar los detalles del pedido",
+       });
+     }
+   };
 
   const handleEditOrder = (orderId) => {
     handleViewOrder(orderId);
@@ -366,36 +401,40 @@ export function LoadsManagement() {
 
   const handleCancelOrder = async (orderId) => {
     const result = await Swal.fire({
-      title: '¿Cancelar pedido?',
+      title: "¿Cancelar pedido?",
       text: `¿Estás seguro de que deseas cancelar el pedido #${orderId}?`,
-      icon: 'warning',
+      icon: "warning",
       showCancelButton: true,
-      confirmButtonColor: '#ef4444',
-      cancelButtonColor: '#6b7280',
-      confirmButtonText: 'Sí, cancelar',
-      cancelButtonText: 'No'
+      confirmButtonColor: "#ef4444",
+      cancelButtonColor: "#6b7280",
+      confirmButtonText: "Sí, cancelar",
+      cancelButtonText: "No",
     });
 
     if (result.isConfirmed) {
       try {
         setProcessing(true);
-        await loadsApi.cancelOrders(accessToken, [orderId], 'Cancelado manualmente');
+        await loadsApi.cancelOrders(
+          accessToken,
+          [orderId],
+          "Cancelado manualmente"
+        );
 
         Swal.fire({
-          icon: 'success',
-          title: 'Pedido cancelado',
-          text: 'El pedido ha sido cancelado correctamente',
-          timer: 2000
+          icon: "success",
+          title: "Pedido cancelado",
+          text: "El pedido ha sido cancelado correctamente",
+          timer: 2000,
         });
 
         fetchOrders();
-        setSelectedOrders(prev => prev.filter(id => id !== orderId));
+        setSelectedOrders((prev) => prev.filter((id) => id !== orderId));
       } catch (error) {
-        console.error('Error al cancelar pedido:', error);
+        console.error("Error al cancelar pedido:", error);
         Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: error.message || 'No se pudo cancelar el pedido'
+          icon: "error",
+          title: "Error",
+          text: error.message || "No se pudo cancelar el pedido",
         });
       } finally {
         setProcessing(false);
@@ -465,8 +504,8 @@ export function LoadsManagement() {
 
       if (response.success) {
         Swal.fire({
-          icon: 'success',
-          title: '¡Carga procesada!',
+          icon: "success",
+          title: "¡Carga procesada!",
           html: `
             <div style="text-align: left; margin: 16px 0;">
               <p><strong>Load ID:</strong> ${response.data.loadId}</p>
@@ -475,112 +514,57 @@ export function LoadsManagement() {
               <p><strong>Pedidos procesados:</strong> ${response.data.totalOrders}</p>
             </div>
           `,
-          confirmButtonText: 'Entendido'
+          confirmButtonText: "Entendido",
         });
 
         fetchOrders();
         setSelectedOrders([]);
       }
     } catch (error) {
-      console.error('Error al procesar carga:', error);
+      console.error("Error al procesar carga:", error);
       Swal.fire({
-        icon: 'error',
-        title: 'Error al procesar carga',
-        text: error.message || 'No se pudo procesar la carga'
+        icon: "error",
+        title: "Error al procesar carga",
+        text: error.message || "No se pudo procesar la carga",
       });
     } finally {
       setProcessing(false);
     }
   };
 
-  const handleCreateDeliveryPerson = async () => {
-    const { value: formValues } = await Swal.fire({
-      title: 'Nuevo Repartidor',
-      html: `
-        <div style="text-align: left;">
-          <div style="margin-bottom: 15px;">
-            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Código:</label>
-            <input id="code" class="swal2-input" placeholder="Ej: REP001" style="margin: 0;">
-          </div>
-          <div style="margin-bottom: 15px;">
-            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Nombre:</label>
-            <input id="name" class="swal2-input" placeholder="Nombre completo" style="margin: 0;">
-          </div>
-          <div style="margin-bottom: 15px;">
-            <label style="display: block; margin-bottom: 5px; font-weight: 500;">Bodega Asignada:</label>
-            <input id="warehouse" class="swal2-input" placeholder="Código de bodega" style="margin: 0;">
-          </div>
-        </div>
-      `,
-      focusConfirm: false,
-      showCancelButton: true,
-      confirmButtonText: 'Crear',
-      cancelButtonText: 'Cancelar',
-      preConfirm: () => {
-        const code = document.getElementById('code').value.trim();
-        const name = document.getElementById('name').value.trim();
-        const warehouse = document.getElementById('warehouse').value.trim();
-
-        if (!code || !name || !warehouse) {
-          Swal.showValidationMessage('Todos los campos son requeridos');
-          return false;
-        }
-
-        return { code, name, assignedWarehouse: warehouse };
-      }
-    });
-
-    if (formValues) {
-      try {
-        setProcessing(true);
-        await loadsApi.createDeliveryPerson(accessToken, formValues);
-
-        Swal.fire({
-          icon: 'success',
-          title: 'Repartidor creado',
-          text: 'El repartidor ha sido creado correctamente',
-          timer: 2000
-        });
-
-        fetchDeliveryPersons();
-      } catch (error) {
-        console.error('Error al crear repartidor:', error);
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: error.message || 'No se pudo crear el repartidor'
-        });
-      } finally {
-        setProcessing(false);
-      }
-    }
-  };
 
   const handleRemoveLines = async (linesToRemove) => {
     try {
       setProcessing(true);
-      await loadsApi.removeOrderLines(accessToken, selectedOrderForDetails, linesToRemove);
+      await loadsApi.removeOrderLines(
+        accessToken,
+        selectedOrderForDetails,
+        linesToRemove
+      );
 
       Swal.fire({
-        icon: 'success',
-        title: 'Líneas eliminadas',
+        icon: "success",
+        title: "Líneas eliminadas",
         text: `${linesToRemove.length} líneas han sido eliminadas del pedido`,
-        timer: 2000
+        timer: 2000,
       });
 
       // Recargar detalles
-      const response = await loadsApi.getOrderDetails(accessToken, selectedOrderForDetails);
+      const response = await loadsApi.getOrderDetails(
+        accessToken,
+        selectedOrderForDetails
+      );
       if (response.success) {
         setOrderDetails(response.data);
       }
 
       fetchOrders();
     } catch (error) {
-      console.error('Error al eliminar líneas:', error);
+      console.error("Error al eliminar líneas:", error);
       Swal.fire({
-        icon: 'error',
-        title: 'Error',
-        text: error.message || 'No se pudieron eliminar las líneas'
+        icon: "error",
+        title: "Error",
+        text: error.message || "No se pudieron eliminar las líneas",
       });
     } finally {
       setProcessing(false);
@@ -588,10 +572,10 @@ export function LoadsManagement() {
   };
 
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('es-DO', {
-      style: 'currency',
-      currency: 'DOP',
-      minimumFractionDigits: 0
+    return new Intl.NumberFormat("es-DO", {
+      style: "currency",
+      currency: "DOP",
+      minimumFractionDigits: 0,
     }).format(amount || 0);
   };
 
@@ -599,7 +583,7 @@ export function LoadsManagement() {
   if (!canRead) {
     return (
       <Container>
-        <div style={{ textAlign: 'center', padding: '60px 20px' }}>
+        <div style={{ textAlign: "center", padding: "60px 20px" }}>
           <FaExclamationTriangle size={48} color="#ef4444" />
           <h2>Acceso Denegado</h2>
           <p>No tienes permisos para acceder a la gestión de cargas.</p>
@@ -608,29 +592,33 @@ export function LoadsManagement() {
     );
   }
 
+
+
   return (
     <>
       <Helmet>
         <title>Gestión de Cargas - Sistema ERP</title>
-        <meta name="description" content="Gestión y procesamiento de cargas de pedidos" />
+        <meta
+          name="description"
+          content="Gestión y procesamiento de cargas de pedidos"
+        />
       </Helmet>
-
-      <Header />
 
       <Container>
         <PageHeader>
           <HeaderInfo>
             <PageTitle>Gestión de Cargas</PageTitle>
             <PageDescription>
-              Administra y procesa las cargas de pedidos pendientes.
-              Selecciona pedidos, asigna repartidores y gestiona el proceso de distribución.
+              Administra y procesa las cargas de pedidos pendientes. Selecciona
+              pedidos, asigna repartidores y gestiona el proceso de
+              distribución.
             </PageDescription>
           </HeaderInfo>
           <HeaderActions>
             {canManage && (
               <LoadsButton
                 variant="secondary"
-                onClick={() => window.location.href = '/loads/history'}
+                onClick={() => (window.location.href = "/loads/history")}
               >
                 <FaHistory /> Historial
               </LoadsButton>
@@ -659,7 +647,9 @@ export function LoadsManagement() {
             <StatLabel>Completados</StatLabel>
           </StatCard>
           <StatCard>
-            <StatValue color="#6366f1">{formatCurrency(stats.totalAmount)}</StatValue>
+            <StatValue color="#6366f1">
+              {formatCurrency(stats.totalAmount)}
+            </StatValue>
             <StatLabel>Valor Total</StatLabel>
           </StatCard>
         </StatsGrid>
@@ -670,25 +660,43 @@ export function LoadsManagement() {
             onFiltersChange={handleFiltersChange}
             onReset={handleReset}
             onRefresh={fetchOrders}
+            onSearch={handleSearch} // NUEVO: Buscar manual
             search={search}
             onSearchChange={setSearch}
             sellers={sellers}
             loading={ordersLoading}
           />
 
-          <OrdersList
-            orders={filteredOrders}
-            selectedOrders={selectedOrders}
-            onOrderSelect={handleOrderSelect}
-            onSelectAll={handleSelectAll}
-            onView={handleViewOrder}
-            onEdit={canUpdate ? handleEditOrder : undefined}
-            onCancel={canUpdate ? handleCancelOrder : undefined}
-            onLoad={canCreate ? handleLoadOrder : undefined}
-            onBulkLoad={canCreate ? handleBulkLoad : undefined}
-            onBulkCancel={canUpdate ? handleBulkCancel : undefined}
-            loading={ordersLoading}
-          />
+          {!hasSearched ? (
+            <NoDataMessage>
+              <h3>Bienvenido a la Gestión de Cargas</h3>
+              <p>
+                Usa los filtros y haz clic en "Buscar" para ver los pedidos
+                pendientes de procesar.
+              </p>
+              <LoadsButton
+                variant="primary"
+                onClick={handleSearch}
+                loading={ordersLoading}
+              >
+                <FaSearch /> Buscar Pedidos
+              </LoadsButton>
+            </NoDataMessage>
+          ) : (
+            <OrdersList
+              orders={filteredOrders}
+              selectedOrders={selectedOrders}
+              onOrderSelect={handleOrderSelect}
+              onSelectAll={handleSelectAll}
+              onView={handleViewOrder}
+              onEdit={canUpdate ? handleEditOrder : undefined}
+              onCancel={canUpdate ? handleCancelOrder : undefined}
+              onLoad={canCreate ? handleLoadOrder : undefined}
+              onBulkLoad={canCreate ? handleBulkLoad : undefined}
+              onBulkCancel={canUpdate ? handleBulkCancel : undefined}
+              loading={ordersLoading}
+            />
+          )}
         </ContentArea>
 
         {/* Modales */}
@@ -705,20 +713,19 @@ export function LoadsManagement() {
           isOpen={showDeliverySelector}
           onClose={() => setShowDeliverySelector(false)}
           onSelect={handleDeliveryPersonSelect}
-          selectedOrders={selectedOrders.map(id =>
-            filteredOrders.find(order => order.pedido === id)
-          ).filter(Boolean)}
+          selectedOrders={selectedOrders
+            .map((id) => filteredOrders.find((order) => order.pedido === id))
+            .filter(Boolean)}
           deliveryPersons={deliveryPersons}
-          onCreateDeliveryPerson={canManage ? handleCreateDeliveryPerson : undefined}
           loading={processing}
         />
 
         {/* Overlay de procesamiento */}
         {processing && (
           <LoadingOverlay>
-            <div style={{ textAlign: 'center' }}>
-              <div style={{ marginBottom: '12px' }}>Procesando...</div>
-              <div style={{ fontSize: '14px', opacity: 0.8 }}>
+            <div style={{ textAlign: "center" }}>
+              <div style={{ marginBottom: "12px" }}>Procesando...</div>
+              <div style={{ fontSize: "14px", opacity: 0.8 }}>
                 Por favor espera mientras se completa la operación
               </div>
             </div>

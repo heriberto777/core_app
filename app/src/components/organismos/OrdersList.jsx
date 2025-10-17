@@ -1,6 +1,6 @@
 import styled from "styled-components";
 import { useState, useMemo } from "react";
-import { OrderCard, LoadsButton} from "../../index";
+import { OrderCard, LoadsButton, StatusBadge} from "../../index";
 import { FaList, FaTh, FaTable, FaTruck } from "react-icons/fa";
 
 const Container = styled.div`
