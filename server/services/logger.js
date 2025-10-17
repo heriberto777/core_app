@@ -1,4 +1,4 @@
-// services/logger.js - Versión COMPLETA con interceptores automáticos
+// services/logger.js - Versión COMPLETA con interceptores automáticos y corrección robusta
 const { createLogger, format, transports } = require("winston");
 const { combine, timestamp, printf, colorize, json } = format;
 const path = require("path");
@@ -32,7 +32,6 @@ const transactionFormat = printf(
   }) => {
     let output = `${timestamp} [${level.toUpperCase()}]`;
 
-    // Información de contexto
     if (source) output += `[${source}]`;
     if (requestId) output += `[REQ:${requestId}]`;
     if (transactionId) output += `[TXN:${transactionId}]`;
@@ -42,7 +41,6 @@ const transactionFormat = printf(
 
     output += `: ${message}`;
 
-    // ⭐ INFORMACIÓN DEL CALLER ⭐
     if (caller) {
       const fileName = path.basename(caller.fileName || "unknown");
       const lineInfo = `${fileName}:${caller.lineNumber}`;
@@ -52,34 +50,23 @@ const transactionFormat = printf(
       output += `\n🔍 Ubicación: ${lineInfo} en ${functionInfo}`;
     }
 
-    // ⭐ SUGERENCIAS AUTOMÁTICAS ⭐
     if (suggestions && Array.isArray(suggestions) && suggestions.length > 0) {
       output += `\n💡 Sugerencias:`;
-      suggestions.forEach((suggestion, index) => {
-        output += `\n   ${index + 1}. ${suggestion}`;
-      });
+      suggestions.forEach((s, i) => (output += `\n   ${i + 1}. ${s}`));
     }
 
-    // Metadata adicional
     if (metadata && Object.keys(metadata).length > 0) {
       output += `\n📊 Metadata: ${JSON.stringify(metadata, null, 2)}`;
     }
 
-    // Stack trace para errores
-    if (stack) {
-      output += `\n📚 Stack: ${stack}`;
-    }
+    if (stack) output += `\n📚 Stack: ${stack}`;
 
-    // Resto de propiedades
     const restProps = Object.keys(rest).filter(
-      (key) =>
-        !key.startsWith("Symbol(") &&
-        !["level", "message", "timestamp"].includes(key)
+      (k) => !["level", "message", "timestamp"].includes(k)
     );
-
     if (restProps.length > 0) {
       const restData = {};
-      restProps.forEach((key) => (restData[key] = rest[key]));
+      restProps.forEach((k) => (restData[k] = rest[k]));
       output += `\n🔍 Additional: ${JSON.stringify(restData, null, 2)}`;
     }
 
@@ -90,7 +77,7 @@ const transactionFormat = printf(
 // Formato JSON para archivos
 const jsonFormat = combine(timestamp(), json());
 
-// Crear transporte MongoDB con configuración completa
+// Crear transporte MongoDB
 const createMongoTransport = () => {
   try {
     if (process.env.DISABLE_MONGO_LOGS === "true") {
@@ -110,14 +97,13 @@ const createMongoTransport = () => {
 
     const mongoTransport = new MongoDBTransport({
       level: "debug",
-      silent: false,
       handleExceptions: true,
       handleRejections: true,
     });
 
-    mongoTransport.on("error", (error) => {
-      console.error("❌ Error en MongoDB Transport:", error.message);
-    });
+    mongoTransport.on("error", (err) =>
+      console.error("❌ Error en MongoDB Transport:", err.message)
+    );
 
     console.log("✅ MongoDB Transport configurado para LOG COMPLETO");
     return mongoTransport;
@@ -127,7 +113,7 @@ const createMongoTransport = () => {
   }
 };
 
-// Configurar TODOS los transportes
+// Configurar transportes
 const configureTransports = () => {
   const transportsList = [
     new transports.Console({
@@ -158,15 +144,12 @@ const configureTransports = () => {
   ];
 
   const mongoTransport = createMongoTransport();
-  if (mongoTransport) {
-    transportsList.push(mongoTransport);
-    console.log("✅ Transporte MongoDB agregado para LOG COMPLETO");
-  }
+  if (mongoTransport) transportsList.push(mongoTransport);
 
   return transportsList;
 };
 
-// Crear logger con configuración COMPLETA
+// Crear logger base
 const logger = createLogger({
   level: "debug",
   format: combine(timestamp(), transactionFormat),
@@ -182,9 +165,7 @@ const logger = createLogger({
   },
 });
 
-// ⭐ INTERCEPTORES AUTOMÁTICOS DE ERRORES ⭐
-
-// Helper para obtener información del caller
+// Obtener información del caller
 function getCaller() {
   const originalFunc = Error.prepareStackTrace;
   let callerInfo = {
@@ -197,16 +178,13 @@ function getCaller() {
     const err = new Error();
     Error.prepareStackTrace = (err, stack) => stack;
     const stack = err.stack;
-
     for (let i = 1; i < stack.length; i++) {
       const caller = stack[i];
       const fileName = caller.getFileName();
-
       if (
         fileName &&
         !fileName.includes("node_modules") &&
         !fileName.includes("logger.js") &&
-        !fileName.includes("internal/") &&
         fileName.includes("server/")
       ) {
         callerInfo = {
@@ -214,73 +192,30 @@ function getCaller() {
           lineNumber: caller.getLineNumber(),
           functionName:
             caller.getFunctionName() || caller.getMethodName() || "<anonymous>",
-          typeName: caller.getTypeName(),
         };
         break;
       }
     }
-  } catch (e) {
-    // Silencioso si falla
-  }
-
+  } catch {}
   Error.prepareStackTrace = originalFunc;
   return callerInfo;
 }
 
-// ⭐ INTERCEPTOR DE CONSOLE.ERROR ⭐
+// Interceptar console.error
 const originalConsoleError = console.error;
 console.error = function (...args) {
   originalConsoleError.apply(console, args);
-
   const errorMessage = args.join(" ");
   const caller = getCaller();
-
   logger.error(`🔍 CONSOLE ERROR INTERCEPTADO: ${errorMessage}`, {
     source: "console_error",
-    caller: caller,
-    args: args,
+    caller,
+    args,
     stack: new Error().stack,
   });
 };
 
-// ⭐ INTERCEPTOR DE REQUIRE() ⭐
-const originalRequire = Module.prototype.require;
-Module.prototype.require = function (id) {
-  try {
-    return originalRequire.apply(this, arguments);
-  } catch (error) {
-    const caller = getCaller();
-
-    if (error.code === "MODULE_NOT_FOUND") {
-      logger.error(`❌ MÓDULO NO ENCONTRADO: ${id}`, {
-        source: "require_error",
-        errorCode: error.code,
-        requestedModule: id,
-        caller: caller,
-        availablePaths: module.paths.slice(0, 3),
-        stack: error.stack,
-        suggestions: [
-          `¿Existe el archivo/módulo ${id}?`,
-          `¿La ruta es correcta?`,
-          `¿Está instalado el paquete npm?`,
-        ],
-      });
-    } else {
-      logger.error(`❌ ERROR AL CARGAR MÓDULO: ${id}`, {
-        source: "require_error",
-        errorCode: error.code,
-        requestedModule: id,
-        caller: caller,
-        errorMessage: error.message,
-        stack: error.stack,
-      });
-    }
-
-    throw error;
-  }
-};
-
-// ⭐ MÉTODO PARA CAPTURA INTELIGENTE DE ERRORES ⭐
+// Método principal de captura de errores
 logger.captureError = function (error, context = {}) {
   const caller = getCaller();
   const errorType = error.constructor.name;
@@ -289,17 +224,7 @@ logger.captureError = function (error, context = {}) {
   let errorCategory = "general_error";
   let suggestions = [];
 
-  if (
-    errorMessage.includes("Cannot read prop") ||
-    errorMessage.includes("undefined")
-  ) {
-    errorCategory = "undefined_property";
-    suggestions = [
-      "¿El objeto está correctamente inicializado?",
-      "¿Importaste todos los módulos necesarios?",
-      "¿Verificaste que la variable no sea null/undefined?",
-    ];
-  } else if (errorMessage.includes("is not a function")) {
+  if (errorMessage.includes("is not a function")) {
     errorCategory = "not_a_function";
     suggestions = [
       "¿El método existe en el objeto?",
@@ -313,321 +238,65 @@ logger.captureError = function (error, context = {}) {
       "¿La ruta relativa es correcta?",
       "¿Instalaste el paquete npm?",
     ];
-  } else if (error.code === "ECONNREFUSED" || error.code === "ETIMEDOUT") {
-    errorCategory = "connection_error";
-    suggestions = [
-      "¿El servidor de base de datos está corriendo?",
-      "¿La configuración de conexión es correcta?",
-      "¿Hay problemas de red o firewall?",
-    ];
   }
 
   this.error(`🚨 ${errorCategory.toUpperCase()}: ${errorMessage}`, {
     source: "error_capture",
-    errorType: errorType,
-    errorCategory: errorCategory,
-    caller: caller,
-    context: context,
+    errorType,
+    errorCategory,
+    caller,
+    context,
     stack: error.stack,
-    suggestions: suggestions,
-    timestamp: new Date().toISOString(),
+    suggestions,
   });
 };
 
 // Stream para Morgan
 logger.stream = {
-  write: function (message) {
-    try {
-      const cleanMessage =
-        typeof message === "string" ? message.trim() : String(message).trim();
-
-      if (cleanMessage) {
-        logger.info(cleanMessage, {
-          source: "http",
-          type: "request",
-        });
-      }
-    } catch (error) {
-      console.log("Log stream error:", error.message);
-    }
+  write: (msg) => {
+    const clean = typeof msg === "string" ? msg.trim() : String(msg).trim();
+    if (clean) logger.info(clean, { source: "http", type: "request" });
   },
 };
 
-// Helper para contexto con información completa
-logger.withContext = function (context = {}) {
-  return {
-    error: (message, meta = {}) =>
-      logger.error(message, { ...context, ...meta, logLevel: "error" }),
-    warn: (message, meta = {}) =>
-      logger.warn(message, { ...context, ...meta, logLevel: "warn" }),
-    info: (message, meta = {}) =>
-      logger.info(message, { ...context, ...meta, logLevel: "info" }),
-    debug: (message, meta = {}) =>
-      logger.debug(message, { ...context, ...meta, logLevel: "debug" }),
-    verbose: (message, meta = {}) =>
-      logger.verbose(message, { ...context, ...meta, logLevel: "verbose" }),
-  };
-};
+// Métodos de contexto
+logger.withContext = (context = {}) => ({
+  error: (m, meta = {}) => logger.error(m, { ...context, ...meta }),
+  warn: (m, meta = {}) => logger.warn(m, { ...context, ...meta }),
+  info: (m, meta = {}) => logger.info(m, { ...context, ...meta }),
+  debug: (m, meta = {}) => logger.debug(m, { ...context, ...meta }),
+});
 
-// Helpers especializados para transacciones
+// Contextos especializados
 logger.system = logger.withContext({ source: "system" });
 logger.db = logger.withContext({ source: "database" });
 logger.api = logger.withContext({ source: "api" });
 logger.transfer = logger.withContext({ source: "transfer" });
-logger.transaction = logger.withContext({ source: "transaction" });
 
-// Método para iniciar transacción con logging completo
-logger.startTransaction = function (
-  transactionId,
-  operation,
-  userId,
-  metadata = {}
-) {
-  const txnLogger = logger.withContext({
-    transactionId,
-    operation,
-    userId,
-    startTime: Date.now(),
-  });
-
-  txnLogger.info("🚀 Transacción iniciada", {
-    operation,
-    transactionId,
-    userId,
-    metadata,
-    timestamp: new Date().toISOString(),
-  });
-
-  return {
-    debug: (message, meta = {}) => txnLogger.debug(message, meta),
-    info: (message, meta = {}) => txnLogger.info(message, meta),
-    warn: (message, meta = {}) => txnLogger.warn(message, meta),
-    error: (message, meta = {}) => txnLogger.error(message, meta),
-
-    // Método para finalizar transacción
-    finish: function (status = "success", result = {}) {
-      const duration = Date.now() - this.startTime;
-      const finalStatus = status === "success" ? "✅" : "❌";
-
-      txnLogger.info(`${finalStatus} Transacción finalizada`, {
-        status,
-        duration: `${duration}ms`,
-        result,
-        timestamp: new Date().toISOString(),
-      });
-    },
-  };
-};
-
-// Resto de métodos existentes (logQuery, logRequest, logTransfer, etc.)
-logger.logQuery = function (query, duration, result, context = {}) {
-  const queryInfo = {
-    query: query.length > 200 ? query.substring(0, 200) + "..." : query,
-    duration: `${duration}ms`,
-    resultCount: Array.isArray(result) ? result.length : result ? 1 : 0,
-    source: "database",
-    timestamp: new Date().toISOString(),
-    ...context,
-  };
-
-  if (duration > 1000) {
-    this.warn("🐌 Slow query detected", queryInfo);
-  } else {
-    this.debug("📊 Query executed", queryInfo);
-  }
-};
-
-logger.logRequest = function (req, res, duration, context = {}) {
-  const requestInfo = {
-    method: req.method,
-    url: req.url,
-    status: res.statusCode,
-    duration: `${duration}ms`,
-    ip: req.ip,
-    userAgent: req.get("User-Agent"),
-    contentLength: res.get("Content-Length"),
-    requestId: req.headers["x-request-id"],
-    userId: req.user?.id,
-    source: "request",
-    timestamp: new Date().toISOString(),
-    ...context,
-  };
-
-  if (res.statusCode >= 500) {
-    this.error("🚨 Server error", requestInfo);
-  } else if (res.statusCode >= 400) {
-    this.warn("⚠️ Client error", requestInfo);
-  } else if (duration > 2000) {
-    this.warn("🐌 Slow request", requestInfo);
-  } else {
-    this.info("📊 Request completed", requestInfo);
-  }
-};
-
-logger.logTransfer = function (operation, recordCount, duration, context = {}) {
-  const transferInfo = {
-    operation,
-    recordCount,
-    duration: `${duration}ms`,
-    recordsPerSecond: Math.round(recordCount / (duration / 1000)),
-    source: "transfer",
-    timestamp: new Date().toISOString(),
-    ...context,
-  };
-
-  this.info("📊 Transfer completed", transferInfo);
-  this.debug("🔍 Transfer details", {
-    ...transferInfo,
-    detailedStats: {
-      avgTimePerRecord: `${(duration / recordCount).toFixed(2)}ms`,
-      efficiency: recordCount > 0 ? "high" : "low",
-    },
-  });
-};
-
-// ⭐ AUTO-CAPTURA DE PROMISES RECHAZADAS ⭐
-process.on("unhandledRejection", (reason, promise) => {
-  const caller = getCaller();
-
-  logger.error("❌ PROMESA RECHAZADA NO MANEJADA", {
-    source: "unhandled_rejection",
-    reason: reason?.message || reason,
-    promiseDetails: promise.toString(),
-    caller: caller,
-    stack: reason?.stack,
-    suggestions: [
-      "Agrega .catch() a todas las promesas",
-      "Usa try-catch en funciones async",
-      "Verifica que todos los await tengan manejo de errores",
-    ],
-  });
-});
-
-// ⭐ AUTO-CAPTURA DE EXCEPCIONES NO MANEJADAS ⭐
-process.on("uncaughtException", (error) => {
-  const caller = getCaller();
-
-  logger.error("💥 EXCEPCIÓN NO CAPTURADA - CRÍTICO", {
-    source: "uncaught_exception",
-    error: error.message,
-    caller: caller,
-    stack: error.stack,
-    suggestions: [
-      "Revisa el stack trace para encontrar el origen",
-      "Agrega try-catch apropiado",
-      "Verifica inicializaciones de objetos",
-    ],
-  });
-
-  setTimeout(() => {
-    process.exit(1);
-  }, 1000);
-});
-
-// Graceful shutdown
-const gracefulShutdown = () => {
-  logger.system.info("🔄 Iniciando cierre graceful del logger...");
-
-  if (logger.transports) {
-    logger.transports.forEach((transport) => {
-      if (
-        transport.name === "mongodb" &&
-        typeof transport.close === "function"
-      ) {
-        logger.system.debug("🔄 Cerrando MongoDB Transport...");
-        transport.close();
-      }
-    });
-  }
-
-  logger.system.info("✅ Logger cerrado correctamente");
-  logger.close();
-};
-
-process.on("SIGINT", gracefulShutdown);
-process.on("SIGTERM", gracefulShutdown);
-
-// ⭐ ASEGURAR QUE TODAS LAS FUNCIONES ESTÉN DISPONIBLES ⭐
-logger.captureError = logger.captureError.bind(logger);
-logger.logQuery = logger.logQuery.bind(logger);
-logger.logRequest = logger.logRequest.bind(logger);
-logger.logTransfer = logger.logTransfer.bind(logger);
-logger.startTransaction = logger.startTransaction.bind(logger);
-logger.withContext = logger.withContext.bind(logger);
-
-// Crear alias para compatibilidad
-logger.capture = logger.captureError;
-
-// ⭐ EXPORTACIÓN ROBUSTA ⭐
+// Exportación robusta
 const exportedLogger = {
   ...logger,
-  // Métodos personalizados explícitos
-  captureError: function (error, context = {}) {
-    return logger.captureError(error, context);
-  },
-  capture: function (error, context = {}) {
-    return logger.captureError(error, context);
-  },
-  logQuery: function (query, duration, result, context = {}) {
-    return logger.logQuery(query, duration, result, context);
-  },
-  logRequest: function (req, res, duration, context = {}) {
-    return logger.logRequest(req, res, duration, context);
-  },
-  logTransfer: function (operation, recordCount, duration, context = {}) {
-    return logger.logTransfer(operation, recordCount, duration, context);
-  },
-  startTransaction: function (transactionId, operation, userId, metadata = {}) {
-    return logger.startTransaction(transactionId, operation, userId, metadata);
-  },
-  withContext: function (context = {}) {
-    return logger.withContext(context);
-  },
-  // Métodos winston nativos
-  error: logger.error.bind(logger),
-  warn: logger.warn.bind(logger),
-  info: logger.info.bind(logger),
-  debug: logger.debug.bind(logger),
-  verbose: logger.verbose.bind(logger),
-  // Contextos especializados
+  captureError: (error, ctx = {}) => logger.captureError(error, ctx),
+  capture: (error, ctx = {}) => logger.captureError(error, ctx),
+  withContext: (ctx = {}) => logger.withContext(ctx),
   system: logger.system,
   db: logger.db,
   api: logger.api,
   transfer: logger.transfer,
-  transaction: logger.transaction,
-  // Stream para Morgan
   stream: logger.stream,
-  // Métodos de Winston
   close: logger.close.bind(logger),
   transports: logger.transports,
 };
 
-// Log de inicialización con interceptores
-logger.system.info("🚀 Sistema de logging inicializado", {
-  level: "debug",
+// 🔒 Alias para compatibilidad con { logger } imports incorrectos
+exportedLogger.logger = exportedLogger;
+
+// Inicialización
+logger.system.info("🚀 Logger inicializado correctamente", {
   transports: logger.transports.length,
-  mongoEnabled: logger.transports.some((t) => t.name === "mongodb"),
-  interceptors: [
-    "console.error",
-    "Module.require",
-    "unhandledRejection",
-    "uncaughtException",
-  ],
-  customMethods: [
-    "captureError",
-    "logQuery",
-    "logRequest",
-    "logTransfer",
-    "startTransaction",
-    "withContext",
-  ],
   timestamp: new Date().toISOString(),
 });
 
-// Debug: Verificar que los métodos están disponibles
-console.log(
-  "🔍 Logger methods available:",
-  Object.getOwnPropertyNames(exportedLogger)
-);
+console.log("🔍 Logger methods disponibles:", Object.keys(exportedLogger));
 
 module.exports = exportedLogger;
