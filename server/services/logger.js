@@ -281,16 +281,17 @@ Module.prototype.require = function (id) {
 };
 
 // ⭐ MÉTODO PARA CAPTURA INTELIGENTE DE ERRORES ⭐
-logger.error = function (error, context = {}) {
+logger.captureError = function (error, context = {}) {
   const caller = getCaller();
   const errorType = error.constructor.name;
+  const errorMessage = error.message || error.toString() || "Error sin mensaje";
 
   let errorCategory = "general_error";
   let suggestions = [];
 
   if (
-    error.message.includes("Cannot read prop") ||
-    error.message.includes("undefined")
+    errorMessage.includes("Cannot read prop") ||
+    errorMessage.includes("undefined")
   ) {
     errorCategory = "undefined_property";
     suggestions = [
@@ -298,14 +299,14 @@ logger.error = function (error, context = {}) {
       "¿Importaste todos los módulos necesarios?",
       "¿Verificaste que la variable no sea null/undefined?",
     ];
-  } else if (error.message.includes("is not a function")) {
+  } else if (errorMessage.includes("is not a function")) {
     errorCategory = "not_a_function";
     suggestions = [
       "¿El método existe en el objeto?",
       "¿Importaste correctamente el módulo?",
       "¿El objeto tiene ese método disponible?",
     ];
-  } else if (error.message.includes("Cannot find module")) {
+  } else if (errorMessage.includes("Cannot find module")) {
     errorCategory = "module_not_found";
     suggestions = [
       "¿Existe el archivo en la ruta especificada?",
@@ -321,7 +322,7 @@ logger.error = function (error, context = {}) {
     ];
   }
 
-  this.error(`🚨 ${errorCategory.toUpperCase()}: ${error.message}`, {
+  this.error(`🚨 ${errorCategory.toUpperCase()}: ${errorMessage}`, {
     source: "error_capture",
     errorType: errorType,
     errorCategory: errorCategory,
