@@ -643,7 +643,7 @@ class LoadsService {
         'CATELLI' AS Code_Unit_Org,
         'CATELLI' AS Code_Sales_Org,
         PEDIDO AS Order_Num_ofClient,
-        LINEA_TIPO AS Num_Line,
+        PEDIDO_LINEA AS Num_Line,
         RUBRO4 AS Order_Num,
         'S' AS Type_Rec,
         @loadId AS Code_load,
