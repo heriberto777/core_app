@@ -1,64 +1,5 @@
-// index.js - Versión optimizada con HTTPS forzado + AUTO-WRAPPER
+// index.js - Versión optimizada con HTTPS forzado
 require("dotenv").config();
-
-// ⭐ AUTO-WRAPPER SYSTEM - DEBE IR AL INICIO ⭐
-const path = require("path");
-const Module = require("module");
-
-// Función helper para verificar si un objeto tiene métodos wrappables
-function hasWrappableMethods(obj) {
-  if (typeof obj !== "function" && typeof obj !== "object") return false;
-  if (obj === null) return false;
-
-  const methods = Object.getOwnPropertyNames(obj).filter(
-    (prop) =>
-      typeof obj[prop] === "function" &&
-      !["length", "name", "constructor"].includes(prop)
-  );
-
-  return methods.length > 0;
-}
-
-// Interceptor de require() para auto-wrapping
-const originalRequire = Module.prototype.require;
-Module.prototype.require = function (id) {
-  const result = originalRequire.apply(this, arguments);
-
-  // Solo procesar módulos de nuestro proyecto
-  if (
-    this.filename &&
-    this.filename.includes("/server/") &&
-    !id.includes("node_modules") &&
-    (id.startsWith("./") || id.startsWith("../"))
-  ) {
-    const fileName = path.basename(id, ".js");
-
-    // Patrones para auto-wrapping
-    if (
-      /Service$|Controller$|Manager$|Helper$|Utils?$|Repository$|Provider$/.test(
-        fileName
-      )
-    ) {
-      if (hasWrappableMethods(result)) {
-        try {
-          // Cargar el serviceWrapper solo cuando se necesite
-          const { wrapService } = require("./utils/serviceWrapper");
-          console.log(`🔧 Auto-wrapped: ${fileName}`);
-          return wrapService(result, fileName);
-        } catch (wrapError) {
-          console.warn(`⚠️ Error wrapping ${fileName}:`, wrapError.message);
-          return result; // Retornar original si falla el wrapping
-        }
-      }
-    }
-  }
-
-  return result;
-};
-
-console.log("✅ Auto-wrapper system initialized");
-// ⭐ FIN AUTO-WRAPPER SYSTEM ⭐
-
 const app = require("./app");
 const fs = require("fs");
 const https = require("https");
@@ -420,7 +361,6 @@ console.log(`   - NODE_ENV: ${process.env.NODE_ENV || "development"}`);
 console.log(`   - Puerto por defecto: ${defaultPort}`);
 console.log(`   - Plataforma: ${process.platform}`);
 console.log(`   - Versión Node.js: ${process.version}`);
-console.log(`   - Auto-wrapper: ✅ Activado`);
 
 // Iniciar el servidor
 startServer().catch((err) => {

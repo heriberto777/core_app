@@ -873,4 +873,4 @@ class LoadsService {
   }
 }
 
-module.exports = wrapService(LoadsService, "LoadsService");
+module.exports = LoadsService
