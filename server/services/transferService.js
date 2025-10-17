@@ -10,7 +10,7 @@ const {
   sendCriticalErrorEmail,
 } = require("./emailService");
 const TaskTracker = require("./TaskTracker");
-// const { RetryService } = require("./RetryService");
+const { RetryService: RetryServiceClass } = require("./RetryService");
 const MemoryManager = require("./MemoryManager");
 const Telemetry = require("./Telemetry");
 const TaskExecution = require("../models/taskExecutionModel");
@@ -21,9 +21,7 @@ const LinkedTasksService = require("./LinkedTasksService");
  */
 class TransferService {
   constructor() {
-    // ✅ Importar la clase y crear instancia personalizada
-    const { RetryService } = require("./RetryService");
-    this.retryService = new RetryService({
+    this.retryService = new RetryServiceClass({
       maxRetries: 3,
       initialDelay: 2000,
       maxDelay: 30000,
