@@ -10,7 +10,7 @@ const {
   sendCriticalErrorEmail,
 } = require("./emailService");
 const TaskTracker = require("./TaskTracker");
-const {RetryService} = require("./RetryService");
+const { RetryService } = require("./RetryService");
 const MemoryManager = require("./MemoryManager");
 const Telemetry = require("./Telemetry");
 const TaskExecution = require("../models/taskExecutionModel");
@@ -21,7 +21,7 @@ const LinkedTasksService = require("./LinkedTasksService");
  */
 class TransferService {
   constructor() {
-    this.retryService = new RetryService.RetryService({
+    this.retryService = new RetryService({
       maxRetries: 3,
       initialDelay: 2000,
       maxDelay: 30000,
