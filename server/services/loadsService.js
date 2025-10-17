@@ -761,20 +761,18 @@ class LoadsService {
     for (const [productCode, productData] of productMap) {
       const query = `
         INSERT INTO dbo.IMPLT_loads_detail (
-          Code, Code_Unit_Org, Code_Sales_Org, Num_Line, Lot_Group,
+          Code, Num_Line, Lot_Group,
           Code_Product, Date_Load, Quantity, Unit_Type, Code_Warehouse_Sou,
-          Code_Route, Transfer_status
+          Code_Route, Source_Create, Transfer_status
         ) VALUES (
-          @Code, @Code_Unit_Org, @Code_Sales_Org, @Num_Line, @Lot_Group,
+          @Code, @Num_Line, @Lot_Group,
           @Code_Product, @Date_Load, @Quantity, @Unit_Type, @Code_Warehouse_Sou,
-          @Code_Route, @Transfer_status
+          @Code_Route, @Source_Create, @Transfer_status
         )
       `;
 
       const params = {
         Code: loadId,
-        Code_Unit_Org: "CATELLI",
-        Code_Sales_Org: "CATELLI",
         Num_Line: lineNumber,
         Lot_Group: "999999999",
         Code_Product: productData.Code_Product,
@@ -783,6 +781,7 @@ class LoadsService {
         Unit_Type: "UND",
         Code_Warehouse_Sou: warehouse,
         Code_Route: route,
+        Source_Create: "0",
         Transfer_status: "1",
       };
 
