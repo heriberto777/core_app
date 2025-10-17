@@ -34,22 +34,34 @@ export function LoginForm() {
 
     try {
       setLoading(true);
+      setMessage(""); // Limpiar mensajes previos
 
       console.log("🎯 Iniciando login desde formulario...");
 
-      // ⭐ USAR LA FUNCIÓN LOGIN DEL CONTEXTO DIRECTAMENTE ⭐
-      await login(formData);
+      // ⭐ USAR LA FUNCIÓN LOGIN DEL CONTEXTO Y VERIFICAR RESULTADO ⭐
+      const result = await login(formData);
 
-      console.log("✅ Login exitoso desde formulario");
-      // El usuario será redirigido automáticamente por el AdminRouter
+      if (result?.success) {
+        console.log("✅ Login exitoso desde formulario");
+        setMessage("Acceso autorizado. Redirigiendo...");
+        // El usuario será redirigido automáticamente por el AdminRouter
+      } else {
+        // ⭐ MANEJAR CASO DONDE NO HAY EXCEPCIÓN PERO EL LOGIN FALLÓ ⭐
+        throw new Error(result?.error || "Error desconocido en el login");
+      }
     } catch (error) {
       console.error("❌ Error en login desde formulario:", error);
 
+      // ⭐ MOSTRAR ERROR ESPECÍFICO AL USUARIO ⭐
       Swal.fire({
         icon: "error",
-        title: "Error en inicio de sesión",
+        title: "Error de Autenticación",
         text: error.message || "Error al iniciar sesión",
+        confirmButtonText: "Intentar nuevamente",
       });
+
+      // ⭐ TAMBIÉN MOSTRAR EN INTERFAZ PARA MEJOR UX ⭐
+      setMessage(`Error: ${error.message}`);
     } finally {
       setLoading(false);
     }
@@ -62,7 +74,9 @@ export function LoginForm() {
       </Helmet>
       <FormWrapper>
         <Title>Iniciar Sesión</Title>
-        {message && <Message>{message}</Message>}
+        {message && (
+          <Message error={message.startsWith("Error:")}>{message}</Message>
+        )}
         <Form onSubmit={handleSubmit}>
           <Label>Email</Label>
           <Input
@@ -174,8 +188,23 @@ const ErrorText = styled.p`
   margin: -10px 0 10px;
 `;
 
-const Message = styled.p`
-  color: green;
+const Message = styled.div`
+  padding: 12px;
+  margin-bottom: 16px;
+  border-radius: 6px;
   font-size: 14px;
-  margin-bottom: 10px;
+  text-align: center;
+
+  ${(props) =>
+    props.error
+      ? `
+    background-color: #fee;
+    color: #c53030;
+    border: 1px solid #fc8181;
+  `
+      : `
+    background-color: #f0fff4;
+    color: #2f855a;
+    border: 1px solid #9ae6b4;
+  `}
 `;

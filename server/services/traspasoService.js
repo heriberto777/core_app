@@ -1,4 +1,3 @@
-// services/traspasoService.js
 const { withConnection } = require("../utils/dbUtils");
 const { SqlService } = require("./SqlService");
 const logger = require("./logger");
@@ -43,8 +42,8 @@ async function obtenerDetalleProductos(connection, productos) {
     }
 
     const query = `
-      SELECT ARTICULO, DESCRIPCION 
-      FROM CATELLI.ARTICULO 
+      SELECT ARTICULO, DESCRIPCION
+      FROM CATELLI.ARTICULO
       WHERE ARTICULO IN (${placeholders.join(", ")})
     `;
 
@@ -160,10 +159,10 @@ async function traspasoBodega({ route, salesData, bodega_destino = "02" }) {
 
         // 3. Obtener el último consecutivo
         const queryConse = `
-          SELECT TOP 1 SIGUIENTE_CONSEC 
-          FROM CATELLI.CONSECUTIVO_CI 
+          SELECT TOP 1 SIGUIENTE_CONSEC
+          FROM CATELLI.CONSECUTIVO_CI
           WITH (UPDLOCK, ROWLOCK)
-          WHERE CONSECUTIVO LIKE @prefix 
+          WHERE CONSECUTIVO LIKE @prefix
           ORDER BY CONSECUTIVO DESC
         `;
 
@@ -194,8 +193,8 @@ async function traspasoBodega({ route, salesData, bodega_destino = "02" }) {
 
         const updateResult = await SqlService.query(
           connection,
-          `UPDATE CATELLI.CONSECUTIVO_CI 
-           SET SIGUIENTE_CONSEC = @newConsec 
+          `UPDATE CATELLI.CONSECUTIVO_CI
+           SET SIGUIENTE_CONSEC = @newConsec
            WHERE SIGUIENTE_CONSEC = @lastConsec`,
           updateParams
         );
@@ -241,9 +240,9 @@ async function traspasoBodega({ route, salesData, bodega_destino = "02" }) {
 
         await SqlService.query(
           connection,
-          `INSERT INTO CATELLI.DOCUMENTO_INV 
+          `INSERT INTO CATELLI.DOCUMENTO_INV
             (PAQUETE_INVENTARIO, DOCUMENTO_INV, CONSECUTIVO, REFERENCIA, FECHA_HOR_CREACION, FECHA_DOCUMENTO, SELECCIONADO, USUARIO)
-           VALUES 
+           VALUES
             (@paquete, @documento_inv, @consecutivo, @referencia, GETDATE(), GETDATE(), @seleccionado, @usuario)`,
           headerParams
         );
@@ -313,9 +312,9 @@ async function traspasoBodega({ route, salesData, bodega_destino = "02" }) {
               .join(", ");
 
             const sql = `
-              INSERT INTO CATELLI.LINEA_DOC_INV 
+              INSERT INTO CATELLI.LINEA_DOC_INV
                 (${columns})
-              VALUES 
+              VALUES
                 (${paramPlaceholders})
             `;
 
@@ -556,10 +555,10 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
 
         // 5. Obtener el consecutivo actual con SQL directo
         const consultaConsecutivo = `
-          SELECT TOP 1 SIGUIENTE_CONSEC 
-          FROM CATELLI.CONSECUTIVO_CI 
+          SELECT TOP 1 SIGUIENTE_CONSEC
+          FROM CATELLI.CONSECUTIVO_CI
           WITH (UPDLOCK, ROWLOCK)
-          WHERE CONSECUTIVO LIKE 'TR%' 
+          WHERE CONSECUTIVO LIKE 'TR%'
           ORDER BY CONSECUTIVO DESC
         `;
 
@@ -595,8 +594,8 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
 
         const resultadoActualizacion = await SqlService.query(
           connection,
-          `UPDATE CATELLI.CONSECUTIVO_CI 
-           SET SIGUIENTE_CONSEC = @nuevo 
+          `UPDATE CATELLI.CONSECUTIVO_CI
+           SET SIGUIENTE_CONSEC = @nuevo
            WHERE SIGUIENTE_CONSEC = @actual`,
           actualizarConsecutivoParams
         );
@@ -615,9 +614,9 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
         };
 
         const insertarDocumento = `
-          INSERT INTO CATELLI.DOCUMENTO_INV 
+          INSERT INTO CATELLI.DOCUMENTO_INV
             (PAQUETE_INVENTARIO, DOCUMENTO_INV, CONSECUTIVO, REFERENCIA, FECHA_HOR_CREACION, FECHA_DOCUMENTO, SELECCIONADO, USUARIO)
-          VALUES 
+          VALUES
             ('CS', @documento, 'TR', @referencia, GETDATE(), GETDATE(), 'N', 'SA')
         `;
 
@@ -676,17 +675,17 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
             };
 
             const insertarLinea = `
-              INSERT INTO CATELLI.LINEA_DOC_INV 
-                (PAQUETE_INVENTARIO, DOCUMENTO_INV, LINEA_DOC_INV, AJUSTE_CONFIG, ARTICULO, 
-                 BODEGA, BODEGA_DESTINO, CANTIDAD, TIPO, SUBTIPO, SUBSUBTIPO, 
-                 COSTO_TOTAL_LOCAL, COSTO_TOTAL_DOLAR, PRECIO_TOTAL_LOCAL, PRECIO_TOTAL_DOLAR, 
-                 LOCALIZACION_DEST, CENTRO_COSTO, SECUENCIA, UNIDAD_DISTRIBUCIO, CUENTA_CONTABLE, 
+              INSERT INTO CATELLI.LINEA_DOC_INV
+                (PAQUETE_INVENTARIO, DOCUMENTO_INV, LINEA_DOC_INV, AJUSTE_CONFIG, ARTICULO,
+                 BODEGA, BODEGA_DESTINO, CANTIDAD, TIPO, SUBTIPO, SUBSUBTIPO,
+                 COSTO_TOTAL_LOCAL, COSTO_TOTAL_DOLAR, PRECIO_TOTAL_LOCAL, PRECIO_TOTAL_DOLAR,
+                 LOCALIZACION_DEST, CENTRO_COSTO, SECUENCIA, UNIDAD_DISTRIBUCIO, CUENTA_CONTABLE,
                  COSTO_TOTAL_LOCAL_COMP, COSTO_TOTAL_DOLAR_COMP, CAI, TIPO_OPERACION, TIPO_PAGO, LOCALIZACION)
-              VALUES 
-                (@paquete, @documento_inv, @linea, @ajuste, @articulo, 
-                 @bodega, @bodega_destino, @cantidad, @tipo, @subtipo, @subsubtipo, 
-                 @costo_total_local, @costo_total_dolar, @precio_total_local, @precio_total_dolar, 
-                 @localizacion_dest, @centro_costo, @secuencia, @unidad_distribucio, @cuenta_contable, 
+              VALUES
+                (@paquete, @documento_inv, @linea, @ajuste, @articulo,
+                 @bodega, @bodega_destino, @cantidad, @tipo, @subtipo, @subsubtipo,
+                 @costo_total_local, @costo_total_dolar, @precio_total_local, @precio_total_dolar,
+                 @localizacion_dest, @centro_costo, @secuencia, @unidad_distribucio, @cuenta_contable,
                  @costo_total_local_comp, @costo_total_dolar_comp, @cai, @tipo_operacion, @tipo_pago, @localizacion)
             `;
 
@@ -710,17 +709,17 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
               const codigoProducto = producto.codigo.replace(/'/g, "''"); // Escapar comillas simples
 
               const insertarLineaDirecto = `
-                INSERT INTO CATELLI.LINEA_DOC_INV 
-                  (PAQUETE_INVENTARIO, DOCUMENTO_INV, LINEA_DOC_INV, AJUSTE_CONFIG, ARTICULO, 
-                   BODEGA, BODEGA_DESTINO, CANTIDAD, TIPO, SUBTIPO, SUBSUBTIPO, 
-                   COSTO_TOTAL_LOCAL, COSTO_TOTAL_DOLAR, PRECIO_TOTAL_LOCAL, PRECIO_TOTAL_DOLAR, 
-                   LOCALIZACION_DEST, CENTRO_COSTO, SECUENCIA, UNIDAD_DISTRIBUCIO, CUENTA_CONTABLE, 
+                INSERT INTO CATELLI.LINEA_DOC_INV
+                  (PAQUETE_INVENTARIO, DOCUMENTO_INV, LINEA_DOC_INV, AJUSTE_CONFIG, ARTICULO,
+                   BODEGA, BODEGA_DESTINO, CANTIDAD, TIPO, SUBTIPO, SUBSUBTIPO,
+                   COSTO_TOTAL_LOCAL, COSTO_TOTAL_DOLAR, PRECIO_TOTAL_LOCAL, PRECIO_TOTAL_DOLAR,
+                   LOCALIZACION_DEST, CENTRO_COSTO, SECUENCIA, UNIDAD_DISTRIBUCIO, CUENTA_CONTABLE,
                    COSTO_TOTAL_LOCAL_COMP, COSTO_TOTAL_DOLAR_COMP, CAI, TIPO_OPERACION, TIPO_PAGO, LOCALIZACION)
-                VALUES 
-                  ('CS', '${nuevoConsecutivo}', ${lineaNumero}, '~TT~', '${codigoProducto}', 
-                   '${bodegaOrigen}', '${bodega_destino}', ${producto.cantidad}, 'T', 'D', '', 
-                   0, 0, 0, 0, 
-                   'ND', '00-00-00', '', 'UND', '100-01-05-99-00', 
+                VALUES
+                  ('CS', '${nuevoConsecutivo}', ${lineaNumero}, '~TT~', '${codigoProducto}',
+                   '${bodegaOrigen}', '${bodega_destino}', ${producto.cantidad}, 'T', 'D', '',
+                   0, 0, 0, 0,
+                   'ND', '00-00-00', '', 'UND', '100-01-05-99-00',
                    0, 0, '', '11', 'ND', 'ND')
               `;
 

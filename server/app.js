@@ -136,6 +136,7 @@ app.use(`/api/${API_VERSION}/modules`, require("./routes/moduleRoutes"));
 app.use(`/api/${API_VERSION}/task`, require("./routes/transferTaskRoutes"));
 app.use(`/api/${API_VERSION}/users`, require("./routes/userRoutes"));
 app.use(`/api/${API_VERSION}/config`, require("./routes/dbRoutes"));
+
 app.use(
   `/api/${API_VERSION}/email-recipients`,
   require("./routes/emailRecipientRoutes")
@@ -173,6 +174,7 @@ app.use(
   `/api/${API_VERSION}/email-config`,
   require("./routes/emailConfigRoutes")
 );
+app.use(`/api/${API_VERSION}/loads`, require("./routes/loadsRoutes"));
 //Comentario
 // Ruta para health check mejorada
 app.get("/health", async (req, res) => {

@@ -22,7 +22,7 @@ export const ENV = {
     TRANSFER_PROGRESS: "transfer",
     CANCELLATION: "cancellation",
     TRANSFER_STAST: "stats",
-    LOAD: "load",
+    LOAD: "loads",
     CONFIG_TASK: "config",
     EMAIL_RECIPIENTS: "email-recipients",
     EMAIL_CONFIG: "email-config",
