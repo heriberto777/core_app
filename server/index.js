@@ -1,4 +1,3 @@
-// index.js - Versión optimizada con HTTPS forzado
 require("dotenv").config();
 const app = require("./app");
 const fs = require("fs");
