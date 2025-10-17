@@ -138,7 +138,7 @@ class LoadsService {
           SELECT
             VENDEDOR as code,
             NOMBRE as name,
-            U_ESVENDEDOR as vendorType,
+            U_ESVENDEDOR as isVendedor,
             U_BODEGA as assignedWarehouse,
             ACTIVO as isActive
           FROM CATELLI.VENDEDOR
@@ -359,7 +359,7 @@ class LoadsService {
           VENDEDOR as code,
           NOMBRE as name,
           U_BODEGA as assignedWarehouse,
-          U_ESVENDEDOR as vendorType,
+          U_ESVENDEDOR as isVendedor,
           ACTIVO as isActive
         FROM CATELLI.VENDEDOR
         WHERE VENDEDOR = @deliveryPersonCode
