@@ -139,7 +139,7 @@ class LoadsService {
             VENDEDOR as code,
             NOMBRE as name,
             U_ESVENDEDOR as vendorType,
-            U_BODEGA_ASIGNADA as assignedWarehouse,
+            U_BODEGA as assignedWarehouse,
             ACTIVO as isActive
           FROM CATELLI.VENDEDOR
           WHERE ACTIVO = 'S'
@@ -358,7 +358,7 @@ class LoadsService {
         SELECT
           VENDEDOR as code,
           NOMBRE as name,
-          U_BODEGA_ASIGNADA as assignedWarehouse,
+          U_BODEGA as assignedWarehouse,
           U_ESVENDEDOR as vendorType,
           ACTIVO as isActive
         FROM CATELLI.VENDEDOR
@@ -382,7 +382,7 @@ class LoadsService {
 
       if (!deliveryPerson.assignedWarehouse) {
         throw new Error(
-          `Repartidor ${deliveryPersonCode} no tiene bodega asignada (U_BODEGA_ASIGNADA)`
+          `Repartidor ${deliveryPersonCode} no tiene bodega asignada (U_BODEGA)`
         );
       }
 
