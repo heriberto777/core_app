@@ -129,29 +129,49 @@ export function AuthProvider({ children }) {
     [isValidTokenFormat, logout]
   );
 
-  // ⭐ FUNCIÓN DE LOGIN MEJORADA ⭐
   const login = useCallback(
     async (formData) => {
       try {
         setLoading(true);
         setError(null);
 
+        console.log("🎯 Iniciando login desde contexto...");
+
         const response = await authController.login(formData);
+        console.log("📥 Respuesta de authController.login:", response);
 
         if (response.state && response.accessToken) {
+          console.log("✅ Credenciales válidas, procesando tokens...");
+
           if (response.refreshToken) {
             authController.setRefreshToken(response.refreshToken);
           }
 
           const result = await loginWithToken(response.accessToken, true);
-          return result;
+
+          if (result.success) {
+            console.log("✅ Login completado exitosamente");
+            return { success: true, user: result.user };
+          } else {
+            console.error("❌ Error en loginWithToken:", result.error);
+            throw new Error(
+              result.error || "Error al procesar la autenticación"
+            );
+          }
         } else {
-          throw new Error(response.msg || "Credenciales inválidas");
+          // ⭐ MANEJO CORRECTO DE CREDENCIALES INVÁLIDAS ⭐
+          console.log("❌ Credenciales inválidas:", response.msg);
+          const errorMessage = response.msg || "Email o contraseña incorrectos";
+          setError(errorMessage);
+          throw new Error(errorMessage);
         }
       } catch (error) {
         console.error("❌ Error en login:", error);
         setError(error.message);
-        return { success: false, error: error.message };
+        // ⭐ IMPORTANTE: SIEMPRE ARROJA LA EXCEPCIÓN PARA QUE LoginForm LA MANEJE ⭐
+        throw error;
+      } finally {
+        setLoading(false);
       }
     },
     [loginWithToken]

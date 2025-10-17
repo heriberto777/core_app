@@ -1,11 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const LoadsController = require('../controllers/loadsController');
-const { authenticateToken } = require('../middlewares/authMiddleware');
-const { checkPermission } = require('../middlewares/permissionMiddleware');
+const {
+  verifyToken,
+  checkPermission,
+} = require("../middlewares/authMiddleware");
 
 // Middleware de autenticación para todas las rutas
-router.use(authenticateToken);
+router.use(verifyToken);
 
 /**
  * @route GET /api/loads/pending-orders

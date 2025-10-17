@@ -13,6 +13,7 @@ export * from './components/atomos/ContentHeader';
 export * from './components/atomos/FilterInput';
 export * from './components/atomos/Icono';
 export * from './components/atomos/LoadsButton';
+export * from './components/atomos/MultiSelectInput';
 export * from './components/atomos/StatusBadge';
 export * from './components/meleculas/BotonCircular';
 export * from './components/meleculas/FiltersPanel';

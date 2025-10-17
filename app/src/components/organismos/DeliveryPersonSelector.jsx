@@ -1,7 +1,8 @@
+// app/src/components/organismos/DeliveryPersonSelector.jsx - MEJORADO CON STICKY HEADER Y ICONOS
 import styled from "styled-components";
-import { useState, useEffect } from "react";
-import { LoadsButton, FilterInput } from "../../index";
-import { FaTruck, FaWarehouse, FaPlus, FaTimes } from "react-icons/fa";
+import { useState } from "react";
+import { LoadsButton } from "../../index";
+import { FaTruck, FaWarehouse, FaTimes, FaUser, FaCheckCircle, FaCircle,  } from "react-icons/fa";
 
 const ModalOverlay = styled.div`
   position: fixed;
@@ -43,6 +44,10 @@ const ModalHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
+  position: sticky;
+  top: 0;
+  background: ${props => props.theme.cardBg || 'white'};
+  z-index: 10;
 
   @media (max-width: 768px) {
     padding: 16px;
@@ -75,13 +80,26 @@ const CloseButton = styled.button`
   }
 `;
 
+const StickySection = styled.div`
+  position: sticky;
+  top: 81px; /* Altura del header + border */
+  background: ${props => props.theme.cardBg || 'white'};
+  z-index: 9;
+  padding: 20px 20px 0 20px;
+
+  @media (max-width: 768px) {
+    top: 65px; /* Altura ajustada para móvil */
+    padding: 16px 16px 0 16px;
+  }
+`;
+
 const ModalBody = styled.div`
-  padding: 20px;
+  padding: 0 20px 20px 20px;
   overflow-y: auto;
   flex: 1;
 
   @media (max-width: 768px) {
-    padding: 16px;
+    padding: 0 16px 16px 16px;
   }
 `;
 
@@ -116,7 +134,7 @@ const SummaryGrid = styled.div`
   gap: 12px;
 
   @media (max-width: 768px) {
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 10px;
   }
 `;
@@ -147,33 +165,48 @@ const SummaryLabel = styled.div`
 
 const DeliveryPersonsGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
+  grid-template-columns: 1fr;
+  gap: 12px;
+  margin-top: 20px;
 
   @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-    gap: 12px;
-    margin-bottom: 16px;
+    gap: 10px;
+    margin-top: 16px;
   }
 `;
 
 const DeliveryPersonCard = styled.div`
-  border: 2px solid ${props => props.selected ? (props.theme.primary || '#3b82f6') : (props.theme.border || '#e5e7eb')};
+  border: 2px solid ${props => props.selected ? '#10b981' : (props.theme.border || '#e5e7eb')};
   border-radius: 8px;
   padding: 16px;
   cursor: pointer;
   transition: all 0.2s ease;
-  background: ${props => props.selected ? (props.theme.primary || '#3b82f6') + '10' : (props.theme.cardBg || 'white')};
+  background: ${props => props.selected ? '#dcfce7' : (props.theme.cardBg || 'white')};
+  position: relative;
 
   &:hover {
-    border-color: ${props => props.theme.primary || '#3b82f6'};
-    transform: translateY(-2px);
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
+    border-color: ${props => props.selected ? '#10b981' : '#3b82f6'};
+    transform: translateY(-1px);
+    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
   }
 
   @media (max-width: 768px) {
     padding: 12px;
+  }
+`;
+
+const SelectionIcon = styled.div`
+  position: absolute;
+  top: 12px;
+  right: 12px;
+  font-size: 20px;
+  color: ${props => props.selected ? '#10b981' : '#d1d5db'};
+  transition: color 0.2s ease;
+
+  @media (max-width: 768px) {
+    top: 10px;
+    right: 10px;
+    font-size: 18px;
   }
 `;
 
@@ -182,10 +215,12 @@ const DeliveryPersonHeader = styled.div`
   align-items: center;
   gap: 12px;
   margin-bottom: 12px;
+  padding-right: 30px; /* Espacio para el ícono de selección */
 
   @media (max-width: 768px) {
     gap: 10px;
     margin-bottom: 10px;
+    padding-right: 25px;
   }
 `;
 
@@ -248,41 +283,78 @@ const WarehouseInfo = styled.div`
   }
 `;
 
-const AddDeliveryPersonButton = styled.button`
-  width: 100%;
-  padding: 20px;
-  border: 2px dashed ${props => props.theme.border || '#e5e7eb'};
-  border-radius: 8px;
-  background: none;
-  color: ${props => props.theme.textSecondary || '#6b7280'};
-  cursor: pointer;
-  font-size: 14px;
-  transition: all 0.2s ease;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-
-  &:hover {
-    border-color: ${props => props.theme.primary || '#3b82f6'};
-    color: ${props => props.theme.primary || '#3b82f6'};
-  }
-
-  @media (max-width: 768px) {
-    padding: 16px;
-    font-size: 13px;
-  }
-`;
-
 const ModalFooter = styled.div`
   padding: 20px;
   border-top: 1px solid ${props => props.theme.border || '#e5e7eb'};
+  background: ${props => props.theme.cardBg || 'white'};
+  position: sticky;
+  bottom: 0;
+  z-index: 10;
+
+  @media (max-width: 768px) {
+    padding: 16px;
+  }
+`;
+
+const SelectedVendedorInfo = styled.div`
+  background: #f0f9ff;
+  border: 1px solid #3b82f6;
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 16px;
+  display: ${props => props.show ? 'block' : 'none'};
+
+  @media (max-width: 768px) {
+    padding: 10px;
+    margin-bottom: 12px;
+  }
+`;
+
+const SelectedVendedorTitle = styled.div`
+  font-size: 12px;
+  color: #1e40af;
+  font-weight: 600;
+  margin-bottom: 4px;
+  text-transform: uppercase;
+  letter-spacing: 0.5px;
+`;
+
+const SelectedVendedorDetails = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+
+  @media (max-width: 768px) {
+    flex-direction: column;
+    align-items: flex-start;
+  }
+`;
+
+const SelectedVendedorName = styled.div`
+  font-weight: 600;
+  color: #1e40af;
+`;
+
+const SelectedVendedorCode = styled.div`
+  font-size: 12px;
+  color: #6b7280;
+  font-family: monospace;
+`;
+
+const SelectedVendedorWarehouse = styled.div`
+  font-size: 12px;
+  color: #059669;
+  font-weight: 500;
+`;
+
+const FooterActions = styled.div`
   display: flex;
   gap: 12px;
   justify-content: flex-end;
 
   @media (max-width: 768px) {
-    padding: 16px;
     gap: 8px;
     flex-direction: column;
   }
@@ -291,7 +363,7 @@ const ModalFooter = styled.div`
 const EmptyState = styled.div`
   text-align: center;
   padding: 40px 20px;
-  color: ${props => props.theme.textSecondary || '#6b7280'};
+  color: ${props => props.theme.textSecondary};
 
   @media (max-width: 768px) {
     padding: 30px 16px;
@@ -304,43 +376,50 @@ export function DeliveryPersonSelector({
   onSelect,
   selectedOrders = [],
   deliveryPersons = [],
-  onCreateDeliveryPerson,
   loading = false
 }) {
-  const [selectedDeliveryPerson, setSelectedDeliveryPerson] = useState(null);
+  const [selectedVendedor, setSelectedVendedor] = useState(null);
+
+  // DEPURACIÓN: Agregar logs para entender el problema
+  console.log("DeliveryPersonSelector - selectedVendedor:", selectedVendedor);
+  console.log("DeliveryPersonSelector - deliveryPersons:", deliveryPersons);
 
   if (!isOpen) return null;
 
   const orderCount = selectedOrders.length;
-  const totalAmount = selectedOrders.reduce((sum, order) => sum + (order.totalPedido || 0), 0);
-  const totalLines = selectedOrders.reduce((sum, order) => sum + (order.totalLineas || 0), 0);
+  const totalAmount = selectedOrders.reduce(
+    (sum, order) => sum + (order.totalPedido || 0),
+    0
+  );
+  const totalLines = selectedOrders.reduce(
+    (sum, order) => sum + (order.totalLineas || 0),
+    0
+  );
 
   const handleSelect = () => {
-    if (!selectedDeliveryPerson) return;
-    onSelect(selectedDeliveryPerson.code);
+    if (!selectedVendedor) return;
+    onSelect(selectedVendedor.code || selectedVendedor.VENDEDOR);
   };
 
   const formatCurrency = (amount) => {
-    return new Intl.NumberFormat('es-DO', {
-      style: 'currency',
-      currency: 'DOP',
-      minimumFractionDigits: 0
+    return new Intl.NumberFormat("es-DO", {
+      style: "currency",
+      currency: "DOP",
+      minimumFractionDigits: 0,
     }).format(amount || 0);
   };
 
   return (
     <ModalOverlay onClick={onClose}>
-      <ModalContent onClick={e => e.stopPropagation()}>
+      <ModalContent onClick={(e) => e.stopPropagation()}>
         <ModalHeader>
-          <ModalTitle>
-            Seleccionar Repartidor
-          </ModalTitle>
+          <ModalTitle>Asignar Vendedor/Repartidor</ModalTitle>
           <CloseButton onClick={onClose}>
             <FaTimes />
           </CloseButton>
         </ModalHeader>
 
-        <ModalBody>
+        <StickySection>
           <OrderSummary>
             <SummaryTitle>Resumen de la Carga</SummaryTitle>
             <SummaryGrid>
@@ -358,58 +437,112 @@ export function DeliveryPersonSelector({
               </SummaryItem>
             </SummaryGrid>
           </OrderSummary>
+        </StickySection>
 
+        <ModalBody>
           {deliveryPersons.length === 0 ? (
             <EmptyState>
-              <div>No hay repartidores configurados</div>
-              <div style={{ marginTop: '8px', fontSize: '13px' }}>
-                Agrega un repartidor para continuar con la carga
+              <div>No hay vendedores activos disponibles</div>
+              <div style={{ marginTop: "8px", fontSize: "13px" }}>
+                Contacta al administrador para configurar vendedores
               </div>
             </EmptyState>
           ) : (
             <DeliveryPersonsGrid>
-              {deliveryPersons.map(person => (
-                <DeliveryPersonCard
-                  key={person.code}
-                  selected={selectedDeliveryPerson?.code === person.code}
-                  onClick={() => setSelectedDeliveryPerson(person)}
-                >
-                  <DeliveryPersonHeader>
-                    <DeliveryPersonIcon>
-                      <FaTruck />
-                    </DeliveryPersonIcon>
-                    <DeliveryPersonInfo>
-                      <DeliveryPersonName>{person.name}</DeliveryPersonName>
-                      <DeliveryPersonCode>#{person.code}</DeliveryPersonCode>
-                    </DeliveryPersonInfo>
-                  </DeliveryPersonHeader>
-                  <WarehouseInfo>
-                    <FaWarehouse />
-                    Bodega: {person.assignedWarehouse}
-                  </WarehouseInfo>
-                </DeliveryPersonCard>
-              ))}
+              {deliveryPersons
+                .filter((vendedor) => vendedor.isVendedor === "Re")
+                .map((vendedor) => {
+                  const vendedorId =
+                    vendedor.code || vendedor.VENDEDOR || vendedor.id;
+                  const selectedId =
+                    selectedVendedor?.code ||
+                    selectedVendedor?.VENDEDOR ||
+                    selectedVendedor?.id;
+                  const isSelected = selectedId === vendedorId;
 
-              <AddDeliveryPersonButton onClick={onCreateDeliveryPerson}>
-                <FaPlus />
-                Agregar Repartidor
-              </AddDeliveryPersonButton>
+                  // DEPURACIÓN: Log para cada vendedor
+                  console.log(`Vendedor ${vendedorId}:`, {
+                    vendedorId,
+                    selectedId,
+                    isSelected,
+                    vendedor,
+                    selectedVendedor,
+                  });
+
+                  return (
+                    <DeliveryPersonCard
+                      key={vendedor.code || vendedor.VENDEDOR}
+                      selected={isSelected}
+                      onClick={() => {
+                        console.log("Seleccionando vendedor:", vendedor);
+                        setSelectedVendedor(vendedor);
+                      }}
+                    >
+                      <SelectionIcon selected={isSelected}>
+                        {isSelected ? <FaCheckCircle /> : <FaCircle />}
+                      </SelectionIcon>
+
+                      <DeliveryPersonHeader>
+                        <DeliveryPersonIcon>
+                          <FaUser />
+                        </DeliveryPersonIcon>
+                        <DeliveryPersonInfo>
+                          <DeliveryPersonName>
+                            {vendedor.name || vendedor.NOMBRE}
+                          </DeliveryPersonName>
+                          <DeliveryPersonCode>
+                            #{vendedor.code || vendedor.VENDEDOR}
+                          </DeliveryPersonCode>
+                        </DeliveryPersonInfo>
+                      </DeliveryPersonHeader>
+                      <WarehouseInfo>
+                        <FaWarehouse />
+                        Bodega:{" "}
+                        {vendedor.assignedWarehouse ||
+                          vendedor.BODEGA_ASIGNADA ||
+                          "No asignada"}
+                      </WarehouseInfo>
+                    </DeliveryPersonCard>
+                  );
+                })}
             </DeliveryPersonsGrid>
           )}
         </ModalBody>
 
         <ModalFooter>
-          <LoadsButton variant="secondary" onClick={onClose}>
-            Cancelar
-          </LoadsButton>
-          <LoadsButton
-            variant="primary"
-            onClick={handleSelect}
-            disabled={!selectedDeliveryPerson}
-            loading={loading}
-          >
-            <FaTruck /> Asignar y Cargar
-          </LoadsButton>
+          <SelectedVendedorInfo show={!!selectedVendedor}>
+            <SelectedVendedorTitle>Vendedor Seleccionado</SelectedVendedorTitle>
+            <SelectedVendedorDetails>
+              <div>
+                <SelectedVendedorName>
+                  {selectedVendedor?.name || selectedVendedor?.NOMBRE}
+                </SelectedVendedorName>
+                <SelectedVendedorCode>
+                  #{selectedVendedor?.code || selectedVendedor?.VENDEDOR}
+                </SelectedVendedorCode>
+              </div>
+              <SelectedVendedorWarehouse>
+                Bodega:{" "}
+                {selectedVendedor?.assignedWarehouse ||
+                  selectedVendedor?.BODEGA_ASIGNADA ||
+                  "No asignada"}
+              </SelectedVendedorWarehouse>
+            </SelectedVendedorDetails>
+          </SelectedVendedorInfo>
+
+          <FooterActions>
+            <LoadsButton variant="secondary" onClick={onClose}>
+              Cancelar
+            </LoadsButton>
+            <LoadsButton
+              variant="primary"
+              onClick={handleSelect}
+              disabled={!selectedVendedor}
+              loading={loading}
+            >
+              <FaTruck /> Asignar y Procesar ({orderCount} pedidos)
+            </LoadsButton>
+          </FooterActions>
         </ModalFooter>
       </ModalContent>
     </ModalOverlay>
