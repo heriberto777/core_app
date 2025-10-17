@@ -16,7 +16,7 @@ const {
 const { sendProgress } = require("./progressSse");
 
 // Servicio de reintentos específico para consultas dinámicas
-const queryRetryService = new RetryService.RetryService({
+const queryRetryService = new RetryService({
   maxRetries: 3,
   initialDelay: 2000,
   maxDelay: 15000,
