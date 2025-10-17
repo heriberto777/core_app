@@ -143,7 +143,6 @@ class LoadsService {
             ACTIVO as isActive
           FROM CATELLI.VENDEDOR
           WHERE ACTIVO = 'S'
-          AND U_ESVENDEDOR = 'Re'
           ORDER BY NOMBRE
         `;
 
@@ -364,7 +363,7 @@ class LoadsService {
         FROM CATELLI.VENDEDOR
         WHERE VENDEDOR = @deliveryPersonCode
         AND ACTIVO = 'S'
-        AND U_ESVENDEDOR = 'Re'
+
       `;
 
       const result = await SqlService.query(connection, query, {
