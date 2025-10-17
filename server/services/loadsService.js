@@ -342,14 +342,7 @@ class LoadsService {
    * Procesa la carga de pedidos seleccionados
    */
   static async processOrderLoad(selectedPedidos, deliveryPersonCode, userId) {
-    let server2Connection = null;
-    let server1Connection = null;
-
     try {
-      // Obtener conexiones
-      server2Connection = await withConnection("server2");
-      server1Connection = await withConnection("server1");
-
       // Obtener información del repartidor
       const deliveryPerson = await DeliveryPerson.findOne({
         code: deliveryPersonCode,
@@ -375,30 +368,40 @@ class LoadsService {
 
       await loadTracking.save();
 
-      // 1. Actualizar U_Code_Load en CATELLI.PEDIDO
-      await this.updatePedidosWithLoadId(
-        server1Connection,
-        selectedPedidos,
-        loadId
-      );
+      const result = await withConnection(
+        "server1",
+        async (server1Connection) => {
+          // 1. Actualizar U_Code_Load en CATELLI.PEDIDO
+          await this.updatePedidosWithLoadId(
+            server1Connection,
+            selectedPedidos,
+            loadId
+          );
 
-      // 2. Obtener datos transformados para IMPLT_Orders
-      const ordersData = await this.getTransformedOrdersData(
-        server1Connection,
-        selectedPedidos,
-        loadId
-      );
+          // 2. Obtener datos transformados para IMPLT_Orders
+          const ordersData = await this.getTransformedOrdersData(
+            server1Connection,
+            selectedPedidos,
+            loadId
+          );
 
-      // 3. Insertar en IMPLT_Orders
-      await this.insertToIMPLTOrders(server2Connection, ordersData);
+          // ⭐ NESTED withConnection PARA SERVER2 ⭐
+          await withConnection("server2", async (server2Connection) => {
+            // 3. Insertar en IMPLT_Orders
+            await this.insertToIMPLTOrders(server2Connection, ordersData);
 
-      // 4. Insertar en IMPLT_loads_detail
-      await this.insertToIMPLTLoadsDetail(
-        server2Connection,
-        loadId,
-        deliveryPersonCode,
-        deliveryPerson.assignedWarehouse,
-        ordersData
+            // 4. Insertar en IMPLT_loads_detail
+            await this.insertToIMPLTLoadsDetail(
+              server2Connection,
+              loadId,
+              deliveryPersonCode,
+              deliveryPerson.assignedWarehouse,
+              ordersData
+            );
+          });
+
+          return ordersData;
+        }
       );
 
       // Actualizar tracking
