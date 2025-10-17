@@ -94,7 +94,17 @@ class AppBootstrap {
   async initializeMongoDB() {
     try {
       logger.info("📊 Conectando a MongoDB...");
-      const mongoConnected = await MongoDbService.connect();
+
+      // ⚠️ AGREGAR TIMEOUT DE 5 SEGUNDOS
+      const mongoConnected = await Promise.race([
+        MongoDbService.connect(),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("MongoDB connection timeout")),
+            5000
+          )
+        ),
+      ]);
 
       if (!mongoConnected) {
         logger.error(
@@ -111,11 +121,21 @@ class AppBootstrap {
       this.state.mongodb = true;
       logger.info("✅ Conexión a MongoDB establecida correctamente");
 
-      // Verificar modelo de logs
-      await this.verifyLogModel();
+      // Verificar modelo de logs con timeout también
+      await Promise.race([
+        this.verifyLogModel(),
+        new Promise((_, reject) =>
+          setTimeout(
+            () => reject(new Error("Log model verification timeout")),
+            3000
+          )
+        ),
+      ]);
     } catch (error) {
       logger.error("Error en inicialización de MongoDB:", error);
+      logger.info("⚠️ Continuando sin MongoDB...");
       this.state.mongodb = false;
+      process.env.DISABLE_MONGO_LOGS = "true";
     }
   }
 
@@ -196,54 +216,69 @@ class AppBootstrap {
   }
 
   /**
-   * Inicializa el servicio de cron
-   */
-  async initializeCronService() {
-    try {
-      const Config = require("../models/configModel");
-      const cronService = require("../services/cronService");
-
-      // Buscar configuración guardada
-      const savedConfig = await Config.findOne();
-
-      if (savedConfig) {
-        // Sincronizar estado del planificador con la configuración guardada
-        cronService.setSchedulerEnabled(savedConfig.enabled, savedConfig.hour);
-
-        logger.info(
-          `Servicio de tareas programadas inicializado: ${
-            savedConfig.enabled ? "habilitado" : "deshabilitado"
-          } a las ${savedConfig.hour}`
-        );
-      } else {
-        // Si no hay configuración, crear una configuración por defecto (deshabilitada)
-        const defaultConfig = new Config({
-          hour: "02:00",
-          enabled: false, // Deshabilitado por defecto
-          lastModified: new Date(),
-        });
-
-        await defaultConfig.save();
-        logger.info(
-          "Configuración inicial del planificador creada como deshabilitada"
-        );
-
-        // Asegurar que el planificador esté deshabilitado
-        cronService.setSchedulerEnabled(false, "02:00");
-      }
-
+ * Inicializa el servicio de cron
+ */
+async initializeCronService() {
+  try {
+    // ⚠️ SOLO INICIALIZAR CRON SI MONGODB ESTÁ CONECTADO
+    if (!this.state.mongodb) {
+      logger.info("⚠️ Saltando inicialización de cron service (MongoDB no disponible)");
       return {
         success: true,
-        message: "Servicio cron inicializado correctamente",
-      };
-    } catch (error) {
-      logger.error(`Error al inicializar servicio cron: ${error.message}`);
-      return {
-        success: false,
-        message: `Error al inicializar servicio cron: ${error.message}`,
+        message: "Cron service omitido - MongoDB no disponible",
       };
     }
+
+    const Config = require("../models/configModel");
+    const cronService = require("../services/cronService");
+
+    // ⚠️ AGREGAR TIMEOUT DE 3 SEGUNDOS
+    const savedConfig = await Promise.race([
+      Config.findOne(),
+      new Promise((_, reject) =>
+        setTimeout(() => reject(new Error("Config findOne timeout")), 3000)
+      )
+    ]);
+
+    if (savedConfig) {
+      cronService.setSchedulerEnabled(savedConfig.enabled, savedConfig.hour);
+      logger.info(
+        `Servicio de tareas programadas inicializado: ${
+          savedConfig.enabled ? "habilitado" : "deshabilitado"
+        } a las ${savedConfig.hour}`
+      );
+    } else {
+      // Crear configuración por defecto con timeout
+      const defaultConfig = new Config({
+        hour: "02:00",
+        enabled: false,
+        lastModified: new Date(),
+      });
+
+      await Promise.race([
+        defaultConfig.save(),
+        new Promise((_, reject) =>
+          setTimeout(() => reject(new Error("Config save timeout")), 3000)
+        )
+      ]);
+
+      logger.info("Configuración inicial del planificador creada como deshabilitada");
+      cronService.setSchedulerEnabled(false, "02:00");
+    }
+
+    return {
+      success: true,
+      message: "Servicio cron inicializado correctamente",
+    };
+  } catch (error) {
+    logger.error(`Error al inicializar servicio cron: ${error.message}`);
+    logger.info("⚠️ Continuando sin cron service...");
+    return {
+      success: false,
+      message: `Error al inicializar servicio cron: ${error.message}`,
+    };
   }
+}
 
   /**
    * Detiene todos los servicios de la aplicación de manera ordenada

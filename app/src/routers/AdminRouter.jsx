@@ -7,7 +7,7 @@ import {
   usePermissions,
   Dashboard,
   TransferTasks,
-  LoadsTasks,
+  LoadsManagement,
   LoadsResumen,
   Statistics,
   DocumentsVisualization,
@@ -148,7 +148,10 @@ export function AdminRouter() {
         path="/loads"
         element={
           <ProtectedRoute resource="loads" action="read">
-            <LayoutWrapper component={LoadsTasks} title="Cargas de Datos" />
+            <LayoutWrapper
+              component={LoadsManagement}
+              title="Cargas de Datos"
+            />
           </ProtectedRoute>
         }
       />
