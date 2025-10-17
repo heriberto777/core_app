@@ -49,7 +49,7 @@ const transactionFormat = printf(
       const functionInfo = caller.functionName
         ? `${caller.functionName}()`
         : "<anonymous>";
-      output += `\n📍 Ubicación: ${lineInfo} en ${functionInfo}`;
+      output += `\n🔍 Ubicación: ${lineInfo} en ${functionInfo}`;
     }
 
     // ⭐ SUGERENCIAS AUTOMÁTICAS ⭐
@@ -376,6 +376,49 @@ logger.api = logger.withContext({ source: "api" });
 logger.transfer = logger.withContext({ source: "transfer" });
 logger.transaction = logger.withContext({ source: "transaction" });
 
+// Método para iniciar transacción con logging completo
+logger.startTransaction = function (
+  transactionId,
+  operation,
+  userId,
+  metadata = {}
+) {
+  const txnLogger = logger.withContext({
+    transactionId,
+    operation,
+    userId,
+    startTime: Date.now(),
+  });
+
+  txnLogger.info("🚀 Transacción iniciada", {
+    operation,
+    transactionId,
+    userId,
+    metadata,
+    timestamp: new Date().toISOString(),
+  });
+
+  return {
+    debug: (message, meta = {}) => txnLogger.debug(message, meta),
+    info: (message, meta = {}) => txnLogger.info(message, meta),
+    warn: (message, meta = {}) => txnLogger.warn(message, meta),
+    error: (message, meta = {}) => txnLogger.error(message, meta),
+
+    // Método para finalizar transacción
+    finish: function (status = "success", result = {}) {
+      const duration = Date.now() - this.startTime;
+      const finalStatus = status === "success" ? "✅" : "❌";
+
+      txnLogger.info(`${finalStatus} Transacción finalizada`, {
+        status,
+        duration: `${duration}ms`,
+        result,
+        timestamp: new Date().toISOString(),
+      });
+    },
+  };
+};
+
 // Resto de métodos existentes (logQuery, logRequest, logTransfer, etc.)
 logger.logQuery = function (query, duration, result, context = {}) {
   const queryInfo = {
@@ -504,6 +547,61 @@ const gracefulShutdown = () => {
 process.on("SIGINT", gracefulShutdown);
 process.on("SIGTERM", gracefulShutdown);
 
+// ⭐ ASEGURAR QUE TODAS LAS FUNCIONES ESTÉN DISPONIBLES ⭐
+logger.captureError = logger.captureError.bind(logger);
+logger.logQuery = logger.logQuery.bind(logger);
+logger.logRequest = logger.logRequest.bind(logger);
+logger.logTransfer = logger.logTransfer.bind(logger);
+logger.startTransaction = logger.startTransaction.bind(logger);
+logger.withContext = logger.withContext.bind(logger);
+
+// Crear alias para compatibilidad
+logger.capture = logger.captureError;
+
+// ⭐ EXPORTACIÓN ROBUSTA ⭐
+const exportedLogger = {
+  ...logger,
+  // Métodos personalizados explícitos
+  captureError: function (error, context = {}) {
+    return logger.captureError(error, context);
+  },
+  capture: function (error, context = {}) {
+    return logger.captureError(error, context);
+  },
+  logQuery: function (query, duration, result, context = {}) {
+    return logger.logQuery(query, duration, result, context);
+  },
+  logRequest: function (req, res, duration, context = {}) {
+    return logger.logRequest(req, res, duration, context);
+  },
+  logTransfer: function (operation, recordCount, duration, context = {}) {
+    return logger.logTransfer(operation, recordCount, duration, context);
+  },
+  startTransaction: function (transactionId, operation, userId, metadata = {}) {
+    return logger.startTransaction(transactionId, operation, userId, metadata);
+  },
+  withContext: function (context = {}) {
+    return logger.withContext(context);
+  },
+  // Métodos winston nativos
+  error: logger.error.bind(logger),
+  warn: logger.warn.bind(logger),
+  info: logger.info.bind(logger),
+  debug: logger.debug.bind(logger),
+  verbose: logger.verbose.bind(logger),
+  // Contextos especializados
+  system: logger.system,
+  db: logger.db,
+  api: logger.api,
+  transfer: logger.transfer,
+  transaction: logger.transaction,
+  // Stream para Morgan
+  stream: logger.stream,
+  // Métodos de Winston
+  close: logger.close.bind(logger),
+  transports: logger.transports,
+};
+
 // Log de inicialización con interceptores
 logger.system.info("🚀 Sistema de logging inicializado", {
   level: "debug",
@@ -515,7 +613,21 @@ logger.system.info("🚀 Sistema de logging inicializado", {
     "unhandledRejection",
     "uncaughtException",
   ],
+  customMethods: [
+    "captureError",
+    "logQuery",
+    "logRequest",
+    "logTransfer",
+    "startTransaction",
+    "withContext",
+  ],
   timestamp: new Date().toISOString(),
 });
 
-module.exports = logger;
+// Debug: Verificar que los métodos están disponibles
+console.log(
+  "🔍 Logger methods available:",
+  Object.getOwnPropertyNames(exportedLogger)
+);
+
+module.exports = exportedLogger;
