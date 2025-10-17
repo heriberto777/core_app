@@ -281,7 +281,7 @@ Module.prototype.require = function (id) {
 };
 
 // ⭐ MÉTODO PARA CAPTURA INTELIGENTE DE ERRORES ⭐
-logger.captureError = function (error, context = {}) {
+logger.error = function (error, context = {}) {
   const caller = getCaller();
   const errorType = error.constructor.name;
 

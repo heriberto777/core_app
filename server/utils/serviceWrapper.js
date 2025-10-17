@@ -38,7 +38,7 @@ function wrapService(ServiceClass, serviceName) {
         const duration = Date.now() - startTime;
 
         // Usar tu logger existente con análisis automático
-        logger.captureError(error, {
+        logger.error(error, {
           service: serviceName,
           method: methodName,
           duration: `${duration}ms`,
