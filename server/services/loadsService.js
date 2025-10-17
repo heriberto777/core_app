@@ -397,6 +397,8 @@ class LoadsService {
 
       await loadTracking.save();
 
+      let ordersData;
+
       const result = await withConnection(
         "server1",
         async (server1Connection) => {
@@ -408,7 +410,7 @@ class LoadsService {
           );
 
           // 2. Obtener datos transformados para IMPLT_Orders
-          const ordersData = await this.getTransformedOrdersData(
+          const transformedData = await this.getTransformedOrdersData(
             server1Connection,
             selectedPedidos,
             loadId
@@ -417,7 +419,7 @@ class LoadsService {
           // ⭐ NESTED withConnection PARA SERVER2 ⭐
           await withConnection("server2", async (server2Connection) => {
             // 3. Insertar en IMPLT_Orders
-            await this.insertToIMPLTOrders(server2Connection, ordersData);
+            await this.insertToIMPLTOrders(server2Connection, transformedData);
 
             // 4. Insertar en IMPLT_loads_detail
             await this.insertToIMPLTLoadsDetail(
@@ -425,31 +427,94 @@ class LoadsService {
               loadId,
               deliveryPersonCode,
               deliveryPerson.assignedWarehouse,
-              ordersData
+              transformedData
             );
           });
 
-          return ordersData;
+          return transformedData;
         }
       );
+
+      ordersData = result;
+
+      // ⭐ PASO 3: AUTO-EJECUTAR TRASPASO DE INVENTARIO ⭐
+      console.log("🚀 Ejecutando traspaso automático de inventario...");
+
+
+      let traspasoResult = null;
+      try {
+        // Importar el servicio de traspaso
+        const { realizarTraspaso } = require("./traspasoService");
+
+        // Preparar datos para el traspaso
+        const traspasoData = ordersData.map((order) => ({
+          Code_Product: order.Code_Product,
+          Quantity: order.Quantity,
+          bodega: deliveryPerson.assignedWarehouse, // Bodega origen del repartidor
+        }));
+
+        // ⭐ EJECUTAR TRASPASO AUTOMÁTICAMENTE ⭐
+        traspasoResult = await realizarTraspaso({
+          route: deliveryPersonCode,
+          salesData: traspasoData,
+          bodega_destino: "02", // Bodega destino por defecto o configurable
+        });
+
+        console.log(
+          "✅ Traspaso automático completado:",
+          traspasoResult.documento_inv
+        );
+      } catch (traspasoError) {
+        console.error(
+          "❌ Error en traspaso automático:",
+          traspasoError.message
+        );
+
+        // ⚠️ DECIDIR: ¿Fallar todo el proceso o continuar sin traspaso?
+        // Opción 1: Continuar sin traspaso (warning)
+        console.warn("⚠️ Continuando sin traspaso automático");
+
+        // Opción 2: Fallar todo el proceso (uncomment línea siguiente)
+        // throw new Error(`Error en traspaso automático: ${traspasoError.message}`);
+      }
 
       // Actualizar tracking
       loadTracking.status = "completed";
       loadTracking.processedOrders = selectedPedidos.length;
+      loadTracking.traspasoDocument = traspasoResult?.documento_inv || null;
+      loadTracking.traspasoStatus = traspasoResult?.success
+        ? "completed"
+        : "failed";
       loadTracking.updatedAt = new Date();
       await loadTracking.save();
 
       return {
         success: true,
-        message: "Carga procesada exitosamente",
+        message: "Carga y traspaso procesados exitosamente",
         data: {
           loadId,
           deliveryPerson: deliveryPerson.name,
           warehouse: deliveryPerson.assignedWarehouse,
           totalOrders: selectedPedidos.length,
+          // ⭐ INFORMACIÓN DEL TRASPASO ⭐
+          traspaso: traspasoResult
+            ? {
+                documento: traspasoResult.documento_inv,
+                success: traspasoResult.success,
+                lineasProcesadas: traspasoResult.totalLineas,
+                lineasExitosas: traspasoResult.lineasExitosas,
+              }
+            : null,
         },
       };
     } catch (error) {
+      if (loadTracking) {
+        loadTracking.status = "failed";
+        loadTracking.errorMessage = error.message;
+        loadTracking.updatedAt = new Date();
+        await loadTracking.save().catch(console.error);
+      }
+
       logger.error("Error procesando carga:", error);
       throw error;
     }

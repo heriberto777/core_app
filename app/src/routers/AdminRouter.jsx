@@ -7,7 +7,6 @@ import {
   usePermissions,
   Dashboard,
   TransferTasks,
-  LoadsTasks,
   LoadsManagement,
   LoadsResumen,
   Statistics,
