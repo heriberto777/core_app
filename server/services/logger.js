@@ -1,8 +1,9 @@
-// services/logger.js - Versión COMPLETA para transacciones
+// services/logger.js - Versión COMPLETA con interceptores automáticos
 const { createLogger, format, transports } = require("winston");
 const { combine, timestamp, printf, colorize, json } = format;
 const path = require("path");
 const fs = require("fs");
+const Module = require("module");
 const MongoDBTransport = require("./mongoDBTransport");
 
 // Crear directorio de logs
@@ -25,6 +26,8 @@ const transactionFormat = printf(
     duration,
     metadata,
     stack,
+    caller,
+    suggestions,
     ...rest
   }) => {
     let output = `${timestamp} [${level.toUpperCase()}]`;
@@ -38,6 +41,24 @@ const transactionFormat = printf(
     if (duration) output += `[${duration}ms]`;
 
     output += `: ${message}`;
+
+    // ⭐ INFORMACIÓN DEL CALLER ⭐
+    if (caller) {
+      const fileName = path.basename(caller.fileName || "unknown");
+      const lineInfo = `${fileName}:${caller.lineNumber}`;
+      const functionInfo = caller.functionName
+        ? `${caller.functionName}()`
+        : "<anonymous>";
+      output += `\n📍 Ubicación: ${lineInfo} en ${functionInfo}`;
+    }
+
+    // ⭐ SUGERENCIAS AUTOMÁTICAS ⭐
+    if (suggestions && Array.isArray(suggestions) && suggestions.length > 0) {
+      output += `\n💡 Sugerencias:`;
+      suggestions.forEach((suggestion, index) => {
+        output += `\n   ${index + 1}. ${suggestion}`;
+      });
+    }
 
     // Metadata adicional
     if (metadata && Object.keys(metadata).length > 0) {
@@ -88,7 +109,7 @@ const createMongoTransport = () => {
     }
 
     const mongoTransport = new MongoDBTransport({
-      level: "debug", // CAPTURAR TODO
+      level: "debug",
       silent: false,
       handleExceptions: true,
       handleRejections: true,
@@ -109,41 +130,33 @@ const createMongoTransport = () => {
 // Configurar TODOS los transportes
 const configureTransports = () => {
   const transportsList = [
-    // Consola con formato detallado
     new transports.Console({
       format: combine(colorize(), timestamp(), transactionFormat),
-      level: "debug", // TODO en consola
+      level: "debug",
     }),
-
-    // Archivo combinado con TODO
     new transports.File({
       filename: path.join(logDir, "combined.log"),
-      maxsize: 50485760, // 50MB
+      maxsize: 50485760,
       maxFiles: 20,
-      level: "debug", // TODO en archivo
+      level: "debug",
       format: jsonFormat,
     }),
-
-    // Archivo solo de errores
     new transports.File({
       filename: path.join(logDir, "error.log"),
       level: "error",
-      maxsize: 20485760, // 20MB
+      maxsize: 20485760,
       maxFiles: 10,
       format: jsonFormat,
     }),
-
-    // Archivo de transacciones detalladas
     new transports.File({
       filename: path.join(logDir, "transactions.log"),
       level: "debug",
-      maxsize: 100485760, // 100MB
+      maxsize: 100485760,
       maxFiles: 50,
       format: combine(timestamp(), transactionFormat),
     }),
   ];
 
-  // Agregar MongoDB Transport
   const mongoTransport = createMongoTransport();
   if (mongoTransport) {
     transportsList.push(mongoTransport);
@@ -155,7 +168,7 @@ const configureTransports = () => {
 
 // Crear logger con configuración COMPLETA
 const logger = createLogger({
-  level: "debug", // Nivel más bajo para capturar TODO
+  level: "debug",
   format: combine(timestamp(), transactionFormat),
   transports: configureTransports(),
   exitOnError: false,
@@ -169,7 +182,158 @@ const logger = createLogger({
   },
 });
 
-// Stream para Morgan con logging completo
+// ⭐ INTERCEPTORES AUTOMÁTICOS DE ERRORES ⭐
+
+// Helper para obtener información del caller
+function getCaller() {
+  const originalFunc = Error.prepareStackTrace;
+  let callerInfo = {
+    fileName: "unknown",
+    lineNumber: 0,
+    functionName: "unknown",
+  };
+
+  try {
+    const err = new Error();
+    Error.prepareStackTrace = (err, stack) => stack;
+    const stack = err.stack;
+
+    for (let i = 1; i < stack.length; i++) {
+      const caller = stack[i];
+      const fileName = caller.getFileName();
+
+      if (
+        fileName &&
+        !fileName.includes("node_modules") &&
+        !fileName.includes("logger.js") &&
+        !fileName.includes("internal/") &&
+        fileName.includes("server/")
+      ) {
+        callerInfo = {
+          fileName: fileName.replace(process.cwd(), ""),
+          lineNumber: caller.getLineNumber(),
+          functionName:
+            caller.getFunctionName() || caller.getMethodName() || "<anonymous>",
+          typeName: caller.getTypeName(),
+        };
+        break;
+      }
+    }
+  } catch (e) {
+    // Silencioso si falla
+  }
+
+  Error.prepareStackTrace = originalFunc;
+  return callerInfo;
+}
+
+// ⭐ INTERCEPTOR DE CONSOLE.ERROR ⭐
+const originalConsoleError = console.error;
+console.error = function (...args) {
+  originalConsoleError.apply(console, args);
+
+  const errorMessage = args.join(" ");
+  const caller = getCaller();
+
+  logger.error(`🔍 CONSOLE ERROR INTERCEPTADO: ${errorMessage}`, {
+    source: "console_error",
+    caller: caller,
+    args: args,
+    stack: new Error().stack,
+  });
+};
+
+// ⭐ INTERCEPTOR DE REQUIRE() ⭐
+const originalRequire = Module.prototype.require;
+Module.prototype.require = function (id) {
+  try {
+    return originalRequire.apply(this, arguments);
+  } catch (error) {
+    const caller = getCaller();
+
+    if (error.code === "MODULE_NOT_FOUND") {
+      logger.error(`❌ MÓDULO NO ENCONTRADO: ${id}`, {
+        source: "require_error",
+        errorCode: error.code,
+        requestedModule: id,
+        caller: caller,
+        availablePaths: module.paths.slice(0, 3),
+        stack: error.stack,
+        suggestions: [
+          `¿Existe el archivo/módulo ${id}?`,
+          `¿La ruta es correcta?`,
+          `¿Está instalado el paquete npm?`,
+        ],
+      });
+    } else {
+      logger.error(`❌ ERROR AL CARGAR MÓDULO: ${id}`, {
+        source: "require_error",
+        errorCode: error.code,
+        requestedModule: id,
+        caller: caller,
+        errorMessage: error.message,
+        stack: error.stack,
+      });
+    }
+
+    throw error;
+  }
+};
+
+// ⭐ MÉTODO PARA CAPTURA INTELIGENTE DE ERRORES ⭐
+logger.captureError = function (error, context = {}) {
+  const caller = getCaller();
+  const errorType = error.constructor.name;
+
+  let errorCategory = "general_error";
+  let suggestions = [];
+
+  if (
+    error.message.includes("Cannot read prop") ||
+    error.message.includes("undefined")
+  ) {
+    errorCategory = "undefined_property";
+    suggestions = [
+      "¿El objeto está correctamente inicializado?",
+      "¿Importaste todos los módulos necesarios?",
+      "¿Verificaste que la variable no sea null/undefined?",
+    ];
+  } else if (error.message.includes("is not a function")) {
+    errorCategory = "not_a_function";
+    suggestions = [
+      "¿El método existe en el objeto?",
+      "¿Importaste correctamente el módulo?",
+      "¿El objeto tiene ese método disponible?",
+    ];
+  } else if (error.message.includes("Cannot find module")) {
+    errorCategory = "module_not_found";
+    suggestions = [
+      "¿Existe el archivo en la ruta especificada?",
+      "¿La ruta relativa es correcta?",
+      "¿Instalaste el paquete npm?",
+    ];
+  } else if (error.code === "ECONNREFUSED" || error.code === "ETIMEDOUT") {
+    errorCategory = "connection_error";
+    suggestions = [
+      "¿El servidor de base de datos está corriendo?",
+      "¿La configuración de conexión es correcta?",
+      "¿Hay problemas de red o firewall?",
+    ];
+  }
+
+  this.error(`🚨 ${errorCategory.toUpperCase()}: ${error.message}`, {
+    source: "error_capture",
+    errorType: errorType,
+    errorCategory: errorCategory,
+    caller: caller,
+    context: context,
+    stack: error.stack,
+    suggestions: suggestions,
+    timestamp: new Date().toISOString(),
+  });
+};
+
+// Stream para Morgan
 logger.stream = {
   write: function (message) {
     try {
@@ -211,115 +375,10 @@ logger.api = logger.withContext({ source: "api" });
 logger.transfer = logger.withContext({ source: "transfer" });
 logger.transaction = logger.withContext({ source: "transaction" });
 
-// Método para iniciar transacción con logging completo
-logger.startTransaction = function (
-  transactionId,
-  operation,
-  userId,
-  metadata = {}
-) {
-  const txnLogger = logger.withContext({
-    transactionId,
-    operation,
-    userId,
-    startTime: Date.now(),
-  });
-
-  txnLogger.info("🚀 Transacción iniciada", {
-    operation,
-    transactionId,
-    userId,
-    metadata,
-    timestamp: new Date().toISOString(),
-  });
-
-  return {
-    debug: (message, meta = {}) => txnLogger.debug(message, meta),
-    info: (message, meta = {}) => txnLogger.info(message, meta),
-    warn: (message, meta = {}) => txnLogger.warn(message, meta),
-    error: (message, meta = {}) => txnLogger.error(message, meta),
-
-    // Método para finalizar transacción
-    finish: function (status = "success", result = {}) {
-      const duration = Date.now() - this.startTime;
-      const finalStatus = status === "success" ? "✅" : "❌";
-
-      txnLogger.info(`${finalStatus} Transacción ${status}`, {
-        duration,
-        status,
-        result,
-        transactionId,
-        operation,
-        userId,
-        endTime: new Date().toISOString(),
-      });
-    },
-
-    // Método para logging de pasos
-    step: function (stepName, data = {}) {
-      txnLogger.debug(`🔹 Paso: ${stepName}`, {
-        step: stepName,
-        stepData: data,
-        transactionId,
-        operation,
-      });
-    },
-  };
-};
-
-// Método para errores con stack completo
-logger.logError = function (error, context = {}) {
-  try {
-    const errorInfo = {
-      message: error.message,
-      stack: error.stack,
-      name: error.name,
-      code: error.code,
-      timestamp: new Date().toISOString(),
-      ...context,
-    };
-
-    this.error("❌ Error occurred", errorInfo);
-
-    // También log en debug para más detalle
-    this.debug("🔍 Error details", {
-      error: error.toString(),
-      stack: error.stack,
-      context,
-      timestamp: new Date().toISOString(),
-    });
-  } catch (logError) {
-    console.error("Error logging error:", logError.message);
-    console.error("Original error:", error);
-  }
-};
-
-// Método para logging de performance completo
-logger.logPerformance = function (operation, duration, context = {}) {
-  const perfInfo = {
-    operation,
-    duration: `${duration}ms`,
-    source: "performance",
-    timestamp: new Date().toISOString(),
-    ...context,
-  };
-
-  if (duration > 5000) {
-    this.error("🐌 VERY SLOW operation detected", perfInfo);
-  } else if (duration > 1000) {
-    this.warn("⚠️ Slow operation detected", perfInfo);
-  } else if (duration > 500) {
-    this.info("📊 Operation completed", perfInfo);
-  } else {
-    this.debug("⚡ Fast operation completed", perfInfo);
-  }
-};
-
-// Método para logging de queries de BD
-logger.logQuery = function (query, params, duration, result, context = {}) {
+// Resto de métodos existentes (logQuery, logRequest, logTransfer, etc.)
+logger.logQuery = function (query, duration, result, context = {}) {
   const queryInfo = {
-    query: query.substring(0, 1000), // Truncar queries muy largas
-    params,
+    query: query.length > 200 ? query.substring(0, 200) + "..." : query,
     duration: `${duration}ms`,
     resultCount: Array.isArray(result) ? result.length : result ? 1 : 0,
     source: "database",
@@ -334,7 +393,6 @@ logger.logQuery = function (query, params, duration, result, context = {}) {
   }
 };
 
-// Método para logging de requests completo
 logger.logRequest = function (req, res, duration, context = {}) {
   const requestInfo = {
     method: req.method,
@@ -362,7 +420,6 @@ logger.logRequest = function (req, res, duration, context = {}) {
   }
 };
 
-// Método para logging de datos transferidos
 logger.logTransfer = function (operation, recordCount, duration, context = {}) {
   const transferInfo = {
     operation,
@@ -375,8 +432,6 @@ logger.logTransfer = function (operation, recordCount, duration, context = {}) {
   };
 
   this.info("📊 Transfer completed", transferInfo);
-
-  // Log detallado en debug
   this.debug("🔍 Transfer details", {
     ...transferInfo,
     detailedStats: {
@@ -386,7 +441,46 @@ logger.logTransfer = function (operation, recordCount, duration, context = {}) {
   });
 };
 
-// Graceful shutdown con logging completo
+// ⭐ AUTO-CAPTURA DE PROMISES RECHAZADAS ⭐
+process.on("unhandledRejection", (reason, promise) => {
+  const caller = getCaller();
+
+  logger.error("❌ PROMESA RECHAZADA NO MANEJADA", {
+    source: "unhandled_rejection",
+    reason: reason?.message || reason,
+    promiseDetails: promise.toString(),
+    caller: caller,
+    stack: reason?.stack,
+    suggestions: [
+      "Agrega .catch() a todas las promesas",
+      "Usa try-catch en funciones async",
+      "Verifica que todos los await tengan manejo de errores",
+    ],
+  });
+});
+
+// ⭐ AUTO-CAPTURA DE EXCEPCIONES NO MANEJADAS ⭐
+process.on("uncaughtException", (error) => {
+  const caller = getCaller();
+
+  logger.error("💥 EXCEPCIÓN NO CAPTURADA - CRÍTICO", {
+    source: "uncaught_exception",
+    error: error.message,
+    caller: caller,
+    stack: error.stack,
+    suggestions: [
+      "Revisa el stack trace para encontrar el origen",
+      "Agrega try-catch apropiado",
+      "Verifica inicializaciones de objetos",
+    ],
+  });
+
+  setTimeout(() => {
+    process.exit(1);
+  }, 1000);
+});
+
+// Graceful shutdown
 const gracefulShutdown = () => {
   logger.system.info("🔄 Iniciando cierre graceful del logger...");
 
@@ -409,11 +503,17 @@ const gracefulShutdown = () => {
 process.on("SIGINT", gracefulShutdown);
 process.on("SIGTERM", gracefulShutdown);
 
-// Log de inicio del sistema
+// Log de inicialización con interceptores
 logger.system.info("🚀 Sistema de logging inicializado", {
   level: "debug",
   transports: logger.transports.length,
   mongoEnabled: logger.transports.some((t) => t.name === "mongodb"),
+  interceptors: [
+    "console.error",
+    "Module.require",
+    "unhandledRejection",
+    "uncaughtException",
+  ],
   timestamp: new Date().toISOString(),
 });
 
