@@ -2,9 +2,10 @@ import styled from "styled-components";
 import {
   Header,
   useAuth,
-  TransferApi,
+
   ScheduleConfigButton,
 } from "../../index";
+import { TransferApi } from "../../api/index";
 import { useState, useEffect, useCallback } from "react";
 import {
   FaServer,

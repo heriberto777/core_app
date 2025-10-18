@@ -2,9 +2,10 @@
 import React, { useContext, useState, useMemo } from "react";
 import styled from "styled-components";
 import SwitchMode from "react-switch";
-import { v, ThemeContext, useAuth, usePermissions } from "../../index";
+import { ThemeContext, useAuth, usePermissions } from "../../index";
+import { v, Device} from "../../styles/index";
 import { NavLink, useLocation } from "react-router-dom";
-import { Device } from "../../styles/breakpoints";
+// import { Device } from "../../styles/breakpoints";
 import {
   FaMoon,
   FaSun,

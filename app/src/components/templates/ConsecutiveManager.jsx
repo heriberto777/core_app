@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
-import { TransferApi, useAuth } from "../../index";
+import { useAuth } from "../../index";
+import { TransferApi } from "../../api/index";
 import {
   FaEdit,
   FaTrash,
@@ -276,13 +277,13 @@ export function ConsecutiveManager() {
               <tr style="border-bottom: 1px solid #eee;">
                 <td style="padding: 8px; font-weight: bold;">Rango de Valores:</td>
                 <td style="padding: 8px;">
-                  Min: ${metrics.metrics.valueRange.min} | 
-                  Actual: ${metrics.metrics.valueRange.current} | 
+                  Min: ${metrics.metrics.valueRange.min} |
+                  Actual: ${metrics.metrics.valueRange.current} |
                   Max: ${metrics.metrics.valueRange.max}
                 </td>
               </tr>
             </table>
-            
+
             ${
               metrics.metrics.bySegment
                 ? `
@@ -294,7 +295,7 @@ export function ConsecutiveManager() {
                   <tr style="border-bottom: 1px solid #eee;">
                     <td style="padding: 8px; font-weight: bold;">${segment}:</td>
                     <td style="padding: 8px;">
-                      Valor: ${data.currentValue} | 
+                      Valor: ${data.currentValue} |
                       Incrementos: ${data.incrementCount}
                     </td>
                   </tr>

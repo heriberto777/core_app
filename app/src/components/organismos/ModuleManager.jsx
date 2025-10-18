@@ -37,9 +37,8 @@ import {
   ProtectedComponent,
   ActionButton,
   Pagination,
-  moduleApi,
-  roleApi,
 } from "../../index";
+import { moduleApi, roleApi } from "../../api/index";
 import { Badge, Spinner } from "./UIComponents";
 
 // ⭐ INSTANCIAR API ⭐
@@ -746,19 +745,19 @@ const ModuleManager = () => {
         <div id="rolePermissionsContainer">
           <div class="role-permission-item">
             <label>
-              <input type="checkbox" value="superadmin" checked> 
+              <input type="checkbox" value="superadmin" checked>
               Super Admin - Todos los permisos
             </label>
           </div>
           <div class="role-permission-item">
             <label>
-              <input type="checkbox" value="admin" checked> 
+              <input type="checkbox" value="admin" checked>
               Admin - Lectura y actualización
             </label>
           </div>
           <div class="role-permission-item">
             <label>
-              <input type="checkbox" value="coordinador"> 
+              <input type="checkbox" value="coordinador">
               Coordinador - Solo lectura
             </label>
           </div>

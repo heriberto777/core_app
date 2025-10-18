@@ -1,5 +1,6 @@
 import styled from "styled-components";
-import { Header, TransferApi, useAuth, useFetchData } from "../../index";
+import { Header,  useAuth, useFetchData } from "../../index";
+import { TransferApi } from "../../api/index";
 import { useState, useEffect, useCallback } from "react";
 import Swal from "sweetalert2";
 import { FaPlay, FaSync, FaList, FaTable, FaHistory } from "react-icons/fa";
@@ -336,12 +337,12 @@ export function LoadsTasks() {
             <option value="">-- Selecciona un vendedor --</option>
             ${vendedoresOptions}
           </select>
-          
+
           <div>
             <label>Código de Vendedor:</label>
             <input id="swal-input-route" class="swal2-input" readonly />
           </div>
-          
+
           <div>
             <label>Bodega Asignada:</label>
             <input id="swal-input-bodega" class="swal2-input" readonly />

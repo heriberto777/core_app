@@ -17,7 +17,8 @@ import {
   FaEye,
   FaEyeSlash,
 } from "react-icons/fa";
-import { EmailConfigApi, useAuth, useFetchData, Header } from "../../index";
+import { useAuth, useFetchData, Header } from "../../index";
+import { EmailConfigApi } from "../../api/index";
 
 const emailConfigApi = new EmailConfigApi();
 
@@ -63,12 +64,12 @@ export function ControlEmailConfig() {
             <label for="name">Nombre de configuración *</label>
             <input id="name" class="swal2-input" placeholder="Ej: Gmail Corporativo">
           </div>
-          
+
           <div class="form-group">
             <label for="host">Servidor SMTP *</label>
             <input id="host" class="swal2-input" placeholder="Ej: smtp.gmail.com">
           </div>
-          
+
           <div class="form-row">
             <div class="form-group">
               <label for="port">Puerto *</label>
@@ -79,33 +80,33 @@ export function ControlEmailConfig() {
               <label for="secure">Conexión segura (SSL)</label>
             </div>
           </div>
-          
+
           <div class="form-group">
             <label for="authUser">Usuario/Email *</label>
             <input id="authUser" type="email" class="swal2-input" placeholder="usuario@ejemplo.com">
           </div>
-          
+
           <div class="form-group">
             <label for="authPass">Contraseña *</label>
             <input id="authPass" type="password" class="swal2-input" placeholder="Contraseña o App Password">
           </div>
-          
+
           <div class="form-group">
             <label for="fromEmail">Dirección de envío *</label>
             <input id="fromEmail" class="swal2-input" placeholder='"Sistema de Transferencia" <noreply@ejemplo.com>'>
           </div>
-          
+
           <div class="form-check">
             <input type="checkbox" id="isDefault" class="swal2-checkbox">
             <label for="isDefault">Establecer como configuración por defecto</label>
           </div>
-          
+
           <div class="form-check">
             <input type="checkbox" id="isActive" class="swal2-checkbox" checked>
             <label for="isActive">Activar configuración</label>
           </div>
         </div>
-        
+
         <style>
           .email-config-form { text-align: left; }
           .form-group { margin-bottom: 15px; }
@@ -230,14 +231,14 @@ export function ControlEmailConfig() {
               config.name
             }" placeholder="Ej: Gmail Corporativo">
           </div>
-          
+
           <div class="form-group">
             <label for="host">Servidor SMTP *</label>
             <input id="host" class="swal2-input" value="${
               config.host
             }" placeholder="Ej: smtp.gmail.com">
           </div>
-          
+
           <div class="form-row">
             <div class="form-group">
               <label for="port">Puerto *</label>
@@ -252,26 +253,26 @@ export function ControlEmailConfig() {
               <label for="secure">Conexión segura (SSL)</label>
             </div>
           </div>
-          
+
           <div class="form-group">
             <label for="authUser">Usuario/Email *</label>
             <input id="authUser" type="email" class="swal2-input" value="${
               config.auth?.user || ""
             }" placeholder="usuario@ejemplo.com">
           </div>
-          
+
           <div class="form-group">
             <label for="authPass">Contraseña *</label>
             <input id="authPass" type="password" class="swal2-input" placeholder="Dejar vacío para mantener actual">
           </div>
-          
+
           <div class="form-group">
             <label for="fromEmail">Dirección de envío *</label>
             <input id="fromEmail" class="swal2-input" value="${
               config.from
             }" placeholder='"Sistema de Transferencia" <noreply@ejemplo.com>'>
           </div>
-          
+
           <div class="form-check">
             <input type="checkbox" id="isActive" class="swal2-checkbox" ${
               config.isActive ? "checked" : ""
@@ -279,7 +280,7 @@ export function ControlEmailConfig() {
             <label for="isActive">Activar configuración</label>
           </div>
         </div>
-        
+
         <style>
           .email-config-form { text-align: left; }
           .form-group { margin-bottom: 15px; }

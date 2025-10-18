@@ -15,7 +15,8 @@ import {
   FaEye,
 } from "react-icons/fa";
 
-import { User, useAuth, usePermissions, roleApi } from "../../index";
+import { useAuth, usePermissions } from "../../index";
+import { User, roleApi } from "../../api/index";
 
 const userApi = new User();
 const cnnRolApi = new roleApi();
@@ -125,28 +126,28 @@ const UserManagement = () => {
               user?.name || ""
             }" style="margin: 0;">
           </div>
-          
+
           <div style="margin-bottom: 1rem;">
             <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Apellido:</label>
             <input id="lastname" class="swal2-input" placeholder="Apellido" value="${
               user?.lastname || ""
             }" style="margin: 0;">
           </div>
-          
+
           <div style="margin-bottom: 1rem;">
             <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Email:</label>
             <input id="email" class="swal2-input" type="email" placeholder="Email" value="${
               user?.email || ""
             }" style="margin: 0;">
           </div>
-          
+
           <div style="margin-bottom: 1rem;">
             <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Teléfono:</label>
             <input id="telefono" class="swal2-input" placeholder="Teléfono" value="${
               user?.telefono || ""
             }" style="margin: 0;">
           </div>
-          
+
           ${
             !isEdit
               ? `
@@ -157,7 +158,7 @@ const UserManagement = () => {
           `
               : ""
           }
-          
+
           <div style="margin-bottom: 1rem;">
             <label style="display: block; margin-bottom: 0.5rem; font-weight: 600;">Roles:</label>
             <select id="roles" class="swal2-input" multiple style="margin: 0; height: 120px;">
@@ -165,7 +166,7 @@ const UserManagement = () => {
             </select>
             <small style="color: #666;">Mantén Ctrl/Cmd presionado para seleccionar múltiples roles</small>
           </div>
-          
+
           <div style="margin-bottom: 1rem;">
             <label style="display: flex; align-items: center; gap: 0.5rem;">
               <input id="isAdmin" type="checkbox" ${
@@ -391,36 +392,36 @@ const UserManagement = () => {
             <strong>Nombre completo:</strong><br>
             ${user.name} ${user.lastname}
           </div>
-          
+
           <div style="margin-bottom: 1rem;">
             <strong>Email:</strong><br>
             ${user.email}
           </div>
-          
+
           <div style="margin-bottom: 1rem;">
             <strong>Teléfono:</strong><br>
             ${user.telefono || "No especificado"}
           </div>
-          
+
           <div style="margin-bottom: 1rem;">
             <strong>Estado:</strong><br>
             <span style="color: ${user.activo ? "#28a745" : "#dc3545"};">
               ${user.activo ? "✅ Activo" : "❌ Inactivo"}
             </span>
           </div>
-          
+
           <div style="margin-bottom: 1rem;">
             <strong>Administrador:</strong><br>
             <span style="color: ${user.isAdmin ? "#f39c12" : "#6c757d"};">
               ${user.isAdmin ? "👑 Sí" : "👤 No"}
             </span>
           </div>
-          
+
           <div style="margin-bottom: 1rem;">
             <strong>Roles asignados:</strong><br>
             ${rolesText}
           </div>
-          
+
           <div>
             <strong>Fecha de registro:</strong><br>
             ${

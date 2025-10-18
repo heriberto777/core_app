@@ -14,7 +14,8 @@ import {
   FaCopy,
 } from "react-icons/fa";
 
-import { useAuth, usePermissions, roleApi } from "../../index";
+import { useAuth, usePermissions } from "../../index";
+import { roleApi } from "../../api/index";
 const cnnApi = new roleApi();
 
 const RoleManagement = () => {

@@ -11,8 +11,9 @@ import {
   FiltersPanel,
   LoadsButton,
   StatusBadge,
-  LoadsApi,
+
 } from "../../index";
+import { LoadsApi } from "../../api/index";
 
 import {
   FaPlus,
@@ -244,7 +245,7 @@ export function LoadsManagement() {
       .toISOString()
       .split("T")[0],
     dateTo: new Date().toISOString().split("T")[0],
-    seller: "all",
+    sellers: [],
     transferStatus: "all",
     includeLoaded: false,
   });
@@ -350,20 +351,23 @@ export function LoadsManagement() {
   };
 
   const handleFiltersChange = (newFilters) => {
+    console.log("🏠 LoadsManagement - Filtros recibidos:", newFilters);
     setFilters(newFilters);
     setSelectedOrders([]); // Limpiar selección al cambiar filtros
   };
 
   const handleReset = () => {
+     console.log("🔄 Reseteando filtros...");
     setFilters({
       dateFrom: new Date(new Date().setDate(new Date().getDate() - 30))
         .toISOString()
         .split("T")[0],
       dateTo: new Date().toISOString().split("T")[0],
-      seller: "all",
+      sellers: [],
       transferStatus: "all",
       includeLoaded: false,
     });
+
     setSearch("");
     setSelectedOrders([]);
     setHasSearched(false);
@@ -660,7 +664,7 @@ export function LoadsManagement() {
             onFiltersChange={handleFiltersChange}
             onReset={handleReset}
             onRefresh={fetchOrders}
-            onSearch={handleSearch} // NUEVO: Buscar manual
+            onSearch={handleSearch}
             search={search}
             onSearchChange={setSearch}
             sellers={sellers}

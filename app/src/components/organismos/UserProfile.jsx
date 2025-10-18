@@ -1,6 +1,8 @@
 import React, { useState, useRef } from "react";
 import styled from "styled-components";
-import { useAuth, User, ENV } from "../../index";
+import { useAuth } from "../../index";
+import { User } from "../../api/index";
+import { ENV } from "../../utils/index";
 import Swal from "sweetalert2";
 import {
   FaUser,

@@ -1,7 +1,8 @@
 import React, { useEffect, useState } from "react";
 import styled from "styled-components";
 import Swal from "sweetalert2";
-import { TransferApi, useAuth } from "../../index"; // Asegúrate de tener estas importaciones
+import { useAuth } from "../../index"; // Asegúrate de tener estas importaciones
+import { TransferApi } from "../../api/index";
 
 const api = new TransferApi();
 

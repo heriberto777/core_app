@@ -3,12 +3,12 @@ import styled from "styled-components";
 import { useState, useEffect } from "react";
 import {
   Header,
-  TransferApi,
   useAuth,
   useFetchData,
   MappingsList,
   MappingEditor,
 } from "../../index";
+import { TransferApi } from "../../api/index";
 
 import Swal from "sweetalert2";
 import {
@@ -362,7 +362,7 @@ export function OrdersVisualization() {
                 )
                 .join("")}
             </div>
-            
+
             <h4>Detalle</h4>
             <div class="items-table-container">
               <table class="items-table">

@@ -1,5 +1,6 @@
 import React, { useState } from "react";
-import { TransferApi, useAuth } from "../../index";
+import { useAuth } from "../../index";
+import { TransferApi } from "../../api/index";
 import Swal from "sweetalert2";
 import { FaCog } from "react-icons/fa";
 import styled from "styled-components";
@@ -13,19 +14,19 @@ const scheduleManagerStyles = `
     max-width: 500px;
     margin: 0 auto;
   }
-  
+
   .toggle-section {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
   }
-  
+
   .toggle-label {
     font-weight: 500;
     font-size: 16px;
   }
-  
+
   .toggle-button {
     background-color: #6c757d;
     color: white;
@@ -38,83 +39,83 @@ const scheduleManagerStyles = `
     align-items: center;
     gap: 8px;
   }
-  
+
   .toggle-button.active {
     background-color: #28a745;
   }
-  
+
   .divider {
     border: 0;
     border-top: 1px solid #eee;
     margin: 20px 0;
   }
-  
+
   .time-section {
     display: flex;
     justify-content: space-between;
     align-items: center;
     margin-bottom: 20px;
   }
-  
+
   .time-label {
     display: flex;
     align-items: center;
     gap: 8px;
     font-size: 16px;
   }
-  
+
   .time-input {
     padding: 10px;
     border: 1px solid #ccc;
     border-radius: 4px;
     font-size: 16px;
   }
-  
+
   .time-input.disabled {
     background-color: #f5f5f5;
     opacity: 0.7;
     cursor: not-allowed;
   }
-  
+
   .next-execution {
     background-color: rgba(108, 117, 125, 0.05);
     border-radius: 8px;
     padding: 15px;
     margin: 15px 0;
   }
-  
+
   .next-execution.active {
     background-color: rgba(0, 123, 255, 0.05);
   }
-  
+
   .next-run-label {
     font-weight: 500;
     margin-bottom: 5px;
   }
-  
+
   .next-run-time {
     font-size: 18px;
     font-weight: 600;
     margin-bottom: 10px;
   }
-  
+
   .schedule-description {
     font-size: 14px;
     color: #666;
   }
-  
+
   .info-section {
     margin-top: 25px;
     border-top: 1px dashed #ddd;
     padding-top: 15px;
   }
-  
+
   .info-section h4 {
     font-size: 16px;
     margin-bottom: 10px;
     color: #17a2b8;
   }
-  
+
   .info-section p {
     font-size: 14px;
     margin: 8px 0;
@@ -195,22 +196,22 @@ export function ScheduleConfigButton({ disabled = false, onSuccess }) {
               }
             </button>
           </div>
-          
+
           <hr class="divider" />
-          
+
           <div class="time-section">
             <div class="time-label">
               <i class="fa fa-clock"></i> Hora de ejecución diaria:
             </div>
-            <input 
-              id="timeInput" 
-              type="time" 
-              value="${modalTime}" 
+            <input
+              id="timeInput"
+              type="time"
+              value="${modalTime}"
               ${!modalEnabled ? "disabled" : ""}
               class="time-input ${!modalEnabled ? "disabled" : ""}"
             />
           </div>
-          
+
           <div class="next-execution ${modalEnabled ? "active" : "inactive"}">
             <div class="next-run-label">Próxima ejecución:</div>
             <div class="next-run-time">${getNextExecutionDisplay()}</div>
@@ -222,7 +223,7 @@ export function ScheduleConfigButton({ disabled = false, onSuccess }) {
               }
             </div>
           </div>
-          
+
           <div class="info-section">
             <h4>Información Adicional</h4>
             <p>El planificador automático ejecutará todas las tareas configuradas como <strong>automáticas</strong> a la hora especificada cada día.</p>
@@ -429,22 +430,22 @@ export function openScheduleConfigModal(accessToken, onSuccess) {
                 }
               </button>
             </div>
-            
+
             <hr class="divider" />
-            
+
             <div class="time-section">
               <div class="time-label">
                 <i class="fa fa-clock"></i> Hora de ejecución diaria:
               </div>
-              <input 
-                id="timeInput" 
-                type="time" 
-                value="${modalTime}" 
+              <input
+                id="timeInput"
+                type="time"
+                value="${modalTime}"
                 ${!modalEnabled ? "disabled" : ""}
                 class="time-input ${!modalEnabled ? "disabled" : ""}"
               />
             </div>
-            
+
             <div class="next-execution ${modalEnabled ? "active" : "inactive"}">
               <div class="next-run-label">Próxima ejecución:</div>
               <div class="next-run-time">${getNextExecutionDisplay()}</div>
@@ -456,7 +457,7 @@ export function openScheduleConfigModal(accessToken, onSuccess) {
                 }
               </div>
             </div>
-            
+
             <div class="info-section">
               <h4>Información Adicional</h4>
               <p>El planificador automático ejecutará todas las tareas configuradas como <strong>automáticas</strong> a la hora especificada cada día.</p>

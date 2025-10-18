@@ -1,49 +1,53 @@
-import { ENV } from "../utils/constants";
+import { ENV } from "../utils/index";
 
 export class AuthApi {
   baseApi = ENV.BASE_API;
 
   async login(data) {
-  try {
-    console.log("🚀 AuthApi.login iniciado con:", data);
+    try {
+      console.log("🚀 AuthApi.login iniciado con:", data);
 
-    const url = `${this.baseApi}/${ENV.API_ROUTERS.LOGIN}`;
-    console.log("🔗 URL de login:", url);
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOGIN}`;
+      console.log("🔗 URL de login:", url);
 
-    const response = await fetch(url, {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify(data),
-    });
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(data),
+      });
 
-    console.log("📡 Respuesta HTTP status:", response.status);
+      console.log("📡 Respuesta HTTP status:", response.status);
 
-    // ⭐ MANEJO MEJORADO DE ERRORES HTTP ⭐
-    if (!response.ok) {
-      let errorData;
-      try {
-        errorData = await response.json();
-      } catch (parseError) {
-        console.error("❌ Error al parsear respuesta de error:", parseError);
-        throw new Error(`Error del servidor (${response.status}): ${response.statusText}`);
+      // ⭐ MANEJO MEJORADO DE ERRORES HTTP ⭐
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch (parseError) {
+          console.error("❌ Error al parsear respuesta de error:", parseError);
+          throw new Error(
+            `Error del servidor (${response.status}): ${response.statusText}`
+          );
+        }
+
+        console.error("❌ Error HTTP:", errorData);
+        throw new Error(
+          errorData.msg || `Error del servidor (${response.status})`
+        );
       }
 
-      console.error("❌ Error HTTP:", errorData);
-      throw new Error(errorData.msg || `Error del servidor (${response.status})`);
+      const result = await response.json();
+      console.log("📥 Respuesta exitosa recibida:", result);
+
+      return result;
+    } catch (error) {
+      console.error("❌ Error en AuthApi.login:", error);
+      // ⭐ IMPORTANTE: Re-lanzar el error para que los niveles superiores lo manejen ⭐
+      throw error;
     }
-
-    const result = await response.json();
-    console.log("📥 Respuesta exitosa recibida:", result);
-
-    return result;
-  } catch (error) {
-    console.error("❌ Error en AuthApi.login:", error);
-    // ⭐ IMPORTANTE: Re-lanzar el error para que los niveles superiores lo manejen ⭐
-    throw error;
   }
-}
 
   async refreshAccessToken(refreshToken) {
     try {

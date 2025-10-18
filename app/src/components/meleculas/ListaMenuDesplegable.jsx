@@ -1,5 +1,6 @@
 import styled from "styled-components";
-import { ItemsDesplegable, v } from "../../index";
+import { ItemsDesplegable} from "../../index";
+import { v } from  '../../styles/index'
 
 export function ListaMenuDesplegable({ data, top, funcion }) {
   return (

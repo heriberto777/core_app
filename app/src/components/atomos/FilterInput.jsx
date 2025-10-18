@@ -70,7 +70,9 @@ export function FilterInput({
   ...props
 }) {
   const handleChange = (e) => {
-    onChange?.(e.target.value);
+    const newValue = e.target.value;
+    console.log("🎯 FilterInput onChange:", label, "->", newValue);
+    onChange?.(newValue); // ✅ Llamar onChange con el nuevo valor
   };
 
   return (

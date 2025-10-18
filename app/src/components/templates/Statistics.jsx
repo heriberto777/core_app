@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
-import { Header, useAuth, TransferApi } from "../../index";
+import { Header, useAuth } from "../../index";
+import { TransferApi } from "../../api/index";
 import {
   FaChartLine,
   FaExchangeAlt,

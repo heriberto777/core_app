@@ -1,4 +1,4 @@
-import { ENV } from "../utils/constants";
+import { ENV } from "../utils/index";
 
 class RoleApi {
   baseApi = ENV.BASE_API;
