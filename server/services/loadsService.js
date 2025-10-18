@@ -17,39 +17,39 @@ class LoadsService {
     return await withConnection("server1", async (connection) => {
       try {
         let baseQuery = `
-          WITH BaseData AS (
-            SELECT
-              pl.PEDIDO,
-              pl.PEDIDO_LINEA,
-              pl.CANTIDAD_PEDIDA,
-              pl.CANTIDAD_BONIFICAD,
-              pl.PRECIO_UNITARIO,
-              pl.MONTO_DESCUENTO,
-              pl.PORC_DESCUENTO,
-              pl.PORC_IMPUESTO1,
-              pl.PORC_IMPUESTO2,
-              pe.RUBRO5,
-              pe.U_Code_Load,
-              pe.U_estado_proceso,
-              pe.FECHA_PROMETIDA,
-              pe.FECHA_PEDIDO,
-              pe.CLIENTE,
-              pe.VENDEDOR,
-              pe.RUBRO4,
-              cl.detalle_direccion,
-              ar.ARTICULO,
-              ar.UNIDAD_ALMACEN,
-              pl.BODEGA,
-              v.NOMBRE as NOMBRE_VENDEDOR
-            FROM CATELLI.PEDIDO_LINEA AS pl
-            INNER JOIN CATELLI.PEDIDO AS pe ON pe.PEDIDO = pl.PEDIDO
-            INNER JOIN CATELLI.CLIENTE AS cl ON cl.CLIENTE = pe.CLIENTE
-            LEFT JOIN CATELLI.ARTICULO AS ar ON ar.ARTICULO = pl.ARTICULO
-            LEFT JOIN CATELLI.VENDEDOR AS v ON v.VENDEDOR = pe.VENDEDOR
-            WHERE pe.estado = 'N'
-              AND (pe.U_Code_Load IS NULL OR pe.U_Code_Load = '')
-              AND pe.U_estado_proceso = 'N'
-        `;
+        WITH BaseData AS (
+          SELECT
+            pl.PEDIDO,
+            pl.PEDIDO_LINEA,
+            pl.CANTIDAD_PEDIDA,
+            pl.CANTIDAD_BONIFICAD,
+            pl.PRECIO_UNITARIO,
+            pl.MONTO_DESCUENTO,
+            pl.PORC_DESCUENTO,
+            pl.PORC_IMPUESTO1,
+            pl.PORC_IMPUESTO2,
+            pe.RUBRO5,
+            pe.U_Code_Load,
+            pe.U_estado_proceso,
+            pe.FECHA_PROMETIDA,
+            pe.FECHA_PEDIDO,
+            pe.CLIENTE,
+            pe.VENDEDOR,
+            pe.RUBRO4,
+            cl.detalle_direccion,
+            ar.ARTICULO,
+            ar.UNIDAD_ALMACEN,
+            pl.BODEGA,
+            v.NOMBRE as NOMBRE_VENDEDOR
+          FROM CATELLI.PEDIDO_LINEA AS pl
+          INNER JOIN CATELLI.PEDIDO AS pe ON pe.PEDIDO = pl.PEDIDO
+          INNER JOIN CATELLI.CLIENTE AS cl ON cl.CLIENTE = pe.CLIENTE
+          LEFT JOIN CATELLI.ARTICULO AS ar ON ar.ARTICULO = pl.ARTICULO
+          LEFT JOIN CATELLI.VENDEDOR AS v ON v.VENDEDOR = pe.VENDEDOR
+          WHERE pe.estado = 'N'
+            AND (pe.U_Code_Load IS NULL OR pe.U_Code_Load = '')
+            AND pe.U_estado_proceso = 'N'
+      `;
 
         const params = {};
 
@@ -97,6 +97,39 @@ class LoadsService {
 
         const fullQuery = `
           ${baseQuery}
+          ),
+          Calc AS (
+            -- LÍNEAS DE CANTIDAD PEDIDA
+            SELECT
+              PEDIDO,
+              CANTIDAD_PEDIDA as Cantidad,
+              (CANTIDAD_PEDIDA * PRECIO_UNITARIO) AS LineAmount,
+              U_estado_proceso,
+              FECHA_PEDIDO,
+              CLIENTE,
+              VENDEDOR,
+              NOMBRE_VENDEDOR,
+              FECHA_PROMETIDA,
+              detalle_direccion
+            FROM BaseData
+            WHERE CANTIDAD_PEDIDA <> 0
+
+            UNION ALL
+
+            -- LÍNEAS DE CANTIDAD BONIFICADA (valor 0)
+            SELECT
+              PEDIDO,
+              CANTIDAD_BONIFICAD as Cantidad,
+              0 AS LineAmount,
+              U_estado_proceso,
+              FECHA_PEDIDO,
+              CLIENTE,
+              VENDEDOR,
+              NOMBRE_VENDEDOR,
+              FECHA_PROMETIDA,
+              detalle_direccion
+            FROM BaseData
+            WHERE CANTIDAD_BONIFICAD > 0
           )
           SELECT
             PEDIDO,
@@ -106,14 +139,13 @@ class LoadsService {
             FECHA_PEDIDO,
             FECHA_PROMETIDA,
             COUNT(*) as totalLines,
-            SUM(CANTIDAD_PEDIDA) as totalQuantity,
-            SUM(PRECIO_UNITARIO * CANTIDAD_PEDIDA) as totalAmount,
+            SUM(Cantidad) as totalQuantity,
+            SUM(LineAmount) as totalAmount,
             detalle_direccion,
-            MIN(U_estado_proceso) as estadoProceso,
-            MIN(U_Code_Load) as codeLoad
-          FROM BaseData
+            MIN(U_estado_proceso) as estadoProceso
+          FROM Calc
           GROUP BY PEDIDO, CLIENTE, VENDEDOR, NOMBRE_VENDEDOR,
-                   FECHA_PEDIDO, FECHA_PROMETIDA, detalle_direccion
+                  FECHA_PEDIDO, FECHA_PROMETIDA, detalle_direccion
           ORDER BY FECHA_PEDIDO DESC, PEDIDO DESC
         `;
 
@@ -169,18 +201,57 @@ class LoadsService {
     try {
       return await withConnection("server1", async (connection) => {
         const query = `
-          SELECT
-            pl.PEDIDO_LINEA,
-            pl.ARTICULO as Code_Product,
-            ar.DESCRIPCION as productDescription,
-            pl.CANTIDAD_PEDIDA as quantity,
-            pl.PRECIO_UNITARIO as price,
-            (pl.CANTIDAD_PEDIDA * pl.PRECIO_UNITARIO) as subtotal,
-            ar.UNIDAD_ALMACEN as unitMeasure
-          FROM CATELLI.PEDIDO_LINEA pl
-          INNER JOIN CATELLI.ARTICULO ar ON pl.ARTICULO = ar.ARTICULO
-          WHERE pl.PEDIDO = @pedidoId
-          ORDER BY pl.PEDIDO_LINEA
+          WITH BaseData AS (
+            SELECT
+              pl.PEDIDO,
+              pl.PEDIDO_LINEA,
+              pl.CANTIDAD_PEDIDA,
+              pl.CANTIDAD_BONIFICAD,
+              pl.PRECIO_UNITARIO,
+              pl.MONTO_DESCUENTO,
+              ar.ARTICULO,
+              ar.DESCRIPCION as productDescription,
+              ar.UNIDAD_ALMACEN as unitMeasure
+            FROM CATELLI.PEDIDO_LINEA pl
+            INNER JOIN CATELLI.ARTICULO ar ON pl.ARTICULO = ar.ARTICULO
+            WHERE pl.PEDIDO = @pedidoId
+          ),
+          Details AS (
+            -- LÍNEAS DE CANTIDAD PEDIDA
+            SELECT
+              PEDIDO_LINEA,
+              CAST(PEDIDO_LINEA AS VARCHAR(10)) + '-P' AS lineId,
+              'P' AS lineType,
+              'Pedida' AS lineTypeLabel,
+              ARTICULO as Code_Product,
+              productDescription,
+              CANTIDAD_PEDIDA as quantity,
+              PRECIO_UNITARIO as price,
+              (CANTIDAD_PEDIDA * PRECIO_UNITARIO) as subtotal,
+              unitMeasure
+            FROM BaseData
+            WHERE CANTIDAD_PEDIDA <> 0
+
+            UNION ALL
+
+            -- LÍNEAS DE CANTIDAD BONIFICADA
+            SELECT
+              PEDIDO_LINEA,
+              CAST(PEDIDO_LINEA AS VARCHAR(10)) + '-B' AS lineId,
+              'B' AS lineType,
+              'Bonificada' AS lineTypeLabel,
+              ARTICULO as Code_Product,
+              productDescription,
+              CANTIDAD_BONIFICAD as quantity,
+              0 as price,
+              0 as subtotal,
+              unitMeasure
+            FROM BaseData
+            WHERE CANTIDAD_BONIFICAD > 0
+          )
+          SELECT *
+          FROM Details
+          ORDER BY PEDIDO_LINEA, lineType
         `;
 
         const result = await SqlService.query(connection, query, { pedidoId });
@@ -626,84 +697,147 @@ class LoadsService {
    * Obtiene datos transformados para IMPLT_Orders
    */
   static async getTransformedOrdersData(connection, selectedPedidos, loadId) {
+    if (!Array.isArray(selectedPedidos)) {
+      throw new Error(
+        `selectedPedidos debe ser un array, recibido: ${typeof selectedPedidos}`
+      );
+    }
+
     const pedidosList = selectedPedidos
       .map((_, index) => `@pedido${index}`)
       .join(", ");
 
     const query = `
-      WITH Calc AS (
-        SELECT
-          p.PEDIDO,
-          pl.PEDIDO_LINEA,
-          'CATELLI' AS Code_Unit_Org,
-          'CATELLI' AS Code_Sales_Org,
-          p.PEDIDO AS Order_Num_ofClient,
-          ROW_NUMBER() OVER (ORDER BY p.PEDIDO, pl.PEDIDO_LINEA) AS Num_Line,
-          p.PEDIDO AS Order_Num,
-          'V' AS Type_Rec,
-          @loadId AS Code_load,
-          CAST(p.FECHA_PEDIDO AS DATE) AS Date_Delivery,
-          CAST(p.FECHA_PEDIDO AS DATE) AS Order_Date,
-          p.CLIENTE AS Code_Account,
-          pl.ARTICULO AS Code_Product,
-          '000000' AS Lot_Number,
-          CAST(pl.CANTIDAD_PEDIDA AS NUMERIC(11,3)) AS Quantity,
-          CAST(pl.CANTIDAD_PEDIDA AS NUMERIC(11,3)) AS Quantity_Order,
-          ar.UNIDAD_ALMACEN AS Unit_Measure,
-          CAST(pl.PRECIO_UNITARIO AS NUMERIC(11,3)) AS Price_Br,
-          CAST(pl.PRECIO_UNITARIO AS NUMERIC(11,3)) AS Price,
-          CAST(pl.CANTIDAD_PEDIDA * pl.PRECIO_UNITARIO AS NUMERIC(11,3)) AS TotalAmount,
-          CAST(0.00 AS NUMERIC(5,2)) AS PORC_DESCUENTO1,
-          CAST(0.00 AS NUMERIC(5,2)) AS PORC_IMPUESTO1,
-          CAST(0.00 AS NUMERIC(5,2)) AS PORC_IMPUESTO2,
-          p.VENDEDOR,
-          cl.detalle_direccion
-        FROM CATELLI.PEDIDO p
-        INNER JOIN CATELLI.PEDIDO_LINEA pl ON p.PEDIDO = pl.PEDIDO
-        INNER JOIN CATELLI.ARTICULO ar ON pl.ARTICULO = ar.ARTICULO
-        INNER JOIN CATELLI.CLIENTE cl ON p.CLIENTE = cl.CLIENTE
-        WHERE p.PEDIDO IN (${pedidosList})
-        AND p.U_Code_Load = @loadId
-      )
+    WITH BaseData AS (
       SELECT
-        Code_Unit_Org,
-        Code_Sales_Org,
-        Order_Num_ofClient,
-        Num_Line,
-        Order_Num,
-        Type_Rec,
-        Code_load,
-        Date_Delivery,
-        Order_Date,
-        Code_Account,
-        Code_Product,
-        Lot_Number,
-        Quantity,
-        Quantity_Order,
-        Unit_Measure,
-        Price_Br,
-        Price,
-        TotalAmount AS Total_Amount,
-        PORC_DESCUENTO1 AS Por_Discount1,
-        CAST(TotalAmount * (PORC_DESCUENTO1 / 100.0) AS NUMERIC(11,3)) AS Amount_Discount1,
-        CAST(PORC_IMPUESTO1 AS NUMERIC(5,2)) AS Por_Tax1,
-        CAST(TotalAmount * (PORC_IMPUESTO1 / 100.0) AS NUMERIC(11,3)) AS Amount_Tax1,
-        CAST(PORC_IMPUESTO2 AS NUMERIC(5,2)) AS Por_Tax2,
-        CAST(TotalAmount * (PORC_IMPUESTO2 / 100.0) AS NUMERIC(11,3)) AS Amount_Tax2,
-        'RD' AS Code_Currency,
-        '0' AS Secuence,
-        PEDIDO AS Order_Num_Cli,
-        NULL AS Code_Paymentway,
-        VENDEDOR AS Code_Seller,
-        NULL AS Order_Type,
-        '0' AS Sale_Type,
-        NULL AS Code_ReturnCause,
-        detalle_direccion AS Code_Address,
-        '00' AS Transport,
-        1 AS Transfer_status
-      FROM Calc
-      ORDER BY PEDIDO, PEDIDO_LINEA
-    `;
+        pl.PEDIDO,
+        pl.PEDIDO_LINEA,
+        pl.CANTIDAD_PEDIDA,
+        pl.CANTIDAD_BONIFICAD,
+        pl.PRECIO_UNITARIO,
+        pl.MONTO_DESCUENTO,
+        pl.PORC_DESCUENTO,
+        pl.PORC_IMPUESTO1,
+        pl.PORC_IMPUESTO2,
+        pe.RUBRO5,
+        pe.FECHA_PROMETIDA,
+        pe.FECHA_PEDIDO,
+        pe.CLIENTE,
+        pe.VENDEDOR,
+        pe.RUBRO4,
+        cl.detalle_direccion,
+        ar.ARTICULO,
+        ar.UNIDAD_ALMACEN,
+        pl.BODEGA
+      FROM CATELLI.PEDIDO_LINEA AS pl
+      INNER JOIN CATELLI.PEDIDO AS pe ON pe.PEDIDO = pl.PEDIDO
+      INNER JOIN CATELLI.CLIENTE AS cl ON cl.CLIENTE = pe.CLIENTE
+      LEFT JOIN CATELLI.ARTICULO AS ar ON ar.ARTICULO = pl.ARTICULO
+      WHERE pe.PEDIDO IN (${pedidosList})
+      AND pe.U_Code_Load = @loadId
+    ),
+    Calc AS (
+      -- LÍNEAS DE CANTIDAD PEDIDA
+      SELECT
+        PEDIDO,
+        PEDIDO_LINEA,
+        CAST(PEDIDO_LINEA AS VARCHAR(10)) + '-P' AS LINEA_TIPO,
+        'P' AS TIPO_LINEA,
+        CANTIDAD_PEDIDA AS Cantidad,
+        PRECIO_UNITARIO,
+        MONTO_DESCUENTO,
+        PORC_DESCUENTO,
+        PORC_IMPUESTO1,
+        PORC_IMPUESTO2,
+        RUBRO5,
+        FECHA_PROMETIDA,
+        FECHA_PEDIDO,
+        CLIENTE,
+        VENDEDOR,
+        RUBRO4,
+        detalle_direccion,
+        ARTICULO,
+        UNIDAD_ALMACEN,
+        BODEGA,
+        (CANTIDAD_PEDIDA * PRECIO_UNITARIO) AS SubTotal,
+        ((CANTIDAD_PEDIDA * PRECIO_UNITARIO) - MONTO_DESCUENTO) AS TotalAmount
+      FROM BaseData
+      WHERE CANTIDAD_PEDIDA <> 0
+
+      UNION ALL
+
+      -- LÍNEAS DE CANTIDAD BONIFICADA
+      SELECT
+        PEDIDO,
+        PEDIDO_LINEA,
+        CAST(PEDIDO_LINEA AS VARCHAR(10)) + '-B' AS LINEA_TIPO,
+        'B' AS TIPO_LINEA,
+        CANTIDAD_BONIFICAD AS Cantidad,
+        0 AS PRECIO_UNITARIO,
+        0 AS MONTO_DESCUENTO,
+        0 AS PORC_DESCUENTO,
+        0 AS PORC_IMPUESTO1,
+        0 AS PORC_IMPUESTO2,
+        RUBRO5,
+        FECHA_PROMETIDA,
+        FECHA_PEDIDO,
+        CLIENTE,
+        VENDEDOR,
+        RUBRO4,
+        detalle_direccion,
+        ARTICULO,
+        UNIDAD_ALMACEN,
+        BODEGA,
+        0 AS SubTotal,
+        0 AS TotalAmount
+      FROM BaseData
+      WHERE CANTIDAD_BONIFICAD > 0
+    )
+    SELECT
+      'CATELLI' AS Code_Unit_Org,
+      'CATELLI' AS Code_Sales_Org,
+      PEDIDO AS Order_Num_ofClient,
+      ROW_NUMBER() OVER (ORDER BY PEDIDO, PEDIDO_LINEA, LINEA_TIPO) AS Num_Line,
+      RUBRO4 AS Order_Num,
+      'S' AS Type_Rec,
+      @loadId AS Code_load,
+      CONVERT(VARCHAR, FECHA_PROMETIDA, 112) AS Date_Delivery,
+      CONVERT(VARCHAR, FECHA_PEDIDO, 112) AS Order_Date,
+      CLIENTE AS Code_Account,
+      ARTICULO AS Code_Product,
+      '999999999' AS Lot_Number,
+      CAST(Cantidad AS NUMERIC(11,3)) AS Quantity,
+      CAST(Cantidad AS NUMERIC(11,3)) AS Quantity_Order,
+      UNIDAD_ALMACEN AS Unit_Measure,
+      CAST(PRECIO_UNITARIO AS NUMERIC(11,3)) AS Price_Br,
+      CAST(CASE WHEN Cantidad <> 0 THEN TotalAmount / Cantidad ELSE 0 END AS NUMERIC(11,3)) AS Price,
+      CAST(TotalAmount AS NUMERIC(11,3)) AS Total_Amount,
+      CAST(PORC_DESCUENTO AS NUMERIC(5,2)) AS Por_Discount1,
+      CAST(MONTO_DESCUENTO AS NUMERIC(11,3)) AS Amount_Discount1,
+      NULL AS Por_Discount2,
+      NULL AS Amount_Discount2,
+      NULL AS Por_Discount3,
+      NULL AS Amount_Discount3,
+      CAST(PORC_IMPUESTO1 AS NUMERIC(5,2)) AS Por_Tax1,
+      CAST(TotalAmount * (PORC_IMPUESTO1 / 100.0) AS NUMERIC(11,3)) AS Amount_Tax1,
+      CAST(PORC_IMPUESTO2 AS NUMERIC(5,2)) AS Por_Tax2,
+      CAST(TotalAmount * (PORC_IMPUESTO2 / 100.0) AS NUMERIC(11,3)) AS Amount_Tax2,
+      'RD' AS Code_Currency,
+      '0' AS Secuence,
+      PEDIDO AS Order_Num_Cli,
+      NULL AS Code_Paymentway,
+      VENDEDOR AS Code_Seller,
+      NULL AS Order_Type,
+      CASE WHEN TIPO_LINEA = 'B' THEN '1' ELSE '0' END AS Sale_Type,
+      NULL AS Code_ReturnCause,
+      detalle_direccion AS Code_Address,
+      '00' AS Transport,
+      1 AS Transfer_status,
+      TIPO_LINEA,
+      LINEA_TIPO
+    FROM Calc
+    ORDER BY PEDIDO, PEDIDO_LINEA, LINEA_TIPO
+  `;
 
     const params = { loadId };
     selectedPedidos.forEach((pedido, index) => {
@@ -711,6 +845,11 @@ class LoadsService {
     });
 
     const result = await SqlService.query(connection, query, params);
+
+    console.log(
+      `Registros transformados obtenidos: ${result.recordset.length}`
+    );
+
     return result.recordset;
   }
 
