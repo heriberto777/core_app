@@ -489,9 +489,21 @@ class LoadsService {
    * ⭐ Actualiza U_Code_Load en los pedidos seleccionados ⭐
    */
   static async updatePedidosWithLoadId(connection, selectedPedidos, loadId) {
+    // Validación inicial
+    if (!Array.isArray(selectedPedidos)) {
+      throw new Error(
+        `selectedPedidos debe ser un array, recibido: ${typeof selectedPedidos}`
+      );
+    }
+
+    if (selectedPedidos.length === 0) {
+      throw new Error("selectedPedidos no puede estar vacío");
+    }
+
     const pedidosList = selectedPedidos
       .map((_, index) => `@pedido${index}`)
       .join(", ");
+
     const params = { loadId };
 
     selectedPedidos.forEach((pedido, index) => {
@@ -499,24 +511,67 @@ class LoadsService {
     });
 
     const query = `
-      UPDATE CATELLI.PEDIDO
-      SET U_Code_Load = @loadId
-      WHERE PEDIDO IN (${pedidosList})
-      AND U_Code_Load IS NULL
-      AND U_estado_proceso = 'N'
-    `;
+    UPDATE CATELLI.PEDIDO
+    SET U_Code_Load = @loadId
+    WHERE PEDIDO IN (${pedidosList})
+    AND U_Code_Load IS NULL
+    AND U_estado_proceso = 'N'
+  `;
+
+    // DEBUG: Agregar logging antes de ejecutar
+    console.log("🔍 Query a ejecutar:", query);
+    console.log("🔍 Params:", params);
+    console.log("🔍 Pedidos a actualizar:", selectedPedidos);
 
     const result = await SqlService.query(connection, query, params);
 
-    if (result.rowsAffected[0] !== selectedPedidos.length) {
+    // DEBUG: Ver estructura completa del resultado
+    console.log("🔍 Resultado completo:", result);
+    console.log("🔍 result.rowsAffected:", result.rowsAffected);
+    console.log("🔍 result.rowsAffected type:", typeof result.rowsAffected);
+    console.log("🔍 result.rowsAffected[0]:", result.rowsAffected?.[0]);
+
+    // Verificar diferentes posibles formatos de rowsAffected
+    let affectedRows = 0;
+
+    if (Array.isArray(result.rowsAffected)) {
+      affectedRows = result.rowsAffected[0] || 0;
+    } else if (typeof result.rowsAffected === "number") {
+      affectedRows = result.rowsAffected;
+    } else if (result.recordset && result.recordset.affectedRows) {
+      affectedRows = result.recordset.affectedRows;
+    } else {
+      // Si no podemos determinar filas afectadas, intentar una consulta de verificación
+      console.log(
+        "⚠️ No se puede determinar filas afectadas, verificando manualmente..."
+      );
+
+      const verifyQuery = `
+      SELECT COUNT(*) as count
+      FROM CATELLI.PEDIDO
+      WHERE PEDIDO IN (${pedidosList})
+      AND U_Code_Load = @loadId
+    `;
+
+      const verifyResult = await SqlService.query(
+        connection,
+        verifyQuery,
+        params
+      );
+      affectedRows = verifyResult.recordset[0]?.count || 0;
+
+      console.log("🔍 Verificación manual - filas actualizadas:", affectedRows);
+    }
+
+    if (affectedRows !== selectedPedidos.length) {
       throw new Error(
-        `Solo se actualizaron ${result.rowsAffected[0]} de ${selectedPedidos.length} pedidos. ` +
+        `Solo se actualizaron ${affectedRows} de ${selectedPedidos.length} pedidos. ` +
           `Algunos pedidos pueden ya estar procesados o no existen.`
       );
     }
 
     logger.info(
-      `✅ ${result.rowsAffected[0]} pedidos actualizados con loadId: ${loadId}`
+      `✅ ${affectedRows} pedidos actualizados con loadId: ${loadId}`
     );
   }
 
