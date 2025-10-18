@@ -6,7 +6,7 @@ import React, {
   useCallback,
   useRef,
 } from "react";
-import { User, AuthApi } from "../index";
+import { User, AuthApi} from "../api/index";
 
 export const AuthContext = createContext();
 const userController = new User();

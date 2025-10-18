@@ -2,7 +2,7 @@ import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import Swal from "sweetalert2";
 import { FaTrash, FaEye, FaSort, FaCrown, FaUsers } from "react-icons/fa";
-import { TransferApi } from "../../index";
+import { TransferApi } from "../../api/index";
 
 const api = new TransferApi();
 
@@ -64,12 +64,12 @@ const LinkedGroupsManager = ({
       .map(
         (task, index) => `
       <div style="
-        display: flex; 
-        justify-content: space-between; 
-        align-items: center; 
-        padding: 10px; 
-        margin: 5px 0; 
-        background-color: ${task.isCoordinator ? "#e8f5e8" : "#f8f9fa"}; 
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        padding: 10px;
+        margin: 5px 0;
+        background-color: ${task.isCoordinator ? "#e8f5e8" : "#f8f9fa"};
         border-radius: 4px;
         border-left: 4px solid ${task.isCoordinator ? "#4caf50" : "#6c757d"};
       ">
@@ -86,11 +86,11 @@ const LinkedGroupsManager = ({
         <button onclick="window.removeTaskFromGroupHandler('${
           task.id
         }')" style="
-          background: #dc3545; 
-          color: white; 
-          border: none; 
-          padding: 5px 10px; 
-          border-radius: 4px; 
+          background: #dc3545;
+          color: white;
+          border: none;
+          padding: 5px 10px;
+          border-radius: 4px;
           cursor: pointer;
         ">
           Quitar
@@ -121,12 +121,12 @@ const LinkedGroupsManager = ({
       html: `
         <div style="text-align: left;">
           <p><strong>Total de tareas:</strong> ${groupData.totalTasks}</p>
-          
+
           ${coordinatorInfo}
-          
+
           <h4>Tareas en el grupo:</h4>
           ${tasksHtml}
-          
+
           <div style="margin-top: 20px; padding: 15px; background-color: #fff3cd; border-radius: 6px;">
             <strong>⚠️ Importante:</strong> Al quitar tareas del grupo, perderán su configuración de vinculación y post-update.
           </div>

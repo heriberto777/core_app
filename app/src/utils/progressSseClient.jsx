@@ -1,4 +1,4 @@
-import { ENV } from "../index";
+import { ENV } from "./index";
 export class ProgressSseClient {
   baseApi = ENV.BASE_API;
 

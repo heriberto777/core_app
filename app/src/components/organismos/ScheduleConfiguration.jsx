@@ -16,7 +16,8 @@ import {
   FaCog,
   FaUser,
 } from "react-icons/fa";
-import { useAuth, TransferApi, ScheduleConfigButton } from "../../index";
+import { useAuth, ScheduleConfigButton } from "../../index";
+import { TransferApi } from "../../api/index";
 
 const cnnApi = new TransferApi();
 

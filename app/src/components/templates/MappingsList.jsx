@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
-import { TransferApi, useAuth } from "../../index";
+import {  useAuth } from "../../index";
+import { TransferApi } from "../../api/index";
 import { FaEdit, FaTrash, FaPlus, FaSearch, FaEye } from "react-icons/fa";
 import Swal from "sweetalert2";
 

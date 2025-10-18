@@ -1,7 +1,7 @@
 import styled from "styled-components";
 import { useState, useEffect } from "react";
 import { useNavigate, useParams, useLocation } from "react-router-dom";
-import Swal from "sweetalert2";
+
 import {
   FaEye,
   FaArrowLeft,
@@ -10,7 +10,8 @@ import {
   FaFilter,
   FaCalendarAlt,
 } from "react-icons/fa";
-import { Header, useAuth, useFetchData, TransferApi } from "../../index";
+import { Header, useAuth, useFetchData } from "../../index";
+import { TransferApi } from "../../api/index";
 
 const cnnApi = new TransferApi();
 

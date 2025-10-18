@@ -1,13 +1,14 @@
 import styled from "styled-components";
 import { useState, useEffect, useCallback, useMemo } from "react";
 import {
-  TransferApi,
+
   useAuth,
   useFetchData,
   MappingsList,
   MappingEditor,
   CustomerEditor,
 } from "../../index";
+import { TransferApi } from "../../api/index";
 
 import Swal from "sweetalert2";
 import {
@@ -318,12 +319,12 @@ export function DocumentsVisualization() {
               )
               .join("")}
           </div>
-          
+
           <h4>Detalle</h4>
-          
+
           <div class="items-table-container">
             <div style="margin-bottom: 8px; text-align: left;">
-              <strong>Tablas disponibles:</strong> 
+              <strong>Tablas disponibles:</strong>
               ${Object.keys(detailTableMapping)
                 .map(
                   (tableName) =>
@@ -331,7 +332,7 @@ export function DocumentsVisualization() {
                 )
                 .join("")}
             </div>
-            
+
             <table class="items-table">
               <thead>
                 <tr>

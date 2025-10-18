@@ -1,22 +1,24 @@
-import { ENV } from "../index";
+import { ENV } from "../utils/index";
 
 class LoadsApi {
   baseApi = ENV.BASE_API;
-  // constructor() {
-  //   this.baseApi = ENV.BASE_API;
-  // }
-
   /**
    * Obtiene pedidos pendientes de cargar
    */
   async getPendingOrders(accessToken, filters = {}) {
+    console.log("🚀 ~ file: LoadsApi.jsx:7 ~ LoadsApi ~ getPendingOrders ~ filters:", filters);
     try {
-      const queryParams = new URLSearchParams();
+      const queryParams = new URLSearchParams(); 
+
+      console.log(
+        "🚀 ~ file: LoadsApi.jsx:11 ~ LoadsApi ~ getPendingOrders ~ queryParams before:",
+        filters.transferStatus && filters.transferStatus !== "all"
+      );
 
       if (filters.dateFrom) queryParams.append("dateFrom", filters.dateFrom);
       if (filters.dateTo) queryParams.append("dateTo", filters.dateTo);
-      if (filters.seller && filters.seller !== "all")
-        queryParams.append("seller", filters.seller);
+      if (filters.sellers && filters.sellers !== "all")
+        queryParams.append("sellers", filters.sellers);
       if (filters.transferStatus && filters.transferStatus !== "all")
         queryParams.append("transferStatus", filters.transferStatus);
       if (filters.includeLoaded)
@@ -189,8 +191,6 @@ class LoadsApi {
       throw error;
     }
   }
-
-
 
   /**
    * Obtiene historial de cargas

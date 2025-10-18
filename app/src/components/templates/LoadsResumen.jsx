@@ -13,7 +13,8 @@ import {
   FaTruck,
   FaArrowLeft,
 } from "react-icons/fa";
-import { Header, useAuth, useFetchData, TransferSummaryApi } from "../../index";
+import { Header, useAuth, useFetchData } from "../../index";
+import { TransferSummaryApi } from "../../api/index";
 
 const summaryApi = new TransferSummaryApi();
 
@@ -195,7 +196,7 @@ export function LoadsResumen() {
               <p><strong>Fecha:</strong> ${new Date(
                 summary.date
               ).toLocaleString()}</p>
-              <p><strong>Estado:</strong> 
+              <p><strong>Estado:</strong>
                 ${
                   summary.status === "completed"
                     ? "Completado"
@@ -207,9 +208,9 @@ export function LoadsResumen() {
                 }
               </p>
             </div>
-            
+
             ${returnInfoHtml}
-            
+
             <h4>Productos</h4>
             <div class="swal2-table-container">
               <table class="swal2-table">
@@ -292,11 +293,11 @@ export function LoadsResumen() {
           return `
           <tr>
             <td>
-              <input 
-                type="checkbox" 
-                id="return-product-${index}" 
-                class="return-checkbox" 
-                data-index="${index}" 
+              <input
+                type="checkbox"
+                id="return-product-${index}"
+                class="return-checkbox"
+                data-index="${index}"
                 ${isDisabled ? "disabled" : ""}
               />
             </td>
@@ -307,12 +308,12 @@ export function LoadsResumen() {
             <td class="text-right">${product.availableInInventory || 0}</td>
             <td class="text-right">${maxReturnable}</td>
             <td>
-              <input 
-                type="number" 
-                id="return-quantity-${index}" 
-                class="return-quantity swal2-input" 
-                min="1" 
-                max="${maxReturnable}" 
+              <input
+                type="number"
+                id="return-quantity-${index}"
+                class="return-quantity swal2-input"
+                min="1"
+                max="${maxReturnable}"
                 value="${maxReturnable > 0 ? 1 : 0}"
                 ${isDisabled ? "disabled" : ""}
                 style="width: 80px; padding: 5px;"
@@ -342,7 +343,7 @@ export function LoadsResumen() {
         html: `
           <div class="swal2-return-form">
             <p>Seleccione los productos a devolver y especifique la cantidad:</p>
-            
+
             <div class="swal2-table-container">
               <table class="swal2-table">
                 <thead>
@@ -362,7 +363,7 @@ export function LoadsResumen() {
                 </tbody>
               </table>
             </div>
-            
+
             <div class="form-group" style="margin-top: 20px;">
               <label for="return-reason">Motivo de la devolución:</label>
               <textarea id="return-reason" class="swal2-textarea" placeholder="Especifique el motivo de la devolución" style="width: 100%;"></textarea>

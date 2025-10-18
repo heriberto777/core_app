@@ -1,6 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { FaSave, FaTimes, FaSync, FaDatabase } from "react-icons/fa";
-import { TransferApi, useAuth } from "../../index";
+import {  useAuth } from "../../index";
+import { TransferApi } from "../../api/index";
 import Swal from "sweetalert2";
 
 // Instancia de la API

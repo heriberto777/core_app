@@ -1,5 +1,4 @@
-// TransferSummaryApi.js
-import { ENV } from "../index";
+import { ENV } from "../utils/index";
 
 export class TransferSummaryApi {
   baseApi = ENV.BASE_API;

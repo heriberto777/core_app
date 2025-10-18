@@ -1,8 +1,9 @@
 // Header.jsx (Optimizado)
 import { useEffect, useRef, useState, useContext } from "react";
 import styled from "styled-components";
-import { DataUser, v, AdminLayout } from "../../index";
-import { Device } from "../../styles/breakpoints";
+import { DataUser, AdminLayout } from "../../index";
+import { v, Device } from "../../styles/index";
+// import { Device } from "../../styles/breakpoints";
 import { FaBars, FaTimes } from "react-icons/fa";
 import { LayoutContext } from "../../layouts/AdminLayout/AdminLayout";
 

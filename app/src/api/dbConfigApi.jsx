@@ -1,4 +1,4 @@
-import { ENV } from "../utils/constants";
+import { ENV } from "../utils/index";
 
 export class DBConfigApi {
   baseApi = ENV.BASE_API;

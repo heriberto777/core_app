@@ -1,4 +1,4 @@
-import { ENV } from "../index";
+import { ENV } from "../utils/index";
 
 export class TransferApi {
   baseApi = ENV.BASE_API;

@@ -1,6 +1,7 @@
 import React, { useState, useEffect, useCallback } from "react";
 import styled from "styled-components";
-import { useAuth, DBConfigApi } from "../../index";
+import { useAuth } from "../../index";
+import { DBConfigApi } from "../../api/index";
 import Swal from "sweetalert2";
 import {
   FaDatabase,
@@ -54,18 +55,18 @@ export function DatabaseConnections() {
         <div class="task-form-container">
           <div class="task-form-section">
             <h4 class="task-form-section-title">Información del Servidor</h4>
-            
+
             <div class="task-form-group">
               <label class="task-form-label">Nombre del Servidor *</label>
               <input id="serverName" class="task-form-input" value="${
                 connection?.serverName || ""
-              }" 
+              }"
                      placeholder="Ej: SERVIDOR_PRINCIPAL" ${
                        isEdit ? "readonly" : ""
                      }>
               <small class="task-form-help-text">Identificador único para esta conexión</small>
             </div>
-            
+
             <div class="task-form-group">
               <label class="task-form-label">Tipo de Base de Datos *</label>
               <select id="type" class="task-form-select">
@@ -92,7 +93,7 @@ export function DatabaseConnections() {
               <label class="task-form-label">Host/Dirección IP *</label>
               <input id="host" class="task-form-input" value="${
                 connection?.host || ""
-              }" 
+              }"
                      placeholder="Ej: localhost, 192.168.1.100">
             </div>
 
@@ -100,7 +101,7 @@ export function DatabaseConnections() {
               <label class="task-form-label">Puerto *</label>
               <input id="port" type="number" class="task-form-input" value="${
                 connection?.port || ""
-              }" 
+              }"
                      placeholder="Ej: 1433 (SQL Server), 3306 (MySQL), 5432 (PostgreSQL)">
               <small class="task-form-help-text">Puerto por defecto: SQL Server: 1433, MySQL: 3306, PostgreSQL: 5432</small>
             </div>
@@ -108,19 +109,19 @@ export function DatabaseConnections() {
 
           <div class="task-form-section">
             <h4 class="task-form-section-title">Credenciales de Acceso</h4>
-            
+
             <div class="task-form-group">
               <label class="task-form-label">Usuario *</label>
               <input id="user" class="task-form-input" value="${
                 connection?.user || ""
-              }" 
+              }"
                      placeholder="Nombre de usuario">
             </div>
-            
+
             <div class="task-form-group">
               <label class="task-form-label">Contraseña *</label>
               <div style="position: relative;">
-                <input id="password" type="password" class="task-form-input" 
+                <input id="password" type="password" class="task-form-input"
                        value="${
                          connection?.password || ""
                        }" placeholder="Contraseña">
@@ -134,7 +135,7 @@ export function DatabaseConnections() {
               <label class="task-form-label">Base de Datos *</label>
               <input id="database" class="task-form-input" value="${
                 connection?.database || ""
-              }" 
+              }"
                      placeholder="Nombre de la base de datos">
             </div>
 
@@ -144,7 +145,7 @@ export function DatabaseConnections() {
               <label class="task-form-label">Instancia (SQL Server)</label>
               <input id="instance" class="task-form-input" value="${
                 connection?.instance || ""
-              }" 
+              }"
                      placeholder="Ej: SQLEXPRESS">
               <small class="task-form-help-text">Solo requerido para instancias con nombre en SQL Server</small>
             </div>
@@ -152,14 +153,14 @@ export function DatabaseConnections() {
 
           <div class="task-form-section">
             <h4 class="task-form-section-title">Opciones Avanzadas</h4>
-            
+
             <div class="task-form-checkbox-container">
               <input type="checkbox" id="encrypt" ${
                 connection?.options?.encrypt !== false ? "checked" : ""
               }>
               <label class="task-form-checkbox-label" for="encrypt">Encriptar conexión</label>
             </div>
-            
+
             <div class="task-form-checkbox-container">
               <input type="checkbox" id="trustServerCertificate" ${
                 connection?.options?.trustServerCertificate !== false
@@ -168,7 +169,7 @@ export function DatabaseConnections() {
               }>
               <label class="task-form-checkbox-label" for="trustServerCertificate">Confiar en certificado del servidor</label>
             </div>
-            
+
             <div class="task-form-checkbox-container" id="sslGroup" style="display: ${
               ["postgres", "mysql", "mariadb"].includes(connection?.type)
                 ? "block"
@@ -186,7 +187,7 @@ export function DatabaseConnections() {
               <label class="task-form-label">Auth Source (MongoDB)</label>
               <input id="authSource" class="task-form-input" value="${
                 connection?.options?.authSource || "admin"
-              }" 
+              }"
                      placeholder="admin">
             </div>
           </div>

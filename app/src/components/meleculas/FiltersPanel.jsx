@@ -115,12 +115,30 @@ export function FiltersPanel({
   sellers = [],
   loading = false,
 }) {
+
   const handleFilterChange = (key, value) => {
-    onFiltersChange({
+    console.log("🔄 Cambiando filtro:", key, "->", value);
+    console.log("📋 Filtros actuales antes del cambio:", filters);
+
+    const newFilters = {
       ...filters,
       [key]: value,
-    });
+    };
+
+    console.log("📋 Filtros nuevos después del cambio:", newFilters);
+    onFiltersChange(newFilters);
   };
+
+
+  // const handleFilterChange = (key, value) => {
+  //   console.log("Valor de Filtroes", value);
+  //   onFiltersChange({
+  //     ...filters,
+  //     [key]: value,
+  //   });
+  // };
+
+
 
   const transferStatusOptions = [
     { value: "all", label: "Todos los estados" },
@@ -142,6 +160,8 @@ export function FiltersPanel({
        label: seller.name,
      })),
  ];
+
+
 
   return (
     <Panel>

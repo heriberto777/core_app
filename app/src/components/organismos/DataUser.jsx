@@ -2,11 +2,10 @@ import styled from "styled-components";
 import {
   useAuth,
   BotonCircular,
-  v,
-  ListaMenuDesplegable,
-  DesplegableUser,
-  ENV,
+  ListaMenuDesplegable
 } from "../../index";
+import { v } from "../../styles/index";
+import { ENV, DesplegableUser } from "../../utils/index";
 import { useNavigate } from "react-router-dom";
 import { memo, useCallback } from "react";
 import { FaUser } from "react-icons/fa";

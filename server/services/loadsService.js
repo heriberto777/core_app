@@ -3,15 +3,17 @@ const { SqlService } = require("./SqlService");
 const logger = require("./logger");
 const { LoadTracking, DeliveryPerson } = require("../models/loadsModel");
 const { wrapService } = require("../utils/serviceWrapper");
+
 /**
  * Servicio para manejo de cargas de pedidos
  * Implementa lógica secuencial con control de estado U_estado_proceso
  */
 class LoadsService {
   /**
-   * Obtiene pedidos pendientes desde CATELLI.PEDIDO usando tu consulta original
+   * Obtiene pedidos pendientes desde CATELLI.PEDIDO usando consulta optimizada
    */
   static async getPendingOrders(filters = {}) {
+    console.log("Filters received:", filters);
     return await withConnection("server1", async (connection) => {
       try {
         let baseQuery = `
@@ -51,7 +53,7 @@ class LoadsService {
 
         const params = {};
 
-        // Aplicar filtros
+        // Aplicar filtros de fecha
         if (filters.dateFrom) {
           baseQuery += " AND pe.FECHA_PEDIDO >= @dateFrom";
           params.dateFrom = new Date(filters.dateFrom);
@@ -64,9 +66,33 @@ class LoadsService {
           params.dateTo = endDate;
         }
 
+        // Aplicar filtro de vendedor
         if (filters.seller && filters.seller !== "all") {
           baseQuery += " AND pe.VENDEDOR = @seller";
           params.seller = filters.seller;
+        }
+
+        // Aplicar filtro de transferStatus
+        if (filters.transferStatus && filters.transferStatus !== "all") {
+          switch (filters.transferStatus) {
+            case "pending":
+              baseQuery += " AND pe.U_estado_proceso = 'N'";
+              break;
+            case "processing":
+              baseQuery += " AND pe.U_estado_proceso = 'P'";
+              break;
+            case "completed":
+              baseQuery += " AND pe.U_estado_proceso = 'S'";
+              break;
+            case "cancelled":
+              baseQuery += " AND pe.estado = 'C'";
+              break;
+          }
+        }
+
+        // Aplicar filtro includeLoaded
+        if (!filters.includeLoaded) {
+          // Ya está incluido en la condición base: U_Code_Load IS NULL OR U_Code_Load = ''
         }
 
         const fullQuery = `
@@ -82,7 +108,9 @@ class LoadsService {
             COUNT(*) as totalLines,
             SUM(CANTIDAD_PEDIDA) as totalQuantity,
             SUM(PRECIO_UNITARIO * CANTIDAD_PEDIDA) as totalAmount,
-            detalle_direccion
+            detalle_direccion,
+            MIN(U_estado_proceso) as estadoProceso,
+            MIN(U_Code_Load) as codeLoad
           FROM BaseData
           GROUP BY PEDIDO, CLIENTE, VENDEDOR, NOMBRE_VENDEDOR,
                    FECHA_PEDIDO, FECHA_PROMETIDA, detalle_direccion
@@ -90,12 +118,48 @@ class LoadsService {
         `;
 
         const result = await SqlService.query(connection, fullQuery, params);
-        return result.recordset;
+
+        // Retornar estructura consistente con transformación de datos
+        return {
+          success: true,
+          data: result.recordset.map((order) => ({
+            pedido: order.PEDIDO,
+            cliente: order.CLIENTE,
+            fechaPedido: order.FECHA_PEDIDO,
+            vendedor: order.VENDEDOR,
+            nombreVendedor: order.NOMBRE_VENDEDOR,
+            totalLineas: order.totalLines,
+            totalPedido: order.totalAmount || 0,
+            totalCantidad: order.totalQuantity || 0,
+            direccion: order.detalle_direccion,
+            codeLoad: order.codeLoad,
+            transferStatus: this.mapTransferStatus(order.estadoProceso),
+          })),
+          totalRecords: result.recordset.length,
+        };
       } catch (error) {
         logger.error("Error obteniendo pedidos pendientes:", error);
         throw error;
       }
     });
+  }
+
+  /**
+   * Mapear estados de proceso a transferStatus
+   */
+  static mapTransferStatus(estadoProceso) {
+    switch (estadoProceso) {
+      case "N":
+        return "pending";
+      case "P":
+        return "processing";
+      case "S":
+        return "completed";
+      case "C":
+        return "cancelled";
+      default:
+        return "pending";
+    }
   }
 
   /**
@@ -120,7 +184,11 @@ class LoadsService {
         `;
 
         const result = await SqlService.query(connection, query, { pedidoId });
-        return result.recordset;
+
+        return {
+          success: true,
+          data: result.recordset,
+        };
       });
     } catch (error) {
       logger.error(`Error obteniendo detalles del pedido ${pedidoId}:`, error);
@@ -147,6 +215,7 @@ class LoadsService {
         `;
 
         const result = await SqlService.query(connection, query);
+
         return {
           success: true,
           data: result.recordset,
@@ -169,6 +238,8 @@ class LoadsService {
    * ⭐ PROCESO PRINCIPAL: Procesa carga de pedidos con validación secuencial ⭐
    */
   static async processOrderLoad(deliveryPersonCode, selectedPedidos, userId) {
+    let loadTracking = null;
+
     try {
       logger.info(
         `🚀 Iniciando proceso de carga para repartidor: ${deliveryPersonCode}`
@@ -182,10 +253,10 @@ class LoadsService {
 
       // 2. Generar loadId único
       const loadId = await this.generateLoadId();
-      logger.info(`🔖 LoadId generado: ${loadId}`);
+      logger.info(`📖 LoadId generado: ${loadId}`);
 
       // 3. Crear tracking inicial
-      const loadTracking = await this.createLoadTracking(
+      loadTracking = await this.createLoadTracking(
         loadId,
         deliveryPersonCode,
         deliveryPerson.assignedWarehouse,
@@ -308,17 +379,20 @@ class LoadsService {
       } catch (error) {
         logger.error(`❌ Error en paso ${step}:`, error);
 
-        // ⚠️ ROLLBACK: Si algo falla, marcar como error y no cambiar estado ⚠️
+        // ⚠️ ROLLBACK MEJORADO: Si algo falla, marcar como error y limpiar ⚠️
         try {
           // Actualizar tracking como fallido
-          await LoadTracking.findOneAndUpdate(
-            { loadId },
-            {
-              status: "error",
-              errorMessage: error.message,
-              updatedAt: new Date(),
-            }
-          );
+          if (loadTracking) {
+            await LoadTracking.findOneAndUpdate(
+              { loadId: loadTracking.loadId },
+              {
+                status: "error",
+                errorMessage: error.message,
+                failedStep: step,
+                updatedAt: new Date(),
+              }
+            );
+          }
 
           // Si ya se actualizó U_Code_Load pero falló después, limpiar
           if (
@@ -327,6 +401,7 @@ class LoadsService {
               "insertToIMPLTOrders",
               "insertToIMPLTLoadsDetail",
               "realizarTraspaso",
+              "updateEstadoProceso",
             ].includes(step)
           ) {
             await withConnection("server1", async (connection) => {
@@ -363,7 +438,6 @@ class LoadsService {
         FROM CATELLI.VENDEDOR
         WHERE VENDEDOR = @deliveryPersonCode
         AND ACTIVO = 'S'
-
       `;
 
       const result = await SqlService.query(connection, query, {
@@ -703,25 +777,38 @@ class LoadsService {
   static async cancelOrders(selectedPedidos, userId, reason) {
     try {
       return await withConnection("server1", async (connection) => {
-        const pedidosList = selectedPedidos
+        const placeholders = selectedPedidos
           .map((_, index) => `@pedido${index}`)
           .join(", ");
-        const params = { reason: reason || "Cancelado por usuario", userId };
 
+        // Solo los parámetros de los pedidos
+        const params = {};
         selectedPedidos.forEach((pedido, index) => {
           params[`pedido${index}`] = pedido;
         });
 
         const query = `
-          UPDATE CATELLI.PEDIDO
-          SET estado = 'C',
-              U_estado_proceso = 'C',
-              USUARIO_MODIF = @userId,
-              FECHA_MODIF = GETDATE()
-          WHERE PEDIDO IN (${pedidosList})
-          AND estado = 'N'
-          AND U_Code_Load IS NULL
-        `;
+        UPDATE CATELLI.PEDIDO
+        SET estado = 'C',
+            U_estado_proceso = 'C'
+        WHERE PEDIDO IN (${placeholders})
+        AND estado = 'N'
+        AND U_Code_Load IS NULL
+      `;
+
+        console.log("🔍 DEBUG Query:", query);
+        console.log("🔍 DEBUG Params:", params);
+        console.log("🔍 DEBUG Placeholders:", placeholders);
+
+        // IMplementar usuario Modificacion
+        //  UPDATE CATELLI.PEDIDO
+        //   SET estado = 'C',
+        //       U_estado_proceso = 'C',
+        //       USUARIO_MODIF = @userId,
+        //       FECHA_MODIF = GETDATE()
+        //   WHERE PEDIDO IN (${pedidosList})
+        //   AND estado = 'N'
+        //   AND U_Code_Load IS NULL
 
         const result = await SqlService.query(connection, query, params);
 
@@ -855,6 +942,7 @@ class LoadsService {
       ]);
 
       return {
+        success: true,
         data: loads,
         pagination: {
           currentPage: page,
@@ -870,6 +958,66 @@ class LoadsService {
       throw error;
     }
   }
+
+  /**
+   * Procesa traspaso de inventario (integración con traspasoService existente)
+   */
+  static async processInventoryTransfer(loadId, bodegaDestino) {
+    try {
+      // Obtener datos de la carga desde IMPLT_loads_detail
+      const loadData = await withConnection("server2", async (connection) => {
+        const query = `
+          SELECT
+            Code_Product as codigo,
+            Quantity as cantidad,
+            Code_Warehouse_Sou as bodegaOrigen
+          FROM dbo.IMPLT_loads_detail
+          WHERE Code = @loadId
+        `;
+
+        const result = await SqlService.query(connection, query, { loadId });
+        return result.recordset;
+      });
+
+      if (!loadData || loadData.length === 0) {
+        throw new Error(`No se encontraron datos para la carga ${loadId}`);
+      }
+
+      // Usar traspasoService existente
+      const traspasoService = require("./traspasoService");
+
+      const traspasoResult = await traspasoService.procesarTraspasoBodega(
+        loadData, // productos con formato: [{codigo, cantidad, bodegaOrigen}]
+        loadData[0].bodegaOrigen, // bodega origen (primera línea)
+        bodegaDestino, // bodega destino
+        loadId // referencia del traspaso
+      );
+
+      // Actualizar estado del tracking
+      await LoadTracking.findOneAndUpdate(
+        { loadId },
+        {
+          status: "transferred",
+          updatedAt: new Date(),
+        }
+      );
+
+      return {
+        success: true,
+        message: "Traspaso de inventario procesado correctamente",
+        data: {
+          loadId,
+          documentoGenerado: traspasoResult.documento_inv,
+          lineasProcesadas: traspasoResult.successCount,
+          bodegaOrigen: loadData[0].bodegaOrigen,
+          bodegaDestino,
+        },
+      };
+    } catch (error) {
+      logger.error("Error procesando traspaso de inventario:", error);
+      throw error;
+    }
+  }
 }
 
-module.exports = LoadsService
+module.exports = LoadsService;

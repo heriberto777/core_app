@@ -1,5 +1,6 @@
 import { createContext, useContext, useEffect, useState } from "react";
-import { AdminRouter, AuthContext, ReloadProvider, Light, Dark } from "./index";
+import { AdminRouter, AuthContext, ReloadProvider } from "./index";
+import {Dark, Light} from './styles/index'
 import { ThemeProvider } from "styled-components";
 import { HelmetProvider } from "react-helmet-async";
 

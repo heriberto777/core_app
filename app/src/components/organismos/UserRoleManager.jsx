@@ -12,9 +12,10 @@ import {
   FaCrown,
 } from "react-icons/fa";
 
-import { User, useAuth, usePermissions } from "../../index"; // ⭐ IMPORTAR LA CLASE User EXISTENTE
+import { useAuth, usePermissions } from "../../index";
+import { User } from "../../api/index";
 
-const userApi = new User(); // ⭐ INSTANCIAR userApi
+const userApi = new User();
 
 const UserRoleManager = () => {
   const [users, setUsers] = useState([]);

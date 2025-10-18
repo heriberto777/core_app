@@ -6,14 +6,20 @@ class LoadsController {
    * Obtiene pedidos pendientes de cargar
    */
   static async getPendingOrders(req, res) {
+
+    console.log("Query Params in Controller:", req.query);
+
     try {
+      //transferStatus
       const filters = {
         dateFrom: req.query.dateFrom,
         dateTo: req.query.dateTo,
-        seller: req.query.seller,
+        seller: req.query.sellers,
         transferStatus: req.query.transferStatus,
         includeLoaded: req.query.includeLoaded === "true",
       };
+
+      console.log("Filters in Controller:", filters);
 
       const result = await LoadsService.getPendingOrders(filters);
 
@@ -175,6 +181,9 @@ class LoadsController {
     try {
       const { selectedPedidos, reason } = req.body;
       const userId = req.user?.user_id || req.user?._id;
+      // console.log("Usuario", req.user)
+
+      // console.log("Params in cancelOrders:", selectedPedidos, reason, userId);
 
       // Validaciones
       if (

@@ -3,9 +3,9 @@ import styled from "styled-components";
 import {
   ConsecutiveConfigSection,
   PromotionConfigSection,
-  TransferApi,
   useAuth,
 } from "../../index";
+import { TransferApi } from "../../api/index";
 import { FaSave, FaPlus, FaTrash, FaTimes, FaEdit } from "react-icons/fa";
 import Swal from "sweetalert2";
 

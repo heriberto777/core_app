@@ -1,6 +1,8 @@
 import React, { useState } from "react";
 import styled from "styled-components";
-import { useForm, validateForm, AuthApi, useAuth } from "../../index";
+import { useForm,  useAuth } from "../../index";
+import { AuthApi } from "../../api/index";
+import { validateForm } from "../../utils/index";
 import Swal from "sweetalert2";
 import { Helmet } from "react-helmet-async";
 

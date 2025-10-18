@@ -9,7 +9,8 @@ import {
   FaPlus,
   FaSync,
 } from "react-icons/fa";
-import { EmailRecipientApi, useAuth, useFetchData, Header } from "../../index";
+import { useAuth, useFetchData, Header } from "../../index";
+import { EmailRecipientApi } from "../../api/index";
 
 const cnnApi = new EmailRecipientApi();
 

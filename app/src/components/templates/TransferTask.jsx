@@ -1,13 +1,13 @@
 import styled from "styled-components";
 import {
   ScheduleConfigButton,
-  TransferApi,
   useAuth,
   useFetchData,
-  progressClient,
   LinkedGroupsManager,
   usePermissions,
 } from "../../index";
+import { TransferApi } from "../../api/index";
+import { progressClient } from "../../utils/index";
 import { useEffect, useState, useRef, useCallback, useMemo } from "react";
 import Swal from "sweetalert2";
 import {
@@ -384,7 +384,7 @@ export function TransferTasks() {
       <!-- SECCIÓN 1: CONFIGURACIÓN BÁSICA -->
       <div class="form-section">
         <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Configuración Básica</h4>
-        
+
         <div class="form-group">
           <label>Nombre de la tarea:</label>
           <input id="swal-name" class="swal2-input" placeholder="Nombre" value="${
@@ -424,7 +424,7 @@ export function TransferTasks() {
             }>Transfer Interno (Server1 → Server1)</option>
           </select>
         </div>
-        
+
         <div class="form-group">
           <label>Modo de Ejecución:</label>
           <select id="swal-executionMode" class="swal2-select">
@@ -438,7 +438,7 @@ export function TransferTasks() {
             }>Batches SSE</option>
           </select>
         </div>
-        
+
         <div class="swal2-checkbox-container">
           <input id="swal-active" type="checkbox" ${
             task?.active !== false ? "checked" : ""
@@ -453,11 +453,11 @@ export function TransferTasks() {
           <label for="swal-clearBeforeInsert">Borrar registros antes de insertar</label>
         </div>
       </div>
-      
+
       <!-- SECCIÓN 2: CONSULTA Y PARÁMETROS -->
       <div class="form-section">
         <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Consulta y Parámetros</h4>
-        
+
         <div class="form-group">
           <label>Consulta SQL:</label>
           <textarea id="swal-query" class="textarea-sql" placeholder="Consulta SQL">${
@@ -478,7 +478,7 @@ export function TransferTasks() {
       <!-- SECCIÓN 3: TAREAS VINCULADAS -->
       <div class="form-section">
         <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">🔗 Tareas Vinculadas</h4>
-        
+
         <div style="margin-bottom: 15px; padding: 12px; background-color: #e3f2fd; border-radius: 6px; border-left: 4px solid #2196f3;">
           <div style="font-weight: 600; color: #1565c0; margin-bottom: 8px;">ℹ️ ¿Cómo funciona?</div>
           <ul style="margin: 0; padding-left: 20px; font-size: 13px; color: #424242; line-height: 1.5;">
@@ -488,11 +488,11 @@ export function TransferTasks() {
             <li><strong>Orden de ejecución:</strong> Las tareas se ejecutan según el orden especificado</li>
           </ul>
         </div>
-        
+
         <div class="form-group">
           <label>Grupo de vinculación:</label>
-          <input id="swal-linkedGroup" class="swal2-input" 
-                 placeholder="Ejemplo: IMPLT_Accounts_Group" 
+          <input id="swal-linkedGroup" class="swal2-input"
+                 placeholder="Ejemplo: IMPLT_Accounts_Group"
                  value="${task?.linkedGroup || ""}" />
           <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
             <strong>Importante:</strong> Todas las tareas con el mismo nombre de grupo se ejecutarán juntas automáticamente
@@ -501,7 +501,7 @@ export function TransferTasks() {
 
         <div class="form-group">
           <label>Orden de ejecución en el grupo:</label>
-          <input id="swal-linkedExecutionOrder" class="swal2-input" type="number" 
+          <input id="swal-linkedExecutionOrder" class="swal2-input" type="number"
                  placeholder="0" min="0" max="100"
                  value="${task?.linkedExecutionOrder || 0}" />
           <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
@@ -515,7 +515,7 @@ export function TransferTasks() {
           } />
           <label for="swal-isCoordinator">Esta tarea será la coordinadora del post-update del grupo</label>
           <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
-            <strong>Regla importante:</strong> Solo UNA tarea del grupo debe tener post-update definido (será la coordinadora). 
+            <strong>Regla importante:</strong> Solo UNA tarea del grupo debe tener post-update definido (será la coordinadora).
             Las demás tareas del grupo deben tener post-update vacío.
           </small>
         </div>
@@ -539,7 +539,7 @@ export function TransferTasks() {
               .join("")}
           </select>
           <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
-            <strong>Alternativa:</strong> Si no usas grupos, puedes vincular tareas específicas aquí. 
+            <strong>Alternativa:</strong> Si no usas grupos, puedes vincular tareas específicas aquí.
             Mantén presionada Ctrl para seleccionar múltiples tareas.
           </small>
         </div>
@@ -590,7 +590,7 @@ export function TransferTasks() {
           </ul>
         </div>
       </div>
-      
+
       <!-- RESTO DE SECCIONES... -->
       ${getRestOfSections(task, tasks)}
     </div>
@@ -1077,14 +1077,14 @@ export function TransferTasks() {
      <!-- SECCIÓN 4: MAPEO DE CAMPOS (SOLO PARA DOWN) -->
      <div id="section-field-mapping" class="form-section" style="display: none;">
        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Mapeo de Campos (Server2 → Server1)</h4>
-       
+
        <div style="margin-bottom: 10px;">
          <p style="font-size: 13px; color: #666;">Define las tablas y la correspondencia entre campos.</p>
        </div>
-       
+
        <div class="form-group">
          <label>Tabla origen en Server2:</label>
-         <input id="swal-source-table" class="swal2-input" placeholder="Ejemplo: dbo.CLIENTES_EXTERNOS" 
+         <input id="swal-source-table" class="swal2-input" placeholder="Ejemplo: dbo.CLIENTES_EXTERNOS"
            value="${task?.fieldMapping?.sourceTable || ""}" />
          <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
            Nombre de la tabla en Server2 de donde se obtendrán los datos
@@ -1093,13 +1093,13 @@ export function TransferTasks() {
 
        <div class="form-group">
          <label>Tabla destino en Server1:</label>
-         <input id="swal-target-table" class="swal2-input" placeholder="Ejemplo: dbo.Clientes" 
+         <input id="swal-target-table" class="swal2-input" placeholder="Ejemplo: dbo.Clientes"
            value="${task?.fieldMapping?.targetTable || task?.name || ""}" />
          <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
            Nombre de la tabla en Server1 donde se insertarán los datos
          </small>
        </div>
-       
+
        <div class="mapping-fields">
          <div style="margin-bottom: 10px;">
            <label for="swal-source-fields">Campos Origen (Server2):</label>
@@ -1109,7 +1109,7 @@ export function TransferTasks() {
                : ""
            }</textarea>
          </div>
-         
+
          <div style="margin-bottom: 10px;">
            <label for="swal-target-fields">Campos Destino (Server1):</label>
            <textarea id="swal-target-fields" class="swal2-textarea" placeholder="ClienteID, Nombre, Telefono...">${
@@ -1118,7 +1118,7 @@ export function TransferTasks() {
                : ""
            }</textarea>
          </div>
-         
+
          <div style="margin-bottom: 10px;">
            <label for="swal-default-values">Valores por defecto (opcional):</label>
            <textarea id="swal-default-values" class="swal2-textarea" placeholder="Campo1:Valor1, Campo2:Valor2...">${
@@ -1133,25 +1133,25 @@ export function TransferTasks() {
            </small>
          </div>
        </div>
-       
+
        <div class="form-group" style="margin-top: 20px; padding-top: 15px; border-top: 1px dashed #ddd;">
          <label>Campo identificador único:</label>
-         <input id="swal-down-key-field" class="swal2-input" placeholder="Ejemplo: ClienteID, Codigo, etc." 
+         <input id="swal-down-key-field" class="swal2-input" placeholder="Ejemplo: ClienteID, Codigo, etc."
            value="${task?.validationRules?.existenceCheck?.key || ""}" />
          <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
            <strong>Importante:</strong> Especifique un campo que identifique de manera única cada registro (debe estar en los campos destino).
          </small>
        </div>
-       
+
        <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
          Los campos deben estar separados por comas y en el mismo orden para establecer la correspondencia correcta.
        </small>
      </div>
-     
+
      <!-- SECCIÓN DE TAREAS ENCADENADAS (SOLO PARA DOWN) -->
      <div id="section-chain-tasks" class="form-section" style="display: none;">
        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Tareas Encadenadas</h4>
-       
+
        <div class="form-group">
          <label>Ejecutar estas tareas al finalizar (opcional):</label>
          <select id="swal-next-tasks" class="swal2-select" multiple style="height: 100px; width: 100%;">
@@ -1175,14 +1175,14 @@ export function TransferTasks() {
          </small>
        </div>
      </div>
-     
+
      <!-- SECCIÓN 5: VALIDACIÓN DE DATOS -->
      <div id="section-validation" class="form-section">
        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Validación de Datos</h4>
-       
+
        <div class="form-group">
          <label>Campos obligatorios:</label>
-         <input id="swal-requiredFields" class="swal2-input" placeholder="Ejemplo: Code_ofClient, Name1" 
+         <input id="swal-requiredFields" class="swal2-input" placeholder="Ejemplo: Code_ofClient, Name1"
            value="${
              Array.isArray(task?.validationRules?.requiredFields)
                ? task.validationRules.requiredFields.join(", ")
@@ -1192,21 +1192,21 @@ export function TransferTasks() {
 
        <div class="form-group">
          <label>Tabla de validación:</label>
-         <input id="swal-existenceTable" class="swal2-input" placeholder="Ejemplo: dbo.IMPLT_clients" 
+         <input id="swal-existenceTable" class="swal2-input" placeholder="Ejemplo: dbo.IMPLT_clients"
            value="${task?.validationRules?.existenceCheck?.table || ""}" />
        </div>
 
        <div class="form-group">
          <label>Clave primaria:</label>
-         <input id="swal-existenceKey" class="swal2-input" placeholder="Ejemplo: Code_ofClient" 
+         <input id="swal-existenceKey" class="swal2-input" placeholder="Ejemplo: Code_ofClient"
            value="${task?.validationRules?.existenceCheck?.key || ""}" />
        </div>
      </div>
-     
+
      <!-- SECCIÓN 6: POST-TRANSFERENCIA -->
      <div id="section-post-transfer" class="form-section">
        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Operaciones Post-Transferencia</h4>
-       
+
        <div class="form-group">
          <label>Consulta Post-Transferencia:</label>
          <textarea id="swal-postUpdateQuery" class="swal2-textarea"
@@ -1223,21 +1223,21 @@ export function TransferTasks() {
          <input id="swal-postUpdateKeyView" class="swal2-input" placeholder="Ejemplo: Code_OfClient"
            value="${task?.postUpdateMapping?.viewKey || ""}" />
        </div>
-       
+
        <div class="form-group">
          <label>Clave en Tabla Real:</label>
          <input id="swal-postUpdateKeyTable" class="swal2-input" placeholder="Ejemplo: CLIENTE"
            value="${task?.postUpdateMapping?.tableKey || ""}" />
        </div>
      </div>
-     
+
      <!-- SECCIÓN 7: TABLA DESTINO (SÓLO PARA TRANSFERENCIA INTERNA) -->
      <div id="section-target-table" class="form-section" style="display: none;">
        <h4 style="border-bottom: 1px solid #eee; padding-bottom: 8px; margin: 15px 0;">Configuración de Transferencia Interna</h4>
-       
+
        <div class="form-group">
          <label>Tabla destino:</label>
-         <input id="swal-targetTable" class="swal2-input" placeholder="Ejemplo: dbo.IMPLT_Hist_Orders" 
+         <input id="swal-targetTable" class="swal2-input" placeholder="Ejemplo: dbo.IMPLT_Hist_Orders"
            value="${task?.targetTable || ""}" />
          <small style="display: block; margin-top: 5px; font-size: 12px; color: #666;">
            Especifique la tabla destino para transferencias internas en Server1
@@ -1519,7 +1519,7 @@ export function TransferTasks() {
              ? new Date(task.lastExecutionDate).toLocaleString()
              : "Nunca"
          }</p>
-         
+
          <h4>Últimas transferencias</h4>
          <div class="history-table-container">
            <table class="swal2-table">
@@ -1752,7 +1752,7 @@ export function TransferTasks() {
       }%</div>
            </div>
          </div>
-         
+
          <div class="time-estimates">
            <p><strong>Tiempo transcurrido:</strong> ${elapsedMinutes}m ${elapsedSeconds}s</p>
            <p><strong>Tiempo restante est.:</strong> ${remainingMinutes}m ${remainingSeconds}s</p>
@@ -1765,7 +1765,7 @@ export function TransferTasks() {
                : "Desconocida"
            }</p>
          </div>
-         
+
          <div class="status-info">
            <p><strong>Estado de la tarea:</strong> <span class="status-badge">${
              task.status === "running" ? "En ejecución" : task.status
@@ -1825,9 +1825,9 @@ export function TransferTasks() {
            right: 0;
            bottom: 0;
            background: linear-gradient(
-             90deg, 
-             rgba(255,255,255,0) 0%, 
-             rgba(255,255,255,0.3) 50%, 
+             90deg,
+             rgba(255,255,255,0) 0%,
+             rgba(255,255,255,0.3) 50%,
              rgba(255,255,255,0) 100%
            );
            animation: progressShine 2s infinite linear;
@@ -1983,7 +1983,7 @@ export function TransferTasks() {
                <p class="metric-value">${successRate.toFixed(1)}%</p>
              </div>
            </div>
-           
+
            <div class="metrics-table-container">
              <h4>Tareas más ejecutadas</h4>
              <table>
@@ -2066,7 +2066,7 @@ export function TransferTasks() {
              width: 100%;
              border-collapse: collapse;
            }
-           .metrics-table-container th, 
+           .metrics-table-container th,
            .metrics-table-container td {
              padding: 8px 12px;
              text-align: left;

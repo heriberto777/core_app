@@ -1,6 +1,7 @@
 import styled from "styled-components";
 import { useState, useEffect } from "react";
-import { Header, useAuth, TransferApi } from "../../index";
+import { Header, useAuth } from "../../index";
+import { TransferApi } from "../../api/index";
 import {
   FaSync,
   FaFilter,

@@ -20,6 +20,7 @@ import {
   ScheduleConfiguration,
 } from "../../index";
 
+
 export function ConfigurationPage() {
   const [activeTab, setActiveTab] = useState("database");
   const { user } = useAuth();

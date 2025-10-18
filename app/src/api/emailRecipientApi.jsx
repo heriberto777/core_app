@@ -1,4 +1,4 @@
-import { ENV } from "../index";
+import { ENV } from "../utils/index";
 
 export class EmailRecipientApi {
   baseApi = ENV.BASE_API;
