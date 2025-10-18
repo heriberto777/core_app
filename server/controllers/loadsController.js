@@ -123,6 +123,30 @@ class LoadsController {
       const { selectedPedidos, deliveryPersonCode } = req.body;
       const userId = req.user?.user_id || req.user?._id;
 
+      // ✅ AGREGAR DEBUG AQUÍ:
+      console.log(
+        "🔍 deliveryPersonCode:",
+        deliveryPersonCode,
+        typeof deliveryPersonCode
+      );
+      console.log(
+        "🔍 selectedPedidos:",
+        selectedPedidos,
+        typeof selectedPedidos
+      );
+      console.log("🔍 selectedPedidos.length:", selectedPedidos?.length);
+      console.log("🔍 userId:", userId, typeof userId);
+
+      // Verificar que selectedPedidos sea un array
+      if (!Array.isArray(selectedPedidos)) {
+        return res.status(400).json({
+          success: false,
+          message: "selectedPedidos debe ser un array",
+          received: typeof selectedPedidos,
+          value: selectedPedidos,
+        });
+      }
+
       // Validaciones
       if (
         !selectedPedidos ||
@@ -154,8 +178,8 @@ class LoadsController {
       );
 
       const result = await LoadsService.processOrderLoad(
-        selectedPedidos,
         deliveryPersonCode,
+        selectedPedidos,
         userId
       );
 
