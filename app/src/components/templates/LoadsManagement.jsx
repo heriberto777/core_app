@@ -500,6 +500,7 @@ export function LoadsManagement() {
       setProcessing(true);
       setShowDeliverySelector(false);
 
+
       const response = await loadsApi.processOrderLoad(
         accessToken,
         selectedOrders,

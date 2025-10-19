@@ -75,137 +75,388 @@ async function obtenerDetalleProductos(connection, productos) {
 }
 
 /**
- * Valida todos los datos necesarios para el traspaso (encabezado y detalle)
+ * Validación completa de datos para traspaso con múltiples bodegas origen
  */
-async function validateTraspasoData(salesData, route, bodega_destino) {
+async function validateTraspasoData(salesData, route, bodega_destino, connection = null) {
   const validation = {
     isValid: true,
-    missingFields: [],
     errors: [],
     warnings: [],
     productos: [],
-    configValidation: {
-      isValid: true,
-      errors: []
-    }
+    route,
+    bodega_destino,
+    bodegasOrigen: [] // Múltiples bodegas origen
   };
 
-  logger.info(`Iniciando validación de traspaso para ruta ${route}`);
-
   try {
-    // 1. Validar configuración general del traspaso
-    const configValidation = await validateTraspasoConfig();
-    validation.configValidation = configValidation;
-
-    if (!configValidation.isValid) {
-      validation.isValid = false;
-      validation.errors.push(...configValidation.errors);
+    if (connection) {
+      return await validateWithExistingConnection(connection, salesData, route, bodega_destino, validation);
+    } else {
+      return await withConnection("server1", async (newConnection) => {
+        return await validateWithExistingConnection(newConnection, salesData, route, bodega_destino, validation);
+      });
     }
-
-    // 2. Validar datos de entrada básicos
-    if (!salesData || !Array.isArray(salesData) || salesData.length === 0) {
-      validation.isValid = false;
-      validation.errors.push('No hay datos de ventas para procesar');
-      return validation;
-    }
-
-    if (!route || route.toString().trim() === '') {
-      validation.isValid = false;
-      validation.errors.push('Ruta/vendedor no especificado');
-    }
-
-    if (!bodega_destino || bodega_destino.toString().trim() === '') {
-      validation.isValid = false;
-      validation.errors.push('Bodega destino no especificada');
-    }
-
-    // 3. Filtrar productos válidos
-    const productosValidos = salesData.filter(
-      (item) =>
-        item &&
-        item.Code_Product &&
-        item.Code_Product.trim() !== "" &&
-        typeof item.Quantity !== "undefined" &&
-        Number(item.Quantity) > 0
-    );
-
-    if (productosValidos.length === 0) {
-      validation.isValid = false;
-      validation.errors.push('No hay productos válidos en los datos de ventas');
-      return validation;
-    }
-
-    // 4. Validar bodega origen
-    const bodegaOrigen = productosValidos[0].bodega;
-    if (!bodegaOrigen || bodegaOrigen.toString().trim() === '') {
-      validation.isValid = false;
-      validation.errors.push('Bodega origen no especificada en los datos');
-    }
-
-    // 5. Validar cada producto individualmente
-    return await withConnection("server1", async (connection) => {
-      // Validar disponibilidad del consecutivo
-      const consecutivoValidation = await validateConsecutivoAvailable(connection);
-      if (!consecutivoValidation.isValid) {
-        validation.isValid = false;
-        validation.errors.push(...consecutivoValidation.errors);
-      }
-
-      // Validar bodegas existen
-      const bodegasValidation = await validateBodegas(connection, bodegaOrigen, bodega_destino);
-      if (!bodegasValidation.isValid) {
-        validation.isValid = false;
-        validation.errors.push(...bodegasValidation.errors);
-      }
-
-      // Agrupar productos para validación
-      const productos = {};
-      for (const item of productosValidos) {
-        const codigo = item.Code_Product.trim();
-        const cantidad = Math.max(0, Number(item.Quantity) || 0);
-
-        if (codigo && cantidad > 0) {
-          if (!productos[codigo]) {
-            productos[codigo] = 0;
-          }
-          productos[codigo] += cantidad;
-        }
-      }
-
-      // Validar cada producto agrupado
-      for (const [codigo, cantidad] of Object.entries(productos)) {
-        const productValidation = await validateProduct(
-          connection,
-          {
-            Code_Product: codigo,
-            Quantity: cantidad,
-          },
-          bodegaOrigen // ← Este parámetro estaba en la posición incorrecta
-        );
-
-        validation.productos.push(productValidation);
-
-        // Verificar si hay errores
-        if (!productValidation.isValid) {
-          validation.isValid = false;
-          validation.errors.push(...productValidation.errors);
-        }
-
-        // Agregar advertencias
-        if (productValidation.warnings.length > 0) {
-          validation.warnings.push(...productValidation.warnings);
-        }
-      }
-
-      return validation;
-    });
-
   } catch (error) {
-    logger.error(`Error durante validación de traspaso: ${error.message}`);
+    logger.error('Error en validateTraspasoData:', error);
     validation.isValid = false;
     validation.errors.push(`Error de validación: ${error.message}`);
     return validation;
   }
+}
+
+/**
+ * Lógica de validación usando conexión existente - ACTUALIZADA
+ */
+async function validateWithExistingConnection(connection, salesData, route, bodega_destino, validation) {
+  // Validaciones básicas
+  if (!salesData || !Array.isArray(salesData) || salesData.length === 0) {
+    validation.isValid = false;
+    validation.errors.push('No hay datos de productos para procesar');
+    return validation;
+  }
+
+  // Agrupar productos por código Y bodega origen
+  const productos = {};
+  const bodegasOrigenSet = new Set();
+
+  for (const item of salesData) {
+    if (item && item.Code_Product && item.Code_Product.trim() !== '') {
+      const codigo = item.Code_Product.trim();
+      const cantidad = Math.max(0, Number(item.Quantity) || 0);
+      const bodegaOrigen = item.bodega || "01";
+
+      bodegasOrigenSet.add(bodegaOrigen);
+
+      const key = `${codigo}_${bodegaOrigen}`;
+
+      if (cantidad > 0) {
+        if (!productos[key]) {
+          productos[key] = {
+            Code_Product: codigo,
+            Quantity: 0,
+            bodegaOrigen: bodegaOrigen
+          };
+        }
+        productos[key].Quantity += cantidad;
+      }
+    }
+  }
+
+  validation.bodegasOrigen = Array.from(bodegasOrigenSet);
+
+  if (Object.keys(productos).length === 0) {
+    validation.isValid = false;
+    validation.errors.push('No se encontraron productos válidos con cantidades mayores a 0');
+    return validation;
+  }
+
+  logger.info(`Validando traspaso multi-bodega: Bodegas origen: [${validation.bodegasOrigen.join(', ')}], Bodega destino: ${bodega_destino}`);
+
+  // Validar cada producto agrupado
+  for (const [key, producto] of Object.entries(productos)) {
+    try {
+      const productValidation = await validateProduct(
+        connection,
+        producto,
+        producto.bodegaOrigen
+      );
+
+      validation.productos.push(productValidation);
+
+      if (!productValidation.isValid) {
+        validation.isValid = false;
+        validation.errors.push(...productValidation.errors);
+      }
+
+      if (productValidation.warnings.length > 0) {
+        validation.warnings.push(...productValidation.warnings);
+      }
+    } catch (error) {
+      logger.error(`Error validando producto ${producto.Code_Product}:`, error);
+      validation.isValid = false;
+      validation.errors.push(`Error validando producto ${producto.Code_Product}: ${error.message}`);
+    }
+  }
+
+  // Validar ruta/repartidor
+  try {
+    const routeValidation = await validateRoute(connection, route);
+    if (!routeValidation.isValid) {
+      validation.isValid = false;
+      validation.errors.push(...routeValidation.errors);
+    }
+  } catch (error) {
+    logger.error(`Error validando ruta ${route}:`, error);
+    validation.isValid = false;
+    validation.errors.push(`Error validando repartidor ${route}: ${error.message}`);
+  }
+
+  // Validar bodega destino
+  try {
+    const bodegaValidation = await validateBodega(connection, bodega_destino);
+    if (!bodegaValidation.isValid) {
+      validation.isValid = false;
+      validation.errors.push(...bodegaValidation.errors);
+    }
+  } catch (error) {
+    logger.error(`Error validando bodega destino ${bodega_destino}:`, error);
+    validation.warnings.push(`No se pudo validar bodega destino ${bodega_destino}: ${error.message}`);
+  }
+
+  // Validar cada bodega origen
+  for (const bodegaOrigen of validation.bodegasOrigen) {
+    try {
+      const bodegaOrigenValidation = await validateBodega(connection, bodegaOrigen);
+      if (!bodegaOrigenValidation.isValid) {
+        validation.isValid = false;
+        validation.errors.push(`Bodega origen ${bodegaOrigen}: ${bodegaOrigenValidation.errors.join(', ')}`);
+      }
+    } catch (error) {
+      logger.error(`Error validando bodega origen ${bodegaOrigen}:`, error);
+      validation.warnings.push(`No se pudo validar bodega origen ${bodegaOrigen}: ${error.message}`);
+    }
+  }
+
+  return validation;
+}
+
+/**
+ * Valida ruta/repartidor
+ */
+async function validateRoute(connection, route) {
+  const validation = {
+    isValid: true,
+    errors: [],
+    routeInfo: null
+  };
+
+  try {
+    const routeQuery = `
+      SELECT
+        VENDEDOR as code,
+        NOMBRE as name,
+        U_BODEGA as assignedWarehouse,
+        U_ESVENDEDOR as isVendedor,
+        ACTIVO as isActive
+      FROM CATELLI.VENDEDOR
+      WHERE VENDEDOR = @route
+      AND ACTIVO = 'S'
+    `;
+
+    const result = await executeDirectQuery(connection, routeQuery, {
+      route: route
+    });
+
+    if (!result.recordset || result.recordset.length === 0) {
+      validation.isValid = false;
+      validation.errors.push(`Repartidor ${route} no encontrado o inactivo`);
+      return validation;
+    }
+
+    const routeInfo = result.recordset[0];
+    validation.routeInfo = routeInfo;
+
+    if (!routeInfo.assignedWarehouse) {
+      validation.isValid = false;
+      validation.errors.push(`Repartidor ${route} no tiene bodega asignada`);
+    }
+
+  } catch (error) {
+    validation.isValid = false;
+    validation.errors.push(`Error validando repartidor: ${error.message}`);
+  }
+
+  return validation;
+}
+
+/**
+ * Lógica de validación usando conexión existente
+ */
+async function validateWithExistingConnection(connection, salesData, route, bodega_destino, validation) {
+  // Validaciones básicas
+  if (!salesData || !Array.isArray(salesData) || salesData.length === 0) {
+    validation.isValid = false;
+    validation.errors.push('No hay datos de productos para procesar');
+    return validation;
+  }
+
+  if (!route || route.trim() === '') {
+    validation.isValid = false;
+    validation.errors.push('Código de ruta/repartidor es requerido');
+    return validation;
+  }
+
+  if (!bodega_destino || bodega_destino.trim() === '') {
+    validation.isValid = false;
+    validation.errors.push('Bodega destino es requerida');
+    return validation;
+  }
+
+  // Agrupar productos por código
+  const productos = {};
+  for (const item of salesData) {
+    if (item && item.Code_Product && item.Code_Product.trim() !== '') {
+      const codigo = item.Code_Product.trim();
+      const cantidad = Math.max(0, Number(item.Quantity) || 0);
+
+      if (cantidad > 0) {
+        if (!productos[codigo]) {
+          productos[codigo] = 0;
+        }
+        productos[codigo] += cantidad;
+      }
+    }
+  }
+
+  if (Object.keys(productos).length === 0) {
+    validation.isValid = false;
+    validation.errors.push('No se encontraron productos válidos con cantidades mayores a 0');
+    return validation;
+  }
+
+  // Determinar bodega origen desde los datos de ventas
+  const bodegaOrigen = salesData[0]?.bodega || "01";
+
+  logger.info(`Validando traspaso: Bodega origen: ${bodegaOrigen}, Bodega destino: ${bodega_destino}`);
+
+  // Validar cada producto agrupado usando conexión existente
+  for (const [codigo, cantidad] of Object.entries(productos)) {
+    try {
+      const productValidation = await validateProduct(
+        connection,  // Usar conexión existente
+        {
+          Code_Product: codigo,
+          Quantity: cantidad
+        },
+        bodegaOrigen
+      );
+
+      validation.productos.push(productValidation);
+
+      if (!productValidation.isValid) {
+        validation.isValid = false;
+        validation.errors.push(...productValidation.errors);
+      }
+
+      if (productValidation.warnings.length > 0) {
+        validation.warnings.push(...productValidation.warnings);
+      }
+    } catch (error) {
+      logger.error(`Error validando producto ${codigo}:`, error);
+      validation.isValid = false;
+      validation.errors.push(`Error validando producto ${codigo}: ${error.message}`);
+    }
+  }
+
+  // Validar ruta/repartidor usando conexión existente
+  try {
+    const routeValidation = await validateRoute(connection, route);
+    if (!routeValidation.isValid) {
+      validation.isValid = false;
+      validation.errors.push(...routeValidation.errors);
+    }
+  } catch (error) {
+    logger.error(`Error validando ruta ${route}:`, error);
+    validation.isValid = false;
+    validation.errors.push(`Error validando repartidor ${route}: ${error.message}`);
+  }
+
+  // Validar que la bodega destino sea válida
+  try {
+    const bodegaValidation = await validateBodega(connection, bodega_destino);
+    if (!bodegaValidation.isValid) {
+      validation.isValid = false;
+      validation.errors.push(...bodegaValidation.errors);
+    }
+  } catch (error) {
+    logger.error(`Error validando bodega destino ${bodega_destino}:`, error);
+    validation.warnings.push(`No se pudo validar bodega destino ${bodega_destino}: ${error.message}`);
+  }
+
+  return validation;
+}
+
+/**
+ * Valida que una bodega existe y está activa
+ */
+async function validateBodega(connection, bodegaCode) {
+  const validation = {
+    isValid: true,
+    errors: [],
+    bodegaInfo: null
+  };
+
+  try {
+    const bodegaQuery = `
+      SELECT
+        BODEGA as code,
+        NOMBRE as description,
+        'S' as isActive
+      FROM CATELLI.BODEGA
+      WHERE BODEGA = @bodega
+    `;
+
+    const result = await executeDirectQuery(connection, bodegaQuery, {
+      bodega: bodegaCode
+    });
+
+    if (!result.recordset || result.recordset.length === 0) {
+      validation.isValid = false;
+      validation.errors.push(`Bodega ${bodegaCode} no encontrada o inactiva`);
+      return validation;
+    }
+
+    validation.bodegaInfo = result.recordset[0];
+
+  } catch (error) {
+    validation.isValid = false;
+    validation.errors.push(`Error validando bodega: ${error.message}`);
+  }
+
+  return validation;
+}
+
+/**
+ * Ejecuta query directamente con la conexión sin pasar por SqlService
+ */
+async function executeDirectQuery(connection, sql, params = {}) {
+  return new Promise((resolve, reject) => {
+    const { Request, TYPES } = require("tedious");
+    const rows = [];
+
+    const request = new Request(sql, (err, rowCount) => {
+      if (err) {
+        reject(err);
+        return;
+      }
+      resolve({ recordset: rows, rowsAffected: rowCount });
+    });
+
+    // Agregar parámetros
+    for (const [key, value] of Object.entries(params)) {
+      let paramType = TYPES.NVarChar; // Tipo por defecto
+
+      if (typeof value === 'number') {
+        paramType = Number.isInteger(value) ? TYPES.Int : TYPES.Float;
+      } else if (value instanceof Date) {
+        paramType = TYPES.DateTime;
+      } else if (typeof value === 'boolean') {
+        paramType = TYPES.Bit;
+      }
+
+      request.addParameter(key, paramType, value);
+    }
+
+    request.on('row', (columns) => {
+      const row = {};
+      columns.forEach((column) => {
+        row[column.metadata.colName] = column.value;
+      });
+      rows.push(row);
+    });
+
+    connection.execSql(request);
+  });
 }
 
 /**
@@ -515,63 +766,20 @@ function getTraspasoConfig() {
 }
 
 /**
- * Realiza traspaso con validación previa integrada
+ * Realiza traspaso con bodegas origen dinámicas
  */
 async function realizarTraspaso({ route, salesData, bodega_destino }) {
   let detalleProductos = [];
   let pdfPath = null;
-  let validationReport = null;
 
-  logger.info(
-    `Iniciando realizar traspaso de bodega ${bodega_destino} con validación previa`
-  );
+  logger.info(`Iniciando traspaso con múltiples bodegas origen hacia bodega destino: ${bodega_destino}`);
 
   try {
-    // PASO 1: Validación completa antes de procesar
-    logger.info("Ejecutando validación previa de datos...");
-    const validation = await validateTraspasoData(
-      salesData,
-      route,
-      bodega_destino
-    );
-
-    if (!validation.isValid) {
-      logger.warn(
-        `Validación fallida para ruta ${route}: ${validation.errors.join(", ")}`
-      );
-
-      // Generar reporte de validación
-      validationReport = await generateValidationReport(validation, route);
-
-      // Guardar registro de fallo
-      await saveFailedTraspasoRecord(route, validation, validationReport);
-
-      // Enviar notificación de traspaso manual requerido
-      try {
-        await sendTraspasoEmail(
-          validationReport.reportData,
-          validationReport.path
-        );
-        logger.info("Notificación de traspaso manual enviada");
-      } catch (emailError) {
-        logger.error(`Error al enviar notificación: ${emailError.message}`);
-      }
-
-      return {
-        success: false,
-        requiresManualAction: true,
-        validation,
-        reportPath: validationReport.path,
-        message:
-          "Traspaso requiere intervención manual debido a errores de validación",
-        errors: validation.errors,
-        warnings: validation.warnings,
-      };
+    // 1. Validar datos de entrada
+    if (!salesData || !Array.isArray(salesData) || salesData.length === 0) {
+      throw new Error("No hay datos de ventas para procesar");
     }
 
-    logger.info("Validación exitosa - procediendo con traspaso automático");
-
-    // PASO 2: Proceder con lógica de traspaso original (validación pasó)
     const productosValidos = salesData.filter(
       (item) =>
         item &&
@@ -581,389 +789,194 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
         Number(item.Quantity) > 0
     );
 
+    if (productosValidos.length === 0) {
+      throw new Error("No hay productos válidos en los datos de ventas");
+    }
+
+    // 2. Agrupar productos por bodega origen
     const productos = {};
-    const bodegaOrigen = productosValidos[0].bodega || "02";
 
     for (const item of productosValidos) {
       const codigo = item.Code_Product.trim();
       const cantidad = Math.max(0, Number(item.Quantity) || 0);
+      const bodegaOrigen = item.bodega || "01"; // Bodega origen del item
+
+      const key = `${codigo}_${bodegaOrigen}`;
 
       if (codigo && cantidad > 0) {
-        if (!productos[codigo]) {
-          productos[codigo] = 0;
+        if (!productos[key]) {
+          productos[key] = {
+            codigo,
+            cantidad: 0,
+            bodegaOrigen
+          };
         }
-        productos[codigo] += cantidad;
+        productos[key].cantidad += cantidad;
       }
     }
 
-    const productosArray = Object.entries(productos)
-      .filter(([codigo, cantidad]) => codigo && cantidad > 0)
-      .map(([codigo, cantidad]) => ({
-        codigo,
-        cantidad,
-      }));
-
-    logger.info(
-      `Procesando traspaso validado para ruta ${route} con ${productosArray.length} productos. Bodega origen: ${bodegaOrigen}, Bodega destino: ${bodega_destino}`
+    const productosArray = Object.values(productos).filter(
+      producto => producto.codigo && producto.cantidad > 0
     );
 
-    // PASO 3: Ejecutar traspaso con tu lógica robusta existente
+    if (productosArray.length === 0) {
+      throw new Error("No hay productos válidos después de agrupar");
+    }
+
+    logger.info(`Procesando traspaso para ruta ${route} con ${productosArray.length} productos`);
+    logger.info(`Bodegas origen involucradas: ${[...new Set(productosArray.map(p => p.bodegaOrigen))].join(', ')}`);
+
+    // 3. Resto de la lógica de traspaso usando productosArray con bodegaOrigen individual
     return await withConnection("server1", async (connection) => {
-      try {
-        // Obtener información de productos para el correo
-        detalleProductos = await obtenerDetalleProductos(
-          connection,
-          productosArray
-        );
+      // Obtener detalles de productos para correo
+      detalleProductos = await obtenerDetalleProductos(connection, productosArray);
 
-        // Obtener el consecutivo actual
-        const consultaConsecutivo = `
-          SELECT TOP 1 SIGUIENTE_CONSEC
-          FROM CATELLI.CONSECUTIVO_CI
-          WITH (UPDLOCK, ROWLOCK)
-          WHERE CONSECUTIVO LIKE 'TR%'
-          ORDER BY CONSECUTIVO DESC
-        `;
+      // Generar consecutivo
+      const consultaConsecutivo = `
+        SELECT TOP 1 SIGUIENTE_CONSEC
+        FROM CATELLI.CONSECUTIVO_CI
+        WITH (UPDLOCK, ROWLOCK)
+        WHERE CONSECUTIVO LIKE 'TR%'
+        ORDER BY CONSECUTIVO DESC
+      `;
 
-        const resultadoConsecutivo = await SqlService.query(
-          connection,
-          consultaConsecutivo
-        );
+      const resultadoConsecutivo = await SqlService.query(connection, consultaConsecutivo);
 
-        if (
-          !resultadoConsecutivo ||
-          !resultadoConsecutivo.recordset ||
-          resultadoConsecutivo.recordset.length === 0
-        ) {
-          throw new Error("No se pudo obtener el consecutivo actual");
-        }
-
-        const ultimoConsecutivo =
-          resultadoConsecutivo.recordset[0].SIGUIENTE_CONSEC || "TRA0000000";
-        const numeroActual =
-          parseInt(ultimoConsecutivo.replace("TRA", ""), 10) || 0;
-        const nuevoConsecutivo =
-          "TRA" + (numeroActual + 1).toString().padStart(6, "0");
-
-        logger.info(
-          `Consecutivo actual: ${ultimoConsecutivo}, Nuevo consecutivo: ${nuevoConsecutivo}`
-        );
-
-        // Actualizar el consecutivo
-        const actualizarConsecutivoParams = {
-          nuevo: nuevoConsecutivo,
-          actual: ultimoConsecutivo,
-        };
-
-        const resultadoActualizacion = await SqlService.query(
-          connection,
-          `UPDATE CATELLI.CONSECUTIVO_CI
-           SET SIGUIENTE_CONSEC = @nuevo
-           WHERE SIGUIENTE_CONSEC = @actual`,
-          actualizarConsecutivoParams
-        );
-
-        if (
-          !resultadoActualizacion ||
-          resultadoActualizacion.rowsAffected === 0
-        ) {
-          throw new Error("No se pudo actualizar el consecutivo");
-        }
-
-        // Insertar el documento principal
-        const config = getTraspasoConfig();
-        const referenciaParams = {
-          referencia: `Traspaso de bodega para vendedor ${route}`,
-          documento: nuevoConsecutivo,
-        };
-
-        const insertarDocumento = `
-          INSERT INTO CATELLI.DOCUMENTO_INV
-            (PAQUETE_INVENTARIO, DOCUMENTO_INV, CONSECUTIVO, REFERENCIA, FECHA_HOR_CREACION, FECHA_DOCUMENTO, SELECCIONADO, USUARIO)
-          VALUES
-            ('${config.paquete_inventario}', @documento, '${config.consecutivo_prefix}', @referencia, GETDATE(), GETDATE(), 'N', '${config.usuario_default}')
-        `;
-
-        await SqlService.query(connection, insertarDocumento, referenciaParams);
-
-        // Insertar líneas una por una
-        let lineasExitosas = 0;
-        let lineasFallidas = 0;
-
-        let columnTypes = {};
-        try {
-          columnTypes = await SqlService.getColumnTypes(
-            connection,
-            "CATELLI.LINEA_DOC_INV"
-          );
-        } catch (typesError) {
-          logger.warn(
-            `No se pudieron obtener tipos de columnas: ${typesError.message}`
-          );
-        }
-
-        for (let i = 0; i < productosArray.length; i++) {
-          const producto = productosArray[i];
-          const lineaNumero = i + 1;
-
-          try {
-            // ✅ USAR STRING VACÍO PARA SUBSUBTIPO (valor más común en tu BD)
-            const lineaParams = {
-              paquete: config.paquete_inventario,
-              documento_inv: nuevoConsecutivo,
-              linea: lineaNumero,
-              ajuste: config.ajuste_config,
-              articulo: producto.codigo,
-              bodega: bodegaOrigen,
-              bodega_destino: bodega_destino,
-              cantidad: producto.cantidad,
-              tipo: "T",
-              subtipo: config.subtipo,
-              subsubtipo: '', // ✅ String vacío como en tu BD
-              costo_total_local: 0,
-              costo_total_dolar: 0,
-              precio_total_local: 0,
-              precio_total_dolar: 0,
-              localizacion_dest: config.localizacion_default,
-              centro_costo: config.centro_costo,
-              secuencia: "",
-              unidad_distribucio: config.unidad_distribucion_default,
-              cuenta_contable: config.cuenta_contable_default,
-              costo_total_local_comp: 0,
-              costo_total_dolar_comp: 0,
-              cai: "",
-              tipo_operacion: config.tipo_operacion,
-              tipo_pago: config.tipo_pago,
-              localizacion: config.localizacion_default,
-            };
-
-            const insertarLinea = `
-              INSERT INTO CATELLI.LINEA_DOC_INV
-                (PAQUETE_INVENTARIO, DOCUMENTO_INV, LINEA_DOC_INV, AJUSTE_CONFIG, ARTICULO,
-                 BODEGA, BODEGA_DESTINO, CANTIDAD, TIPO, SUBTIPO, SUBSUBTIPO,
-                 COSTO_TOTAL_LOCAL, COSTO_TOTAL_DOLAR, PRECIO_TOTAL_LOCAL, PRECIO_TOTAL_DOLAR,
-                 LOCALIZACION_DEST, CENTRO_COSTO, SECUENCIA, UNIDAD_DISTRIBUCIO, CUENTA_CONTABLE,
-                 COSTO_TOTAL_LOCAL_COMP, COSTO_TOTAL_DOLAR_COMP, CAI, TIPO_OPERACION, TIPO_PAGO, LOCALIZACION)
-              VALUES
-                (@paquete, @documento_inv, @linea, @ajuste, @articulo,
-                 @bodega, @bodega_destino, @cantidad, @tipo, @subtipo, @subsubtipo,
-                 @costo_total_local, @costo_total_dolar, @precio_total_local, @precio_total_dolar,
-                 @localizacion_dest, @centro_costo, @secuencia, @unidad_distribucio, @cuenta_contable,
-                 @costo_total_local_comp, @costo_total_dolar_comp, @cai, @tipo_operacion, @tipo_pago, @localizacion)
-            `;
-
-            await SqlService.query(
-              connection,
-              insertarLinea,
-              lineaParams,
-              columnTypes
-            );
-
-            lineasExitosas++;
-            logger.debug(
-              `Línea ${lineaNumero} insertada correctamente: ${producto.codigo} x ${producto.cantidad}`
-            );
-          } catch (lineError) {
-            lineasFallidas++;
-            logger.error(`Error al insertar línea ${lineaNumero}:`, lineError);
-
-            // Intentar fallback directo como backup
-            try {
-              const codigoProducto = producto.codigo.replace(/'/g, "''");
-
-              const insertarLineaDirecto = `
-                INSERT INTO CATELLI.LINEA_DOC_INV
-                  (PAQUETE_INVENTARIO, DOCUMENTO_INV, LINEA_DOC_INV, AJUSTE_CONFIG, ARTICULO,
-                   BODEGA, BODEGA_DESTINO, CANTIDAD, TIPO, SUBTIPO, SUBSUBTIPO,
-                   COSTO_TOTAL_LOCAL, COSTO_TOTAL_DOLAR, PRECIO_TOTAL_LOCAL, PRECIO_TOTAL_DOLAR,
-                   LOCALIZACION_DEST, CENTRO_COSTO, SECUENCIA, UNIDAD_DISTRIBUCIO, CUENTA_CONTABLE,
-                   COSTO_TOTAL_LOCAL_COMP, COSTO_TOTAL_DOLAR_COMP, CAI, TIPO_OPERACION, TIPO_PAGO, LOCALIZACION)
-                VALUES
-                  ('${config.paquete_inventario}', '${nuevoConsecutivo}', ${lineaNumero}, '${config.ajuste_config}', '${codigoProducto}',
-                   '${bodegaOrigen}', '${bodega_destino}', ${producto.cantidad}, 'T', '${config.subtipo}', '',
-                   0, 0, 0, 0,
-                   '${config.localizacion_default}', '${config.centro_costo}', '', '${config.unidad_distribucion_default}', '${config.cuenta_contable_default}',
-                   0, 0, '', '${config.tipo_operacion}', '${config.tipo_pago}', '${config.localizacion_default}')
-              `;
-
-              await SqlService.query(connection, insertarLineaDirecto);
-              lineasExitosas++;
-              lineasFallidas--;
-              logger.debug(
-                `Línea ${lineaNumero} insertada correctamente (modo fallback): ${codigoProducto} x ${producto.cantidad}`
-              );
-            } catch (fallbackError) {
-              logger.error(
-                `Fallo también en modo fallback para línea ${lineaNumero}:`,
-                fallbackError
-              );
-            }
-          }
-        }
-
-        if (lineasExitosas === 0 && productosArray.length > 0) {
-          throw new Error(
-            "No se pudo insertar ninguna línea de detalle en el documento"
-          );
-        }
-
-        // Preparar resultado exitoso
-        const resultado = {
-          success: true,
-          documento_inv: nuevoConsecutivo,
-          totalLineas: productosArray.length,
-          lineasExitosas,
-          lineasFallidas,
-          detalleProductos,
-          route,
-          bodegaOrigen,
-          bodega_destino,
-          validation: {
-            executed: true,
-            warnings: validation.warnings,
-          },
-        };
-
-        logger.info("Traspaso completado exitosamente:", resultado);
-
-        // Guardar resumen para tracking
-        try {
-          let loadIdFromSales = "N/A";
-          if (salesData && salesData.length > 0 && salesData[0].Code_load) {
-            loadIdFromSales = salesData[0].Code_load;
-          }
-
-          const summaryProducts = productosArray.map((producto) => ({
-            code: producto.codigo,
-            description:
-              detalleProductos.find((p) => p.codigo === producto.codigo)
-                ?.descripcion || "Sin descripción",
-            quantity: producto.cantidad,
-            unit: "UND",
-          }));
-
-          const summary = new TransferSummary({
-            loadId: loadIdFromSales,
-            route: route,
-            documentId: nuevoConsecutivo,
-            products: summaryProducts,
-            totalProducts: summaryProducts.length,
-            totalQuantity: summaryProducts.reduce(
-              (sum, p) => sum + p.quantity,
-              0
-            ),
-            createdBy: config.usuario_default,
-            bodegaOrigen,
-            bodega_destino,
-          });
-
-          await summary.save();
-          logger.info(
-            `Resumen de traspaso guardado con éxito para documento ${nuevoConsecutivo}`
-          );
-
-          resultado.summaryId = summary._id;
-        } catch (summaryError) {
-          logger.error(
-            `Error al guardar resumen de traspaso: ${summaryError.message}`
-          );
-          // No detener el proceso si falla el resumen
-        }
-
-        // Generar PDF del traspaso exitoso
-        try {
-          const pdfResult = await PDFService.generateTraspasoPDF(resultado);
-          pdfPath = pdfResult.path;
-          logger.info(`PDF de traspaso generado: ${pdfPath}`);
-        } catch (pdfError) {
-          logger.error(
-            `Error al generar PDF del traspaso: ${pdfError.message}`
-          );
-        }
-
-        // Enviar correo con el resultado exitoso
-        try {
-          await sendTraspasoEmail(resultado, pdfPath);
-          logger.info(
-            `Correo de notificación enviado para el traspaso: ${
-              resultado.documento_inv || "N/A"
-            }`
-          );
-        } catch (errorCorreo) {
-          logger.error(
-            `Error al enviar correo de traspaso: ${errorCorreo.message}`
-          );
-        }
-
-        return resultado;
-      } catch (dbError) {
-        logger.error(
-          `Error en operaciones de base de datos durante traspaso: ${dbError.message}`
-        );
-        throw dbError;
+      if (!resultadoConsecutivo || !resultadoConsecutivo.recordset || resultadoConsecutivo.recordset.length === 0) {
+        throw new Error("No se pudo obtener el consecutivo actual");
       }
+
+      const ultimoConsecutivo = resultadoConsecutivo.recordset[0].SIGUIENTE_CONSEC || "TRA0000000";
+      const numeroActual = parseInt(ultimoConsecutivo.replace("TRA", ""), 10) || 0;
+      const nuevoConsecutivo = "TRA" + (numeroActual + 1).toString().padStart(6, "0");
+
+      logger.info(`Consecutivo actual: ${ultimoConsecutivo}, Nuevo consecutivo: ${nuevoConsecutivo}`);
+
+      // Actualizar consecutivo
+      const actualizarConsecutivoParams = {
+        nuevo: nuevoConsecutivo,
+        actual: ultimoConsecutivo,
+      };
+
+      const resultadoActualizacion = await SqlService.query(
+        connection,
+        `UPDATE CATELLI.CONSECUTIVO_CI
+         SET SIGUIENTE_CONSEC = @nuevo
+         WHERE SIGUIENTE_CONSEC = @actual`,
+        actualizarConsecutivoParams
+      );
+
+      if (!resultadoActualizacion || resultadoActualizacion.rowsAffected === 0) {
+        throw new Error("No se pudo actualizar el consecutivo");
+      }
+
+      // Insertar documento principal
+      const config = getTraspasoConfig();
+      const referenciaParams = {
+        referencia: `Traspaso multi-bodega para vendedor ${route}`,
+        documento: nuevoConsecutivo,
+      };
+
+      const insertarDocumento = `
+        INSERT INTO CATELLI.DOCUMENTO_INV
+          (PAQUETE_INVENTARIO, DOCUMENTO_INV, CONSECUTIVO, REFERENCIA, FECHA_HOR_CREACION, FECHA_DOCUMENTO, SELECCIONADO, USUARIO)
+        VALUES
+          ('${config.paquete_inventario}', @documento, '${config.consecutivo_prefix}', @referencia, GETDATE(), GETDATE(), 'N', '${config.usuario_default}')
+      `;
+
+      await SqlService.query(connection, insertarDocumento, referenciaParams);
+
+      // Insertar líneas usando bodega origen específica de cada producto
+      let lineasExitosas = 0;
+      let lineasFallidas = 0;
+
+      for (let i = 0; i < productosArray.length; i++) {
+        const producto = productosArray[i];
+        const lineaNumero = i + 1;
+
+        try {
+          const lineaParams = {
+            paquete: config.paquete_inventario,
+            documento_inv: nuevoConsecutivo,
+            linea: lineaNumero,
+            ajuste: config.ajuste_config,
+            articulo: producto.codigo,
+            bodega: producto.bodegaOrigen,  // ✅ Bodega origen específica del producto
+            bodega_destino: bodega_destino,
+            cantidad: producto.cantidad,
+            tipo: "T",
+            subtipo: config.subtipo,
+            subsubtipo: '',
+            costo_total_local: 0,
+            costo_total_dolar: 0,
+            precio_total_local: 0,
+            precio_total_dolar: 0,
+            localizacion_dest: config.localizacion_default,
+            centro_costo: config.centro_costo,
+            secuencia: "",
+            unidad_distribucio: config.unidad_distribucion_default,
+            cuenta_contable: config.cuenta_contable_default,
+            costo_total_local_comp: 0,
+            costo_total_dolar_comp: 0,
+            cai: "",
+            tipo_operacion: config.tipo_operacion,
+            tipo_pago: config.tipo_pago,
+            localizacion: config.localizacion_default,
+          };
+
+          const insertarLinea = `
+            INSERT INTO CATELLI.LINEA_DOC_INV
+              (PAQUETE_INVENTARIO, DOCUMENTO_INV, LINEA_DOC_INV, AJUSTE_CONFIG, ARTICULO,
+               BODEGA, BODEGA_DESTINO, CANTIDAD, TIPO, SUBTIPO, SUBSUBTIPO,
+               COSTO_TOTAL_LOCAL, COSTO_TOTAL_DOLAR, PRECIO_TOTAL_LOCAL, PRECIO_TOTAL_DOLAR,
+               LOCALIZACION_DEST, CENTRO_COSTO, SECUENCIA, UNIDAD_DISTRIBUCIO, CUENTA_CONTABLE,
+               COSTO_TOTAL_LOCAL_COMP, COSTO_TOTAL_DOLAR_COMP, CAI, TIPO_OPERACION, TIPO_PAGO, LOCALIZACION)
+            VALUES
+              (@paquete, @documento_inv, @linea, @ajuste, @articulo,
+               @bodega, @bodega_destino, @cantidad, @tipo, @subtipo, @subsubtipo,
+               @costo_total_local, @costo_total_dolar, @precio_total_local, @precio_total_dolar,
+               @localizacion_dest, @centro_costo, @secuencia, @unidad_distribucio, @cuenta_contable,
+               @costo_total_local_comp, @costo_total_dolar_comp, @cai, @tipo_operacion, @tipo_pago, @localizacion)
+          `;
+
+          await SqlService.query(connection, insertarLinea, lineaParams);
+
+          lineasExitosas++;
+          logger.debug(`Línea ${lineaNumero} insertada: ${producto.codigo} x ${producto.cantidad} (${producto.bodegaOrigen} → ${bodega_destino})`);
+
+        } catch (lineError) {
+          lineasFallidas++;
+          logger.error(`Error al insertar línea ${lineaNumero}:`, lineError);
+        }
+      }
+
+      if (lineasExitosas === 0 && productosArray.length > 0) {
+        throw new Error("No se pudo insertar ninguna línea de detalle en el documento");
+      }
+
+      // Preparar resultado exitoso
+      const resultado = {
+        success: true,
+        documento_inv: nuevoConsecutivo,
+        totalLineas: productosArray.length,
+        lineasExitosas,
+        lineasFallidas,
+        detalleProductos,
+        route,
+        bodegasOrigen: [...new Set(productosArray.map(p => p.bodegaOrigen))], // Múltiples bodegas origen
+        bodega_destino,
+      };
+
+      logger.info("Traspaso multi-bodega completado exitosamente:", resultado);
+
+      return resultado;
     });
+
   } catch (error) {
     logger.error("Error en realizarTraspaso:", error);
-
-    // Preparar resultado de error
-    const resultadoError = {
-      success: false,
-      mensaje: error.message,
-      errorDetail: error.stack,
-      totalLineas: detalleProductos.length,
-      lineasExitosas: 0,
-      lineasFallidas: detalleProductos.length,
-      detalleProductos,
-      route,
-      bodegaOrigen: salesData?.[0]?.bodega || "01",
-      bodega_destino,
-      validation: validationReport
-        ? {
-            executed: true,
-            failed: true,
-            reportPath: validationReport.path,
-          }
-        : {
-            executed: false,
-            failed: true,
-          },
-    };
-
-    // Intentar generar PDF del error
-    try {
-      const pdfResult = await PDFService.generateTraspasoPDF(resultadoError);
-      pdfPath = pdfResult.path;
-      logger.info(`PDF de error de traspaso generado: ${pdfPath}`);
-    } catch (pdfError) {
-      logger.error(`Error al generar PDF del error: ${pdfError.message}`);
-    }
-
-    // Intentar enviar correo de error con PDF
-    try {
-      await sendTraspasoEmail(resultadoError, pdfPath);
-      logger.info(`Correo de error enviado para el traspaso fallido`);
-    } catch (errorCorreo) {
-      logger.error(`Error al enviar correo de error: ${errorCorreo.message}`);
-    }
-
-    // Limpiar archivo PDF temporal después de un tiempo
-    try {
-      if (pdfPath) {
-        setTimeout(async () => {
-          await PDFService.cleanupTempFile(pdfPath);
-        }, 60000);
-      }
-    } catch (cleanupError) {
-      logger.warn(
-        `Error al programar limpieza de PDF temporal: ${cleanupError.message}`
-      );
-    }
-
     throw error;
   }
 }
-
 /**
  * Método alternativo para realizar traspasos (mantener por compatibilidad)
  */
