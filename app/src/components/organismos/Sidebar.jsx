@@ -54,7 +54,7 @@ export function Sidebar({ state, setState }) {
         isAccessible: hasPermission("tasks", "read"),
       },
       {
-        path: "/loads",
+        path: "/loads/cargas",
         name: "Gestión de Cargas",
         icon: "🚛",
         category: "Operaciones",
@@ -62,6 +62,16 @@ export function Sidebar({ state, setState }) {
         order: 3,
         isAccessible: hasPermission("loads", "read"),
       },
+      {
+        path: "/loads/transfers",
+        name: "Trapasos Control",
+        icon: "🚛",
+        category: "Operaciones",
+        description: "Gestionar los trapasos entre bodegas",
+        order: 3,
+        isAccessible: hasPermission("loads", "read"),
+      },
+
       // {
       //   path: "/loads",
       //   name: "Cargas",
