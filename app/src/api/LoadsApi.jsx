@@ -1,22 +1,21 @@
+// src/api/LoadsApi.jsx - VERSIÓN CONSOLIDADA SIN DUPLICACIÓN
+
 import { ENV } from "../utils/index";
 
 class LoadsApi {
   baseApi = ENV.BASE_API;
+
+  // ========================================
+  // MÉTODOS PRINCIPALES DE CARGAS (MANTENER)
+  // ========================================
+
   /**
    * Obtiene pedidos pendientes de cargar
    */
   async getPendingOrders(accessToken, filters = {}) {
-    console.log(
-      "🚀 ~ file: LoadsApi.jsx:7 ~ LoadsApi ~ getPendingOrders ~ filters:",
-      filters
-    );
+    console.log("🚀 ~ LoadsApi ~ getPendingOrders ~ filters:", filters);
     try {
       const queryParams = new URLSearchParams();
-
-      console.log(
-        "🚀 ~ file: LoadsApi.jsx:11 ~ LoadsApi ~ getPendingOrders ~ queryParams before:",
-        filters.transferStatus && filters.transferStatus !== "all"
-      );
 
       if (filters.dateFrom) queryParams.append("dateFrom", filters.dateFrom);
       if (filters.dateTo) queryParams.append("dateTo", filters.dateTo);
@@ -86,28 +85,6 @@ class LoadsApi {
       return result;
     } catch (error) {
       console.error("Error al obtener vendedores:", error);
-      throw error;
-    }
-  }
-
-  /**
-   * Obtiene lista de repartidores
-   */
-  async getDeliveryPersons(accessToken) {
-    try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/sellers`;
-
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
-      const result = await response.json();
-      if (!response.ok) throw result;
-      return result;
-    } catch (error) {
-      console.error("Error al obtener repartidores:", error);
       throw error;
     }
   }
@@ -255,105 +232,61 @@ class LoadsApi {
       throw error;
     }
   }
+
+  // ========================================
+  // MÉTODOS PARA GESTIÓN DE TRASPASOS (CONSOLIDADOS)
+  // ========================================
+
   /**
-   * ========================================
-   * MÉTODOS PARA GESTIÓN DE TRASPASOS
-   * ========================================
+   * Obtiene lista de traspasos con tracking completo
+   * CONSOLIDADO: Reemplaza getTransfers() y getTraspasos()
    */
-
-  async getTransfers(accessToken, filters = {}) {
-    console.log("🚀 getTransfers filters:", filters);
-
+  async getTraspasos(accessToken, filters = {}) {
     try {
       const queryParams = new URLSearchParams();
 
-      // ✅ PROCESAR CADA FILTRO ESPECÍFICAMENTE
-      const processedFilters = {
-        dateFrom: filters.dateFrom,
-        dateTo: filters.dateTo,
-        status: filters.status,
-        sourceWarehouse: filters.sourceWarehouse,
-        targetWarehouse: filters.targetWarehouse,
-        loadId: filters.loadId,
-        page: filters.page,
-        pageSize: filters.pageSize,
-        sortBy: filters.sortBy,
-        sortOrder: filters.sortOrder,
-      };
+      // Procesar filtros específicos para traspasos
+      if (filters.page) queryParams.append("page", filters.page);
+      if (filters.limit) queryParams.append("limit", filters.limit);
+      if (filters.status && filters.status !== "all")
+        queryParams.append("status", filters.status);
+      if (filters.deliveryPerson && filters.deliveryPerson !== "all")
+        queryParams.append("deliveryPerson", filters.deliveryPerson);
+      if (filters.loadId) queryParams.append("loadId", filters.loadId);
+      if (filters.dateFrom) queryParams.append("dateFrom", filters.dateFrom);
+      if (filters.dateTo) queryParams.append("dateTo", filters.dateTo);
 
-      Object.keys(processedFilters).forEach((key) => {
-        const value = processedFilters[key];
-
-        if (
-          value !== undefined &&
-          value !== null &&
-          value !== "" &&
-          value !== "all"
-        ) {
-          // ✅ VALIDACIONES ESPECÍFICAS POR TIPO
-          if (key === "page" || key === "pageSize") {
-            const numValue = parseInt(value);
-            if (!isNaN(numValue) && numValue > 0) {
-              queryParams.append(key, numValue.toString());
-            }
-          } else if (key === "dateFrom" || key === "dateTo") {
-            // Validar formato de fecha
-            const dateValue = new Date(value);
-            if (!isNaN(dateValue.getTime())) {
-              queryParams.append(key, value.toString());
-            }
-          } else {
-            // Otros valores como string
-            queryParams.append(key, String(value));
-          }
-        }
-      });
-
-      const queryString = queryParams.toString();
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/transfers${
-        queryString ? `?${queryString}` : ""
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/traspasos${
+        queryParams.toString() ? `?${queryParams.toString()}` : ""
       }`;
 
-      console.log("🚀 getTransfers url:", url);
-      console.log(
-        "🚀 getTransfers queryParams:",
-        Object.fromEntries(queryParams)
-      );
-
       const response = await fetch(url, {
-        method: "GET",
         headers: {
           Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
         },
       });
 
-      if (!response.ok) {
-        throw new Error(`HTTP ${response.status}: ${response.statusText}`);
-      }
-
-      return await response.json();
+      const result = await response.json();
+      if (!response.ok) throw result;
+      return result;
     } catch (error) {
-      console.error("Error in getTransfers:", error);
+      console.error("Error al obtener traspasos:", error);
       throw error;
     }
   }
 
   /**
    * Obtiene estadísticas de traspasos
+   * CONSOLIDADO: Reemplaza getTransferStats() y getTraspasoStats()
    */
-  async getTransferStats(accessToken, filters = {}) {
+  async getTraspasoStats(accessToken, filters = {}) {
     try {
       const queryParams = new URLSearchParams();
 
       if (filters.dateFrom) queryParams.append("dateFrom", filters.dateFrom);
       if (filters.dateTo) queryParams.append("dateTo", filters.dateTo);
-      if (filters.sourceWarehouse && filters.sourceWarehouse !== "all")
-        queryParams.append("sourceWarehouse", filters.sourceWarehouse);
-      if (filters.targetWarehouse && filters.targetWarehouse !== "all")
-        queryParams.append("targetWarehouse", filters.targetWarehouse);
 
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/transfers/stats${
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/traspasos/stats${
         queryParams.toString() ? `?${queryParams.toString()}` : ""
       }`;
 
@@ -373,60 +306,12 @@ class LoadsApi {
   }
 
   /**
-   * Ejecuta un traspaso específico
-   */
-  async executeTransfer(accessToken, loadId) {
-    try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/transfers/execute/${loadId}`;
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      const result = await response.json();
-      if (!response.ok) throw result;
-      return result;
-    } catch (error) {
-      console.error("Error al ejecutar traspaso:", error);
-      throw error;
-    }
-  }
-
-  /**
-   * Ejecuta múltiples traspasos
-   */
-  async executeBulkTransfers(accessToken, loadIds) {
-    try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/transfers/execute-bulk`;
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ loadIds }),
-      });
-
-      const result = await response.json();
-      if (!response.ok) throw result;
-      return result;
-    } catch (error) {
-      console.error("Error al ejecutar traspasos masivos:", error);
-      throw error;
-    }
-  }
-
-  /**
    * Obtiene detalles de un traspaso específico
+   * CONSOLIDADO: Reemplaza getTransferDetails() y getTraspasoDetails()
    */
-  async getTransferDetails(accessToken, loadId) {
+  async getTraspasoDetails(accessToken, traspasoId) {
     try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/transfers/${loadId}/details`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/traspasos/details/${traspasoId}`;
 
       const response = await fetch(url, {
         headers: {
@@ -444,11 +329,12 @@ class LoadsApi {
   }
 
   /**
-   * Obtiene lista de bodegas para traspasos
+   * Obtiene repartidores para filtros
+   * CONSOLIDADO: Reemplaza getDeliveryPersons() y getDeliveryPersonsFilter()
    */
-  async getTransferWarehouses(accessToken) {
+  async getDeliveryPersonsFilter(accessToken) {
     try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/warehouses`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/traspasos/delivery-persons`;
 
       const response = await fetch(url, {
         headers: {
@@ -460,36 +346,15 @@ class LoadsApi {
       if (!response.ok) throw result;
       return result;
     } catch (error) {
-      console.error("Error al obtener bodegas:", error);
+      console.error("Error al obtener repartidores para filtro:", error);
       throw error;
     }
   }
 
   /**
-   * Cancela un traspaso específico
+   * Obtiene lista de bodegas
+   * CONSOLIDADO: Reemplaza getTransferWarehouses() y getWarehouses()
    */
-  async cancelTransfer(accessToken, loadId, reason = "") {
-    try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/transfers/${loadId}/cancel`;
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ reason }),
-      });
-
-      const result = await response.json();
-      if (!response.ok) throw result;
-      return result;
-    } catch (error) {
-      console.error("Error al cancelar traspaso:", error);
-      throw error;
-    }
-  }
-
   async getWarehouses(accessToken) {
     try {
       const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/warehouses`;
@@ -515,6 +380,80 @@ class LoadsApi {
         success: false,
         data: [],
       };
+    }
+  }
+
+  /**
+   * Ejecuta un traspaso específico
+   */
+  async executeTransfer(accessToken, loadId) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/traspasos/execute/${loadId}`;
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al ejecutar traspaso:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Ejecuta múltiples traspasos
+   */
+  async executeBulkTransfers(accessToken, loadIds) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/traspasos/execute-bulk`;
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ loadIds }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al ejecutar traspasos masivos:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Cancela un traspaso específico
+   */
+  async cancelTransfer(accessToken, loadId, reason = "") {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/traspasos/${loadId}/cancel`;
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ reason }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("Error al cancelar traspaso:", error);
+      throw error;
     }
   }
 }

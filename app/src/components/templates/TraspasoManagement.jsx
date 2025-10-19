@@ -1,16 +1,40 @@
-// src/components/templates/TraspasoManagement.jsx - VERSIÓN COMPLETA
+// src/components/templates/TraspasoManagement.jsx - VERSIÓN SIGUIENDO TU ESTRUCTURA
 import React, { useState, useEffect, useCallback, useMemo } from "react";
 import styled from "styled-components";
-import { useAuth, usePermissions, useNotification, usePagination, useDebounce, useTransferManagement } from "../../index";
+import {
+  useAuth,
+  usePermissions,
+  useNotification,
+  usePagination,
+  useDebounce,
+  useTransferManagement,
+  Header,
+  LoadsButton,
+  StatusBadge,
+  Card,
+  CardHeader,
+  CardTitle,
+  CardContent,
+  CardFooter,
+  GridContainer,
+  NotificationContainer
+} from "../../index";
 
+// Iconos
+import {
+  FaHistory,
+  FaSync,
+  FaExclamationCircle,
+  FaEye,
+  FaCheckCircle,
+  FaTimesCircle,
+  FaClock,
+  FaSpinner,
+  FaRedo,
+  FaChartBar
+} from "react-icons/fa";
 
-// 🔄 Componentes - Importaciones directas para evitar conflictos
-import { TraspasoFiltersPanel, TraspasoTrackingTable, NotificationContainer} from "../../index";
-
-// 🔄 Iconos
-import { FaHistory, FaSync, FaExclamationCircle } from "react-icons/fa";
-
-// 🔄 Styled Components siguiendo tu patrón de LoadsManagement
+// Styled Components siguiendo tu patrón exacto
 const Container = styled.div`
   min-height: 100vh;
   background-color: #f8fafc;
@@ -118,95 +142,6 @@ const StatCard = styled.div`
     font-size: 16px;
     opacity: 0.7;
   }
-`;
-
-const LoadsButton = styled.button`
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  text-decoration: none;
-  white-space: nowrap;
-
-  &:focus {
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-  }
-
-  ${({ variant = "primary" }) => {
-    const variants = {
-      primary: `
-        background: #3b82f6;
-        color: white;
-        &:hover:not(:disabled) { background: #2563eb; }
-        &:active { background: #1d4ed8; }
-      `,
-      secondary: `
-        background: #f3f4f6;
-        color: #374151;
-        border: 1px solid #d1d5db;
-        &:hover:not(:disabled) {
-          background: #e5e7eb;
-          border-color: #9ca3af;
-        }
-        &:active { background: #d1d5db; }
-      `,
-      danger: `
-        background: #ef4444;
-        color: white;
-        &:hover:not(:disabled) { background: #dc2626; }
-        &:active { background: #b91c1c; }
-      `,
-      warning: `
-        background: #f59e0b;
-        color: white;
-        &:hover:not(:disabled) { background: #d97706; }
-        &:active { background: #b45309; }
-      `,
-      success: `
-        background: #10b981;
-        color: white;
-        &:hover:not(:disabled) { background: #059669; }
-        &:active { background: #047857; }
-      `,
-    };
-    return variants[variant];
-  }}
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  ${({ loading }) =>
-    loading &&
-    `
-    pointer-events: none;
-    opacity: 0.7;
-    position: relative;
-
-    &:before {
-      content: "";
-      position: absolute;
-      width: 14px;
-      height: 14px;
-      border: 2px solid currentColor;
-      border-top-color: transparent;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin-right: 6px;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-  `}
 `;
 
 const NoDataMessage = styled.div`
@@ -320,8 +255,322 @@ const RefreshInfo = styled.div`
   }
 `;
 
+// Componente TraspasoFiltersPanel
+const TraspasoFiltersPanel = ({
+  filters,
+  onFiltersChange,
+  onReset,
+  onSearch,
+  loading,
+  deliveryPersons = []
+}) => (
+  <Card style={{ marginBottom: '24px' }}>
+    <CardHeader>
+      <CardTitle>Filtros de Búsqueda</CardTitle>
+    </CardHeader>
+    <CardContent>
+      <GridContainer columns={3} gap="16px">
+        <div>
+          <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
+            Buscar Load ID:
+          </label>
+          <input
+            type="text"
+            placeholder="Buscar por Load ID..."
+            value={filters.loadId}
+            onChange={(e) => onFiltersChange({ loadId: e.target.value })}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: '1px solid #d1d5db',
+              borderRadius: '6px',
+              fontSize: '14px'
+            }}
+          />
+        </div>
+
+        <div>
+          <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
+            Estado:
+          </label>
+          <select
+            value={filters.status}
+            onChange={(e) => onFiltersChange({ status: e.target.value })}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: '1px solid #d1d5db',
+              borderRadius: '6px',
+              fontSize: '14px'
+            }}
+          >
+            <option value="all">Todos los estados</option>
+            <option value="completed">Completados</option>
+            <option value="failed">Fallidos</option>
+            <option value="pending">Pendientes</option>
+            <option value="processing">Procesando</option>
+          </select>
+        </div>
+
+        <div>
+          <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
+            Repartidor:
+          </label>
+          <select
+            value={filters.deliveryPerson}
+            onChange={(e) => onFiltersChange({ deliveryPerson: e.target.value })}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: '1px solid #d1d5db',
+              borderRadius: '6px',
+              fontSize: '14px'
+            }}
+          >
+            <option value="all">Todos los repartidores</option>
+            {deliveryPersons.map(person => (
+              <option key={person.code} value={person.code}>
+                {person.name}
+              </option>
+            ))}
+          </select>
+        </div>
+
+        <div>
+          <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
+            Fecha desde:
+          </label>
+          <input
+            type="date"
+            value={filters.dateFrom}
+            onChange={(e) => onFiltersChange({ dateFrom: e.target.value })}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: '1px solid #d1d5db',
+              borderRadius: '6px',
+              fontSize: '14px'
+            }}
+          />
+        </div>
+
+        <div>
+          <label style={{ display: 'block', marginBottom: '4px', fontSize: '14px', fontWeight: '500' }}>
+            Fecha hasta:
+          </label>
+          <input
+            type="date"
+            value={filters.dateTo}
+            onChange={(e) => onFiltersChange({ dateTo: e.target.value })}
+            style={{
+              width: '100%',
+              padding: '8px 12px',
+              border: '1px solid #d1d5db',
+              borderRadius: '6px',
+              fontSize: '14px'
+            }}
+          />
+        </div>
+      </GridContainer>
+    </CardContent>
+    <CardFooter>
+      <LoadsButton variant="secondary" onClick={onReset}>
+        <FaRedo /> Limpiar filtros
+      </LoadsButton>
+      <LoadsButton variant="primary" onClick={onSearch} loading={loading}>
+        <FaSync /> Buscar Traspasos
+      </LoadsButton>
+    </CardFooter>
+  </Card>
+);
+
+// Componente TraspasoTrackingTable
+const TraspasoTrackingTable = ({
+  transfers = [],
+  loading,
+  onViewDetails,
+  pagination = {}
+}) => {
+  const getStatusIcon = (status) => {
+    switch (status) {
+      case 'completed':
+        return <FaCheckCircle style={{ color: '#28a745' }} />;
+      case 'failed':
+        return <FaTimesCircle style={{ color: '#dc3545' }} />;
+      case 'processing':
+        return <FaSpinner style={{ color: '#007bff' }} />;
+      default:
+        return <FaClock style={{ color: '#ffc107' }} />;
+    }
+  };
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle>Lista de Traspasos ({transfers.length})</CardTitle>
+      </CardHeader>
+      <CardContent style={{ padding: 0 }}>
+        {loading ? (
+          <div style={{ padding: '40px', textAlign: 'center' }}>
+            <FaSpinner className="spinning" style={{ fontSize: '24px', marginBottom: '16px' }} />
+            <p>Cargando traspasos...</p>
+          </div>
+        ) : transfers.length === 0 ? (
+          <div style={{ padding: '40px', textAlign: 'center' }}>
+            <FaExclamationCircle style={{ fontSize: '48px', opacity: 0.5, marginBottom: '16px' }} />
+            <h3>No hay traspasos</h3>
+            <p>No se encontraron traspasos con los filtros aplicados.</p>
+          </div>
+        ) : (
+          <div style={{ overflowX: 'auto' }}>
+            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+              <thead>
+                <tr style={{ borderBottom: '1px solid #e5e7eb' }}>
+                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Estado</th>
+                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Load ID</th>
+                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Repartidor</th>
+                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Documento</th>
+                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Productos</th>
+                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Éxito</th>
+                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Fecha</th>
+                  <th style={{ padding: '12px', textAlign: 'left', fontWeight: '600' }}>Acciones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {transfers.map(traspaso => (
+                  <tr
+                    key={traspaso.id}
+                    style={{
+                      borderBottom: '1px solid #f3f4f6',
+                      '&:hover': { backgroundColor: '#f8fafc' }
+                    }}
+                  >
+                    <td style={{ padding: '12px' }}>
+                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {getStatusIcon(traspaso.status)}
+                        <StatusBadge variant={traspaso.status}>
+                          {traspaso.status_description || traspaso.status}
+                        </StatusBadge>
+                        {traspaso.is_return === 1 && (
+                          <span style={{
+                            background: '#e74c3c',
+                            color: 'white',
+                            padding: '2px 6px',
+                            borderRadius: '4px',
+                            fontSize: '10px'
+                          }}>
+                            DEV
+                          </span>
+                        )}
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px' }}>
+                      <code style={{
+                        background: '#f3f4f6',
+                        padding: '2px 6px',
+                        borderRadius: '4px',
+                        fontSize: '13px'
+                      }}>
+                        {traspaso.load_id}
+                      </code>
+                    </td>
+                    <td style={{ padding: '12px' }}>
+                      <div>
+                        <strong>{traspaso.delivery_person_code}</strong>
+                        <br />
+                        <small style={{ color: '#6b7280' }}>
+                          {traspaso.delivery_person_name}
+                        </small>
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px' }}>
+                      <code style={{ color: '#3b82f6', fontSize: '13px' }}>
+                        {traspaso.documento_generated}
+                      </code>
+                    </td>
+                    <td style={{ padding: '12px' }}>
+                      <div style={{ fontSize: '14px', lineHeight: '1.4' }}>
+                        <div>Total: {traspaso.total_products}</div>
+                        <div style={{ color: '#10b981' }}>Exitosos: {traspaso.lines_successful}</div>
+                        {traspaso.lines_failed > 0 && (
+                          <div style={{ color: '#dc3545' }}>
+                            Fallidos: {traspaso.lines_failed}
+                          </div>
+                        )}
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px' }}>
+                      <span style={{
+                        color: traspaso.success_percentage >= 80 ? '#27ae60' :
+                               traspaso.success_percentage >= 50 ? '#f39c12' : '#e74c3c',
+                        fontWeight: 'bold'
+                      }}>
+                        {traspaso.success_percentage || 0}%
+                      </span>
+                    </td>
+                    <td style={{ padding: '12px' }}>
+                      <div style={{ fontSize: '14px', lineHeight: '1.4' }}>
+                        {new Date(traspaso.created_at).toLocaleDateString()}
+                        <br />
+                        <small style={{ color: '#6b7280' }}>
+                          {new Date(traspaso.created_at).toLocaleTimeString()}
+                        </small>
+                      </div>
+                    </td>
+                    <td style={{ padding: '12px' }}>
+                      <LoadsButton
+                        variant="primary"
+                        size="small"
+                        onClick={() => onViewDetails(traspaso.id)}
+                      >
+                        <FaEye /> Ver
+                      </LoadsButton>
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        )}
+      </CardContent>
+
+      {pagination && pagination.totalPages > 1 && (
+        <CardFooter>
+          <div style={{
+            display: 'flex',
+            justifyContent: 'space-between',
+            alignItems: 'center',
+            width: '100%'
+          }}>
+            <span style={{ color: '#6b7280', fontSize: '14px' }}>
+              Página {pagination.currentPage} de {pagination.totalPages}
+              ({pagination.totalItems} traspasos)
+            </span>
+            <div style={{ display: 'flex', gap: '8px' }}>
+              <LoadsButton
+                variant="secondary"
+                size="small"
+                disabled={!pagination.hasPrevPage}
+              >
+                Anterior
+              </LoadsButton>
+              <LoadsButton
+                variant="secondary"
+                size="small"
+                disabled={!pagination.hasNextPage}
+              >
+                Siguiente
+              </LoadsButton>
+            </div>
+          </div>
+        </CardFooter>
+      )}
+    </Card>
+  );
+};
+
 export function TraspasoManagement() {
-  // 🔄 Hooks base siguiendo tu patrón de LoadsManagement
+  // Hooks base siguiendo tu patrón exacto
   const { accessToken, user } = useAuth();
   const { hasPermission } = usePermissions();
   const { showSuccess, showError, showWarning, showInfo } = useNotification();
@@ -331,19 +580,20 @@ export function TraspasoManagement() {
   const [error, setError] = useState(null);
   const [lastRefresh, setLastRefresh] = useState(new Date());
 
-  // Estados para filtros siguiendo tu patrón exacto de LoadsManagement
+  // Estados para filtros siguiendo tu patrón exacto
   const [filters, setFilters] = useState({
     dateFrom: new Date(new Date().setDate(new Date().getDate() - 30))
       .toISOString()
       .split("T")[0],
     dateTo: new Date().toISOString().split("T")[0],
     status: "all",
-    sourceWarehouse: "all",
-    targetWarehouse: "all",
+    deliveryPerson: "all",
     loadId: "",
+    page: 1,
+    limit: 20,
   });
 
-  // 🔄 Verificar permisos siguiendo tu patrón exacto
+  // Verificar permisos siguiendo tu patrón exacto
   const canRead = hasPermission("loads", "read");
   const canCreate = hasPermission("loads", "create");
   const canUpdate = hasPermission("loads", "update");
@@ -352,30 +602,27 @@ export function TraspasoManagement() {
   // Debounce de filtros
   const debouncedFilters = useDebounce(filters, 500);
 
-  // 🔄 Hook especializado para traspasos
+  // Hook especializado para traspasos
   const {
-    transfers,
-    totalRecords,
     loading,
     error: transferError,
-    stats,
-    warehouses,
-    selectedTransfers,
-    fetchTransfers,
-    fetchStats,
-    fetchWarehouses,
-    executeTransfer,
-    executeBulkTransfers,
-    handleSelectTransfer,
-    handleSelectAll,
-    setSelectedTransfers,
-  } = useTransferManagement(hasSearched ? filters : {});
+    traspasos,
+    traspasoStats,
+    deliveryPersonsFilter,
+    selectedTraspaso,
+    traspasosPagination,
+    fetchTraspasos,
+    fetchTraspasoStats,
+    fetchDeliveryPersonsFilter,
+    fetchTraspasoDetails,
+    clearSelectedTraspaso,
+  } = useTransferManagement();
 
   // Paginación
   const { currentPage, totalPages, setTotalPages, goToPage, resetToFirstPage } =
     usePagination();
 
-  // 🔄 Funciones principales siguiendo tu patrón exacto de LoadsManagement
+  // Funciones principales siguiendo tu patrón exacto
   const handleSearch = useCallback(() => {
     if (!canRead) {
       showWarning("No tienes permisos para ver traspasos");
@@ -386,8 +633,8 @@ export function TraspasoManagement() {
     setHasSearched(true);
     setError(null);
 
-    // 🔄 Fetch manual siguiendo tu patrón
-    Promise.all([fetchTransfers(), fetchStats()])
+    // Fetch manual siguiendo tu patrón
+    Promise.all([fetchTraspasos(filters), fetchTraspasoStats(filters)])
       .then(() => {
         setLastRefresh(new Date());
         showInfo("Traspasos actualizados");
@@ -400,8 +647,9 @@ export function TraspasoManagement() {
   }, [
     canRead,
     resetToFirstPage,
-    fetchTransfers,
-    fetchStats,
+    fetchTraspasos,
+    fetchTraspasoStats,
+    filters,
     showWarning,
     showInfo,
     showError,
@@ -418,20 +666,20 @@ export function TraspasoManagement() {
         .split("T")[0],
       dateTo: new Date().toISOString().split("T")[0],
       status: "all",
-      sourceWarehouse: "all",
-      targetWarehouse: "all",
+      deliveryPerson: "all",
       loadId: "",
+      page: 1,
+      limit: 20,
     });
     setHasSearched(false);
-    setSelectedTransfers([]);
     setError(null);
     showInfo("Filtros restablecidos");
-  }, [setSelectedTransfers, showInfo]);
+  }, [showInfo]);
 
   const handleRefresh = useCallback(() => {
     if (!hasSearched) return;
 
-    Promise.all([fetchTransfers(), fetchStats()])
+    Promise.all([fetchTraspasos(filters), fetchTraspasoStats(filters)])
       .then(() => {
         setLastRefresh(new Date());
         showSuccess("Datos actualizados");
@@ -440,110 +688,44 @@ export function TraspasoManagement() {
         console.error("Error al actualizar traspasos:", err);
         showError("Error al actualizar datos");
       });
-  }, [hasSearched, fetchTransfers, fetchStats, showSuccess, showError]);
-
-  // 🔄 Manejadores de acciones siguiendo tu patrón
-  const handleExecuteTransfer = useCallback(
-    async (transfer) => {
-      if (!canCreate) {
-        showError("No tienes permisos para ejecutar traspasos");
-        return;
-      }
-
-      try {
-        await executeTransfer(transfer.loadId);
-        // El hook ya maneja las notificaciones y refresh
-        setLastRefresh(new Date());
-      } catch (error) {
-        // Error ya manejado en el hook
-        console.error("Error executing transfer:", error);
-      }
-    },
-    [canCreate, executeTransfer, showError]
-  );
-
-  const handleBulkExecute = useCallback(
-    async (selectedIds) => {
-      if (!canCreate) {
-        showError("No tienes permisos para ejecutar traspasos");
-        return;
-      }
-
-      try {
-        const pendingIds = selectedIds.filter((id) => {
-          const transfer = transfers.find((t) => t.loadId === id);
-          return transfer && ["PENDING", "ERROR"].includes(transfer.status);
-        });
-
-        if (pendingIds.length === 0) {
-          showWarning("No hay traspasos ejecutables seleccionados");
-          return;
-        }
-
-        await executeBulkTransfers(pendingIds);
-        // El hook ya maneja la limpieza de selección y refresh
-        setLastRefresh(new Date());
-      } catch (error) {
-        // Error ya manejado en el hook
-        console.error("Error in bulk execution:", error);
-      }
-    },
-    [canCreate, transfers, executeBulkTransfers, showError, showWarning]
-  );
+  }, [hasSearched, fetchTraspasos, fetchTraspasoStats, filters, showSuccess, showError]);
 
   const handleViewDetails = useCallback(
-    (transfer) => {
-      console.log("Viewing transfer details:", transfer);
-      showInfo(`Mostrando detalles del traspaso ${transfer.loadId}`);
-      // 🔄 Aquí podrías implementar navegación o modal como en tu LoadsManagement
-      // setSelectedOrderForDetails(transfer);
-      // setShowDetailsModal(true);
+    async (traspasoId) => {
+      const details = await fetchTraspasoDetails(traspasoId);
+      if (details) {
+        showInfo(`Mostrando detalles del traspaso ${details.load_id}`);
+        // Aquí podrías implementar navegación o modal
+      }
     },
-    [showInfo]
+    [fetchTraspasoDetails, showInfo]
   );
 
-  // 🔄 useEffect para cargar warehouses siguiendo tu patrón
+  // useEffect para cargar delivery persons siguiendo tu patrón
   useEffect(() => {
     if (canRead) {
-      fetchWarehouses().catch((err) => {
-        console.error("Error loading warehouses:", err);
-        showError("Error al cargar bodegas");
+      fetchDeliveryPersonsFilter().catch((err) => {
+        console.error("Error loading delivery persons:", err);
+        showError("Error al cargar repartidores");
       });
     }
-  }, [canRead, fetchWarehouses, showError]);
+  }, [canRead, fetchDeliveryPersonsFilter, showError]);
 
-  // 🔄 useEffect para actualizar paginación
+  // useEffect para actualizar paginación
   useEffect(() => {
-    if (totalRecords > 0) {
-      setTotalPages(Math.ceil(totalRecords / 20));
+    if (traspasosPagination?.totalItems > 0) {
+      setTotalPages(traspasosPagination.totalPages);
     }
-  }, [totalRecords, setTotalPages]);
+  }, [traspasosPagination, setTotalPages]);
 
-  // 🔄 useEffect para manejar errores
+  // useEffect para manejar errores
   useEffect(() => {
     if (transferError) {
       setError(transferError.message || "Error en el sistema de traspasos");
     }
   }, [transferError]);
 
-  // 🔄 Función para formatear moneda siguiendo tu patrón
-  const formatCurrency = useCallback((amount) => {
-    return new Intl.NumberFormat("es-DO", {
-      style: "currency",
-      currency: "DOP",
-    }).format(amount || 0);
-  }, []);
-
-  // Datos computados para estadísticas
-  const pendingCount = useMemo(() => {
-    return transfers.filter((t) => t.status === "PENDING").length;
-  }, [transfers]);
-
-  const processingCount = useMemo(() => {
-    return transfers.filter((t) => t.status === "PROCESSING").length;
-  }, [transfers]);
-
-  // 🔄 Verificar acceso siguiendo tu patrón exacto
+  // Verificar acceso siguiendo tu patrón exacto
   if (!canRead) {
     return (
       <Container>
@@ -572,7 +754,6 @@ export function TraspasoManagement() {
           </NoDataMessage>
         </ContentArea>
 
-        {/* 🔔 Contenedor de notificaciones */}
         <NotificationContainer />
       </Container>
     );
@@ -618,7 +799,7 @@ export function TraspasoManagement() {
       </PageHeader>
 
       <ContentArea>
-        {/* 🔄 Mostrar errores siguiendo tu patrón */}
+        {/* Mostrar errores siguiendo tu patrón */}
         {error && (
           <AlertMessage type="error">
             <div className="alert-content">
@@ -629,50 +810,42 @@ export function TraspasoManagement() {
           </AlertMessage>
         )}
 
-        {/* 🔄 Estadísticas siguiendo tu patrón exacto de LoadsManagement */}
+        {/* Estadísticas siguiendo tu patrón exacto */}
         <StatsGrid>
           <StatCard>
             <h3>Pendientes</h3>
             <p className="value" style={{ color: "#f59e0b" }}>
-              {stats.pending || 0}
-              <span className="icon">⏳</span>
+              {traspasoStats.pending || 0}
+               <span className="icon">⏳</span>
             </p>
-            {pendingCount > 0 && (
-              <p className="change neutral">
-                {pendingCount} en la tabla actual
-              </p>
-            )}
           </StatCard>
 
           <StatCard>
             <h3>Procesando</h3>
             <p className="value" style={{ color: "#3b82f6" }}>
-              {stats.processing || 0}
+              {traspasoStats.processing || 0}
               <span className="icon">🔄</span>
             </p>
-            {processingCount > 0 && (
-              <p className="change positive">{processingCount} en progreso</p>
-            )}
           </StatCard>
 
           <StatCard>
             <h3>Completados</h3>
             <p className="value" style={{ color: "#10b981" }}>
-              {stats.completed || 0}
+              {traspasoStats.completed || 0}
               <span className="icon">✅</span>
             </p>
           </StatCard>
 
           <StatCard>
-            <h3>Valor Total</h3>
-            <p className="value" style={{ color: "#6366f1" }}>
-              {formatCurrency(stats.totalValue)}
-              <span className="icon">💰</span>
+            <h3>Fallidos</h3>
+            <p className="value" style={{ color: "#ef4444" }}>
+              {traspasoStats.failed || 0}
+              <span className="icon">❌</span>
             </p>
           </StatCard>
         </StatsGrid>
 
-        {/* 🔄 Patrón de búsqueda siguiendo LoadsManagement EXACTO */}
+        {/* Patrón de búsqueda siguiendo LoadsManagement EXACTO */}
         {!hasSearched ? (
           <NoDataMessage>
             <div className="icon">🔍</div>
@@ -699,28 +872,23 @@ export function TraspasoManagement() {
               onReset={handleReset}
               onSearch={handleSearch}
               loading={loading}
-              warehouses={warehouses}
-              loadOptions={[]} // Para futuras implementaciones
+              deliveryPersons={deliveryPersonsFilter}
             />
 
             <TraspasoTrackingTable
-              transfers={transfers}
+              transfers={traspasos}
               loading={loading}
-              onExecuteTransfer={handleExecuteTransfer}
               onViewDetails={handleViewDetails}
-              onRefresh={handleRefresh}
-              currentPage={currentPage}
-              totalPages={totalPages}
-              onPageChange={goToPage}
-              filters={filters}
-              selectedTransfers={selectedTransfers}
-              onSelectTransfer={handleSelectTransfer}
-              onSelectAll={handleSelectAll}
-              onBulkExecute={handleBulkExecute}
+              pagination={traspasosPagination}
             />
           </>
         )}
       </ContentArea>
+
+      {/* Contenedor de notificaciones */}
+      <NotificationContainer />
     </Container>
   );
 }
+
+export default TraspasoManagement;
