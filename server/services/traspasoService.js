@@ -355,7 +355,7 @@ async function validateProduct(connection, product, bodegaOrigen) {
     const params = { articulo: articulo };
     logger.info(`🔍 validateProduct - Params object:`, params);
 
-    const result = await SqlService.query(connection, productQuery, params);
+    const result = await SqlService.query(connection, productQuery, {articulo: product.Code_Product}, null, null);
 
     logger.info(`🔍 validateProduct - Query exitosa para ${articulo}`);
 
@@ -393,7 +393,7 @@ async function validateProduct(connection, product, bodegaOrigen) {
     const stockResult = await SqlService.query(connection, stockQuery, {
       articulo: product.Code_Product,
       bodega: bodegaOrigen,
-    });
+    }, null, null);
 
     const currentStock = stockResult.recordset[0]?.stock || 0;
 
