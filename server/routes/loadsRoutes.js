@@ -123,12 +123,24 @@ router.post('/inventory-transfer',
 // RUTAS DE GESTIÓN DE TRASPASOS (NUEVAS)
 // ================================================
 
-router.get('/transfers',
+router.get('/traspaso-history',
   checkPermission('loads', 'read'),
   LoadsController.getTraspasoHistory
 );
 
-router.get('/transfers/stats',
+router.get(
+  "/traspasos",
+  checkPermission("loads", "read"),
+  LoadsController.getTraspasos
+);
+
+router.get(
+  "/traspasos/delivery-persons",
+  checkPermission("loads", "read"),
+  LoadsController.getDeliveryPersonsFilter
+);
+
+router.get('/traspasos/stats',
   checkPermission('loads', 'read'),
   LoadsController.getTraspasoStats
 );
@@ -138,37 +150,37 @@ router.get('/warehouses',
   LoadsController.getWarehouses
 );
 
-router.get('/transfers/:traspasoId',
+router.get('/traspasos/:traspasoId',
   checkPermission('loads', 'read'),
   LoadsController.getTraspasoDetails
 );
 
-router.post('/transfers/execute/:loadId',
+router.post('/traspasos/execute/:loadId',
   checkPermission('loads', 'create'),
   LoadsController.executeTransfer
 );
 
-router.post('/transfers/execute-bulk',
+router.post('/traspasos/execute-bulk',
   checkPermission('loads', 'create'),
   LoadsController.executeBulkTransfers
 );
 
-router.put('/transfers/:traspasoId/status',
+router.put('/traspasos/:traspasoId/status',
   checkPermission('loads', 'update'),
   LoadsController.updateTraspasoStatus
 );
 
-router.post('/transfers/:traspasoId/retry',
+router.post('/traspasos/:traspasoId/retry',
   checkPermission('loads', 'manage'),
   LoadsController.retryTraspaso
 );
 
-router.post('/transfers/:traspasoId/returns',
+router.post('/traspasos/:traspasoId/returns',
   checkPermission('loads', 'manage'),
   LoadsController.processReturns
 );
 
-router.post('/transfers/bulk-action',
+router.post('/traspasos/bulk-action',
   checkPermissions(
     [
       { resource: "loads", action: "manage" },
@@ -179,7 +191,7 @@ router.post('/transfers/bulk-action',
   LoadsController.bulkAction
 );
 
-router.delete('/transfers/:traspasoId',
+router.delete('/traspasos/:traspasoId',
   checkPermissions(
     [
       { resource: "loads", action: "manage" },

@@ -1,4 +1,4 @@
-// src/hooks/useTransferManagement.js
+// src/hooks/useTransferManagement.jsx - CORREGIDO PARA API CONSOLIDADA
 
 import { useState, useCallback } from "react";
 import { useAuth } from "./useAuth";
@@ -11,8 +11,7 @@ export const useTransferManagement = () => {
   const { accessToken } = useAuth();
   const { showSuccess, showError, showWarning, showInfo } = useNotification();
 
-
-  // Estados principales
+  // Estados principales - TU ESTRUCTURA ORIGINAL
   const [transfers, setTransfers] = useState([]);
   const [totalRecords, setTotalRecords] = useState(0);
   const [loading, setLoading] = useState(false);
@@ -29,7 +28,14 @@ export const useTransferManagement = () => {
   const [warehouses, setWarehouses] = useState([]);
   const [selectedTransfers, setSelectedTransfers] = useState([]);
 
-  // Fetch transfers - SOLO MANUAL, no auto-fetch
+  // ✅ NUEVOS ESTADOS PARA TRASPASOS (USANDO TU ESTRUCTURA EXISTENTE)
+  const [traspasos, setTraspasos] = useState([]);
+  const [traspasoStats, setTraspasoStats] = useState({});
+  const [deliveryPersonsFilter, setDeliveryPersonsFilter] = useState([]);
+  const [selectedTraspaso, setSelectedTraspaso] = useState(null);
+  const [traspasosPagination, setTraspasosPagination] = useState({});
+
+  // ✅ CONSOLIDADO: fetchTransfers - USA getTraspasos() unificado
   const fetchTransfers = useCallback(
     async (filters = {}) => {
       if (!accessToken) {
@@ -42,7 +48,8 @@ export const useTransferManagement = () => {
         setError(null);
 
         console.log("Fetching transfers with filters:", filters);
-        const result = await loadsApi.getTransfers(accessToken, filters);
+        // ✅ CAMBIO: Usar getTraspasos() consolidado
+        const result = await loadsApi.getTraspasos(accessToken, filters);
 
         if (result?.success) {
           const transfersData = result.data?.transfers || result.data || [];
@@ -72,7 +79,51 @@ export const useTransferManagement = () => {
     [accessToken, showError]
   );
 
-  // Fetch stats - SOLO MANUAL
+  // ✅ CONSOLIDADO: fetchTraspasos - USA getTraspasos() unificado
+  const fetchTraspasos = useCallback(
+    async (filters = {}) => {
+      if (!accessToken) {
+        console.warn("No access token available for fetchTraspasos");
+        return;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        console.log("Fetching traspasos with filters:", filters);
+
+        // ✅ CAMBIO: Usar getTraspasos() consolidado
+        const result = await loadsApi.getTraspasos(accessToken, filters);
+
+        if (result?.success) {
+          const traspasoData = result.data?.transfers || result.data || [];
+          const pagination = result.pagination || {};
+
+          setTraspasos(traspasoData);
+          setTraspasosPagination(pagination);
+
+          console.log("Traspasos fetched successfully:", {
+            count: traspasoData.length,
+            pagination,
+          });
+        } else {
+          throw new Error(result?.message || "Error al obtener traspasos");
+        }
+      } catch (err) {
+        console.error("Error en fetchTraspasos:", err);
+        setError(err);
+        setTraspasos([]);
+        setTraspasosPagination({});
+        showError(`Error al obtener traspasos: ${err.message}`);
+      } finally {
+        setLoading(false);
+      }
+    },
+    [accessToken, showError]
+  );
+
+  // ✅ CONSOLIDADO: fetchStats - USA getTraspasoStats() unificado
   const fetchStats = useCallback(
     async (filters = {}) => {
       if (!accessToken) {
@@ -82,7 +133,9 @@ export const useTransferManagement = () => {
 
       try {
         console.log("Fetching stats with filters:", filters);
-        const result = await loadsApi.getTransferStats(accessToken, filters);
+
+        // ✅ CAMBIO: Usar getTraspasoStats() consolidado
+        const result = await loadsApi.getTraspasoStats(accessToken, filters);
 
         if (result?.success) {
           const statsData = result.data?.stats || result.data || {};
@@ -100,7 +153,125 @@ export const useTransferManagement = () => {
     [accessToken, showWarning]
   );
 
-  // Fetch warehouses - SOLO MANUAL
+  // ✅ CONSOLIDADO: fetchTraspasoStats - USA getTraspasoStats() unificado
+  const fetchTraspasoStats = useCallback(
+    async (filters = {}) => {
+      if (!accessToken) {
+        console.warn("No access token available for fetchTraspasoStats");
+        return;
+      }
+
+      try {
+        console.log("Fetching traspaso stats with filters:", filters);
+
+        // ✅ CAMBIO: Usar getTraspasoStats() consolidado (eliminar getTransferStats)
+        const result = await loadsApi.getTraspasoStats(accessToken, filters);
+
+        if (result?.success) {
+          const statsData = result.data?.stats || result.data || {};
+          setTraspasoStats(statsData);
+          console.log("Traspaso stats fetched successfully:", statsData);
+        } else {
+          console.warn("Error al obtener estadísticas:", result?.message);
+          // NO mostrar error, solo advertencia
+        }
+      } catch (err) {
+        console.error("Error en fetchTraspasoStats:", err);
+        // NO mostrar error en UI para stats
+      }
+    },
+    [accessToken]
+  );
+
+  // ✅ CONSOLIDADO: fetchDeliveryPersonsFilter - USA getDeliveryPersonsFilter() unificado
+  const fetchDeliveryPersonsFilter = useCallback(async () => {
+    if (!accessToken) {
+      console.warn("No access token available for fetchDeliveryPersonsFilter");
+      return;
+    }
+
+    try {
+      console.log("Fetching delivery persons...");
+
+      // ✅ CAMBIO: Usar getDeliveryPersonsFilter() consolidado
+      const result = await loadsApi.getDeliveryPersonsFilter(accessToken);
+
+      if (result?.success) {
+        const deliveryPersonsData = result.data || [];
+        // Transformar formato si es necesario
+        const formattedData = deliveryPersonsData.map((person) => ({
+          code: person.code || person.Codigo,
+          name: person.name || person.Nombre || person.Description,
+        }));
+
+        setDeliveryPersonsFilter(formattedData);
+        console.log(
+          "Delivery persons fetched successfully:",
+          formattedData.length
+        );
+      } else {
+        console.warn("Error al obtener repartidores:", result?.message);
+      }
+    } catch (err) {
+      console.error("Error en fetchDeliveryPersonsFilter:", err);
+    }
+  }, [accessToken]);
+
+  // ✅ CONSOLIDADO: fetchTraspasoDetails - USA getTraspasoDetails() unificado
+  const fetchTraspasoDetails = useCallback(
+    async (traspasoId) => {
+      if (!accessToken) {
+        showError("No hay token de acceso disponible");
+        return null;
+      }
+
+      try {
+        setLoading(true);
+        setError(null);
+
+        // ✅ CAMBIO: Usar getTraspasoDetails() consolidado
+        const result = await loadsApi.getTraspasoDetails(
+          accessToken,
+          traspasoId
+        );
+
+        if (result?.success) {
+          const traspasoData = result.data;
+          setSelectedTraspaso(traspasoData);
+          return traspasoData;
+        } else {
+          // ✅ POR AHORA, BUSCAR EN EL ARRAY LOCAL COMO FALLBACK
+          const traspaso = traspasos.find((t) => t.id === traspasoId);
+
+          if (traspaso) {
+            setSelectedTraspaso(traspaso);
+            return traspaso;
+          } else {
+            throw new Error("Traspaso no encontrado");
+          }
+        }
+      } catch (err) {
+        const errorMessage =
+          err.message || "Error al cargar detalles del traspaso";
+        setError(err);
+        console.error("Error en fetchTraspasoDetails:", err);
+        showError(errorMessage);
+        return null;
+      } finally {
+        setLoading(false);
+      }
+    },
+    [accessToken, traspasos, showError]
+  );
+
+  /**
+   * Limpia el traspaso seleccionado
+   */
+  const clearSelectedTraspaso = useCallback(() => {
+    setSelectedTraspaso(null);
+  }, []);
+
+  // ✅ CONSOLIDADO: fetchWarehouses - USA getWarehouses() unificado
   const fetchWarehouses = useCallback(async () => {
     if (!accessToken) {
       console.warn("No access token available for fetchWarehouses");
@@ -109,6 +280,7 @@ export const useTransferManagement = () => {
 
     try {
       console.log("Fetching warehouses...");
+      // ✅ CAMBIO: Usar getWarehouses() consolidado
       const result = await loadsApi.getWarehouses(accessToken);
 
       if (result?.success) {
@@ -123,7 +295,7 @@ export const useTransferManagement = () => {
     }
   }, [accessToken]);
 
-  // Execute single transfer
+  // MANTENER TUS FUNCIONES DE EXECUTE (ya usan métodos consolidados)...
   const executeTransfer = useCallback(
     async (loadId) => {
       if (!accessToken) {
@@ -152,7 +324,6 @@ export const useTransferManagement = () => {
     [accessToken, showSuccess, showError]
   );
 
-  // Execute bulk transfers
   const executeBulkTransfers = useCallback(
     async (loadIds) => {
       if (!accessToken) {
@@ -184,9 +355,7 @@ export const useTransferManagement = () => {
             showWarning("No se pudieron ejecutar los traspasos seleccionados");
           }
 
-          // Limpiar selección
           setSelectedTransfers([]);
-
           return result;
         } else {
           throw new Error(result?.message || "Error en ejecución masiva");
@@ -200,67 +369,7 @@ export const useTransferManagement = () => {
     [accessToken, showSuccess, showError, showWarning]
   );
 
-  // Update transfer status
-  const updateTransferStatus = useCallback(
-    async (traspasoId, status, notes = "") => {
-      if (!accessToken) {
-        showError("No hay token de acceso disponible");
-        return;
-      }
-
-      try {
-        console.log("Updating transfer status:", { traspasoId, status, notes });
-        const result = await loadsApi.updateTraspasoStatus(
-          accessToken,
-          traspasoId,
-          { status, notes }
-        );
-
-        if (result?.success) {
-          showSuccess("Estado del traspaso actualizado correctamente");
-          return result;
-        } else {
-          throw new Error(result?.message || "Error al actualizar estado");
-        }
-      } catch (err) {
-        console.error("Error updating transfer status:", err);
-        showError(`Error al actualizar estado: ${err.message}`);
-        throw err;
-      }
-    },
-    [accessToken, showSuccess, showError]
-  );
-
-  // Retry failed transfer
-  const retryTransfer = useCallback(
-    async (traspasoId, updatedData = null) => {
-      if (!accessToken) {
-        showError("No hay token de acceso disponible");
-        return;
-      }
-
-      try {
-        console.log("Retrying transfer:", { traspasoId, updatedData });
-        const result = await loadsApi.retryTraspaso(accessToken, traspasoId, {
-          updatedData,
-        });
-
-        if (result?.success) {
-          showSuccess("Traspaso reintentado exitosamente");
-          return result;
-        } else {
-          throw new Error(result?.message || "Error al reintentar traspaso");
-        }
-      } catch (err) {
-        console.error("Error retrying transfer:", err);
-        showError(`Error al reintentar traspaso: ${err.message}`);
-        throw err;
-      }
-    },
-    [accessToken, showSuccess, showError]
-  );
-
-  // Manejo de selección
+  // MANTENER TUS FUNCIONES DE SELECCIÓN...
   const handleSelectTransfer = useCallback((loadId, isSelected) => {
     setSelectedTransfers((prev) => {
       if (isSelected) {
@@ -283,12 +392,10 @@ export const useTransferManagement = () => {
     [transfers]
   );
 
-  // Clear selections
   const clearSelections = useCallback(() => {
     setSelectedTransfers([]);
   }, []);
 
-  // Refresh all data
   const refreshData = useCallback(
     async (filters = {}) => {
       await Promise.all([fetchTransfers(filters), fetchStats(filters)]);
@@ -297,7 +404,7 @@ export const useTransferManagement = () => {
   );
 
   return {
-    // Estados
+    // Estados ORIGINALES
     transfers,
     totalRecords,
     loading,
@@ -306,20 +413,32 @@ export const useTransferManagement = () => {
     warehouses,
     selectedTransfers,
 
-    // Funciones principales - TODAS MANUALES
+    // Funciones principales ORIGINALES (ahora usando API consolidada)
     fetchTransfers,
     fetchStats,
     fetchWarehouses,
     executeTransfer,
     executeBulkTransfers,
-    updateTransferStatus,
-    retryTransfer,
     refreshData,
 
-    // Funciones de selección
+    // Funciones de selección ORIGINALES
     handleSelectTransfer,
     handleSelectAll,
     clearSelections,
     setSelectedTransfers,
+
+    // ✅ NUEVOS ESTADOS PARA TRASPASOS
+    traspasos,
+    traspasoStats,
+    deliveryPersonsFilter,
+    selectedTraspaso,
+    traspasosPagination,
+
+    // ✅ NUEVAS FUNCIONES PARA TRASPASOS (usando API consolidada)
+    fetchTraspasos,
+    fetchTraspasoStats,
+    fetchDeliveryPersonsFilter,
+    fetchTraspasoDetails,
+    clearSelectedTraspaso,
   };
 };

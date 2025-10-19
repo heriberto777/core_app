@@ -114,6 +114,7 @@ class LoadsController {
       });
     }
   }
+
   /**
    * Procesa la carga de pedidos seleccionados
    */
@@ -123,16 +124,11 @@ class LoadsController {
       const userId =
         req.user?.user_id || req.user?._id || req.user?.id || "SYSTEM";
 
-      // Validación básica
+      // Validaciones
       if (!Array.isArray(selectedPedidos) || selectedPedidos.length === 0) {
         return res.status(400).json({
           success: false,
           message: "Debe seleccionar al menos un pedido",
-          debug: {
-            receivedType: typeof selectedPedidos,
-            isArray: Array.isArray(selectedPedidos),
-            length: selectedPedidos?.length,
-          },
         });
       }
 
@@ -143,28 +139,46 @@ class LoadsController {
         });
       }
 
-      // ✅ REMOVER ESTA LÍNEA QUE CAUSA EL ERROR
-      // logger.info(`Procesando carga de ${selectedPedidos.length} pedidos para repartidor ${deliveryPersonCode}`);
-
-      // ✅ USAR ESTA LÍNEA EN SU LUGAR
       logger.info(
         `Procesando carga de ${selectedPedidos.length} pedidos para repartidor ${deliveryPersonCode}`
       );
 
-      // LLAMADA AL SERVICIO
+      // LLAMADA AL SERVICIO CON MANEJO DEFENSIVO
       const result = await LoadsService.processOrderLoad(
         deliveryPersonCode.trim(),
         selectedPedidos,
         userId
       );
 
-      res.json({
-        success: true,
-        message: result.message,
-        data: result.data,
-      });
+      // VALIDAR QUE RESULT NO SEA UNDEFINED
+      if (!result) {
+        logger.error("LoadsService.processOrderLoad retornó undefined");
+        return res.status(500).json({
+          success: false,
+          message: "Error interno: El servicio no retornó resultado válido",
+        });
+      }
+
+      // VALIDAR ESTRUCTURA DEL RESULTADO
+      const response = {
+        success: result.success !== false, // Default true si no está definido
+        message: result.message || "Proceso completado",
+        data: result.data || {},
+      };
+
+      // AGREGAR CAMPOS ADICIONALES SI EXISTEN
+      if (result.requiresManualTransfer) {
+        response.requiresManualTransfer = true;
+      }
+
+      if (result.hasWarnings) {
+        response.hasWarnings = true;
+      }
+
+      res.json(response);
     } catch (error) {
       logger.error("Error en processOrderLoad:", error);
+
       res.status(500).json({
         success: false,
         message: "Error al procesar la carga",
@@ -420,30 +434,6 @@ class LoadsController {
     }
   }
 
-  /**
-   * Controller limpio que SOLO llama a tu traspasoService.js
-   */
-  static async getTransfers(req, res) {
-    try {
-      const filters = req.query;
-      console.log("Filters in getTransfers Controller:", filters);
-
-      // USAR MÉTODO DE TU traspasoService.js (necesitamos agregarlo)
-      const result = await traspasoService.getTransfersList(filters);
-
-      res.json({
-        success: true,
-        data: result,
-      });
-    } catch (error) {
-      logger.error("Error fetching transfers:", error);
-      res.status(500).json({
-        success: false,
-        message: "Error al obtener traspasos",
-        error: error.message,
-      });
-    }
-  }
 
   static async executeTransfer(req, res) {
     try {
@@ -493,19 +483,32 @@ class LoadsController {
   static async getTraspasoDetails(req, res) {
     try {
       const { traspasoId } = req.params;
-
-      // AGREGAR ESTE MÉTODO A traspasoService.js
       const result = await traspasoService.getTraspasoDetails(traspasoId);
 
-      res.json({
-        success: true,
-        data: result,
-      });
+      res.json(result);
     } catch (error) {
       logger.error("Error obteniendo detalles de traspaso:", error);
       res.status(500).json({
         success: false,
         message: "Error al obtener detalles del traspaso",
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Obtiene repartidores para filtros
+   */
+  static async getDeliveryPersonsFilter(req, res) {
+    try {
+      const result = await traspasoService.getDeliveryPersonsForFilter();
+
+      res.json(result);
+    } catch (error) {
+      logger.error("Error obteniendo repartidores para filtro:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error al obtener repartidores",
         error: error.message,
       });
     }
@@ -598,24 +601,56 @@ class LoadsController {
   }
 
   /**
+   * Obtiene lista de traspasos con filtros y paginación
+   */
+  static async getTraspasos(req, res) {
+    try {
+      // ✅ CONVERTIR PARÁMETROS A ENTEROS EXPLÍCITAMENTE
+      const filters = {
+        page: parseInt(req.query.page) || 1,
+        limit: parseInt(req.query.limit) || 20,
+        status: req.query.status,
+        deliveryPerson: req.query.deliveryPerson,
+        loadId: req.query.loadId,
+        dateFrom: req.query.dateFrom,
+        dateTo: req.query.dateTo,
+      };
+
+      // Validar que page y limit sean números válidos
+      if (isNaN(filters.page) || filters.page < 1) filters.page = 1;
+      if (isNaN(filters.limit) || filters.limit < 1) filters.limit = 20;
+
+      const result = await traspasoService.getTraspasosList(filters);
+
+      res.json(result);
+    } catch (error) {
+      logger.error("Error obteniendo traspasos:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error al obtener traspasos",
+        error: error.message,
+      });
+    }
+  }
+
+  /**
    * Estadísticas - AGREGAR A TRASPASOSERVICE
    */
   static async getTraspasoStats(req, res) {
     try {
-      const filters = req.query;
+      const filters = {
+        dateFrom: req.query.dateFrom,
+        dateTo: req.query.dateTo,
+      };
 
-      // AGREGAR ESTE MÉTODO A traspasoService.js
       const result = await traspasoService.getTraspasoStats(filters);
 
-      res.json({
-        success: true,
-        data: result,
-      });
+      res.json(result);
     } catch (error) {
-      logger.error("Error obteniendo estadísticas:", error);
+      logger.error("Error obteniendo estadísticas de traspasos:", error);
       res.status(500).json({
         success: false,
-        message: "Error al obtener estadísticas",
+        message: "Error al obtener estadísticas de traspasos",
         error: error.message,
       });
     }
@@ -735,29 +770,6 @@ class LoadsController {
     }
   }
 
-  /**
-   * Obtiene estadísticas de traspasos
-   */
-  static async getTransferStats(req, res) {
-    try {
-      const filters = req.query;
-
-      // Usar método del traspasoService
-      const result = await traspasoService.getTraspasoStats(filters);
-
-      res.json({
-        success: true,
-        data: { stats: result },
-      });
-    } catch (error) {
-      logger.error("Error obteniendo estadísticas de traspasos:", error);
-      res.status(500).json({
-        success: false,
-        message: "Error al obtener estadísticas de traspasos",
-        error: error.message,
-      });
-    }
-  }
 
   /**
    * Obtiene bodegas activas
