@@ -360,15 +360,21 @@ class LoadsService {
           );
           logger.info(`✅ ${step}: ${ordersData.length} registros obtenidos`);
 
-          // ⭐ PASOS 3 y 4: Insertar en server2 (IMPLT_Orders e IMPLT_loads_detail) ⭐
+          // PASO 3: Preparar datos de traspaso con bodegas origen reales
+          const traspasoData = this.prepareTraspasoData(
+            ordersData,
+            bodegaDestino
+          );
+
+          // ⭐ PASOS 4 y 5: Insertar en server2 (IMPLT_Orders e IMPLT_loads_detail) ⭐
           await withConnection("server2", async (server2Connection) => {
-            // PASO 3: Insertar en IMPLT_Orders
+            // PASO 4: Insertar en IMPLT_Orders
             step = "insertToIMPLTOrders";
             logger.info(`🔥 ${step}: Insertando en IMPLT_Orders...`);
             await this.insertToIMPLTOrders(server2Connection, ordersData);
             logger.info(`✅ ${step}: Completado exitosamente`);
 
-            // PASO 4: Insertar en IMPLT_loads_detail
+            // PASO 5: Insertar en IMPLT_loads_detail
             step = "insertToIMPLTLoadsDetail";
             logger.info(`🔥 ${step}: Insertando en IMPLT_loads_detail...`);
             await this.insertToIMPLTLoadsDetail(
@@ -379,16 +385,12 @@ class LoadsService {
             );
             logger.info(`✅ ${step}: Completado exitosamente`);
 
-            // ⭐ PASO 5: VALIDAR TRASPASO ANTES DE EJECUTAR ⭐
+            // ⭐ PASO 6: VALIDAR TRASPASO ANTES DE EJECUTAR ⭐
             step = "validarTraspaso";
             logger.info(`🔍 ${step}: Validando datos para traspaso...`);
 
             const { validateTraspasoData } = require("./traspasoService");
-            // const traspasoData = ordersData.map((order) => ({
-            //   Code_Product: order.Code_Product,
-            //   Quantity: order.Quantity,
-            //   bodega: deliveryPerson.assignedWarehouse,
-            // }));
+
 
             // Ejecutar validación con la bodega destino recibida como parámetro
             const validation = await validateTraspasoData(
