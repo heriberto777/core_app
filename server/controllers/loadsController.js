@@ -114,7 +114,6 @@ class LoadsController {
       });
     }
   }
-
   /**
    * Procesa la carga de pedidos seleccionados
    */
@@ -124,119 +123,38 @@ class LoadsController {
       const userId =
         req.user?.user_id || req.user?._id || req.user?.id || "SYSTEM";
 
-      // ✅ DEBUG: Ver qué está llegando del frontend
-      console.log("🔍 DEBUG - Datos recibidos:");
-      console.log(
-        "selectedPedidos:",
-        selectedPedidos,
-        "tipo:",
-        typeof selectedPedidos
-      );
-      console.log(
-        "deliveryPersonCode:",
-        deliveryPersonCode,
-        "tipo:",
-        typeof deliveryPersonCode
-      );
-      console.log("req.body completo:", req.body);
-
-      // ✅ VALIDACIÓN DEFENSIVA DE selectedPedidos
-      let pedidosArray = [];
-
-      if (!selectedPedidos) {
+      // Validación básica
+      if (!Array.isArray(selectedPedidos) || selectedPedidos.length === 0) {
         return res.status(400).json({
           success: false,
-          message: "No se recibieron pedidos seleccionados",
+          message: "Debe seleccionar al menos un pedido",
           debug: {
             receivedType: typeof selectedPedidos,
-            receivedValue: selectedPedidos,
+            isArray: Array.isArray(selectedPedidos),
+            length: selectedPedidos?.length,
           },
         });
       }
 
-      // Convertir a array si no lo es
-      if (Array.isArray(selectedPedidos)) {
-        pedidosArray = selectedPedidos;
-      } else if (typeof selectedPedidos === "string") {
-        try {
-          // Intentar parsear si es string JSON
-          pedidosArray = JSON.parse(selectedPedidos);
-          if (!Array.isArray(pedidosArray)) {
-            // Si es un string simple, crear array
-            pedidosArray = [selectedPedidos];
-          }
-        } catch (parseError) {
-          // Si no es JSON válido, tratarlo como string simple
-          pedidosArray = [selectedPedidos];
-        }
-      } else if (typeof selectedPedidos === "number") {
-        pedidosArray = [selectedPedidos.toString()];
-      } else if (
-        typeof selectedPedidos === "object" &&
-        selectedPedidos !== null
-      ) {
-        // Si es objeto, intentar obtener valores
-        if (selectedPedidos.length !== undefined) {
-          // Es array-like object
-          pedidosArray = Array.from(selectedPedidos);
-        } else {
-          // Es objeto con propiedades
-          pedidosArray = Object.values(selectedPedidos);
-        }
-      } else {
-        return res.status(400).json({
-          success: false,
-          message: "Formato de pedidos seleccionados no válido",
-          debug: {
-            receivedType: typeof selectedPedidos,
-            receivedValue: selectedPedidos,
-          },
-        });
-      }
-
-      // Filtrar elementos válidos
-      pedidosArray = pedidosArray
-        .filter(
-          (pedido) =>
-            pedido !== null &&
-            pedido !== undefined &&
-            pedido !== "" &&
-            !isNaN(pedido)
-        )
-        .map((pedido) => pedido.toString().trim());
-
-      // Validar que hay pedidos después del filtrado
-      if (pedidosArray.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: "No hay pedidos válidos después del filtrado",
-          debug: {
-            originalData: selectedPedidos,
-            afterFiltering: pedidosArray,
-          },
-        });
-      }
-
-      // ✅ VALIDACIÓN DE deliveryPersonCode
       if (!deliveryPersonCode || deliveryPersonCode.trim() === "") {
         return res.status(400).json({
           success: false,
           message: "Debe seleccionar un repartidor",
-          debug: {
-            deliveryPersonCode: deliveryPersonCode,
-          },
         });
       }
 
-      logger.info(
-        `Procesando carga de ${pedidosArray.length} pedidos para repartidor ${deliveryPersonCode}`
-      );
-      logger.info(`Pedidos: [${pedidosArray.join(", ")}]`);
+      // ✅ REMOVER ESTA LÍNEA QUE CAUSA EL ERROR
+      // logger.info(`Procesando carga de ${selectedPedidos.length} pedidos para repartidor ${deliveryPersonCode}`);
 
-      // LLAMADA AL SERVICIO CON ARRAY VALIDADO
+      // ✅ USAR ESTA LÍNEA EN SU LUGAR
+      logger.info(
+        `Procesando carga de ${selectedPedidos.length} pedidos para repartidor ${deliveryPersonCode}`
+      );
+
+      // LLAMADA AL SERVICIO
       const result = await LoadsService.processOrderLoad(
         deliveryPersonCode.trim(),
-        pedidosArray,
+        selectedPedidos,
         userId
       );
 
@@ -247,21 +165,10 @@ class LoadsController {
       });
     } catch (error) {
       logger.error("Error en processOrderLoad:", error);
-
-      // Información adicional de debug en desarrollo
-      const debugInfo =
-        process.env.NODE_ENV === "development"
-          ? {
-              originalBody: req.body,
-              errorStack: error.stack,
-            }
-          : {};
-
       res.status(500).json({
         success: false,
         message: "Error al procesar la carga",
         error: error.message,
-        ...debugInfo,
       });
     }
   }
