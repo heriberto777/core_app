@@ -305,16 +305,16 @@ class LoadsService {
   }
 
   /**
-   * PROCESO PRINCIPAL con mejor manejo de conexiones
+   * PROCESO PRINCIPAL: Procesa carga de pedidos SIN validación de traspaso
    */
   static async processOrderLoad(deliveryPersonCode, selectedPedidos, userId) {
     let loadTracking = null;
 
     try {
       logger.info(
-        `Iniciando proceso de carga para repartidor: ${deliveryPersonCode}`
+        `🚀 Iniciando proceso de carga para repartidor: ${deliveryPersonCode}`
       );
-      logger.info(`Pedidos seleccionados: ${selectedPedidos.join(", ")}`);
+      logger.info(`📦 Pedidos seleccionados: ${selectedPedidos.join(", ")}`);
 
       // 1. Validar repartidor y obtener bodega destino
       const deliveryPerson = await this.validateDeliveryPerson(
@@ -324,33 +324,41 @@ class LoadsService {
 
       // 2. Generar loadId único
       const loadId = await this.generateLoadId();
-      logger.info(`LoadId generado: ${loadId}`);
+      logger.info(`📖 LoadId generado: ${loadId}`);
+
+      // 3. Crear tracking inicial
+      loadTracking = await this.createLoadTracking(
+        loadId,
+        deliveryPersonCode,
+        "MULTIPLE",
+        selectedPedidos.length,
+        userId
+      );
 
       let ordersData = null;
       let step = "";
 
       try {
-        // ✅ USAR UNA SOLA CONEXIÓN PARA TODO EL PROCESO SERVER1
         return await withConnection("server1", async (server1Connection) => {
           // PASO 1: Actualizar U_Code_Load en PEDIDO
           step = "updatePedidosWithLoadId";
-          logger.info(`${step}: Actualizando pedidos con loadId...`);
+          logger.info(`📄 ${step}: Actualizando pedidos con loadId...`);
           await this.updatePedidosWithLoadId(
             server1Connection,
             selectedPedidos,
             loadId
           );
-          logger.info(`${step}: Completado exitosamente`);
+          logger.info(`✅ ${step}: Completado exitosamente`);
 
           // PASO 2: Obtener datos transformados
           step = "getTransformedOrdersData";
-          logger.info(`${step}: Obteniendo datos transformados...`);
+          logger.info(`📄 ${step}: Obteniendo datos transformados...`);
           ordersData = await this.getTransformedOrdersData(
             server1Connection,
             selectedPedidos,
             loadId
           );
-          logger.info(`${step}: ${ordersData.length} registros obtenidos`);
+          logger.info(`✅ ${step}: ${ordersData.length} registros obtenidos`);
 
           // PASO 3: Preparar datos de traspaso
           const traspasoData = this.prepareTraspasoData(
@@ -358,63 +366,69 @@ class LoadsService {
             bodegaDestino
           );
 
-          // PASO 4-5: Insertar en server2 CON NUEVA CONEXIÓN
+          // PASOS 4 y 5: Insertar en server2
           await withConnection("server2", async (server2Connection) => {
             // PASO 4: Insertar en IMPLT_Orders
             step = "insertToIMPLTOrders";
-            logger.info(`${step}: Insertando en IMPLT_Orders...`);
+            logger.info(`📥 ${step}: Insertando en IMPLT_Orders...`);
             await this.insertToIMPLTOrders(server2Connection, ordersData);
-            logger.info(`${step}: Completado exitosamente`);
+            logger.info(`✅ ${step}: Completado exitosamente`);
 
             // PASO 5: Insertar en IMPLT_loads_detail
             step = "insertToIMPLTLoadsDetail";
-            logger.info(`${step}: Insertando en IMPLT_loads_detail...`);
+            logger.info(`📥 ${step}: Insertando en IMPLT_loads_detail...`);
             await this.insertToIMPLTLoadsDetail(
               server2Connection,
               loadId,
               deliveryPersonCode,
               ordersData
             );
-            logger.info(`${step}: Completado exitosamente`);
-          });
+            logger.info(`✅ ${step}: Completado exitosamente`);
 
-          // PASO 6: VALIDAR TRASPASO (usar la misma conexión server1)
-          step = "validarTraspaso";
-          logger.info(`${step}: Validando datos para traspaso...`);
+            // PASO 6: Ejecutar traspaso automático DIRECTAMENTE
+            step = "realizarTraspaso";
+            logger.info(`📄 ${step}: Ejecutando traspaso de inventario...`);
 
-          const { validateTraspasoData } = require("./traspasoService");
+            const { realizarTraspaso } = require("./traspasoService");
+            const traspasoResult = await realizarTraspaso({
+              route: deliveryPersonCode,
+              salesData: traspasoData,
+              bodega_destino: bodegaDestino,
+            });
 
-          const validation = await validateTraspasoData(
-            traspasoData,
-            deliveryPersonCode,
-            bodegaDestino,
-            server1Connection // ✅ PASAR LA CONEXIÓN EXISTENTE
-          );
-
-          if (!validation.isValid) {
-            logger.warn(
-              `Validación de traspaso falló: ${validation.errors.join(", ")}`
+            logger.info(
+              `✅ ${step}: Traspaso completado - Documento: ${traspasoResult.documento_inv}`
             );
 
-            // Marcar pedidos como procesados pero pendientes de traspaso
-            step = "updateEstadoProcesoPendiente";
+            // PASO 7: Actualizar U_estado_proceso = 'S' (TODO EXITOSO)
+            step = "updateEstadoProceso";
             logger.info(
-              `${step}: Marcando pedidos como procesados - traspaso pendiente...`
+              `📄 ${step}: Marcando pedidos como procesados exitosamente...`
             );
             await this.updateEstadoProceso(
               server1Connection,
               selectedPedidos,
-              "P"
+              "S"
             );
-            logger.info(
-              `${step}: Pedidos marcados como procesados - traspaso pendiente`
+            logger.info(`✅ ${step}: Pedidos marcados como procesados`);
+
+            // PASO 8: Actualizar tracking como completado
+            await LoadTracking.findOneAndUpdate(
+              { loadId },
+              {
+                status: "completed",
+                processedOrders: selectedPedidos.length,
+                traspasoDocument: traspasoResult.documento_inv,
+                traspasoStatus: "completed",
+                warehouseOrigin: "MULTIPLE",
+                warehouseDestination: bodegaDestino,
+                updatedAt: new Date(),
+              }
             );
 
             return {
               success: true,
-              requiresManualTransfer: true,
-              message:
-                "Carga procesada exitosamente. Traspaso requiere intervención manual debido a errores de validación",
+              message: "Proceso de carga completado exitosamente",
               data: {
                 loadId,
                 deliveryPerson: {
@@ -424,99 +438,60 @@ class LoadsService {
                 },
                 ordersProcessed: selectedPedidos.length,
                 linesProcessed: ordersData.length,
-                validation: {
-                  isValid: false,
-                  errors: validation.errors,
-                  warnings: validation.warnings,
-                },
                 traspaso: {
-                  status: "manual_required",
-                  message: "Validación falló - Se requiere traspaso manual",
+                  documento: traspasoResult.documento_inv,
+                  success: traspasoResult.success,
+                  lineasProcesadas: traspasoResult.totalLineas,
+                  lineasExitosas: traspasoResult.lineasExitosas,
                 },
               },
             };
-          }
-
-          logger.info(
-            `${step}: Validación exitosa, procediendo con traspaso automático`
-          );
-
-          // PASO 7: Ejecutar traspaso automático
-          step = "realizarTraspaso";
-          logger.info(`${step}: Ejecutando traspaso de inventario...`);
-
-          const { realizarTraspaso } = require("./traspasoService");
-          const traspasoResult = await realizarTraspaso({
-            route: deliveryPersonCode,
-            salesData: traspasoData,
-            bodega_destino: bodegaDestino,
           });
-
-          logger.info(
-            `${step}: Traspaso completado - Documento: ${traspasoResult.documento_inv}`
-          );
-
-          // PASO 8: Actualizar U_estado_proceso = 'S'
-          step = "updateEstadoProceso";
-          logger.info(
-            `${step}: Marcando pedidos como procesados exitosamente...`
-          );
-          await this.updateEstadoProceso(
-            server1Connection,
-            selectedPedidos,
-            "S"
-          );
-          logger.info(`${step}: Pedidos marcados como procesados`);
-
-          return {
-            success: true,
-            message: "Proceso de carga completado exitosamente",
-            data: {
-              loadId,
-              deliveryPerson: {
-                code: deliveryPersonCode,
-                name: deliveryPerson.name,
-                warehouse: bodegaDestino,
-              },
-              ordersProcessed: selectedPedidos.length,
-              linesProcessed: ordersData.length,
-              traspaso: {
-                documento: traspasoResult.documento_inv,
-                success: traspasoResult.success,
-                lineasProcesadas: traspasoResult.totalLineas,
-                lineasExitosas: traspasoResult.lineasExitosas,
-              },
-            },
-          };
         });
       } catch (error) {
-        logger.error(`Error en paso ${step}:`, error);
+        logger.error(`❌ Error en paso ${step}:`, error);
 
-        // ROLLBACK simplificado
+        // ROLLBACK: Si algo falla, marcar como error y limpiar
         try {
+          if (loadTracking) {
+            await LoadTracking.findOneAndUpdate(
+              { loadId: loadTracking.loadId },
+              {
+                status: "error",
+                errorMessage: error.message,
+                failedStep: step,
+                warehouseOrigin: "MULTIPLE",
+                warehouseDestination: bodegaDestino,
+                updatedAt: new Date(),
+              }
+            );
+          }
+
+          // Si ya se actualizó U_Code_Load pero falló después, limpiar
           if (
             [
               "getTransformedOrdersData",
               "insertToIMPLTOrders",
               "insertToIMPLTLoadsDetail",
-              "validarTraspaso",
               "realizarTraspaso",
               "updateEstadoProceso",
             ].includes(step)
           ) {
             await withConnection("server1", async (connection) => {
               await this.clearLoadIdFromPedidos(connection, selectedPedidos);
-              logger.info("LoadId removido de pedidos debido a fallo");
+              logger.info("📄 LoadId removido de pedidos debido a fallo");
             });
           }
+
+          logger.info("📄 Rollback completado");
         } catch (rollbackError) {
-          logger.error("Error durante rollback:", rollbackError);
+          logger.error("❌ Error durante rollback:", rollbackError);
         }
 
         throw error;
       }
     } catch (error) {
-      logger.error("Error general en processOrderLoad:", error);
+      logger.error("❌ Error general en processOrderLoad:", error);
       throw error;
     }
   }
