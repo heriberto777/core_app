@@ -756,7 +756,7 @@ function getTraspasoConfig() {
     consecutivo_prefix: "TR",
     tipo_documento: "TI",
     subtipo: "D",
-    subsubtipo: "", // ✅ String vacío como en tu BD
+    subsubtipo: "0",
     ajuste_config: "~TT~",
     tipo_operacion: "11",
     tipo_pago: "ND",
