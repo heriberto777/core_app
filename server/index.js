@@ -107,28 +107,114 @@ const isPortInUse = async (port) => {
 // Función para iniciar el servidor con un puerto
 const startServerWithPort = async (serverPort) => {
   try {
-    // Verificar si existen certificados SSL
-    const keyPath = path.join(__dirname, "cert", "server.key");
-    const certPath = path.join(__dirname, "cert", "server.crt");
-    const hasSSLCerts = fs.existsSync(keyPath) && fs.existsSync(certPath);
+    console.log(`Intentando iniciar servidor en puerto ${serverPort}...`);
 
-    let server;
-    let protocol;
+    // ⭐ DEBUGGING MEJORADO ⭐
+    console.log("🔍 DEBUG - Variables de entorno:");
+    console.log("NODE_ENV:", process.env.NODE_ENV);
+    console.log("SSL_PATH:", process.env.SSL_PATH);
+    console.log("isDev:", isDev);
+    console.log("isWindows:", isWindows);
 
-    // Configurar servidor HTTPS en producción o si hay certificados
-    if (!isDev && hasSSLCerts) {
-      const options = {
-        key: fs.readFileSync(keyPath),
-        cert: fs.readFileSync(certPath),
-      };
-      server = https.createServer(options, app);
-      protocol = "https";
-      console.log("🔒 Iniciando servidor HTTPS (Producción)");
+    // Inicializar todos los servicios a través del bootstrap
+    console.log("Inicializando servicios...");
+    const bootstrapResult = await AppBootstrap.initialize();
+
+    if (!bootstrapResult.success) {
+      console.warn(
+        "⚠️ Inicialización completada con advertencias, verificar logs"
+      );
     } else {
-      server = http.createServer(app);
-      protocol = "http";
-      console.log("🌐 Iniciando servidor HTTP (Desarrollo)");
+      console.log("✅ Servicios inicializados correctamente");
     }
+
+    // Determinar si podemos usar SSL
+    const sslPath =
+      process.env.SSL_PATH || "/etc/letsencrypt/live/catelli.ddns.net";
+
+    // ⭐ DEBUGGING SSL ⭐
+    console.log("🔍 DEBUG - Estado SSL:");
+    console.log("sslPath:", sslPath);
+    console.log("privkey.pem exists:", fs.existsSync(`${sslPath}/privkey.pem`));
+    console.log(
+      "fullchain.pem exists:",
+      fs.existsSync(`${sslPath}/fullchain.pem`)
+    );
+    console.log("chain.pem exists:", fs.existsSync(`${sslPath}/chain.pem`));
+
+    const hasSSLCerts =
+      !isWindows &&
+      fs.existsSync(`${sslPath}/privkey.pem`) &&
+      fs.existsSync(`${sslPath}/fullchain.pem`);
+
+    console.log("hasSSLCerts:", hasSSLCerts);
+
+    console.log(
+      `Modo: ${isDev ? "desarrollo" : "producción"}, Sistema: ${
+        isWindows ? "Windows" : "Linux/Unix"
+      }`
+    );
+    console.log(`SSL disponible: ${hasSSLCerts ? "Sí" : "No"}`);
+
+    // Iniciar el servidor HTTP o HTTPS
+    let server;
+
+    // ⭐ LÓGICA MEJORADA PARA FORZAR HTTPS ⭐
+    if (hasSSLCerts) {
+      // SIEMPRE usar HTTPS si hay certificados SSL disponibles
+      try {
+        console.log("🔒 Cargando certificados SSL para HTTPS...");
+
+        const privateKey = fs.readFileSync(`${sslPath}/privkey.pem`, "utf8");
+        const certificate = fs.readFileSync(`${sslPath}/fullchain.pem`, "utf8");
+
+        // chain.pem es opcional, algunos setups no lo necesitan
+        let ca = null;
+        if (fs.existsSync(`${sslPath}/chain.pem`)) {
+          ca = fs.readFileSync(`${sslPath}/chain.pem`, "utf8");
+        }
+
+        const credentials = {
+          key: privateKey,
+          cert: certificate,
+          ...(ca && { ca }), // Solo agregar ca si existe
+        };
+
+        console.log("✅ Certificados SSL cargados correctamente");
+        console.log("🚀 Creando servidor HTTPS...");
+
+        server = https.createServer(credentials, app);
+
+        console.log("🔒 Servidor HTTPS configurado exitosamente");
+      } catch (sslError) {
+        // Fallback a HTTP si falla SSL
+        console.error("❌ Error al configurar HTTPS:", sslError.message);
+        console.log("📋 Detalles del error SSL:", sslError);
+        console.log("⚠️ Fallback a HTTP debido a error en SSL...");
+        server = http.createServer(app);
+      }
+    } else {
+      // HTTP solo si no hay certificados SSL o estamos en Windows
+      if (isWindows) {
+        console.log("🌐 Iniciando servidor HTTP (Windows detectado)...");
+      } else {
+        console.log("🌐 Iniciando servidor HTTP (sin certificados SSL)...");
+      }
+      server = http.createServer(app);
+    }
+
+    // Configurar eventos del servidor
+    server.on("error", (err) => {
+      if (err.code === "EADDRINUSE") {
+        console.error(
+          `❌ Puerto ${serverPort} en uso, intentando otro puerto...`
+        );
+        setTimeout(() => startServerWithPort(serverPort + 1), 1000);
+      } else {
+        console.error("❌ Error en servidor:", err);
+        logger.error("Error en servidor:", err);
+      }
+    });
 
     return new Promise((resolve, reject) => {
       server.listen(serverPort, () => {
