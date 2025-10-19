@@ -1106,51 +1106,72 @@ class LoadsService {
   }
 
   /**
-   * Inserta datos en IMPLT_loads_detail
+   * Inserta datos en IMPLT_loads_detail con bodegas origen reales
    */
-  static async insertToIMPLTLoadsDetail(
-    connection,
-    loadId,
-    route,
-    warehouse,
-    ordersData
-  ) {
+  static async insertToIMPLTLoadsDetail(connection, loadId, route, ordersData) {
     logger.info(
       `📥 Insertando registros en IMPLT_loads_detail para load: ${loadId}`
     );
 
-    // Agrupar por producto para consolidar cantidades
+    // ✅ VALIDACIÓN DEFENSIVA
+    if (!ordersData || !Array.isArray(ordersData)) {
+      throw new Error(
+        `ordersData debe ser un array válido. Recibido: ${typeof ordersData}`
+      );
+    }
+
+    if (ordersData.length === 0) {
+      logger.warn(`No hay ordersData para procesar en loadId: ${loadId}`);
+      return;
+    }
+
+    // Agrupar por producto Y bodega origen (mantener origen separado)
     const productMap = new Map();
 
     ordersData.forEach((order) => {
-      const key = order.Code_Product;
+      // ✅ VALIDACIÓN DEFENSIVA
+      if (!order || !order.Code_Product) {
+        logger.warn(`Orden inválida encontrada:`, order);
+        return;
+      }
+
+      const bodegaOrigen = order.Code_Warehouse_Orig || order.bodega || "01";
+      const key = `${order.Code_Product}_${bodegaOrigen}`;
+
       if (productMap.has(key)) {
         const existing = productMap.get(key);
-        existing.Quantity += order.Quantity;
+        existing.Quantity += order.Quantity || 0;
       } else {
         productMap.set(key, {
           Code_Product: order.Code_Product,
-          Quantity: order.Quantity,
-          Unit_Measure: order.Unit_Measure,
+          Quantity: order.Quantity || 0,
+          Unit_Measure: order.Unit_Measure || "UND",
           Order_Date: order.Order_Date,
+          Code_Warehouse_Orig: route,
         });
       }
     });
 
+    if (productMap.size === 0) {
+      throw new Error(
+        `No se pudieron procesar productos válidos de ordersData`
+      );
+    }
+
     // Insertar líneas consolidadas
     let lineNumber = 1;
-    for (const [productCode, productData] of productMap) {
+    for (const [productKey, productData] of productMap) {
       const query = `
-        INSERT INTO dbo.IMPLT_loads_detail (
-          Code, Num_Line, Lot_Group,
-          Code_Product, Date_Load, Quantity, Unit_Type, Code_Warehouse_Sou,
-          Code_Route, Source_Create, Transfer_status
-        ) VALUES (
-          @Code, @Num_Line, @Lot_Group,
-          @Code_Product, @Date_Load, @Quantity, @Unit_Type, @Code_Warehouse_Sou,
-          @Code_Route, @Source_Create, @Transfer_status
-        )
-      `;
+      INSERT INTO dbo.IMPLT_loads_detail (
+        Code, Num_Line, Lot_Group,
+        Code_Product, Date_Load, Quantity, Unit_Type, Code_Warehouse_Sou,
+        Code_Route, Source_Create, Transfer_status
+      ) VALUES (
+        @Code, @Num_Line, @Lot_Group,
+        @Code_Product, @Date_Load, @Quantity, @Unit_Type, @Code_Warehouse_Sou,
+        @Code_Route, @Source_Create, @Transfer_status
+      )
+    `;
 
       const params = {
         Code: loadId,
@@ -1160,14 +1181,22 @@ class LoadsService {
         Date_Load: productData.Order_Date,
         Quantity: productData.Quantity,
         Unit_Type: "UND",
-        Code_Warehouse_Sou: warehouse,
+        Code_Warehouse_Sou: route,
         Code_Route: route,
         Source_Create: "0",
         Transfer_status: "1",
       };
 
-      await SqlService.query(connection, query, params);
-      lineNumber++;
+      try {
+        await SqlService.query(connection, query, params);
+        lineNumber++;
+      } catch (error) {
+        logger.error(
+          `Error insertando línea ${lineNumber} para producto ${productData.Code_Product}:`,
+          error
+        );
+        throw error;
+      }
     }
 
     logger.info(
