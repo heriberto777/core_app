@@ -1,6 +1,6 @@
 // services/healthMonitorService.js
 const logger = require("./logger");
-const ConnectionService = require("./ConnectionCentralService");
+const ConnectionCentralService = require("./ConnectionCentralService");
 const MongoDbService = require("./mongoDbService");
 const ConnectionDiagnostic = require("./connectionDiagnostic");
 
@@ -120,7 +120,7 @@ async function checkSystemHealth() {
     // 2. Verificar estado de los pools
     let poolStatus = {};
     try {
-      poolStatus = ConnectionService.getConnectionStats();
+      poolStatus = ConnectionCentralService.getConnectionStats();
     } catch (error) {
       logger.warn("Error al obtener estado de pools:", error);
       poolStatus = {};
@@ -133,8 +133,8 @@ async function checkSystemHealth() {
 
       let initialized = false;
       try {
-        await ConnectionService.initPool("server1");
-        await ConnectionService.initPool("server2");
+        await ConnectionCentralService.initPool("server1");
+        await ConnectionCentralService.initPool("server2");
         initialized = true;
       } catch (initError) {
         logger.error("Error al inicializar pools:", initError);
@@ -243,7 +243,7 @@ async function attemptDatabaseRecovery() {
 
     // 2. Reiniciar pools de conexión
     try {
-      await ConnectionService.closePools();
+      await ConnectionCentralService.closePools();
       logger.info("Pools cerrados correctamente");
     } catch (closeError) {
       logger.error("Error al cerrar pools:", closeError);
@@ -251,8 +251,8 @@ async function attemptDatabaseRecovery() {
 
     let poolsInitialized = false;
     try {
-      await ConnectionService.initPool("server1");
-      await ConnectionService.initPool("server2");
+      await ConnectionCentralService.initPool("server1");
+      await ConnectionCentralService.initPool("server2");
       poolsInitialized = true;
     } catch (initError) {
       logger.error("Error al inicializar pools:", initError);
@@ -326,7 +326,7 @@ async function attemptConnectionRecovery() {
   try {
     // 1. Cerrar pools existentes
     try {
-      await ConnectionService.closePools();
+      await ConnectionCentralService.closePools();
       logger.info("Pools cerrados correctamente");
     } catch (closeError) {
       logger.error("Error al cerrar pools:", closeError);
@@ -338,8 +338,8 @@ async function attemptConnectionRecovery() {
     // 3. Reinicializar pools
     let poolsInitialized = false;
     try {
-      await ConnectionService.initPool("server1");
-      await ConnectionService.initPool("server2");
+      await ConnectionCentralService.initPool("server1");
+      await ConnectionCentralService.initPool("server2");
       poolsInitialized = true;
     } catch (initError) {
       logger.error("Error al inicializar pools:", initError);
@@ -426,7 +426,7 @@ async function performFullDiagnostic() {
     // 4. Verificar estado de pools
     let poolStatus = {};
     try {
-      poolStatus = ConnectionService.getConnectionStats();
+      poolStatus = ConnectionCentralService.getConnectionStats();
     } catch (poolError) {
       logger.warn("Error al obtener estado de pools:", poolError);
       poolStatus = { error: poolError.message };
