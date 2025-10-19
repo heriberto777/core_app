@@ -406,7 +406,7 @@ class LoadsService {
 
               // ⭐ GUARDAR EN TABLAS DE TRACKING PARA INTERVENCIÓN MANUAL ⭐
               const trackingId = await this.saveFailedTraspasoTracking(
-                server2Connection,
+                server1Connection,
                 {
                   loadId,
                   deliveryPersonCode,
