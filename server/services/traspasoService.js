@@ -174,15 +174,26 @@ async function validateTraspasoData(salesData, route, bodega_destino) {
 
       // Validar cada producto agrupado
       for (const [codigo, cantidad] of Object.entries(productos)) {
-        const productValidation = await validateProduct(connection, {
-          Code_Product: codigo,
-          Quantity: cantidad
-        }, bodegaOrigen);
+        const productValidation = await validateProduct(
+          connection,
+          {
+            Code_Product: codigo,
+            Quantity: cantidad,
+          },
+          bodegaOrigen // ← Este parámetro estaba en la posición incorrecta
+        );
 
         validation.productos.push(productValidation);
 
+        // Verificar si hay errores
         if (!productValidation.isValid) {
           validation.isValid = false;
+          validation.errors.push(...productValidation.errors);
+        }
+
+        // Agregar advertencias
+        if (productValidation.warnings.length > 0) {
+          validation.warnings.push(...productValidation.warnings);
         }
       }
 
