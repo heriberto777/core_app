@@ -269,7 +269,7 @@ export function LoadsManagement() {
 
  const fetchDeliveryPersonsCallback = useCallback(async () => {
    if (!canRead) return { data: [] };
-   return await loadsApi.getDeliveryPersons(accessToken);
+   return await loadsApi.getSellers(accessToken);
  }, [accessToken, canRead]);
 
   // Fetch de datos
