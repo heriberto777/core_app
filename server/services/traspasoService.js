@@ -324,8 +324,7 @@ async function validateProduct(connection, product, bodegaOrigen) {
         ARTICULO,
         DESCRIPCION,
         UNIDAD_ALMACEN,
-        ACTIVO,
-        TIPO
+        ACTIVO
       FROM CATELLI.ARTICULO
       WHERE ARTICULO = @articulo
     `;
