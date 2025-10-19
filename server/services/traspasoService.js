@@ -909,7 +909,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
             cantidad: producto.cantidad,
             tipo: "T",
             subtipo: config.subtipo,
-            subsubtipo: '',
+            subsubtipo: config.subsubtipo || "",
             costo_total_local: 0,
             costo_total_dolar: 0,
             precio_total_local: 0,
@@ -936,7 +936,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
                COSTO_TOTAL_LOCAL_COMP, COSTO_TOTAL_DOLAR_COMP, CAI, TIPO_OPERACION, TIPO_PAGO, LOCALIZACION)
             VALUES
               (@paquete, @documento_inv, @linea, @ajuste, @articulo,
-               @bodega, @bodega_destino, @cantidad, @tipo, @subtipo, @subsubtipo,
+               @bodega, @bodega_destino, @cantidad, @tipo, @subtipo, ISNULL(@subsubtipo, ''),
                @costo_total_local, @costo_total_dolar, @precio_total_local, @precio_total_dolar,
                @localizacion_dest, @centro_costo, @secuencia, @unidad_distribucio, @cuenta_contable,
                @costo_total_local_comp, @costo_total_dolar_comp, @cai, @tipo_operacion, @tipo_pago, @localizacion)
