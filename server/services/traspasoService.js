@@ -305,7 +305,7 @@ async function validateBodegas(connection, bodegaOrigen, bodegaDestino) {
 }
 
 /**
- * Valida un producto individual para el traspaso
+ * Valida un producto individual para el traspaso - CORREGIDO
  */
 async function validateProduct(connection, product, bodegaOrigen) {
   const validation = {
@@ -318,18 +318,14 @@ async function validateProduct(connection, product, bodegaOrigen) {
   };
 
   try {
-    // Verificar que el producto existe y obtener información completa
+    // Verificar que el producto existe y obtener información disponible
     const productQuery = `
       SELECT
         ARTICULO,
         DESCRIPCION,
         UNIDAD_ALMACEN,
         ACTIVO,
-        TIPO,
-        SUBTIPO,
-        SUBSUBTIPO,
-        CUENTA_INVENTARIO,
-        COSTO_PROMEDIO
+        TIPO
       FROM CATELLI.ARTICULO
       WHERE ARTICULO = @articulo
     `;
@@ -347,12 +343,7 @@ async function validateProduct(connection, product, bodegaOrigen) {
     const productInfo = result.recordset[0];
     validation.productInfo = productInfo;
 
-    // Validar campos críticos para el traspaso
-    if (!productInfo.SUBSUBTIPO || productInfo.SUBSUBTIPO.trim() === '') {
-      validation.isValid = false;
-      validation.errors.push('SUBSUBTIPO no configurado - requerido para inserción en LINEA_DOC_INV');
-    }
-
+    // Validar campos críticos disponibles
     if (productInfo.ACTIVO !== 'S') {
       validation.isValid = false;
       validation.errors.push('Producto inactivo');
@@ -361,10 +352,6 @@ async function validateProduct(connection, product, bodegaOrigen) {
     if (!productInfo.UNIDAD_ALMACEN || productInfo.UNIDAD_ALMACEN.trim() === '') {
       validation.isValid = false;
       validation.errors.push('Unidad de medida no configurada');
-    }
-
-    if (!productInfo.CUENTA_INVENTARIO || productInfo.CUENTA_INVENTARIO.trim() === '') {
-      validation.warnings.push('Cuenta contable de inventario no configurada - se usará por defecto');
     }
 
     // Verificar existencias en bodega origen
@@ -483,19 +470,19 @@ async function saveFailedTraspasoRecord(route, validation, reportResult, loadId 
  */
 function getTraspasoConfig() {
   return {
-    paquete_inventario: 'CS',
-    consecutivo_prefix: 'TR',
-    tipo_documento: 'TI',
-    subtipo: 'D',
-    subsubtipo: '001', // Valor por defecto para evitar NULL
-    ajuste_config: '~TT~',
-    tipo_operacion: '11',
-    tipo_pago: 'ND',
-    centro_costo: '00-00-00',
-    cuenta_contable_default: '100-01-05-99-00',
-    localizacion_default: 'ND',
-    unidad_distribucion_default: 'UND',
-    usuario_default: 'SA'
+    paquete_inventario: "CS",
+    consecutivo_prefix: "TR",
+    tipo_documento: "TI",
+    subtipo: "D",
+    subsubtipo: "", // ✅ String vacío como en tu BD
+    ajuste_config: "~TT~",
+    tipo_operacion: "11",
+    tipo_pago: "ND",
+    centro_costo: "00-00-00",
+    cuenta_contable_default: "100-01-05-99-00",
+    localizacion_default: "ND",
+    unidad_distribucion_default: "UND",
+    usuario_default: "SA",
   };
 }
 
@@ -692,13 +679,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
           const lineaNumero = i + 1;
 
           try {
-            // Usar la validación para obtener SUBSUBTIPO correcto
-            const productValidation = validation.productos.find(
-              (p) => p.Code_Product === producto.codigo
-            );
-            const subsubtipo =
-              productValidation?.productInfo?.SUBSUBTIPO || config.subsubtipo;
-
+            // ✅ USAR STRING VACÍO PARA SUBSUBTIPO (valor más común en tu BD)
             const lineaParams = {
               paquete: config.paquete_inventario,
               documento_inv: nuevoConsecutivo,
@@ -710,7 +691,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
               cantidad: producto.cantidad,
               tipo: "T",
               subtipo: config.subtipo,
-              subsubtipo: subsubtipo, // Usar el valor validado
+              subsubtipo: '', // ✅ String vacío como en tu BD
               costo_total_local: 0,
               costo_total_dolar: 0,
               precio_total_local: 0,
@@ -719,9 +700,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
               centro_costo: config.centro_costo,
               secuencia: "",
               unidad_distribucio: config.unidad_distribucion_default,
-              cuenta_contable:
-                productValidation?.productInfo?.CUENTA_INVENTARIO ||
-                config.cuenta_contable_default,
+              cuenta_contable: config.cuenta_contable_default,
               costo_total_local_comp: 0,
               costo_total_dolar_comp: 0,
               cai: "",
@@ -773,7 +752,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
                    COSTO_TOTAL_LOCAL_COMP, COSTO_TOTAL_DOLAR_COMP, CAI, TIPO_OPERACION, TIPO_PAGO, LOCALIZACION)
                 VALUES
                   ('${config.paquete_inventario}', '${nuevoConsecutivo}', ${lineaNumero}, '${config.ajuste_config}', '${codigoProducto}',
-                   '${bodegaOrigen}', '${bodega_destino}', ${producto.cantidad}, 'T', '${config.subtipo}', '${config.subsubtipo}',
+                   '${bodegaOrigen}', '${bodega_destino}', ${producto.cantidad}, 'T', '${config.subtipo}', '',
                    0, 0, 0, 0,
                    '${config.localizacion_default}', '${config.centro_costo}', '', '${config.unidad_distribucion_default}', '${config.cuenta_contable_default}',
                    0, 0, '', '${config.tipo_operacion}', '${config.tipo_pago}', '${config.localizacion_default}')
@@ -852,7 +831,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
 
           await summary.save();
           logger.info(
-            `✅ Resumen de traspaso guardado con éxito para documento ${nuevoConsecutivo}`
+            `Resumen de traspaso guardado con éxito para documento ${nuevoConsecutivo}`
           );
 
           resultado.summaryId = summary._id;
