@@ -329,7 +329,19 @@ async function validateProduct(connection, product, bodegaOrigen) {
   };
 
   try {
-    // Verificar que el producto existe y obtener información disponible
+    // DEBUG: Verificar estado de conexión
+    logger.info(
+      `🔍 validateProduct - Producto: ${product.Code_Product}, Conexión state: ${connection?.state}`
+    );
+
+    // DEBUG: Verificar parámetro
+    const articulo = product.Code_Product;
+    logger.info(
+      `🔍 validateProduct - Parámetro articulo: "${articulo}", tipo: ${typeof articulo}, length: ${
+        articulo?.length
+      }`
+    );
+
     const productQuery = `
       SELECT
         ARTICULO,
@@ -340,28 +352,35 @@ async function validateProduct(connection, product, bodegaOrigen) {
       WHERE ARTICULO = @articulo
     `;
 
-    const result = await SqlService.query(connection, productQuery, {
-      articulo: product.Code_Product
-    });
+    const params = { articulo: articulo };
+    logger.info(`🔍 validateProduct - Params object:`, params);
 
+    const result = await SqlService.query(connection, productQuery, params);
+
+    logger.info(`🔍 validateProduct - Query exitosa para ${articulo}`);
+
+    // Resto de tu lógica...
     if (!result.recordset || result.recordset.length === 0) {
       validation.isValid = false;
-      validation.errors.push('Producto no encontrado en el catálogo');
+      validation.errors.push("Producto no encontrado en el catálogo");
       return validation;
     }
 
     const productInfo = result.recordset[0];
     validation.productInfo = productInfo;
 
-    // Validar campos críticos disponibles
-    if (productInfo.ACTIVO !== 'S') {
+    // Validaciones del producto
+    if (productInfo.ACTIVO !== "S") {
       validation.isValid = false;
-      validation.errors.push('Producto inactivo');
+      validation.errors.push("Producto inactivo");
     }
 
-    if (!productInfo.UNIDAD_ALMACEN || productInfo.UNIDAD_ALMACEN.trim() === '') {
+    if (
+      !productInfo.UNIDAD_ALMACEN ||
+      productInfo.UNIDAD_ALMACEN.trim() === ""
+    ) {
       validation.isValid = false;
-      validation.errors.push('Unidad de medida no configurada');
+      validation.errors.push("Unidad de medida no configurada");
     }
 
     // Verificar existencias en bodega origen
@@ -373,7 +392,7 @@ async function validateProduct(connection, product, bodegaOrigen) {
 
     const stockResult = await SqlService.query(connection, stockQuery, {
       articulo: product.Code_Product,
-      bodega: bodegaOrigen
+      bodega: bodegaOrigen,
     });
 
     const currentStock = stockResult.recordset[0]?.stock || 0;
@@ -385,9 +404,8 @@ async function validateProduct(connection, product, bodegaOrigen) {
     }
 
     if (currentStock === 0) {
-      validation.warnings.push('No hay existencias en bodega origen');
+      validation.warnings.push("No hay existencias en bodega origen");
     }
-
   } catch (error) {
     validation.isValid = false;
     validation.errors.push(`Error de validación de producto: ${error.message}`);
