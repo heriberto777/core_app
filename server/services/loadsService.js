@@ -591,7 +591,7 @@ class LoadsService {
   }
 
   /**
-   * ⭐ NUEVO MÉTODO: Guarda traspaso fallido en tablas de tracking ⭐
+   * Guarda traspaso fallido en tablas de tracking - SIMPLIFICADO
    */
   static async saveFailedTraspasoTracking(connection, data) {
     const {
@@ -607,34 +607,33 @@ class LoadsService {
     } = data;
 
     try {
-      // 1. Insertar en IMPLT_traspaso_tracking
+      // 1. Insertar en IMPLT_traspaso_tracking - SIN created_at ni created_by
       const insertTrackingQuery = `
       INSERT INTO dbo.IMPLT_traspaso_tracking (
         load_id, delivery_person_code, delivery_person_name,
         warehouse_origin, warehouse_destination, status,
-        error_message, validation_report, total_products,
-        created_by, created_at
+        error_message, validation_report, total_products
       )
       OUTPUT INSERTED.id
       VALUES (
         @load_id, @delivery_person_code, @delivery_person_name,
         @warehouse_origin, @warehouse_destination, @status,
-        @error_message, @validation_report, @total_products,
-        @created_by, GETDATE()
+        @error_message, @validation_report, @total_products
       )
     `;
 
       const trackingParams = {
-        load_id: loadId,
-        delivery_person_code: deliveryPersonCode,
-        delivery_person_name: deliveryPersonName,
-        warehouse_origin: warehouseOrigin,
-        warehouse_destination: warehouseDestination,
+        load_id: loadId || "N/A",
+        delivery_person_code: deliveryPersonCode || "N/A",
+        delivery_person_name: deliveryPersonName || "N/A",
+        warehouse_origin: warehouseOrigin || "01",
+        warehouse_destination: warehouseDestination || "02",
         status: "validation_failed",
-        error_message: validation.errors.slice(0, 500).join("; "),
-        validation_report: JSON.stringify(validation),
-        total_products: ordersData.length,
-        created_by: userId,
+        error_message:
+          validation.errors?.slice(0, 500).join("; ") || "Error de validación",
+        validation_report: JSON.stringify(validation).substring(0, 1000),
+        total_products: ordersData?.length || 0,
+        // created_by y created_at usarán sus valores DEFAULT
       };
 
       const trackingResult = await SqlService.query(
@@ -644,68 +643,71 @@ class LoadsService {
       );
       const trackingId = trackingResult.recordset[0].id;
 
-      logger.info(`✅ Tracking insertado con ID: ${trackingId}`);
+      logger.info(`Tracking insertado con ID: ${trackingId}`);
 
-      // 2. Insertar detalles de productos en IMPLT_traspaso_detail
-      for (let i = 0; i < ordersData.length; i++) {
-        const product = ordersData[i];
+      // 2. Insertar detalles de productos en IMPLT_traspaso_detail - SIN created_at
+      if (ordersData && ordersData.length > 0) {
+        for (let i = 0; i < ordersData.length; i++) {
+          const product = ordersData[i];
 
-        const detailQuery = `
-        INSERT INTO dbo.IMPLT_traspaso_detail (
-          traspaso_tracking_id, product_code, quantity_requested,
-          quantity_processed, status, error_message, created_at
-        ) VALUES (
-          @traspaso_tracking_id, @product_code, @quantity_requested,
-          @quantity_processed, @status, @error_message, GETDATE()
-        )
-      `;
+          const detailQuery = `
+          INSERT INTO dbo.IMPLT_traspaso_detail (
+            traspaso_tracking_id, product_code, quantity_requested,
+            quantity_processed, status, error_message
+          ) VALUES (
+            @traspaso_tracking_id, @product_code, @quantity_requested,
+            @quantity_processed, @status, @error_message
+          )
+        `;
 
-        const productValidation = validation.productos?.find(
-          (p) => p.Code_Product === product.Code_Product
-        );
+          const productValidation = validation.productos?.find(
+            (p) => p.Code_Product === product.Code_Product
+          );
 
-        const detailParams = {
-          traspaso_tracking_id: trackingId,
-          product_code: product.Code_Product,
-          quantity_requested: product.Quantity,
-          quantity_processed: 0,
-          status: productValidation?.isValid ? "pending" : "validation_failed",
-          error_message: productValidation?.errors?.join("; ") || null,
-        };
+          const detailParams = {
+            traspaso_tracking_id: trackingId,
+            product_code: product.Code_Product || "N/A",
+            quantity_requested: product.Quantity || 0,
+            quantity_processed: 0,
+            status: productValidation?.isValid
+              ? "pending"
+              : "validation_failed",
+            error_message:
+              productValidation?.errors?.join("; ")?.substring(0, 500) || null,
+          };
 
-        await SqlService.query(connection, detailQuery, detailParams);
+          await SqlService.query(connection, detailQuery, detailParams);
+        }
+
+        logger.info(`${ordersData.length} detalles de productos insertados`);
       }
 
-      logger.info(`✅ ${ordersData.length} detalles de productos insertados`);
-
-      // 3. Generar documento de validación si existe
+      // 3. Generar documento de validación si existe - SIN generated_at
       if (validation.reportPath) {
         const documentQuery = `
         INSERT INTO dbo.IMPLT_traspaso_documents (
-          traspaso_tracking_id, document_type, document_path,
-          file_size, generated_at
+          traspaso_tracking_id, document_type, document_path, file_size
         ) VALUES (
-          @traspaso_tracking_id, @document_type, @document_path,
-          @file_size, GETDATE()
+          @traspaso_tracking_id, @document_type, @document_path, @file_size
         )
       `;
 
         const documentParams = {
           traspaso_tracking_id: trackingId,
           document_type: "VALIDATION_REPORT",
-          document_path: validation.reportPath,
-          file_size: 0, // Se podría calcular el tamaño del archivo
+          document_path: validation.reportPath.substring(0, 255),
+          file_size: 0,
         };
 
         await SqlService.query(connection, documentQuery, documentParams);
         logger.info(
-          `✅ Documento de validación registrado: ${validation.reportPath}`
+          `Documento de validación registrado: ${validation.reportPath}`
         );
       }
 
       return trackingId;
     } catch (error) {
-      logger.error("❌ Error guardando tracking de traspaso fallido:", error);
+      logger.error("Error guardando tracking de traspaso fallido:", error);
       throw error;
     }
   }
