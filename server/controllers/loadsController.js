@@ -116,52 +116,430 @@ class LoadsController {
   }
 
   /**
-   * Procesa la carga de pedidos seleccionados
+   * PROCESO PRINCIPAL: Procesa carga con validación de resultado de traspaso
    */
-  static async processOrderLoad(req, res) {
+  static async processOrderLoad(deliveryPersonCode, selectedPedidos, userId) {
+    let loadTracking = null;
+
     try {
-      const { selectedPedidos, deliveryPersonCode } = req.body;
-      const userId =
-        req.user?.user_id || req.user?._id || req.user?.id || "SYSTEM";
-
-      // Validaciones
-      if (!Array.isArray(selectedPedidos) || selectedPedidos.length === 0) {
-        return res.status(400).json({
-          success: false,
-          message: "Debe seleccionar al menos un pedido",
-        });
-      }
-
-      if (!deliveryPersonCode) {
-        return res.status(400).json({
-          success: false,
-          message: "Debe seleccionar un repartidor",
-        });
-      }
-
       logger.info(
-        `Procesando carga de ${selectedPedidos.length} pedidos para repartidor ${deliveryPersonCode}`
+        `🚀 Iniciando proceso de carga para repartidor: ${deliveryPersonCode}`
       );
+      logger.info(`📦 Pedidos seleccionados: ${selectedPedidos.join(", ")}`);
 
-      // LLAMADA LIMPIA SIN PASAR bodegaDestino (se obtiene del repartidor)
-      const result = await LoadsService.processOrderLoad(
+      // 1. Validar repartidor y obtener bodega destino
+      const deliveryPerson = await this.validateDeliveryPerson(
+        deliveryPersonCode
+      );
+      const bodegaDestino = deliveryPerson.assignedWarehouse;
+
+      // 2. Generar loadId único
+      const loadId = await this.generateLoadId();
+      logger.info(`📖 LoadId generado: ${loadId}`);
+
+      // 3. Crear tracking inicial
+      loadTracking = await this.createLoadTracking(
+        loadId,
         deliveryPersonCode,
-        selectedPedidos,
+        "MULTIPLE",
+        selectedPedidos.length,
         userId
       );
 
-      res.json({
-        success: true,
-        message: result.message,
-        data: result.data,
-      });
+      let ordersData = null;
+      let step = "";
+
+      try {
+        return await withConnection("server1", async (server1Connection) => {
+          // PASO 1: Actualizar U_Code_Load en PEDIDO
+          step = "updatePedidosWithLoadId";
+          logger.info(`📄 ${step}: Actualizando pedidos con loadId...`);
+          await this.updatePedidosWithLoadId(
+            server1Connection,
+            selectedPedidos,
+            loadId
+          );
+          logger.info(`✅ ${step}: Completado exitosamente`);
+
+          // PASO 2: Obtener datos transformados
+          step = "getTransformedOrdersData";
+          logger.info(`📄 ${step}: Obteniendo datos transformados...`);
+          ordersData = await this.getTransformedOrdersData(
+            server1Connection,
+            selectedPedidos,
+            loadId
+          );
+          logger.info(`✅ ${step}: ${ordersData.length} registros obtenidos`);
+
+          // PASO 3: Preparar datos de traspaso
+          const traspasoData = this.prepareTraspasoData(
+            ordersData,
+            bodegaDestino
+          );
+
+          // PASOS 4 y 5: Insertar en server2
+          await withConnection("server2", async (server2Connection) => {
+            // PASO 4: Insertar en IMPLT_Orders
+            step = "insertToIMPLTOrders";
+            logger.info(`📥 ${step}: Insertando en IMPLT_Orders...`);
+            await this.insertToIMPLTOrders(server2Connection, ordersData);
+            logger.info(`✅ ${step}: Completado exitosamente`);
+
+            // PASO 5: Insertar en IMPLT_loads_detail
+            step = "insertToIMPLTLoadsDetail";
+            logger.info(`📥 ${step}: Insertando en IMPLT_loads_detail...`);
+            await this.insertToIMPLTLoadsDetail(
+              server2Connection,
+              loadId,
+              deliveryPersonCode,
+              ordersData
+            );
+            logger.info(`✅ ${step}: Completado exitosamente`);
+
+            // PASO 6: Ejecutar traspaso automático
+            step = "realizarTraspaso";
+            logger.info(`📄 ${step}: Ejecutando traspaso de inventario...`);
+
+            const { realizarTraspaso } = require("./traspasoService");
+            const traspasoResult = await realizarTraspaso({
+              route: deliveryPersonCode,
+              salesData: traspasoData,
+              bodega_destino: bodegaDestino,
+            });
+
+            // ✅ VALIDAR RESULTADO DEL TRASPASO
+            if (!traspasoResult.success) {
+              logger.warn(
+                `❌ Traspaso falló: ${
+                  traspasoResult.mensaje || "Error desconocido"
+                }`
+              );
+
+              // Guardar en tablas de tracking para intervención manual
+              const trackingId = await this.saveFailedTraspasoTracking(
+                server1Connection,
+                {
+                  loadId,
+                  deliveryPersonCode,
+                  deliveryPersonName: deliveryPerson.name,
+                  warehouseOrigin: "MULTIPLE",
+                  warehouseDestination: bodegaDestino,
+                  selectedPedidos,
+                  ordersData,
+                  traspasoResult,
+                  userId,
+                }
+              );
+
+              // Actualizar LoadTracking MongoDB
+              await LoadTracking.findOneAndUpdate(
+                { loadId },
+                {
+                  status: "completed_manual_transfer_required",
+                  processedOrders: selectedPedidos.length,
+                  traspasoStatus: "execution_failed",
+                  traspasoTrackingId: trackingId,
+                  errorMessage: traspasoResult.mensaje,
+                  warehouseOrigin: "MULTIPLE",
+                  warehouseDestination: bodegaDestino,
+                  updatedAt: new Date(),
+                }
+              );
+
+              // Marcar pedidos como procesados pero pendientes de traspaso manual
+              step = "updateEstadoProcesoPendiente";
+              logger.info(
+                `📄 ${step}: Marcando pedidos como procesados - traspaso pendiente...`
+              );
+              await this.updateEstadoProceso(
+                server1Connection,
+                selectedPedidos,
+                "P"
+              );
+              logger.info(
+                `✅ ${step}: Pedidos marcados como procesados - traspaso pendiente`
+              );
+
+              return {
+                success: true,
+                requiresManualTransfer: true,
+                message:
+                  "Carga procesada exitosamente. Traspaso requiere intervención manual debido a fallos en la ejecución",
+                data: {
+                  loadId,
+                  traspasoTrackingId: trackingId,
+                  deliveryPerson: {
+                    code: deliveryPersonCode,
+                    name: deliveryPerson.name,
+                    warehouse: bodegaDestino,
+                  },
+                  ordersProcessed: selectedPedidos.length,
+                  linesProcessed: ordersData.length,
+                  traspaso: {
+                    status: "execution_failed",
+                    trackingId: trackingId,
+                    message:
+                      "Ejecución de traspaso falló - Se requiere traspaso manual",
+                    error: traspasoResult.mensaje,
+                    lineasProcesadas: traspasoResult.totalLineas || 0,
+                    lineasExitosas: traspasoResult.lineasExitosas || 0,
+                    lineasFallidas: traspasoResult.lineasFallidas || 0,
+                  },
+                },
+              };
+            }
+
+            // ✅ VALIDAR QUE AL MENOS ALGUNAS LÍNEAS FUERON EXITOSAS
+            if (
+              traspasoResult.lineasExitosas === 0 &&
+              traspasoResult.totalLineas > 0
+            ) {
+              logger.warn(
+                `❌ Traspaso sin líneas exitosas: 0/${traspasoResult.totalLineas}`
+              );
+
+              // Guardar como fallo parcial
+              const trackingId = await this.saveFailedTraspasoTracking(
+                server1Connection,
+                {
+                  loadId,
+                  deliveryPersonCode,
+                  deliveryPersonName: deliveryPerson.name,
+                  warehouseOrigin: "MULTIPLE",
+                  warehouseDestination: bodegaDestino,
+                  selectedPedidos,
+                  ordersData,
+                  traspasoResult,
+                  userId,
+                }
+              );
+
+              await LoadTracking.findOneAndUpdate(
+                { loadId },
+                {
+                  status: "completed_manual_transfer_required",
+                  processedOrders: selectedPedidos.length,
+                  traspasoStatus: "partial_failure",
+                  traspasoTrackingId: trackingId,
+                  errorMessage: "Ninguna línea procesada exitosamente",
+                  warehouseOrigin: "MULTIPLE",
+                  warehouseDestination: bodegaDestino,
+                  updatedAt: new Date(),
+                }
+              );
+
+              await this.updateEstadoProceso(
+                server1Connection,
+                selectedPedidos,
+                "P"
+              );
+
+              return {
+                success: true,
+                requiresManualTransfer: true,
+                message:
+                  "Carga procesada pero traspaso falló completamente. Se requiere intervención manual",
+                data: {
+                  loadId,
+                  traspasoTrackingId: trackingId,
+                  deliveryPerson: {
+                    code: deliveryPersonCode,
+                    name: deliveryPerson.name,
+                    warehouse: bodegaDestino,
+                  },
+                  ordersProcessed: selectedPedidos.length,
+                  linesProcessed: ordersData.length,
+                  traspaso: {
+                    status: "total_failure",
+                    trackingId: trackingId,
+                    message:
+                      "Ninguna línea procesada exitosamente - Traspaso manual requerido",
+                    documento: traspasoResult.documento_inv,
+                    lineasProcesadas: traspasoResult.totalLineas,
+                    lineasExitosas: 0,
+                    lineasFallidas: traspasoResult.totalLineas,
+                  },
+                },
+              };
+            }
+
+            // ✅ VALIDAR SI HAY FALLAS PARCIALES SIGNIFICATIVAS
+            const porcentajeExito =
+              (traspasoResult.lineasExitosas / traspasoResult.totalLineas) *
+              100;
+
+            if (porcentajeExito < 80 && traspasoResult.lineasFallidas > 0) {
+              logger.warn(
+                `⚠️ Traspaso con fallas significativas: ${
+                  traspasoResult.lineasExitosas
+                }/${traspasoResult.totalLineas} (${porcentajeExito.toFixed(
+                  1
+                )}%)`
+              );
+
+              // Guardar como fallo parcial pero continuar
+              const trackingId = await this.saveFailedTraspasoTracking(
+                server1Connection,
+                {
+                  loadId,
+                  deliveryPersonCode,
+                  deliveryPersonName: deliveryPerson.name,
+                  warehouseOrigin: "MULTIPLE",
+                  warehouseDestination: bodegaDestino,
+                  selectedPedidos,
+                  ordersData,
+                  traspasoResult,
+                  userId,
+                }
+              );
+
+              await LoadTracking.findOneAndUpdate(
+                { loadId },
+                {
+                  status: "completed_with_warnings",
+                  processedOrders: selectedPedidos.length,
+                  traspasoDocument: traspasoResult.documento_inv,
+                  traspasoStatus: "partial_success",
+                  traspasoTrackingId: trackingId,
+                  warningMessage: `Traspaso parcial: ${traspasoResult.lineasExitosas}/${traspasoResult.totalLineas} líneas exitosas`,
+                  warehouseOrigin: "MULTIPLE",
+                  warehouseDestination: bodegaDestino,
+                  updatedAt: new Date(),
+                }
+              );
+
+              // Marcar como completado pero con advertencias
+              await this.updateEstadoProceso(
+                server1Connection,
+                selectedPedidos,
+                "S"
+              );
+
+              return {
+                success: true,
+                hasWarnings: true,
+                message: `Proceso completado con advertencias. Traspaso parcial: ${traspasoResult.lineasExitosas}/${traspasoResult.totalLineas} líneas exitosas`,
+                data: {
+                  loadId,
+                  traspasoTrackingId: trackingId,
+                  deliveryPerson: {
+                    code: deliveryPersonCode,
+                    name: deliveryPerson.name,
+                    warehouse: bodegaDestino,
+                  },
+                  ordersProcessed: selectedPedidos.length,
+                  linesProcessed: ordersData.length,
+                  traspaso: {
+                    documento: traspasoResult.documento_inv,
+                    success: true,
+                    status: "partial_success",
+                    lineasProcesadas: traspasoResult.totalLineas,
+                    lineasExitosas: traspasoResult.lineasExitosas,
+                    lineasFallidas: traspasoResult.lineasFallidas,
+                    porcentajeExito: porcentajeExito.toFixed(1),
+                  },
+                },
+              };
+            }
+
+            logger.info(
+              `✅ ${step}: Traspaso completado exitosamente - Documento: ${traspasoResult.documento_inv}`
+            );
+
+            // PASO 7: Actualizar U_estado_proceso = 'S' (TODO EXITOSO)
+            step = "updateEstadoProceso";
+            logger.info(
+              `📄 ${step}: Marcando pedidos como procesados exitosamente...`
+            );
+            await this.updateEstadoProceso(
+              server1Connection,
+              selectedPedidos,
+              "S"
+            );
+            logger.info(`✅ ${step}: Pedidos marcados como procesados`);
+
+            // PASO 8: Actualizar tracking como completado
+            await LoadTracking.findOneAndUpdate(
+              { loadId },
+              {
+                status: "completed",
+                processedOrders: selectedPedidos.length,
+                traspasoDocument: traspasoResult.documento_inv,
+                traspasoStatus: "completed",
+                warehouseOrigin: "MULTIPLE",
+                warehouseDestination: bodegaDestino,
+                updatedAt: new Date(),
+              }
+            );
+
+            return {
+              success: true,
+              message: "Proceso de carga completado exitosamente",
+              data: {
+                loadId,
+                deliveryPerson: {
+                  code: deliveryPersonCode,
+                  name: deliveryPerson.name,
+                  warehouse: bodegaDestino,
+                },
+                ordersProcessed: selectedPedidos.length,
+                linesProcessed: ordersData.length,
+                traspaso: {
+                  documento: traspasoResult.documento_inv,
+                  success: traspasoResult.success,
+                  lineasProcesadas: traspasoResult.totalLineas,
+                  lineasExitosas: traspasoResult.lineasExitosas,
+                  lineasFallidas: traspasoResult.lineasFallidas || 0,
+                  porcentajeExito: "100",
+                },
+              },
+            };
+          });
+        });
+      } catch (error) {
+        logger.error(`❌ Error en paso ${step}:`, error);
+
+        // ROLLBACK
+        try {
+          if (loadTracking) {
+            await LoadTracking.findOneAndUpdate(
+              { loadId: loadTracking.loadId },
+              {
+                status: "error",
+                errorMessage: error.message,
+                failedStep: step,
+                warehouseOrigin: "MULTIPLE",
+                warehouseDestination: bodegaDestino,
+                updatedAt: new Date(),
+              }
+            );
+          }
+
+          if (
+            [
+              "getTransformedOrdersData",
+              "insertToIMPLTOrders",
+              "insertToIMPLTLoadsDetail",
+              "realizarTraspaso",
+              "updateEstadoProceso",
+            ].includes(step)
+          ) {
+            await withConnection("server1", async (connection) => {
+              await this.clearLoadIdFromPedidos(connection, selectedPedidos);
+              logger.info("📄 LoadId removido de pedidos debido a fallo");
+            });
+          }
+
+          logger.info("📄 Rollback completado");
+        } catch (rollbackError) {
+          logger.error("❌ Error durante rollback:", rollbackError);
+        }
+
+        throw error;
+      }
     } catch (error) {
-      logger.error("Error en processOrderLoad:", error);
-      res.status(500).json({
-        success: false,
-        message: "Error al procesar la carga",
-        error: error.message,
-      });
+      logger.error("❌ Error general en processOrderLoad:", error);
+      throw error;
     }
   }
 
@@ -769,6 +1147,122 @@ class LoadsController {
         message: "Error al obtener bodegas",
         error: error.message,
       });
+    }
+  }
+
+  /**
+   * Guarda traspaso fallido en tablas de tracking
+   */
+  static async saveFailedTraspasoTracking(connection, data) {
+    const {
+      loadId,
+      deliveryPersonCode,
+      deliveryPersonName,
+      warehouseOrigin,
+      warehouseDestination,
+      selectedPedidos,
+      ordersData,
+      traspasoResult,
+      userId,
+    } = data;
+
+    try {
+      // Determinar tipo de error
+      let errorType = "execution_failed";
+      let errorMessage = "Error en ejecución de traspaso";
+
+      if (traspasoResult) {
+        if (!traspasoResult.success) {
+          errorType = "execution_failed";
+          errorMessage =
+            traspasoResult.mensaje || "Traspaso falló durante ejecución";
+        } else if (traspasoResult.lineasExitosas === 0) {
+          errorType = "total_failure";
+          errorMessage = "Ninguna línea procesada exitosamente";
+        } else if (traspasoResult.lineasFallidas > 0) {
+          errorType = "partial_failure";
+          errorMessage = `Traspaso parcial: ${traspasoResult.lineasExitosas}/${traspasoResult.totalLineas} líneas exitosas`;
+        }
+      }
+
+      // 1. Insertar en IMPLT_traspaso_tracking
+      const insertTrackingQuery = `
+      INSERT INTO dbo.IMPLT_traspaso_tracking (
+        load_id, delivery_person_code, delivery_person_name,
+        warehouse_origin, warehouse_destination, status,
+        error_message, execution_report, total_products,
+        documento_generated, lines_successful, lines_failed
+      )
+      OUTPUT INSERTED.id
+      VALUES (
+        @load_id, @delivery_person_code, @delivery_person_name,
+        @warehouse_origin, @warehouse_destination, @status,
+        @error_message, @execution_report, @total_products,
+        @documento_generated, @lines_successful, @lines_failed
+      )
+    `;
+
+      const trackingParams = {
+        load_id: loadId || "N/A",
+        delivery_person_code: deliveryPersonCode || "N/A",
+        delivery_person_name: deliveryPersonName || "N/A",
+        warehouse_origin: warehouseOrigin || "MULTIPLE",
+        warehouse_destination: warehouseDestination || "02",
+        status: errorType,
+        error_message: errorMessage.substring(0, 500),
+        execution_report: JSON.stringify(traspasoResult || {}).substring(
+          0,
+          1000
+        ),
+        total_products: ordersData?.length || 0,
+        documento_generated: traspasoResult?.documento_inv || null,
+        lines_successful: traspasoResult?.lineasExitosas || 0,
+        lines_failed: traspasoResult?.lineasFallidas || 0,
+      };
+
+      const trackingResult = await SqlService.query(
+        connection,
+        insertTrackingQuery,
+        trackingParams
+      );
+      const trackingId = trackingResult.recordset[0].id;
+
+      logger.info(`Tracking insertado con ID: ${trackingId}`);
+
+      // 2. Insertar detalles de productos
+      if (ordersData && ordersData.length > 0) {
+        for (let i = 0; i < ordersData.length; i++) {
+          const product = ordersData[i];
+
+          const detailQuery = `
+          INSERT INTO dbo.IMPLT_traspaso_detail (
+            traspaso_tracking_id, product_code, quantity_requested,
+            quantity_processed, status, warehouse_origin
+          ) VALUES (
+            @traspaso_tracking_id, @product_code, @quantity_requested,
+            @quantity_processed, @status, @warehouse_origin
+          )
+        `;
+
+          const detailParams = {
+            traspaso_tracking_id: trackingId,
+            product_code: product.Code_Product || "N/A",
+            quantity_requested: product.Quantity || 0,
+            quantity_processed: 0,
+            status: errorType,
+            warehouse_origin: product.Code_Warehouse_Orig || "N/A",
+          };
+
+          await SqlService.query(connection, detailQuery, detailParams);
+        }
+
+        logger.info(`${ordersData.length} detalles de productos insertados`);
+      }
+
+      return trackingId;
+    } catch (error) {
+      logger.error("Error guardando tracking de traspaso fallido:", error);
+      throw error;
     }
   }
 }
