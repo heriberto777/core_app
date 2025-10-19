@@ -121,38 +121,11 @@ class LoadsController {
   static async processOrderLoad(req, res) {
     try {
       const { selectedPedidos, deliveryPersonCode } = req.body;
-      const userId = req.user?.user_id || req.user?._id;
-
-      // ✅ AGREGAR DEBUG AQUÍ:
-      console.log(
-        "🔍 deliveryPersonCode:",
-        deliveryPersonCode,
-        typeof deliveryPersonCode
-      );
-      console.log(
-        "🔍 selectedPedidos:",
-        selectedPedidos,
-        typeof selectedPedidos
-      );
-      console.log("🔍 selectedPedidos.length:", selectedPedidos?.length);
-      console.log("🔍 userId:", userId, typeof userId);
-
-      // Verificar que selectedPedidos sea un array
-      if (!Array.isArray(selectedPedidos)) {
-        return res.status(400).json({
-          success: false,
-          message: "selectedPedidos debe ser un array",
-          received: typeof selectedPedidos,
-          value: selectedPedidos,
-        });
-      }
+      const userId =
+        req.user?.user_id || req.user?._id || req.user?.id || "SYSTEM";
 
       // Validaciones
-      if (
-        !selectedPedidos ||
-        !Array.isArray(selectedPedidos) ||
-        selectedPedidos.length === 0
-      ) {
+      if (!Array.isArray(selectedPedidos) || selectedPedidos.length === 0) {
         return res.status(400).json({
           success: false,
           message: "Debe seleccionar al menos un pedido",
@@ -166,17 +139,11 @@ class LoadsController {
         });
       }
 
-      if (!userId) {
-        return res.status(400).json({
-          success: false,
-          message: "Usuario no identificado",
-        });
-      }
-
       logger.info(
         `Procesando carga de ${selectedPedidos.length} pedidos para repartidor ${deliveryPersonCode}`
       );
 
+      // LLAMADA LIMPIA SIN PASAR bodegaDestino (se obtiene del repartidor)
       const result = await LoadsService.processOrderLoad(
         deliveryPersonCode,
         selectedPedidos,

@@ -320,6 +320,7 @@ class LoadsService {
       const deliveryPerson = await this.validateDeliveryPerson(
         deliveryPersonCode
       );
+      const bodegaDestino = deliveryPerson.assignedWarehouse;
 
       // 2. Generar loadId único
       const loadId = await this.generateLoadId();
@@ -329,7 +330,7 @@ class LoadsService {
       loadTracking = await this.createLoadTracking(
         loadId,
         deliveryPersonCode,
-        deliveryPerson.assignedWarehouse,
+        "MULTIPLE", // Bodegas origen múltiples
         selectedPedidos.length,
         userId
       );
@@ -374,7 +375,6 @@ class LoadsService {
               server2Connection,
               loadId,
               deliveryPersonCode,
-              deliveryPerson.assignedWarehouse,
               ordersData
             );
             logger.info(`✅ ${step}: Completado exitosamente`);
@@ -384,17 +384,18 @@ class LoadsService {
             logger.info(`🔍 ${step}: Validando datos para traspaso...`);
 
             const { validateTraspasoData } = require("./traspasoService");
-            const traspasoData = ordersData.map((order) => ({
-              Code_Product: order.Code_Product,
-              Quantity: order.Quantity,
-              bodega: deliveryPerson.assignedWarehouse,
-            }));
+            // const traspasoData = ordersData.map((order) => ({
+            //   Code_Product: order.Code_Product,
+            //   Quantity: order.Quantity,
+            //   bodega: deliveryPerson.assignedWarehouse,
+            // }));
 
-            // Ejecutar validación
+            // Ejecutar validación con la bodega destino recibida como parámetro
             const validation = await validateTraspasoData(
               traspasoData,
               deliveryPersonCode,
-              "02" // bodega destino
+              bodegaDestino, // Usar bodega destino recibida como parámetro
+              server1Connection // Pasar conexión existente
             );
 
             if (!validation.isValid) {
@@ -411,8 +412,8 @@ class LoadsService {
                   loadId,
                   deliveryPersonCode,
                   deliveryPersonName: deliveryPerson.name,
-                  warehouseOrigin: deliveryPerson.assignedWarehouse,
-                  warehouseDestination: "02",
+                  warehouseOrigin: "MULTIPLE",
+                  warehouseDestination: bodegaDestino,
                   selectedPedidos,
                   ordersData,
                   validation,
@@ -430,6 +431,8 @@ class LoadsService {
                   traspasoTrackingId: trackingId,
                   validationErrors: validation.errors,
                   validationWarnings: validation.warnings,
+                  warehouseOrigin: "MULTIPLE",
+                  warehouseDestination: bodegaDestino,
                   updatedAt: new Date(),
                 }
               );
@@ -459,7 +462,7 @@ class LoadsService {
                   deliveryPerson: {
                     code: deliveryPersonCode,
                     name: deliveryPerson.name,
-                    warehouse: deliveryPerson.assignedWarehouse,
+                    warehouse: bodegaDestino,
                   },
                   ordersProcessed: selectedPedidos.length,
                   linesProcessed: ordersData.length,
@@ -489,7 +492,7 @@ class LoadsService {
             const traspasoResult = await realizarTraspaso({
               route: deliveryPersonCode,
               salesData: traspasoData,
-              bodega_destino: "02",
+              bodega_destino: bodegaDestino,
             });
 
             logger.info(
@@ -516,6 +519,8 @@ class LoadsService {
                 processedOrders: selectedPedidos.length,
                 traspasoDocument: traspasoResult.documento_inv,
                 traspasoStatus: "completed",
+                warehouseOrigin: "MULTIPLE",
+                warehouseDestination: bodegaDestino,
                 updatedAt: new Date(),
               }
             );
@@ -528,7 +533,7 @@ class LoadsService {
                 deliveryPerson: {
                   code: deliveryPersonCode,
                   name: deliveryPerson.name,
-                  warehouse: deliveryPerson.assignedWarehouse,
+                  warehouse: bodegaDestino,
                 },
                 ordersProcessed: selectedPedidos.length,
                 linesProcessed: ordersData.length,
@@ -555,6 +560,8 @@ class LoadsService {
                 status: "error",
                 errorMessage: error.message,
                 failedStep: step,
+                warehouseOrigin: "MULTIPLE",
+                warehouseDestination: bodegaDestino,
                 updatedAt: new Date(),
               }
             );
@@ -573,11 +580,11 @@ class LoadsService {
           ) {
             await withConnection("server1", async (connection) => {
               await this.clearLoadIdFromPedidos(connection, selectedPedidos);
-              logger.info("🔄 LoadId removido de pedidos debido a fallo");
+              logger.info("📄 LoadId removido de pedidos debido a fallo");
             });
           }
 
-          logger.info("🔄 Rollback completado");
+          logger.info("📄 Rollback completado");
         } catch (rollbackError) {
           logger.error("❌ Error durante rollback:", rollbackError);
         }
@@ -591,7 +598,7 @@ class LoadsService {
   }
 
   /**
-   * Guarda traspaso fallido en tablas de tracking - SIMPLIFICADO
+   * Guarda traspaso fallido en tablas de tracking
    */
   static async saveFailedTraspasoTracking(connection, data) {
     const {
@@ -607,7 +614,7 @@ class LoadsService {
     } = data;
 
     try {
-      // 1. Insertar en IMPLT_traspaso_tracking - SIN created_at ni created_by
+      // 1. Insertar en IMPLT_traspaso_tracking
       const insertTrackingQuery = `
       INSERT INTO dbo.IMPLT_traspaso_tracking (
         load_id, delivery_person_code, delivery_person_name,
@@ -622,18 +629,21 @@ class LoadsService {
       )
     `;
 
+      const bodegasOrigenStr = validation.bodegasOrigen
+        ? validation.bodegasOrigen.join(", ")
+        : warehouseOrigin || "MULTIPLE";
+
       const trackingParams = {
         load_id: loadId || "N/A",
         delivery_person_code: deliveryPersonCode || "N/A",
         delivery_person_name: deliveryPersonName || "N/A",
-        warehouse_origin: warehouseOrigin || "01",
+        warehouse_origin: bodegasOrigenStr,
         warehouse_destination: warehouseDestination || "02",
         status: "validation_failed",
         error_message:
           validation.errors?.slice(0, 500).join("; ") || "Error de validación",
         validation_report: JSON.stringify(validation).substring(0, 1000),
         total_products: ordersData?.length || 0,
-        // created_by y created_at usarán sus valores DEFAULT
       };
 
       const trackingResult = await SqlService.query(
@@ -645,7 +655,7 @@ class LoadsService {
 
       logger.info(`Tracking insertado con ID: ${trackingId}`);
 
-      // 2. Insertar detalles de productos en IMPLT_traspaso_detail - SIN created_at
+      // 2. Insertar detalles de productos
       if (ordersData && ordersData.length > 0) {
         for (let i = 0; i < ordersData.length; i++) {
           const product = ordersData[i];
@@ -653,10 +663,10 @@ class LoadsService {
           const detailQuery = `
           INSERT INTO dbo.IMPLT_traspaso_detail (
             traspaso_tracking_id, product_code, quantity_requested,
-            quantity_processed, status, error_message
+            quantity_processed, status, error_message, warehouse_origin
           ) VALUES (
             @traspaso_tracking_id, @product_code, @quantity_requested,
-            @quantity_processed, @status, @error_message
+            @quantity_processed, @status, @error_message, @warehouse_origin
           )
         `;
 
@@ -674,35 +684,13 @@ class LoadsService {
               : "validation_failed",
             error_message:
               productValidation?.errors?.join("; ")?.substring(0, 500) || null,
+            warehouse_origin: product.Code_Warehouse_Orig || "N/A",
           };
 
           await SqlService.query(connection, detailQuery, detailParams);
         }
 
         logger.info(`${ordersData.length} detalles de productos insertados`);
-      }
-
-      // 3. Generar documento de validación si existe - SIN generated_at
-      if (validation.reportPath) {
-        const documentQuery = `
-        INSERT INTO dbo.IMPLT_traspaso_documents (
-          traspaso_tracking_id, document_type, document_path, file_size
-        ) VALUES (
-          @traspaso_tracking_id, @document_type, @document_path, @file_size
-        )
-      `;
-
-        const documentParams = {
-          traspaso_tracking_id: trackingId,
-          document_type: "VALIDATION_REPORT",
-          document_path: validation.reportPath.substring(0, 255),
-          file_size: 0,
-        };
-
-        await SqlService.query(connection, documentQuery, documentParams);
-        logger.info(
-          `Documento de validación registrado: ${validation.reportPath}`
-        );
       }
 
       return trackingId;
@@ -713,21 +701,21 @@ class LoadsService {
   }
 
   /**
-   * Valida que el repartidor existe y está activo usando SQL Server
+   * Valida que el repartidor existe y está activo
    */
   static async validateDeliveryPerson(deliveryPersonCode) {
     return await withConnection("server1", async (connection) => {
       const query = `
-        SELECT
-          VENDEDOR as code,
-          NOMBRE as name,
-          U_BODEGA as assignedWarehouse,
-          U_ESVENDEDOR as isVendedor,
-          ACTIVO as isActive
-        FROM CATELLI.VENDEDOR
-        WHERE VENDEDOR = @deliveryPersonCode
-        AND ACTIVO = 'S'
-      `;
+      SELECT
+        VENDEDOR as code,
+        NOMBRE as name,
+        U_BODEGA as assignedWarehouse,
+        U_ESVENDEDOR as isVendedor,
+        ACTIVO as isActive
+      FROM CATELLI.VENDEDOR
+      WHERE VENDEDOR = @deliveryPersonCode
+      AND ACTIVO = 'S'
+    `;
 
       const result = await SqlService.query(connection, query, {
         deliveryPersonCode,
@@ -736,7 +724,7 @@ class LoadsService {
       if (!result.recordset || result.recordset.length === 0) {
         throw new Error(
           `Repartidor ${deliveryPersonCode} no encontrado o inactivo. ` +
-            `Verifique que sea un repartidor válido (U_ESVENDEDOR = 'Re')`
+            `Verifique que sea un repartidor válido`
         );
       }
 
@@ -749,7 +737,7 @@ class LoadsService {
       }
 
       logger.info(
-        `✅ Repartidor encontrado: ${deliveryPerson.name} - Bodega: ${deliveryPerson.assignedWarehouse}`
+        `Repartidor encontrado: ${deliveryPerson.name} - Bodega destino: ${deliveryPerson.assignedWarehouse}`
       );
 
       return deliveryPerson;
@@ -912,6 +900,21 @@ class LoadsService {
   }
 
   /**
+   * Prepara datos de traspaso usando bodegas origen reales de cada línea
+   */
+  static prepareTraspasoData(ordersData, bodegaDestino) {
+    const traspasoData = ordersData.map((order) => ({
+      Code_Product: order.Code_Product,
+      Quantity: order.Quantity,
+      bodega: order.Code_Warehouse_Orig, // Bodega origen real de PEDIDO_LINEA.BODEGA
+      bodega_destino: bodegaDestino,
+      Code_load: order.Code_load,
+    }));
+
+    return traspasoData;
+  }
+
+  /**
    * Obtiene datos transformados para IMPLT_Orders
    */
   static async getTransformedOrdersData(connection, selectedPedidos, loadId) {
@@ -946,7 +949,7 @@ class LoadsService {
         cl.detalle_direccion,
         ar.ARTICULO,
         ar.UNIDAD_ALMACEN,
-        pl.BODEGA
+        pl.BODEGA as BODEGA_ORIGEN_REAL  -- ✅ Bodega origen real
       FROM CATELLI.PEDIDO_LINEA AS pl
       INNER JOIN CATELLI.PEDIDO AS pe ON pe.PEDIDO = pl.PEDIDO
       INNER JOIN CATELLI.CLIENTE AS cl ON cl.CLIENTE = pe.CLIENTE
@@ -976,7 +979,7 @@ class LoadsService {
         detalle_direccion,
         ARTICULO,
         UNIDAD_ALMACEN,
-        BODEGA,
+        BODEGA_ORIGEN_REAL,  -- ✅ Incluir bodega origen real
         (CANTIDAD_PEDIDA * PRECIO_UNITARIO) AS SubTotal,
         ((CANTIDAD_PEDIDA * PRECIO_UNITARIO) - MONTO_DESCUENTO) AS TotalAmount
       FROM BaseData
@@ -1005,7 +1008,7 @@ class LoadsService {
         detalle_direccion,
         ARTICULO,
         UNIDAD_ALMACEN,
-        BODEGA,
+        BODEGA_ORIGEN_REAL,  -- ✅ Incluir bodega origen real
         0 AS SubTotal,
         0 AS TotalAmount
       FROM BaseData
@@ -1052,7 +1055,8 @@ class LoadsService {
       '00' AS Transport,
       1 AS Transfer_status,
       TIPO_LINEA,
-      LINEA_TIPO
+      LINEA_TIPO,
+      BODEGA_ORIGEN_REAL AS Code_Warehouse_Orig  -- ✅ Bodega origen real
     FROM Calc
     ORDER BY PEDIDO, PEDIDO_LINEA, LINEA_TIPO
   `;
@@ -1063,7 +1067,6 @@ class LoadsService {
     });
 
     const result = await SqlService.query(connection, query, params);
-
     console.log(
       `Registros transformados obtenidos: ${result.recordset.length}`
     );
