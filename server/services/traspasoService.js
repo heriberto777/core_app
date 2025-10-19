@@ -769,16 +769,16 @@ function getTraspasoConfig() {
 }
 
 /**
- * Realiza traspaso con bodegas origen dinámicas
+ * Realiza traspaso SIN validación previa
  */
 async function realizarTraspaso({ route, salesData, bodega_destino }) {
   let detalleProductos = [];
   let pdfPath = null;
 
-  logger.info(`Iniciando traspaso con múltiples bodegas origen hacia bodega destino: ${bodega_destino}`);
+  logger.info(`Iniciando traspaso directo hacia bodega destino: ${bodega_destino}`);
 
   try {
-    // 1. Validar datos de entrada
+    // 1. Validar datos de entrada básicos
     if (!salesData || !Array.isArray(salesData) || salesData.length === 0) {
       throw new Error("No hay datos de ventas para procesar");
     }
@@ -802,7 +802,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
     for (const item of productosValidos) {
       const codigo = item.Code_Product.trim();
       const cantidad = Math.max(0, Number(item.Quantity) || 0);
-      const bodegaOrigen = item.bodega || "01"; // Bodega origen del item
+      const bodegaOrigen = item.bodega || "01";
 
       const key = `${codigo}_${bodegaOrigen}`;
 
@@ -827,9 +827,9 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
     }
 
     logger.info(`Procesando traspaso para ruta ${route} con ${productosArray.length} productos`);
-    logger.info(`Bodegas origen involucradas: ${[...new Set(productosArray.map(p => p.bodegaOrigen))].join(', ')}`);
+    logger.info(`Bodegas origen: ${[...new Set(productosArray.map(p => p.bodegaOrigen))].join(', ')}`);
 
-    // 3. Resto de la lógica de traspaso usando productosArray con bodegaOrigen individual
+    // 3. Ejecutar traspaso
     return await withConnection("server1", async (connection) => {
       // Obtener detalles de productos para correo
       detalleProductos = await obtenerDetalleProductos(connection, productosArray);
@@ -853,7 +853,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
       const numeroActual = parseInt(ultimoConsecutivo.replace("TRA", ""), 10) || 0;
       const nuevoConsecutivo = "TRA" + (numeroActual + 1).toString().padStart(6, "0");
 
-      logger.info(`Consecutivo actual: ${ultimoConsecutivo}, Nuevo consecutivo: ${nuevoConsecutivo}`);
+      logger.info(`Consecutivo generado: ${nuevoConsecutivo}`);
 
       // Actualizar consecutivo
       const actualizarConsecutivoParams = {
@@ -876,7 +876,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
       // Insertar documento principal
       const config = getTraspasoConfig();
       const referenciaParams = {
-        referencia: `Traspaso multi-bodega para vendedor ${route}`,
+        referencia: `Traspaso automatico para vendedor ${route}`,
         documento: nuevoConsecutivo,
       };
 
@@ -904,7 +904,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
             linea: lineaNumero,
             ajuste: config.ajuste_config,
             articulo: producto.codigo,
-            bodega: producto.bodegaOrigen,  // ✅ Bodega origen específica del producto
+            bodega: producto.bodegaOrigen,
             bodega_destino: bodega_destino,
             cantidad: producto.cantidad,
             tipo: "T",
@@ -950,6 +950,33 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
         } catch (lineError) {
           lineasFallidas++;
           logger.error(`Error al insertar línea ${lineaNumero}:`, lineError);
+
+          // Intentar fallback directo
+          try {
+            const codigoProducto = producto.codigo.replace(/'/g, "''");
+
+            const insertarLineaDirecto = `
+              INSERT INTO CATELLI.LINEA_DOC_INV
+                (PAQUETE_INVENTARIO, DOCUMENTO_INV, LINEA_DOC_INV, AJUSTE_CONFIG, ARTICULO,
+                 BODEGA, BODEGA_DESTINO, CANTIDAD, TIPO, SUBTIPO, SUBSUBTIPO,
+                 COSTO_TOTAL_LOCAL, COSTO_TOTAL_DOLAR, PRECIO_TOTAL_LOCAL, PRECIO_TOTAL_DOLAR,
+                 LOCALIZACION_DEST, CENTRO_COSTO, SECUENCIA, UNIDAD_DISTRIBUCIO, CUENTA_CONTABLE,
+                 COSTO_TOTAL_LOCAL_COMP, COSTO_TOTAL_DOLAR_COMP, CAI, TIPO_OPERACION, TIPO_PAGO, LOCALIZACION)
+              VALUES
+                ('${config.paquete_inventario}', '${nuevoConsecutivo}', ${lineaNumero}, '${config.ajuste_config}', '${codigoProducto}',
+                 '${producto.bodegaOrigen}', '${bodega_destino}', ${producto.cantidad}, 'T', '${config.subtipo}', '',
+                 0, 0, 0, 0,
+                 '${config.localizacion_default}', '${config.centro_costo}', '', '${config.unidad_distribucion_default}', '${config.cuenta_contable_default}',
+                 0, 0, '', '${config.tipo_operacion}', '${config.tipo_pago}', '${config.localizacion_default}')
+            `;
+
+            await SqlService.query(connection, insertarLineaDirecto);
+            lineasExitosas++;
+            lineasFallidas--;
+            logger.debug(`Línea ${lineaNumero} insertada (fallback): ${codigoProducto} x ${producto.cantidad}`);
+          } catch (fallbackError) {
+            logger.error(`Fallo también en modo fallback para línea ${lineaNumero}:`, fallbackError);
+          }
         }
       }
 
@@ -966,20 +993,94 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
         lineasFallidas,
         detalleProductos,
         route,
-        bodegasOrigen: [...new Set(productosArray.map(p => p.bodegaOrigen))], // Múltiples bodegas origen
+        bodegasOrigen: [...new Set(productosArray.map(p => p.bodegaOrigen))],
         bodega_destino,
       };
 
-      logger.info("Traspaso multi-bodega completado exitosamente:", resultado);
+      logger.info("Traspaso completado exitosamente:", resultado);
+
+      // Guardar resumen para tracking
+      try {
+        const summaryProducts = detalleProductos.map((producto) => ({
+          code: producto.codigo,
+          description: producto.descripcion || "Sin descripción",
+          quantity: producto.cantidad,
+          unit: "UND",
+        }));
+
+        const summary = new TransferSummary({
+          loadId: salesData[0]?.Code_load || "N/A",
+          route: route,
+          documentId: nuevoConsecutivo,
+          products: summaryProducts,
+          totalProducts: summaryProducts.length,
+          totalQuantity: summaryProducts.reduce((sum, p) => sum + p.quantity, 0),
+          createdBy: config.usuario_default,
+          bodegaOrigen: 'MULTIPLE',
+          bodega_destino,
+        });
+
+        await summary.save();
+        resultado.summaryId = summary._id;
+      } catch (summaryError) {
+        logger.error(`Error al guardar resumen: ${summaryError.message}`);
+      }
+
+      // Generar PDF del traspaso
+      try {
+        const pdfResult = await PDFService.generateTraspasoPDF(resultado);
+        pdfPath = pdfResult.path;
+        logger.info(`PDF de traspaso generado: ${pdfPath}`);
+      } catch (pdfError) {
+        logger.error(`Error al generar PDF: ${pdfError.message}`);
+      }
+
+      // Enviar correo con el resultado
+      try {
+        await sendTraspasoEmail(resultado, pdfPath);
+        logger.info(`Correo enviado para traspaso: ${resultado.documento_inv}`);
+      } catch (errorCorreo) {
+        logger.error(`Error al enviar correo: ${errorCorreo.message}`);
+      }
 
       return resultado;
     });
 
   } catch (error) {
     logger.error("Error en realizarTraspaso:", error);
+
+    // Preparar resultado de error
+    const resultadoError = {
+      success: false,
+      mensaje: error.message,
+      totalLineas: detalleProductos.length,
+      lineasExitosas: 0,
+      lineasFallidas: detalleProductos.length,
+      detalleProductos,
+      route,
+      bodegasOrigen: [...new Set(salesData.map(item => item.bodega || "01"))],
+      bodega_destino,
+    };
+
+    // Intentar generar PDF del error
+    try {
+      const pdfResult = await PDFService.generateTraspasoPDF(resultadoError);
+      pdfPath = pdfResult.path;
+    } catch (pdfError) {
+      logger.error(`Error al generar PDF del error: ${pdfError.message}`);
+    }
+
+    // Intentar enviar correo de error
+    try {
+      await sendTraspasoEmail(resultadoError, pdfPath);
+    } catch (errorCorreo) {
+      logger.error(`Error al enviar correo de error: ${errorCorreo.message}`);
+    }
+
     throw error;
   }
 }
+
 /**
  * Método alternativo para realizar traspasos (mantener por compatibilidad)
  */
