@@ -18,6 +18,7 @@ import {
   UserProfile,
   ModuleManager,
   LogsPage,
+  TraspasoManagement
 } from "../index";
 
 // ⭐ COMPONENTE DE LOADING MEJORADO ⭐
@@ -145,12 +146,24 @@ export function AdminRouter() {
       />
 
       <Route
-        path="/loads"
+        path="/loads/cargas"
         element={
           <ProtectedRoute resource="loads" action="read">
             <LayoutWrapper
               component={LoadsManagement}
               title="Cargas de Datos"
+            />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/loads/transfers"
+        element={
+          <ProtectedRoute resource="loads" action="read">
+            <LayoutWrapper
+              component={TraspasoManagement}
+              title="Gestión de Traspasos"
             />
           </ProtectedRoute>
         }

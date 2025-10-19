@@ -2,7 +2,6 @@ const { withConnection } = require("../utils/dbUtils");
 const { SqlService } = require("./SqlService");
 const logger = require("./logger");
 const { LoadTracking, DeliveryPerson } = require("../models/loadsModel");
-const { wrapService } = require("../utils/serviceWrapper");
 
 /**
  * Servicio para manejo de cargas de pedidos

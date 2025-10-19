@@ -1,4 +1,5 @@
 const LoadsService = require("../services/loadsService");
+const traspasoService = require('../services/traspasoService');
 const logger = require("../services/logger");
 
 class LoadsController {
@@ -6,7 +7,6 @@ class LoadsController {
    * Obtiene pedidos pendientes de cargar
    */
   static async getPendingOrders(req, res) {
-
     console.log("Query Params in Controller:", req.query);
 
     try {
@@ -440,6 +440,366 @@ class LoadsController {
       res.status(500).json({
         success: false,
         message: "Error al procesar traspaso de inventario",
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Controller limpio que SOLO llama a tu traspasoService.js
+   */
+  static async getTransfers(req, res) {
+    try {
+      const filters = req.query;
+      console.log("Filters in getTransfers Controller:", filters);
+
+      // USAR MÉTODO DE TU traspasoService.js (necesitamos agregarlo)
+      const result = await traspasoService.getTransfersList(filters);
+
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      logger.error("Error fetching transfers:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error al obtener traspasos",
+        error: error.message,
+      });
+    }
+  }
+
+  static async executeTransfer(req, res) {
+    try {
+      const { loadId } = req.params;
+
+      // TU SERVICIO YA MANEJA TODO ESTO
+      const result = await traspasoService.executeTransferByLoadId(loadId);
+
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      logger.error("Error executing transfer:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error al ejecutar traspaso",
+        error: error.message,
+      });
+    }
+  }
+  static async getTraspasoHistory(req, res) {
+    try {
+      const filters = req.query;
+
+      // AGREGAR ESTE MÉTODO A traspasoService.js
+      const result = await traspasoService.getTraspasoHistory(filters);
+
+      res.json({
+        success: true,
+        data: result.data,
+        pagination: result.pagination,
+      });
+    } catch (error) {
+      logger.error("Error obteniendo historial de traspasos:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error al obtener historial de traspasos",
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Obtiene detalles - USAR MÉTODO DEL SERVICIO
+   */
+  static async getTraspasoDetails(req, res) {
+    try {
+      const { traspasoId } = req.params;
+
+      // AGREGAR ESTE MÉTODO A traspasoService.js
+      const result = await traspasoService.getTraspasoDetails(traspasoId);
+
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      logger.error("Error obteniendo detalles de traspaso:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error al obtener detalles del traspaso",
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Actualiza estado - YA EXISTE EN TRASPASOSERVICE
+   */
+  static async updateTraspasoStatus(req, res) {
+    try {
+      const { traspasoId } = req.params;
+      const { status, notes } = req.body;
+      const userId = req.user?.id || "SYSTEM";
+
+      // USAR MÉTODO EXISTENTE DE traspasoService.js
+      const result = await traspasoService.updateTraspasoStatus(
+        traspasoId,
+        status,
+        notes,
+        userId
+      );
+
+      res.json(result);
+    } catch (error) {
+      logger.error("Error actualizando estado de traspaso:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error al actualizar estado del traspaso",
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Reintenta traspaso - YA EXISTE EN TRASPASOSERVICE
+   */
+  static async retryTraspaso(req, res) {
+    try {
+      const { traspasoId } = req.params;
+      const { updatedData } = req.body;
+
+      // USAR MÉTODO EXISTENTE DE traspasoService.js
+      const result = await traspasoService.retryFailedTraspaso(
+        traspasoId,
+        updatedData
+      );
+
+      res.json({
+        success: true,
+        message: "Traspaso reintentado exitosamente",
+        data: result,
+      });
+    } catch (error) {
+      logger.error("Error reintentando traspaso:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error al reintentar traspaso",
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Procesa devoluciones - YA EXISTE EN TRASPASOSERVICE
+   */
+  static async processReturns(req, res) {
+    try {
+      const { traspasoId } = req.params;
+      const { returnedProducts } = req.body;
+
+      // USAR MÉTODO EXISTENTE DE traspasoService.js
+      const result = await traspasoService.processProductReturns(
+        traspasoId,
+        returnedProducts
+      );
+
+      res.json({
+        success: true,
+        message: "Devoluciones procesadas correctamente",
+        data: result,
+      });
+    } catch (error) {
+      logger.error("Error procesando devoluciones:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error al procesar devoluciones",
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Estadísticas - AGREGAR A TRASPASOSERVICE
+   */
+  static async getTraspasoStats(req, res) {
+    try {
+      const filters = req.query;
+
+      // AGREGAR ESTE MÉTODO A traspasoService.js
+      const result = await traspasoService.getTraspasoStats(filters);
+
+      res.json({
+        success: true,
+        data: result,
+      });
+    } catch (error) {
+      logger.error("Error obteniendo estadísticas:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error al obtener estadísticas",
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Elimina traspaso - YA EXISTE EN TRASPASOSERVICE
+   */
+  static async deleteTraspaso(req, res) {
+    try {
+      const { traspasoId } = req.params;
+      const { reason } = req.body;
+      const userId = req.user?.id || "SYSTEM";
+
+      // USAR MÉTODO EXISTENTE DE traspasoService.js
+      const result = await traspasoService.deleteTraspaso(
+        traspasoId,
+        reason,
+        userId
+      );
+
+      res.json(result);
+    } catch (error) {
+      logger.error("Error eliminando traspaso:", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Error al eliminar traspaso",
+      });
+    }
+  }
+
+  /**
+   * Operaciones masivas - YA EXISTE EN TRASPASOSERVICE
+   */
+  static async bulkAction(req, res) {
+    try {
+      const { action, traspasoIds, data } = req.body;
+      const userId = req.user?.id || "SYSTEM";
+
+      // USAR MÉTODO EXISTENTE DE traspasoService.js
+      const result = await traspasoService.bulkTraspasoAction(
+        action,
+        traspasoIds,
+        data || {},
+        userId
+      );
+
+      res.json(result);
+    } catch (error) {
+      logger.error("Error en operación masiva:", error);
+      res.status(500).json({
+        success: false,
+        message: error.message || "Error en operación masiva",
+      });
+    }
+  }
+
+  /**
+   * Ejecutar múltiples traspasos (bulk) - FALTABA ESTE MÉTODO
+   */
+  static async executeBulkTransfers(req, res) {
+    try {
+      const { loadIds } = req.body;
+      const userId = req.user?.id || "SYSTEM";
+
+      if (!Array.isArray(loadIds) || loadIds.length === 0) {
+        return res.status(400).json({
+          success: false,
+          message: "Se requiere una lista válida de Load IDs",
+        });
+      }
+
+      const results = {
+        executed: 0,
+        failed: 0,
+        errors: [],
+        details: [],
+      };
+
+      // Procesar cada traspaso
+      for (const loadId of loadIds) {
+        try {
+          const result = await traspasoService.executeTransferByLoadId(loadId);
+
+          if (result.success) {
+            results.executed++;
+            results.details.push({
+              loadId,
+              status: "success",
+              message: "Traspaso ejecutado exitosamente",
+            });
+          } else {
+            results.failed++;
+            results.errors.push(
+              `Load ID ${loadId}: ${result.mensaje || "Error en ejecución"}`
+            );
+          }
+        } catch (error) {
+          results.failed++;
+          results.errors.push(`Load ID ${loadId}: ${error.message}`);
+          logger.error(`Error en traspaso masivo ${loadId}:`, error);
+        }
+      }
+
+      res.json({
+        success: true,
+        message: `Proceso masivo completado: ${results.executed} exitosos, ${results.failed} fallidos`,
+        data: results,
+      });
+    } catch (error) {
+      logger.error("Error in bulk execution:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error en ejecución masiva",
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Obtiene estadísticas de traspasos
+   */
+  static async getTransferStats(req, res) {
+    try {
+      const filters = req.query;
+
+      // Usar método del traspasoService
+      const result = await traspasoService.getTraspasoStats(filters);
+
+      res.json({
+        success: true,
+        data: { stats: result },
+      });
+    } catch (error) {
+      logger.error("Error obteniendo estadísticas de traspasos:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error al obtener estadísticas de traspasos",
+        error: error.message,
+      });
+    }
+  }
+
+  /**
+   * Obtiene bodegas activas
+   */
+  static async getWarehouses(req, res) {
+    try {
+      const result = await traspasoService.getWarehouses();
+
+      res.json({
+        success: true,
+        data: { warehouses: result },
+      });
+    } catch (error) {
+      logger.error("Error fetching warehouses:", error);
+      res.status(500).json({
+        success: false,
+        message: "Error al obtener bodegas",
         error: error.message,
       });
     }

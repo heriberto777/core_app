@@ -1,6 +1,6 @@
 import React, { useState, useEffect, createContext, useCallback } from "react";
 import styled from "styled-components";
-import { Sidebar, Header, useAuth } from "../../index";
+import { Sidebar, Header, useAuth, NotificationContainer, LoadingSpinner } from "../../index";
 import { Device } from "../../styles/breakpoints";
 
 // ⭐ CONTEXTO MEJORADO PARA EL LAYOUT ⭐
@@ -187,7 +187,7 @@ export function AdminLayout({
           <ContentSection className="main-content">
             {pageLoading ? (
               <LoadingContainer>
-                <LoadingSpinner>🔄</LoadingSpinner>
+                <LoadingSpinner size="large" type="ring" />
                 <LoadingText>Cargando contenido...</LoadingText>
               </LoadingContainer>
             ) : (
@@ -200,6 +200,8 @@ export function AdminLayout({
         {sidebarOpen && window.innerWidth <= 768 && (
           <SidebarOverlay onClick={closeSidebar} />
         )}
+        {/* 🔔 CONTENEDOR DE NOTIFICACIONES - AGREGADO AQUÍ */}
+        <NotificationContainer />
       </Container>
     </LayoutContext.Provider>
   );
@@ -366,19 +368,19 @@ const LoadingContainer = styled.div`
   gap: 1rem;
 `;
 
-const LoadingSpinner = styled.div`
-  font-size: 2rem;
-  animation: spin 1s linear infinite;
+// const LoadingSpinner = styled.div`
+//   font-size: 2rem;
+//   animation: spin 1s linear infinite;
 
-  @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
-  }
-`;
+//   @keyframes spin {
+//     from {
+//       transform: rotate(0deg);
+//     }
+//     to {
+//       transform: rotate(360deg);
+//     }
+//   }
+// `;
 
 const LoadingText = styled.div`
   color: ${({ theme }) => theme.textSecondary};

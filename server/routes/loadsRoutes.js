@@ -3,7 +3,7 @@ const router = express.Router();
 const LoadsController = require('../controllers/loadsController');
 const {
   verifyToken,
-  checkPermission,
+  checkPermission, checkPermissions
 } = require("../middlewares/authMiddleware");
 
 // Middleware de autenticación para todas las rutas
@@ -117,6 +117,77 @@ router.get('/history',
 router.post('/inventory-transfer',
   checkPermission('loads', 'create'),
   LoadsController.processInventoryTransfer
+);
+
+// ================================================
+// RUTAS DE GESTIÓN DE TRASPASOS (NUEVAS)
+// ================================================
+
+router.get('/transfers',
+  checkPermission('loads', 'read'),
+  LoadsController.getTraspasoHistory
+);
+
+router.get('/transfers/stats',
+  checkPermission('loads', 'read'),
+  LoadsController.getTraspasoStats
+);
+
+router.get('/warehouses',
+  checkPermission('loads', 'read'),
+  LoadsController.getWarehouses
+);
+
+router.get('/transfers/:traspasoId',
+  checkPermission('loads', 'read'),
+  LoadsController.getTraspasoDetails
+);
+
+router.post('/transfers/execute/:loadId',
+  checkPermission('loads', 'create'),
+  LoadsController.executeTransfer
+);
+
+router.post('/transfers/execute-bulk',
+  checkPermission('loads', 'create'),
+  LoadsController.executeBulkTransfers
+);
+
+router.put('/transfers/:traspasoId/status',
+  checkPermission('loads', 'update'),
+  LoadsController.updateTraspasoStatus
+);
+
+router.post('/transfers/:traspasoId/retry',
+  checkPermission('loads', 'manage'),
+  LoadsController.retryTraspaso
+);
+
+router.post('/transfers/:traspasoId/returns',
+  checkPermission('loads', 'manage'),
+  LoadsController.processReturns
+);
+
+router.post('/transfers/bulk-action',
+  checkPermissions(
+    [
+      { resource: "loads", action: "manage" },
+      { resource: "admin", action: "manage" },
+    ],
+    "OR"
+  ),
+  LoadsController.bulkAction
+);
+
+router.delete('/transfers/:traspasoId',
+  checkPermissions(
+    [
+      { resource: "loads", action: "manage" },
+      { resource: "admin", action: "delete" },
+    ],
+    "AND"
+  ),
+  LoadsController.deleteTraspaso
 );
 
 module.exports = router;
