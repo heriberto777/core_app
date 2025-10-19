@@ -443,7 +443,7 @@ async function generateValidationReport(validation, route, loadId = null) {
  */
 async function saveFailedTraspasoRecord(route, validation, reportResult, loadId = null) {
   try {
-    return await withConnection("server2", async (connection) => {
+    return await withConnection("server1", async (connection) => {
       const query = `
         INSERT INTO dbo.IMPLT_traspaso_tracking
         (load_id, delivery_person_code, status, error_message,
@@ -961,7 +961,7 @@ async function retryFailedTraspaso(traspasoId, updatedData = null) {
   logger.info(`Reintentando traspaso fallido: ${traspasoId}`);
 
   try {
-    return await withConnection("server2", async (connection) => {
+    return await withConnection("server1", async (connection) => {
       // Obtener datos del traspaso fallido
       const query = `
         SELECT * FROM dbo.IMPLT_traspaso_tracking
@@ -1040,7 +1040,7 @@ async function processProductReturns(traspasoId, returnedProducts) {
  */
 async function deleteTraspaso(traspasoId, reason, userId) {
   try {
-    return await withConnection("server2", async (connection) => {
+    return await withConnection("server1", async (connection) => {
       // Verificar que el traspaso existe y se puede eliminar
       const checkQuery = `
         SELECT id, status, load_id, delivery_person_code
@@ -1164,7 +1164,7 @@ async function bulkTraspasoAction(action, traspasoIds, actionData, userId) {
  */
 async function updateTraspasoStatus(traspasoId, status, notes, userId) {
   try {
-    return await withConnection("server2", async (connection) => {
+    return await withConnection("server1", async (connection) => {
       const query = `
         UPDATE dbo.IMPLT_traspaso_tracking
         SET status = @status,
@@ -1204,7 +1204,7 @@ async function updateTraspasoStatus(traspasoId, status, notes, userId) {
  */
 async function exportTraspasoData(traspasoId) {
   try {
-    return await withConnection("server2", async (connection) => {
+    return await withConnection("server1", async (connection) => {
       const query = `
         SELECT t.*, d.product_code, d.quantity_requested, d.status as product_status
         FROM dbo.IMPLT_traspaso_tracking t
