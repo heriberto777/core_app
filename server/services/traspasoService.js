@@ -282,7 +282,7 @@ async function validateBodegas(connection, bodegaOrigen, bodegaDestino) {
 
   try {
     const query = `
-      SELECT BODEGA, DESCRIPCION, ACTIVA
+      SELECT BODEGA, NOMBRE, 'S' AS ACTIVA
       FROM CATELLI.BODEGA
       WHERE BODEGA IN (@bodegaOrigen, @bodegaDestino)
     `;
