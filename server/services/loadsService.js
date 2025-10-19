@@ -311,10 +311,41 @@ class LoadsService {
     let loadTracking = null;
 
     try {
+      // ✅ VALIDACIÓN DEFENSIVA ADICIONAL
+      if (!Array.isArray(selectedPedidos)) {
+        throw new Error(
+          `selectedPedidos debe ser un array. Recibido: ${typeof selectedPedidos}`
+        );
+      }
+
+      if (selectedPedidos.length === 0) {
+        throw new Error("La lista de pedidos seleccionados está vacía");
+      }
+
+      // Validar que todos los elementos son válidos
+      const pedidosValidos = selectedPedidos.filter(
+        (pedido) =>
+          pedido !== null &&
+          pedido !== undefined &&
+          pedido.toString().trim() !== ""
+      );
+
+      if (pedidosValidos.length === 0) {
+        throw new Error("No hay pedidos válidos en la lista");
+      }
+
+      if (pedidosValidos.length !== selectedPedidos.length) {
+        logger.warn(
+          `Filtrados ${
+            selectedPedidos.length - pedidosValidos.length
+          } pedidos inválidos`
+        );
+      }
+
       logger.info(
         `🚀 Iniciando proceso de carga para repartidor: ${deliveryPersonCode}`
       );
-      logger.info(`📦 Pedidos seleccionados: ${selectedPedidos.join(", ")}`);
+      logger.info(`📦 Pedidos seleccionados: ${pedidosValidos.join(", ")}`);
 
       // 1. Validar repartidor y obtener bodega destino
       const deliveryPerson = await this.validateDeliveryPerson(
@@ -331,7 +362,7 @@ class LoadsService {
         loadId,
         deliveryPersonCode,
         "MULTIPLE",
-        selectedPedidos.length,
+        pedidosValidos.length, // ✅ Usar pedidosValidos
         userId
       );
 
