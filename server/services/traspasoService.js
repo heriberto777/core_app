@@ -221,7 +221,7 @@ async function validateWithExistingConnection(connection, salesData, route, bode
 }
 
 /**
- * Valida ruta/repartidor
+ * Valida ruta/repartidor - SIMPLIFICADO
  */
 async function validateRoute(connection, route) {
   const validation = {
@@ -231,6 +231,7 @@ async function validateRoute(connection, route) {
   };
 
   try {
+    // ✅ USAR SqlService DIRECTAMENTE
     const routeQuery = `
       SELECT
         VENDEDOR as code,
@@ -243,7 +244,7 @@ async function validateRoute(connection, route) {
       AND ACTIVO = 'S'
     `;
 
-    const result = await executeDirectQuery(connection, routeQuery, {
+    const result = await SqlService.query(connection, routeQuery, {
       route: route
     });
 
@@ -377,7 +378,7 @@ async function validateWithExistingConnection(connection, salesData, route, bode
 }
 
 /**
- * Valida que una bodega existe y está activa
+ * Valida que una bodega existe y está activa - SIMPLIFICADO
  */
 async function validateBodega(connection, bodegaCode) {
   const validation = {
@@ -387,6 +388,7 @@ async function validateBodega(connection, bodegaCode) {
   };
 
   try {
+    // ✅ USAR SqlService DIRECTAMENTE
     const bodegaQuery = `
       SELECT
         BODEGA as code,
@@ -396,7 +398,7 @@ async function validateBodega(connection, bodegaCode) {
       WHERE BODEGA = @bodega
     `;
 
-    const result = await executeDirectQuery(connection, bodegaQuery, {
+    const result = await SqlService.query(connection, bodegaQuery, {
       bodega: bodegaCode
     });
 
@@ -447,12 +449,30 @@ async function executeDirectQuery(connection, sql, params = {}) {
       request.addParameter(key, paramType, value);
     }
 
+    // ✅ CORREGIR EL MANEJO DEL EVENTO 'row'
     request.on('row', (columns) => {
       const row = {};
-      columns.forEach((column) => {
-        row[column.metadata.colName] = column.value;
-      });
+
+      // ✅ VALIDACIÓN DEFENSIVA
+      if (columns && Array.isArray(columns)) {
+        columns.forEach((column) => {
+          if (column && column.metadata && column.metadata.colName) {
+            row[column.metadata.colName] = column.value;
+          }
+        });
+      } else {
+        // Si columns no es array, intentar manejar de otra forma
+        logger.warn('Estructura de columns inesperada:', typeof columns);
+        return; // Saltar esta fila
+      }
+
       rows.push(row);
+    });
+
+    // ✅ AGREGAR MANEJO DE ERRORES
+    request.on('error', (error) => {
+      logger.error('Error en request SQL directo:', error);
+      reject(error);
     });
 
     connection.execSql(request);
@@ -567,7 +587,7 @@ async function validateBodegas(connection, bodegaOrigen, bodegaDestino) {
 }
 
 /**
- * Valida un producto individual para el traspaso - CORREGIDO
+ * Valida un producto individual para el traspaso - SIMPLIFICADO
  */
 async function validateProduct(connection, product, bodegaOrigen) {
   const validation = {
@@ -580,19 +600,7 @@ async function validateProduct(connection, product, bodegaOrigen) {
   };
 
   try {
-    // DEBUG: Verificar estado de conexión
-    logger.info(
-      `🔍 validateProduct - Producto: ${product.Code_Product}, Conexión state: ${connection?.state}`
-    );
-
-    // DEBUG: Verificar parámetro
-    const articulo = product.Code_Product;
-    logger.info(
-      `🔍 validateProduct - Parámetro articulo: "${articulo}", tipo: ${typeof articulo}, length: ${
-        articulo?.length
-      }`
-    );
-
+    // ✅ USAR SqlService DIRECTAMENTE EN LUGAR DE executeDirectQuery
     const productQuery = `
       SELECT
         ARTICULO,
@@ -603,14 +611,10 @@ async function validateProduct(connection, product, bodegaOrigen) {
       WHERE ARTICULO = @articulo
     `;
 
-    const params = { articulo: articulo };
-    logger.info(`🔍 validateProduct - Params object:`, params);
+    const result = await SqlService.query(connection, productQuery, {
+      articulo: product.Code_Product
+    });
 
-    const result = await SqlService.query(connection, productQuery, {articulo: product.Code_Product}, null, null);
-
-    logger.info(`🔍 validateProduct - Query exitosa para ${articulo}`);
-
-    // Resto de tu lógica...
     if (!result.recordset || result.recordset.length === 0) {
       validation.isValid = false;
       validation.errors.push("Producto no encontrado en el catálogo");
@@ -626,10 +630,7 @@ async function validateProduct(connection, product, bodegaOrigen) {
       validation.errors.push("Producto inactivo");
     }
 
-    if (
-      !productInfo.UNIDAD_ALMACEN ||
-      productInfo.UNIDAD_ALMACEN.trim() === ""
-    ) {
+    if (!productInfo.UNIDAD_ALMACEN || productInfo.UNIDAD_ALMACEN.trim() === "") {
       validation.isValid = false;
       validation.errors.push("Unidad de medida no configurada");
     }
@@ -644,7 +645,7 @@ async function validateProduct(connection, product, bodegaOrigen) {
     const stockResult = await SqlService.query(connection, stockQuery, {
       articulo: product.Code_Product,
       bodega: bodegaOrigen,
-    }, null, null);
+    });
 
     const currentStock = stockResult.recordset[0]?.stock || 0;
 
@@ -657,7 +658,9 @@ async function validateProduct(connection, product, bodegaOrigen) {
     if (currentStock === 0) {
       validation.warnings.push("No hay existencias en bodega origen");
     }
+
   } catch (error) {
+    logger.error(`Error validando producto ${product.Code_Product}:`, error);
     validation.isValid = false;
     validation.errors.push(`Error de validación de producto: ${error.message}`);
   }
