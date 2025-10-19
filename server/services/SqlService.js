@@ -723,10 +723,10 @@ class SqlService {
       // Verificar operaciones para gestión de memoria
       MemoryManager.trackOperation("sql_query");
 
-      // Incrementar contador de operaciones de la conexión
-      if (connectionObj) {
-        ConnectionCentralService.incrementOperationCount(connectionObj);
-      }
+      // // Incrementar contador de operaciones de la conexión
+      // if (connectionObj) {
+      //   ConnectionCentralService.incrementOperationCount(connectionObj);
+      // }
 
       // Sanitizar parámetros
       const sanitizedParams = this.sanitizeParams(params);
