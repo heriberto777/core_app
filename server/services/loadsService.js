@@ -309,6 +309,8 @@ class LoadsService {
    */
   static async processOrderLoad(deliveryPersonCode, selectedPedidos, userId) {
     let loadTracking = null;
+    let step = "";
+    let ordersData = null;
 
     try {
       logger.info(
@@ -334,9 +336,6 @@ class LoadsService {
         selectedPedidos.length,
         userId
       );
-
-      let ordersData = null;
-      let step = "";
 
       return await withConnection("server1", async (server1Connection) => {
         try {

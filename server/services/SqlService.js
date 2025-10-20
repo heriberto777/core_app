@@ -583,11 +583,21 @@ class SqlService {
       try {
         connectionObj = await ConnectionCentralService.getConnection(serverKey);
         needToRelease = true; // Necesitamos liberar esta conexión al finalizar
+        logger.debug(`Conexión obtenida para ${serverKey}`);
       } catch (connError) {
         throw new Error(
           `Error al obtener conexión para ${serverKey}: ${connError.message}`
         );
+      } finally {
+        if (needToRelease && connectionObj) {
+          try {
+            await ConnectionCentralService.releaseConnection(connectionObj);
+          } catch (releaseError) {
+            logger.warn(`Error liberando conexión: ${releaseError.message}`);
+          }
+        }
       }
+
     } else if (connection && connection._serverKey) {
       // Si la conexión tiene _serverKey, usarlo para telemetría
       serverKey = connection._serverKey;
