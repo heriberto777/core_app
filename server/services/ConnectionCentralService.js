@@ -374,6 +374,206 @@ class ConnectionCentralService {
     await Promise.all(closePromises);
     logger.info("🔴 ConnectionCentralService shutdown completado");
   }
+
+  /**
+   * Inicia una transacción en una conexión
+   * MEJORADO: Con manejo robusto para AggregateError
+   * @param {Connection} connection - Conexión
+   * @param {Object} options - Opciones
+   * @returns {Promise<Object>} - Conexión con transacción
+   */
+  async beginTransaction(connection, options = {}) {
+    if (!connection) {
+      throw new Error(
+        "Se requiere una conexión válida para iniciar transacción"
+      );
+    }
+
+    if (this.activeTransactions.has(connection)) {
+      logger.warn(
+        "Intento de iniciar transacción en una conexión que ya tiene una transacción activa"
+      );
+      return {
+        connection,
+        transaction: this.activeTransactions.get(connection),
+      };
+    }
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error("Timeout al iniciar transacción"));
+      }, options.timeout || 45000); // Aumentado para AggregateError
+
+      try {
+        connection.transaction((err, transaction) => {
+          clearTimeout(timeout);
+
+          if (err) {
+            logger.error(`Error al iniciar transacción: ${err.message}`);
+
+            // NUEVO: Manejo específico para AggregateError en transacciones
+            if (err.name === "AggregateError") {
+              logger.error(`AggregateError al iniciar transacción:`, err);
+              Telemetry.trackError("transaction_begin_aggregate_error", {
+                serverKey: connection._serverKey,
+              });
+            }
+
+            reject(err);
+          } else {
+            // Registrar la transacción activa
+            this.activeTransactions.set(connection, transaction);
+
+            // Añadir metadatos a la transacción
+            transaction._startTime = Date.now();
+            transaction._connection = connection;
+
+            logger.debug("Transacción iniciada correctamente");
+            resolve({ connection, transaction });
+          }
+        });
+      } catch (error) {
+        clearTimeout(timeout);
+
+        if (error.name === "AggregateError") {
+          logger.error(`AggregateError en try de beginTransaction:`, error);
+        }
+
+        reject(error);
+      }
+    });
+  }
+
+  /**
+   * Confirma una transacción
+   * MEJORADO: Con manejo robusto para AggregateError
+   * @param {Transaction} transaction - Transacción
+   * @returns {Promise<void>}
+   */
+  async commitTransaction(transaction) {
+    if (!transaction) {
+      throw new Error("Se requiere una transacción válida para confirmar");
+    }
+
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error("Timeout al confirmar transacción"));
+      }, 45000); // Aumentado para AggregateError
+
+      try {
+        transaction.commit((err) => {
+          clearTimeout(timeout);
+
+          if (err) {
+            logger.error(`Error al confirmar transacción: ${err.message}`);
+
+            // NUEVO: Manejo específico para AggregateError en commit
+            if (err.name === "AggregateError") {
+              logger.error(`AggregateError al confirmar transacción:`, err);
+              Telemetry.trackError("transaction_commit_aggregate_error", {
+                serverKey: transaction._connection?._serverKey,
+              });
+            }
+
+            reject(err);
+          } else {
+            // Limpiar referencia en el mapa de transacciones activas
+            if (transaction._connection) {
+              this.activeTransactions.delete(transaction._connection);
+            }
+
+            logger.debug("Transacción confirmada correctamente");
+            resolve();
+          }
+        });
+      } catch (error) {
+        clearTimeout(timeout);
+
+        if (error.name === "AggregateError") {
+          logger.error(`AggregateError en try de commitTransaction:`, error);
+        }
+
+        reject(error);
+      }
+    });
+  }
+  /**
+   * Revierte una transacción
+   * MEJORADO: Con manejo robusto para AggregateError
+   * @param {Transaction} transaction - Transacción
+   * @returns {Promise<void>}
+   */
+  async rollbackTransaction(transaction) {
+    if (!transaction) return;
+
+    return new Promise((resolve, reject) => {
+      try {
+        const timeout = setTimeout(() => {
+          // Limpiar conexión incluso en timeout
+          if (transaction._connection) {
+            this.activeTransactions.delete(transaction._connection);
+          }
+
+          logger.warn("Timeout en rollback de transacción, continuando...");
+          resolve();
+        }, 45000); // Aumentado para AggregateError
+
+        if (typeof transaction.rollback === "function") {
+          transaction.rollback((err) => {
+            clearTimeout(timeout);
+
+            // Siempre limpiar la referencia
+            if (transaction._connection) {
+              this.activeTransactions.delete(transaction._connection);
+            }
+
+            if (err) {
+              logger.error(`Error en rollback: ${err.message}`);
+
+              // NUEVO: Manejo específico para AggregateError en rollback
+              if (err.name === "AggregateError") {
+                logger.error(`AggregateError en rollback:`, err);
+                Telemetry.trackError("transaction_rollback_aggregate_error", {
+                  serverKey: transaction._connection?._serverKey,
+                });
+              }
+
+              reject(err);
+            } else {
+              logger.debug("Rollback completado correctamente");
+              resolve();
+            }
+          });
+        } else {
+          clearTimeout(timeout);
+
+          // Limpiar conexión
+          if (transaction._connection) {
+            this.activeTransactions.delete(transaction._connection);
+          }
+
+          logger.warn(
+            "No se encontró método rollback en el objeto de transacción"
+          );
+          resolve();
+        }
+      } catch (error) {
+        logger.error(`Error general en rollback: ${error.message}`);
+
+        // NUEVO: Manejo específico para AggregateError en catch general
+        if (error.name === "AggregateError") {
+          logger.error(`AggregateError en try de rollbackTransaction:`, error);
+        }
+
+        // Limpiar conexión incluso en error
+        if (transaction._connection) {
+          this.activeTransactions.delete(transaction._connection);
+        }
+
+        reject(error);
+      }
+    });
+  }
 }
 
 const connectionCentralService = new ConnectionCentralService();
