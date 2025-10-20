@@ -4890,7 +4890,7 @@ class DynamicTransferService {
 
       // Probar conexión origen
       try {
-        const sourceConnResult = await ConnectionService.enhancedRobustConnect(
+        const sourceConnResult = await ConnectionService.getConnection(
           mapping.sourceServer
         );
         if (sourceConnResult.success) {
@@ -4919,7 +4919,7 @@ class DynamicTransferService {
 
       // Probar conexión destino
       try {
-        const targetConnResult = await ConnectionService.enhancedRobustConnect(
+        const targetConnResult = await ConnectionService.getConnection(
           mapping.targetServer
         );
         if (targetConnResult.success) {
@@ -4977,7 +4977,7 @@ class DynamicTransferService {
       }
 
       // Establecer conexión origen
-      const sourceConnResult = await ConnectionService.enhancedRobustConnect(
+      const sourceConnResult = await ConnectionService.getConnection(
         mapping.sourceServer
       );
       if (!sourceConnResult.success) {
