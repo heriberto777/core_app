@@ -955,7 +955,8 @@ export class TransferApi {
    */
   async getLogsSummary(accessToken) {
     try {
-      const url = `${this.baseApi}/logs/summary`;
+      // const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/execute/${taskId}`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOGS}/summary`;
       const params = {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -984,7 +985,7 @@ export class TransferApi {
    */
   async getLogDetail(accessToken, logId) {
     try {
-      const url = `${this.baseApi}/logs/detail/${logId}`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOGS}/detail/${logId}`;
       const params = {
         headers: {
           Authorization: `Bearer ${accessToken}`,
@@ -1011,9 +1012,9 @@ export class TransferApi {
    * @param {number} olderThan - Días de antigüedad para eliminar
    * @returns {Promise<Object>} - Resultado de la operación
    */
-  async cleanOldLogs(accessToken, olderThan = 30) {
+  async cleanOldLogs(accessToken, olderThan = 365) {
     try {
-      const url = `${this.baseApi}/logs/clean`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOGS}/clean`;
       const params = {
         method: "DELETE",
         headers: {
@@ -1044,7 +1045,7 @@ export class TransferApi {
    */
   async getLogSources(accessToken) {
     try {
-      const url = `${this.baseApi}/logs/sources`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOGS}/sources`;
       const params = {
         headers: {
           Authorization: `Bearer ${accessToken}`,

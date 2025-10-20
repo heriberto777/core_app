@@ -239,28 +239,72 @@ const getLogDetail = async (req, res) => {
  * @route DELETE /api/v1/logs/clean
  */
 const cleanOldLogs = async (req, res) => {
+  console.log("Iniciando limpieza de logs antiguos...");
   try {
-    const { olderThan = 30 } = req.body; // Valor predeterminado: 30 días
+    // PROBLEMA 1: Los parámetros deben venir de query, no de body en DELETE
+    const { olderThan = 90 } = req.query; // Cambiado de req.body a req.query
 
-    // Calcular fecha límite
+    // PROBLEMA 2: Validar que olderThan sea un número válido
+    const daysToDelete = parseInt(olderThan);
+    if (isNaN(daysToDelete) || daysToDelete < 1) {
+      return res.status(400).json({
+        success: false,
+        message: "El parámetro 'olderThan' debe ser un número positivo",
+      });
+    }
+
+    // PROBLEMA 3: Calcular fecha límite correctamente
     const limitDate = new Date();
-    limitDate.setDate(limitDate.getDate() - parseInt(olderThan));
+    limitDate.setDate(limitDate.getDate() - daysToDelete);
 
-    // Eliminar logs anteriores a la fecha límite
-    const result = await Log.deleteMany({ timestamp: { $lt: limitDate } });
+    // PROBLEMA 4: Verificar que el campo timestamp existe y es correcto
+    console.log(`Eliminando logs anteriores a: ${limitDate.toISOString()}`);
 
-    // Registrar acción en logs
-    logger.info(
-      `Limpieza de logs: ${result.deletedCount} registros eliminados (mayores a ${olderThan} días)`
-    );
-
-    res.json({
-      success: true,
-      message: `Se eliminaron ${result.deletedCount} logs antiguos`,
-      deletedCount: result.deletedCount,
+    // PROBLEMA 5: Verificar primero cuántos logs existen antes de eliminar
+    const totalLogs = await Log.countDocuments();
+    const logsToDelete = await Log.countDocuments({
+      timestamp: { $lt: limitDate }
     });
+
+    console.log(`Total de logs: ${totalLogs}`);
+    console.log(`Logs a eliminar: ${logsToDelete}`);
+
+    if (logsToDelete === 0) {
+      return res.json({
+        success: true,
+        message: `No hay logs anteriores a ${daysToDelete} días para eliminar`,
+        deletedCount: 0,
+        totalLogs: totalLogs
+      });
+    }
+
+    // PROBLEMA 6: Usar deleteMany con await correctamente
+    const result = await Log.deleteMany({
+      timestamp: { $lt: limitDate }
+    });
+
+    // Verificar si la eliminación fue exitosa
+    if (result.acknowledged) {
+      logger.info(
+        `Limpieza de logs: ${result.deletedCount} registros eliminados (mayores a ${daysToDelete} días)`
+      );
+
+      res.json({
+        success: true,
+        message: `Se eliminaron ${result.deletedCount} logs antiguos`,
+        deletedCount: result.deletedCount,
+        totalLogsBeforeClean: totalLogs,
+        daysDeleted: daysToDelete,
+        cutoffDate: limitDate.toISOString()
+      });
+    } else {
+      throw new Error("La operación de eliminación no fue reconocida por MongoDB");
+    }
+
   } catch (error) {
+    console.error("Error detallado al limpiar logs:", error);
     logger.error("Error al limpiar logs antiguos:", error);
+
     res.status(500).json({
       success: false,
       message: "Error al limpiar logs antiguos",
