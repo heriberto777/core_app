@@ -216,7 +216,11 @@ class LoadsController {
         }`
       );
 
-      const result = await LoadsService.cancelOrders(selectedPedidos, userId);
+      const result = await LoadsService.cancelOrders(
+        selectedPedidos,
+        userId,
+        (transaction = null)
+      );
 
       res.json({
         success: true,
@@ -265,7 +269,8 @@ class LoadsController {
 
       const result = await LoadsService.removeOrderLines(
         pedidoId,
-        lineasToRemove
+        lineasToRemove,
+        (transaction = null)
       );
 
       res.json({
