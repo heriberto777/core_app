@@ -26,10 +26,13 @@ class ConnectionCentralService {
       errors: 0,
       activeConnections: new Set(),
     };
+    this.activeTransactions = new Map();
     this._initializingPools = new Map();
     this._closingPools = new Set();
     this._isShuttingDown = false;
   }
+
+
 
   async initialize() {
     if (this._initialized) return;
