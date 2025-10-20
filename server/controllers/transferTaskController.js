@@ -1728,15 +1728,14 @@ const getSourceDataByMapping = async (req, res) => {
     const connectionResult = await ConnectionManager.getConnection(
       mapping.sourceServer
     );
-    if (!connectionResult.success) {
+    if (!connectionResult) {
       throw new Error(
-        `No se pudo establecer conexión a ${mapping.sourceServer}: ${
-          connectionResult.error?.message || "Error desconocido"
+        `No se pudo establecer conexión a ${mapping.sourceServer}|| "Error desconocido"
         }`
       );
     }
 
-    connection = connectionResult.connection;
+    // connection = connectionResult.connection;
 
     // Buscar la tabla principal en la configuración
     const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);

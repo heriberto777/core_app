@@ -230,16 +230,14 @@ const getDocumentsByMapping = async (req, res) => {
         mapping.sourceServer
       );
 
-      if (!connectionResult.success) {
+      if (!connectionResult) {
         return res.status(500).json({
           success: false,
-          message: `No se pudo establecer conexión a ${mapping.sourceServer}: ${
-            connectionResult.error?.message || "Error desconocido"
+          message: `No se pudo establecer conexión a ${mapping.sourceServer} || "Error desconocido"
           }`,
         });
       }
 
-      connection = connectionResult.connection;
       logger.info(
         `Conexión establecida exitosamente a ${mapping.sourceServer}`
       );
@@ -331,15 +329,14 @@ const getDocumentDetailsByMapping = async (req, res) => {
     const connectionResult = await ConnectionManager.getConnection(
       mapping.sourceServer
     );
-    if (!connectionResult.success) {
+    if (!connectionResult) {
       throw new Error(
-        `No se pudo establecer conexión a ${mapping.sourceServer}: ${
-          connectionResult.error?.message || "Error desconocido"
+        `No se pudo establecer conexión a ${mapping.sourceServer} || "Error desconocido"
         }`
       );
     }
 
-    connection = connectionResult.connection;
+    // connection = connectionResult.connection;
 
     // Buscar configuraciones de tablas de detalle
     const detailTableConfigs = mapping.tableConfigs.filter(
