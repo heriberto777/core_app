@@ -658,7 +658,7 @@ class LoadsService {
               server1Connection,
               selectedPedidos,
               "S",
-              transaction
+              null
             );
             logger.info(`${step}: Pedidos marcados como procesados`);
 
