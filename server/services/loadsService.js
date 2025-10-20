@@ -359,7 +359,6 @@ class LoadsService {
               server1Connection,
               selectedPedidos,
               loadId,
-              transaction
             );
             logger.info(`${step}: Completado exitosamente`);
 
@@ -571,7 +570,7 @@ class LoadsService {
                   traspasoResult,
                   userId: String(userId),
                 },
-                transaction
+                null
               );
 
               // PASO 7: Actualizar U_estado_proceso = 'S' (con warnings)
@@ -580,7 +579,6 @@ class LoadsService {
                 server1Connection,
                 selectedPedidos,
                 "S",
-                transaction
               );
 
               // CONFIRMAR TRANSACCIÓN
@@ -648,7 +646,7 @@ class LoadsService {
                 traspasoResult,
                 userId: String(userId),
               },
-              transaction
+              null
             );
 
             // PASO 7: Actualizar U_estado_proceso = 'S' (TODO EXITOSO)
