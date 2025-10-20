@@ -64,7 +64,7 @@ class ConsecutiveBatchManager {
       });
 
       // Obtener conexión al servidor
-      const connectionResult = await ConnectionService.enhancedRobustConnect(
+      const connectionResult = await ConnectionService.getConnection(
         config.serverKey
       );
       if (!connectionResult.success) {
@@ -339,7 +339,7 @@ class ConsecutiveBatchManager {
             `Reconectando por error de conexión en lote ${batchNumber}`
           );
 
-          const reconnectResult = await ConnectionService.enhancedRobustConnect(
+          const reconnectResult = await ConnectionService.getConnection(
             config.serverKey
           );
           if (reconnectResult.success) {
@@ -396,7 +396,7 @@ class ConsecutiveBatchManager {
     } catch (connError) {
       logger.warn(`Conexión perdida, reconectando a ${serverKey}...`);
 
-      const reconnectResult = await ConnectionService.enhancedRobustConnect(
+      const reconnectResult = await ConnectionService.getConnection(
         serverKey
       );
       if (!reconnectResult.success) {

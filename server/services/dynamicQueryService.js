@@ -142,7 +142,7 @@ async function executeDynamicSelect(
       );
       sendProgress(task._id, 10);
 
-      const connectionResult = await ConnectionService.enhancedRobustConnect(
+      const connectionResult = await ConnectionService.getConnection(
         serverKey
       );
 
@@ -278,7 +278,7 @@ async function executeDynamicSelect(
 
               // Obtener nueva conexión
               const reconnectResult =
-                await ConnectionService.enhancedRobustConnect(serverKey);
+                await ConnectionService.getConnection(serverKey);
 
               if (!reconnectResult.success) {
                 throw new Error(
@@ -533,9 +533,7 @@ async function executeNonDestructiveQuery(
       `🔌 Estableciendo conexión a ${serverKey} para tarea no destructiva '${taskName}'...`
     );
 
-    const connectionResult = await ConnectionService.enhancedRobustConnect(
-      serverKey
-    );
+    const connectionResult = await ConnectionService.getConnection(serverKey);
 
     if (!connectionResult.success) {
       throw new Error(
@@ -660,8 +658,9 @@ async function executeNonDestructiveQuery(
               } catch (e) {}
 
               // Obtener nueva conexión
-              const reconnectResult =
-                await ConnectionService.enhancedRobustConnect(serverKey);
+              const reconnectResult = await ConnectionService.getConnection(
+                serverKey
+              );
 
               if (!reconnectResult.success) {
                 throw new Error(

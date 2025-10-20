@@ -1725,7 +1725,7 @@ const getSourceDataByMapping = async (req, res) => {
     }
 
     // Obtener conexión al servidor origen
-    const connectionResult = await ConnectionManager.enhancedRobustConnect(
+    const connectionResult = await ConnectionManager.getConnection(
       mapping.sourceServer
     );
     if (!connectionResult.success) {
@@ -1828,7 +1828,7 @@ const updateEntityData = async (req, res) => {
     // 1. Actualizar en la tabla origen
     try {
       // Obtener conexión al servidor origen
-      const sourceConnResult = await ConnectionManager.enhancedRobustConnect(
+      const sourceConnResult = await ConnectionManager.getConnection(
         mapping.sourceServer
       );
       if (!sourceConnResult.success) {
@@ -1875,7 +1875,7 @@ const updateEntityData = async (req, res) => {
     if (_dynamicFields && Object.keys(_dynamicFields).length > 0) {
       try {
         // Obtener conexión al servidor destino
-        const targetConnResult = await ConnectionManager.enhancedRobustConnect(
+        const targetConnResult = await ConnectionManager.getConnection(
           mapping.targetServer
         );
         if (!targetConnResult.success) {

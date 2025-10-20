@@ -362,7 +362,7 @@ class LinkedTasksService {
       );
 
       // Obtener conexión (siempre a server1 para post-updates)
-      const connectionResult = await ConnectionService.enhancedRobustConnect(
+      const connectionResult = await ConnectionService.getConnection(
         "server1"
       );
       if (!connectionResult.success) {
