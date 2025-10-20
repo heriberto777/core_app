@@ -5,7 +5,7 @@ const roleSchema = new mongoose.Schema(
     name: {
       type: String,
       required: true,
-      unique: true,
+      // unique: true,
       trim: true,
       lowercase: true,
     },
@@ -58,8 +58,8 @@ const roleSchema = new mongoose.Schema(
 
 // Índices para optimización
 roleSchema.index({ name: 1 });
-roleSchema.index({ isActive: 1 });
-roleSchema.index({ isSystem: 1 });
+// roleSchema.index({ isActive: 1 });
+// roleSchema.index({ isSystem: 1 });
 
 // Método para verificar si un rol tiene un permiso específico
 roleSchema.methods.hasPermission = function (resource, action) {
