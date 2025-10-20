@@ -163,15 +163,16 @@ class ConnectionCentralService {
     }
   }
 
-  // ✅ CONFIGURACIÓN SSL CORREGIDA SEGÚN TU ESTRUCTURA ORIGINAL
+  /**
+   * Convierte la configuración de MongoDB al formato requerido por Tedious
+   * Configuración robusta para prevenir AggregateError
+   * @private
+   * @param {Object} dbConfig - Configuración de MongoDB
+   * @returns {Object} - Configuración en formato Tedious
+   */
   _convertToTediousConfig(dbConfig) {
-    // Detectar si es dirección IP
+    // Verificar si es una dirección IP
     const isIpAddress = /^(\d{1,3}\.){3}\d{1,3}$/.test(dbConfig.host);
-
-    // ✅ USAR CONFIGURACIÓN SSL ORIGINAL
-    const useEncryption = dbConfig.options?.encrypt !== false && !isIpAddress;
-    const trustCertificate =
-      dbConfig.options?.trustServerCertificate !== false || isIpAddress;
 
     const config = {
       server: dbConfig.host,
@@ -183,24 +184,38 @@ class ConnectionCentralService {
         },
       },
       options: {
-        database: dbConfig.database,
-        // ✅ CONFIGURACIÓN SSL MEJORADA
-        encrypt: useEncryption,
-        trustServerCertificate: trustCertificate,
-
-        // ✅ TIMEOUTS INCREMENTADOS
-        connectTimeout: 90000, // 90 segundos para conectar
-        requestTimeout: 180000, // 3 minutos para queries
-        cancelTimeout: 30000, // 30 segundos para cancelar
-
-        port: dbConfig.port || 1433,
-        rowCollectionOnRequestCompletion: true,
-        validateParameters: false,
+        // MEJORADO: Configuración SSL/TLS más robusta para AggregateError
+        encrypt: isIpAddress ? false : dbConfig.options?.encrypt || false,
+        trustServerCertificate: true,
         enableArithAbort: true,
 
-        // ✅ CONFIGURACIONES ADICIONALES PARA ESTABILIDAD
-        useColumnNames: false,
-        camelCaseColumns: false,
+        // MEJORADO: Timeouts más largos y configuración de retry para AggregateError
+        connectTimeout: 90000, // Aumentado a 90 segundos
+        requestTimeout: 180000, // Aumentado a 3 minutos
+        cancelTimeout: 15000,
+        connectionRetryInterval: 3000,
+
+        // MEJORADO: Configuración de pool y manejo de resultados
+        database: dbConfig.database,
+        rowCollectionOnRequestCompletion: true,
+        useColumnNames: true,
+
+        // NUEVO: Configuración adicional para estabilidad y AggregateError
+        validateParameters: false,
+        abortTransactionOnError: false,
+        enableConcurrentExecution: false,
+
+        // NUEVO: Configuración específica para prevenir AggregateError
+        enableImplicitTransactions: false,
+        isolationLevel: 2, // READ_COMMITTED
+        readOnlyIntent: false,
+
+        // NUEVO: Configuración de red mejorada para AggregateError
+        packetSize: 8192, // Aumentado para mejor rendimiento
+        useUTC: true,
+        dateFirst: 7,
+
+        // NUEVO: Configuración de debug para troubleshooting
         debug: {
           packet: false,
           data: false,
@@ -210,10 +225,25 @@ class ConnectionCentralService {
       },
     };
 
-    // ✅ AGREGAR INSTANCIA SI EXISTE (IMPORTANTE PARA SQL SERVER)
     if (dbConfig.instance) {
       config.options.instanceName = dbConfig.instance;
     }
+
+    if (dbConfig.port) {
+      config.options.port = parseInt(dbConfig.port);
+    }
+
+    // NUEVO: Configuración específica por entorno para AggregateError
+    if (process.env.NODE_ENV === "production") {
+      config.options.connectTimeout = 120000; // Más tiempo en producción
+      config.options.requestTimeout = 240000;
+    }
+
+    logger.info(
+      `Configuración Tedious robusta creada para ${dbConfig.host}:${
+        dbConfig.port || 1433
+      }`
+    );
 
     return config;
   }
