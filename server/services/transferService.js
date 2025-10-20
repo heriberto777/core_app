@@ -615,7 +615,8 @@ class TransferService {
         connections,
         taskInfo,
         signal,
-        initialCount // Pasar initialCount como parámetro
+        initialCount, // Pasar initialCount como parámetro
+        connections.columnTypes || {}
       );
 
       this.checkCancellation(signal);
@@ -1303,7 +1304,8 @@ class TransferService {
     connections,
     task,
     signal,
-    initialCount = 0
+    initialCount = 0,
+    columnTypes = {}
   ) {
     // Configurar claves para identificar registros
     const { validationRules, name } = task;
@@ -1613,8 +1615,9 @@ class TransferService {
                 logger.warn(`Intentando reconexión por error de agregación...`);
 
                 // CORREGIDO: Reconectar al servidor correcto
-                const reconnectResult =
-                  await ConnectionService.getConnection(targetServer);
+                const reconnectResult = await ConnectionService.getConnection(
+                  targetServer
+                );
                 if (!reconnectResult) {
                   throw new Error(
                     `No se pudo restablecer la conexión tras error: ${targetServer} || "Error desconocido"
@@ -1723,8 +1726,9 @@ class TransferService {
                 );
 
                 // CORREGIDO: Reconectar al servidor correcto
-                const reconnectResult =
-                  await ConnectionService.getConnection(targetServer);
+                const reconnectResult = await ConnectionService.getConnection(
+                  targetServer
+                );
 
                 if (!reconnectResult) {
                   throw new Error(
@@ -2085,9 +2089,7 @@ class TransferService {
           "server1"
         );
         if (!reconnectResult) {
-          throw new Error(
-            `No se pudo reconectar para post-actualización}`
-          );
+          throw new Error(`No se pudo reconectar para post-actualización}`);
         }
       }
 
@@ -2153,8 +2155,9 @@ class TransferService {
               `Reintentando post-actualización tras error de conexión`
             );
 
-            const reconnectResult =
-              await ConnectionService.getConnection("server1");
+            const reconnectResult = await ConnectionService.getConnection(
+              "server1"
+            );
             if (!reconnectResult) {
               throw new Error(
                 `No se pudo reconectar para reintentar post-actualización}`
@@ -2644,8 +2647,9 @@ class TransferService {
           );
 
           // Usar conexión robusta para el borrado
-          const connectionResult =
-            await ConnectionService.getConnection("server2");
+          const connectionResult = await ConnectionService.getConnection(
+            "server2"
+          );
           if (!connectionResult) {
             throw new Error(
               `No se pudo establecer conexión a server2 para borrado`
@@ -2698,12 +2702,11 @@ class TransferService {
 
         try {
           // Usar conexión robusta
-          const connectionResult =
-            await ConnectionService.getConnection("server2");
+          const connectionResult = await ConnectionService.getConnection(
+            "server2"
+          );
           if (!connectionResult) {
-            throw new Error(
-              `No se pudo establecer conexión a server2`
-            );
+            throw new Error(`No se pudo establecer conexión a server2`);
           }
           logger.info(
             `Conexión establecida y verificada para inserción en lotes (taskId: ${taskId}, task: ${taskName})`
@@ -2814,9 +2817,7 @@ class TransferService {
             "server2"
           );
           if (!reconnectResult) {
-            throw new Error(
-              `No se pudo restablecer la conexión`
-            );
+            throw new Error(`No se pudo restablecer la conexión`);
           }
           logger.info(
             `Reconexión exitosa a server2 para lote ${currentBatchNumber}`
@@ -2908,12 +2909,11 @@ class TransferService {
                 } catch (e) {}
 
                 // Usar conexión robusta
-                const reconnectResult =
-                  await ConnectionService.getConnection("server2");
+                const reconnectResult = await ConnectionService.getConnection(
+                  "server2"
+                );
                 if (!reconnectResult) {
-                  throw new Error(
-                    `No se pudo restablecer la conexión`
-                  );
+                  throw new Error(`No se pudo restablecer la conexión`);
                 }
                 // Reintentar inserción
                 const retryResult = await SqlService.insertWithExplicitTypes(
@@ -3159,25 +3159,17 @@ class TransferService {
 
       // 3. Establecer conexiones a ambos servidores
       logger.info(`Conectando a Server2 (origen)...`);
-      const server2Result = await ConnectionService.getConnection(
-        "server2"
-      );
+      const server2Result = await ConnectionService.getConnection("server2");
       if (!server2Result) {
-        throw new Error(
-          `No se pudo conectar a Server2`
-        );
+        throw new Error(`No se pudo conectar a Server2`);
       }
 
       logger.info(`Conexión establecida a Server2`);
 
       logger.info(`Conectando a Server1 (destino)...`);
-      const server1Result = await ConnectionService.getConnection(
-        "server1"
-      );
+      const server1Result = await ConnectionService.getConnection("server1");
       if (!server1Result) {
-        throw new Error(
-          `No se pudo conectar a Server1`
-        );
+        throw new Error(`No se pudo conectar a Server1`);
       }
 
       logger.info(`Conexión establecida a Server1`);
