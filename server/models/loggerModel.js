@@ -8,7 +8,7 @@ const LogSchema = new Schema(
       required: true,
       enum: ["error", "warn", "info", "debug", "verbose"],
       default: "info",
-      index: true,
+      // index: true,
     },
     message: {
       type: String,
@@ -18,12 +18,12 @@ const LogSchema = new Schema(
     timestamp: {
       type: Date,
       default: Date.now,
-      index: true,
+      // index: true,
     },
     source: {
       type: String,
       default: "app",
-      index: true,
+      // index: true,
     },
     stack: {
       type: String,
@@ -35,11 +35,11 @@ const LogSchema = new Schema(
     },
     user: {
       type: String,
-      index: true,
+      // index: true,
     },
     ip: {
       type: String,
-      index: true,
+      // index: true,
     },
     // Nuevos campos para mejor tracking
     sessionId: String,
