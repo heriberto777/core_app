@@ -1,19 +1,17 @@
-// server/services/ConnectionCentralService.js - VERSIÓN CONSOLIDADA
-
 const { Connection, Request } = require("tedious");
 const { createPool } = require("generic-pool");
 const logger = require("./logger");
 const DBConfig = require("../models/dbConfigModel");
 const MongoDbService = require("./mongoDbService");
 
-// Configuración mejorada para evitar pool closing errors
+// ✅ CONFIGURACIÓN MEJORADA PARA EVITAR TIMEOUTS
 const DEFAULT_POOL_CONFIG = {
-  min: 2,            // Mínimo 2 conexiones activas
-  max: 15,           // Máximo 15 conexiones
-  acquireTimeoutMillis: 45000,   // 45 segundos
-  idleTimeoutMillis: 600000,     // 10 minutos idle
-  evictionRunIntervalMillis: 120000, // Check cada 2 minutos
-  softIdleTimeoutMillis: 300000,     // 5 minutos soft timeout
+  min: 1, // Empezar con 1 conexión
+  max: 10, // Máximo 10 conexiones
+  acquireTimeoutMillis: 120000, // 2 minutos para obtener conexión
+  idleTimeoutMillis: 900000, // 15 minutos idle
+  evictionRunIntervalMillis: 300000, // Check cada 5 minutos
+  softIdleTimeoutMillis: 600000, // 10 minutos soft timeout
   testOnBorrow: false,
   testOnReturn: false,
   fifo: false,
@@ -33,14 +31,10 @@ class ConnectionCentralService {
     this._isShuttingDown = false;
   }
 
-  /**
-   * Inicializar servicio
-   */
   async initialize() {
     if (this._initialized) return;
 
     try {
-      // Asegurar conexión a MongoDB
       if (!MongoDbService.isConnected()) {
         await MongoDbService.connect();
       }
@@ -53,17 +47,12 @@ class ConnectionCentralService {
     }
   }
 
-  /**
-   * Obtener conexión con manejo robusto
-   */
   async getConnection(serverKey) {
     try {
-      // Verificar si el servicio está cerrando
       if (this._isShuttingDown) {
         throw new Error(`El servicio está cerrando`);
       }
 
-      // Verificar si el pool existe y no está cerrando
       if (!this.pools.has(serverKey) || this._closingPools.has(serverKey)) {
         logger.info(`Inicializando pool para ${serverKey}...`);
         const initialized = await this.initPool(serverKey);
@@ -77,9 +66,10 @@ class ConnectionCentralService {
         throw new Error(`Pool no disponible para ${serverKey}`);
       }
 
-      // Verificar estado del pool antes de obtener conexión
       if (pool._draining) {
-        throw new Error(`El pool para ${serverKey} está en proceso de cierre y no puede aceptar trabajo`);
+        throw new Error(
+          `El pool para ${serverKey} está en proceso de cierre y no puede aceptar trabajo`
+        );
       }
 
       const connection = await pool.acquire();
@@ -91,12 +81,10 @@ class ConnectionCentralService {
       this.stats.acquired++;
       this.stats.activeConnections.add(connection);
 
-      // Marcar conexión con metadata
       connection._serverKey = serverKey;
       connection._acquiredAt = Date.now();
 
       return connection;
-
     } catch (error) {
       this.stats.errors++;
       logger.error(`Error obteniendo conexión para ${serverKey}:`, error);
@@ -104,11 +92,7 @@ class ConnectionCentralService {
     }
   }
 
-  /**
-   * Inicializar pool con protección contra concurrencia
-   */
   async initPool(serverKey, customConfig = {}) {
-    // Evitar inicializaciones concurrentes
     if (this._initializingPools.has(serverKey)) {
       return await this._initializingPools.get(serverKey);
     }
@@ -126,39 +110,28 @@ class ConnectionCentralService {
     }
   }
 
-  /**
-   * Implementación real de inicialización
-   */
   async _doInitPool(serverKey, customConfig = {}) {
     try {
       logger.info(`🔄 Inicializando pool para ${serverKey}...`);
 
-      // Cerrar pool existente si hay uno
       if (this.pools.has(serverKey)) {
         await this._forceClosePool(serverKey);
       }
 
-      // Cargar configuración desde MongoDB
       const dbConfig = await this._loadConfig(serverKey);
       if (!dbConfig) {
         throw new Error(`No se encontró configuración para ${serverKey}`);
       }
 
-      // Crear factory
       const factory = this._createConnectionFactory(dbConfig, serverKey);
-
-      // Configuración del pool
       const poolConfig = { ...DEFAULT_POOL_CONFIG, ...customConfig };
-
-      // Crear pool
       const pool = createPool(factory, poolConfig);
 
-      // Manejar eventos del pool
-      pool.on('factoryCreateError', (err) => {
+      pool.on("factoryCreateError", (err) => {
         logger.error(`Error en factory para ${serverKey}:`, err);
       });
 
-      pool.on('factoryDestroyError', (err) => {
+      pool.on("factoryDestroyError", (err) => {
         logger.error(`Error destruyendo conexión para ${serverKey}:`, err);
       });
 
@@ -166,16 +139,12 @@ class ConnectionCentralService {
 
       logger.info(`✅ Pool inicializado para ${serverKey}`);
       return true;
-
     } catch (error) {
       logger.error(`❌ Error inicializando pool para ${serverKey}:`, error);
       throw error;
     }
   }
 
-  /**
-   * Cargar configuración desde MongoDB
-   */
   async _loadConfig(serverKey) {
     try {
       if (!MongoDbService.isConnected()) {
@@ -194,13 +163,17 @@ class ConnectionCentralService {
     }
   }
 
-  /**
-   * Convertir config de MongoDB a Tedious
-   */
+  // ✅ CONFIGURACIÓN SSL CORREGIDA SEGÚN TU ESTRUCTURA ORIGINAL
   _convertToTediousConfig(dbConfig) {
+    // Detectar si es dirección IP
     const isIpAddress = /^(\d{1,3}\.){3}\d{1,3}$/.test(dbConfig.host);
 
-    return {
+    // ✅ USAR CONFIGURACIÓN SSL ORIGINAL
+    const useEncryption = dbConfig.options?.encrypt !== false && !isIpAddress;
+    const trustCertificate =
+      dbConfig.options?.trustServerCertificate !== false || isIpAddress;
+
+    const config = {
       server: dbConfig.host,
       authentication: {
         type: "default",
@@ -211,58 +184,94 @@ class ConnectionCentralService {
       },
       options: {
         database: dbConfig.database,
-        encrypt: isIpAddress ? false : true,
-        trustServerCertificate: true,
-        connectTimeout: 60000,
-        requestTimeout: 120000,
+        // ✅ CONFIGURACIÓN SSL MEJORADA
+        encrypt: useEncryption,
+        trustServerCertificate: trustCertificate,
+
+        // ✅ TIMEOUTS INCREMENTADOS
+        connectTimeout: 90000, // 90 segundos para conectar
+        requestTimeout: 180000, // 3 minutos para queries
+        cancelTimeout: 30000, // 30 segundos para cancelar
+
         port: dbConfig.port || 1433,
         rowCollectionOnRequestCompletion: true,
         validateParameters: false,
         enableArithAbort: true,
+
+        // ✅ CONFIGURACIONES ADICIONALES PARA ESTABILIDAD
+        useColumnNames: false,
+        camelCaseColumns: false,
+        debug: {
+          packet: false,
+          data: false,
+          payload: false,
+          token: false,
+        },
       },
     };
+
+    // ✅ AGREGAR INSTANCIA SI EXISTE (IMPORTANTE PARA SQL SERVER)
+    if (dbConfig.instance) {
+      config.options.instanceName = dbConfig.instance;
+    }
+
+    return config;
   }
 
-  /**
-   * Crear factory de conexiones
-   */
   _createConnectionFactory(config, serverKey) {
     return {
       create: () => {
         return new Promise((resolve, reject) => {
           const connection = new Connection(config);
 
+          // ✅ TIMEOUT INCREMENTADO A 2 MINUTOS
           const timeout = setTimeout(() => {
-            reject(new Error(`Timeout conectando a ${serverKey}`));
-          }, 60000);
+            reject(
+              new Error(
+                `Timeout conectando a ${serverKey} después de 120 segundos`
+              )
+            );
+          }, 120000);
 
           connection.connect((err) => {
             clearTimeout(timeout);
             if (err) {
+              logger.error(`Error conectando a ${serverKey}:`, {
+                message: err.message,
+                code: err.code,
+                state: err.state,
+              });
               reject(err);
             } else {
+              logger.debug(`Conexión exitosa a ${serverKey}`);
               resolve(connection);
             }
+          });
+
+          // ✅ MANEJAR ERRORES DE CONEXIÓN
+          connection.on("error", (err) => {
+            logger.error(`Error en conexión a ${serverKey}:`, err);
           });
         });
       },
       destroy: (connection) => {
         return new Promise((resolve) => {
-          if (connection && !connection.closed) {
-            connection.close();
+          try {
+            if (connection && !connection.closed) {
+              connection.close();
+            }
+          } catch (error) {
+            logger.warn(`Error cerrando conexión: ${error.message}`);
           }
           resolve();
         });
       },
       validate: (connection) => {
-        return Promise.resolve(!connection.closed);
-      }
+        return Promise.resolve(connection && !connection.closed);
+      },
     };
   }
 
-  /**
-   * Liberar conexión
-   */
   async releaseConnection(connection) {
     try {
       if (!connection || !connection._serverKey) {
@@ -276,15 +285,13 @@ class ConnectionCentralService {
         await pool.release(connection);
         this.stats.released++;
         this.stats.activeConnections.delete(connection);
+        logger.debug(`Conexión liberada para ${serverKey}`);
       }
     } catch (error) {
       logger.error("Error liberando conexión:", error);
     }
   }
 
-  /**
-   * Forzar cierre de pool
-   */
   async _forceClosePool(serverKey) {
     try {
       const pool = this.pools.get(serverKey);
@@ -305,9 +312,7 @@ class ConnectionCentralService {
     }
   }
 
-  /**
-   * Obtener estadísticas (AGREGAR MÉTODO FALTANTE)
-   */
+  // ✅ MÉTODO FALTANTE AGREGADO
   getConnectionStats() {
     const poolStats = {};
 
@@ -318,24 +323,21 @@ class ConnectionCentralService {
         borrowed: pool.borrowed,
         pending: pool.pending,
         max: pool.max,
-        min: pool.min
+        min: pool.min,
       };
     }
 
     return {
       pools: poolStats,
       globalStats: this.stats,
-      activeConnections: this.stats.activeConnections.size
+      activeConnections: this.stats.activeConnections.size,
     };
   }
 
-  /**
-   * Cerrar todos los pools (shutdown graceful)
-   */
   async shutdown() {
     this._isShuttingDown = true;
 
-    const closePromises = Array.from(this.pools.keys()).map(serverKey =>
+    const closePromises = Array.from(this.pools.keys()).map((serverKey) =>
       this._forceClosePool(serverKey)
     );
 
@@ -344,6 +346,5 @@ class ConnectionCentralService {
   }
 }
 
-// Instancia singleton
 const connectionCentralService = new ConnectionCentralService();
 module.exports = connectionCentralService;
