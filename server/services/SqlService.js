@@ -1045,6 +1045,9 @@ class SqlService {
   async beginTransaction(connection) {
     let connectionObj = connection;
     let needToRelease = false;
+    const operationId = `tx-${Date.now()}-${Math.random()
+      .toString(36)
+      .substr(2, 5)}`;
 
     try {
       // Si pasaron un serverKey en lugar de una conexión, obtener la conexión
