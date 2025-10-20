@@ -146,6 +146,8 @@ async function executeDynamicSelect(
         serverKey
       );
 
+      logger.info(`🔌 Conexión a ${serverKey} establecida.`, connectionResult);
+
       if (!connectionResult.success) {
         logger.error(
           `No se pudo establecer conexión a ${serverKey}: ${
