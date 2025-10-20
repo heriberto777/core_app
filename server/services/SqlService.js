@@ -597,7 +597,6 @@ class SqlService {
           }
         }
       }
-
     } else if (connection && connection._serverKey) {
       // Si la conexión tiene _serverKey, usarlo para telemetría
       serverKey = connection._serverKey;
@@ -1071,17 +1070,87 @@ class SqlService {
       );
       return result;
     } catch (error) {
-      // Si obtuvimos una conexión y hubo error, liberarla
+      logger.error(
+        `[${operationId}] Error al iniciar transacción: ${error.message}`
+      );
+
+      // ✅ CLEANUP MEJORADO: Solo liberar si nosotros obtuvimos la conexión
       if (needToRelease && connectionObj) {
         try {
-          await ConnectionCentralService.releaseConnection(connectionObj);
-        } catch (e) {
-          // Ignorar error al liberar
+          const connectionService = require("./ConnectionCentralService");
+          await connectionService.releaseConnection(connectionObj);
+          logger.debug(
+            `[${operationId}] Conexión liberada correctamente durante cleanup`
+          );
+        } catch (releaseError) {
+          // ✅ LOGGING DETALLADO: No ignorar silenciosamente
+          logger.error(
+            `[${operationId}] Error crítico al liberar conexión durante cleanup`,
+            {
+              originalError: error.message,
+              releaseError: releaseError.message,
+              connectionInfo: {
+                serverKey: connectionObj._serverKey || "unknown",
+                poolOrigin: connectionObj._poolOrigin || "unknown",
+                acquiredAt: connectionObj._acquiredAt || "unknown",
+              },
+              stack: releaseError.stack,
+            }
+          );
+
+          // ✅ TELEMETRÍA: Rastrear problemas de pool
+          if (typeof Telemetry !== "undefined" && Telemetry.trackError) {
+            Telemetry.trackError("critical_connection_release_failed", {
+              serverKey: connectionObj._serverKey || "unknown",
+              originalErrorType: error.constructor.name,
+              releaseErrorType: releaseError.constructor.name,
+              operationId,
+            });
+          }
+
+          // ✅ ESCALACIÓN: Si hay muchos errores de liberación, es crítico
+          this._trackReleaseFailures(connectionObj._serverKey, releaseError);
         }
       }
 
-      logger.error(`Error al iniciar transacción: ${error.message}`);
-      throw error;
+      throw error; // Propagar error original
+    }
+  }
+
+  /**
+   * ✅ NUEVO: Rastrear fallos de liberación para detectar problemas del pool
+   */
+  _trackReleaseFailures(serverKey, error) {
+    if (!this._releaseFailures) {
+      this._releaseFailures = new Map();
+    }
+
+    const key = serverKey || "unknown";
+    const failures = this._releaseFailures.get(key) || {
+      count: 0,
+      lastError: null,
+    };
+
+    failures.count++;
+    failures.lastError = {
+      message: error.message,
+      timestamp: new Date().toISOString(),
+    };
+
+    this._releaseFailures.set(key, failures);
+
+    // ✅ ALERTA: Si hay muchos fallos de liberación consecutivos
+    if (failures.count > 5) {
+      logger.error(
+        `🚨 CRÍTICO: ${failures.count} fallos consecutivos liberando conexiones para ${key}`,
+        {
+          lastError: failures.lastError,
+          recommendation: "Considerar reiniciar pool de conexiones",
+        }
+      );
+
+      // Reset counter para evitar spam de logs
+      failures.count = 0;
     }
   }
 
@@ -1092,11 +1161,42 @@ class SqlService {
    * @returns {Promise<void>}
    */
   async commitTransaction(transaction) {
+    const operationId = `commit-${Date.now()}`;
+
     if (!transaction) {
       throw new Error("Se requiere una transacción válida para confirmar");
     }
 
-    return ConnectionCentralService.commitTransaction(transaction);
+    try {
+      logger.debug(`[${operationId}] Confirmando transacción`);
+      const result = await ConnectionCentralService.commitTransaction(
+        transaction
+      );
+      logger.debug(`[${operationId}] Transacción confirmada exitosamente`);
+      return result;
+    } catch (error) {
+      logger.error(
+        `[${operationId}] Error al confirmar transacción: ${error.message}`
+      );
+
+      // ✅ Intentar rollback de emergencia
+      try {
+        await this.rollbackTransaction(transaction);
+        logger.warn(
+          `[${operationId}] Rollback de emergencia ejecutado tras fallo de commit`
+        );
+      } catch (rollbackError) {
+        logger.error(
+          `[${operationId}] Fallo crítico: No se pudo hacer rollback tras fallo de commit`,
+          {
+            commitError: error.message,
+            rollbackError: rollbackError.message,
+          }
+        );
+      }
+
+      throw error;
+    }
   }
 
   /**
@@ -1106,9 +1206,46 @@ class SqlService {
    * @returns {Promise<void>}
    */
   async rollbackTransaction(transaction) {
-    if (!transaction) return;
+    const operationId = `rollback-${Date.now()}`;
 
-    return ConnectionCentralService.rollbackTransaction(transaction);
+    if (!transaction) {
+      logger.debug(`[${operationId}] No hay transacción para revertir`);
+      return;
+    }
+
+    try {
+      logger.debug(`[${operationId}] Revirtiendo transacción`);
+      const result = await ConnectionCentralService.rollbackTransaction(
+        transaction
+      );
+      logger.debug(`[${operationId}] Transacción revertida exitosamente`);
+      return result;
+    } catch (error) {
+      // ✅ Los errores de rollback SÍ son críticos
+      logger.error(
+        `[${operationId}] Error crítico al revertir transacción: ${error.message}`,
+        {
+          stack: error.stack,
+          transactionInfo: {
+            startTime: transaction._startTime,
+            connectionId: transaction._connection?._serverKey,
+          },
+        }
+      );
+
+      // ✅ TELEMETRÍA: Rollback failures son críticos
+      if (typeof Telemetry !== "undefined" && Telemetry.trackError) {
+        Telemetry.trackError("critical_rollback_failed", {
+          transactionAge: transaction._startTime
+            ? Date.now() - transaction._startTime
+            : "unknown",
+          errorMessage: error.message,
+        });
+      }
+
+      // ✅ NO PROPAGAR: En rollback, logging es suficiente
+      // Si el rollback falla, la conexión probablemente se cerrará automáticamente
+    }
   }
 
   /**
