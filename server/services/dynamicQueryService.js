@@ -142,29 +142,19 @@ async function executeDynamicSelect(
       );
       sendProgress(task._id, 10);
 
-      const connectionResult = await ConnectionService.getConnection(
-        serverKey
-      );
+      connection = await ConnectionService.getConnection(serverKey);
 
-      logger.info(`🔌 Conexión a ${serverKey} establecida.`, connectionResult);
+      logger.info(`🔌 Conexión a ${serverKey} establecida.`);
 
-      if (!connectionResult.success) {
+      if (!connection) {
         logger.error(
-          `No se pudo establecer conexión a ${serverKey}: ${
-            connectionResult || "Error desconocido"
-          }`
+          `No se pudo establecer conexión a ${serverKey}: Error obteniendo conexión`
         );
         throw new Error(
-          `No se pudo establecer conexión a ${serverKey}: ${
-            connectionResult || "Error desconocido"
-          }`
+          `No se pudo establecer conexión a ${serverKey}: Error obteniendo conexión`
         );
       }
 
-      connection = connectionResult.connection;
-      logger.info(
-        `✅ Conexión establecida correctamente para tarea '${taskName}'`
-      );
     } else {
       logger.info(`✅ Usando conexión existente para tarea '${taskName}'`);
     }
@@ -540,20 +530,11 @@ async function executeNonDestructiveQuery(
       `🔌 Estableciendo conexión a ${serverKey} para tarea no destructiva '${taskName}'...`
     );
 
-    const connectionResult = await ConnectionService.getConnection(serverKey);
+    connection = await ConnectionService.getConnection(serverKey);
 
-    if (!connectionResult.success) {
-      throw new Error(
-        `No se pudo establecer conexión a ${serverKey}: ${
-          connectionResult.error?.message || "Error desconocido"
-        }`
-      );
+    if (!connection) {
+      throw new Error(`No se pudo restablecer conexión para ${serverKey}`);
     }
-
-    connection = connectionResult.connection;
-    logger.info(
-      `✅ Conexión establecida correctamente para tarea no destructiva '${taskName}'`
-    );
 
     // 7) Construir la consulta final usando los parámetros
     let finalQuery = task.query.trim();
@@ -665,22 +646,13 @@ async function executeNonDestructiveQuery(
               } catch (e) {}
 
               // Obtener nueva conexión
-              const reconnectResult = await ConnectionService.getConnection(
-                serverKey
-              );
+              connection = await ConnectionService.getConnection(serverKey);
 
-              if (!reconnectResult.success) {
+              if (!connection) {
                 throw new Error(
-                  `No se pudo restablecer conexión: ${
-                    reconnectResult.error?.message || "Error desconocido"
-                  }`
+                  `No se pudo restablecer conexión para ${serverKey}`
                 );
               }
-
-              connection = reconnectResult.connection;
-              logger.info(
-                `✅ Reconexión exitosa para tarea no destructiva '${taskName}'`
-              );
             }
           }
 
