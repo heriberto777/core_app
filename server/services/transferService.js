@@ -48,6 +48,46 @@ class TransferService {
   }
 
   /**
+   * Asegura que tenemos una conexión válida para el servidor especificado
+   * @param {string} serverKey - "server1" o "server2"
+   * @param {Object|null} currentConnection - Conexión actual (si existe)
+   * @returns {Promise<Object>} - Conexión válida
+   */
+  async _ensureValidConnection(serverKey, currentConnection = null) {
+    // Si tenemos una conexión, verificar que funcione
+    if (currentConnection) {
+      try {
+        await SqlService.query(currentConnection, "SELECT 1 AS test");
+        logger.debug(`Conexión existente a ${serverKey} está funcionando`);
+        return currentConnection;
+      } catch (testError) {
+        logger.warn(
+          `Conexión a ${serverKey} no válida, obteniendo nueva: ${testError.message}`
+        );
+
+        // Intentar liberar la conexión inválida
+        try {
+          await ConnectionService.releaseConnection(currentConnection);
+        } catch (releaseError) {
+          logger.debug(
+            `Error al liberar conexión inválida: ${releaseError.message}`
+          );
+        }
+      }
+    }
+
+    // Obtener nueva conexión
+    logger.info(`Obteniendo nueva conexión para ${serverKey}...`);
+    const newConnection = await ConnectionService.getConnection(serverKey);
+
+    // Validar la nueva conexión
+    await SqlService.query(newConnection, "SELECT 1 AS test");
+    logger.info(`Nueva conexión a ${serverKey} establecida y validada`);
+
+    return newConnection;
+  }
+
+  /**
    * Obtiene todas las tareas activas desde MongoDB (type: auto o both).
    * ACTUALIZADO: Ahora considera tareas vinculadas para ejecución automática
    */
@@ -127,7 +167,7 @@ class TransferService {
             logger.info(`📧 Correo de grupo (${executionType}) enviado`);
           } catch (emailError) {
             logger.error(
-              `❌ Error al enviar correo de grupo: ${emailError.message}`
+              `⚠ Error al enviar correo de grupo: ${emailError.message}`
             );
           }
         }
@@ -135,7 +175,7 @@ class TransferService {
         return groupResult;
       } else {
         logger.info(
-          `📌 Ejecutando individualmente (${executionType}): ${executionStrategy.reason}`
+          `🔌 Ejecutando individualmente (${executionType}): ${executionStrategy.reason}`
         );
 
         // Ejecutar individualmente
@@ -160,7 +200,7 @@ class TransferService {
             logger.info(`📧 Correo automático enviado para ${task?.name}`);
           } catch (emailError) {
             logger.error(
-              `❌ Error al enviar correo automático: ${emailError.message}`
+              `⚠ Error al enviar correo automático: ${emailError.message}`
             );
           }
         }
@@ -168,7 +208,7 @@ class TransferService {
         return result;
       }
     } catch (error) {
-      logger.error(`❌ Error en executeTaskWithLinkingLogic: ${error.message}`);
+      logger.error(`⚠ Error en executeTaskWithLinkingLogic: ${error.message}`);
       throw error;
     }
   }
@@ -186,13 +226,13 @@ class TransferService {
       // 1. Buscar la tarea en la base de datos
       task = await TransferTask.findById(taskId);
       if (!task) {
-        logger.error(`❌ No se encontró la tarea con ID: ${taskId}`);
+        logger.error(`⚠ No se encontró la tarea con ID: ${taskId}`);
         return { success: false, message: "Tarea no encontrada" };
       }
 
       transferName = task.name;
       logger.info(
-        `📌 Encontrada tarea de transferencia: ${transferName} (${taskId})`
+        `🔌 Encontrada tarea de transferencia: ${transferName} (${taskId})`
       );
 
       if (!task.active) {
@@ -238,7 +278,7 @@ class TransferService {
             logger.info(`📧 Correo de grupo enviado para ${transferName}`);
           } catch (emailError) {
             logger.error(
-              `❌ Error al enviar correo de grupo: ${emailError.message}`
+              `⚠ Error al enviar correo de grupo: ${emailError.message}`
             );
           }
 
@@ -260,12 +300,12 @@ class TransferService {
         }
       } else {
         logger.info(
-          `📌 Ejecutando individualmente: ${executionStrategy.reason}`
+          `🔌 Ejecutando individualmente: ${executionStrategy.reason}`
         );
 
         // Ejecutar individualmente (lógica original)
         logger.info(
-          `📌 Ejecutando transferencia para la tarea: ${transferName}`
+          `🔌 Ejecutando transferencia para la tarea: ${transferName}`
         );
         Telemetry.trackTransfer("started");
 
@@ -275,7 +315,7 @@ class TransferService {
         // Verificar que result sea un objeto válido para evitar errores
         if (!result) {
           logger.error(
-            `❌ No se obtuvo un resultado válido para la tarea: ${transferName}`
+            `⚠ No se obtuvo un resultado válido para la tarea: ${transferName}`
           );
           return {
             success: false,
@@ -308,7 +348,7 @@ class TransferService {
           );
         } catch (emailError) {
           logger.error(
-            `❌ Error al enviar correo de notificación: ${emailError.message}`
+            `⚠ Error al enviar correo de notificación: ${emailError.message}`
           );
         }
 
@@ -337,7 +377,7 @@ class TransferService {
           };
         } else {
           logger.error(
-            `❌ Error en la transferencia manual: ${transferName}`,
+            `⚠ Error en la transferencia manual: ${transferName}`,
             result
           );
           return {
@@ -350,7 +390,7 @@ class TransferService {
       }
     } catch (error) {
       logger.error(
-        `❌ Error en la ejecución manual de la transferencia ${transferName}: ${error.message}`
+        `⚠ Error en la ejecución manual de la transferencia ${transferName}: ${error.message}`
       );
       Telemetry.trackTransfer("failed");
 
@@ -364,7 +404,7 @@ class TransferService {
         logger.info(`📧 Correo de error crítico enviado`);
       } catch (emailError) {
         logger.error(
-          `❌ Error al enviar correo de error: ${emailError.message}`
+          `⚠ Error al enviar correo de error: ${emailError.message}`
         );
       }
 
@@ -817,7 +857,7 @@ class TransferService {
   }
 
   /**
-   * Establece conexiones a ambos servidores
+   * Establece conexiones a ambos servidores - ACTUALIZADO con _ensureValidConnection
    */
   async establishConnections(task, signal) {
     try {
@@ -826,14 +866,12 @@ class TransferService {
       // Verificar cancelación
       if (signal.aborted) throw new Error("Tarea cancelada por el usuario");
 
-      // Conectar a server1 con conexión robusta
+      // ACTUALIZADO: Usar método centralizado para server1
       logger.info(
         `Estableciendo conexión a server1 para tarea ${task.name}...`
       );
 
-      const server1Connection = await ConnectionService.getConnection(
-        "server1"
-      );
+      const server1Connection = await this._ensureValidConnection("server1");
 
       if (!server1Connection) {
         throw new Error("No se pudo establecer conexión a server1");
@@ -842,14 +880,12 @@ class TransferService {
       // Verificar cancelación después de primera conexión
       if (signal.aborted) throw new Error("Tarea cancelada por el usuario");
 
-      // Conectar a server2 con conexión robusta
+      // ACTUALIZADO: Usar método centralizado para server2
       logger.info(
         `Estableciendo conexión a server2 para tarea ${task.name}...`
       );
 
-      const server2Connection = await ConnectionService.getConnection(
-        "server2"
-      );
+      const server2Connection = await this._ensureValidConnection("server2");
 
       if (!server2Connection) {
         // Liberar conexión a server1 antes de lanzar error
@@ -1075,7 +1111,7 @@ class TransferService {
 
       // MEJORA: Agregar depuración detallada sobre los resultados
       logger.info(
-        `🔍 DATOS OBTENIDOS DE ORIGEN (${sourceServer}): ${result.recordset.length} registros para la tarea ${task.name}`
+        `📍 DATOS OBTENIDOS DE ORIGEN (${sourceServer}): ${result.recordset.length} registros para la tarea ${task.name}`
       );
 
       if (result.recordset.length > 0) {
@@ -1116,7 +1152,7 @@ class TransferService {
           );
         } catch (testError) {
           logger.error(
-            `❌ Error al ejecutar consulta de prueba en ${sourceServer}: ${testError.message}`
+            `⚠ Error al ejecutar consulta de prueba en ${sourceServer}: ${testError.message}`
           );
         }
       }
@@ -1137,7 +1173,7 @@ class TransferService {
       }
 
       // MEJORA: Depuración detallada del error
-      logger.error(`❌ Error en la consulta: `, error);
+      logger.error(`⚠ Error en la consulta: `, error);
       logger.error(`🔍 Consulta que causó el error: ${task.query}`);
 
       if (error.number) {
@@ -1168,7 +1204,7 @@ class TransferService {
         );
       } catch (diagError) {
         logger.error(
-          `❌ Error en consulta de diagnóstico en ${sourceServer}: ${diagError.message}`
+          `⚠ Error en consulta de diagnóstico en ${sourceServer}: ${diagError.message}`
         );
       }
 
@@ -1179,7 +1215,7 @@ class TransferService {
   }
 
   /**
-   * Prepara la tabla destino según el tipo de transferencia
+   * Prepara la tabla destino según el tipo de transferencia - ACTUALIZADO con _ensureValidConnection
    */
   async prepareDestination(connections, task, signal) {
     // Verificar si la tarea fue cancelada
@@ -1188,12 +1224,16 @@ class TransferService {
     }
 
     // CORREGIDO: Determinar la conexión correcta para el destino
-    const targetConnection =
-      task.transferType === "down"
-        ? connections.server1 // Para "down" la tabla destino está en server1
-        : connections.server2; // Para otros tipos la tabla destino está en server2
+    const targetServerKey =
+      task.transferType === "down" ? "server1" : "server2";
+    let targetConnection = connections[targetServerKey];
 
-    const targetServer = task.transferType === "down" ? "server1" : "server2";
+    // ACTUALIZADO: Asegurar conexión válida con método centralizado
+    targetConnection = await this._ensureValidConnection(
+      targetServerKey,
+      targetConnection
+    );
+    connections[targetServerKey] = targetConnection; // Actualizar en el objeto connections
 
     // CORREGIDO: Determinar nombre de tabla destino
     let targetTableName = `dbo.[${task.name}]`; // Predeterminado
@@ -1215,11 +1255,11 @@ class TransferService {
       }
 
       logger.info(
-        `Transferencia DOWN: Usando tabla destino "${targetTableName}" en ${targetServer}`
+        `Transferencia DOWN: Usando tabla destino "${targetTableName}" en ${targetServerKey}`
       );
     } else {
       logger.info(
-        `Usando tabla destino predeterminada: "${targetTableName}" en ${targetServer}`
+        `Usando tabla destino predeterminada: "${targetTableName}" en ${targetServerKey}`
       );
     }
 
@@ -1231,7 +1271,7 @@ class TransferService {
     if (task.clearBeforeInsert) {
       try {
         logger.info(
-          `🧹 Borrando registros existentes de la tabla ${targetTableName} en ${targetServer} antes de insertar`
+          `🧹 Borrando registros existentes de la tabla ${targetTableName} en ${targetServerKey} antes de insertar`
         );
 
         // Verificar cancelación
@@ -1254,7 +1294,7 @@ class TransferService {
         }
 
         logger.error(
-          `❌ Error al borrar registros de la tabla ${targetTableName}:`,
+          `⚠ Error al borrar registros de la tabla ${targetTableName}:`,
           clearError
         );
 
@@ -1297,7 +1337,7 @@ class TransferService {
   }
 
   /**
-   * Procesa e inserta los datos en lotes
+   * Procesa e inserta los datos en lotes - ACTUALIZADO con _ensureValidConnection
    */
   async processAndInsertData(
     data,
@@ -1320,12 +1360,9 @@ class TransferService {
     }
 
     // CORREGIDO: Determinar la conexión correcta para el destino según el tipo
-    const targetConnection =
-      task.transferType === "down"
-        ? connections.server1 // Para "down" el destino está en server1
-        : connections.server2; // Para otros tipos el destino está en server2
-
-    const targetServer = task.transferType === "down" ? "server1" : "server2";
+    const targetServerKey =
+      task.transferType === "down" ? "server1" : "server2";
+    let targetConnection = connections[targetServerKey];
 
     // CORREGIDO: Determinar el nombre correcto de la tabla destino según el tipo de transferencia
     let targetTableName = `dbo.[${name}]`; // Valor predeterminado
@@ -1377,6 +1414,13 @@ class TransferService {
         logger.debug(
           `Obteniendo claves existentes para verificar duplicados...`
         );
+
+        // ACTUALIZADO: Asegurar conexión válida antes de consulta
+        targetConnection = await this._ensureValidConnection(
+          targetServerKey,
+          targetConnection
+        );
+        connections[targetServerKey] = targetConnection;
 
         // CORREGIDO: Usar targetTableName y targetConnection
         const keysQuery = `
@@ -1430,32 +1474,12 @@ class TransferService {
         `Procesando lote ${batchNumber}/${totalBatches} (${batch.length} registros)...`
       );
 
-      // Verificar conexión al inicio de cada lote
-      try {
-        // CORREGIDO: Verificar la conexión destino correcta según tipo
-        await SqlService.query(targetConnection, "SELECT 1 AS test");
-      } catch (connError) {
-        // Reconectar si es necesario
-        logger.warn(`Conexión perdida durante procesamiento, reconectando...`);
-
-        // CORREGIDO: Reconectar al servidor correcto según tipo
-        const reconnectResult = await ConnectionService.getConnection(
-          targetServer // Servidor correcto según tipo
-        );
-        if (!reconnectResult) {
-          throw new Error(
-            `No se pudo restablecer la conexión: ${targetServer}`
-          );
-        }
-
-        // CORREGIDO: Asignar la nueva conexión al servidor correcto
-        if (targetServer === "server1") {
-          connections.server1 = reconnectResult;
-        } else {
-          connections.server2 = reconnectResult;
-        }
-        logger.info(`✅ Reconexión exitosa durante procesamiento`);
-      }
+      // ACTUALIZADO: Asegurar conexión válida al inicio de cada lote
+      targetConnection = await this._ensureValidConnection(
+        targetServerKey,
+        targetConnection
+      );
+      connections[targetServerKey] = targetConnection;
 
       // Procesar cada registro individualmente para mejor control de errores
       let batchInserted = 0;
@@ -1607,40 +1631,32 @@ class TransferService {
               if (
                 insertError.name === "AggregateError" ||
                 (insertError.stack &&
-                  insertError.stack.includes("AggregateError"))
+                  insertError.stack.includes("AggregateError")) ||
+                (insertError.message &&
+                  (insertError.message.includes("conexión") ||
+                    insertError.message.includes("connection") ||
+                    insertError.message.includes("timeout") ||
+                    insertError.message.includes("Timeout") ||
+                    insertError.message.includes("state")))
               ) {
                 logger.error(`Error de conexión o consulta SQL:`, insertError);
 
-                // Intentar reconexión
+                // ACTUALIZADO: Usar método centralizado para reconexión
                 logger.warn(`Intentando reconexión por error de agregación...`);
 
-                // CORREGIDO: Reconectar al servidor correcto
-                const reconnectResult = await ConnectionService.getConnection(
-                  targetServer
+                targetConnection = await this._ensureValidConnection(
+                  targetServerKey
                 );
-                if (!reconnectResult) {
-                  throw new Error(
-                    `No se pudo restablecer la conexión tras error: ${targetServer} || "Error desconocido"
-                    }`
-                  );
-                }
+                connections[targetServerKey] = targetConnection;
 
-                // CORREGIDO: Asignar la nueva conexión al servidor correcto
-                if (targetServer === "server1") {
-                  connections.server1 = reconnectResult;
-                } else {
-                  connections.server2 = reconnectResult;
-                }
-                logger.info(`✅ Reconexión exitosa tras AggregateError`);
+                logger.info(`✅ Reconexión exitosa tras error de conexión`);
 
                 // Intentar inserción de nuevo
                 logger.info(`Reintentando inserción...`);
                 try {
                   // CORREGIDO: Usar conexión y tabla correctas
                   const retryResult = await SqlService.insertWithExplicitTypes(
-                    targetServer === "server1"
-                      ? connections.server1
-                      : connections.server2,
+                    targetConnection,
                     targetTableName,
                     validatedRecord,
                     columnTypes
@@ -1650,7 +1666,7 @@ class TransferService {
                   if (rowsAffected > 0) {
                     totalInserted += rowsAffected;
                     batchInserted += rowsAffected;
-                    logger.info(`Inserción exitosa después de AggregateError`);
+                    logger.info(`Inserción exitosa después de reconexión`);
                   }
                 } catch (retryError) {
                   // Si falla el reintento, lanzar el error original
@@ -1712,54 +1728,6 @@ class TransferService {
                 throw new Error(
                   `Error: violación de restricción CHECK o FOREIGN KEY (${insertError.message})`
                 );
-              } else if (
-                insertError.message &&
-                (insertError.message.includes("conexión") ||
-                  insertError.message.includes("connection") ||
-                  insertError.message.includes("timeout") ||
-                  insertError.message.includes("Timeout") ||
-                  insertError.message.includes("state"))
-              ) {
-                // Error de conexión - reconectar y reintentar
-                logger.warn(
-                  `Error de conexión durante inserción, reconectando...`
-                );
-
-                // CORREGIDO: Reconectar al servidor correcto
-                const reconnectResult = await ConnectionService.getConnection(
-                  targetServer
-                );
-
-                if (!reconnectResult) {
-                  throw new Error(
-                    `No se pudo restablecer la conexión para continuar inserciones: ${targetServer}`
-                  );
-                }
-
-                // CORREGIDO: Asignar la nueva conexión al servidor correcto
-                if (targetServer === "server1") {
-                  connections.server1 = reconnectResult;
-                } else {
-                  connections.server2 = reconnectResult;
-                }
-
-                // Reintentar la inserción con la tabla y conexión correctas
-                const retryResult = await SqlService.insertWithExplicitTypes(
-                  targetServer === "server1"
-                    ? connections.server1
-                    : connections.server2,
-                  targetTableName,
-                  validatedRecord,
-                  columnTypes
-                );
-
-                const rowsAffected = retryResult?.rowsAffected || 0;
-
-                if (rowsAffected > 0) {
-                  totalInserted += rowsAffected;
-                  batchInserted += rowsAffected;
-                  logger.info(`Inserción exitosa después de reconexión`);
-                }
               } else {
                 throw new Error(
                   `Error al insertar registro: ${
@@ -1812,6 +1780,12 @@ class TransferService {
     // Verificar conteo final
     let finalCount = 0;
     try {
+      // ACTUALIZADO: Asegurar conexión válida antes de conteo final
+      targetConnection = await this._ensureValidConnection(
+        targetServerKey,
+        targetConnection
+      );
+
       // CORREGIDO: Usar conexión y tabla correctas
       const countResult = await SqlService.query(
         targetConnection, // Conexión correcta
@@ -1851,189 +1825,7 @@ class TransferService {
   }
 
   /**
-   * Ejecuta una transferencia manualmente y envía resultados detallados por correo.
-   * ACTUALIZADO: Ahora maneja tareas vinculadas automáticamente
-   */
-  async executeTransferManual(taskId) {
-    logger.info(`🔄 Ejecutando transferencia manual: ${taskId}`);
-    let task = null;
-    let transferName = "desconocida";
-
-    try {
-      // 1. Buscar la tarea en la base de datos
-      task = await TransferTask.findById(taskId);
-      if (!task) {
-        logger.error(`❌ No se encontró la tarea con ID: ${taskId}`);
-        return { success: false, message: "Tarea no encontrada" };
-      }
-
-      transferName = task.name;
-      logger.info(
-        `📌 Encontrada tarea de transferencia: ${transferName} (${taskId})`
-      );
-
-      if (!task.active) {
-        logger.warn(`⚠️ La tarea ${transferName} está inactiva.`);
-        return { success: false, message: "Tarea inactiva" };
-      }
-
-      // 2. 🔗 NUEVA LÓGICA: Verificar si debe ejecutarse como grupo o individualmente
-      const executionStrategy = await LinkedTasksService.shouldExecuteAsGroup(
-        taskId
-      );
-
-      if (executionStrategy.executeAsGroup) {
-        logger.info(
-          `🔗 Ejecutando como grupo vinculado: ${executionStrategy.reason}`
-        );
-
-        // Ejecutar todo el grupo usando LinkedTasksService
-        const groupResult = await LinkedTasksService.executeLinkedGroup(
-          taskId,
-          "manual"
-        );
-
-        if (groupResult.success) {
-          logger.info(
-            `✅ Ejecución de grupo completada exitosamente desde ${transferName}`
-          );
-
-          // Enviar correo de grupo si es necesario
-          try {
-            const emailResults = groupResult.linkedTasksResults.map((r) => ({
-              name: r.taskName,
-              success: r.success,
-              inserted: r.inserted || 0,
-              updated: r.updated || 0,
-              duplicates: r.duplicates || 0,
-              rows: r.rows || 0,
-              message: r.message || "Transferencia completada",
-              errorDetail: r.error || "N/A",
-            }));
-
-            await sendTransferResultsEmail(emailResults, "manual_linked_group");
-            logger.info(`📧 Correo de grupo enviado para ${transferName}`);
-          } catch (emailError) {
-            logger.error(
-              `❌ Error al enviar correo de grupo: ${emailError.message}`
-            );
-          }
-
-          return {
-            success: true,
-            message: groupResult.message,
-            result: groupResult,
-            emailSent: true,
-            isLinkedGroup: true,
-          };
-        } else {
-          return {
-            success: false,
-            message: groupResult.message,
-            result: groupResult,
-            emailSent: true,
-            isLinkedGroup: true,
-          };
-        }
-      } else {
-        logger.info(
-          `📌 Ejecutando individualmente: ${executionStrategy.reason}`
-        );
-
-        // Ejecutar individualmente (lógica original)
-        logger.info(
-          `📌 Ejecutando transferencia para la tarea: ${transferName}`
-        );
-        Telemetry.trackTransfer("started");
-
-        const result = await this.executeTransferWithRetry(taskId);
-        Telemetry.trackTransfer(result.success ? "completed" : "failed");
-
-        // Verificar que result sea un objeto válido para evitar errores
-        if (!result) {
-          logger.error(
-            `❌ No se obtuvo un resultado válido para la tarea: ${transferName}`
-          );
-          return {
-            success: false,
-            message: "No se obtuvo un resultado válido",
-          };
-        }
-
-        // 3. Preparar datos para el correo
-        const formattedResult = {
-          name: transferName,
-          success: result.success || false,
-          inserted: result.inserted || 0,
-          updated: result.updated || 0,
-          duplicates: result.duplicates || 0,
-          rows: result.rows || 0,
-          message: result.message || "Transferencia completada",
-          errorDetail: result.errorDetail || "N/A",
-          initialCount: result.initialCount || 0,
-          finalCount: result.finalCount || 0,
-          duplicatedRecords: result.duplicatedRecords || [],
-          hasMoreDuplicates: result.hasMoreDuplicates || false,
-          totalDuplicates: result.totalDuplicates || 0,
-        };
-
-        // 4. Enviar correo con el resultado
-        try {
-          await sendTransferResultsEmail([formattedResult], "manual");
-          logger.info(
-            `📧 Correo de notificación enviado para la transferencia: ${transferName}`
-          );
-        } catch (emailError) {
-          logger.error(
-            `❌ Error al enviar correo de notificación: ${emailError.message}`
-          );
-        }
-
-        // 5. Devolver el resultado
-        if (result.success) {
-          logger.info(
-            `✅ Transferencia manual completada con éxito: ${transferName}`
-          );
-
-          // Actualizar estadísticas de la tarea
-          await TransferTask.findByIdAndUpdate(taskId, {
-            lastExecutionDate: new Date(),
-            $inc: { executionCount: 1 },
-            lastExecutionResult: {
-              success: result.success,
-              message: result.message || "Transferencia completada",
-              affectedRecords: (result.inserted || 0) + (result.updated || 0),
-            },
-          });
-
-          return {
-            success: true,
-            message: "Transferencia manual ejecutada con éxito",
-            result,
-            emailSent: true,
-          };
-        } else {
-          logger.error(
-            `❌ Error en la transferencia manual: ${transferName}`,
-            result
-          );
-          return {
-            success: false,
-            message: "Error en la ejecución de la transferencia manual",
-            result,
-            emailSent: true,
-          };
-        }
-      }
-    } catch (error) {
-      logger.error(`❌ Error en executeTaskWithLinkingLogic: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * Ejecuta operaciones post-transferencia (actualizaciones adicionales)
-   * ACTUALIZADO: Ahora verifica si la tarea está en un grupo vinculado antes de ejecutar post-update
+   * Ejecuta operaciones post-transferencia (actualizaciones adicionales) - ACTUALIZADO
    */
   async executePostTransferOperations(
     connection,
@@ -2079,19 +1871,8 @@ class TransferService {
       // Verificar si la tarea fue cancelada
       if (signal.aborted) throw new Error("Tarea cancelada por el usuario");
 
-      // Verificar la conexión
-      try {
-        await SqlService.query(connection, "SELECT 1 AS test");
-      } catch (testError) {
-        logger.warn(`Reconectando para post-actualización...`);
-
-        const reconnectResult = await ConnectionService.getConnection(
-          "server1"
-        );
-        if (!reconnectResult) {
-          throw new Error(`No se pudo reconectar para post-actualización}`);
-        }
-      }
+      // ACTUALIZADO: Asegurar conexión válida con método centralizado
+      connection = await this._ensureValidConnection("server1", connection);
 
       // Procesar en lotes para evitar consultas demasiado grandes
       const batchSize = 500;
@@ -2143,7 +1924,7 @@ class TransferService {
             `Post-actualización ejecutada: ${updateResult.rowsAffected} filas afectadas`
           );
         } catch (updateError) {
-          // Verificar si es error de conexión y reintentar
+          // ACTUALIZADO: Verificar si es error de conexión y usar método centralizado para reconectar
           if (
             updateError.message &&
             (updateError.message.includes("conexión") ||
@@ -2155,14 +1936,8 @@ class TransferService {
               `Reintentando post-actualización tras error de conexión`
             );
 
-            const reconnectResult = await ConnectionService.getConnection(
-              "server1"
-            );
-            if (!reconnectResult) {
-              throw new Error(
-                `No se pudo reconectar para reintentar post-actualización}`
-              );
-            }
+            // ACTUALIZADO: Usar método centralizado
+            connection = await this._ensureValidConnection("server1");
 
             // Reintentar la actualización
             const sanitizedParams = SqlService.sanitizeParams(params);
@@ -2193,7 +1968,7 @@ class TransferService {
         throw new Error("Transferencia cancelada por el usuario");
       }
 
-      logger.error(`❌ Error en operaciones post-transferencia:`, error);
+      logger.error(`⚠ Error en operaciones post-transferencia:`, error);
       return {
         success: false,
         message: `Error en operaciones post-transferencia: ${error.message}`,
@@ -2576,22 +2351,13 @@ class TransferService {
   }
 
   /**
-   * Función que inserta TODOS los datos en lotes, reportando progreso SSE y enviando correo al finalizar.
-   * No verifica duplicados, simplemente inserta todos los registros.
-   * Requiere que el frontend esté suscrito a /api/transfer/progress/:taskId
-   * Versión adaptada con soporte para TaskTracker y cancelación.
-   *
-   * @param {String} taskId - ID de la tarea en MongoDB
-   * @param {Array} data - Datos a insertar
-   * @param {Number} batchSize - Tamaño de lote (default: 100)
-   * @param {AbortSignal} signal - Señal para cancelación (opcional)
-   * @returns {Object} - Resultado de la operación
+   * Función que inserta TODOS los datos en lotes - ACTUALIZADO con _ensureValidConnection
    */
   async insertInBatchesSSE(taskId, data, batchSize = 100, signal = null) {
     let server2Connection = null;
     let lastReportedProgress = 0;
     let initialCount = 0;
-    let taskName = "desconocida"; // Inicializar taskName por defecto
+    let taskName = "desconocida";
     let columnTypes = null;
 
     // Crear AbortController si no se proporcionó signal
@@ -2637,58 +2403,49 @@ class TransferService {
         throw new Error("Tarea cancelada por el usuario");
       }
 
+      // ACTUALIZADO: Establecer y validar conexión al inicio usando método centralizado
+      logger.info(
+        `Estableciendo conexión para inserción en lotes de ${taskName}...`
+      );
+      server2Connection = await this._ensureValidConnection("server2");
+      sendProgress(taskId, 10);
+
       // Si la tarea tiene habilitada la opción de borrar antes de insertar
       if (task.clearBeforeInsert) {
-        sendProgress(taskId, 5); // Actualizar progreso: iniciando borrado
+        sendProgress(taskId, 15);
 
         try {
           logger.info(
-            `🧹 Borrando registros existentes de la tabla ${task.name} antes de insertar en lotes`
+            `Borrando registros existentes de la tabla ${task.name} antes de insertar en lotes`
           );
 
-          // Usar conexión robusta para el borrado
-          const connectionResult = await ConnectionService.getConnection(
-            "server2"
-          );
-          if (!connectionResult) {
-            throw new Error(
-              `No se pudo establecer conexión a server2 para borrado`
-            );
-          }
-
-          // Realizar el borrado
+          // Realizar el borrado con la conexión establecida
           const deletedCount = await SqlService.clearTableData(
             server2Connection,
             `dbo.[${task.name}]`
           );
           logger.info(
-            `✅ Se eliminaron ${deletedCount} registros de la tabla ${task.name}`
+            `Se eliminaron ${deletedCount} registros de la tabla ${task.name}`
           );
 
-          sendProgress(taskId, 10); // Actualizar progreso: borrado completado
+          sendProgress(taskId, 20);
         } catch (clearError) {
           logger.error(
-            `❌ Error al borrar registros de la tabla ${task.name}:`,
+            `Error al borrar registros de la tabla ${task.name}:`,
             clearError
           );
 
           // Decidir si continuar o abortar
           if (clearError.message && clearError.message.includes("no existe")) {
-            logger.warn(
-              `⚠️ La tabla no existe, continuando con la inserción...`
-            );
+            logger.warn(`La tabla no existe, continuando con la inserción...`);
           } else {
             logger.warn(
-              `⚠️ Error al borrar registros pero continuando con la inserción...`
+              `Error al borrar registros pero continuando con la inserción...`
             );
           }
-
-          // Si quieres abortar en caso de error:
-          // await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
-          // sendProgress(taskId, -1);
-          // TaskTracker.completeTask(cancelTaskId, "failed");
-          // throw new Error(`Error al borrar registros existentes: ${clearError.message}`);
         }
+      } else {
+        sendProgress(taskId, 20);
       }
 
       // Verificar cancelación después del borrado
@@ -2696,41 +2453,9 @@ class TransferService {
         throw new Error("Tarea cancelada por el usuario");
       }
 
-      // 3) Conectarse a la DB de destino si aún no lo estamos
-      if (!server2Connection) {
-        sendProgress(taskId, 15); // Actualizar progreso: conectando a server2
-
-        try {
-          // Usar conexión robusta
-          const connectionResult = await ConnectionService.getConnection(
-            "server2"
-          );
-          if (!connectionResult) {
-            throw new Error(`No se pudo establecer conexión a server2`);
-          }
-          logger.info(
-            `Conexión establecida y verificada para inserción en lotes (taskId: ${taskId}, task: ${taskName})`
-          );
-
-          sendProgress(taskId, 20); // Actualizar progreso: conexión establecida
-        } catch (connError) {
-          logger.error(
-            `Error al establecer conexión para inserción en lotes (taskId: ${taskId}, task: ${taskName}):`,
-            connError
-          );
-          await TransferTask.findByIdAndUpdate(taskId, { status: "failed" });
-          sendProgress(taskId, -1);
-          TaskTracker.completeTask(cancelTaskId, "failed");
-          throw new Error(
-            `Error al establecer conexión de base de datos: ${connError.message}`
-          );
-        }
-      }
-
-      // Obtener tipos de columnas para una inserción más segura
+      // 4) Obtener tipos de columnas para una inserción más segura
       try {
         logger.debug(`Obteniendo información de tabla ${taskName}...`);
-        // Verificar si getColumnTypes existe
         if (typeof SqlService.getColumnTypes === "function") {
           columnTypes = await SqlService.getColumnTypes(
             server2Connection,
@@ -2757,7 +2482,7 @@ class TransferService {
         throw new Error("Tarea cancelada por el usuario");
       }
 
-      // 4) Verificar conteo inicial de registros
+      // 5) Verificar conteo inicial de registros
       try {
         const countResult = await SqlService.query(
           server2Connection,
@@ -2774,18 +2499,18 @@ class TransferService {
         initialCount = 0;
       }
 
-      // 5) Pre-cargar información de longitud de columnas
+      // 6) Pre-cargar información de longitud de columnas
       const columnLengthCache = new Map();
 
-      // 6) Contadores para tracking
+      // 7) Contadores para tracking
       const total = data.length;
       let totalInserted = 0;
       let processedCount = 0;
       let errorCount = 0;
 
-      sendProgress(taskId, 25); // Actualizar progreso: preparación completa, comenzando inserción
+      sendProgress(taskId, 25);
 
-      // 7) Procesar data en lotes - SIN TRANSACCIONES PARA MAYOR ESTABILIDAD
+      // 8) Procesar data en lotes
       for (let i = 0; i < data.length; i += batchSize) {
         // Verificar cancelación al inicio de cada lote
         if (signal.aborted) {
@@ -2800,29 +2525,11 @@ class TransferService {
           `Procesando lote ${currentBatchNumber}/${totalBatches} (${batch.length} registros) para ${taskName}...`
         );
 
-        // Verificar si la conexión sigue activa y reconectar si es necesario
-        try {
-          await SqlService.query(server2Connection, "SELECT 1 AS test");
-        } catch (connError) {
-          logger.warn(
-            `Conexión perdida con server2 durante procesamiento, intentando reconectar...`
-          );
-
-          try {
-            await ConnectionService.releaseConnection(server2Connection);
-          } catch (e) {}
-
-          // Usar conexión robusta
-          const reconnectResult = await ConnectionService.getConnection(
-            "server2"
-          );
-          if (!reconnectResult) {
-            throw new Error(`No se pudo restablecer la conexión`);
-          }
-          logger.info(
-            `Reconexión exitosa a server2 para lote ${currentBatchNumber}`
-          );
-        }
+        // ACTUALIZADO: Asegurar conexión válida antes de cada lote
+        server2Connection = await this._ensureValidConnection(
+          "server2",
+          server2Connection
+        );
 
         // Procesar cada registro del lote de forma independiente
         let batchInserted = 0;
@@ -2890,7 +2597,7 @@ class TransferService {
                 batchInserted += rowsAffected;
               }
             } catch (insertError) {
-              // Verificar si es error de conexión
+              // ACTUALIZADO: Verificar si es error de conexión y usar método centralizado
               if (
                 insertError.message &&
                 (insertError.message.includes("conexión") ||
@@ -2899,22 +2606,15 @@ class TransferService {
                   insertError.message.includes("Timeout") ||
                   insertError.message.includes("state"))
               ) {
-                // Intentar reconectar y reintentar
+                // ACTUALIZADO: Usar método centralizado para reconexión
                 logger.warn(
                   `Error de conexión durante inserción, reconectando...`
                 );
 
-                try {
-                  await ConnectionService.releaseConnection(server2Connection);
-                } catch (e) {}
-
-                // Usar conexión robusta
-                const reconnectResult = await ConnectionService.getConnection(
+                server2Connection = await this._ensureValidConnection(
                   "server2"
                 );
-                if (!reconnectResult) {
-                  throw new Error(`No se pudo restablecer la conexión`);
-                }
+
                 // Reintentar inserción
                 const retryResult = await SqlService.insertWithExplicitTypes(
                   server2Connection,
@@ -2968,9 +2668,9 @@ class TransferService {
         // Actualizar progreso después de cada lote
         processedCount += batch.length;
         const progress = Math.min(
-          Math.round((processedCount / total) * 100),
-          99 // Máximo 99% hasta completar todo
-        );
+          Math.round((processedCount / total) * 75) + 25,
+          99
+        ); // 25-99%
 
         if (progress > lastReportedProgress + 5 || progress >= 99) {
           lastReportedProgress = progress;
@@ -2983,7 +2683,7 @@ class TransferService {
         MemoryManager.trackOperation("batch_insert");
       }
 
-      // 8. Actualizar estado a completado
+      // 9. Actualizar estado a completado
       await TransferTask.findByIdAndUpdate(taskId, {
         status: "completed",
         progress: 100,
@@ -3000,7 +2700,7 @@ class TransferService {
       sendProgress(taskId, 100);
       TaskTracker.completeTask(cancelTaskId, "completed");
 
-      // 9. Verificar conteo final
+      // 10. Verificar conteo final
       let finalCount = 0;
       try {
         const countResult = await SqlService.query(
@@ -3017,7 +2717,7 @@ class TransferService {
         logger.warn(`No se pudo verificar conteo final: ${countError.message}`);
       }
 
-      // 10. Preparar resultado
+      // 11. Preparar resultado
       const result = {
         success: true,
         message: "Transferencia completada",
@@ -3028,7 +2728,7 @@ class TransferService {
         finalCount,
       };
 
-      // 11. Enviar correo con el resultado
+      // 12. Enviar correo con el resultado
       try {
         const formattedResult = {
           name: task.name,
@@ -3126,7 +2826,7 @@ class TransferService {
   }
 
   /**
-   * Ejecuta una transferencia desde Server2 a Server1 (Down)
+   * Ejecuta una transferencia desde Server2 a Server1 (Down) - ACTUALIZADO con _ensureValidConnection
    * @param {String} taskId - ID de la tarea a ejecutar
    */
   async executeTransferDown(taskId) {
@@ -3142,11 +2842,11 @@ class TransferService {
 
       const transferName = task.name;
       logger.info(
-        `📌 Encontrada tarea de transferencia DOWN: ${transferName} (${taskId})`
+        `Encontrada tarea de transferencia DOWN: ${transferName} (${taskId})`
       );
 
       if (!task.active) {
-        logger.warn(`⚠️ La tarea ${transferName} está inactiva.`);
+        logger.warn(`La tarea ${transferName} está inactiva.`);
         return { success: false, message: "Tarea inactiva" };
       }
 
@@ -3157,21 +2857,13 @@ class TransferService {
       });
       sendProgress(taskId, 0);
 
-      // 3. Establecer conexiones a ambos servidores
+      // ACTUALIZADO: Establecer conexiones usando método centralizado
       logger.info(`Conectando a Server2 (origen)...`);
-      const server2Result = await ConnectionService.getConnection("server2");
-      if (!server2Result) {
-        throw new Error(`No se pudo conectar a Server2`);
-      }
-
+      server2Connection = await this._ensureValidConnection("server2");
       logger.info(`Conexión establecida a Server2`);
 
       logger.info(`Conectando a Server1 (destino)...`);
-      const server1Result = await ConnectionService.getConnection("server1");
-      if (!server1Result) {
-        throw new Error(`No se pudo conectar a Server1`);
-      }
-
+      server1Connection = await this._ensureValidConnection("server1");
       logger.info(`Conexión establecida a Server1`);
 
       // 4. Obtener datos desde Server2
@@ -3263,7 +2955,7 @@ class TransferService {
       // 6. Preparar tabla destino (limpiar si es necesario)
       if (task.clearBeforeInsert) {
         logger.info(
-          `🧹 Limpiando tabla destino antes de insertar en Server1: ${task.name}`
+          `Limpiando tabla destino antes de insertar en Server1: ${task.name}`
         );
         const deleteResult = await SqlService.clearTableData(
           server1Connection,
@@ -3314,6 +3006,12 @@ class TransferService {
           )} (${batch.length} registros)`
         );
 
+        // ACTUALIZADO: Asegurar conexión válida antes de cada lote
+        server1Connection = await this._ensureValidConnection(
+          "server1",
+          server1Connection
+        );
+
         // Procesar registros del lote
         for (const record of batch) {
           try {
@@ -3339,20 +3037,38 @@ class TransferService {
             ) {
               duplicateCount++;
               logger.debug(`Registro duplicado: ${JSON.stringify(record)}`);
+            }
+            // ACTUALIZADO: Manejo de errores de conexión con método centralizado
+            else if (
+              insertError.message &&
+              (insertError.message.includes("conexión") ||
+                insertError.message.includes("connection") ||
+                insertError.message.includes("timeout"))
+            ) {
+              logger.warn(`Error de conexión, reconectando...`);
+              server1Connection = await this._ensureValidConnection("server1");
+
+              // Reintentar inserción
+              try {
+                const retryResult = await SqlService.insertWithExplicitTypes(
+                  server1Connection,
+                  `dbo.[${task.name}]`,
+                  record
+                );
+                if (retryResult && retryResult.rowsAffected) {
+                  insertedCount += retryResult.rowsAffected;
+                }
+              } catch (retryError) {
+                errorCount++;
+                logger.error(
+                  `Error en reintento de inserción: ${retryError.message}`
+                );
+              }
             } else {
               errorCount++;
               logger.error(
                 `Error al insertar registro: ${insertError.message}`
               );
-              // En caso de error crítico que no sea de duplicados, detener el proceso
-              if (
-                insertError.message &&
-                (insertError.message.includes("conexión") ||
-                  insertError.message.includes("connection") ||
-                  insertError.message.includes("timeout"))
-              ) {
-                throw insertError;
-              }
             }
           }
         }
@@ -3373,7 +3089,7 @@ class TransferService {
       sendProgress(taskId, 100);
 
       logger.info(
-        `✅ Transferencia DOWN completada para ${task.name}: ${insertedCount} registros insertados, ${duplicateCount} duplicados, ${errorCount} errores`
+        `Transferencia DOWN completada para ${task.name}: ${insertedCount} registros insertados, ${duplicateCount} duplicados, ${errorCount} errores`
       );
 
       // 9. Ejecutar tareas encadenadas si existen
@@ -3483,7 +3199,7 @@ class TransferService {
         errors: errorCount,
       };
     } catch (error) {
-      logger.error(`❌ Error en transferencia DOWN: ${error.message}`);
+      logger.error(`Error en transferencia DOWN: ${error.message}`);
 
       // Actualizar estado a error
       await TransferTask.findByIdAndUpdate(taskId, {

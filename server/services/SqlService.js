@@ -588,14 +588,6 @@ class SqlService {
         throw new Error(
           `Error al obtener conexión para ${serverKey}: ${connError.message}`
         );
-      } finally {
-        if (needToRelease && connectionObj) {
-          try {
-            await ConnectionCentralService.releaseConnection(connectionObj);
-          } catch (releaseError) {
-            logger.warn(`Error liberando conexión: ${releaseError.message}`);
-          }
-        }
       }
     } else if (connection && connection._serverKey) {
       // Si la conexión tiene _serverKey, usarlo para telemetría
@@ -608,7 +600,7 @@ class SqlService {
 
     while (retryCount <= maxRetries) {
       try {
-        return await this._executeQueryWithRetries(
+        const result = await this._executeQueryWithRetries(
           connectionObj,
           sql,
           params,
@@ -617,6 +609,19 @@ class SqlService {
           serverKey,
           needToRelease
         );
+
+        // CORREGIDO: Liberar conexión DESPUÉS de obtener el resultado exitoso
+        if (needToRelease && connectionObj) {
+          try {
+            logger.debug(`Liberando conexión obtenida en query`);
+            await ConnectionCentralService.releaseConnection(connectionObj);
+            logger.debug(`Conexión liberada exitosamente`);
+          } catch (releaseError) {
+            logger.warn(`Error al liberar conexión: ${releaseError.message}`);
+          }
+        }
+
+        return result;
       } catch (error) {
         retryCount++;
 
@@ -635,7 +640,7 @@ class SqlService {
           error.code === "ETIMEOUT"
         ) {
           if (retryCount <= maxRetries) {
-            const delay = Math.min(2000 * Math.pow(2, retryCount - 1), 10000); // Backoff exponencial
+            const delay = Math.min(2000 * Math.pow(2, retryCount - 1), 10000);
             logger.info(
               `Waiting ${delay}ms before retry ${
                 retryCount + 1
@@ -692,6 +697,18 @@ class SqlService {
         // Para otros tipos de error, lanzar inmediatamente
         if (retryCount > maxRetries) {
           logger.error(`All retries exhausted. Final error:`, error);
+
+          // CORREGIDO: Liberar conexión en caso de error final
+          if (needToRelease && connectionObj) {
+            try {
+              await ConnectionCentralService.releaseConnection(connectionObj);
+            } catch (releaseError) {
+              logger.warn(
+                `Error liberando conexión tras error: ${releaseError.message}`
+              );
+            }
+          }
+
           throw error;
         }
 
@@ -731,11 +748,6 @@ class SqlService {
 
       // Verificar operaciones para gestión de memoria
       MemoryManager.trackOperation("sql_query");
-
-      // // Incrementar contador de operaciones de la conexión
-      // if (connectionObj) {
-      //   ConnectionCentralService.incrementOperationCount(connectionObj);
-      // }
 
       // Sanitizar parámetros
       const sanitizedParams = this.sanitizeParams(params);
@@ -808,18 +820,8 @@ class SqlService {
         );
       }
 
-      // Si obtuvimos la conexión aquí, liberarla
-      if (needToRelease && connectionObj) {
-        try {
-          logger.debug(`[${queryId}] Liberando conexión obtenida`);
-          await ConnectionCentralService.releaseConnection(connectionObj);
-          logger.debug(`[${queryId}] Conexión liberada exitosamente`);
-        } catch (releaseError) {
-          logger.warn(
-            `[${queryId}] Error al liberar conexión: ${releaseError.message}`
-          );
-        }
-      }
+      // CORREGIDO: NO liberar la conexión aquí
+      // La liberación se maneja en el método query principal
 
       const totalDuration = Date.now() - startTime;
       logger.debug(
