@@ -149,12 +149,12 @@ async function executeDynamicSelect(
       if (!connectionResult.success) {
         logger.error(
           `No se pudo establecer conexión a ${serverKey}: ${
-            connectionResult.error?.message || "Error desconocido"
+            connectionResult || "Error desconocido"
           }`
         );
         throw new Error(
           `No se pudo establecer conexión a ${serverKey}: ${
-            connectionResult.error?.message || "Error desconocido"
+            connectionResult || "Error desconocido"
           }`
         );
       }
