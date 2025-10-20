@@ -32,8 +32,6 @@ class ConnectionCentralService {
     this._isShuttingDown = false;
   }
 
-
-
   async initialize() {
     if (this._initialized) return;
 
@@ -576,6 +574,226 @@ class ConnectionCentralService {
         reject(error);
       }
     });
+  }
+
+  /**
+   * Obtiene una conexión con reintentos automáticos, optimizada para robustez y AggregateError
+   * @param {string} serverKey - Clave del servidor
+   * @param {number} maxAttempts - Número máximo de intentos
+   * @param {number} baseDelay - Retraso base entre intentos (ms)
+   * @returns {Promise<Object>} - Resultado con conexión o error
+   */
+  async enhancedRobustConnect(serverKey, maxAttempts = 5, baseDelay = 5000) {
+    let attempt = 0;
+    let delay = baseDelay;
+    let existingPool = false;
+
+    // Verificar si el servicio está inicializado
+    if (!this.healthCheckInterval) {
+      this.initialize();
+    }
+
+    // Verificar si ya existe un pool y está funcionando
+    try {
+      if (this.pools && this.pools[serverKey]) {
+        // Intentar verificar el pool existente
+        try {
+          const testConnection = await this.getConnection(serverKey, {
+            timeout: 10000,
+          });
+          if (testConnection) {
+            // Create a proper Request object for verification
+            const testRequest = new Request(
+              "SELECT 1 AS test",
+              (err, rowCount, rows) => {
+                if (err) throw err;
+              }
+            );
+
+            // Use a promise to properly handle the test
+            await new Promise((resolve, reject) => {
+              const timeout = setTimeout(() => {
+                reject(new Error("Timeout during connection test"));
+              }, 15000); // Aumentado para AggregateError
+
+              testRequest.on("done", () => {
+                clearTimeout(timeout);
+                resolve();
+              });
+
+              testRequest.on("error", (err) => {
+                clearTimeout(timeout);
+                reject(err);
+              });
+
+              // Execute the request
+              testConnection.execSql(testRequest);
+            });
+
+            // Si llegamos aquí, la conexión está bien
+            await this.releaseConnection(testConnection);
+            logger.info(
+              `Pool existente para ${serverKey} está funcionando correctamente`
+            );
+
+            return {
+              success: true,
+              connection: await this.getConnection(serverKey),
+            };
+          }
+        } catch (poolTestError) {
+          logger.warn(
+            `Error al verificar pool existente: ${poolTestError.message}`
+          );
+          existingPool = true;
+        }
+      }
+    } catch (checkError) {
+      logger.warn(`Error al verificar estado de pools: ${checkError.message}`);
+    }
+
+    // Solo cerrar el pool si existe y está teniendo problemas
+    if (existingPool) {
+      try {
+        logger.info(
+          `Cerrando pool con problemas para ${serverKey} antes de reconectar`
+        );
+        await this.closePool(serverKey);
+      } catch (closeError) {
+        logger.warn(`Error al cerrar pool existente: ${closeError.message}`);
+        // Continuar de todos modos
+      }
+    }
+
+    while (attempt < maxAttempts) {
+      attempt++;
+
+      try {
+        logger.info(
+          `Intento ${attempt}/${maxAttempts} para conectar a ${serverKey}...`
+        );
+
+        // Inicializar el pool desde cero solo si no existe o se cerró
+        const initialized = await this.initPool(serverKey);
+        if (!initialized) {
+          throw new Error(`No se pudo inicializar el pool para ${serverKey}`);
+        }
+
+        // Obtener una conexión del pool
+        const connection = await this.getConnection(serverKey, {
+          timeout: 30000,
+        }); // Timeout aumentado
+        if (!connection) {
+          throw new Error(`No se pudo obtener una conexión a ${serverKey}`);
+        }
+
+        // Test the connection using tedious directly with enhanced error handling
+        await new Promise((resolve, reject) => {
+          const testRequest = new Request(
+            "SELECT 1 AS test",
+            (err, rowCount) => {
+              if (err) {
+                // NUEVO: Manejo específico para AggregateError en test
+                if (err.name === "AggregateError") {
+                  logger.error(`AggregateError durante test de conexión:`, err);
+                  Telemetry.trackError("connection_test_aggregate_error", {
+                    serverKey,
+                    attempt,
+                  });
+                }
+                reject(err);
+              } else {
+                resolve(rowCount);
+              }
+            }
+          );
+
+          // Add a timeout - aumentado para AggregateError
+          const timeout = setTimeout(() => {
+            reject(new Error(`Timeout al verificar conexión a ${serverKey}`));
+          }, 20000);
+
+          // Handle request events
+          testRequest.on("done", () => {
+            clearTimeout(timeout);
+            resolve();
+          });
+
+          testRequest.on("error", (err) => {
+            clearTimeout(timeout);
+            if (err.name === "AggregateError") {
+              logger.error(`AggregateError en test request event:`, err);
+            }
+            reject(err);
+          });
+
+          // Execute the request
+          connection.execSql(testRequest);
+        });
+
+        logger.info(
+          `Conexión a ${serverKey} establecida y verificada (intento ${attempt})`
+        );
+        return { success: true, connection };
+      } catch (error) {
+        logger.warn(
+          `Error en intento ${attempt} para ${serverKey}: ${error.message}`
+        );
+
+        // NUEVO: Log específico para AggregateError
+        if (error.name === "AggregateError") {
+          logger.error(
+            `AggregateError en intento ${attempt} de enhancedRobustConnect:`,
+            {
+              serverKey,
+              attempt,
+              message: error.message,
+              code: error.code,
+            }
+          );
+        }
+
+        // Si es el último intento, fallar
+        if (attempt >= maxAttempts) {
+          return {
+            success: false,
+            error: new Error(
+              `No se pudo establecer conexión a ${serverKey} después de ${attempt} intentos: ${error.message}`
+            ),
+          };
+        }
+
+        // Liberar recursos antes de reintentar
+        try {
+          // Cerrar pool solo si hay un error grave o AggregateError
+          if (
+            error.message &&
+            (error.message.includes("timeout") ||
+              error.message.includes("network") ||
+              error.message.includes("state") ||
+              error.name === "AggregateError")
+          ) {
+            await this.closePool(serverKey);
+          }
+        } catch (cleanupError) {
+          logger.warn(
+            `Error al limpiar recursos antes de reintento: ${cleanupError.message}`
+          );
+        }
+
+        // Esperar antes del siguiente intento con backoff exponencial - aumentado para AggregateError
+        await new Promise((resolve) => setTimeout(resolve, delay));
+        delay = Math.min(delay * 1.5, 45000); // Máximo 45 segundos para AggregateError
+      }
+    }
+
+    // No debería llegar aquí debido al retorno en la última iteración
+    return {
+      success: false,
+      error: new Error(
+        `No se pudo establecer conexión a ${serverKey} después de ${maxAttempts} intentos`
+      ),
+    };
   }
 }
 
