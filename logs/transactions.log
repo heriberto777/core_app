@@ -1,0 +1,218 @@
+2025-10-21T06:45:54.438Z [INFO][system]: 🚀 Sistema de logging inicializado
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796,
+  "transports": 4,
+  "mongoEnabled": false,
+  "logLevel": "info"
+}
+2025-10-21T06:45:54.487Z [DEBUG]: Ejecutando comprobación de servidores...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.492Z [INFO]: Servicio de monitoreo de servidores iniciado (intervalo: 5 minutos)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.510Z [INFO]: Saltando mongodb: configuración MongoDB
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.511Z [INFO]: Cargando 2 configuraciones SQL Server válidas
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.511Z [INFO]: Creando pool para server1...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.512Z [DEBUG]: server1: Usando puerto 1433
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.512Z [DEBUG]: Configuración final para server1:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796,
+  "server": "10.0.10.120",
+  "port": 1433,
+  "database": "EXACTUS"
+}
+2025-10-21T06:45:54.514Z [INFO]: Pool creado exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.515Z [INFO]: Creando pool para server2...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.515Z [DEBUG]: server2: Usando instancia 'calidadstdb' (puerto ignorado)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.515Z [DEBUG]: Configuración final para server2:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796,
+  "server": "sql-calidad.miami",
+  "instance": "calidadstdb",
+  "database": "stdb_gnd"
+}
+2025-10-21T06:45:54.516Z [INFO]: Pool creado exitosamente para server2
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.516Z [INFO]: DatabaseService inicializado exitosamente con 2 pools
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.516Z [INFO]: DatabaseServiceAdapter inicializado
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.518Z [DEBUG]: [conn-1761029154518-9ja9f] Solicitando conexión para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.518Z [DEBUG]: [conn-1761029154518-9ja9f] Adquiriendo conexión del pool...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.522Z [ERROR]: Error conectando a server2: getaddrinfo ENOTFOUND sql-calidad.miami
+📚 Stack: Error: getaddrinfo ENOTFOUND sql-calidad.miami
+    at D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1006:32
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796,
+  "code": "EINSTLOOKUP",
+  "cause": {
+    "errno": -3008,
+    "code": "ENOTFOUND",
+    "syscall": "getaddrinfo",
+    "hostname": "sql-calidad.miami"
+  }
+}
+2025-10-21T06:45:54.522Z [ERROR]: Error creando conexión en pool server2: getaddrinfo ENOTFOUND sql-calidad.miami
+📚 Stack: Error: getaddrinfo ENOTFOUND sql-calidad.miami
+    at D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1006:32
+    at process.processTicksAndRejections (node:internal/process/task_queues:85:11)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796,
+  "code": "EINSTLOOKUP",
+  "cause": {
+    "errno": -3008,
+    "code": "ENOTFOUND",
+    "syscall": "getaddrinfo",
+    "hostname": "sql-calidad.miami"
+  }
+}
+2025-10-21T06:45:54.538Z [DEBUG]: Conexión creada exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.539Z [DEBUG]: [conn-1761029154518-9ja9f] Conexión obtenida exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.539Z [DEBUG]: [conn-1761029154518-9ja9f] Conexión liberada para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.540Z [DEBUG]: [conn-1761029154540-d9ru4] Solicitando conexión para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.540Z [DEBUG]: [conn-1761029154540-d9ru4] Adquiriendo conexión del pool...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.540Z [DEBUG]: [conn-1761029154540-d9ru4] Conexión obtenida exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.550Z [DEBUG]: Comprobación de servidores completada
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
+2025-10-21T06:45:54.552Z [DEBUG]: [conn-1761029154540-d9ru4] Conexión liberada para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796
+}
