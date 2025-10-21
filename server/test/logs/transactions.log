@@ -1,0 +1,1763 @@
+2025-10-21T04:29:37.917Z [INFO][system]: 🚀 Sistema de logging inicializado
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020,
+  "transports": 4,
+  "mongoEnabled": false,
+  "logLevel": "info"
+}
+2025-10-21T04:29:37.977Z [DEBUG]: Ejecutando comprobación de servidores...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:29:37.983Z [INFO]: Servicio de monitoreo de servidores iniciado (intervalo: 5 minutos)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:29:38.004Z [INFO]: Cargando 3 configuraciones de base de datos
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:29:38.005Z [INFO]: Creando pool para mongodb...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:29:38.006Z [DEBUG]: Configuración Tedious para mongodb:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020,
+  "server": "localhost",
+  "port": 27017,
+  "database": "core_app",
+  "encrypt": true
+}
+2025-10-21T04:29:38.006Z [INFO]: Pool creado exitosamente para mongodb
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:29:38.007Z [INFO]: Creando pool para server1...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:29:38.007Z [DEBUG]: Configuración Tedious para server1:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020,
+  "server": "10.0.10.120",
+  "port": 1433,
+  "database": "EXACTUS",
+  "encrypt": false
+}
+2025-10-21T04:29:38.007Z [INFO]: Pool creado exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:29:38.008Z [INFO]: Creando pool para server2...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:29:38.008Z [DEBUG]: Configuración Tedious para server2:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020,
+  "server": "sql-calidad.miami",
+  "port": 1433,
+  "database": "stdb_gnd",
+  "encrypt": false
+}
+2025-10-21T04:29:38.008Z [INFO]: Pool creado exitosamente para server2
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:29:38.008Z [INFO]: DatabaseService inicializado exitosamente con 3 pools
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:29:38.010Z [DEBUG]: [conn-1761020978010-mwriz] Solicitando conexión para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:29:38.010Z [DEBUG]: [conn-1761020978010-mwriz] Adquiriendo conexión del pool...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:29:38.011Z [ERROR]: Error creando conexión en pool server2: Port and instanceName are mutually exclusive, but 1433 and calidadstdb provided
+📚 Stack: Error: Port and instanceName are mutually exclusive, but 1433 and calidadstdb provided
+    at new Connection (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:492:15)
+    at D:\proyectos\app\core_app\server\services\DatabaseService.js:110:28
+    at new Promise (<anonymous>)
+    at DatabaseService._createConnection (D:\proyectos\app\core_app\server\services\DatabaseService.js:107:12)
+    at Object.create (D:\proyectos\app\core_app\server\services\DatabaseService.js:67:28)
+    at Pool._createResource (D:\proyectos\app\core_app\server\node_modules\generic-pool\lib\Pool.js:319:42)
+    at Pool._ensureMinimum (D:\proyectos\app\core_app\server\node_modules\generic-pool\lib\Pool.js:351:12)
+    at Pool.start (D:\proyectos\app\core_app\server\node_modules\generic-pool\lib\Pool.js:425:10)
+    at new Pool (D:\proyectos\app\core_app\server\node_modules\generic-pool\lib\Pool.js:128:12)
+    at createPool (D:\proyectos\app\core_app\server\node_modules\generic-pool\index.js:11:12)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:29:38.027Z [ERROR]: Error conectando a mongodb: Connection lost - read ECONNRESET
+📚 Stack: Error: Connection lost - read ECONNRESET
+    at Connection.socketError (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1359:26)
+    at Socket.<anonymous> (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1060:12)
+    at Socket.emit (node:events:530:35)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020,
+  "code": "ESOCKET",
+  "cause": {
+    "errno": -4077,
+    "code": "ECONNRESET",
+    "syscall": "read"
+  }
+}
+2025-10-21T04:29:38.027Z [ERROR]: Error en conexión a mongodb: Connection lost - read ECONNRESET
+📚 Stack: Error: Connection lost - read ECONNRESET
+    at Connection.socketError (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1359:26)
+    at Socket.<anonymous> (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1060:12)
+    at Socket.emit (node:events:530:35)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020,
+  "code": "ESOCKET",
+  "cause": {
+    "errno": -4077,
+    "code": "ECONNRESET",
+    "syscall": "read"
+  }
+}
+2025-10-21T04:29:38.028Z [ERROR]: Error creando conexión en pool mongodb: Connection lost - read ECONNRESET
+📚 Stack: Error: Connection lost - read ECONNRESET
+    at Connection.socketError (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1359:26)
+    at Socket.<anonymous> (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1060:12)
+    at Socket.emit (node:events:530:35)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020,
+  "code": "ESOCKET",
+  "cause": {
+    "errno": -4077,
+    "code": "ECONNRESET",
+    "syscall": "read"
+  }
+}
+2025-10-21T04:29:38.030Z [DEBUG]: Conexión creada exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:29:38.031Z [DEBUG]: [conn-1761020978010-mwriz] Conexión obtenida exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:29:38.031Z [DEBUG]: [conn-1761020978010-mwriz] Conexión liberada para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:29:38.111Z [DEBUG]: Comprobación de servidores completada
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:34:37.992Z [DEBUG]: Ejecutando comprobación de servidores...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:34:38.011Z [DEBUG]: Comprobación de servidores completada
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:39:38.003Z [DEBUG]: Ejecutando comprobación de servidores...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:39:38.023Z [DEBUG]: Comprobación de servidores completada
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:39:38.035Z [DEBUG]: Configuración Tedious para server1:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020,
+  "server": "10.0.10.120",
+  "port": 1433,
+  "database": "EXACTUS",
+  "encrypt": false
+}
+2025-10-21T04:39:38.043Z [DEBUG]: Conexión creada exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020
+}
+2025-10-21T04:41:42.367Z [INFO][system]: 🔄 Iniciando cierre graceful del logger...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020,
+  "logLevel": "info"
+}
+2025-10-21T04:41:42.368Z [INFO][system]: ✅ Logger cerrado correctamente
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 60020,
+  "logLevel": "info"
+}
+2025-10-21T04:44:47.166Z [INFO][system]: 🚀 Sistema de logging inicializado
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812,
+  "transports": 4,
+  "mongoEnabled": false,
+  "logLevel": "info"
+}
+2025-10-21T04:44:47.171Z [DEBUG]: [conn-1761021887171-x72ol] Solicitando conexión para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.216Z [DEBUG]: Ejecutando comprobación de servidores...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.220Z [INFO]: Servicio de monitoreo de servidores iniciado (intervalo: 5 minutos)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.235Z [INFO]: Cargando 3 configuraciones de base de datos
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.236Z [INFO]: Creando pool para mongodb...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.236Z [DEBUG]: Configuración Tedious para mongodb:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812,
+  "server": "localhost",
+  "port": 27017,
+  "database": "core_app",
+  "encrypt": true
+}
+2025-10-21T04:44:47.238Z [INFO]: Pool creado exitosamente para mongodb
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.238Z [INFO]: Creando pool para server1...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.238Z [DEBUG]: Configuración Tedious para server1:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812,
+  "server": "10.0.10.120",
+  "port": 1433,
+  "database": "EXACTUS",
+  "encrypt": false
+}
+2025-10-21T04:44:47.239Z [INFO]: Pool creado exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.239Z [INFO]: Creando pool para server2...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.239Z [DEBUG]: Configuración Tedious para server2:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812,
+  "server": "sql-calidad.miami",
+  "port": 1433,
+  "database": "stdb_gnd",
+  "encrypt": false
+}
+2025-10-21T04:44:47.239Z [INFO]: Pool creado exitosamente para server2
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.239Z [INFO]: DatabaseService inicializado exitosamente con 3 pools
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.239Z [DEBUG]: [conn-1761021887171-x72ol] Adquiriendo conexión del pool...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.240Z [ERROR]: Error creando conexión en pool server2: Port and instanceName are mutually exclusive, but 1433 and calidadstdb provided
+📚 Stack: Error: Port and instanceName are mutually exclusive, but 1433 and calidadstdb provided
+    at new Connection (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:492:15)
+    at D:\proyectos\app\core_app\server\services\DatabaseService.js:110:28
+    at new Promise (<anonymous>)
+    at DatabaseService._createConnection (D:\proyectos\app\core_app\server\services\DatabaseService.js:107:12)
+    at Object.create (D:\proyectos\app\core_app\server\services\DatabaseService.js:67:28)
+    at Pool._createResource (D:\proyectos\app\core_app\server\node_modules\generic-pool\lib\Pool.js:319:42)
+    at Pool._ensureMinimum (D:\proyectos\app\core_app\server\node_modules\generic-pool\lib\Pool.js:351:12)
+    at Pool.start (D:\proyectos\app\core_app\server\node_modules\generic-pool\lib\Pool.js:425:10)
+    at new Pool (D:\proyectos\app\core_app\server\node_modules\generic-pool\lib\Pool.js:128:12)
+    at createPool (D:\proyectos\app\core_app\server\node_modules\generic-pool\index.js:11:12)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.257Z [ERROR]: Error conectando a mongodb: Connection lost - read ECONNRESET
+📚 Stack: Error: Connection lost - read ECONNRESET
+    at Connection.socketError (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1359:26)
+    at Socket.<anonymous> (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1060:12)
+    at Socket.emit (node:events:530:35)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812,
+  "code": "ESOCKET",
+  "cause": {
+    "errno": -4077,
+    "code": "ECONNRESET",
+    "syscall": "read"
+  }
+}
+2025-10-21T04:44:47.257Z [ERROR]: Error en conexión a mongodb: Connection lost - read ECONNRESET
+📚 Stack: Error: Connection lost - read ECONNRESET
+    at Connection.socketError (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1359:26)
+    at Socket.<anonymous> (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1060:12)
+    at Socket.emit (node:events:530:35)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812,
+  "code": "ESOCKET",
+  "cause": {
+    "errno": -4077,
+    "code": "ECONNRESET",
+    "syscall": "read"
+  }
+}
+2025-10-21T04:44:47.258Z [ERROR]: Error creando conexión en pool mongodb: Connection lost - read ECONNRESET
+📚 Stack: Error: Connection lost - read ECONNRESET
+    at Connection.socketError (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1359:26)
+    at Socket.<anonymous> (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1060:12)
+    at Socket.emit (node:events:530:35)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812,
+  "code": "ESOCKET",
+  "cause": {
+    "errno": -4077,
+    "code": "ECONNRESET",
+    "syscall": "read"
+  }
+}
+2025-10-21T04:44:47.261Z [DEBUG]: Conexión creada exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.262Z [DEBUG]: [conn-1761021887171-x72ol] Conexión obtenida exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.281Z [DEBUG]: Comprobación de servidores completada
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.412Z [DEBUG]: [conn-1761021887171-x72ol] Conexión liberada para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.413Z [DEBUG]: [tx-1761021887413-4l84f] Iniciando transacción para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.413Z [DEBUG]: [conn-1761021887413-an64l] Solicitando conexión para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.413Z [DEBUG]: [conn-1761021887413-an64l] Adquiriendo conexión del pool...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.413Z [DEBUG]: [conn-1761021887413-an64l] Conexión obtenida exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.646Z [ERROR]: [tx-1761021887413-4l84f] Error en transacción: transaction.commit is not a function
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.646Z [ERROR]: [tx-1761021887413-4l84f] Error en rollback: transaction.rollback is not a function
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.647Z [DEBUG]: [conn-1761021887413-an64l] Conexión liberada para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.647Z [DEBUG]: [tx-1761021887647-8h1hk] Iniciando transacción para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.647Z [DEBUG]: [conn-1761021887647-c9rpr] Solicitando conexión para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.647Z [DEBUG]: [conn-1761021887647-c9rpr] Adquiriendo conexión del pool...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.648Z [DEBUG]: [conn-1761021887647-c9rpr] Conexión obtenida exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.661Z [ERROR]: [tx-1761021887647-8h1hk] Error en transacción: Invalid object name 'tabla_que_no_existe'.
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.661Z [ERROR]: [tx-1761021887647-8h1hk] Error en rollback: transaction.rollback is not a function
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.661Z [DEBUG]: [conn-1761021887647-c9rpr] Conexión liberada para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.661Z [DEBUG]: [conn-1761021887661-762wi] Solicitando conexión para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.662Z [DEBUG]: [conn-1761021887661-762wi] Adquiriendo conexión del pool...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.662Z [DEBUG]: [conn-1761021887662-abtu5] Solicitando conexión para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.662Z [DEBUG]: [conn-1761021887662-abtu5] Adquiriendo conexión del pool...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.662Z [DEBUG]: Configuración Tedious para server1:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812,
+  "server": "10.0.10.120",
+  "port": 1433,
+  "database": "EXACTUS",
+  "encrypt": false
+}
+2025-10-21T04:44:47.662Z [DEBUG]: [conn-1761021887662-44aff] Solicitando conexión para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.662Z [DEBUG]: [conn-1761021887662-44aff] Adquiriendo conexión del pool...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.663Z [DEBUG]: Configuración Tedious para server1:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812,
+  "server": "10.0.10.120",
+  "port": 1433,
+  "database": "EXACTUS",
+  "encrypt": false
+}
+2025-10-21T04:44:47.663Z [DEBUG]: [conn-1761021887663-2k7f1] Solicitando conexión para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.663Z [DEBUG]: [conn-1761021887663-2k7f1] Adquiriendo conexión del pool...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.663Z [DEBUG]: Configuración Tedious para server1:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812,
+  "server": "10.0.10.120",
+  "port": 1433,
+  "database": "EXACTUS",
+  "encrypt": false
+}
+2025-10-21T04:44:47.663Z [DEBUG]: [conn-1761021887663-r09ax] Solicitando conexión para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.663Z [DEBUG]: [conn-1761021887663-r09ax] Adquiriendo conexión del pool...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.663Z [DEBUG]: Configuración Tedious para server1:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812,
+  "server": "10.0.10.120",
+  "port": 1433,
+  "database": "EXACTUS",
+  "encrypt": false
+}
+2025-10-21T04:44:47.664Z [DEBUG]: [conn-1761021887661-762wi] Conexión obtenida exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.667Z [DEBUG]: [conn-1761021887661-762wi] Conexión liberada para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.667Z [DEBUG]: [conn-1761021887662-abtu5] Conexión obtenida exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.669Z [DEBUG]: [conn-1761021887662-abtu5] Conexión liberada para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.669Z [DEBUG]: [conn-1761021887662-44aff] Conexión obtenida exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.671Z [DEBUG]: [conn-1761021887662-44aff] Conexión liberada para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.671Z [DEBUG]: [conn-1761021887663-2k7f1] Conexión obtenida exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.674Z [DEBUG]: [conn-1761021887663-2k7f1] Conexión liberada para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.674Z [DEBUG]: [conn-1761021887663-r09ax] Conexión obtenida exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.675Z [DEBUG]: Conexión creada exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.675Z [DEBUG]: Conexión creada exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.676Z [DEBUG]: Conexión creada exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.676Z [DEBUG]: Conexión creada exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:44:47.676Z [DEBUG]: [conn-1761021887663-r09ax] Conexión liberada para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:49:47.231Z [DEBUG]: Ejecutando comprobación de servidores...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:49:47.253Z [DEBUG]: Comprobación de servidores completada
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:54:47.241Z [DEBUG]: Ejecutando comprobación de servidores...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:54:47.287Z [DEBUG]: Comprobación de servidores completada
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:58:47.302Z [DEBUG]: Configuración Tedious para server1:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812,
+  "server": "10.0.10.120",
+  "port": 1433,
+  "database": "EXACTUS",
+  "encrypt": false
+}
+2025-10-21T04:58:47.312Z [DEBUG]: Conexión creada exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:59:47.251Z [DEBUG]: Ejecutando comprobación de servidores...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T04:59:47.272Z [DEBUG]: Comprobación de servidores completada
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812
+}
+2025-10-21T05:01:09.879Z [INFO][system]: 🔄 Iniciando cierre graceful del logger...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812,
+  "logLevel": "info"
+}
+2025-10-21T05:01:09.879Z [INFO][system]: ✅ Logger cerrado correctamente
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 62812,
+  "logLevel": "info"
+}
+2025-10-21T05:01:54.516Z [INFO][system]: 🚀 Sistema de logging inicializado
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820,
+  "transports": 4,
+  "mongoEnabled": false,
+  "logLevel": "info"
+}
+2025-10-21T05:01:54.526Z [INFO]: Servicio de telemetría iniciado
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.528Z [DEBUG]: Memoria [Inicialización MemoryManager]: 29MB/59MB (49.5%)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.530Z [INFO]: SqlService inicializado correctamente
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.594Z [DEBUG]: Ejecutando comprobación de servidores...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.598Z [INFO]: Servicio de monitoreo de servidores iniciado (intervalo: 5 minutos)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.615Z [INFO]: Cargando 3 configuraciones de base de datos
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.615Z [INFO]: Creando pool para mongodb...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.616Z [DEBUG]: Configuración Tedious para mongodb:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820,
+  "server": "localhost",
+  "port": 27017,
+  "database": "core_app",
+  "encrypt": true
+}
+2025-10-21T05:01:54.617Z [INFO]: Pool creado exitosamente para mongodb
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.618Z [INFO]: Creando pool para server1...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.618Z [DEBUG]: Configuración Tedious para server1:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820,
+  "server": "10.0.10.120",
+  "port": 1433,
+  "database": "EXACTUS",
+  "encrypt": false
+}
+2025-10-21T05:01:54.618Z [INFO]: Pool creado exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.618Z [INFO]: Creando pool para server2...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.619Z [DEBUG]: Configuración Tedious para server2:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820,
+  "server": "sql-calidad.miami",
+  "port": 1433,
+  "database": "stdb_gnd",
+  "encrypt": false
+}
+2025-10-21T05:01:54.619Z [INFO]: Pool creado exitosamente para server2
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.619Z [INFO]: DatabaseService inicializado exitosamente con 3 pools
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.619Z [INFO]: DatabaseServiceAdapter inicializado
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.619Z [DEBUG]: [tx-1761022914619-f3ptg] Iniciando transacción para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.619Z [DEBUG]: [conn-1761022914619-eazsc] Solicitando conexión para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.620Z [DEBUG]: [conn-1761022914619-eazsc] Adquiriendo conexión del pool...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.620Z [ERROR]: Error creando conexión en pool server2: Port and instanceName are mutually exclusive, but 1433 and calidadstdb provided
+📚 Stack: Error: Port and instanceName are mutually exclusive, but 1433 and calidadstdb provided
+    at new Connection (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:492:15)
+    at D:\proyectos\app\core_app\server\services\DatabaseService.js:110:28
+    at new Promise (<anonymous>)
+    at DatabaseService._createConnection (D:\proyectos\app\core_app\server\services\DatabaseService.js:107:12)
+    at Object.create (D:\proyectos\app\core_app\server\services\DatabaseService.js:67:28)
+    at Pool._createResource (D:\proyectos\app\core_app\server\node_modules\generic-pool\lib\Pool.js:319:42)
+    at Pool._ensureMinimum (D:\proyectos\app\core_app\server\node_modules\generic-pool\lib\Pool.js:351:12)
+    at Pool.start (D:\proyectos\app\core_app\server\node_modules\generic-pool\lib\Pool.js:425:10)
+    at new Pool (D:\proyectos\app\core_app\server\node_modules\generic-pool\lib\Pool.js:128:12)
+    at createPool (D:\proyectos\app\core_app\server\node_modules\generic-pool\index.js:11:12)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.638Z [ERROR]: Error conectando a mongodb: Connection lost - read ECONNRESET
+📚 Stack: Error: Connection lost - read ECONNRESET
+    at Connection.socketError (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1359:26)
+    at Socket.<anonymous> (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1060:12)
+    at Socket.emit (node:events:530:35)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820,
+  "code": "ESOCKET",
+  "cause": {
+    "errno": -4077,
+    "code": "ECONNRESET",
+    "syscall": "read"
+  }
+}
+2025-10-21T05:01:54.639Z [ERROR]: Error en conexión a mongodb: Connection lost - read ECONNRESET
+📚 Stack: Error: Connection lost - read ECONNRESET
+    at Connection.socketError (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1359:26)
+    at Socket.<anonymous> (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1060:12)
+    at Socket.emit (node:events:530:35)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820,
+  "code": "ESOCKET",
+  "cause": {
+    "errno": -4077,
+    "code": "ECONNRESET",
+    "syscall": "read"
+  }
+}
+2025-10-21T05:01:54.639Z [ERROR]: Error creando conexión en pool mongodb: Connection lost - read ECONNRESET
+📚 Stack: Error: Connection lost - read ECONNRESET
+    at Connection.socketError (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1359:26)
+    at Socket.<anonymous> (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1060:12)
+    at Socket.emit (node:events:530:35)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820,
+  "code": "ESOCKET",
+  "cause": {
+    "errno": -4077,
+    "code": "ECONNRESET",
+    "syscall": "read"
+  }
+}
+2025-10-21T05:01:54.645Z [DEBUG]: Conexión creada exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.645Z [DEBUG]: [conn-1761022914619-eazsc] Conexión obtenida exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.649Z [DEBUG]: [tx-1761022914649-n61nh] Iniciando transacción para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.649Z [DEBUG]: [conn-1761022914649-53vlr] Solicitando conexión para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.649Z [DEBUG]: [conn-1761022914649-53vlr] Adquiriendo conexión del pool...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.649Z [DEBUG]: Configuración Tedious para server1:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820,
+  "server": "10.0.10.120",
+  "port": 1433,
+  "database": "EXACTUS",
+  "encrypt": false
+}
+2025-10-21T05:01:54.664Z [DEBUG]: Comprobación de servidores completada
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.668Z [DEBUG]: Conexión creada exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.669Z [DEBUG]: [conn-1761022914649-53vlr] Conexión obtenida exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.716Z [ERROR]: [tx-1761022914649-n61nh] Error en transacción: transaction.commit is not a function
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.716Z [ERROR]: [tx-1761022914649-n61nh] Error en rollback: transaction.rollback is not a function
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.716Z [DEBUG]: [conn-1761022914649-53vlr] Conexión liberada para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.716Z [ERROR]: [tx-1761022914619-f3ptg] Error en transacción: transaction.commit is not a function
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.717Z [ERROR]: [tx-1761022914619-f3ptg] Error en rollback: transaction.rollback is not a function
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.717Z [DEBUG]: [conn-1761022914619-eazsc] Conexión liberada para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.717Z [DEBUG]: [tx-1761022914717-nptm3] Iniciando transacción para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.718Z [DEBUG]: [conn-1761022914718-6duvw] Solicitando conexión para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.718Z [DEBUG]: [conn-1761022914718-6duvw] Adquiriendo conexión del pool...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.718Z [DEBUG]: [tx-1761022914718-hrq5p] Iniciando transacción para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.718Z [DEBUG]: [conn-1761022914718-alo8i] Solicitando conexión para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.718Z [DEBUG]: [conn-1761022914718-alo8i] Adquiriendo conexión del pool...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.718Z [DEBUG]: [tx-1761022914718-i4fbm] Iniciando transacción para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.718Z [DEBUG]: [conn-1761022914718-eqpto] Solicitando conexión para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.718Z [DEBUG]: [conn-1761022914718-eqpto] Adquiriendo conexión del pool...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.719Z [DEBUG]: Configuración Tedious para server1:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820,
+  "server": "10.0.10.120",
+  "port": 1433,
+  "database": "EXACTUS",
+  "encrypt": false
+}
+2025-10-21T05:01:54.719Z [DEBUG]: [conn-1761022914718-6duvw] Conexión obtenida exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.719Z [DEBUG]: [conn-1761022914718-alo8i] Conexión obtenida exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.725Z [ERROR]: [tx-1761022914717-nptm3] Error en transacción: transaction.commit is not a function
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.725Z [ERROR]: [tx-1761022914717-nptm3] Error en rollback: transaction.rollback is not a function
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.726Z [DEBUG]: [conn-1761022914718-6duvw] Conexión liberada para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.726Z [DEBUG]: [conn-1761022914718-eqpto] Conexión obtenida exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.729Z [DEBUG]: Conexión creada exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.730Z [ERROR]: [tx-1761022914718-i4fbm] Error en transacción: transaction.commit is not a function
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.730Z [ERROR]: [tx-1761022914718-i4fbm] Error en rollback: transaction.rollback is not a function
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.730Z [DEBUG]: [conn-1761022914718-eqpto] Conexión liberada para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.742Z [ERROR]: [tx-1761022914718-hrq5p] Error en transacción: transaction.commit is not a function
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.742Z [ERROR]: [tx-1761022914718-hrq5p] Error en rollback: transaction.rollback is not a function
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:01:54.743Z [DEBUG]: [conn-1761022914718-alo8i] Conexión liberada para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:06:54.606Z [DEBUG]: Ejecutando comprobación de servidores...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:06:54.662Z [DEBUG]: Comprobación de servidores completada
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820
+}
+2025-10-21T05:11:13.634Z [INFO][system]: 🔄 Iniciando cierre graceful del logger...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820,
+  "logLevel": "info"
+}
+2025-10-21T05:11:13.634Z [INFO][system]: ✅ Logger cerrado correctamente
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28820,
+  "logLevel": "info"
+}
+2025-10-21T05:12:10.232Z [INFO][system]: 🚀 Sistema de logging inicializado
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388,
+  "transports": 4,
+  "mongoEnabled": false,
+  "logLevel": "info"
+}
+2025-10-21T05:12:10.278Z [DEBUG]: Ejecutando comprobación de servidores...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.282Z [INFO]: Servicio de monitoreo de servidores iniciado (intervalo: 5 minutos)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.300Z [INFO]: Cargando 3 configuraciones de base de datos
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.300Z [INFO]: Creando pool para mongodb...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.301Z [DEBUG]: Configuración Tedious para mongodb:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388,
+  "server": "localhost",
+  "port": 27017,
+  "database": "core_app",
+  "encrypt": true
+}
+2025-10-21T05:12:10.302Z [INFO]: Pool creado exitosamente para mongodb
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.303Z [INFO]: Creando pool para server1...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.303Z [DEBUG]: Configuración Tedious para server1:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388,
+  "server": "10.0.10.120",
+  "port": 1433,
+  "database": "EXACTUS",
+  "encrypt": false
+}
+2025-10-21T05:12:10.303Z [INFO]: Pool creado exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.304Z [INFO]: Creando pool para server2...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.304Z [DEBUG]: Configuración Tedious para server2:
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388,
+  "server": "sql-calidad.miami",
+  "port": 1433,
+  "database": "stdb_gnd",
+  "encrypt": false
+}
+2025-10-21T05:12:10.304Z [INFO]: Pool creado exitosamente para server2
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.304Z [INFO]: DatabaseService inicializado exitosamente con 3 pools
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.304Z [INFO]: DatabaseServiceAdapter inicializado
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.304Z [DEBUG]: [conn-1761023530304-3j13j] Solicitando conexión para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.305Z [DEBUG]: [conn-1761023530304-3j13j] Adquiriendo conexión del pool...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.306Z [ERROR]: Error creando conexión en pool server2: Port and instanceName are mutually exclusive, but 1433 and calidadstdb provided
+📚 Stack: Error: Port and instanceName are mutually exclusive, but 1433 and calidadstdb provided
+    at new Connection (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:492:15)
+    at D:\proyectos\app\core_app\server\services\DatabaseService.js:110:28
+    at new Promise (<anonymous>)
+    at DatabaseService._createConnection (D:\proyectos\app\core_app\server\services\DatabaseService.js:107:12)
+    at Object.create (D:\proyectos\app\core_app\server\services\DatabaseService.js:67:28)
+    at Pool._createResource (D:\proyectos\app\core_app\server\node_modules\generic-pool\lib\Pool.js:319:42)
+    at Pool._ensureMinimum (D:\proyectos\app\core_app\server\node_modules\generic-pool\lib\Pool.js:351:12)
+    at Pool.start (D:\proyectos\app\core_app\server\node_modules\generic-pool\lib\Pool.js:425:10)
+    at new Pool (D:\proyectos\app\core_app\server\node_modules\generic-pool\lib\Pool.js:128:12)
+    at createPool (D:\proyectos\app\core_app\server\node_modules\generic-pool\index.js:11:12)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.321Z [ERROR]: Error conectando a mongodb: Connection lost - read ECONNRESET
+📚 Stack: Error: Connection lost - read ECONNRESET
+    at Connection.socketError (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1359:26)
+    at Socket.<anonymous> (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1060:12)
+    at Socket.emit (node:events:530:35)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388,
+  "code": "ESOCKET",
+  "cause": {
+    "errno": -4077,
+    "code": "ECONNRESET",
+    "syscall": "read"
+  }
+}
+2025-10-21T05:12:10.321Z [ERROR]: Error en conexión a mongodb: Connection lost - read ECONNRESET
+📚 Stack: Error: Connection lost - read ECONNRESET
+    at Connection.socketError (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1359:26)
+    at Socket.<anonymous> (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1060:12)
+    at Socket.emit (node:events:530:35)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388,
+  "code": "ESOCKET",
+  "cause": {
+    "errno": -4077,
+    "code": "ECONNRESET",
+    "syscall": "read"
+  }
+}
+2025-10-21T05:12:10.322Z [ERROR]: Error creando conexión en pool mongodb: Connection lost - read ECONNRESET
+📚 Stack: Error: Connection lost - read ECONNRESET
+    at Connection.socketError (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1359:26)
+    at Socket.<anonymous> (D:\proyectos\app\core_app\server\node_modules\tedious\lib\connection.js:1060:12)
+    at Socket.emit (node:events:530:35)
+    at emitErrorNT (node:internal/streams/destroy:170:8)
+    at emitErrorCloseNT (node:internal/streams/destroy:129:3)
+    at process.processTicksAndRejections (node:internal/process/task_queues:90:21)
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388,
+  "code": "ESOCKET",
+  "cause": {
+    "errno": -4077,
+    "code": "ECONNRESET",
+    "syscall": "read"
+  }
+}
+2025-10-21T05:12:10.326Z [DEBUG]: Conexión creada exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.326Z [DEBUG]: [conn-1761023530304-3j13j] Conexión obtenida exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.331Z [DEBUG]: [conn-1761023530304-3j13j] Conexión liberada para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.331Z [DEBUG]: [tx-1761023530331-wp9mm] Iniciando transacción para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.331Z [DEBUG]: [conn-1761023530331-9c6cx] Solicitando conexión para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.332Z [DEBUG]: [conn-1761023530331-9c6cx] Adquiriendo conexión del pool...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.332Z [DEBUG]: [conn-1761023530331-9c6cx] Conexión obtenida exitosamente para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.342Z [DEBUG]: Comprobación de servidores completada
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.356Z [ERROR]: [tx-1761023530331-wp9mm] Error en transacción: transaction.commit is not a function
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.356Z [ERROR]: [tx-1761023530331-wp9mm] Error en rollback: transaction.rollback is not a function
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:12:10.356Z [DEBUG]: [conn-1761023530331-9c6cx] Conexión liberada para server1
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388
+}
+2025-10-21T05:16:20.974Z [INFO][system]: 🔄 Iniciando cierre graceful del logger...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388,
+  "logLevel": "info"
+}
+2025-10-21T05:16:20.974Z [INFO][system]: ✅ Logger cerrado correctamente
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 54388,
+  "logLevel": "info"
+}
