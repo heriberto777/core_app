@@ -1,6 +1,5 @@
 const { withConnection } = require("../utils/dbUtils");
 const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
-const { SqlService } = require("./SqlService");
 const logger = require("./logger");
 const { LoadTracking, DeliveryPerson } = require("../models/loadsModel");
 
@@ -347,7 +346,7 @@ class LoadsService {
         try {
           // INICIAR TRANSACCIÓN PRINCIPAL
           step = "beginTransaction";
-          transactionResult = await SqlService.beginTransaction(
+          transactionResult = await DatabaseServiceAdapter.beginTransaction(
             server1Connection
           );
           // const { transaction } = transactionResult;
@@ -420,7 +419,7 @@ class LoadsService {
               );
 
               // ROLLBACK de la transacción
-              await SqlService.rollbackTransaction(
+              await DatabaseServiceAdapterrollbackTransaction(
                 transactionResult.transaction
               );
               transactionResult = null; // Marcar como procesada
@@ -488,7 +487,7 @@ class LoadsService {
               traspasoResult.totalLineas > 0
             ) {
               // ROLLBACK de la transacción
-              await SqlService.rollbackTransaction(transactionResult);
+              await DatabaseServiceAdapterrollbackTransaction(transactionResult);
               transactionResult = null;
 
               const trackingId = await this.saveFailedTraspasoTracking(
@@ -585,7 +584,7 @@ class LoadsService {
               );
 
               // CONFIRMAR TRANSACCIÓN
-              await SqlService.commitTransaction(transactionResult);
+              await DatabaseServiceAdaptercommitTransaction(transactionResult);
               transactionResult = null;
 
               await LoadTracking.findOneAndUpdate(
@@ -666,7 +665,7 @@ class LoadsService {
             logger.info(`${step}: Pedidos marcados como procesados`);
 
             // CONFIRMAR TODA LA TRANSACCIÓN
-            await SqlService.commitTransaction(transactionResult);
+            await DatabaseServiceAdaptercommitTransaction(transactionResult);
             transactionResult = null; // Marcar como procesada
 
             // PASO 8: Actualizar tracking MongoDB (fuera de transacción SQL)
@@ -711,7 +710,7 @@ class LoadsService {
           } catch (transactionError) {
             // ROLLBACK automático en caso de error
             if (transactionResult) {
-              await SqlService.rollbackTransaction(transactionResult);
+              await DatabaseServiceAdapterrollbackTransaction(transactionResult);
               transactionResult = null;
             }
             throw transactionError;
@@ -727,7 +726,7 @@ class LoadsService {
       // ROLLBACK de emergencia si no se procesó antes
       try {
         if (transactionResult) {
-          await SqlService.rollbackTransaction(transactionResult);
+          await DatabaseServiceAdapterrollbackTransaction(transactionResult);
         }
       } catch (rollbackError) {
         logger.error("Error en rollback de emergencia:", rollbackError);
