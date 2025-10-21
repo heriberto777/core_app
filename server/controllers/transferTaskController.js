@@ -1653,7 +1653,7 @@ const getTransferSummaries = async (req, res) => {
 const getDailyStats = async (req, res) => {
   try {
     const TaskExecution = require("../models/taskExecutionModel");
-const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
+const DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");
 
     // Calcular el rango de hoy (toda la fecha, sin tener en cuenta la hora)
     const today = new Date();

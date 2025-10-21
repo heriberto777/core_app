@@ -1,7 +1,7 @@
 const LoadsService = require("../services/loadsService");
 const traspasoService = require('../services/traspasoService');
 const logger = require("../services/logger");
-const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
+const DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");
 
 class LoadsController {
   /**

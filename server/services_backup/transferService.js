@@ -1920,7 +1920,7 @@ class TransferService {
         } catch (importError) {
           // Si el servicio de salud no está disponible, hacer verificación básica
           const MongoDbService = require("./mongoDbService");
-const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
+const DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");
 
           // Verificación básica de conexiones
           const mongoConnected = MongoDbService.isConnected();

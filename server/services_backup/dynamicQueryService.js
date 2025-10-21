@@ -14,7 +14,7 @@ const {
   validateNonDestructiveQuery,
 } = require("../utils/validateQuery");
 const { sendProgress } = require("./progressSse");
-const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
+const DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");
 
 // Servicio de reintentos específico para consultas dinámicas
 const queryRetryService = new RetryService.RetryService({

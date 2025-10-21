@@ -82,7 +82,7 @@ class ProductionValidator {
 
       if (
         content.includes("DatabaseServiceAdapter.") &&
-        !content.includes('require("./DatabaseServiceAdapter")') &&
+        !content.includes('require("../services/DatabaseServiceAdapter")') &&
         !content.includes('require("../services/DatabaseServiceAdapter")')
       ) {
         problems.push("Usa DatabaseServiceAdapter sin importarlo");

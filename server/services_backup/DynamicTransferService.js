@@ -2574,7 +2574,7 @@ class DynamicTransferService {
       // Si no tiene taskId, crear uno
       if (!existingMapping.taskId && !mappingData.taskId) {
         const TransferTask = require("../models/transferTaks");
-const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
+const DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");
 
         let defaultQuery = "SELECT 1";
         if (mappingData.tableConfigs && mappingData.tableConfigs.length > 0) {

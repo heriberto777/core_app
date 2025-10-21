@@ -96,7 +96,7 @@ class CodeCleanup {
       },
       {
         from: /const ConnectionService = require\(["']\.\/ConnectionCentralService["']\);?\n?/g,
-        to: '// const ConnectionService = require("./ConnectionCentralService"); // REMOVED\nconst DatabaseServiceAdapter = require("./DatabaseServiceAdapter");\n',
+        to: '// const ConnectionService = require("./ConnectionCentralService"); // REMOVED\nconst DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");\n',
         description: "Reemplazar ConnectionService por DatabaseServiceAdapter",
       },
       {
@@ -135,14 +135,14 @@ class CodeCleanup {
 
     if (
       content.includes("DatabaseServiceAdapter.") &&
-      !content.includes('require("./DatabaseServiceAdapter")') &&
-      !content.includes("require('./DatabaseServiceAdapter')")
+      !content.includes('require("../services/DatabaseServiceAdapter")') &&
+      !content.includes("require("../services/DatabaseServiceAdapter")")
     ) {
       const requireLines = content.match(/const .+ = require\([^)]+\);?\n/g);
       if (requireLines && requireLines.length > 0) {
         const lastRequireLine = requireLines[requireLines.length - 1];
         const newImport =
-          'const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");\n';
+          'const DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");\n';
         content = content.replace(lastRequireLine, lastRequireLine + newImport);
         changesMade++;
         console.log(`  Agregado import DatabaseServiceAdapter`);

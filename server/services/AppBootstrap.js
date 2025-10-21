@@ -1,5 +1,3 @@
-// server/services/AppBootstrap.js - VERSIÓN MEJORADA CON CONNECTIONCENTRALSERVICE
-
 const MongoDbService = require("./mongoDbService");
 const logger = require("./logger");
 // // const ConnectionCentralService = require(...); // REMOVED

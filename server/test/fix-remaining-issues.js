@@ -45,8 +45,8 @@ class RemainingIssuesFixer {
       // Verificar si usa DatabaseServiceAdapter pero no lo importa
       const usesDatabaseAdapter = content.includes("DatabaseServiceAdapter.");
       const hasImport =
-        content.includes('require("./DatabaseServiceAdapter")') ||
-        content.includes("require('./DatabaseServiceAdapter')");
+        content.includes('require("../services/DatabaseServiceAdapter")') ||
+        content.includes("require("../services/DatabaseServiceAdapter")");
 
       if (usesDatabaseAdapter && !hasImport) {
         console.log(`Agregando import a: ${fileName}`);
@@ -76,12 +76,12 @@ class RemainingIssuesFixer {
           lines.splice(
             insertIndex + 1,
             0,
-            'const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");'
+            'const DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");'
           );
         } else {
           // Insertar al principio si no hay otros requires
           lines.unshift(
-            'const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");',
+            'const DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");',
             ""
           );
         }

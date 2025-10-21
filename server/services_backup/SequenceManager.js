@@ -1,6 +1,6 @@
 const logger = require("./logger");
 const { SqlService } = require("./SqlService");
-const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
+const DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");
 
 class SequenceManager {
   /**

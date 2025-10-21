@@ -1,10 +1,7 @@
 const DynamicTransferService = require("../services/DynamicTransferService");
-const { SqlService } = require("../services/SqlService");
-// const ConnectionManager = require("../services/ConnectionCentralService"); // REMOVED
-const DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");
 const logger = require("../services/logger");
 const TransferMapping = require("../models/transferMappingModel");
-const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
+const DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");
 
 /**
  * Obtiene todas las configuraciones de mapeo

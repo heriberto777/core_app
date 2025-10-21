@@ -5,7 +5,7 @@ const logger = require("./logger");
 const { sendTraspasoEmail } = require("./emailService");
 const PDFService = require("./pdfService");
 const TransferSummary = require("../models/transferSummaryModel");
-const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
+const DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");
 
 /**
  * Obtiene información adicional de los productos desde la base de datos
