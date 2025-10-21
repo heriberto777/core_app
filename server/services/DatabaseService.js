@@ -165,30 +165,41 @@ class DatabaseService {
         trustServerCertificate: true,
         enableArithAbort: true,
         database: dbConfig.database,
-
-        // Timeouts robustos
-        connectTimeout: 120000, // 2 minutos
-        requestTimeout: 240000, // 4 minutos
-        cancelTimeout: 30000, // 30 segundos
-
-        // Configuración de estabilidad
+        connectTimeout: 120000,
+        requestTimeout: 240000,
+        cancelTimeout: 30000,
         rowCollectionOnRequestCompletion: true,
         useColumnNames: true,
         validateParameters: false,
         packetSize: 8192,
         useUTC: true,
-
-        // Puerto e instancia
-        port: dbConfig.port ? parseInt(dbConfig.port) : 1433,
-        instanceName: dbConfig.instance || undefined,
       },
     };
 
-    logger.debug(`Configuración Tedious para ${dbConfig.serverName}:`, {
+    // CORREGIDO: Priorizar instancia sobre puerto
+    if (dbConfig.instance && dbConfig.instance.trim() !== "") {
+      // Si hay instancia, NO usar puerto
+      config.options.instanceName = dbConfig.instance.trim();
+      logger.debug(
+        `${dbConfig.serverName}: Usando instancia '${config.options.instanceName}' (puerto ignorado)`
+      );
+    } else if (dbConfig.port) {
+      // Solo usar puerto si NO hay instancia
+      config.options.port = parseInt(dbConfig.port);
+      logger.debug(
+        `${dbConfig.serverName}: Usando puerto ${config.options.port}`
+      );
+    } else {
+      // Puerto por defecto
+      config.options.port = 1433;
+      logger.debug(`${dbConfig.serverName}: Usando puerto por defecto 1433`);
+    }
+
+    logger.debug(`Configuración final para ${dbConfig.serverName}:`, {
       server: config.server,
       port: config.options.port,
+      instance: config.options.instanceName,
       database: config.options.database,
-      encrypt: config.options.encrypt,
     });
 
     return config;
