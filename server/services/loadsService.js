@@ -1,4 +1,5 @@
 const { withConnection } = require("../utils/dbUtils");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 const { SqlService } = require("./SqlService");
 const logger = require("./logger");
 const { LoadTracking, DeliveryPerson } = require("../models/loadsModel");
