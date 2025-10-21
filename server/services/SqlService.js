@@ -1245,11 +1245,11 @@ class SqlService {
             ? Date.now() - transaction._startTime
             : "unknown",
           errorMessage: error.message,
+          serverKey: transaction._connection?._serverKey,
         });
       }
 
-      // ✅ NO PROPAGAR: En rollback, logging es suficiente
-      // Si el rollback falla, la conexión probablemente se cerrará automáticamente
+      // ⚠️ NO PROPAGAR: El rollback fallido ya se loguea y la conexión será cerrada por el driver.
     }
   }
 

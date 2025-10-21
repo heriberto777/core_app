@@ -487,9 +487,7 @@ class LoadsService {
               traspasoResult.totalLineas > 0
             ) {
               // ROLLBACK de la transacción
-              await SqlService.rollbackTransaction(
-                transactionResult.transaction
-              );
+              await SqlService.rollbackTransaction(transactionResult);
               transactionResult = null;
 
               const trackingId = await this.saveFailedTraspasoTracking(
@@ -586,7 +584,7 @@ class LoadsService {
               );
 
               // CONFIRMAR TRANSACCIÓN
-              await SqlService.commitTransaction(transactionResult.transaction);
+              await SqlService.commitTransaction(transactionResult);
               transactionResult = null;
 
               await LoadTracking.findOneAndUpdate(
@@ -667,7 +665,7 @@ class LoadsService {
             logger.info(`${step}: Pedidos marcados como procesados`);
 
             // CONFIRMAR TODA LA TRANSACCIÓN
-            await SqlService.commitTransaction(transactionResult.transaction);
+            await SqlService.commitTransaction(transactionResult);
             transactionResult = null; // Marcar como procesada
 
             // PASO 8: Actualizar tracking MongoDB (fuera de transacción SQL)
@@ -712,9 +710,7 @@ class LoadsService {
           } catch (transactionError) {
             // ROLLBACK automático en caso de error
             if (transactionResult) {
-              await SqlService.rollbackTransaction(
-                transactionResult.transaction
-              );
+              await SqlService.rollbackTransaction(transactionResult);
               transactionResult = null;
             }
             throw transactionError;
@@ -730,7 +726,7 @@ class LoadsService {
       // ROLLBACK de emergencia si no se procesó antes
       try {
         if (transactionResult) {
-          await SqlService.rollbackTransaction(transactionResult.transaction);
+          await SqlService.rollbackTransaction(transactionResult);
         }
       } catch (rollbackError) {
         logger.error("Error en rollback de emergencia:", rollbackError);
