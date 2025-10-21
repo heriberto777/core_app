@@ -583,7 +583,6 @@ class SqlService {
       try {
         connectionObj = await ConnectionCentralService.getConnection(serverKey);
         needToRelease = true; // Necesitamos liberar esta conexión al finalizar
-        logger.debug(`Conexión obtenida para ${serverKey}`);
       } catch (connError) {
         throw new Error(
           `Error al obtener conexión para ${serverKey}: ${connError.message}`
@@ -600,7 +599,7 @@ class SqlService {
 
     while (retryCount <= maxRetries) {
       try {
-        const result = await this._executeQueryWithRetries(
+        return await this._executeQueryWithRetries(
           connectionObj,
           sql,
           params,
@@ -609,19 +608,6 @@ class SqlService {
           serverKey,
           needToRelease
         );
-
-        // CORREGIDO: Liberar conexión DESPUÉS de obtener el resultado exitoso
-        if (needToRelease && connectionObj) {
-          try {
-            logger.debug(`Liberando conexión obtenida en query`);
-            await ConnectionCentralService.releaseConnection(connectionObj);
-            logger.debug(`Conexión liberada exitosamente`);
-          } catch (releaseError) {
-            logger.warn(`Error al liberar conexión: ${releaseError.message}`);
-          }
-        }
-
-        return result;
       } catch (error) {
         retryCount++;
 
@@ -640,7 +626,7 @@ class SqlService {
           error.code === "ETIMEOUT"
         ) {
           if (retryCount <= maxRetries) {
-            const delay = Math.min(2000 * Math.pow(2, retryCount - 1), 10000);
+            const delay = Math.min(2000 * Math.pow(2, retryCount - 1), 10000); // Backoff exponencial
             logger.info(
               `Waiting ${delay}ms before retry ${
                 retryCount + 1
@@ -697,18 +683,6 @@ class SqlService {
         // Para otros tipos de error, lanzar inmediatamente
         if (retryCount > maxRetries) {
           logger.error(`All retries exhausted. Final error:`, error);
-
-          // CORREGIDO: Liberar conexión en caso de error final
-          if (needToRelease && connectionObj) {
-            try {
-              await ConnectionCentralService.releaseConnection(connectionObj);
-            } catch (releaseError) {
-              logger.warn(
-                `Error liberando conexión tras error: ${releaseError.message}`
-              );
-            }
-          }
-
           throw error;
         }
 
@@ -748,6 +722,11 @@ class SqlService {
 
       // Verificar operaciones para gestión de memoria
       MemoryManager.trackOperation("sql_query");
+
+      // Incrementar contador de operaciones de la conexión
+      if (connectionObj) {
+        ConnectionCentralService.incrementOperationCount(connectionObj);
+      }
 
       // Sanitizar parámetros
       const sanitizedParams = this.sanitizeParams(params);
@@ -820,8 +799,18 @@ class SqlService {
         );
       }
 
-      // CORREGIDO: NO liberar la conexión aquí
-      // La liberación se maneja en el método query principal
+      // Si obtuvimos la conexión aquí, liberarla
+      if (needToRelease && connectionObj) {
+        try {
+          logger.debug(`[${queryId}] Liberando conexión obtenida`);
+          await ConnectionCentralService.releaseConnection(connectionObj);
+          logger.debug(`[${queryId}] Conexión liberada exitosamente`);
+        } catch (releaseError) {
+          logger.warn(
+            `[${queryId}] Error al liberar conexión: ${releaseError.message}`
+          );
+        }
+      }
 
       const totalDuration = Date.now() - startTime;
       logger.debug(
@@ -1047,9 +1036,6 @@ class SqlService {
   async beginTransaction(connection) {
     let connectionObj = connection;
     let needToRelease = false;
-    const operationId = `tx-${Date.now()}-${Math.random()
-      .toString(36)
-      .substr(2, 5)}`;
 
     try {
       // Si pasaron un serverKey en lugar de una conexión, obtener la conexión
@@ -1075,87 +1061,17 @@ class SqlService {
       );
       return result;
     } catch (error) {
-      logger.error(
-        `[${operationId}] Error al iniciar transacción: ${error.message}`
-      );
-
-      // ✅ CLEANUP MEJORADO: Solo liberar si nosotros obtuvimos la conexión
+      // Si obtuvimos una conexión y hubo error, liberarla
       if (needToRelease && connectionObj) {
         try {
-          const connectionService = require("./ConnectionCentralService");
-          await connectionService.releaseConnection(connectionObj);
-          logger.debug(
-            `[${operationId}] Conexión liberada correctamente durante cleanup`
-          );
-        } catch (releaseError) {
-          // ✅ LOGGING DETALLADO: No ignorar silenciosamente
-          logger.error(
-            `[${operationId}] Error crítico al liberar conexión durante cleanup`,
-            {
-              originalError: error.message,
-              releaseError: releaseError.message,
-              connectionInfo: {
-                serverKey: connectionObj._serverKey || "unknown",
-                poolOrigin: connectionObj._poolOrigin || "unknown",
-                acquiredAt: connectionObj._acquiredAt || "unknown",
-              },
-              stack: releaseError.stack,
-            }
-          );
-
-          // ✅ TELEMETRÍA: Rastrear problemas de pool
-          if (typeof Telemetry !== "undefined" && Telemetry.trackError) {
-            Telemetry.trackError("critical_connection_release_failed", {
-              serverKey: connectionObj._serverKey || "unknown",
-              originalErrorType: error.constructor.name,
-              releaseErrorType: releaseError.constructor.name,
-              operationId,
-            });
-          }
-
-          // ✅ ESCALACIÓN: Si hay muchos errores de liberación, es crítico
-          this._trackReleaseFailures(connectionObj._serverKey, releaseError);
+          await ConnectionCentralService.releaseConnection(connectionObj);
+        } catch (e) {
+          // Ignorar error al liberar
         }
       }
 
-      throw error; // Propagar error original
-    }
-  }
-
-  /**
-   * ✅ NUEVO: Rastrear fallos de liberación para detectar problemas del pool
-   */
-  _trackReleaseFailures(serverKey, error) {
-    if (!this._releaseFailures) {
-      this._releaseFailures = new Map();
-    }
-
-    const key = serverKey || "unknown";
-    const failures = this._releaseFailures.get(key) || {
-      count: 0,
-      lastError: null,
-    };
-
-    failures.count++;
-    failures.lastError = {
-      message: error.message,
-      timestamp: new Date().toISOString(),
-    };
-
-    this._releaseFailures.set(key, failures);
-
-    // ✅ ALERTA: Si hay muchos fallos de liberación consecutivos
-    if (failures.count > 5) {
-      logger.error(
-        `🚨 CRÍTICO: ${failures.count} fallos consecutivos liberando conexiones para ${key}`,
-        {
-          lastError: failures.lastError,
-          recommendation: "Considerar reiniciar pool de conexiones",
-        }
-      );
-
-      // Reset counter para evitar spam de logs
-      failures.count = 0;
+      logger.error(`Error al iniciar transacción: ${error.message}`);
+      throw error;
     }
   }
 
@@ -1166,42 +1082,11 @@ class SqlService {
    * @returns {Promise<void>}
    */
   async commitTransaction(transaction) {
-    const operationId = `commit-${Date.now()}`;
-
     if (!transaction) {
       throw new Error("Se requiere una transacción válida para confirmar");
     }
 
-    try {
-      logger.debug(`[${operationId}] Confirmando transacción`);
-      const result = await ConnectionCentralService.commitTransaction(
-        transaction
-      );
-      logger.debug(`[${operationId}] Transacción confirmada exitosamente`);
-      return result;
-    } catch (error) {
-      logger.error(
-        `[${operationId}] Error al confirmar transacción: ${error.message}`
-      );
-
-      // ✅ Intentar rollback de emergencia
-      try {
-        await this.rollbackTransaction(transaction);
-        logger.warn(
-          `[${operationId}] Rollback de emergencia ejecutado tras fallo de commit`
-        );
-      } catch (rollbackError) {
-        logger.error(
-          `[${operationId}] Fallo crítico: No se pudo hacer rollback tras fallo de commit`,
-          {
-            commitError: error.message,
-            rollbackError: rollbackError.message,
-          }
-        );
-      }
-
-      throw error;
-    }
+    return ConnectionCentralService.commitTransaction(transaction);
   }
 
   /**
@@ -1211,46 +1096,9 @@ class SqlService {
    * @returns {Promise<void>}
    */
   async rollbackTransaction(transaction) {
-    const operationId = `rollback-${Date.now()}`;
+    if (!transaction) return;
 
-    if (!transaction) {
-      logger.debug(`[${operationId}] No hay transacción para revertir`);
-      return;
-    }
-
-    try {
-      logger.debug(`[${operationId}] Revirtiendo transacción`);
-      const result = await ConnectionCentralService.rollbackTransaction(
-        transaction
-      );
-      logger.debug(`[${operationId}] Transacción revertida exitosamente`);
-      return result;
-    } catch (error) {
-      // ✅ Los errores de rollback SÍ son críticos
-      logger.error(
-        `[${operationId}] Error crítico al revertir transacción: ${error.message}`,
-        {
-          stack: error.stack,
-          transactionInfo: {
-            startTime: transaction._startTime,
-            connectionId: transaction._connection?._serverKey,
-          },
-        }
-      );
-
-      // ✅ TELEMETRÍA: Rollback failures son críticos
-      if (typeof Telemetry !== "undefined" && Telemetry.trackError) {
-        Telemetry.trackError("critical_rollback_failed", {
-          transactionAge: transaction._startTime
-            ? Date.now() - transaction._startTime
-            : "unknown",
-          errorMessage: error.message,
-          serverKey: transaction._connection?._serverKey,
-        });
-      }
-
-      // ⚠️ NO PROPAGAR: El rollback fallido ya se loguea y la conexión será cerrada por el driver.
-    }
+    return ConnectionCentralService.rollbackTransaction(transaction);
   }
 
   /**
