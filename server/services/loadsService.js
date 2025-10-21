@@ -148,7 +148,11 @@ class LoadsService {
           ORDER BY FECHA_PEDIDO DESC, PEDIDO DESC
         `;
 
-        const result = await DatabaseServiceAdapter.query(connection, fullQuery, params);
+        const result = await DatabaseServiceAdapter.query(
+          connection,
+          fullQuery,
+          params
+        );
 
         // Retornar estructura consistente con transformación de datos
         return {
@@ -253,7 +257,9 @@ class LoadsService {
           ORDER BY PEDIDO_LINEA, lineType
         `;
 
-        const result = await DatabaseServiceAdapter.query(connection, query, { pedidoId });
+        const result = await DatabaseServiceAdapter.query(connection, query, {
+          pedidoId,
+        });
 
         return {
           success: true,
@@ -310,7 +316,6 @@ class LoadsService {
   static async processOrderLoad(deliveryPersonCode, selectedPedidos, userId) {
     let loadTracking = null;
     let step = "initialization";
-    let transactionResult = null;
 
     try {
       logger.info(
@@ -342,27 +347,22 @@ class LoadsService {
 
       let ordersData = null;
 
-      return await withConnection("server1", async (server1Connection) => {
-        try {
-          // INICIAR TRANSACCIÓN PRINCIPAL
-          step = "beginTransaction";
-          transactionResult = await DatabaseServiceAdapter.beginTransaction(
-            server1Connection
-          );
-          // const { transaction } = transactionResult;
-
+      // USAR withTransaction para manejo automático de transacciones
+      return await DatabaseServiceAdapter.withTransaction(
+        "server1",
+        async (server1Connection) => {
           try {
-            // PASO 1: Actualizar U_Code_Load en PEDIDO (CON TRANSACCIÓN)
+            // PASO 1: Actualizar U_Code_Load en PEDIDO
             step = "updatePedidosWithLoadId";
             logger.info(`${step}: Actualizando pedidos con loadId...`);
             await this.updatePedidosWithLoadId(
               server1Connection,
               selectedPedidos,
-              loadId,
+              loadId
             );
             logger.info(`${step}: Completado exitosamente`);
 
-            // PASO 2: Obtener datos transformados (SELECT - sin transacción)
+            // PASO 2: Obtener datos transformados
             step = "getTransformedOrdersData";
             logger.info(`${step}: Obteniendo datos transformados...`);
             ordersData = await this.getTransformedOrdersData(
@@ -379,7 +379,7 @@ class LoadsService {
               bodegaDestino
             );
 
-            // PASOS 4 y 5: Insertar en server2 (conexión separada - sin transacción de server1)
+            // PASOS 4 y 5: Insertar en server2 (conexión separada)
             await withConnection("server2", async (server2Connection) => {
               // PASO 4: Insertar en IMPLT_Orders
               step = "insertToIMPLTOrders";
@@ -418,13 +418,7 @@ class LoadsService {
                 }`
               );
 
-              // ROLLBACK de la transacción
-              await DatabaseServiceAdapterrollbackTransaction(
-                transactionResult.transaction
-              );
-              transactionResult = null; // Marcar como procesada
-
-              // Guardar tracking de fallo (nueva conexión, sin transacción)
+              // Guardar tracking de fallo
               const trackingId = await this.saveFailedTraspasoTracking(
                 server1Connection,
                 {
@@ -455,30 +449,12 @@ class LoadsService {
                 }
               );
 
-              return {
-                success: true,
-                requiresManualTransfer: true,
-                message:
-                  "Carga procesada exitosamente. Traspaso requiere intervención manual",
-                data: {
-                  loadId,
-                  traspasoTrackingId: trackingId,
-                  deliveryPerson: {
-                    code: deliveryPersonCode,
-                    name: deliveryPerson.name,
-                    warehouse: bodegaDestino,
-                  },
-                  ordersProcessed: selectedPedidos.length,
-                  linesProcessed: ordersData.length,
-                  traspaso: {
-                    status: "execution_failed",
-                    trackingId: trackingId,
-                    message:
-                      "Ejecución de traspaso falló - Se requiere traspaso manual",
-                    error: traspasoResult?.mensaje || "Error desconocido",
-                  },
-                },
-              };
+              // Lanzar error para activar rollback automático
+              throw new Error(
+                `Traspaso falló: ${
+                  traspasoResult?.mensaje || "Error desconocido"
+                }`
+              );
             }
 
             // VALIDAR QUE AL MENOS ALGUNAS LÍNEAS FUERON EXITOSAS
@@ -486,10 +462,6 @@ class LoadsService {
               traspasoResult.lineasExitosas === 0 &&
               traspasoResult.totalLineas > 0
             ) {
-              // ROLLBACK de la transacción
-              await DatabaseServiceAdapterrollbackTransaction(transactionResult);
-              transactionResult = null;
-
               const trackingId = await this.saveFailedTraspasoTracking(
                 server1Connection,
                 {
@@ -519,29 +491,7 @@ class LoadsService {
                 }
               );
 
-              return {
-                success: true,
-                requiresManualTransfer: true,
-                message: "Carga procesada pero traspaso falló completamente",
-                data: {
-                  loadId,
-                  traspasoTrackingId: trackingId,
-                  deliveryPerson: {
-                    code: deliveryPersonCode,
-                    name: deliveryPerson.name,
-                    warehouse: bodegaDestino,
-                  },
-                  ordersProcessed: selectedPedidos.length,
-                  linesProcessed: ordersData.length,
-                  traspaso: {
-                    status: "total_failure",
-                    trackingId: trackingId,
-                    message:
-                      "Ninguna línea procesada exitosamente - Traspaso manual requerido",
-                    documento: traspasoResult.documento_inv,
-                  },
-                },
-              };
+              throw new Error("Ninguna línea procesada exitosamente");
             }
 
             // VALIDAR FALLAS PARCIALES SIGNIFICATIVAS
@@ -571,8 +521,7 @@ class LoadsService {
                   ordersData,
                   traspasoResult,
                   userId: String(userId),
-                },
-                null
+                }
               );
 
               // PASO 7: Actualizar U_estado_proceso = 'S' (con warnings)
@@ -580,12 +529,8 @@ class LoadsService {
               await this.updateEstadoProceso(
                 server1Connection,
                 selectedPedidos,
-                "S",
+                "S"
               );
-
-              // CONFIRMAR TRANSACCIÓN
-              await DatabaseServiceAdaptercommitTransaction(transactionResult);
-              transactionResult = null;
 
               await LoadTracking.findOneAndUpdate(
                 { loadId },
@@ -633,7 +578,7 @@ class LoadsService {
               `Traspaso completado exitosamente - Documento: ${traspasoResult.documento_inv}`
             );
 
-            // GUARDAR TRASPASO EXITOSO EN TABLA DE TRACKING (CON TRANSACCIÓN)
+            // GUARDAR TRASPASO EXITOSO EN TABLA DE TRACKING
             step = "saveSuccessfulTracking";
             const trackingId = await this.saveSuccessfulTraspasoTracking(
               server1Connection,
@@ -647,8 +592,7 @@ class LoadsService {
                 ordersData,
                 traspasoResult,
                 userId: String(userId),
-              },
-              null
+              }
             );
 
             // PASO 7: Actualizar U_estado_proceso = 'S' (TODO EXITOSO)
@@ -659,14 +603,9 @@ class LoadsService {
             await this.updateEstadoProceso(
               server1Connection,
               selectedPedidos,
-              "S",
-              null
+              "S"
             );
             logger.info(`${step}: Pedidos marcados como procesados`);
-
-            // CONFIRMAR TODA LA TRANSACCIÓN
-            await DatabaseServiceAdaptercommitTransaction(transactionResult);
-            transactionResult = null; // Marcar como procesada
 
             // PASO 8: Actualizar tracking MongoDB (fuera de transacción SQL)
             await LoadTracking.findOneAndUpdate(
@@ -708,29 +647,14 @@ class LoadsService {
               },
             };
           } catch (transactionError) {
-            // ROLLBACK automático en caso de error
-            if (transactionResult) {
-              await DatabaseServiceAdapterrollbackTransaction(transactionResult);
-              transactionResult = null;
-            }
+            logger.error(`Error en paso ${step}:`, transactionError);
+            // withTransaction hará rollback automáticamente
             throw transactionError;
           }
-        } catch (innerError) {
-          logger.error(`Error en paso ${step}:`, innerError);
-          throw innerError;
         }
-      });
+      );
     } catch (error) {
       logger.error("Error general en processOrderLoad:", error);
-
-      // ROLLBACK de emergencia si no se procesó antes
-      try {
-        if (transactionResult) {
-          await DatabaseServiceAdapterrollbackTransaction(transactionResult);
-        }
-      } catch (rollbackError) {
-        logger.error("Error en rollback de emergencia:", rollbackError);
-      }
 
       // Actualizar tracking MongoDB
       try {
@@ -766,11 +690,7 @@ class LoadsService {
   /**
    * Guarda traspaso exitoso - CORREGIDO PARA LA TABLA REAL
    */
-  static async saveSuccessfulTraspasoTracking(
-    connection,
-    data,
-    transaction = null
-  ) {
+  static async saveSuccessfulTraspasoTracking(connection, data) {
     const {
       loadId,
       deliveryPersonCode,
@@ -815,16 +735,13 @@ class LoadsService {
         documento_generated: traspasoResult?.documento_inv || null,
         lines_successful: traspasoResult?.lineasExitosas || 0,
         lines_failed: traspasoResult?.lineasFallidas || 0,
-        // ✅ CORREGIR: Convertir ObjectId a string
         created_by: userId ? String(userId) : "SYSTEM",
       };
 
       const trackingResult = await DatabaseServiceAdapter.query(
         connection,
         insertTrackingQuery,
-        trackingParams,
-        null,
-        transaction
+        trackingParams
       );
 
       const trackingId = trackingResult.recordset[0].id;
@@ -839,11 +756,7 @@ class LoadsService {
   /**
    * Guarda traspaso fallido - CORREGIDO PARA LA TABLA REAL
    */
-  static async saveFailedTraspasoTracking(
-    connection,
-    data,
-    transaction = null
-  ) {
+  static async saveFailedTraspasoTracking(connection, data) {
     const {
       loadId,
       deliveryPersonCode,
@@ -912,9 +825,7 @@ class LoadsService {
       const trackingResult = await DatabaseServiceAdapter.query(
         connection,
         insertTrackingQuery,
-        trackingParams,
-        null,
-        transaction
+        trackingParams
       );
       const trackingId = trackingResult.recordset[0].id;
 
@@ -947,9 +858,7 @@ class LoadsService {
           await DatabaseServiceAdapter.query(
             connection,
             detailQuery,
-            detailParams,
-            null,
-            transaction
+            detailParams
           );
         }
 
@@ -1021,19 +930,14 @@ class LoadsService {
     });
 
     await loadTracking.save();
-    logger.info(`📊 Tracking creado para carga ${loadId}`);
+    logger.info(`Tracking creado para carga ${loadId}`);
     return loadTracking;
   }
 
   /**
-   * ⭐ Actualiza U_Code_Load en los pedidos seleccionados ⭐
+   * Actualiza U_Code_Load en los pedidos seleccionados
    */
-  static async updatePedidosWithLoadId(
-    connection,
-    selectedPedidos,
-    loadId,
-    transaction = null
-  ) {
+  static async updatePedidosWithLoadId(connection, selectedPedidos, loadId) {
     // Validación inicial
     if (!Array.isArray(selectedPedidos)) {
       throw new Error(
@@ -1063,24 +967,11 @@ class LoadsService {
     AND U_estado_proceso = 'N'
   `;
 
-    // DEBUG: Agregar logging antes de ejecutar
-    console.log("🔍 Query a ejecutar:", query);
-    console.log("🔍 Params:", params);
-    console.log("🔍 Pedidos a actualizar:", selectedPedidos);
-
     const result = await DatabaseServiceAdapter.query(
       connection,
       query,
-      params,
-      null,
-      transaction
+      params
     );
-
-    // DEBUG: Ver estructura completa del resultado
-    console.log("🔍 Resultado completo:", result);
-    console.log("🔍 result.rowsAffected:", result.rowsAffected);
-    console.log("🔍 result.rowsAffected type:", typeof result.rowsAffected);
-    console.log("🔍 result.rowsAffected[0]:", result.rowsAffected?.[0]);
 
     // Verificar diferentes posibles formatos de rowsAffected
     let affectedRows = 0;
@@ -1089,14 +980,8 @@ class LoadsService {
       affectedRows = result.rowsAffected[0] || 0;
     } else if (typeof result.rowsAffected === "number") {
       affectedRows = result.rowsAffected;
-    } else if (result.recordset && result.recordset.affectedRows) {
-      affectedRows = result.recordset.affectedRows;
     } else {
-      // Si no podemos determinar filas afectadas, intentar una consulta de verificación
-      console.log(
-        "⚠️ No se puede determinar filas afectadas, verificando manualmente..."
-      );
-
+      // Verificación manual si no podemos determinar filas afectadas
       const verifyQuery = `
       SELECT COUNT(*) as count
       FROM CATELLI.PEDIDO
@@ -1107,13 +992,9 @@ class LoadsService {
       const verifyResult = await DatabaseServiceAdapter.query(
         connection,
         verifyQuery,
-        params,
-        null,
-        transaction
+        params
       );
       affectedRows = verifyResult.recordset[0]?.count || 0;
-
-      console.log("🔍 Verificación manual - filas actualizadas:", affectedRows);
     }
 
     if (affectedRows !== selectedPedidos.length) {
@@ -1123,20 +1004,13 @@ class LoadsService {
       );
     }
 
-    logger.info(
-      `✅ ${affectedRows} pedidos actualizados con loadId: ${loadId}`
-    );
+    logger.info(`${affectedRows} pedidos actualizados con loadId: ${loadId}`);
   }
 
   /**
-   * ⭐ Actualiza U_estado_proceso ('N' → 'S' si exitoso) ⭐
+   * Actualiza U_estado_proceso ('N' → 'S' si exitoso)
    */
-  static async updateEstadoProceso(
-    connection,
-    selectedPedidos,
-    estado,
-    transaction = null
-  ) {
+  static async updateEstadoProceso(connection, selectedPedidos, estado) {
     const pedidosList = selectedPedidos
       .map((_, index) => `@pedido${index}`)
       .join(", ");
@@ -1155,40 +1029,11 @@ class LoadsService {
     const result = await DatabaseServiceAdapter.query(
       connection,
       query,
-      params,
-      null,
-      transaction
+      params
     );
     logger.info(
-      `✅ ${result.rowsAffected[0]} pedidos actualizados con estado: ${estado}`
+      `${result.rowsAffected[0]} pedidos actualizados con estado: ${estado}`
     );
-  }
-
-  /**
-   * Limpia U_Code_Load de los pedidos (usado en rollback)
-   */
-  static async clearLoadIdFromPedidos(
-    connection,
-    selectedPedidos,
-    transaction = null
-  ) {
-    const pedidosList = selectedPedidos
-      .map((_, index) => `@pedido${index}`)
-      .join(", ");
-    const params = {};
-
-    selectedPedidos.forEach((pedido, index) => {
-      params[`pedido${index}`] = pedido;
-    });
-
-    const query = `
-      UPDATE CATELLI.PEDIDO
-      SET U_Code_Load = NULL
-      WHERE PEDIDO IN (${pedidosList})
-    `;
-
-    await DatabaseServiceAdapter.query(connection, query, params, null, transaction);
-    logger.info(`✅ U_Code_Load limpiado de ${selectedPedidos.length} pedidos`);
   }
 
   /**
@@ -1198,7 +1043,7 @@ class LoadsService {
     const traspasoData = ordersData.map((order) => ({
       Code_Product: order.Code_Product,
       Quantity: order.Quantity,
-      bodega: order.Code_Warehouse_Orig, // Bodega origen real de PEDIDO_LINEA.BODEGA
+      bodega: order.Code_Warehouse_Orig,
       bodega_destino: bodegaDestino,
       Code_load: order.Code_load,
     }));
@@ -1241,7 +1086,7 @@ class LoadsService {
         cl.detalle_direccion,
         ar.ARTICULO,
         ar.UNIDAD_ALMACEN,
-        pl.BODEGA as BODEGA_ORIGEN_REAL  -- ✅ Bodega origen real
+        pl.BODEGA as BODEGA_ORIGEN_REAL
       FROM CATELLI.PEDIDO_LINEA AS pl
       INNER JOIN CATELLI.PEDIDO AS pe ON pe.PEDIDO = pl.PEDIDO
       INNER JOIN CATELLI.CLIENTE AS cl ON cl.CLIENTE = pe.CLIENTE
@@ -1271,7 +1116,7 @@ class LoadsService {
         detalle_direccion,
         ARTICULO,
         UNIDAD_ALMACEN,
-        BODEGA_ORIGEN_REAL,  -- ✅ Incluir bodega origen real
+        BODEGA_ORIGEN_REAL,
         (CANTIDAD_PEDIDA * PRECIO_UNITARIO) AS SubTotal,
         ((CANTIDAD_PEDIDA * PRECIO_UNITARIO) - MONTO_DESCUENTO) AS TotalAmount
       FROM BaseData
@@ -1300,7 +1145,7 @@ class LoadsService {
         detalle_direccion,
         ARTICULO,
         UNIDAD_ALMACEN,
-        BODEGA_ORIGEN_REAL,  -- ✅ Incluir bodega origen real
+        BODEGA_ORIGEN_REAL,
         0 AS SubTotal,
         0 AS TotalAmount
       FROM BaseData
@@ -1348,7 +1193,7 @@ class LoadsService {
       1 AS Transfer_status,
       TIPO_LINEA,
       LINEA_TIPO,
-      BODEGA_ORIGEN_REAL AS Code_Warehouse_Orig  -- ✅ Bodega origen real
+      BODEGA_ORIGEN_REAL AS Code_Warehouse_Orig
     FROM Calc
     ORDER BY PEDIDO, PEDIDO_LINEA, LINEA_TIPO
   `;
@@ -1358,19 +1203,19 @@ class LoadsService {
       params[`pedido${index}`] = pedido;
     });
 
-    const result = await DatabaseServiceAdapter.query(connection, query, params);
-    console.log(
-      `Registros transformados obtenidos: ${result.recordset.length}`
+    const result = await DatabaseServiceAdapter.query(
+      connection,
+      query,
+      params
     );
-
     return result.recordset;
   }
 
   /**
    * Inserta datos en IMPLT_Orders
    */
-  static async insertToIMPLTOrders(connection, ordersData, transaction = null) {
-    logger.info(`📥 Insertando ${ordersData.length} registros en IMPLT_Orders`);
+  static async insertToIMPLTOrders(connection, ordersData) {
+    logger.info(`Insertando ${ordersData.length} registros en IMPLT_Orders`);
 
     for (const order of ordersData) {
       const query = `
@@ -1391,27 +1236,20 @@ class LoadsService {
         )
       `;
 
-      await DatabaseServiceAdapter.query(connection, query, order, null, transaction);
+      await DatabaseServiceAdapter.query(connection, query, order);
     }
 
-    logger.info(`✅ ${ordersData.length} registros insertados en IMPLT_Orders`);
+    logger.info(`${ordersData.length} registros insertados en IMPLT_Orders`);
   }
 
   /**
    * Inserta datos en IMPLT_loads_detail con bodegas origen reales
    */
-  static async insertToIMPLTLoadsDetail(
-    connection,
-    loadId,
-    route,
-    ordersData,
-    transaction = null
-  ) {
+  static async insertToIMPLTLoadsDetail(connection, loadId, route, ordersData) {
     logger.info(
-      `📥 Insertando registros en IMPLT_loads_detail para load: ${loadId}`
+      `Insertando registros en IMPLT_loads_detail para load: ${loadId}`
     );
 
-    // ✅ VALIDACIÓN DEFENSIVA
     if (!ordersData || !Array.isArray(ordersData)) {
       throw new Error(
         `ordersData debe ser un array válido. Recibido: ${typeof ordersData}`
@@ -1427,7 +1265,6 @@ class LoadsService {
     const productMap = new Map();
 
     ordersData.forEach((order) => {
-      // ✅ VALIDACIÓN DEFENSIVA
       if (!order || !order.Code_Product) {
         logger.warn(`Orden inválida encontrada:`, order);
         return;
@@ -1486,7 +1323,7 @@ class LoadsService {
       };
 
       try {
-        await DatabaseServiceAdapter.query(connection, query, params, null, transaction);
+        await DatabaseServiceAdapter.query(connection, query, params);
         lineNumber++;
       } catch (error) {
         logger.error(
@@ -1498,9 +1335,7 @@ class LoadsService {
     }
 
     logger.info(
-      `✅ ${
-        lineNumber - 1
-      } líneas consolidadas insertadas en IMPLT_loads_detail`
+      `${lineNumber - 1} líneas consolidadas insertadas en IMPLT_loads_detail`
     );
   }
 
@@ -1516,19 +1351,13 @@ class LoadsService {
   /**
    * Cancela pedidos seleccionados (marca como anulados)
    */
-  static async cancelOrders(
-    selectedPedidos,
-    userId,
-    reason,
-    transaction = null
-  ) {
+  static async cancelOrders(selectedPedidos, userId, reason) {
     try {
       return await withConnection("server1", async (connection) => {
         const placeholders = selectedPedidos
           .map((_, index) => `@pedido${index}`)
           .join(", ");
 
-        // Solo los parámetros de los pedidos
         const params = {};
         selectedPedidos.forEach((pedido, index) => {
           params[`pedido${index}`] = pedido;
@@ -1543,29 +1372,13 @@ class LoadsService {
         AND U_Code_Load IS NULL
       `;
 
-        console.log("🔍 DEBUG Query:", query);
-        console.log("🔍 DEBUG Params:", params);
-        console.log("🔍 DEBUG Placeholders:", placeholders);
-
-        // IMplementar usuario Modificacion
-        //  UPDATE CATELLI.PEDIDO
-        //   SET estado = 'C',
-        //       U_estado_proceso = 'C',
-        //       USUARIO_MODIF = @userId,
-        //       FECHA_MODIF = GETDATE()
-        //   WHERE PEDIDO IN (${pedidosList})
-        //   AND estado = 'N'
-        //   AND U_Code_Load IS NULL
-
         const result = await DatabaseServiceAdapter.query(
           connection,
           query,
-          params,
-          null,
-          transaction
+          params
         );
 
-        logger.info(`✅ ${result.rowsAffected[0]} pedidos cancelados`);
+        logger.info(`${result.rowsAffected[0]} pedidos cancelados`);
 
         return {
           success: true,
@@ -1582,12 +1395,7 @@ class LoadsService {
   /**
    * Elimina líneas específicas de un pedido
    */
-  static async removeOrderLines(
-    pedidoId,
-    selectedLines,
-    userId,
-    transaction = null
-  ) {
+  static async removeOrderLines(pedidoId, selectedLines, userId) {
     try {
       return await withConnection("server1", async (connection) => {
         const linesList = selectedLines
@@ -1608,13 +1416,11 @@ class LoadsService {
         const result = await DatabaseServiceAdapter.query(
           connection,
           query,
-          params,
-          null,
-          transaction
+          params
         );
 
         logger.info(
-          `✅ ${result.rowsAffected[0]} líneas eliminadas del pedido ${pedidoId}`
+          `${result.rowsAffected[0]} líneas eliminadas del pedido ${pedidoId}`
         );
 
         return {
@@ -1630,7 +1436,7 @@ class LoadsService {
   }
 
   /**
-   * Crea un nuevo repartidor en MongoDB (para casos especiales)
+   * Resto de métodos sin cambios de transacciones...
    */
   static async createDeliveryPerson(deliveryPersonData) {
     try {
@@ -1648,9 +1454,6 @@ class LoadsService {
     }
   }
 
-  /**
-   * Actualiza un repartidor existente en MongoDB
-   */
   static async updateDeliveryPerson(id, updateData) {
     try {
       const updatedDeliveryPerson = await DeliveryPerson.findByIdAndUpdate(
@@ -1674,9 +1477,6 @@ class LoadsService {
     }
   }
 
-  /**
-   * Obtiene historial de cargas con filtros
-   */
   static async getLoadHistory(filters = {}) {
     try {
       const { page = 1, limit = 20, status, dateFrom, dateTo } = filters;
@@ -1723,12 +1523,8 @@ class LoadsService {
     }
   }
 
-  /**
-   * Procesa traspaso de inventario (integración con traspasoService existente)
-   */
   static async processInventoryTransfer(loadId, bodegaDestino) {
     try {
-      // Obtener datos de la carga desde IMPLT_loads_detail
       const loadData = await withConnection("server2", async (connection) => {
         const query = `
           SELECT
@@ -1739,7 +1535,9 @@ class LoadsService {
           WHERE Code = @loadId
         `;
 
-        const result = await DatabaseServiceAdapter.query(connection, query, { loadId });
+        const result = await DatabaseServiceAdapter.query(connection, query, {
+          loadId,
+        });
         return result.recordset;
       });
 
@@ -1747,18 +1545,15 @@ class LoadsService {
         throw new Error(`No se encontraron datos para la carga ${loadId}`);
       }
 
-      // Usar traspasoService existente
       const traspasoService = require("./traspasoService");
-const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
       const traspasoResult = await traspasoService.procesarTraspasoBodega(
-        loadData, // productos con formato: [{codigo, cantidad, bodegaOrigen}]
-        loadData[0].bodegaOrigen, // bodega origen (primera línea)
-        bodegaDestino, // bodega destino
-        loadId // referencia del traspaso
+        loadData,
+        loadData[0].bodegaOrigen,
+        bodegaDestino,
+        loadId
       );
 
-      // Actualizar estado del tracking
       await LoadTracking.findOneAndUpdate(
         { loadId },
         {
