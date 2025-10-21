@@ -136,7 +136,7 @@ class DynamicTransferService {
             }
 
             // Verificar que la conexión sea válida
-            await SqlService.query(
+            await DatabaseServiceAdapter.query(
               connectionResult.connection,
               "SELECT 1 AS test"
             );
@@ -693,7 +693,7 @@ class DynamicTransferService {
               documentId
             );
             logger.debug(`Ejecutando consulta personalizada: ${query}`);
-            const result = await SqlService.query(sourceConnection, query);
+            const result = await DatabaseServiceAdapter.query(sourceConnection, query);
             sourceData = result.recordset[0];
           } else {
             // Construir consulta básica con alias para evitar ambigüedad
@@ -733,7 +733,7 @@ class DynamicTransferService {
           }
         `;
             logger.debug(`Ejecutando consulta principal: ${query}`);
-            const result = await SqlService.query(sourceConnection, query, {
+            const result = await DatabaseServiceAdapter.query(sourceConnection, query, {
               documentId,
             });
             sourceData = result.recordset[0];
@@ -782,7 +782,7 @@ class DynamicTransferService {
     `;
 
         logger.debug(`Verificando existencia en destino: ${checkQuery}`);
-        const checkResult = await SqlService.query(
+        const checkResult = await DatabaseServiceAdapter.query(
           targetConnection,
           checkQuery,
           {
@@ -1048,7 +1048,7 @@ class DynamicTransferService {
           }
         }
 
-        await SqlService.query(
+        await DatabaseServiceAdapter.query(
           targetConnection,
           insertQuery,
           filteredTargetData
@@ -1076,7 +1076,7 @@ class DynamicTransferService {
             logger.debug(
               `Ejecutando consulta personalizada para detalles: ${query}`
             );
-            const result = await SqlService.query(sourceConnection, query);
+            const result = await DatabaseServiceAdapter.query(sourceConnection, query);
             detailsData = result.recordset;
           } else {
             // Construir consulta básica con alias para evitar ambigüedad
@@ -1118,7 +1118,7 @@ class DynamicTransferService {
           ${orderByColumn ? ` ORDER BY ${tableAlias}.${orderByColumn}` : ""}
         `;
             logger.debug(`Ejecutando consulta para detalles: ${query}`);
-            const result = await SqlService.query(sourceConnection, query, {
+            const result = await DatabaseServiceAdapter.query(sourceConnection, query, {
               documentId,
             });
             detailsData = result.recordset;
@@ -1384,7 +1384,7 @@ class DynamicTransferService {
             );
 
             // Insertar detalle sin transacción
-            await SqlService.query(
+            await DatabaseServiceAdapter.query(
               targetConnection,
               insertDetailQuery,
               filteredDetailData
@@ -1789,7 +1789,7 @@ class DynamicTransferService {
               }
             }
 
-            const result = await SqlService.query(
+            const result = await DatabaseServiceAdapter.query(
               targetConnection,
               lookupQuery,
               params
@@ -2089,7 +2089,7 @@ class DynamicTransferService {
     AND COLUMN_NAME = '${columnName}'
   `;
 
-      const result = await SqlService.query(connection, query);
+      const result = await DatabaseServiceAdapter.query(connection, query);
 
       let maxLength = 0;
       if (result.recordset && result.recordset.length > 0) {
@@ -2137,7 +2137,7 @@ class DynamicTransferService {
         processedValue: mapping.markProcessedValue,
       };
 
-      const result = await SqlService.query(connection, query, params);
+      const result = await DatabaseServiceAdapter.query(connection, query, params);
       return result.rowsAffected > 0;
     } catch (error) {
       logger.error(
@@ -2165,7 +2165,7 @@ class DynamicTransferService {
       ORDER BY TABLE_SCHEMA, TABLE_NAME
     `;
 
-        const tablesResult = await SqlService.query(
+        const tablesResult = await DatabaseServiceAdapter.query(
           connection,
           listTablesQuery
         );
@@ -2237,7 +2237,7 @@ class DynamicTransferService {
       WHERE TABLE_SCHEMA = '${schema}' AND TABLE_NAME = '${tableName}'
     `;
 
-        const tableCheck = await SqlService.query(connection, checkTableQuery);
+        const tableCheck = await DatabaseServiceAdapter.query(connection, checkTableQuery);
 
         if (
           !tableCheck.recordset ||
@@ -2250,7 +2250,7 @@ class DynamicTransferService {
         WHERE TABLE_NAME LIKE '%${tableName}%'
       `;
 
-          const searchResult = await SqlService.query(
+          const searchResult = await DatabaseServiceAdapter.query(
             connection,
             searchTableQuery
           );
@@ -2277,7 +2277,7 @@ class DynamicTransferService {
       WHERE TABLE_SCHEMA = '${schema}' AND TABLE_NAME = '${tableName}'
     `;
 
-        const columnsResult = await SqlService.query(connection, columnsQuery);
+        const columnsResult = await DatabaseServiceAdapter.query(connection, columnsQuery);
 
         if (!columnsResult.recordset || columnsResult.recordset.length === 0) {
           logger.warn(
@@ -2449,7 +2449,7 @@ class DynamicTransferService {
         )}`;
 
         try {
-          const result = await SqlService.query(connection, query, params);
+          const result = await DatabaseServiceAdapter.query(connection, query, params);
 
           logger.info(
             `Documentos obtenidos: ${
@@ -2574,6 +2574,7 @@ class DynamicTransferService {
       // Si no tiene taskId, crear uno
       if (!existingMapping.taskId && !mappingData.taskId) {
         const TransferTask = require("../models/transferTaks");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
         let defaultQuery = "SELECT 1";
         if (mappingData.tableConfigs && mappingData.tableConfigs.length > 0) {

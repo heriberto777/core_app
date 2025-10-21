@@ -808,7 +808,7 @@ class TransferService {
         JSON.stringify(sanitizedParams)
       );
 
-      const result = await SqlService.query(
+      const result = await DatabaseServiceAdapter.query(
         sourceConnection, // Usar la conexión correcta según el tipo
         finalQuery,
         sanitizedParams,
@@ -857,7 +857,7 @@ class TransferService {
               ? `SELECT TOP 5 * FROM ${task.fieldMapping.sourceTable}`
               : "SELECT TOP 5 * FROM INFORMATION_SCHEMA.TABLES";
 
-          const testResult = await SqlService.query(
+          const testResult = await DatabaseServiceAdapter.query(
             sourceConnection,
             testQuery
           );
@@ -907,7 +907,7 @@ class TransferService {
             ? connections.server2
             : connections.server1;
 
-        const diagResult = await SqlService.query(
+        const diagResult = await DatabaseServiceAdapter.query(
           diagConnection,
           "SELECT 1 AS test"
         );
@@ -1024,7 +1024,7 @@ class TransferService {
       if (signal.aborted) throw new Error("Tarea cancelada por el usuario");
 
       // CORREGIDO: Usar la conexión y tabla correctas
-      const countResult = await SqlService.query(
+      const countResult = await DatabaseServiceAdapter.query(
         targetConnection, // Conexión correcta según tipo
         `SELECT COUNT(*) AS total FROM ${targetTableName} WITH (NOLOCK)`
       );
@@ -1134,7 +1134,7 @@ class TransferService {
       `;
 
         // CORREGIDO: Usar conexión correcta según tipo de transferencia
-        const keysResult = await SqlService.query(
+        const keysResult = await DatabaseServiceAdapter.query(
           targetConnection, // Usar conexión correcta según tipo
           keysQuery
         );
@@ -1182,7 +1182,7 @@ class TransferService {
       // Verificar conexión al inicio de cada lote
       try {
         // CORREGIDO: Verificar la conexión destino correcta según tipo
-        await SqlService.query(targetConnection, "SELECT 1 AS test");
+        await DatabaseServiceAdapter.query(targetConnection, "SELECT 1 AS test");
       } catch (connError) {
         // Reconectar si es necesario
         logger.warn(`Conexión perdida durante procesamiento, reconectando...`);
@@ -1245,7 +1245,7 @@ class TransferService {
                   WHERE TABLE_NAME = '${tableNameOnly}' 
                     AND COLUMN_NAME = '${column}'
                 `;
-                  const lengthResult = await SqlService.query(
+                  const lengthResult = await DatabaseServiceAdapter.query(
                     targetConnection, // Conexión correcta según tipo
                     lengthQuery
                   );
@@ -1561,7 +1561,7 @@ class TransferService {
     let finalCount = 0;
     try {
       // CORREGIDO: Usar conexión y tabla correctas
-      const countResult = await SqlService.query(
+      const countResult = await DatabaseServiceAdapter.query(
         targetConnection, // Conexión correcta
         `SELECT COUNT(*) AS total FROM ${targetTableName} WITH (NOLOCK)`
       );
@@ -1624,7 +1624,7 @@ class TransferService {
 
       // Verificar la conexión
       try {
-        await SqlService.query(connection, "SELECT 1 AS test");
+        await DatabaseServiceAdapter.query(connection, "SELECT 1 AS test");
       } catch (testError) {
         logger.warn(`Reconectando para post-actualización...`);
 
@@ -1679,7 +1679,7 @@ class TransferService {
 
         try {
           const sanitizedParams = SqlService.sanitizeParams(params);
-          const updateResult = await SqlService.query(
+          const updateResult = await DatabaseServiceAdapter.query(
             connection,
             dynamicUpdateQuery,
             sanitizedParams
@@ -1714,7 +1714,7 @@ class TransferService {
 
             // Reintentar la actualización
             const sanitizedParams = SqlService.sanitizeParams(params);
-            const retryResult = await SqlService.query(
+            const retryResult = await DatabaseServiceAdapter.query(
               connection,
               dynamicUpdateQuery,
               sanitizedParams
@@ -1920,6 +1920,7 @@ class TransferService {
         } catch (importError) {
           // Si el servicio de salud no está disponible, hacer verificación básica
           const MongoDbService = require("./mongoDbService");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
           // Verificación básica de conexiones
           const mongoConnected = MongoDbService.isConnected();
@@ -2315,7 +2316,7 @@ class TransferService {
 
       // 4) Verificar conteo inicial de registros
       try {
-        const countResult = await SqlService.query(
+        const countResult = await DatabaseServiceAdapter.query(
           server2Connection,
           `SELECT COUNT(*) AS total FROM dbo.[${task.name}] WITH (NOLOCK)`
         );
@@ -2358,7 +2359,7 @@ class TransferService {
 
         // Verificar si la conexión sigue activa y reconectar si es necesario
         try {
-          await SqlService.query(server2Connection, "SELECT 1 AS test");
+          await DatabaseServiceAdapter.query(server2Connection, "SELECT 1 AS test");
         } catch (connError) {
           logger.warn(
             `Conexión perdida con server2 durante procesamiento, intentando reconectar...`
@@ -2415,7 +2416,7 @@ class TransferService {
                   WHERE TABLE_NAME = '${task.name}' 
                     AND COLUMN_NAME = '${column}'
                 `;
-                  const lengthResult = await SqlService.query(
+                  const lengthResult = await DatabaseServiceAdapter.query(
                     server2Connection,
                     lengthQuery
                   );
@@ -2571,7 +2572,7 @@ class TransferService {
       // 9. Verificar conteo final
       let finalCount = 0;
       try {
-        const countResult = await SqlService.query(
+        const countResult = await DatabaseServiceAdapter.query(
           server2Connection,
           `SELECT COUNT(*) AS total FROM dbo.[${task.name}] WITH (NOLOCK)`
         );
@@ -2797,7 +2798,7 @@ class TransferService {
 
       // Ejecutar consulta en Server2
       const sanitizedParams = SqlService.sanitizeParams(params);
-      const sourceResult = await SqlService.query(
+      const sourceResult = await DatabaseServiceAdapter.query(
         server2Connection,
         finalQuery,
         sanitizedParams,

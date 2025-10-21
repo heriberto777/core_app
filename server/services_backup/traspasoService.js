@@ -5,6 +5,7 @@ const logger = require("./logger");
 const { sendTraspasoEmail } = require("./emailService");
 const PDFService = require("./pdfService");
 const TransferSummary = require("../models/transferSummaryModel");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
 /**
  * Obtiene información adicional de los productos desde la base de datos
@@ -48,7 +49,7 @@ async function obtenerDetalleProductos(connection, productos) {
       WHERE ARTICULO IN (${placeholders.join(", ")})
     `;
 
-    const result = await SqlService.query(connection, query, params);
+    const result = await DatabaseServiceAdapter.query(connection, query, params);
 
     // Crear un mapa para búsqueda rápida
     const descripcionesMap = {};
@@ -167,7 +168,7 @@ async function traspasoBodega({ route, salesData, bodega_destino = "02" }) {
           ORDER BY CONSECUTIVO DESC
         `;
 
-        const resultConsec = await SqlService.query(connection, queryConse, {
+        const resultConsec = await DatabaseServiceAdapter.query(connection, queryConse, {
           prefix: "TR%",
         });
 
@@ -192,7 +193,7 @@ async function traspasoBodega({ route, salesData, bodega_destino = "02" }) {
           lastConsec: lastConsec,
         });
 
-        const updateResult = await SqlService.query(
+        const updateResult = await DatabaseServiceAdapter.query(
           connection,
           `UPDATE CATELLI.CONSECUTIVO_CI 
            SET SIGUIENTE_CONSEC = @newConsec 
@@ -215,7 +216,7 @@ async function traspasoBodega({ route, salesData, bodega_destino = "02" }) {
           documento_inv: documento_inv,
         });
 
-        const checkResult = await SqlService.query(
+        const checkResult = await DatabaseServiceAdapter.query(
           connection,
           `SELECT COUNT(*) AS doc_count
            FROM CATELLI.DOCUMENTO_INV
@@ -239,7 +240,7 @@ async function traspasoBodega({ route, salesData, bodega_destino = "02" }) {
           usuario: "SA",
         });
 
-        await SqlService.query(
+        await DatabaseServiceAdapter.query(
           connection,
           `INSERT INTO CATELLI.DOCUMENTO_INV 
             (PAQUETE_INVENTARIO, DOCUMENTO_INV, CONSECUTIVO, REFERENCIA, FECHA_HOR_CREACION, FECHA_DOCUMENTO, SELECCIONADO, USUARIO)
@@ -320,7 +321,7 @@ async function traspasoBodega({ route, salesData, bodega_destino = "02" }) {
             `;
 
             // Ejecutar la consulta con tipos explícitos si están disponibles
-            await SqlService.query(connection, sql, lineParams, columnTypes);
+            await DatabaseServiceAdapter.query(connection, sql, lineParams, columnTypes);
 
             successCount++;
             logger.debug(`Línea ${lineNumber} insertada correctamente`);
@@ -563,7 +564,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
           ORDER BY CONSECUTIVO DESC
         `;
 
-        const resultadoConsecutivo = await SqlService.query(
+        const resultadoConsecutivo = await DatabaseServiceAdapter.query(
           connection,
           consultaConsecutivo
         );
@@ -593,7 +594,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
           actual: ultimoConsecutivo,
         };
 
-        const resultadoActualizacion = await SqlService.query(
+        const resultadoActualizacion = await DatabaseServiceAdapter.query(
           connection,
           `UPDATE CATELLI.CONSECUTIVO_CI 
            SET SIGUIENTE_CONSEC = @nuevo 
@@ -621,7 +622,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
             ('CS', @documento, 'TR', @referencia, GETDATE(), GETDATE(), 'N', 'SA')
         `;
 
-        await SqlService.query(connection, insertarDocumento, referenciaParams);
+        await DatabaseServiceAdapter.query(connection, insertarDocumento, referenciaParams);
 
         // 8. Insertar líneas una por una con parámetros
         let lineasExitosas = 0;
@@ -690,7 +691,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
                  @costo_total_local_comp, @costo_total_dolar_comp, @cai, @tipo_operacion, @tipo_pago, @localizacion)
             `;
 
-            await SqlService.query(
+            await DatabaseServiceAdapter.query(
               connection,
               insertarLinea,
               lineaParams,
@@ -724,7 +725,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
                    0, 0, '', '11', 'ND', 'ND')
               `;
 
-              await SqlService.query(connection, insertarLineaDirecto);
+              await DatabaseServiceAdapter.query(connection, insertarLineaDirecto);
 
               lineasExitosas++;
               lineasFallidas--; // Corregir el contador porque el intento original falló

@@ -148,7 +148,7 @@ class LoadsService {
           ORDER BY FECHA_PEDIDO DESC, PEDIDO DESC
         `;
 
-        const result = await SqlService.query(connection, fullQuery, params);
+        const result = await DatabaseServiceAdapter.query(connection, fullQuery, params);
 
         // Retornar estructura consistente con transformación de datos
         return {
@@ -253,7 +253,7 @@ class LoadsService {
           ORDER BY PEDIDO_LINEA, lineType
         `;
 
-        const result = await SqlService.query(connection, query, { pedidoId });
+        const result = await DatabaseServiceAdapter.query(connection, query, { pedidoId });
 
         return {
           success: true,
@@ -284,7 +284,7 @@ class LoadsService {
           ORDER BY NOMBRE
         `;
 
-        const result = await SqlService.query(connection, query);
+        const result = await DatabaseServiceAdapter.query(connection, query);
 
         return {
           success: true,
@@ -819,7 +819,7 @@ class LoadsService {
         created_by: userId ? String(userId) : "SYSTEM",
       };
 
-      const trackingResult = await SqlService.query(
+      const trackingResult = await DatabaseServiceAdapter.query(
         connection,
         insertTrackingQuery,
         trackingParams,
@@ -909,7 +909,7 @@ class LoadsService {
         created_by: userId ? String(userId) : "SYSTEM",
       };
 
-      const trackingResult = await SqlService.query(
+      const trackingResult = await DatabaseServiceAdapter.query(
         connection,
         insertTrackingQuery,
         trackingParams,
@@ -944,7 +944,7 @@ class LoadsService {
             error_message: errorMessage.substring(0, 500),
           };
 
-          await SqlService.query(
+          await DatabaseServiceAdapter.query(
             connection,
             detailQuery,
             detailParams,
@@ -980,7 +980,7 @@ class LoadsService {
       AND ACTIVO = 'S'
     `;
 
-      const result = await SqlService.query(connection, query, {
+      const result = await DatabaseServiceAdapter.query(connection, query, {
         deliveryPersonCode,
       });
 
@@ -1068,7 +1068,7 @@ class LoadsService {
     console.log("🔍 Params:", params);
     console.log("🔍 Pedidos a actualizar:", selectedPedidos);
 
-    const result = await SqlService.query(
+    const result = await DatabaseServiceAdapter.query(
       connection,
       query,
       params,
@@ -1104,7 +1104,7 @@ class LoadsService {
       AND U_Code_Load = @loadId
     `;
 
-      const verifyResult = await SqlService.query(
+      const verifyResult = await DatabaseServiceAdapter.query(
         connection,
         verifyQuery,
         params,
@@ -1152,7 +1152,7 @@ class LoadsService {
       WHERE PEDIDO IN (${pedidosList})
     `;
 
-    const result = await SqlService.query(
+    const result = await DatabaseServiceAdapter.query(
       connection,
       query,
       params,
@@ -1187,7 +1187,7 @@ class LoadsService {
       WHERE PEDIDO IN (${pedidosList})
     `;
 
-    await SqlService.query(connection, query, params, null, transaction);
+    await DatabaseServiceAdapter.query(connection, query, params, null, transaction);
     logger.info(`✅ U_Code_Load limpiado de ${selectedPedidos.length} pedidos`);
   }
 
@@ -1358,7 +1358,7 @@ class LoadsService {
       params[`pedido${index}`] = pedido;
     });
 
-    const result = await SqlService.query(connection, query, params);
+    const result = await DatabaseServiceAdapter.query(connection, query, params);
     console.log(
       `Registros transformados obtenidos: ${result.recordset.length}`
     );
@@ -1391,7 +1391,7 @@ class LoadsService {
         )
       `;
 
-      await SqlService.query(connection, query, order, null, transaction);
+      await DatabaseServiceAdapter.query(connection, query, order, null, transaction);
     }
 
     logger.info(`✅ ${ordersData.length} registros insertados en IMPLT_Orders`);
@@ -1486,7 +1486,7 @@ class LoadsService {
       };
 
       try {
-        await SqlService.query(connection, query, params, null, transaction);
+        await DatabaseServiceAdapter.query(connection, query, params, null, transaction);
         lineNumber++;
       } catch (error) {
         logger.error(
@@ -1557,7 +1557,7 @@ class LoadsService {
         //   AND estado = 'N'
         //   AND U_Code_Load IS NULL
 
-        const result = await SqlService.query(
+        const result = await DatabaseServiceAdapter.query(
           connection,
           query,
           params,
@@ -1605,7 +1605,7 @@ class LoadsService {
           AND PEDIDO_LINEA IN (${linesList})
         `;
 
-        const result = await SqlService.query(
+        const result = await DatabaseServiceAdapter.query(
           connection,
           query,
           params,
@@ -1739,7 +1739,7 @@ class LoadsService {
           WHERE Code = @loadId
         `;
 
-        const result = await SqlService.query(connection, query, { loadId });
+        const result = await DatabaseServiceAdapter.query(connection, query, { loadId });
         return result.recordset;
       });
 
@@ -1749,6 +1749,7 @@ class LoadsService {
 
       // Usar traspasoService existente
       const traspasoService = require("./traspasoService");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
       const traspasoResult = await traspasoService.procesarTraspasoBodega(
         loadData, // productos con formato: [{codigo, cantidad, bodegaOrigen}]

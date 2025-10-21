@@ -2,7 +2,9 @@
 
 const MongoDbService = require("./mongoDbService");
 const logger = require("./logger");
-const ConnectionCentralService = require("./ConnectionCentralService");
+// // const ConnectionCentralService = require(...); // REMOVED
+// REMOVED - using DatabaseServiceAdapter
+
 
 /**
  * Servicio para inicialización y cierre ordenado de la aplicación
@@ -29,7 +31,7 @@ class AppBootstrap {
       // ✅ 1. INICIALIZAR CONNECTIONCENTRALSERVICE PRIMERO
       try {
         logger.info("🔌 Inicializando servicio de conexiones...");
-        await ConnectionCentralService.initialize();
+        await DatabaseServiceAdapter.initialize();
         this.state.connectionService = true;
         logger.info("✅ Servicio de conexiones inicializado");
       } catch (error) {
@@ -137,6 +139,7 @@ class AppBootstrap {
         try {
           logger.info("📊 Deteniendo monitor de salud...");
           const healthMonitorService = require("./healthMonitorService");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
           if (
             healthMonitorService &&
             typeof healthMonitorService.stop === "function"
@@ -154,7 +157,7 @@ class AppBootstrap {
       if (this.state.connectionService) {
         try {
           logger.info("🔌 Cerrando servicio de conexiones...");
-          await ConnectionCentralService.shutdown();
+          await DatabaseServiceAdapter.shutdown();
           logger.info("✅ Servicio de conexiones cerrado correctamente");
         } catch (error) {
           logger.warn(
@@ -224,8 +227,8 @@ class AppBootstrap {
 
       switch (serviceName) {
         case "connectionService":
-          await ConnectionCentralService.shutdown();
-          await ConnectionCentralService.initialize();
+          await DatabaseServiceAdapter.shutdown();
+          await DatabaseServiceAdapter.initialize();
           this.state.connectionService = true;
           break;
 

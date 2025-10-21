@@ -1,5 +1,6 @@
 const logger = require("./logger");
 const { SqlService } = require("./SqlService");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
 class SequenceManager {
   /**
@@ -137,7 +138,7 @@ class SequenceManager {
         `;
       }
 
-      const result = await SqlService.query(this.connection, query, params);
+      const result = await DatabaseServiceAdapter.query(this.connection, query, params);
 
       if (result.recordset && result.recordset.length > 0) {
         // Found existing sequence
@@ -196,7 +197,7 @@ class SequenceManager {
         `;
       }
 
-      await SqlService.query(this.connection, query, params);
+      await DatabaseServiceAdapter.query(this.connection, query, params);
       logger.info(
         `Created new sequence ${sequenceName} with initial value ${initialValue}`
       );
@@ -239,7 +240,7 @@ class SequenceManager {
         `;
       }
 
-      await SqlService.query(this.connection, query, params);
+      await DatabaseServiceAdapter.query(this.connection, query, params);
 
       // Update cache with new value
       const cacheKey = segmentValue

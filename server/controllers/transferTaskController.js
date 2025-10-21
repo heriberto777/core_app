@@ -14,7 +14,8 @@ const obtenerConsecutivo = require("../utils/obtenerConsecutivo");
 const { realizarTraspaso } = require("../services/traspasoService");
 const { withConnection } = require("../utils/dbUtils");
 const logger = require("../services/logger");
-const ConnectionManager = require("../services/ConnectionCentralService");
+// const ConnectionManager = require("../services/ConnectionCentralService"); // REMOVED
+const DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");
 const TaskTracker = require("../services/TaskTracker");
 const transferService = require("../services/transferService");
 const { SqlService } = require("../services/SqlService");
@@ -1416,7 +1417,7 @@ const getVendedores = async (req, res) => {
        ORDER BY VENDEDOR
      `;
 
-      const result = await SqlService.query(connection, query);
+      const result = await DatabaseServiceAdapter.query(connection, query);
       console.log("Result -> ", result);
 
       if (!result || !result.recordset) {
@@ -1652,6 +1653,7 @@ const getTransferSummaries = async (req, res) => {
 const getDailyStats = async (req, res) => {
   try {
     const TaskExecution = require("../models/taskExecutionModel");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
     // Calcular el rango de hoy (toda la fecha, sin tener en cuenta la hora)
     const today = new Date();
@@ -1725,7 +1727,7 @@ const getSourceDataByMapping = async (req, res) => {
     }
 
     // Obtener conexión al servidor origen
-    const connectionResult = await ConnectionManager.getConnection(
+    const connectionResult = await DatabaseServiceAdapter.getConnection(
       mapping.sourceServer
     );
     if (!connectionResult) {
@@ -1750,7 +1752,7 @@ const getSourceDataByMapping = async (req, res) => {
    `;
 
     // Ejecutar consulta
-    const result = await SqlService.query(connection, query, { documentId });
+    const result = await DatabaseServiceAdapter.query(connection, query, { documentId });
 
     if (!result.recordset || result.recordset.length === 0) {
       return res.status(404).json({
@@ -1782,7 +1784,7 @@ const getSourceDataByMapping = async (req, res) => {
     // Liberar conexión
     if (connection) {
       try {
-        await ConnectionManager.releaseConnection(connection);
+        await DatabaseServiceAdapter.releaseConnection(connection);
       } catch (e) {
         logger.error(`Error al liberar conexión: ${e.message}`);
       }
@@ -1827,7 +1829,7 @@ const updateEntityData = async (req, res) => {
     // 1. Actualizar en la tabla origen
     try {
       // Obtener conexión al servidor origen
-      const sourceConnResult = await ConnectionManager.getConnection(
+      const sourceConnResult = await DatabaseServiceAdapter.getConnection(
         mapping.sourceServer
       );
       if (!sourceConnResult.success) {
@@ -1853,7 +1855,7 @@ const updateEntityData = async (req, res) => {
      `;
 
       // Ejecutar actualización
-      await SqlService.query(sourceConnection, updateQuery, {
+      await DatabaseServiceAdapter.query(sourceConnection, updateQuery, {
         ...sourceData,
         documentId,
       });
@@ -1866,7 +1868,7 @@ const updateEntityData = async (req, res) => {
       throw new Error(`Error al actualizar en origen: ${sourceError.message}`);
     } finally {
       if (sourceConnection) {
-        await ConnectionManager.releaseConnection(sourceConnection);
+        await DatabaseServiceAdapter.releaseConnection(sourceConnection);
       }
     }
 
@@ -1874,7 +1876,7 @@ const updateEntityData = async (req, res) => {
     if (_dynamicFields && Object.keys(_dynamicFields).length > 0) {
       try {
         // Obtener conexión al servidor destino
-        const targetConnResult = await ConnectionManager.getConnection(
+        const targetConnResult = await DatabaseServiceAdapter.getConnection(
           mapping.targetServer
         );
         if (!targetConnResult.success) {
@@ -1902,7 +1904,7 @@ const updateEntityData = async (req, res) => {
             }
 
             // Ejecutar la actualización
-            await SqlService.query(targetConnection, query, params);
+            await DatabaseServiceAdapter.query(targetConnection, query, params);
 
             logger.info(
               `Secuencia actualizada en ${sequenceTable}.${sequenceField} con valor ${fieldConfig.newValue}`
@@ -1914,7 +1916,7 @@ const updateEntityData = async (req, res) => {
         // No fallamos toda la operación por error en secuencias
       } finally {
         if (targetConnection) {
-          await ConnectionManager.releaseConnection(targetConnection);
+          await DatabaseServiceAdapter.releaseConnection(targetConnection);
         }
       }
     }

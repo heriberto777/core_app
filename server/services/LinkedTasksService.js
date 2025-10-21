@@ -2,7 +2,9 @@
 const TransferTask = require("../models/transferTaks");
 const logger = require("./logger");
 const { SqlService } = require("./SqlService");
-const ConnectionService = require("./ConnectionCentralService");
+// const ConnectionService = require("./ConnectionCentralService"); // REMOVED
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
+
 const { sendProgress } = require("./progressSse");
 const TaskTracker = require("./TaskTracker");
 const { Request } = require("tedious");
@@ -362,7 +364,7 @@ class LinkedTasksService {
       );
 
       // Obtener conexión (siempre a server1 para post-updates)
-      const connectionResult = await ConnectionService.getConnection(
+      const connectionResult = await DatabaseServiceAdapter.getConnection(
         "server1"
       );
       if (!connectionResult.success) {
@@ -411,7 +413,7 @@ class LinkedTasksService {
         try {
           // Ejecutar la actualización
           const sanitizedParams = SqlService.sanitizeParams(params);
-          const updateResult = await SqlService.query(
+          const updateResult = await DatabaseServiceAdapter.query(
             connection,
             dynamicUpdateQuery,
             sanitizedParams
@@ -451,7 +453,7 @@ class LinkedTasksService {
     } finally {
       if (connection) {
         try {
-          await ConnectionService.releaseConnection(connection);
+          await DatabaseServiceAdapter.releaseConnection(connection);
         } catch (e) {
           logger.warn(`Error al liberar conexión: ${e.message}`);
         }

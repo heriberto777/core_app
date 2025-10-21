@@ -1,6 +1,8 @@
 // services/dynamicQueryService.js - VERSIÓN MEJORADA CON _ensureValidConnection
 const TransferTask = require("../models/transferTaks");
-const ConnectionService = require("./ConnectionCentralService");
+// const ConnectionService = require("./ConnectionCentralService"); // REMOVED
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
+
 const { SqlService } = require("./SqlService");
 const logger = require("./logger");
 const MemoryManager = require("./MemoryManager");
@@ -51,7 +53,7 @@ async function _ensureValidConnectionForQuery(serverKeyOrConnection, taskName) {
 
     try {
       const validatedConnection =
-        await ConnectionService._ensureValidConnection(
+        await DatabaseServiceAdapter._ensureValidConnection(
           serverKeyOrConnection,
           `dynamic_query_${taskName}`
         );
@@ -65,7 +67,7 @@ async function _ensureValidConnectionForQuery(serverKeyOrConnection, taskName) {
         `Conexión existente no válida para '${taskName}', obteniendo nueva: ${error.message}`
       );
       // Si la validación falla, obtener nueva conexión
-      const newConnection = await ConnectionService.getConnection("server1");
+      const newConnection = await DatabaseServiceAdapter.getConnection("server1");
       return {
         connection: newConnection,
         needsRelease: true,
@@ -81,7 +83,7 @@ async function _ensureValidConnectionForQuery(serverKeyOrConnection, taskName) {
       `Obteniendo nueva conexión para '${taskName}' desde ${serverKey}`
     );
 
-    const connection = await ConnectionService.getConnection(serverKey);
+    const connection = await DatabaseServiceAdapter.getConnection(serverKey);
     return {
       connection,
       needsRelease: true,
@@ -273,7 +275,7 @@ async function executeDynamicSelect(
             try {
               // Usar el método centralizado para validar la conexión
               const revalidatedConnection =
-                await ConnectionService._ensureValidConnection(
+                await DatabaseServiceAdapter._ensureValidConnection(
                   connection,
                   `dynamic_query_retry_${taskName}_${attempt}`
                 );
@@ -304,7 +306,7 @@ async function executeDynamicSelect(
 
           // Usar SqlService para ejecutar la consulta con parámetros sanitizados
           const sanitizedParams = SqlService.sanitizeParams(params);
-          const queryResult = await SqlService.query(
+          const queryResult = await DatabaseServiceAdapter.query(
             connectionInfo.connection,
             finalQuery,
             sanitizedParams
@@ -442,7 +444,7 @@ async function executeDynamicSelect(
       connectionInfo.connection
     ) {
       try {
-        await ConnectionService.releaseConnection(connectionInfo.connection);
+        await DatabaseServiceAdapter.releaseConnection(connectionInfo.connection);
         logger.debug(
           `✅ Conexión cerrada correctamente para consulta '${taskName}'`
         );
@@ -623,7 +625,7 @@ async function executeNonDestructiveQuery(
           if (attempt > 0) {
             try {
               const revalidatedConnection =
-                await ConnectionService._ensureValidConnection(
+                await DatabaseServiceAdapter._ensureValidConnection(
                   connection,
                   `nondestructive_query_retry_${taskName}_${attempt}`
                 );
@@ -648,7 +650,7 @@ async function executeNonDestructiveQuery(
 
           // Usar SqlService para ejecutar la consulta con parámetros sanitizados
           const sanitizedParams = SqlService.sanitizeParams(params);
-          return await SqlService.query(
+          return await DatabaseServiceAdapter.query(
             connectionInfo.connection,
             finalQuery,
             sanitizedParams
@@ -766,7 +768,7 @@ async function executeNonDestructiveQuery(
       connectionInfo.connection
     ) {
       try {
-        await ConnectionService.releaseConnection(connectionInfo.connection);
+        await DatabaseServiceAdapter.releaseConnection(connectionInfo.connection);
         logger.debug(
           `✅ Conexión cerrada correctamente para consulta no destructiva '${taskName}'`
         );

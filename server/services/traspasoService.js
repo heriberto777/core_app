@@ -45,7 +45,7 @@ async function obtenerDetalleProductos(connection, productos) {
       WHERE ARTICULO IN (${placeholders.join(", ")})
     `;
 
-    const result = await SqlService.query(connection, query, params);
+    const result = await DatabaseServiceAdapter.query(connection, query, params);
 
     const descripcionesMap = {};
     if (result && result.recordset) {
@@ -244,7 +244,7 @@ async function validateRoute(connection, route) {
       AND ACTIVO = 'S'
     `;
 
-    const result = await SqlService.query(connection, routeQuery, {
+    const result = await DatabaseServiceAdapter.query(connection, routeQuery, {
       route: route
     });
 
@@ -398,7 +398,7 @@ async function validateBodega(connection, bodegaCode) {
       WHERE BODEGA = @bodega
     `;
 
-    const result = await SqlService.query(connection, bodegaQuery, {
+    const result = await DatabaseServiceAdapter.query(connection, bodegaQuery, {
       bodega: bodegaCode
     });
 
@@ -424,6 +424,7 @@ async function validateBodega(connection, bodegaCode) {
 async function executeDirectQuery(connection, sql, params = {}) {
   return new Promise((resolve, reject) => {
     const { Request, TYPES } = require("tedious");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
     const rows = [];
 
     const request = new Request(sql, (err, rowCount) => {
@@ -527,7 +528,7 @@ async function validateConsecutivoAvailable(connection) {
       ORDER BY CONSECUTIVO DESC
     `;
 
-    const result = await SqlService.query(connection, query);
+    const result = await DatabaseServiceAdapter.query(connection, query);
 
     if (!result || !result.recordset || result.recordset.length === 0) {
       validation.isValid = false;
@@ -558,7 +559,7 @@ async function validateBodegas(connection, bodegaOrigen, bodegaDestino) {
       WHERE BODEGA IN (@bodegaOrigen, @bodegaDestino)
     `;
 
-    const result = await SqlService.query(connection, query, {
+    const result = await DatabaseServiceAdapter.query(connection, query, {
       bodegaOrigen,
       bodegaDestino
     });
@@ -611,7 +612,7 @@ async function validateProduct(connection, product, bodegaOrigen) {
       WHERE ARTICULO = @articulo
     `;
 
-    const result = await SqlService.query(connection, productQuery, {
+    const result = await DatabaseServiceAdapter.query(connection, productQuery, {
       articulo: product.Code_Product
     });
 
@@ -642,7 +643,7 @@ async function validateProduct(connection, product, bodegaOrigen) {
       WHERE ARTICULO = @articulo AND BODEGA = @bodega
     `;
 
-    const stockResult = await SqlService.query(connection, stockQuery, {
+    const stockResult = await DatabaseServiceAdapter.query(connection, stockQuery, {
       articulo: product.Code_Product,
       bodega: bodegaOrigen,
     });
@@ -736,7 +737,7 @@ async function saveFailedTraspasoRecord(route, validation, reportResult, loadId 
         created_by: 'SYSTEM'
       };
 
-      await SqlService.query(connection, query, params);
+      await DatabaseServiceAdapter.query(connection, query, params);
 
       logger.info(`Registro de traspaso fallido guardado para ruta ${route}`);
     });
@@ -843,7 +844,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
         ORDER BY CONSECUTIVO DESC
       `;
 
-      const resultadoConsecutivo = await SqlService.query(connection, consultaConsecutivo);
+      const resultadoConsecutivo = await DatabaseServiceAdapter.query(connection, consultaConsecutivo);
 
       if (!resultadoConsecutivo || !resultadoConsecutivo.recordset || resultadoConsecutivo.recordset.length === 0) {
         throw new Error("No se pudo obtener el consecutivo actual");
@@ -861,7 +862,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
         actual: ultimoConsecutivo,
       };
 
-      const resultadoActualizacion = await SqlService.query(
+      const resultadoActualizacion = await DatabaseServiceAdapter.query(
         connection,
         `UPDATE CATELLI.CONSECUTIVO_CI
          SET SIGUIENTE_CONSEC = @nuevo
@@ -887,7 +888,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
           ('${config.paquete_inventario}', @documento, '${config.consecutivo_prefix}', @referencia, GETDATE(), GETDATE(), 'N', '${config.usuario_default}')
       `;
 
-      await SqlService.query(connection, insertarDocumento, referenciaParams);
+      await DatabaseServiceAdapter.query(connection, insertarDocumento, referenciaParams);
 
       // Insertar líneas usando bodega origen específica de cada producto
       let lineasExitosas = 0;
@@ -942,7 +943,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
                @costo_total_local_comp, @costo_total_dolar_comp, @cai, @tipo_operacion, @tipo_pago, @localizacion)
           `;
 
-          await SqlService.query(connection, insertarLinea, lineaParams);
+          await DatabaseServiceAdapter.query(connection, insertarLinea, lineaParams);
 
           lineasExitosas++;
           logger.debug(`Línea ${lineaNumero} insertada: ${producto.codigo} x ${producto.cantidad} (${producto.bodegaOrigen} → ${bodega_destino})`);
@@ -970,7 +971,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
                  0, 0, '', '${config.tipo_operacion}', '${config.tipo_pago}', '${config.localizacion_default}')
             `;
 
-            await SqlService.query(connection, insertarLineaDirecto);
+            await DatabaseServiceAdapter.query(connection, insertarLineaDirecto);
             lineasExitosas++;
             lineasFallidas--;
             logger.debug(`Línea ${lineaNumero} insertada (fallback): ${codigoProducto} x ${producto.cantidad}`);
@@ -1103,7 +1104,7 @@ async function retryFailedTraspaso(traspasoId, updatedData = null) {
         WHERE id = @traspasoId AND status IN ('validation_failed', 'failed')
       `;
 
-      const result = await SqlService.query(connection, query, { traspasoId });
+      const result = await DatabaseServiceAdapter.query(connection, query, { traspasoId });
 
       if (!result.recordset || result.recordset.length === 0) {
         throw new Error("Traspaso no encontrado o no es reintentable");
@@ -1124,7 +1125,7 @@ async function retryFailedTraspaso(traspasoId, updatedData = null) {
 
       // Actualizar el registro de tracking
       if (retryResult.success) {
-        await SqlService.query(
+        await DatabaseServiceAdapter.query(
           connection,
           `
           UPDATE dbo.IMPLT_traspaso_tracking
@@ -1183,7 +1184,7 @@ async function deleteTraspaso(traspasoId, reason, userId) {
         WHERE id = @traspasoId
       `;
 
-      const checkResult = await SqlService.query(connection, checkQuery, { traspasoId });
+      const checkResult = await DatabaseServiceAdapter.query(connection, checkQuery, { traspasoId });
 
       if (!checkResult.recordset || checkResult.recordset.length === 0) {
         throw new Error("Traspaso no encontrado");
@@ -1198,13 +1199,13 @@ async function deleteTraspaso(traspasoId, reason, userId) {
       }
 
       // Eliminar detalles primero (foreign key constraint)
-      await SqlService.query(connection, `
+      await DatabaseServiceAdapter.query(connection, `
         DELETE FROM dbo.IMPLT_traspaso_detail
         WHERE traspaso_tracking_id = @traspasoId
       `, { traspasoId });
 
       // Eliminar el registro principal
-      await SqlService.query(connection, `
+      await DatabaseServiceAdapter.query(connection, `
         DELETE FROM dbo.IMPLT_traspaso_tracking
         WHERE id = @traspasoId
       `, { traspasoId });
@@ -1309,7 +1310,7 @@ async function updateTraspasoStatus(traspasoId, status, notes, userId) {
         WHERE id = @traspasoId
       `;
 
-      const result = await SqlService.query(connection, query, {
+      const result = await DatabaseServiceAdapter.query(connection, query, {
         traspasoId,
         status,
         userId,
@@ -1347,7 +1348,7 @@ async function exportTraspasoData(traspasoId) {
         WHERE t.id = @traspasoId
       `;
 
-      const result = await SqlService.query(connection, query, { traspasoId });
+      const result = await DatabaseServiceAdapter.query(connection, query, { traspasoId });
 
       return {
         success: true,
@@ -1387,7 +1388,7 @@ async function getTraspasoDetails(traspasoId) {
         WHERE t.id = @traspasoId
       `;
 
-      const result = await SqlService.query(connection, query, { traspasoId });
+      const result = await DatabaseServiceAdapter.query(connection, query, { traspasoId });
 
       if (!result.recordset || result.recordset.length === 0) {
         throw new Error("Traspaso no encontrado");
@@ -1460,7 +1461,7 @@ async function getTraspasoStats(filters = {}) {
         GROUP BY status
       `;
 
-      const result = await SqlService.query(connection, statsQuery, params);
+      const result = await DatabaseServiceAdapter.query(connection, statsQuery, params);
 
       const stats = {
         total: 0,
@@ -1523,7 +1524,7 @@ async function executeTransferByLoadId(loadId) {
         FROM dbo.IMPLT_loads_detail
         WHERE Code = @loadId
       `;
-      const result = await SqlService.query(connection, query, { loadId });
+      const result = await DatabaseServiceAdapter.query(connection, query, { loadId });
       return result.recordset;
     });
 
@@ -1565,7 +1566,7 @@ async function getWarehouses() {
         ORDER BY NOMBRE
       `;
 
-      const result = await SqlService.query(connection, query);
+      const result = await DatabaseServiceAdapter.query(connection, query);
 
       return result.recordset || [];
     });
@@ -1651,8 +1652,8 @@ async function getTraspasoHistory(filters = {}) {
       `;
 
       const [result, countResult] = await Promise.all([
-        SqlService.query(connection, query, { ...params, offset, limit }),
-        SqlService.query(connection, countQuery, params),
+        DatabaseServiceAdapter.query(connection, query, { ...params, offset, limit }),
+        DatabaseServiceAdapter.query(connection, countQuery, params),
       ]);
 
       const total = countResult.recordset[0]?.total || 0;
@@ -1799,8 +1800,8 @@ async function getTraspasosList(filters = {}) {
 
       // Ejecutar ambas consultas en paralelo
       const [result, countResult] = await Promise.all([
-        SqlService.query(connection, query, params),
-        SqlService.query(connection, countQuery, params),
+        DatabaseServiceAdapter.query(connection, query, params),
+        DatabaseServiceAdapter.query(connection, countQuery, params),
       ]);
 
       const traspasos = result.recordset || [];
@@ -1846,7 +1847,7 @@ async function getDeliveryPersonsForFilter() {
         ORDER BY delivery_person_name
       `;
 
-      const result = await SqlService.query(connection, query);
+      const result = await DatabaseServiceAdapter.query(connection, query);
 
       const deliveryPersons = result.recordset || [];
 

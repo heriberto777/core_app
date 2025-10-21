@@ -1,6 +1,9 @@
 // services/ConnectionAdapter.js
-const ConnectionCentralService = require("./ConnectionCentralService");
+// // const ConnectionCentralService = require(...); // REMOVED
+// REMOVED - using DatabaseServiceAdapter
+
 const logger = require("./logger");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
 /**
  * Adaptador para compatibilidad con código existente
@@ -14,7 +17,7 @@ class ConnectionAdapter {
    */
   async getConnection(serverKey) {
     try {
-      return await ConnectionCentralService.getConnection(serverKey);
+      return await DatabaseServiceAdapter.getConnection(serverKey);
     } catch (error) {
       logger.error(
         `[Adapter] Error al obtener conexión para ${serverKey}: ${error.message}`
@@ -30,7 +33,7 @@ class ConnectionAdapter {
    */
   async enhancedRobustConnect(serverKey) {
     try {
-      return await ConnectionCentralService.enhancedRobustConnect(serverKey);
+      return await DatabaseServiceAdapter.enhancedRobustConnect(serverKey);
     } catch (error) {
       logger.error(
         `[Adapter] Error en enhancedRobustConnect para ${serverKey}: ${error.message}`
@@ -46,7 +49,7 @@ class ConnectionAdapter {
    */
   async releaseConnection(connection) {
     try {
-      await ConnectionCentralService.releaseConnection(connection);
+      await DatabaseServiceAdapter.releaseConnection(connection);
     } catch (error) {
       logger.error(`[Adapter] Error al liberar conexión: ${error.message}`);
       throw error;
@@ -61,7 +64,7 @@ class ConnectionAdapter {
    */
   async initPool(serverKey, config) {
     try {
-      return await ConnectionCentralService.initPool(serverKey, config);
+      return await DatabaseServiceAdapter.initPool(serverKey, config);
     } catch (error) {
       logger.error(
         `[Adapter] Error al inicializar pool para ${serverKey}: ${error.message}`
@@ -77,7 +80,7 @@ class ConnectionAdapter {
    */
   async closePool(serverKey) {
     try {
-      return await ConnectionCentralService.closePool(serverKey);
+      return await DatabaseServiceAdapter.closePool(serverKey);
     } catch (error) {
       logger.error(
         `[Adapter] Error al cerrar pool para ${serverKey}: ${error.message}`
@@ -92,7 +95,7 @@ class ConnectionAdapter {
    */
   async closePools() {
     try {
-      return await ConnectionCentralService.closePools();
+      return await DatabaseServiceAdapter.closePools();
     } catch (error) {
       logger.error(
         `[Adapter] Error al cerrar todos los pools: ${error.message}`
@@ -107,7 +110,7 @@ class ConnectionAdapter {
    */
   getPoolsStatus() {
     try {
-      const stats = ConnectionCentralService.getConnectionStats();
+      const stats = DatabaseServiceAdapter.getConnectionStats();
       return stats.pools || {};
     } catch (error) {
       logger.error(

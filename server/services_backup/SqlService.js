@@ -3,10 +3,13 @@ const { Request, TYPES } = require("tedious");
 const logger = require("./logger");
 const fs = require("fs");
 const path = require("path");
-const ConnectionCentralService = require("./ConnectionCentralService");
+// // const ConnectionCentralService = require(...); // REMOVED
+// REMOVED - using DatabaseServiceAdapter
+
 const ValidationService = require("./ValidationService");
 const Telemetry = require("./Telemetry");
 const MemoryManager = require("./MemoryManager");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
 /**
  * Servicio optimizado para operaciones SQL que usa ConnectionCentralService
@@ -205,7 +208,7 @@ class SqlService {
       // Si pasaron un serverKey en lugar de una conexión, obtener la conexión
       if (typeof connection === "string") {
         const serverKey = connection;
-        connection = await ConnectionCentralService.getConnection(serverKey);
+        connection = await DatabaseServiceAdapter.getConnection(serverKey);
       }
 
       // Validar y sanitizar el registro
@@ -407,7 +410,7 @@ class SqlService {
       let connectionObj = connection;
       if (typeof connection === "string") {
         const serverKey = connection;
-        connectionObj = await ConnectionCentralService.getConnection(serverKey);
+        connectionObj = await DatabaseServiceAdapter.getConnection(serverKey);
       }
 
       // Limpiar el nombre de la tabla
@@ -474,7 +477,7 @@ class SqlService {
       let connectionObj = connection;
       if (typeof connection === "string") {
         const serverKey = connection;
-        connectionObj = await ConnectionCentralService.getConnection(serverKey);
+        connectionObj = await DatabaseServiceAdapter.getConnection(serverKey);
       }
 
       // Extraer esquema y nombre
@@ -543,7 +546,7 @@ class SqlService {
     if (typeof connection === "string") {
       serverKey = connection;
       try {
-        connectionObj = await ConnectionCentralService.getConnection(serverKey);
+        connectionObj = await DatabaseServiceAdapter.getConnection(serverKey);
         needToRelease = true; // Necesitamos liberar esta conexión al finalizar
       } catch (connError) {
         throw new Error(
@@ -563,7 +566,7 @@ class SqlService {
       MemoryManager.trackOperation("sql_query");
 
       // Incrementar contador de operaciones de la conexión
-      ConnectionCentralService.incrementOperationCount(connectionObj);
+      DatabaseServiceAdapter.incrementOperationCount(connectionObj);
 
       // Sanitizar parámetros
       const sanitizedParams = this.sanitizeParams(params);
@@ -602,7 +605,7 @@ class SqlService {
       // Si obtuvimos la conexión aquí, liberarla
       if (needToRelease && connectionObj) {
         try {
-          await ConnectionCentralService.releaseConnection(connectionObj);
+          await DatabaseServiceAdapter.releaseConnection(connectionObj);
         } catch (releaseError) {
           logger.warn(`Error al liberar conexión: ${releaseError.message}`);
         }
@@ -777,22 +780,22 @@ class SqlService {
       // Si pasaron un serverKey en lugar de una conexión, obtener la conexión
       if (typeof connection === "string") {
         const serverKey = connection;
-        connectionObj = await ConnectionCentralService.getConnection(
+        connectionObj = await DatabaseServiceAdapter.getConnection(
           serverKey,
           { useTransaction: true }
         );
         needToRelease = false; // ConnectionCentralService ya maneja la liberación
 
         // La conexión ya debería tener la transacción
-        if (ConnectionCentralService.activeTransactions.has(connectionObj)) {
+        if (DatabaseServiceAdapter.activeTransactions.has(connectionObj)) {
           const transaction =
-            ConnectionCentralService.activeTransactions.get(connectionObj);
+            DatabaseServiceAdapter.activeTransactions.get(connectionObj);
           return { connection: connectionObj, transaction };
         }
       }
 
       // Usar el servicio centralizado
-      const result = await ConnectionCentralService.beginTransaction(
+      const result = await DatabaseServiceAdapter.beginTransaction(
         connectionObj
       );
       return result;
@@ -800,7 +803,7 @@ class SqlService {
       // Si obtuvimos una conexión y hubo error, liberarla
       if (needToRelease && connectionObj) {
         try {
-          await ConnectionCentralService.releaseConnection(connectionObj);
+          await DatabaseServiceAdapter.releaseConnection(connectionObj);
         } catch (e) {
           // Ignorar error al liberar
         }
@@ -822,7 +825,7 @@ class SqlService {
       throw new Error("Se requiere una transacción válida para confirmar");
     }
 
-    return ConnectionCentralService.commitTransaction(transaction);
+    return DatabaseServiceAdapter.commitTransaction(transaction);
   }
 
   /**
@@ -834,7 +837,7 @@ class SqlService {
   async rollbackTransaction(transaction) {
     if (!transaction) return;
 
-    return ConnectionCentralService.rollbackTransaction(transaction);
+    return DatabaseServiceAdapter.rollbackTransaction(transaction);
   }
 
   /**
@@ -877,7 +880,7 @@ class SqlService {
   async close(connection) {
     if (!connection) return;
 
-    return await ConnectionCentralService.releaseConnection(connection);
+    return await DatabaseServiceAdapter.releaseConnection(connection);
   }
 }
 

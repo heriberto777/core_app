@@ -1061,7 +1061,7 @@ class ConnectionManager {
         }
 
         // Verificar la conexión con una query simple
-        const result = await SqlService.query(
+        const result = await DatabaseServiceAdapter.query(
           connection,
           "SELECT 1 AS test",
           {},

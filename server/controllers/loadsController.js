@@ -1,6 +1,7 @@
 const LoadsService = require("../services/loadsService");
 const traspasoService = require('../services/traspasoService');
 const logger = require("../services/logger");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
 class LoadsController {
   /**
@@ -867,7 +868,7 @@ class LoadsController {
         lines_failed: traspasoResult?.lineasFallidas || 0,
       };
 
-      const trackingResult = await SqlService.query(
+      const trackingResult = await DatabaseServiceAdapter.query(
         connection,
         insertTrackingQuery,
         trackingParams
@@ -900,7 +901,7 @@ class LoadsController {
             warehouse_origin: product.Code_Warehouse_Orig || "N/A",
           };
 
-          await SqlService.query(connection, detailQuery, detailParams);
+          await DatabaseServiceAdapter.query(connection, detailQuery, detailParams);
         }
 
         logger.info(`${ordersData.length} detalles de productos insertados`);

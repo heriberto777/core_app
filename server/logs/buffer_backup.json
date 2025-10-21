@@ -1,0 +1,451 @@
+{
+  "timestamp": "2025-10-21T05:52:39.181Z",
+  "logs": [
+    {
+      "level": "info",
+      "message": "🚀 Sistema de logging inicializado",
+      "timestamp": "2025-10-21T05:49:40.104Z",
+      "source": "system",
+      "metadata": {
+        "service": "transfer-control",
+        "environment": "development",
+        "version": "1.0.0",
+        "pid": 59448,
+        "transports": 5,
+        "mongoEnabled": true,
+        "logLevel": "info"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Iniciando API Catelli vv1",
+      "timestamp": "2025-10-21T05:49:40.132Z",
+      "source": "app",
+      "metadata": {
+        "service": "transfer-control",
+        "environment": "development",
+        "version": "1.0.0",
+        "pid": 59448
+      }
+    },
+    {
+      "level": "info",
+      "message": "✅ Middleware de logging principal configurado correctamente",
+      "timestamp": "2025-10-21T05:49:40.133Z",
+      "source": "app",
+      "metadata": {
+        "service": "transfer-control",
+        "environment": "development",
+        "version": "1.0.0",
+        "pid": 59448
+      }
+    },
+    {
+      "level": "info",
+      "message": "Servicio de telemetría iniciado",
+      "timestamp": "2025-10-21T05:49:41.072Z",
+      "source": "app",
+      "metadata": {
+        "service": "transfer-control",
+        "environment": "development",
+        "version": "1.0.0",
+        "pid": 59448
+      }
+    },
+    {
+      "level": "debug",
+      "message": "Memoria [Inicialización MemoryManager]: 38MB/64MB (59.1%)",
+      "timestamp": "2025-10-21T05:49:41.073Z",
+      "source": "app",
+      "metadata": {
+        "service": "transfer-control",
+        "environment": "development",
+        "version": "1.0.0",
+        "pid": 59448
+      }
+    },
+    {
+      "level": "info",
+      "message": "SqlService inicializado correctamente",
+      "timestamp": "2025-10-21T05:49:41.074Z",
+      "source": "app",
+      "metadata": {
+        "service": "transfer-control",
+        "environment": "development",
+        "version": "1.0.0",
+        "pid": 59448
+      }
+    },
+    {
+      "level": "info",
+      "message": "✅ Servicio de cancelación inicializado",
+      "timestamp": "2025-10-21T05:49:41.211Z",
+      "source": "app",
+      "metadata": {
+        "service": "transfer-control",
+        "environment": "development",
+        "version": "1.0.0",
+        "pid": 59448
+      }
+    },
+    {
+      "level": "error",
+      "message": "uncaughtException: Cannot find module './DatabaseServiceAdapter'\nRequire stack:\n- D:\\proyectos\\app\\core_app\\server\\utils\\dbUtils.js\n- D:\\proyectos\\app\\core_app\\server\\services\\traspasoService.js\n- D:\\proyectos\\app\\core_app\\server\\controllers\\transferTaskController.js\n- D:\\proyectos\\app\\core_app\\server\\routes\\transferTaskRoutes.js\n- D:\\proyectos\\app\\core_app\\server\\app.js\n- D:\\proyectos\\app\\core_app\\server\\index.js\nError: Cannot find module './DatabaseServiceAdapter'\nRequire stack:\n- D:\\proyectos\\app\\core_app\\server\\utils\\dbUtils.js\n- D:\\proyectos\\app\\core_app\\server\\services\\traspasoService.js\n- D:\\proyectos\\app\\core_app\\server\\controllers\\transferTaskController.js\n- D:\\proyectos\\app\\core_app\\server\\routes\\transferTaskRoutes.js\n- D:\\proyectos\\app\\core_app\\server\\app.js\n- D:\\proyectos\\app\\core_app\\server\\index.js\n    at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)\n    at Function._load (node:internal/modules/cjs/loader:1075:27)\n    at TracingChannel.traceSync (node:diagnostics_channel:315:14)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:218:24)\n    at Module.require (node:internal/modules/cjs/loader:1340:12)\n    at require (node:internal/modules/helpers:141:16)\n    at Object.<anonymous> (D:\\proyectos\\app\\core_app\\server\\utils\\dbUtils.js:7:32)\n    at Module._compile (node:internal/modules/cjs/loader:1546:14)\n    at Object..js (node:internal/modules/cjs/loader:1689:10)\n    at Module.load (node:internal/modules/cjs/loader:1318:32)",
+      "timestamp": "2025-10-21T05:49:41.237Z",
+      "source": "app",
+      "stack": "Error: Cannot find module './DatabaseServiceAdapter'\nRequire stack:\n- D:\\proyectos\\app\\core_app\\server\\utils\\dbUtils.js\n- D:\\proyectos\\app\\core_app\\server\\services\\traspasoService.js\n- D:\\proyectos\\app\\core_app\\server\\controllers\\transferTaskController.js\n- D:\\proyectos\\app\\core_app\\server\\routes\\transferTaskRoutes.js\n- D:\\proyectos\\app\\core_app\\server\\app.js\n- D:\\proyectos\\app\\core_app\\server\\index.js\n    at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)\n    at Function._load (node:internal/modules/cjs/loader:1075:27)\n    at TracingChannel.traceSync (node:diagnostics_channel:315:14)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:218:24)\n    at Module.require (node:internal/modules/cjs/loader:1340:12)\n    at require (node:internal/modules/helpers:141:16)\n    at Object.<anonymous> (D:\\proyectos\\app\\core_app\\server\\utils\\dbUtils.js:7:32)\n    at Module._compile (node:internal/modules/cjs/loader:1546:14)\n    at Object..js (node:internal/modules/cjs/loader:1689:10)\n    at Module.load (node:internal/modules/cjs/loader:1318:32)",
+      "metadata": {
+        "error": {
+          "code": "MODULE_NOT_FOUND",
+          "requireStack": [
+            "D:\\proyectos\\app\\core_app\\server\\utils\\dbUtils.js",
+            "D:\\proyectos\\app\\core_app\\server\\services\\traspasoService.js",
+            "D:\\proyectos\\app\\core_app\\server\\controllers\\transferTaskController.js",
+            "D:\\proyectos\\app\\core_app\\server\\routes\\transferTaskRoutes.js",
+            "D:\\proyectos\\app\\core_app\\server\\app.js",
+            "D:\\proyectos\\app\\core_app\\server\\index.js"
+          ]
+        },
+        "exception": true,
+        "date": "Tue Oct 21 2025 01:49:41 GMT-0400 (Bolivia Time)",
+        "process": {
+          "pid": 59448,
+          "uid": null,
+          "gid": null,
+          "cwd": "D:\\proyectos\\app\\core_app\\server",
+          "execPath": "C:\\Program Files\\nodejs\\node.exe",
+          "version": "v22.10.0",
+          "argv": [
+            "C:\\Program Files\\nodejs\\node.exe",
+            "D:\\proyectos\\app\\core_app\\server\\index.js",
+            "index.js"
+          ],
+          "memoryUsage": {
+            "rss": 106196992,
+            "heapTotal": 69664768,
+            "heapUsed": 47153416,
+            "external": 20573294,
+            "arrayBuffers": 18270803
+          }
+        },
+        "os": {
+          "loadavg": [
+            0,
+            0,
+            0
+          ],
+          "uptime": 38557.875
+        },
+        "trace": [
+          {
+            "column": 15,
+            "file": "node:internal/modules/cjs/loader",
+            "function": "Function._resolveFilename",
+            "line": 1249,
+            "method": "_resolveFilename",
+            "native": false
+          },
+          {
+            "column": 27,
+            "file": "node:internal/modules/cjs/loader",
+            "function": "Function._load",
+            "line": 1075,
+            "method": "_load",
+            "native": false
+          },
+          {
+            "column": 14,
+            "file": "node:diagnostics_channel",
+            "function": "TracingChannel.traceSync",
+            "line": 315,
+            "method": "traceSync",
+            "native": false
+          },
+          {
+            "column": 24,
+            "file": "node:internal/modules/cjs/loader",
+            "function": "wrapModuleLoad",
+            "line": 218,
+            "method": null,
+            "native": false
+          },
+          {
+            "column": 12,
+            "file": "node:internal/modules/cjs/loader",
+            "function": "Module.require",
+            "line": 1340,
+            "method": "require",
+            "native": false
+          },
+          {
+            "column": 16,
+            "file": "node:internal/modules/helpers",
+            "function": "require",
+            "line": 141,
+            "method": null,
+            "native": false
+          },
+          {
+            "column": 32,
+            "file": "D:\\proyectos\\app\\core_app\\server\\utils\\dbUtils.js",
+            "function": null,
+            "line": 7,
+            "method": null,
+            "native": false
+          },
+          {
+            "column": 14,
+            "file": "node:internal/modules/cjs/loader",
+            "function": "Module._compile",
+            "line": 1546,
+            "method": "_compile",
+            "native": false
+          },
+          {
+            "column": 10,
+            "file": "node:internal/modules/cjs/loader",
+            "function": "Object..js",
+            "line": 1689,
+            "method": ".js",
+            "native": false
+          },
+          {
+            "column": 32,
+            "file": "node:internal/modules/cjs/loader",
+            "function": "Module.load",
+            "line": 1318,
+            "method": "load",
+            "native": false
+          }
+        ],
+        "service": "transfer-control",
+        "environment": "development",
+        "version": "1.0.0",
+        "pid": 59448
+      }
+    },
+    {
+      "level": "info",
+      "message": "🚀 Sistema de logging inicializado",
+      "timestamp": "2025-10-21T05:52:23.712Z",
+      "source": "system",
+      "metadata": {
+        "service": "transfer-control",
+        "environment": "development",
+        "version": "1.0.0",
+        "pid": 70912,
+        "transports": 5,
+        "mongoEnabled": true,
+        "logLevel": "info"
+      }
+    },
+    {
+      "level": "info",
+      "message": "Iniciando API Catelli vv1",
+      "timestamp": "2025-10-21T05:52:23.739Z",
+      "source": "app",
+      "metadata": {
+        "service": "transfer-control",
+        "environment": "development",
+        "version": "1.0.0",
+        "pid": 70912
+      }
+    },
+    {
+      "level": "info",
+      "message": "✅ Middleware de logging principal configurado correctamente",
+      "timestamp": "2025-10-21T05:52:23.740Z",
+      "source": "app",
+      "metadata": {
+        "service": "transfer-control",
+        "environment": "development",
+        "version": "1.0.0",
+        "pid": 70912
+      }
+    },
+    {
+      "level": "info",
+      "message": "Servicio de telemetría iniciado",
+      "timestamp": "2025-10-21T05:52:24.734Z",
+      "source": "app",
+      "metadata": {
+        "service": "transfer-control",
+        "environment": "development",
+        "version": "1.0.0",
+        "pid": 70912
+      }
+    },
+    {
+      "level": "debug",
+      "message": "Memoria [Inicialización MemoryManager]: 38MB/64MB (58.8%)",
+      "timestamp": "2025-10-21T05:52:24.737Z",
+      "source": "app",
+      "metadata": {
+        "service": "transfer-control",
+        "environment": "development",
+        "version": "1.0.0",
+        "pid": 70912
+      }
+    },
+    {
+      "level": "info",
+      "message": "SqlService inicializado correctamente",
+      "timestamp": "2025-10-21T05:52:24.737Z",
+      "source": "app",
+      "metadata": {
+        "service": "transfer-control",
+        "environment": "development",
+        "version": "1.0.0",
+        "pid": 70912
+      }
+    },
+    {
+      "level": "info",
+      "message": "✅ Servicio de cancelación inicializado",
+      "timestamp": "2025-10-21T05:52:24.884Z",
+      "source": "app",
+      "metadata": {
+        "service": "transfer-control",
+        "environment": "development",
+        "version": "1.0.0",
+        "pid": 70912
+      }
+    },
+    {
+      "level": "error",
+      "message": "uncaughtException: Cannot find module './DatabaseServiceAdapter'\nRequire stack:\n- D:\\proyectos\\app\\core_app\\server\\utils\\dbUtils.js\n- D:\\proyectos\\app\\core_app\\server\\services\\traspasoService.js\n- D:\\proyectos\\app\\core_app\\server\\controllers\\transferTaskController.js\n- D:\\proyectos\\app\\core_app\\server\\routes\\transferTaskRoutes.js\n- D:\\proyectos\\app\\core_app\\server\\app.js\n- D:\\proyectos\\app\\core_app\\server\\index.js\nError: Cannot find module './DatabaseServiceAdapter'\nRequire stack:\n- D:\\proyectos\\app\\core_app\\server\\utils\\dbUtils.js\n- D:\\proyectos\\app\\core_app\\server\\services\\traspasoService.js\n- D:\\proyectos\\app\\core_app\\server\\controllers\\transferTaskController.js\n- D:\\proyectos\\app\\core_app\\server\\routes\\transferTaskRoutes.js\n- D:\\proyectos\\app\\core_app\\server\\app.js\n- D:\\proyectos\\app\\core_app\\server\\index.js\n    at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)\n    at Function._load (node:internal/modules/cjs/loader:1075:27)\n    at TracingChannel.traceSync (node:diagnostics_channel:315:14)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:218:24)\n    at Module.require (node:internal/modules/cjs/loader:1340:12)\n    at require (node:internal/modules/helpers:141:16)\n    at Object.<anonymous> (D:\\proyectos\\app\\core_app\\server\\utils\\dbUtils.js:7:32)\n    at Module._compile (node:internal/modules/cjs/loader:1546:14)\n    at Object..js (node:internal/modules/cjs/loader:1689:10)\n    at Module.load (node:internal/modules/cjs/loader:1318:32)",
+      "timestamp": "2025-10-21T05:52:24.910Z",
+      "source": "app",
+      "stack": "Error: Cannot find module './DatabaseServiceAdapter'\nRequire stack:\n- D:\\proyectos\\app\\core_app\\server\\utils\\dbUtils.js\n- D:\\proyectos\\app\\core_app\\server\\services\\traspasoService.js\n- D:\\proyectos\\app\\core_app\\server\\controllers\\transferTaskController.js\n- D:\\proyectos\\app\\core_app\\server\\routes\\transferTaskRoutes.js\n- D:\\proyectos\\app\\core_app\\server\\app.js\n- D:\\proyectos\\app\\core_app\\server\\index.js\n    at Function._resolveFilename (node:internal/modules/cjs/loader:1249:15)\n    at Function._load (node:internal/modules/cjs/loader:1075:27)\n    at TracingChannel.traceSync (node:diagnostics_channel:315:14)\n    at wrapModuleLoad (node:internal/modules/cjs/loader:218:24)\n    at Module.require (node:internal/modules/cjs/loader:1340:12)\n    at require (node:internal/modules/helpers:141:16)\n    at Object.<anonymous> (D:\\proyectos\\app\\core_app\\server\\utils\\dbUtils.js:7:32)\n    at Module._compile (node:internal/modules/cjs/loader:1546:14)\n    at Object..js (node:internal/modules/cjs/loader:1689:10)\n    at Module.load (node:internal/modules/cjs/loader:1318:32)",
+      "metadata": {
+        "error": {
+          "code": "MODULE_NOT_FOUND",
+          "requireStack": [
+            "D:\\proyectos\\app\\core_app\\server\\utils\\dbUtils.js",
+            "D:\\proyectos\\app\\core_app\\server\\services\\traspasoService.js",
+            "D:\\proyectos\\app\\core_app\\server\\controllers\\transferTaskController.js",
+            "D:\\proyectos\\app\\core_app\\server\\routes\\transferTaskRoutes.js",
+            "D:\\proyectos\\app\\core_app\\server\\app.js",
+            "D:\\proyectos\\app\\core_app\\server\\index.js"
+          ]
+        },
+        "exception": true,
+        "date": "Tue Oct 21 2025 01:52:24 GMT-0400 (Bolivia Time)",
+        "process": {
+          "pid": 70912,
+          "uid": null,
+          "gid": null,
+          "cwd": "D:\\proyectos\\app\\core_app\\server",
+          "execPath": "C:\\Program Files\\nodejs\\node.exe",
+          "version": "v22.10.0",
+          "argv": [
+            "C:\\Program Files\\nodejs\\node.exe",
+            "D:\\proyectos\\app\\core_app\\server\\index.js",
+            "index.js"
+          ],
+          "memoryUsage": {
+            "rss": 105877504,
+            "heapTotal": 69664768,
+            "heapUsed": 47034808,
+            "external": 20573294,
+            "arrayBuffers": 18270803
+          }
+        },
+        "os": {
+          "loadavg": [
+            0,
+            0,
+            0
+          ],
+          "uptime": 38721.546
+        },
+        "trace": [
+          {
+            "column": 15,
+            "file": "node:internal/modules/cjs/loader",
+            "function": "Function._resolveFilename",
+            "line": 1249,
+            "method": "_resolveFilename",
+            "native": false
+          },
+          {
+            "column": 27,
+            "file": "node:internal/modules/cjs/loader",
+            "function": "Function._load",
+            "line": 1075,
+            "method": "_load",
+            "native": false
+          },
+          {
+            "column": 14,
+            "file": "node:diagnostics_channel",
+            "function": "TracingChannel.traceSync",
+            "line": 315,
+            "method": "traceSync",
+            "native": false
+          },
+          {
+            "column": 24,
+            "file": "node:internal/modules/cjs/loader",
+            "function": "wrapModuleLoad",
+            "line": 218,
+            "method": null,
+            "native": false
+          },
+          {
+            "column": 12,
+            "file": "node:internal/modules/cjs/loader",
+            "function": "Module.require",
+            "line": 1340,
+            "method": "require",
+            "native": false
+          },
+          {
+            "column": 16,
+            "file": "node:internal/modules/helpers",
+            "function": "require",
+            "line": 141,
+            "method": null,
+            "native": false
+          },
+          {
+            "column": 32,
+            "file": "D:\\proyectos\\app\\core_app\\server\\utils\\dbUtils.js",
+            "function": null,
+            "line": 7,
+            "method": null,
+            "native": false
+          },
+          {
+            "column": 14,
+            "file": "node:internal/modules/cjs/loader",
+            "function": "Module._compile",
+            "line": 1546,
+            "method": "_compile",
+            "native": false
+          },
+          {
+            "column": 10,
+            "file": "node:internal/modules/cjs/loader",
+            "function": "Object..js",
+            "line": 1689,
+            "method": ".js",
+            "native": false
+          },
+          {
+            "column": 32,
+            "file": "node:internal/modules/cjs/loader",
+            "function": "Module.load",
+            "line": 1318,
+            "method": "load",
+            "native": false
+          }
+        ],
+        "service": "transfer-control",
+        "environment": "development",
+        "version": "1.0.0",
+        "pid": 70912
+      }
+    }
+  ]
+}

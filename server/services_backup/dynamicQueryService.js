@@ -14,6 +14,7 @@ const {
   validateNonDestructiveQuery,
 } = require("../utils/validateQuery");
 const { sendProgress } = require("./progressSse");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
 // Servicio de reintentos específico para consultas dinámicas
 const queryRetryService = new RetryService.RetryService({
@@ -264,7 +265,7 @@ async function executeDynamicSelect(
           // Si es un reintento, verificar conexión y reconectar si es necesario
           if (attempt > 0 && ownConnection) {
             try {
-              await SqlService.query(connection, "SELECT 1 AS test");
+              await DatabaseServiceAdapter.query(connection, "SELECT 1 AS test");
               sendProgress(task._id, 35 + attempt * 5); // Incrementar progreso con cada reintento
             } catch (connError) {
               logger.warn(
@@ -298,7 +299,7 @@ async function executeDynamicSelect(
 
           // Usar SqlService para ejecutar la consulta con parámetros sanitizados
           const sanitizedParams = SqlService.sanitizeParams(params);
-          const queryResult = await SqlService.query(
+          const queryResult = await DatabaseServiceAdapter.query(
             connection,
             finalQuery,
             sanitizedParams,
@@ -648,7 +649,7 @@ async function executeNonDestructiveQuery(
           // Si es un reintento, verificar conexión y reconectar si es necesario
           if (attempt > 0) {
             try {
-              await SqlService.query(connection, "SELECT 1 AS test");
+              await DatabaseServiceAdapter.query(connection, "SELECT 1 AS test");
             } catch (connError) {
               logger.warn(
                 `Conexión perdida para tarea no destructiva '${taskName}', reconectando...`
@@ -680,7 +681,7 @@ async function executeNonDestructiveQuery(
 
           // Usar SqlService para ejecutar la consulta con parámetros sanitizados
           const sanitizedParams = SqlService.sanitizeParams(params);
-          return await SqlService.query(
+          return await DatabaseServiceAdapter.query(
             connection,
             finalQuery,
             sanitizedParams,

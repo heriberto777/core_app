@@ -1220,7 +1220,10 @@ class DynamicTransferService {
         documentId
       );
       logger.debug(`Ejecutando consulta personalizada para detalles: ${query}`);
-      const result = await DatabaseServiceAdapter.query(sourceConnection, query);
+      const result = await DatabaseServiceAdapter.query(
+        sourceConnection,
+        query
+      );
       return result.recordset;
     } else if (detailConfig.useSameSourceTable) {
       // Caso especial: usa la misma tabla que el encabezado
@@ -2985,7 +2988,11 @@ class DynamicTransferService {
         params = { table };
       }
 
-      const result = await DatabaseServiceAdapter.query(connection, query, params);
+      const result = await DatabaseServiceAdapter.query(
+        connection,
+        query,
+        params
+      );
 
       if (!result.recordset || result.recordset.length === 0) {
         // Intentar con esquemas comunes
@@ -3493,16 +3500,18 @@ class DynamicTransferService {
 
       if (sourceConnection) {
         releasePromises.push(
-          DatabaseServiceAdapter.releaseConnection(sourceConnection).catch((e) =>
-            logger.error(`Error al liberar conexión origen: ${e.message}`)
+          DatabaseServiceAdapter.releaseConnection(sourceConnection).catch(
+            (e) =>
+              logger.error(`Error al liberar conexión origen: ${e.message}`)
           )
         );
       }
 
       if (targetConnection) {
         releasePromises.push(
-          DatabaseServiceAdapter.releaseConnection(targetConnection).catch((e) =>
-            logger.error(`Error al liberar conexión destino: ${e.message}`)
+          DatabaseServiceAdapter.releaseConnection(targetConnection).catch(
+            (e) =>
+              logger.error(`Error al liberar conexión destino: ${e.message}`)
           )
         );
       }
@@ -3665,6 +3674,8 @@ class DynamicTransferService {
    * @param {Object} connection - Conexión a la base de datos
    * @returns {Promise<Object>} - Información de la tabla
    */
+  // En DynamicTransferService.js - CORREGIR este método también
+
   async prepareTableForQuery(mainTable, connection) {
     let schema = "dbo";
     let tableName = mainTable.sourceTable;
@@ -3685,12 +3696,13 @@ class DynamicTransferService {
 
     // Verificar si la tabla existe
     const checkTableQuery = `
-      SELECT COUNT(*) as count
-      FROM INFORMATION_SCHEMA.TABLES
-      WHERE TABLE_SCHEMA = '${schema}'
-      AND TABLE_NAME = '${tableName}'
-    `;
+    SELECT COUNT(*) as count
+    FROM INFORMATION_SCHEMA.TABLES
+    WHERE TABLE_SCHEMA = '${schema}'
+    AND TABLE_NAME = '${tableName}'
+  `;
 
+    // USAR DatabaseServiceAdapter
     const tableCheckResult = await DatabaseServiceAdapter.query(
       connection,
       checkTableQuery
@@ -3704,14 +3716,18 @@ class DynamicTransferService {
 
     // Obtener columnas de la tabla
     const columnsQuery = `
-      SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT
-      FROM INFORMATION_SCHEMA.COLUMNS
-      WHERE TABLE_SCHEMA = '${schema}'
-      AND TABLE_NAME = '${tableName}'
-      ORDER BY ORDINAL_POSITION
-    `;
+    SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT
+    FROM INFORMATION_SCHEMA.COLUMNS
+    WHERE TABLE_SCHEMA = '${schema}'
+    AND TABLE_NAME = '${tableName}'
+    ORDER BY ORDINAL_POSITION
+  `;
 
-    const columnsResult = await DatabaseServiceAdapter.query(connection, columnsQuery);
+    // USAR DatabaseServiceAdapter
+    const columnsResult = await DatabaseServiceAdapter.query(
+      connection,
+      columnsQuery
+    );
 
     if (!columnsResult.recordset || columnsResult.recordset.length === 0) {
       throw new Error(
@@ -4207,7 +4223,11 @@ class DynamicTransferService {
             const insertQuery = `INSERT INTO ${
               dependency.dependentTable
             } (${insertFields.join(", ")}) VALUES (${insertValues.join(", ")})`;
-            await DatabaseServiceAdapter.query(targetConnection, insertQuery, insertData);
+            await DatabaseServiceAdapter.query(
+              targetConnection,
+              insertQuery,
+              insertData
+            );
             logger.info(
               `Registro insertado exitosamente en ${dependency.dependentTable}`
             );
@@ -5933,9 +5953,13 @@ class DynamicTransferService {
         /@documentId/g,
         documentId
       );
-      const result = await DatabaseServiceAdapter.query(sourceConnection, query, {
-        documentId,
-      });
+      const result = await DatabaseServiceAdapter.query(
+        sourceConnection,
+        query,
+        {
+          documentId,
+        }
+      );
 
       // ✅ Guardar configuración detectada para uso posterior
       result.recordset.forEach((record) => {
@@ -5984,9 +6008,13 @@ class DynamicTransferService {
     logger.debug(`🎁 Query construida: ${query}`);
 
     try {
-      const result = await DatabaseServiceAdapter.query(sourceConnection, query, {
-        documentId,
-      });
+      const result = await DatabaseServiceAdapter.query(
+        sourceConnection,
+        query,
+        {
+          documentId,
+        }
+      );
       const data = result.recordset || [];
 
       logger.info(
