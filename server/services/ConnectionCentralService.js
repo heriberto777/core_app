@@ -498,32 +498,39 @@ class ConnectionCentralService {
       }
     });
   }
+
   /**
    * Revierte una transacción
-   * MEJORADO: Con manejo robusto para AggregateError
-   * @param {Transaction} transaction - Transacción
+   * MEJORADO: Con manejo robusto para AggregateError y timeout
+   * @param {Transaction} transaction - Transacción activa
    * @returns {Promise<void>}
    */
   async rollbackTransaction(transaction) {
-    if (!transaction) return;
+    if (!transaction) {
+      logger.warn("Intento de rollback con transacción nula o indefinida");
+      return;
+    }
 
     return new Promise((resolve, reject) => {
       try {
         const timeout = setTimeout(() => {
-          // Limpiar conexión incluso en timeout
+          // ⏰ Timeout en rollback: limpiar referencias
           if (transaction._connection) {
             this.activeTransactions.delete(transaction._connection);
           }
 
-          logger.warn("Timeout en rollback de transacción, continuando...");
-          resolve();
-        }, 45000); // Aumentado para AggregateError
+          logger.warn(
+            "Timeout en rollback de transacción, continuando sin error..."
+          );
+          resolve(); // Se continúa sin rechazar (rollback forzado)
+        }, 45000); // 45 segundos — extendido por posibles AggregateError
 
+        // 🔹 Verificar si la transacción tiene método rollback
         if (typeof transaction.rollback === "function") {
           transaction.rollback((err) => {
             clearTimeout(timeout);
 
-            // Siempre limpiar la referencia
+            // 🧹 Limpiar conexión usada
             if (transaction._connection) {
               this.activeTransactions.delete(transaction._connection);
             }
@@ -531,24 +538,27 @@ class ConnectionCentralService {
             if (err) {
               logger.error(`Error en rollback: ${err.message}`);
 
-              // NUEVO: Manejo específico para AggregateError en rollback
+              // 🧠 Manejo detallado de AggregateError
               if (err.name === "AggregateError") {
-                logger.error(`AggregateError en rollback:`, err);
-                Telemetry.trackError("transaction_rollback_aggregate_error", {
-                  serverKey: transaction._connection?._serverKey,
-                });
+                logger.error("AggregateError en rollback:", err);
+                if (typeof Telemetry !== "undefined" && Telemetry.trackError) {
+                  Telemetry.trackError("transaction_rollback_aggregate_error", {
+                    serverKey: transaction._connection?._serverKey,
+                    innerErrors: err.errors?.map((e) => e.message),
+                  });
+                }
               }
 
-              reject(err);
-            } else {
-              logger.debug("Rollback completado correctamente");
-              resolve();
+              return reject(err);
             }
+
+            logger.debug("Rollback completado correctamente");
+            resolve();
           });
         } else {
           clearTimeout(timeout);
 
-          // Limpiar conexión
+          // 🚫 No hay método rollback
           if (transaction._connection) {
             this.activeTransactions.delete(transaction._connection);
           }
@@ -559,14 +569,26 @@ class ConnectionCentralService {
           resolve();
         }
       } catch (error) {
-        logger.error(`Error general en rollback: ${error.message}`);
+        clearTimeout(timeout);
+        logger.error(`Error general en rollbackTransaction: ${error.message}`);
 
-        // NUEVO: Manejo específico para AggregateError en catch general
+        // Manejo específico de AggregateError en catch general
         if (error.name === "AggregateError") {
-          logger.error(`AggregateError en try de rollbackTransaction:`, error);
+          logger.error(
+            "AggregateError en try/catch de rollbackTransaction:",
+            error
+          );
+          if (typeof Telemetry !== "undefined" && Telemetry.trackError) {
+            Telemetry.trackError(
+              "transaction_rollback_general_aggregate_error",
+              {
+                serverKey: transaction._connection?._serverKey,
+              }
+            );
+          }
         }
 
-        // Limpiar conexión incluso en error
+        // Limpieza final
         if (transaction._connection) {
           this.activeTransactions.delete(transaction._connection);
         }
