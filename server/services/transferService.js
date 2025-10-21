@@ -93,30 +93,77 @@ class TransferService {
   }
 
   /**
-   * Limpia datos de una tabla - MIGRADO desde SqlService
+   * Limpia datos de una tabla - CORREGIDO
    */
   async _clearTableData(connection, tableName) {
+    // Parsear esquema y nombre de tabla
+    let schema = "dbo";
+    let table = tableName;
+
+    // Limpiar corchetes
     const cleanTableName = tableName.replace(/[\[\]]/g, "");
 
-    // Verificar si la tabla existe
+    // Si tiene esquema especificado (ej: dbo.IMPLT_Cluster_Base)
+    if (cleanTableName.includes(".")) {
+      const parts = cleanTableName.split(".");
+      schema = parts[0];
+      table = parts[1];
+    } else {
+      table = cleanTableName;
+    }
+
+    logger.debug(
+      `Verificando existencia de tabla: schema='${schema}', table='${table}'`
+    );
+
+    // Verificar si la tabla existe - CORREGIDO para incluir schema
     const tableExistsQuery = `
-      SELECT COUNT(*) as count
-      FROM INFORMATION_SCHEMA.TABLES
-      WHERE TABLE_NAME = @tableName
-    `;
+    SELECT COUNT(*) as count
+    FROM INFORMATION_SCHEMA.TABLES
+    WHERE TABLE_SCHEMA = @schema
+      AND TABLE_NAME = @tableName
+  `;
 
     const existsResult = await DatabaseServiceAdapter.query(
       connection,
       tableExistsQuery,
-      { tableName: cleanTableName }
+      {
+        schema: schema,
+        tableName: table,
+      }
+    );
+
+    logger.debug(
+      `Resultado verificación tabla: ${existsResult.recordset[0].count} tablas encontradas`
     );
 
     if (existsResult.recordset[0].count === 0) {
-      throw new Error(`La tabla ${cleanTableName} no existe`);
+      // Intentar consulta alternativa para debug
+      const debugQuery = `
+      SELECT TABLE_SCHEMA, TABLE_NAME
+      FROM INFORMATION_SCHEMA.TABLES
+      WHERE TABLE_NAME LIKE '%${table}%'
+    `;
+
+      try {
+        const debugResult = await DatabaseServiceAdapter.query(
+          connection,
+          debugQuery
+        );
+        logger.debug(`Tablas similares encontradas:`, debugResult.recordset);
+      } catch (debugError) {
+        logger.debug(`Error en consulta debug: ${debugError.message}`);
+      }
+
+      throw new Error(`La tabla ${schema}.${table} no existe`);
     }
 
-    // Truncar tabla
-    const truncateQuery = `TRUNCATE TABLE [${cleanTableName}]`;
+    // Truncar tabla - usar nombre completo con esquema
+    const fullTableName = `[${schema}].[${table}]`;
+    const truncateQuery = `TRUNCATE TABLE ${fullTableName}`;
+
+    logger.debug(`Ejecutando: ${truncateQuery}`);
+
     const result = await DatabaseServiceAdapter.query(
       connection,
       truncateQuery
@@ -1934,218 +1981,228 @@ class TransferService {
       }
 
       // MIGRADO: Usar transacción del nuevo sistema
-      const result = await DatabaseServiceAdapter.withTransaction("server2", async (connection) => {
-        sendProgress(taskId, 10);
+      const result = await DatabaseServiceAdapter.withTransaction(
+        "server2",
+        async (connection) => {
+          sendProgress(taskId, 10);
 
-        // Si la tarea tiene habilitada la opción de borrar antes de insertar
-        if (task.clearBeforeInsert) {
-          sendProgress(taskId, 15);
+          // Si la tarea tiene habilitada la opción de borrar antes de insertar
+          if (task.clearBeforeInsert) {
+            sendProgress(taskId, 15);
 
-          try {
-            logger.info(
-              `Borrando registros existentes de la tabla ${task.name} antes de insertar en lotes`
-            );
-
-            const deletedCount = await this._clearTableData(
-              connection,
-              `dbo.[${task.name}]`
-            );
-            logger.info(
-              `Se eliminaron ${deletedCount} registros de la tabla ${task.name}`
-            );
-
-            sendProgress(taskId, 20);
-          } catch (clearError) {
-            logger.error(
-              `Error al borrar registros de la tabla ${task.name}:`,
-              clearError
-            );
-
-            if (clearError.message && clearError.message.includes("no existe")) {
-              logger.warn(`La tabla no existe, continuando con la inserción...`);
-            } else {
-              logger.warn(
-                `Error al borrar registros pero continuando con la inserción...`
+            try {
+              logger.info(
+                `Borrando registros existentes de la tabla ${task.name} antes de insertar en lotes`
               );
+
+              const deletedCount = await this._clearTableData(
+                connection,
+                `dbo.[${task.name}]`
+              );
+              logger.info(
+                `Se eliminaron ${deletedCount} registros de la tabla ${task.name}`
+              );
+
+              sendProgress(taskId, 20);
+            } catch (clearError) {
+              logger.error(
+                `Error al borrar registros de la tabla ${task.name}:`,
+                clearError
+              );
+
+              if (
+                clearError.message &&
+                clearError.message.includes("no existe")
+              ) {
+                logger.warn(
+                  `La tabla no existe, continuando con la inserción...`
+                );
+              } else {
+                logger.warn(
+                  `Error al borrar registros pero continuando con la inserción...`
+                );
+              }
             }
+          } else {
+            sendProgress(taskId, 20);
           }
-        } else {
-          sendProgress(taskId, 20);
-        }
 
-        if (signal.aborted) {
-          throw new Error("Tarea cancelada por el usuario");
-        }
-
-        // 5) Verificar conteo inicial de registros
-        try {
-          const countResult = await DatabaseServiceAdapter.query(
-            connection,
-            `SELECT COUNT(*) AS total FROM dbo.[${task.name}] WITH (NOLOCK)`
-          );
-          initialCount = countResult.recordset[0].total;
-          logger.info(
-            `Conteo inicial en tabla ${task.name}: ${initialCount} registros`
-          );
-        } catch (countError) {
-          logger.warn(
-            `No se pudo verificar conteo inicial: ${countError.message}`
-          );
-          initialCount = 0;
-        }
-
-        const columnLengthCache = new Map();
-
-        const total = data.length;
-        let totalInserted = 0;
-        let processedCount = 0;
-        let errorCount = 0;
-
-        sendProgress(taskId, 25);
-
-        // 8) Procesar data en lotes
-        for (let i = 0; i < data.length; i += batchSize) {
           if (signal.aborted) {
             throw new Error("Tarea cancelada por el usuario");
           }
 
-          const batch = data.slice(i, i + batchSize);
-          const currentBatchNumber = Math.floor(i / batchSize) + 1;
-          const totalBatches = Math.ceil(data.length / batchSize);
+          // 5) Verificar conteo inicial de registros
+          try {
+            const countResult = await DatabaseServiceAdapter.query(
+              connection,
+              `SELECT COUNT(*) AS total FROM dbo.[${task.name}] WITH (NOLOCK)`
+            );
+            initialCount = countResult.recordset[0].total;
+            logger.info(
+              `Conteo inicial en tabla ${task.name}: ${initialCount} registros`
+            );
+          } catch (countError) {
+            logger.warn(
+              `No se pudo verificar conteo inicial: ${countError.message}`
+            );
+            initialCount = 0;
+          }
 
-          logger.debug(
-            `Procesando lote ${currentBatchNumber}/${totalBatches} (${batch.length} registros) para ${taskName}...`
-          );
+          const columnLengthCache = new Map();
 
-          let batchInserted = 0;
-          let batchErrored = 0;
+          const total = data.length;
+          let totalInserted = 0;
+          let processedCount = 0;
+          let errorCount = 0;
 
-          for (const record of batch) {
+          sendProgress(taskId, 25);
+
+          // 8) Procesar data en lotes
+          for (let i = 0; i < data.length; i += batchSize) {
             if (signal.aborted) {
               throw new Error("Tarea cancelada por el usuario");
             }
 
-            try {
-              const validatedRecord = this._validateRecord(record);
+            const batch = data.slice(i, i + batchSize);
+            const currentBatchNumber = Math.floor(i / batchSize) + 1;
+            const totalBatches = Math.ceil(data.length / batchSize);
 
-              // Truncar strings según las longitudes máximas
-              for (const column in validatedRecord) {
-                if (typeof validatedRecord[column] === "string") {
-                  let maxLength;
-                  if (columnLengthCache.has(column)) {
-                    maxLength = columnLengthCache.get(column);
-                  } else {
-                    const lengthQuery = `
+            logger.debug(
+              `Procesando lote ${currentBatchNumber}/${totalBatches} (${batch.length} registros) para ${taskName}...`
+            );
+
+            let batchInserted = 0;
+            let batchErrored = 0;
+
+            for (const record of batch) {
+              if (signal.aborted) {
+                throw new Error("Tarea cancelada por el usuario");
+              }
+
+              try {
+                const validatedRecord = this._validateRecord(record);
+
+                // Truncar strings según las longitudes máximas
+                for (const column in validatedRecord) {
+                  if (typeof validatedRecord[column] === "string") {
+                    let maxLength;
+                    if (columnLengthCache.has(column)) {
+                      maxLength = columnLengthCache.get(column);
+                    } else {
+                      const lengthQuery = `
                     SELECT CHARACTER_MAXIMUM_LENGTH
                     FROM INFORMATION_SCHEMA.COLUMNS
                     WHERE TABLE_NAME = '${task.name}'
                       AND COLUMN_NAME = '${column}'
                   `;
-                    const lengthResult = await DatabaseServiceAdapter.query(
-                      connection,
-                      lengthQuery
-                    );
-                    maxLength =
-                      lengthResult.recordset[0]?.CHARACTER_MAXIMUM_LENGTH || 0;
-                    columnLengthCache.set(column, maxLength);
-                  }
+                      const lengthResult = await DatabaseServiceAdapter.query(
+                        connection,
+                        lengthQuery
+                      );
+                      maxLength =
+                        lengthResult.recordset[0]?.CHARACTER_MAXIMUM_LENGTH ||
+                        0;
+                      columnLengthCache.set(column, maxLength);
+                    }
 
-                  if (
-                    maxLength > 0 &&
-                    validatedRecord[column]?.length > maxLength
-                  ) {
-                    validatedRecord[column] = validatedRecord[column].substring(
-                      0,
-                      maxLength
-                    );
+                    if (
+                      maxLength > 0 &&
+                      validatedRecord[column]?.length > maxLength
+                    ) {
+                      validatedRecord[column] = validatedRecord[
+                        column
+                      ].substring(0, maxLength);
+                    }
                   }
                 }
-              }
 
-              try {
-                const insertResult = await this._insertRecord(
-                  connection,
-                  `dbo.[${task.name}]`,
-                  validatedRecord
-                );
+                try {
+                  const insertResult = await this._insertRecord(
+                    connection,
+                    `dbo.[${task.name}]`,
+                    validatedRecord
+                  );
 
-                const rowsAffected = insertResult?.rowsAffected || 0;
+                  const rowsAffected = insertResult?.rowsAffected || 0;
 
-                if (rowsAffected > 0) {
-                  totalInserted += rowsAffected;
-                  batchInserted += rowsAffected;
+                  if (rowsAffected > 0) {
+                    totalInserted += rowsAffected;
+                    batchInserted += rowsAffected;
+                  }
+                } catch (insertError) {
+                  logger.error(
+                    `Error específico al insertar registro: ${JSON.stringify(
+                      validatedRecord,
+                      null,
+                      2
+                    )}`
+                  );
+                  logger.error(`Detalles del error: ${insertError.message}`);
+                  throw insertError;
                 }
-              } catch (insertError) {
+              } catch (recordError) {
+                errorCount++;
+                batchErrored++;
                 logger.error(
-                  `Error específico al insertar registro: ${JSON.stringify(
-                    validatedRecord,
-                    null,
-                    2
-                  )}`
+                  `Error al insertar registro en lote ${currentBatchNumber}:`,
+                  recordError
                 );
-                logger.error(`Detalles del error: ${insertError.message}`);
-                throw insertError;
+                logger.debug(
+                  `Registro problemático: ${JSON.stringify(record, null, 2)}`
+                );
               }
-            } catch (recordError) {
-              errorCount++;
-              batchErrored++;
-              logger.error(
-                `Error al insertar registro en lote ${currentBatchNumber}:`,
-                recordError
-              );
-              logger.debug(
-                `Registro problemático: ${JSON.stringify(record, null, 2)}`
-              );
             }
+
+            logger.info(
+              `Lote ${currentBatchNumber}/${totalBatches}: ${batchInserted} registros insertados, ${batchErrored} errores`
+            );
+
+            processedCount += batch.length;
+            const progress = Math.min(
+              Math.round((processedCount / total) * 75) + 25,
+              99
+            );
+
+            if (progress > lastReportedProgress + 5 || progress >= 99) {
+              lastReportedProgress = progress;
+              await TransferTask.findByIdAndUpdate(taskId, { progress });
+              sendProgress(taskId, progress);
+              logger.debug(`Progreso actualizado: ${progress}%`);
+            }
+
+            MemoryManager.trackOperation("batch_insert");
           }
 
-          logger.info(
-            `Lote ${currentBatchNumber}/${totalBatches}: ${batchInserted} registros insertados, ${batchErrored} errores`
-          );
-
-          processedCount += batch.length;
-          const progress = Math.min(
-            Math.round((processedCount / total) * 75) + 25,
-            99
-          );
-
-          if (progress > lastReportedProgress + 5 || progress >= 99) {
-            lastReportedProgress = progress;
-            await TransferTask.findByIdAndUpdate(taskId, { progress });
-            sendProgress(taskId, progress);
-            logger.debug(`Progreso actualizado: ${progress}%`);
+          // 10. Verificar conteo final
+          let finalCount = 0;
+          try {
+            const countResult = await DatabaseServiceAdapter.query(
+              connection,
+              `SELECT COUNT(*) AS total FROM dbo.[${task.name}] WITH (NOLOCK)`
+            );
+            finalCount = countResult.recordset[0].total || 0;
+            logger.info(
+              `Conteo final en tabla ${task.name}: ${finalCount} registros (${
+                finalCount - initialCount
+              } nuevos)`
+            );
+          } catch (countError) {
+            logger.warn(
+              `No se pudo verificar conteo final: ${countError.message}`
+            );
           }
 
-          MemoryManager.trackOperation("batch_insert");
+          return {
+            success: true,
+            message: "Transferencia completada",
+            rows: data.length,
+            inserted: totalInserted,
+            errors: errorCount,
+            initialCount,
+            finalCount,
+          };
         }
-
-        // 10. Verificar conteo final
-        let finalCount = 0;
-        try {
-          const countResult = await DatabaseServiceAdapter.query(
-            connection,
-            `SELECT COUNT(*) AS total FROM dbo.[${task.name}] WITH (NOLOCK)`
-          );
-          finalCount = countResult.recordset[0].total || 0;
-          logger.info(
-            `Conteo final en tabla ${task.name}: ${finalCount} registros (${
-              finalCount - initialCount
-            } nuevos)`
-          );
-        } catch (countError) {
-          logger.warn(`No se pudo verificar conteo final: ${countError.message}`);
-        }
-
-        return {
-          success: true,
-          message: "Transferencia completada",
-          rows: data.length,
-          inserted: totalInserted,
-          errors: errorCount,
-          initialCount,
-          finalCount,
-        };
-      });
+      );
 
       // Actualizar estado a completado
       await TransferTask.findByIdAndUpdate(taskId, {
@@ -2296,15 +2353,22 @@ class TransferService {
                 conditions.push(
                   `${param.field} BETWEEN @${param.field}_from AND @${param.field}_to`
                 );
-              } else if (param.operator === "IN" && Array.isArray(param.value)) {
+              } else if (
+                param.operator === "IN" &&
+                Array.isArray(param.value)
+              ) {
                 const placeholders = param.value.map((val, idx) => {
                   const paramName = `${param.field}_${idx}`;
                   params[paramName] = val;
                   return `@${paramName}`;
                 });
-                conditions.push(`${param.field} IN (${placeholders.join(", ")})`);
+                conditions.push(
+                  `${param.field} IN (${placeholders.join(", ")})`
+                );
               } else {
-                conditions.push(`${param.field} ${param.operator} @${param.field}`);
+                conditions.push(
+                  `${param.field} ${param.operator} @${param.field}`
+                );
               }
             }
 
@@ -2628,15 +2692,22 @@ class TransferService {
                 conditions.push(
                   `${param.field} BETWEEN @${param.field}_from AND @${param.field}_to`
                 );
-              } else if (param.operator === "IN" && Array.isArray(param.value)) {
+              } else if (
+                param.operator === "IN" &&
+                Array.isArray(param.value)
+              ) {
                 const placeholders = param.value.map((val, idx) => {
                   const paramName = `${param.field}_${idx}`;
                   params[paramName] = val;
                   return `@${paramName}`;
                 });
-                conditions.push(`${param.field} IN (${placeholders.join(", ")})`);
+                conditions.push(
+                  `${param.field} IN (${placeholders.join(", ")})`
+                );
               } else {
-                conditions.push(`${param.field} ${param.operator} @${param.field}`);
+                conditions.push(
+                  `${param.field} ${param.operator} @${param.field}`
+                );
               }
             }
 
@@ -2931,7 +3002,6 @@ class TransferService {
       return transformedRecord;
     });
   }
-
 }
 
 // Exportar instancia singleton
