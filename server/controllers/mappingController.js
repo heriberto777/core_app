@@ -1,8 +1,10 @@
 const DynamicTransferService = require("../services/DynamicTransferService");
 const { SqlService } = require("../services/SqlService");
-const ConnectionManager = require("../services/ConnectionCentralService");
+// const ConnectionManager = require("../services/ConnectionCentralService"); // REMOVED
+const DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");
 const logger = require("../services/logger");
 const TransferMapping = require("../models/transferMappingModel");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
 /**
  * Obtiene todas las configuraciones de mapeo
@@ -226,7 +228,7 @@ const getDocumentsByMapping = async (req, res) => {
 
       // Obtener conexión al servidor origen
       logger.info(`Conectando a servidor origen: ${mapping.sourceServer}`);
-      const connectionResult = await ConnectionManager.getConnection(
+      const connectionResult = await DatabaseServiceAdapter.getConnection(
         mapping.sourceServer
       );
 
@@ -296,7 +298,7 @@ const getDocumentsByMapping = async (req, res) => {
     // Liberar conexión
     if (connection) {
       try {
-        await ConnectionManager.releaseConnection(connection);
+        await DatabaseServiceAdapter.releaseConnection(connection);
         logger.info("Conexión liberada correctamente");
       } catch (e) {
         logger.error(`Error al liberar conexión: ${e.message}`);
@@ -326,7 +328,7 @@ const getDocumentDetailsByMapping = async (req, res) => {
     const mapping = await DynamicTransferService.getMappingById(mappingId);
 
     // Obtener conexión al servidor origen
-    const connectionResult = await ConnectionManager.getConnection(
+    const connectionResult = await DatabaseServiceAdapter.getConnection(
       mapping.sourceServer
     );
     if (!connectionResult) {
@@ -460,7 +462,7 @@ const getDocumentDetailsByMapping = async (req, res) => {
       }
 
       logger.debug(`Ejecutando consulta para detalles: ${query}`);
-      const result = await SqlService.query(connection, query, { documentId });
+      const result = await DatabaseServiceAdapter.query(connection, query, { documentId });
 
       // Aplicar transformaciones de acuerdo al mapeo
       const transformedData = result.recordset.map((record) => {
@@ -540,7 +542,7 @@ const getDocumentDetailsByMapping = async (req, res) => {
     // Liberar conexión
     if (connection) {
       try {
-        await ConnectionManager.releaseConnection(connection);
+        await DatabaseServiceAdapter.releaseConnection(connection);
       } catch (e) {
         logger.error(`Error al liberar conexión: ${e.message}`);
       }
@@ -829,7 +831,7 @@ const getDocumentDetailsWithPromotions = async (req, res) => {
     }
 
     // Establecer conexión
-    connection = await ConnectionManager.getConnection(mapping.sourceServer);
+    connection = await DatabaseServiceAdapter.getConnection(mapping.sourceServer);
 
     // Obtener configuraciones de tablas de detalle
     const detailConfigs = mapping.tableConfigs.filter((tc) => tc.isDetailTable);
@@ -870,7 +872,7 @@ const getDocumentDetailsWithPromotions = async (req, res) => {
   } finally {
     if (connection) {
       try {
-        await ConnectionManager.releaseConnection(connection);
+        await DatabaseServiceAdapter.releaseConnection(connection);
       } catch (e) {
         logger.error(`Error al liberar conexión: ${e.message}`);
       }

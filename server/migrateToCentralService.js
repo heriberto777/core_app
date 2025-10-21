@@ -14,57 +14,59 @@ const CONFIG = {
   backupPath: "./services_backup", // Ruta para crear copias de seguridad
   fileExtensions: [".js"], // Extensiones de archivos a procesar
   excludeDirectories: ["node_modules", ".git"], // Directorios a excluir
-  excludeFiles: ["ConnectionCentralService.js"], // Archivos a excluir
+  excludeFiles: ["DatabaseServiceAdapter.js"], // Archivos a excluir
   replacements: [
     {
       from: /const\s+ConnectionManager\s*=\s*require\s*\(\s*['"]\.\/ConnectionManager['"]\s*\)/g,
-      to: 'const ConnectionService = require("./ConnectionCentralService")',
+      to: '// const ConnectionService = require("./ConnectionCentralService"); // REMOVED
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
+',
     },
     {
       from: /ConnectionManager\.enhancedRobustConnect/g,
-      to: "ConnectionService.enhancedRobustConnect",
+      to: "DatabaseServiceAdapter.enhancedRobustConnect",
     },
     {
       from: /ConnectionManager\.getConnection/g,
-      to: "ConnectionService.getConnection",
+      to: "DatabaseServiceAdapter.getConnection",
     },
     {
       from: /ConnectionManager\.releaseConnection/g,
-      to: "ConnectionService.releaseConnection",
+      to: "DatabaseServiceAdapter.releaseConnection",
     },
     {
       from: /ConnectionManager\.verifyAndRenewConnection/g,
-      to: "ConnectionService.verifyAndRenewConnection",
+      to: "DatabaseServiceAdapter.verifyAndRenewConnection",
     },
     {
       from: /ConnectionManager\.shouldRenewConnection/g,
-      to: "ConnectionService.verifyAndRenewConnection",
+      to: "DatabaseServiceAdapter.verifyAndRenewConnection",
     },
     {
       from: /ConnectionManager\.incrementOperationCount/g,
-      to: "ConnectionService.incrementOperationCount",
+      to: "DatabaseServiceAdapter.incrementOperationCount",
     },
     {
       from: /ConnectionManager\.getPoolsStatus/g,
-      to: "ConnectionService.getPoolsStatus",
+      to: "DatabaseServiceAdapter.getPoolsStatus",
     },
     {
       from: /ConnectionManager\.closePools/g,
-      to: "ConnectionService.closePools",
+      to: "DatabaseServiceAdapter.closePools",
     },
     {
       from: /ConnectionManager\.closePool/g,
-      to: "ConnectionService.closePool",
+      to: "DatabaseServiceAdapter.closePool",
     },
     {
       from: /withConnection\s*\(\s*(['"])(\w+)(['"])\s*,\s*async\s*\(\s*connection\s*\)\s*=>\s*\{/g,
       to: (match, q1, serverKey, q3) =>
-        `// Reemplazado por conexión directa\nlet connection = null;\ntry {\n  connection = await ConnectionService.getConnection(${q1}${serverKey}${q3});\n`,
+        `// Reemplazado por conexión directa\nlet connection = null;\ntry {\n  connection = await DatabaseServiceAdapter.getConnection(${q1}${serverKey}${q3});\n`,
     },
     {
       from: /\}\s*\)\s*;(\s*)\/\/\s*fin de withConnection/g,
       to: (match, spaces) =>
-        `${spaces}  return result;\n} finally {\n  if (connection) {\n    await ConnectionService.releaseConnection(connection);\n  }\n}${spaces}// fin de manejo de conexión`,
+        `${spaces}  return result;\n} finally {\n  if (connection) {\n    await DatabaseServiceAdapter.releaseConnection(connection);\n  }\n}${spaces}// fin de manejo de conexión`,
     },
   ],
 };
@@ -170,7 +172,7 @@ async function processDirectory(dirPath) {
 async function main() {
   try {
     console.log(
-      `🚀 Iniciando migración de ConnectionManager a ConnectionCentralService...`
+      `🚀 Iniciando migración de ConnectionManager a DatabaseServiceAdapter...`
     );
 
     // Crear directorio de backup si no existe

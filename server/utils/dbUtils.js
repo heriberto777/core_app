@@ -1,17 +1,20 @@
 // server/utils/dbUtils.js - MEJORADO CON MEJOR MANEJO DE ERRORES
 
-const ConnectionCentralService = require("../services/ConnectionCentralService");
+// // const ConnectionCentralService = require(...); // REMOVED
+// REMOVED - using DatabaseServiceAdapter
+
 const logger = require("../services/logger");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
 async function withConnection(serverKey, callback) {
   let connection = null;
   const startTime = Date.now();
 
   try {
-    await ConnectionCentralService.initialize();
+    await DatabaseServiceAdapter.initialize();
 
     logger.debug(`Solicitando conexión para ${serverKey}...`);
-    connection = await ConnectionCentralService.getConnection(serverKey);
+    connection = await DatabaseServiceAdapter.getConnection(serverKey);
 
     const acquireTime = Date.now() - startTime;
     logger.debug(`Conexión obtenida para ${serverKey} en ${acquireTime}ms`);
@@ -32,7 +35,7 @@ async function withConnection(serverKey, callback) {
   } finally {
     if (connection) {
       try {
-        await ConnectionCentralService.releaseConnection(connection);
+        await DatabaseServiceAdapter.releaseConnection(connection);
         logger.debug(`Conexión liberada correctamente`);
       } catch (releaseError) {
         logger.warn(`Error liberando conexión: ${releaseError.message}`);

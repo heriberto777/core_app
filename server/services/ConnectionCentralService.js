@@ -1,4 +1,4 @@
-// services/ConnectionCentralService.js
+// services/DatabaseServiceAdapter.js
 const { Connection, Request } = require("tedious");
 const { createPool } = require("generic-pool");
 const logger = require("./logger");

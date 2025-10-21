@@ -7,9 +7,12 @@ const http = require("http");
 const path = require("path");
 const logger = require("./services/logger");
 const AppBootstrap = require("./services/AppBootstrap");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
 // ✅ AGREGAR INICIALIZACIÓN DE CONNECTIONCENTRALSERVICE
-const ConnectionCentralService = require("./services/ConnectionCentralService");
+// // const ConnectionCentralService = require(...); // REMOVED
+// REMOVED - using DatabaseServiceAdapter
+
 
 // Manejo de errores no capturados
 process.on("uncaughtException", (error) => {
@@ -310,7 +313,7 @@ function gracefulShutdown(signal) {
     // ✅ CERRAR CONNECTIONCENTRALSERVICE
     try {
       console.log("🔌 Cerrando servicio de conexiones...");
-      await ConnectionCentralService.shutdown();
+      await DatabaseServiceAdapter.shutdown();
       console.log("✅ Servicio de conexiones cerrado");
     } catch (error) {
       console.error("Error cerrando ConnectionCentralService:", error);
@@ -370,7 +373,7 @@ console.log(`   - Versión Node.js: ${process.version}`);
 (async () => {
   try {
     console.log("🔌 Inicializando servicio de conexiones...");
-    await ConnectionCentralService.initialize();
+    await DatabaseServiceAdapter.initialize();
     console.log("✅ Servicio de conexiones inicializado");
 
     // Inicializar AppBootstrap

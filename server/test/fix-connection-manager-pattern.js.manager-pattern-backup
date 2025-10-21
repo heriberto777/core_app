@@ -1,0 +1,174 @@
+// fix-connection-manager-pattern.js
+const fs = require("fs");
+const path = require("path");
+
+class ConnectionManagerPatternFixer {
+  constructor() {
+    this.serverDir = path.join(process.cwd(), "server");
+    this.fixedFiles = [];
+  }
+
+  findConnectionManagerPattern() {
+    console.log(
+      'Buscando patrón ConnectionManager = require("ConnectionCentralService")...\n'
+    );
+
+    const files = this.getAllJSFiles(this.serverDir);
+    const affectedFiles = [];
+
+    files.forEach((filePath) => {
+      const fileName = path.basename(filePath);
+
+      // Saltar archivos que no debemos tocar
+      if (
+        fileName === "ConnectionCentralService.js" ||
+        fileName === "DatabaseService.js" ||
+        fileName === "DatabaseServiceAdapter.js" ||
+        filePath.includes("/test/")
+      ) {
+        return;
+      }
+
+      const content = fs.readFileSync(filePath, "utf8");
+
+      // Buscar el patrón específico
+      const hasPattern =
+        content.includes("ConnectionManager = require") &&
+        content.includes("ConnectionCentralService");
+
+      if (hasPattern) {
+        affectedFiles.push({
+          path: filePath,
+          content: content,
+        });
+        console.log(`Encontrado patrón en: ${fileName}`);
+      }
+    });
+
+    return affectedFiles;
+  }
+
+  fixFile(fileInfo) {
+    const filePath = fileInfo.path;
+    const fileName = path.basename(filePath);
+    let content = fileInfo.content;
+    let changed = false;
+
+    console.log(`\nCorrigiendo: ${fileName}`);
+
+    // Crear backup
+    const backupPath = filePath + ".manager-pattern-backup";
+    if (!fs.existsSync(backupPath)) {
+      fs.copyFileSync(filePath, backupPath);
+      console.log(`  Backup creado: ${fileName}.manager-pattern-backup`);
+    }
+
+    // Correcciones específicas para este patrón
+    const fixes = [
+      {
+        from: /const ConnectionManager = require\(["'][^"']*ConnectionCentralService["']\);?\s*\n?/g,
+        to: '// const ConnectionManager = require("../services/ConnectionCentralService"); // REMOVED\nconst DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");\n',
+        name: "Import ConnectionManager pattern",
+      },
+      {
+        from: /ConnectionManager\.getConnection\(/g,
+        to: "DatabaseServiceAdapter.getConnection(",
+        name: "ConnectionManager.getConnection calls",
+      },
+      {
+        from: /ConnectionManager\.releaseConnection\(/g,
+        to: "DatabaseServiceAdapter.releaseConnection(",
+        name: "ConnectionManager.releaseConnection calls",
+      },
+      {
+        from: /ConnectionManager\.query\(/g,
+        to: "DatabaseServiceAdapter.query(",
+        name: "ConnectionManager.query calls",
+      },
+      {
+        from: /ConnectionManager\.withTransaction\(/g,
+        to: "DatabaseServiceAdapter.withTransaction(",
+        name: "ConnectionManager.withTransaction calls",
+      },
+      {
+        from: /ConnectionManager\./g,
+        to: "DatabaseServiceAdapter.",
+        name: "Other ConnectionManager references",
+      },
+    ];
+
+    fixes.forEach((fix) => {
+      const matches = content.match(fix.from);
+      if (matches) {
+        content = content.replace(fix.from, fix.to);
+        changed = true;
+        console.log(`  ✅ ${fix.name}: ${matches.length} cambios`);
+      }
+    });
+
+    if (changed) {
+      fs.writeFileSync(filePath, content);
+      console.log(`  ✅ ${fileName} corregido exitosamente`);
+      this.fixedFiles.push(fileName);
+      return true;
+    } else {
+      console.log(`  ℹ️ ${fileName} sin cambios necesarios`);
+      return false;
+    }
+  }
+
+  getAllJSFiles(dir) {
+    let files = [];
+
+    try {
+      const items = fs.readdirSync(dir);
+
+      items.forEach((item) => {
+        const itemPath = path.join(dir, item);
+
+        try {
+          const stats = fs.statSync(itemPath);
+
+          if (stats.isDirectory() && item !== "node_modules") {
+            files = files.concat(this.getAllJSFiles(itemPath));
+          } else if (item.endsWith(".js") && !item.includes(".backup")) {
+            files.push(itemPath);
+          }
+        } catch (statError) {
+          // Ignorar archivos inaccesibles
+        }
+      });
+    } catch (readdirError) {
+      console.error(`Error leyendo directorio ${dir}: ${readdirError.message}`);
+    }
+
+    return files;
+  }
+
+  run() {
+    console.log("🔧 Corrigiendo patrón ConnectionManager...\n");
+
+    const affectedFiles = this.findConnectionManagerPattern();
+
+    if (affectedFiles.length === 0) {
+      console.log(
+        "✅ No se encontraron archivos con el patrón ConnectionManager"
+      );
+      return;
+    }
+
+    console.log(`\nArchivos afectados: ${affectedFiles.length}\n`);
+
+    affectedFiles.forEach((fileInfo) => {
+      this.fixFile(fileInfo);
+    });
+
+    console.log(`\n🎉 Corrección completada`);
+    console.log(`📁 Archivos corregidos: ${this.fixedFiles.length}`);
+    this.fixedFiles.forEach((file) => console.log(`  - ${file}`));
+    console.log("💾 Backups creados con extensión .manager-pattern-backup");
+  }
+}
+
+const fixer = new ConnectionManagerPatternFixer();
+fixer.run();

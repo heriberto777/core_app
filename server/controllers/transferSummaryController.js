@@ -5,6 +5,7 @@ const { SqlService } = require("../services/SqlService");
 const { realizarTraspaso } = require("../services/traspasoService");
 const { sendTransferReturnEmail } = require("../services/emailService");
 const { withConnection } = require("../utils/dbUtils");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
 /**
  * Create a new transfer summary after a successful transfer
@@ -402,7 +403,7 @@ const checkInventoryForReturns = async (req, res) => {
         });
 
         // Execute the query
-        const result = await SqlService.query(connection, query, params);
+        const result = await DatabaseServiceAdapter.query(connection, query, params);
 
         if (!result || !result.recordset) {
           throw new Error("No se pudo obtener información de inventario");

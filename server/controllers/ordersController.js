@@ -5,6 +5,7 @@ const TransferTask = require("../models/transferTaks");
 // const xlsx = require("xlsx");
 const transferService = require("../services/transferService");
 const TaskExecution = require("../models/taskExecutionModel");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
 /**
  * Obtiene pedidos desde la tabla FAC_ENC_PED de Server2
@@ -76,7 +77,7 @@ const getOrders = async (req, res) => {
       query += " ORDER BY ENC.FEC_PED DESC";
 
       // Ejecutar consulta
-      const result = await SqlService.query(connection, query, params);
+      const result = await DatabaseServiceAdapter.query(connection, query, params);
 
       // Formatear fechas y campos numéricos
       const formattedData = result.recordset.map((order) => ({
@@ -121,7 +122,7 @@ const getOrderDetails = async (req, res) => {
         WHERE NUM_PED = @orderId
       `;
 
-      const headerResult = await SqlService.query(connection, headerQuery, {
+      const headerResult = await DatabaseServiceAdapter.query(connection, headerQuery, {
         orderId,
       });
 
@@ -154,7 +155,7 @@ const getOrderDetails = async (req, res) => {
         ORDER BY DET.NUM_LIN
       `;
 
-      const itemsResult = await SqlService.query(connection, itemsQuery, {
+      const itemsResult = await DatabaseServiceAdapter.query(connection, itemsQuery, {
         orderId,
       });
 
@@ -195,7 +196,7 @@ const getWarehouses = async (req, res) => {
         ORDER BY BOD.COD_BOD
       `;
 
-      const result = await SqlService.query(connection, query);
+      const result = await DatabaseServiceAdapter.query(connection, query);
 
       res.json({
         success: true,
@@ -291,7 +292,7 @@ const exportOrders = async (req, res) => {
   //     // Ordenar por fecha descendente
   //     query += " ORDER BY ENC.FEC_PED DESC";
   //     // Ejecutar consulta
-  //     const result = await SqlService.query(connection, query, params);
+  //     const result = await DatabaseServiceAdapter.query(connection, query, params);
   //     // Si no hay datos, devolver un error
   //     if (result.recordset.length === 0) {
   //       return res.status(404).json({
@@ -463,7 +464,7 @@ const processOrders = async (req, res) => {
           // Insertar en tabla de pedidos procesados
           for (const orderId of orders) {
             try {
-              await SqlService.query(
+              await DatabaseServiceAdapter.query(
                 connection,
                 `INSERT INTO PROCESSED_ORDERS (NUM_PED, PROCESS_DATE, TASK_NAME, EXECUTION_ID)
                  VALUES (@orderId, @processDate, @taskName, @executionId)`,
