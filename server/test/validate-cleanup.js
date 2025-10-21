@@ -33,8 +33,8 @@ class CleanupValidator {
 
       if (
         content.includes("DatabaseServiceAdapter.") &&
-        !content.includes('require("./DatabaseServiceAdapter")') &&
-        !content.includes("require('./DatabaseServiceAdapter')")
+        !content.includes('require("../services/DatabaseServiceAdapter")') &&
+        !content.includes("require("../services/DatabaseServiceAdapter")")
       ) {
         problems.push("Usa DatabaseServiceAdapter pero no lo importa");
       }

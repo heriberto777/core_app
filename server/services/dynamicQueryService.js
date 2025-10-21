@@ -1,6 +1,6 @@
-// services/dynamicQueryService.js - VERSIÓN MEJORADA CON _ensureValidConnection
+
 const TransferTask = require("../models/transferTaks");
-// const ConnectionService = require("./ConnectionCentralService"); // REMOVED
+
 const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
 const { SqlService } = require("./SqlService");

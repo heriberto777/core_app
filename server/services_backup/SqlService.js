@@ -9,7 +9,7 @@ const path = require("path");
 const ValidationService = require("./ValidationService");
 const Telemetry = require("./Telemetry");
 const MemoryManager = require("./MemoryManager");
-const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
+const DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");
 
 /**
  * Servicio optimizado para operaciones SQL que usa ConnectionCentralService

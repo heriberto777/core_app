@@ -3,7 +3,7 @@
 // REMOVED - using DatabaseServiceAdapter
 
 const logger = require("./logger");
-const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
+const DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");
 
 /**
  * Adaptador para compatibilidad con código existente

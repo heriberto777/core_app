@@ -19,7 +19,7 @@ const CONFIG = {
     {
       from: /const\s+ConnectionManager\s*=\s*require\s*\(\s*['"]\.\/ConnectionManager['"]\s*\)/g,
       to: '// const ConnectionService = require("./ConnectionCentralService"); // REMOVED
-const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
+const DatabaseServiceAdapter = require("./services/DatabaseServiceAdapter");
 ',
     },
     {
