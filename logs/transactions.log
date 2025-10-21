@@ -216,3 +216,19 @@
   "version": "1.0.0",
   "pid": 28796
 }
+2025-10-21T06:47:44.639Z [INFO][system]: 🔄 Iniciando cierre graceful del logger...
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796,
+  "logLevel": "info"
+}
+2025-10-21T06:47:44.639Z [INFO][system]: ✅ Logger cerrado correctamente
+🔍 Additional: {
+  "service": "transfer-control",
+  "environment": "development",
+  "version": "1.0.0",
+  "pid": 28796,
+  "logLevel": "info"
+}
