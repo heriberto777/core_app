@@ -1,6 +1,7 @@
 const { withConnection } = require("../utils/dbUtils");
-
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 const logger = require("./logger");
+const { Request, TYPES } = require("tedious");
 const { sendTraspasoEmail } = require("./emailService");
 const PDFService = require("./pdfService");
 const TransferSummary = require("../models/transferSummaryModel");
@@ -423,8 +424,7 @@ async function validateBodega(connection, bodegaCode) {
  */
 async function executeDirectQuery(connection, sql, params = {}) {
   return new Promise((resolve, reject) => {
-    const { Request, TYPES } = require("tedious");
-const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
+
     const rows = [];
 
     const request = new Request(sql, (err, rowCount) => {

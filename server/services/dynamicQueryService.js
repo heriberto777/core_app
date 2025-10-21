@@ -1,9 +1,6 @@
 
 const TransferTask = require("../models/transferTaks");
-
 const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
-
-const { SqlService } = require("./SqlService");
 const logger = require("./logger");
 const MemoryManager = require("./MemoryManager");
 const Telemetry = require("./Telemetry");
@@ -16,6 +13,25 @@ const {
   validateNonDestructiveQuery,
 } = require("../utils/validateQuery");
 const { sendProgress } = require("./progressSse");
+
+/**
+ * Sanitiza parámetros para evitar inyección SQL
+ */
+function sanitizeParams(params) {
+  if (!params || typeof params !== 'object') return {};
+
+  const sanitized = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null || value === undefined) {
+      sanitized[key] = null;
+    } else if (typeof value === 'string') {
+      sanitized[key] = value.trim();
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
 
 // Servicio de reintentos específico para consultas dinámicas
 const queryRetryService = new RetryService({
@@ -107,6 +123,8 @@ async function executeDynamicSelect(
   // Crear AbortController si no se proporcionó signal
   const localAbortController = !signal ? new AbortController() : null;
   signal = signal || localAbortController.signal;
+
+
 
   try {
     // Registrar uso de memoria inicial
@@ -305,7 +323,7 @@ async function executeDynamicSelect(
           sendProgress(task._id, 40);
 
           // Usar SqlService para ejecutar la consulta con parámetros sanitizados
-          const sanitizedParams = SqlService.sanitizeParams(params);
+          const sanitizedParams = sanitizeParams(params);
           const queryResult = await DatabaseServiceAdapter.query(
             connectionInfo.connection,
             finalQuery,
@@ -649,7 +667,7 @@ async function executeNonDestructiveQuery(
           }
 
           // Usar SqlService para ejecutar la consulta con parámetros sanitizados
-          const sanitizedParams = SqlService.sanitizeParams(params);
+          const sanitizedParams = sanitizeParams(params);
           return await DatabaseServiceAdapter.query(
             connectionInfo.connection,
             finalQuery,

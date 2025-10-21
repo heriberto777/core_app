@@ -25,3 +25,5 @@
 {"environment":"development","level":"debug","message":"[conn-1761029154540-d9ru4] Conexión obtenida exitosamente para server1","pid":28796,"service":"transfer-control","timestamp":"2025-10-21T06:45:54.540Z","version":"1.0.0"}
 {"environment":"development","level":"debug","message":"Comprobación de servidores completada","pid":28796,"service":"transfer-control","timestamp":"2025-10-21T06:45:54.550Z","version":"1.0.0"}
 {"environment":"development","level":"debug","message":"[conn-1761029154540-d9ru4] Conexión liberada para server1","pid":28796,"service":"transfer-control","timestamp":"2025-10-21T06:45:54.552Z","version":"1.0.0"}
+{"environment":"development","level":"info","logLevel":"info","message":"🔄 Iniciando cierre graceful del logger...","pid":28796,"service":"transfer-control","source":"system","timestamp":"2025-10-21T06:47:44.639Z","version":"1.0.0"}
+{"environment":"development","level":"info","logLevel":"info","message":"✅ Logger cerrado correctamente","pid":28796,"service":"transfer-control","source":"system","timestamp":"2025-10-21T06:47:44.639Z","version":"1.0.0"}
