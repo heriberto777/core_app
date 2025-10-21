@@ -1,7 +1,6 @@
 const MongoDbService = require("./mongoDbService");
 const logger = require("./logger");
-// // const ConnectionCentralService = require(...); // REMOVED
-// REMOVED - using DatabaseServiceAdapter
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
 
 /**
@@ -137,7 +136,7 @@ class AppBootstrap {
         try {
           logger.info("📊 Deteniendo monitor de salud...");
           const healthMonitorService = require("./healthMonitorService");
-const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
+
           if (
             healthMonitorService &&
             typeof healthMonitorService.stop === "function"
