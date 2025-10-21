@@ -1,11 +1,9 @@
 const logger = require("./logger");
-const ConnectionService = require("./ConnectionCentralService");
-const { SqlService } = require("./SqlService");
 const TransferMapping = require("../models/transferMappingModel");
 const TaskExecution = require("../models/taskExecutionModel");
 const TaskTracker = require("./TaskTracker");
 const TransferTask = require("../models/transferTaks");
-const ConsecutiveService = require("./ConsecutiveService");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 const PromotionProcessor = require("./PromotionProcessor");
 
 /**
@@ -15,213 +13,6 @@ const PromotionProcessor = require("./PromotionProcessor");
 class DynamicTransferService {
   constructor() {
     this.cancellationSignals = new Map();
-  }
-
-  // ===============================
-  // NUEVOS MÉTODOS DE GESTIÓN DE CONEXIONES
-  // ===============================
-
-  /**
-   * Asegura que tenemos una conexión válida para el servidor especificado
-   * @param {string} serverKey - Clave del servidor (mapping.sourceServer o mapping.targetServer)
-   * @param {Object|null} currentConnection - Conexión actual (si existe)
-   * @returns {Promise<Object>} - Conexión válida
-   */
-  async _ensureValidConnection(serverKey, currentConnection = null) {
-    // 1. Si tenemos una conexión existente, verificar que funcione
-    if (currentConnection) {
-      try {
-        // Test simple para verificar que la conexión funciona
-        await SqlService.query(currentConnection, "SELECT 1 AS test");
-
-        // Verificar metadatos de la conexión si están disponibles
-        if (currentConnection._isHealthy !== false) {
-          logger.debug(
-            `Conexión existente a ${serverKey} está funcionando correctamente`
-          );
-
-          // Incrementar contador de operaciones para monitoreo
-          if (currentConnection._operationCount !== undefined) {
-            currentConnection._operationCount++;
-          }
-
-          return currentConnection;
-        }
-      } catch (testError) {
-        logger.warn(
-          `Conexión a ${serverKey} no válida, obteniendo nueva: ${testError.message}`
-        );
-
-        // Marcar como no saludable
-        if (currentConnection._isHealthy !== undefined) {
-          currentConnection._isHealthy = false;
-        }
-
-        // Intentar liberar la conexión inválida de manera segura
-        try {
-          await ConnectionService.releaseConnection(currentConnection);
-          logger.debug(`Conexión inválida liberada para ${serverKey}`);
-        } catch (releaseError) {
-          logger.debug(
-            `Error al liberar conexión inválida para ${serverKey}: ${releaseError.message}`
-          );
-        }
-      }
-    }
-
-    // 2. Obtener nueva conexión usando el servicio centralizado
-    logger.info(`Obteniendo nueva conexión para servidor: ${serverKey}`);
-
-    try {
-      // Usar enhancedRobustConnect para conexión más robusta
-      const connectionResult = await ConnectionService.enhancedRobustConnect(
-        serverKey
-      );
-
-      if (!connectionResult.success) {
-        throw new Error(
-          `No se pudo establecer conexión a ${serverKey}: ${
-            connectionResult.error?.message || "Error desconocido"
-          }`
-        );
-      }
-
-      const newConnection = connectionResult.connection;
-
-      // 3. Validar la nueva conexión con una consulta de prueba
-      await SqlService.query(newConnection, "SELECT 1 AS test");
-
-      // 4. Configurar metadatos de seguimiento para la conexión
-      if (!newConnection._createdAt) {
-        newConnection._createdAt = Date.now();
-      }
-
-      if (!newConnection._operationCount) {
-        newConnection._operationCount = 1;
-      }
-
-      if (!newConnection._serverKey) {
-        newConnection._serverKey = serverKey;
-      }
-
-      newConnection._isHealthy = true;
-
-      logger.info(`Nueva conexión a ${serverKey} establecida y validada`);
-      logger.debug(
-        `Metadatos de conexión: operaciones=${newConnection._operationCount}, servidor=${serverKey}`
-      );
-
-      return newConnection;
-    } catch (connectionError) {
-      logger.error(
-        `Error crítico al obtener conexión para ${serverKey}: ${connectionError.message}`
-      );
-
-      // Intentar diagnóstico básico si es necesario
-      if (
-        connectionError.message.includes("timeout") ||
-        connectionError.message.includes("ECONNREFUSED")
-      ) {
-        logger.error(
-          `Posibles causas: servidor no disponible, firewall, configuración de red`
-        );
-      }
-
-      throw new Error(
-        `Error de conexión a ${serverKey}: ${connectionError.message}`
-      );
-    }
-  }
-
-  /**
-   * MÉTODO AUXILIAR: Actualiza las conexiones existentes en el contexto de procesamiento
-   * @param {Object} mapping - Configuración de mapping
-   * @param {Object} existingConnections - Conexiones actuales {source, target}
-   * @returns {Promise<Object>} - Conexiones actualizadas/validadas
-   */
-  async updateConnectionsIfNeeded(mapping, existingConnections = {}) {
-    const connections = { ...existingConnections };
-
-    try {
-      // Validar/actualizar conexión origen
-      if (mapping.sourceServer) {
-        connections.source = await this._ensureValidConnection(
-          mapping.sourceServer,
-          connections.source
-        );
-        logger.debug(`Conexión origen validada: ${mapping.sourceServer}`);
-      }
-
-      // Validar/actualizar conexión destino
-      if (mapping.targetServer) {
-        connections.target = await this._ensureValidConnection(
-          mapping.targetServer,
-          connections.target
-        );
-        logger.debug(`Conexión destino validada: ${mapping.targetServer}`);
-      }
-
-      return connections;
-    } catch (error) {
-      logger.error(`Error al actualizar conexiones: ${error.message}`);
-      throw error;
-    }
-  }
-
-  /**
-   * MÉTODO AUXILIAR: Maneja reconexión en caso de error específico
-   * @param {Error} error - Error ocurrido
-   * @param {string} serverKey - Clave del servidor
-   * @param {Object} currentConnection - Conexión actual
-   * @returns {Promise<Object>} - Nueva conexión o null si no se puede reconectar
-   */
-  async handleConnectionErrorAndReconnect(error, serverKey, currentConnection) {
-    const reconnectableErrors = [
-      "ECONNCLOSED",
-      "timeout",
-      "connection",
-      "network",
-      "state",
-      "LoggedIn state",
-      "Final state",
-      "socket hang up",
-      "ECONNRESET",
-    ];
-
-    const shouldReconnect = reconnectableErrors.some((errType) =>
-      error.message.toLowerCase().includes(errType.toLowerCase())
-    );
-
-    if (!shouldReconnect) {
-      logger.debug(`Error no reconectable para ${serverKey}: ${error.message}`);
-      return null;
-    }
-
-    logger.warn(
-      `Intentando reconexión para ${serverKey} debido a: ${error.message}`
-    );
-
-    try {
-      // Liberar conexión problemática
-      if (currentConnection) {
-        try {
-          await ConnectionService.releaseConnection(currentConnection);
-        } catch (releaseError) {
-          logger.debug(`Error liberando conexión: ${releaseError.message}`);
-        }
-      }
-
-      // Obtener nueva conexión
-      const newConnection = await this._ensureValidConnection(serverKey, null);
-      logger.info(`Reconexión exitosa para ${serverKey}`);
-
-      return newConnection;
-    } catch (reconnectError) {
-      logger.error(
-        `Falló la reconexión para ${serverKey}: ${reconnectError.message}`
-      );
-      return null;
-    }
   }
 
   // ===============================
@@ -268,15 +59,15 @@ class DynamicTransferService {
         throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
       }
 
-      // DETECCIÓN AUTOMÁTICA: Verificar si las promociones están habilitadas
+      // 🎁 DETECCIÓN AUTOMÁTICA: Verificar si las promociones están habilitadas
       const shouldUsePromotions = this.shouldUsePromotions(mapping);
       if (shouldUsePromotions) {
         logger.info(
-          `DETECCIÓN AUTOMÁTICA: Promociones habilitadas para mapping ${mapping.name}`
+          `🎁 DETECCIÓN AUTOMÁTICA: Promociones habilitadas para mapping ${mapping.name}`
         );
       } else {
         logger.info(
-          `PROCESAMIENTO ESTÁNDAR: Sin promociones para mapping ${mapping.name}`
+          `📋 PROCESAMIENTO ESTÁNDAR: Sin promociones para mapping ${mapping.name}`
         );
       }
 
@@ -334,137 +125,75 @@ class DynamicTransferService {
       await taskExecution.save();
       executionId = taskExecution._id;
 
-      // 5. Establecer conexiones usando el nuevo método mejorado
-      const connections = await this.establishConnections(mapping);
-      sourceConnection = connections.source;
-      targetConnection = connections.target;
+      // 5. Establecer conexiones
+      return await DatabaseServiceAdapter.withConnections(
+        mapping,
+        async (connections) => {
+          const sourceConnection = connections.source;
+          const targetConnection = connections.target;
 
-      // 6. Actualizar tarea principal como "en ejecución"
-      if (mapping.taskId) {
-        await TransferTask.findByIdAndUpdate(mapping.taskId, {
-          status: "running",
-          progress: 0,
-          lastExecutionDate: new Date(),
-        });
-      }
-
-      // 7. Variables para tracking de resultados
-      const results = {
-        processed: 0,
-        failed: 0,
-        details: [],
-        byType: {},
-        consecutivesUsed: [],
-        promotionsProcessed: 0,
-      };
-
-      const successfulDocuments = [];
-      const failedDocuments = [];
-      let hasErrors = false;
-
-      // 8. BUCLE PRINCIPAL: Procesar cada documento CON VALIDACIÓN DE CONEXIONES
-      for (let i = 0; i < documentIds.length; i++) {
-        // Verificar cancelación
-        if (signal.aborted) {
-          logger.warn(
-            `Procesamiento cancelado en documento ${i + 1}/${
-              documentIds.length
-            }`
-          );
-          break;
-        }
-
-        const documentId = documentIds[i];
-        let currentConsecutive = null;
-
-        try {
-          // NUEVO: Validar conexiones cada ciertos documentos para operaciones largas
-          if (i > 0 && i % 10 === 0) {
-            logger.debug(
-              `Validando conexiones en documento ${i + 1}/${documentIds.length}`
-            );
-            const updatedConnections = await this.updateConnectionsIfNeeded(
-              mapping,
-              { source: sourceConnection, target: targetConnection }
-            );
-            sourceConnection = updatedConnections.source;
-            targetConnection = updatedConnections.target;
-          }
-
-          logger.info(
-            `Procesando documento ${i + 1}/${
-              documentIds.length
-            }: ${documentId} ${
-              shouldUsePromotions ? "(CON PROMOCIONES)" : "(ESTÁNDAR)"
-            }`
-          );
-
-          // Generar consecutivo si es necesario
-          if (mapping.consecutiveConfig && mapping.consecutiveConfig.enabled) {
-            currentConsecutive = await this.generateConsecutiveForDocument(
-              mapping,
-              documentId,
-              useCentralizedConsecutives,
-              centralizedConsecutiveId
-            );
-          }
-
-          // PROCESAR DOCUMENTO CON DETECCIÓN AUTOMÁTICA DE PROMOCIONES
-          const docResult = await this.processSingleDocumentSimple(
-            documentId,
-            mapping,
-            sourceConnection,
-            targetConnection,
-            currentConsecutive
-          );
-
-          // Manejar resultado del documento
-          await this.handleDocumentResult(
-            docResult,
-            documentId,
-            currentConsecutive,
-            useCentralizedConsecutives,
-            centralizedConsecutiveId,
-            results,
-            successfulDocuments,
-            failedDocuments,
-            mapping,
-            sourceConnection
-          );
-
-          // Actualizar progreso
+          // 6. Actualizar tarea principal como "en ejecución"
           if (mapping.taskId) {
-            const progress = Math.round(((i + 1) / documentIds.length) * 100);
-            await TransferTask.findByIdAndUpdate(mapping.taskId, { progress });
+            await TransferTask.findByIdAndUpdate(mapping.taskId, {
+              status: "running",
+              progress: 0,
+              lastExecutionDate: new Date(),
+            });
           }
-        } catch (error) {
-          hasErrors = true;
 
-          // NUEVO: Intentar reconexión automática en caso de error de conexión
-          const reconnectedSource =
-            await this.handleConnectionErrorAndReconnect(
-              error,
-              mapping.sourceServer,
-              sourceConnection
-            );
-          const reconnectedTarget =
-            await this.handleConnectionErrorAndReconnect(
-              error,
-              mapping.targetServer,
-              targetConnection
-            );
+          // 7. Variables para tracking de resultados
+          const results = {
+            processed: 0,
+            failed: 0,
+            details: [],
+            byType: {},
+            consecutivesUsed: [],
+            promotionsProcessed: 0,
+          };
 
-          if (reconnectedSource) sourceConnection = reconnectedSource;
-          if (reconnectedTarget) targetConnection = reconnectedTarget;
+          const successfulDocuments = [];
+          const failedDocuments = [];
+          let hasErrors = false;
 
-          // Si la reconexión fue exitosa, reintentar el documento
-          if (reconnectedSource || reconnectedTarget) {
-            logger.info(
-              `Reintentando documento ${documentId} después de reconexión`
-            );
+          // 8. BUCLE PRINCIPAL: Procesar cada documento
+          for (let i = 0; i < documentIds.length; i++) {
+            // Verificar cancelación
+            if (signal.aborted) {
+              logger.warn(
+                `Procesamiento cancelado en documento ${i + 1}/${
+                  documentIds.length
+                }`
+              );
+              break;
+            }
+
+            const documentId = documentIds[i];
+            let currentConsecutive = null;
+
             try {
-              // Reintentar la operación
-              const retryResult = await this.processSingleDocumentSimple(
+              logger.info(
+                `📋 Procesando documento ${i + 1}/${
+                  documentIds.length
+                }: ${documentId} ${
+                  shouldUsePromotions ? "(CON PROMOCIONES)" : "(ESTÁNDAR)"
+                }`
+              );
+
+              // Generar consecutivo si es necesario
+              if (
+                mapping.consecutiveConfig &&
+                mapping.consecutiveConfig.enabled
+              ) {
+                currentConsecutive = await this.generateConsecutiveForDocument(
+                  mapping,
+                  documentId,
+                  useCentralizedConsecutives,
+                  centralizedConsecutiveId
+                );
+              }
+
+              // 🧠 PROCESAR DOCUMENTO CON DETECCIÓN AUTOMÁTICA DE PROMOCIONES
+              const docResult = await this.processSingleDocumentSimple(
                 documentId,
                 mapping,
                 sourceConnection,
@@ -472,8 +201,9 @@ class DynamicTransferService {
                 currentConsecutive
               );
 
+              // Manejar resultado del documento
               await this.handleDocumentResult(
-                retryResult,
+                docResult,
                 documentId,
                 currentConsecutive,
                 useCentralizedConsecutives,
@@ -485,56 +215,62 @@ class DynamicTransferService {
                 sourceConnection
               );
 
-              continue; // Saltar al siguiente documento
-            } catch (retryError) {
-              // Si el reintento también falla, manejar como error normal
-              error = retryError;
+              // Actualizar progreso
+              if (mapping.taskId) {
+                const progress = Math.round(
+                  ((i + 1) / documentIds.length) * 100
+                );
+                await TransferTask.findByIdAndUpdate(mapping.taskId, {
+                  progress,
+                });
+              }
+            } catch (error) {
+              hasErrors = true;
+              await this.handleDocumentError(
+                error,
+                documentId,
+                currentConsecutive,
+                useCentralizedConsecutives,
+                centralizedConsecutiveId,
+                results,
+                failedDocuments
+              );
             }
           }
 
-          await this.handleDocumentError(
-            error,
-            documentId,
-            currentConsecutive,
+          // 9. Procesos post-procesamiento
+          await this.executePostProcessing(
+            mapping,
+            successfulDocuments,
+            failedDocuments,
+            hasErrors,
+            sourceConnection,
+            results
+          );
+
+          // 10. Finalización y estadísticas
+          const finalResult = await this.finalizationAndStats(
+            executionId,
+            mapping,
+            results,
+            hasErrors,
             useCentralizedConsecutives,
             centralizedConsecutiveId,
-            results,
-            failedDocuments
+            startTime
           );
+
+          clearTimeout(timeoutId);
+          TaskTracker.completeTask(cancelTaskId, finalResult.status);
+
+          return {
+            success: true,
+            executionId,
+            useCentralizedConsecutives,
+            centralizedConsecutiveId,
+            ...finalResult,
+          };
         }
-      }
-
-      // 9. Procesos post-procesamiento
-      await this.executePostProcessing(
-        mapping,
-        successfulDocuments,
-        failedDocuments,
-        hasErrors,
-        sourceConnection,
-        results
       );
-
-      // 10. Finalización y estadísticas
-      const finalResult = await this.finalizationAndStats(
-        executionId,
-        mapping,
-        results,
-        hasErrors,
-        useCentralizedConsecutives,
-        centralizedConsecutiveId,
-        startTime
-      );
-
-      clearTimeout(timeoutId);
-      TaskTracker.completeTask(cancelTaskId, finalResult.status);
-
-      return {
-        success: true,
-        executionId,
-        useCentralizedConsecutives,
-        centralizedConsecutiveId,
-        ...finalResult,
-      };
     } catch (error) {
       return await this.handleProcessingError(
         error,
@@ -545,8 +281,6 @@ class DynamicTransferService {
         timeoutId,
         startTime
       );
-    } finally {
-      await this.cleanup(sourceConnection, targetConnection, timeoutId);
     }
   }
 
@@ -577,12 +311,12 @@ class DynamicTransferService {
 
       const columnLengthCache = new Map();
 
-      // DETECCIÓN AUTOMÁTICA: Determinar si debe usar promociones
+      // 🧠 DETECCIÓN AUTOMÁTICA: Determinar si debe usar promociones
       const shouldUsePromotions = this.shouldUsePromotions(mapping);
 
       if (shouldUsePromotions) {
         logger.info(
-          `DETECCIÓN AUTOMÁTICA: Promociones habilitadas para documento ${documentId}`
+          `🎁 DETECCIÓN AUTOMÁTICA: Promociones habilitadas para documento ${documentId}`
         );
       }
 
@@ -667,7 +401,7 @@ class DynamicTransferService {
         logger.info(`Insertados datos principales en ${tableConfig.name}`);
         processedTables.push(tableConfig.name);
 
-        // 5. PROCESAMIENTO INTELIGENTE DE TABLAS DE DETALLE
+        // 5. 🧠 PROCESAMIENTO INTELIGENTE DE TABLAS DE DETALLE
         const detailTables = mapping.tableConfigs.filter(
           (tc) =>
             tc.isDetailTable &&
@@ -675,10 +409,10 @@ class DynamicTransferService {
         );
 
         if (detailTables.length > 0) {
-          // DECISIÓN AUTOMÁTICA: usar método con o sin promociones
+          // ✅ DECISIÓN AUTOMÁTICA: usar método con o sin promociones
           if (shouldUsePromotions) {
             logger.info(
-              `Procesando detalles CON promociones para documento ${documentId}`
+              `🎁 Procesando detalles CON promociones para documento ${documentId}`
             );
 
             const promotionResult =
@@ -698,12 +432,12 @@ class DynamicTransferService {
             if (promotionResult && promotionResult.promotionsApplied) {
               promotionsApplied = true;
               logger.info(
-                `Promociones aplicadas automáticamente en documento ${documentId}`
+                `✅ Promociones aplicadas automáticamente en documento ${documentId}`
               );
             }
           } else {
             logger.info(
-              `Procesando detalles SIN promociones para documento ${documentId}`
+              `📋 Procesando detalles SIN promociones para documento ${documentId}`
             );
 
             await this.processDetailTables(
@@ -755,19 +489,19 @@ class DynamicTransferService {
    */
   shouldUsePromotions(mapping) {
     try {
-      console.log("DEBUG shouldUsePromotions - INICIANDO");
-      console.log("mapping.name:", mapping.name);
-      console.log("mapping.promotionConfig:", mapping.promotionConfig);
+      console.log("🔍 DEBUG shouldUsePromotions - INICIANDO");
+      console.log("🔍 mapping.name:", mapping.name);
+      console.log("🔍 mapping.promotionConfig:", mapping.promotionConfig);
 
       // 1. Verificar si las promociones están habilitadas
       if (!mapping.promotionConfig || !mapping.promotionConfig.enabled) {
-        console.log("DEBUG: Promociones deshabilitadas");
+        console.log("🔍 DEBUG: Promociones deshabilitadas");
         return false;
       }
 
       // 2. Validar configuración de promociones
       if (!PromotionProcessor.validatePromotionConfig(mapping)) {
-        console.log("DEBUG: Configuración inválida");
+        console.log("🔍 DEBUG: Configuración inválida");
         logger.warn("Configuración de promociones inválida");
         return false;
       }
@@ -775,20 +509,23 @@ class DynamicTransferService {
       // 3. Verificar que existan tablas de detalle
       const detailTables =
         mapping.tableConfigs?.filter((tc) => tc.isDetailTable) || [];
-      console.log("DEBUG: Tablas de detalle encontradas:", detailTables.length);
+      console.log(
+        "🔍 DEBUG: Tablas de detalle encontradas:",
+        detailTables.length
+      );
 
       if (detailTables.length === 0) {
-        console.log("DEBUG: No hay tablas de detalle");
+        console.log("🔍 DEBUG: No hay tablas de detalle");
         return false;
       }
 
-      console.log("DEBUG: Promociones activadas");
+      console.log("🔍 DEBUG: ✅ Promociones activadas");
       logger.info(
-        "Condiciones para promociones cumplidas - activando procesamiento automático"
+        "✅ Condiciones para promociones cumplidas - activando procesamiento automático"
       );
       return true;
     } catch (error) {
-      console.log("DEBUG: Error en shouldUsePromotions:", error.message);
+      console.log("🔍 DEBUG: Error en shouldUsePromotions:", error.message);
       logger.error(`Error al verificar promociones: ${error.message}`);
       return false;
     }
@@ -857,7 +594,7 @@ class DynamicTransferService {
     );
 
     logger.info(
-      `Procesando ${
+      `🎁 Procesando ${
         orderedDetailTables.length
       } tablas de detalle CON PROMOCIONES en orden: ${orderedDetailTables
         .map((t) => t.name)
@@ -868,10 +605,10 @@ class DynamicTransferService {
 
     for (const detailConfig of orderedDetailTables) {
       logger.error(
-        `============ PROCESANDO TABLA: ${detailConfig.name} ============`
+        `🎁 🔍 ============ PROCESANDO TABLA: ${detailConfig.name} ============`
       );
 
-      // USAR MÉTODO CON PROMOCIONES
+      // ✅ USAR MÉTODO CON PROMOCIONES
       const detailsData = await this.getDetailDataWithPromotions(
         detailConfig,
         parentTableConfig,
@@ -888,10 +625,10 @@ class DynamicTransferService {
       }
 
       logger.error(
-        `DATOS OBTENIDOS DE getDetailDataWithPromotions: ${detailsData.length} registros`
+        `🎁 🔍 DATOS OBTENIDOS DE getDetailDataWithPromotions: ${detailsData.length} registros`
       );
 
-      // VERIFICAR SI REALMENTE SE APLICARON PROMOCIONES
+      // 🔍 VERIFICAR SI REALMENTE SE APLICARON PROMOCIONES
       const hasPromotions = detailsData.some(
         (row) =>
           row._PROMOTION_TYPE &&
@@ -900,49 +637,63 @@ class DynamicTransferService {
           row._PROMOTION_TYPE !== "REGULAR_WITH_DISCOUNT" // AGREGAR ESTA LÍNEA
       );
 
-      logger.error(`Tiene promociones aplicadas? ${hasPromotions}`);
+      logger.error(`🎁 🔍 ¿Tiene promociones aplicadas? ${hasPromotions}`);
 
       if (hasPromotions) {
         totalPromotionsApplied = true;
         logger.info(
-          `Promociones detectadas y aplicadas automáticamente en tabla ${detailConfig.name}`
+          `✅ Promociones detectadas y aplicadas automáticamente en tabla ${detailConfig.name}`
         );
 
-        // LOG DETALLADO DE PROMOCIONES
+        // ✅ LOG DETALLADO DE PROMOCIONES
         const bonusLines = detailsData.filter((row) => row._IS_BONUS_LINE);
         const triggerLines = detailsData.filter((row) => row._IS_TRIGGER_LINE);
         const normalLines = detailsData.filter((row) => row._IS_NORMAL_LINE);
 
-        logger.error(`RESUMEN DE PROMOCIONES EN ${detailConfig.name}:`);
-        logger.error(`   Líneas bonificación: ${bonusLines.length}`);
-        logger.error(`   Líneas trigger: ${triggerLines.length}`);
-        logger.error(`   Líneas normales: ${normalLines.length}`);
+        logger.error(`🎁 🔍 RESUMEN DE PROMOCIONES EN ${detailConfig.name}:`);
+        logger.error(`🎁 🔍   Líneas bonificación: ${bonusLines.length}`);
+        logger.error(`🎁 🔍   Líneas trigger: ${triggerLines.length}`);
+        logger.error(`🎁 🔍   Líneas normales: ${normalLines.length}`);
 
         // Log específico de cada bonificación
         bonusLines.forEach((line, index) => {
-          logger.error(`BONIFICACIÓN ${index + 1}:`);
-          logger.error(`   Línea: ${line.NUM_LN} | Artículo: ${line.COD_ART}`);
-          logger.error(`   PEDIDO_LINEA_BONIF: ${line.PEDIDO_LINEA_BONIF}`);
-          logger.error(`   CANTIDAD_BONIFICAD: ${line.CANTIDAD_BONIFICAD}`);
-          logger.error(`   CANTIDAD_PEDIDA: ${line.CANTIDAD_PEDIDA}`);
-          logger.error(`   CANTIDAD_A_FACTURA: ${line.CANTIDAD_A_FACTURA}`);
-          logger.error(`   _PROMOTION_TYPE: ${line._PROMOTION_TYPE}`);
+          logger.error(`🎁 🔍 BONIFICACIÓN ${index + 1}:`);
+          logger.error(
+            `🎁 🔍   Línea: ${line.NUM_LN} | Artículo: ${line.COD_ART}`
+          );
+          logger.error(
+            `🎁 🔍   PEDIDO_LINEA_BONIF: ${line.PEDIDO_LINEA_BONIF}`
+          );
+          logger.error(
+            `🎁 🔍   CANTIDAD_BONIFICAD: ${line.CANTIDAD_BONIFICAD}`
+          );
+          logger.error(`🎁 🔍   CANTIDAD_PEDIDA: ${line.CANTIDAD_PEDIDA}`);
+          logger.error(
+            `🎁 🔍   CANTIDAD_A_FACTURA: ${line.CANTIDAD_A_FACTURA}`
+          );
+          logger.error(`🎁 🔍   _PROMOTION_TYPE: ${line._PROMOTION_TYPE}`);
         });
 
         // Log específico de cada trigger
         triggerLines.forEach((line, index) => {
-          logger.error(`TRIGGER ${index + 1}:`);
-          logger.error(`   Línea: ${line.NUM_LN} | Artículo: ${line.COD_ART}`);
-          logger.error(`   CANTIDAD_PEDIDA: ${line.CANTIDAD_PEDIDA}`);
-          logger.error(`   CANTIDAD_A_FACTURA: ${line.CANTIDAD_A_FACTURA}`);
-          logger.error(`   _PROMOTION_TYPE: ${line._PROMOTION_TYPE}`);
+          logger.error(`🎯 🔍 TRIGGER ${index + 1}:`);
+          logger.error(
+            `🎯 🔍   Línea: ${line.NUM_LN} | Artículo: ${line.COD_ART}`
+          );
+          logger.error(`🎯 🔍   CANTIDAD_PEDIDA: ${line.CANTIDAD_PEDIDA}`);
+          logger.error(
+            `🎯 🔍   CANTIDAD_A_FACTURA: ${line.CANTIDAD_A_FACTURA}`
+          );
+          logger.error(`🎯 🔍   _PROMOTION_TYPE: ${line._PROMOTION_TYPE}`);
         });
       }
 
-      logger.error(`DATOS ANTES DE PROCESAR CADA REGISTRO:`);
+      logger.error(`🎁 🔍 DATOS ANTES DE PROCESAR CADA REGISTRO:`);
       detailsData.forEach((record, index) => {
-        logger.error(`---- REGISTRO ${index + 1} ----`);
-        logger.error(`   Datos completos: ${JSON.stringify(record, null, 2)}`);
+        logger.error(`🎁 🔍 ---- REGISTRO ${index + 1} ----`);
+        logger.error(
+          `🎁 🔍   Datos completos: ${JSON.stringify(record, null, 2)}`
+        );
 
         // Verificar campos críticos de promoción
         const promotionFields = [
@@ -963,7 +714,7 @@ class DynamicTransferService {
         });
 
         logger.error(
-          `   Campos promoción encontrados: ${
+          `🎁 🔍   Campos promoción encontrados: ${
             foundPromotionFields.join(", ") || "NINGUNO"
           }`
         );
@@ -975,7 +726,7 @@ class DynamicTransferService {
         } ${hasPromotions ? "CON PROMOCIONES" : "sin promociones"}`
       );
 
-      // PROCESAR CADA REGISTRO CON MAPPINGS AUTOMÁTICOS
+      // ✅ PROCESAR CADA REGISTRO CON MAPPINGS AUTOMÁTICOS
       for (
         let recordIndex = 0;
         recordIndex < detailsData.length;
@@ -1050,16 +801,18 @@ class DynamicTransferService {
       }
 
       processedTables.push(detailConfig.name);
-      logger.info(`Tabla ${detailConfig.name} procesada exitosamente`);
+      logger.info(`✅ Tabla ${detailConfig.name} procesada exitosamente`);
     }
 
-    // RESUMEN FINAL
-    logger.error(`============ RESUMEN FINAL DE PROCESAMIENTO ============`);
-    logger.error(`Total tablas procesadas: ${processedTables.length}`);
+    // ✅ RESUMEN FINAL
     logger.error(
-      `Promociones aplicadas: ${totalPromotionsApplied ? "SÍ" : "NO"}`
+      `🎁 🔍 ============ RESUMEN FINAL DE PROCESAMIENTO ============`
     );
-    logger.error(`Tablas procesadas: ${processedTables.join(", ")}`);
+    logger.error(`🎁 🔍 Total tablas procesadas: ${processedTables.length}`);
+    logger.error(
+      `🎁 🔍 Promociones aplicadas: ${totalPromotionsApplied ? "SÍ" : "NO"}`
+    );
+    logger.error(`🎁 🔍 Tablas procesadas: ${processedTables.join(", ")}`);
 
     return {
       promotionsApplied: totalPromotionsApplied,
@@ -1202,7 +955,7 @@ class DynamicTransferService {
       ) {
         fieldsToProcess.push(field);
         logger.debug(
-          `Campo promoción detectado para procesar: ${field.sourceField} -> ${field.targetField} (${field.description})`
+          `🎁 Campo promoción detectado para procesar: ${field.sourceField} -> ${field.targetField} (${field.description})`
         );
       }
     }
@@ -1255,7 +1008,7 @@ class DynamicTransferService {
         for (const alternative of [mainField, ...alternatives]) {
           if (sourceData.hasOwnProperty(alternative)) {
             logger.debug(
-              `Campo promoción encontrado: ${sourceField} -> ${alternative} = ${sourceData[alternative]}`
+              `🎁 Campo promoción encontrado: ${sourceField} -> ${alternative} = ${sourceData[alternative]}`
             );
             return sourceData[alternative];
           }
@@ -1288,10 +1041,10 @@ class DynamicTransferService {
   ) {
     try {
       logger.info(
-        `Obteniendo datos con promociones para documento ${documentId}`
+        `🎁 Obteniendo datos con promociones para documento ${documentId}`
       );
 
-      // PASO 1: Verificar si las promociones están habilitadas
+      // ✅ PASO 1: Verificar si las promociones están habilitadas
       if (!mapping.promotionConfig || !mapping.promotionConfig.enabled) {
         logger.debug(
           "Promociones deshabilitadas, procesando datos normalmente"
@@ -1316,7 +1069,7 @@ class DynamicTransferService {
         );
       }
 
-      // PASO 2: Obtener datos CON campos de promociones garantizados
+      // ✅ PASO 2: Obtener datos CON campos de promociones garantizados
       const detailData = await this.getDetailDataWithPromotionFields(
         detailConfig,
         parentTableConfig,
@@ -1332,13 +1085,15 @@ class DynamicTransferService {
         return [];
       }
 
-      logger.debug(`Datos obtenidos: ${detailData.length} registros`);
+      logger.debug(`📊 Datos obtenidos: ${detailData.length} registros`);
 
-      // PASO 3: Usar configuración detectada si está disponible
+      // ✅ PASO 3: Usar configuración detectada si está disponible
       let fieldConfigToUse = null;
       if (detailData.length > 0 && detailData[0]._DETECTED_PROMOTION_CONFIG) {
         fieldConfigToUse = detailData[0]._DETECTED_PROMOTION_CONFIG;
-        logger.info(`Usando configuración de campos detectada automáticamente`);
+        logger.info(
+          `🎁 ✅ Usando configuración de campos detectada automáticamente`
+        );
 
         // Limpiar el campo temporal de los datos
         detailData.forEach((record) => {
@@ -1346,10 +1101,10 @@ class DynamicTransferService {
         });
       } else {
         fieldConfigToUse = PromotionProcessor.getFieldConfiguration(mapping);
-        logger.info(`Usando configuración de campos por defecto`);
+        logger.info(`🎁 Usando configuración de campos por defecto`);
       }
 
-      // PASO 4: Verificar que llegaron los campos de promoción
+      // ✅ PASO 4: Verificar que llegaron los campos de promoción
       const firstRecord = detailData[0];
       const missingFields = [];
       const requiredFields = [
@@ -1369,10 +1124,10 @@ class DynamicTransferService {
 
       if (missingFields.length > 0) {
         logger.error(
-          `CAMPOS DE PROMOCIÓN FALTANTES: ${missingFields.join(", ")}`
+          `🎁 ❌ CAMPOS DE PROMOCIÓN FALTANTES: ${missingFields.join(", ")}`
         );
         logger.error(
-          `Campos disponibles: ${Object.keys(firstRecord).join(", ")}`
+          `🎁 Campos disponibles: ${Object.keys(firstRecord).join(", ")}`
         );
         throw new Error(
           `Faltan campos requeridos para promociones: ${missingFields.join(
@@ -1381,16 +1136,16 @@ class DynamicTransferService {
         );
       }
 
-      logger.info(`Todos los campos de promoción están presentes`);
+      logger.info(`🎁 ✅ Todos los campos de promoción están presentes`);
 
-      // PASO 5: Los datos pasan directamente sin conversión (se aplicará en processField)
+      // ✅ PASO 5: Los datos pasan directamente sin conversión (se aplicará en processField)
       logger.info(
-        `Procesando promociones para documento ${documentId} (conversión se aplicará después)`
+        `🎁 Procesando promociones para documento ${documentId} (conversión se aplicará después)`
       );
 
-      // PASO 6: PROCESAR PROMOCIONES CON DATOS YA CONVERTIDOS
+      // ✅ PASO 6: PROCESAR PROMOCIONES CON DATOS YA CONVERTIDOS
       logger.info(
-        `Procesando promociones con datos convertidos para documento ${documentId}`
+        `🎁 Procesando promociones con datos convertidos para documento ${documentId}`
       );
 
       const processedData = PromotionProcessor.processPromotionsWithConfig(
@@ -1399,13 +1154,13 @@ class DynamicTransferService {
         fieldConfigToUse
       );
 
-      // PASO 7: Aplicar reglas específicas si están configuradas
+      // ✅ PASO 7: Aplicar reglas específicas si están configuradas
       const finalData = PromotionProcessor.applyPromotionRules(
         processedData,
         mapping.promotionConfig
       );
 
-      // PASO 8: Log de resultados y verificación
+      // ✅ PASO 8: Log de resultados y verificación
       const bonusLines = finalData.filter((line) => line._IS_BONUS_LINE);
       const triggerLines = finalData.filter((line) => line._IS_TRIGGER_LINE);
       const regularLines = finalData.filter(
@@ -1413,13 +1168,13 @@ class DynamicTransferService {
       );
 
       logger.info(
-        `Procesamiento completado: ${regularLines.length} regulares, ${bonusLines.length} bonificaciones, ${triggerLines.length} líneas trigger`
+        `🎁 ✅ Procesamiento completado: ${regularLines.length} regulares, ${bonusLines.length} bonificaciones, ${triggerLines.length} líneas trigger`
       );
 
-      // PASO 9: Verificación crítica de cantidades
+      // ✅ PASO 9: Verificación crítica de cantidades
       finalData.forEach((line, index) => {
         if (line._IS_BONUS_LINE) {
-          logger.debug(`Línea bonificación ${index + 1}:`);
+          logger.debug(`🎁 Línea bonificación ${index + 1}:`);
           logger.debug(
             `  CANTIDAD_PEDIDA: ${line.CANTIDAD_PEDIDA} (debe ser 0)`
           );
@@ -1465,7 +1220,7 @@ class DynamicTransferService {
         documentId
       );
       logger.debug(`Ejecutando consulta personalizada para detalles: ${query}`);
-      const result = await SqlService.query(sourceConnection, query);
+      const result = await DatabaseServiceAdapter.query(sourceConnection, query);
       return result.recordset;
     } else if (detailConfig.useSameSourceTable) {
       // Caso especial: usa la misma tabla que el encabezado
@@ -1510,23 +1265,23 @@ class DynamicTransferService {
       detailConfig.primaryKey || parentTableConfig.primaryKey || "NUM_PED";
 
     const query = `
-    SELECT ${finalSelectFields} FROM ${
+      SELECT ${finalSelectFields} FROM ${
       parentTableConfig.sourceTable
     } ${tableAlias}
-    WHERE ${tableAlias}.${primaryKey} = @documentId
-    ${
-      detailConfig.filterCondition
-        ? ` AND ${this.processFilterCondition(
-            detailConfig.filterCondition,
-            tableAlias
-          )}`
-        : ""
-    }
-    ${orderByColumn ? ` ORDER BY ${tableAlias}.${orderByColumn}` : ""}
-  `;
+      WHERE ${tableAlias}.${primaryKey} = @documentId
+      ${
+        detailConfig.filterCondition
+          ? ` AND ${this.processFilterCondition(
+              detailConfig.filterCondition,
+              tableAlias
+            )}`
+          : ""
+      }
+      ${orderByColumn ? ` ORDER BY ${tableAlias}.${orderByColumn}` : ""}
+    `;
 
     logger.debug(`Ejecutando consulta para detalles: ${query}`);
-    const result = await SqlService.query(sourceConnection, query, {
+    const result = await DatabaseServiceAdapter.query(sourceConnection, query, {
       documentId,
     });
 
@@ -1549,16 +1304,18 @@ class DynamicTransferService {
     const primaryKey = detailConfig.primaryKey || "NUM_PED";
 
     const query = `
-    SELECT ${finalSelectFields} FROM ${detailConfig.sourceTable}
-    WHERE ${primaryKey} = @documentId
-    ${
-      detailConfig.filterCondition ? ` AND ${detailConfig.filterCondition}` : ""
-    }
-    ${orderByColumn ? ` ORDER BY ${orderByColumn}` : ""}
-  `;
+      SELECT ${finalSelectFields} FROM ${detailConfig.sourceTable}
+      WHERE ${primaryKey} = @documentId
+      ${
+        detailConfig.filterCondition
+          ? ` AND ${detailConfig.filterCondition}`
+          : ""
+      }
+      ${orderByColumn ? ` ORDER BY ${orderByColumn}` : ""}
+    `;
 
     logger.debug(`Ejecutando consulta para detalles: ${query}`);
-    const result = await SqlService.query(sourceConnection, query, {
+    const result = await DatabaseServiceAdapter.query(sourceConnection, query, {
       documentId,
     });
 
@@ -1577,7 +1334,10 @@ class DynamicTransferService {
       // Usar consulta personalizada si existe
       const query = tableConfig.customQuery.replace(/@documentId/g, documentId);
       logger.debug(`Ejecutando consulta personalizada: ${query}`);
-      const result = await SqlService.query(sourceConnection, query);
+      const result = await DatabaseServiceAdapter.query(
+        sourceConnection,
+        query
+      );
       return result.recordset[0];
     } else {
       // Usar la función centralizada para obtener campos requeridos
@@ -1592,22 +1352,28 @@ class DynamicTransferService {
       const primaryKey = tableConfig.primaryKey || "NUM_PED";
 
       const query = `
-      SELECT ${finalSelectFields} FROM ${tableConfig.sourceTable} ${tableAlias}
-      WHERE ${tableAlias}.${primaryKey} = @documentId
-      ${
-        tableConfig.filterCondition
-          ? ` AND ${this.processFilterCondition(
-              tableConfig.filterCondition,
-              tableAlias
-            )}`
-          : ""
-      }
-    `;
+        SELECT ${finalSelectFields} FROM ${
+        tableConfig.sourceTable
+      } ${tableAlias}
+        WHERE ${tableAlias}.${primaryKey} = @documentId
+        ${
+          tableConfig.filterCondition
+            ? ` AND ${this.processFilterCondition(
+                tableConfig.filterCondition,
+                tableAlias
+              )}`
+            : ""
+        }
+      `;
 
       logger.debug(`Ejecutando consulta principal: ${query}`);
-      const result = await SqlService.query(sourceConnection, query, {
-        documentId,
-      });
+      const result = await DatabaseServiceAdapter.query(
+        sourceConnection,
+        query,
+        {
+          documentId,
+        }
+      );
 
       return result.recordset[0];
     }
@@ -1654,7 +1420,7 @@ class DynamicTransferService {
       );
 
       logger.info(`Ejecutando consulta: ${queryBuilder.query}`);
-      const result = await SqlService.query(
+      const result = await DatabaseServiceAdapter.query(
         connection,
         queryBuilder.query,
         queryBuilder.params
@@ -1717,7 +1483,7 @@ class DynamicTransferService {
 
     // Verificar si hay datos de promociones
     const hasPromotionData = this.detectPromotionData(dataForProcessing);
-    logger.error(`Detecta promociones? ${hasPromotionData}`);
+    logger.error(`¿Detecta promociones? ${hasPromotionData}`);
 
     // Validar configuración de campos
     if (!tableConfig.fieldMappings || tableConfig.fieldMappings.length === 0) {
@@ -2449,7 +2215,7 @@ class DynamicTransferService {
    */
   async setupCentralizedConsecutives(mapping, mappingId) {
     logger.info(
-      `Verificando sistema de consecutivos para mapping ${mappingId}`
+      `🔍 Verificando sistema de consecutivos para mapping ${mappingId}`
     );
 
     let useCentralized = false;
@@ -2457,7 +2223,7 @@ class DynamicTransferService {
 
     if (!mapping.consecutiveConfig?.enabled) {
       logger.info(
-        `Consecutivos deshabilitados en la configuración del mapping`
+        `❌ Consecutivos deshabilitados en la configuración del mapping`
       );
       return { useCentralized, consecutiveId };
     }
@@ -2476,7 +2242,7 @@ class DynamicTransferService {
           consecutiveId =
             mapping.consecutiveConfig.selectedCentralizedConsecutive;
           logger.info(
-            `Usando consecutivo centralizado configurado: ${consecutiveId}`
+            `✅ Usando consecutivo centralizado configurado: ${consecutiveId}`
           );
         }
       }
@@ -2492,21 +2258,21 @@ class DynamicTransferService {
           useCentralized = true;
           consecutiveId = assignedConsecutives[0]._id;
           logger.info(
-            `Usando consecutivo centralizado asignado: ${consecutiveId}`
+            `✅ Usando consecutivo centralizado asignado: ${consecutiveId}`
           );
         }
       }
 
       if (!useCentralized) {
         logger.info(
-          `No se encontraron consecutivos centralizados para ${mappingId}. Usando sistema local.`
+          `❌ No se encontraron consecutivos centralizados para ${mappingId}. Usando sistema local.`
         );
       }
 
       return { useCentralized, consecutiveId };
     } catch (error) {
       logger.warn(
-        `Error al verificar consecutivos centralizados: ${error.message}`
+        `❌ Error al verificar consecutivos centralizados: ${error.message}`
       );
       return { useCentralized: false, consecutiveId: null };
     }
@@ -2526,7 +2292,7 @@ class DynamicTransferService {
     useCentralized,
     centralizedId
   ) {
-    logger.info(`Generando consecutivo para documento ${documentId}`);
+    logger.info(`🔍 Generando consecutivo para documento ${documentId}`);
 
     if (useCentralized && centralizedId) {
       try {
@@ -2545,22 +2311,22 @@ class DynamicTransferService {
         };
 
         logger.info(
-          `Consecutivo centralizado reservado: ${consecutive.formatted}`
+          `✅ Consecutivo centralizado reservado: ${consecutive.formatted}`
         );
         return consecutive;
       } catch (error) {
         logger.error(
-          `Error generando consecutivo centralizado: ${error.message}`
+          `❌ Error generando consecutivo centralizado: ${error.message}`
         );
         throw error;
       }
     } else {
       try {
         const consecutive = await this.generateLocalConsecutive(mapping);
-        logger.info(`Consecutivo local generado: ${consecutive?.formatted}`);
+        logger.info(`✅ Consecutivo local generado: ${consecutive?.formatted}`);
         return consecutive;
       } catch (error) {
-        logger.error(`Error generando consecutivo local: ${error.message}`);
+        logger.error(`❌ Error generando consecutivo local: ${error.message}`);
         throw error;
       }
     }
@@ -2788,7 +2554,7 @@ class DynamicTransferService {
           logger.debug(`Query: ${fieldMapping.lookupQuery}`);
           logger.debug(`Params: ${JSON.stringify(params)}`);
 
-          const result = await SqlService.query(
+          const result = await DatabaseServiceAdapter.query(
             targetConnection,
             fieldMapping.lookupQuery,
             params
@@ -2907,35 +2673,37 @@ class DynamicTransferService {
     targetConnection
   ) {
     try {
-      // 1. MOSTRAR DATOS COMPLETOS EN JSON ANTES DE PROCESAR
-      logger.error(`============ DATOS RECIBIDOS PARA INSERCIÓN ============`);
-      logger.error(`Tabla destino: ${targetTable}`);
+      // ✅ 1. MOSTRAR DATOS COMPLETOS EN JSON ANTES DE PROCESAR
       logger.error(
-        `CAMPOS RECIBIDOS (${targetFields.length}): ${JSON.stringify(
+        `🔍 ============ DATOS RECIBIDOS PARA INSERCIÓN ============`
+      );
+      logger.error(`🔍 Tabla destino: ${targetTable}`);
+      logger.error(
+        `🔍 CAMPOS RECIBIDOS (${targetFields.length}): ${JSON.stringify(
           targetFields,
           null,
           2
         )}`
       );
       logger.error(
-        `VALUES RECIBIDOS (${targetValues.length}): ${JSON.stringify(
+        `🔍 VALUES RECIBIDOS (${targetValues.length}): ${JSON.stringify(
           targetValues,
           null,
           2
         )}`
       );
       logger.error(
-        `TARGET DATA RECIBIDO: ${JSON.stringify(targetData, null, 2)}`
+        `🔍 TARGET DATA RECIBIDO: ${JSON.stringify(targetData, null, 2)}`
       );
       logger.error(
-        `DIRECT SQL FIELDS: ${JSON.stringify(
+        `🔍 DIRECT SQL FIELDS: ${JSON.stringify(
           Array.from(directSqlFields),
           null,
           2
         )}`
       );
 
-      // 2. VALIDAR Y LIMPIAR DATOS
+      // ✅ 2. VALIDAR Y LIMPIAR DATOS
       const validatedParams = {};
       const problematicFields = [];
 
@@ -2963,7 +2731,7 @@ class DynamicTransferService {
 
       if (problematicFields.length > 0) {
         logger.error(
-          `OBJETOS DE CONFIGURACIÓN PROBLEMÁTICOS: ${JSON.stringify(
+          `🔍 ❌ OBJETOS DE CONFIGURACIÓN PROBLEMÁTICOS: ${JSON.stringify(
             problematicFields,
             null,
             2
@@ -2976,7 +2744,7 @@ class DynamicTransferService {
         );
       }
 
-      // 3. CONSTRUIR DATOS FINALES PARA INSERCIÓN
+      // ✅ 3. CONSTRUIR DATOS FINALES PARA INSERCIÓN
       const finalInsertData = {
         tabla: targetTable,
         campos: [],
@@ -3041,35 +2809,35 @@ class DynamicTransferService {
         ", "
       )}) VALUES (${finalInsertData.valores.join(", ")})`;
 
-      // 4. MOSTRAR TODOS LOS VALORES A INSERTAR EN FORMATO JSON SÚPER CLARO
+      // ✅ 4. MOSTRAR TODOS LOS VALORES A INSERTAR EN FORMATO JSON SÚPER CLARO
       logger.error(
-        `============ ESTOS SON LOS VALORES A INSERTAR YA CON PROMOCIONES INCLUIDA ============`
+        `🎁 ============ ESTOS SON LOS VALORES A INSERTAR YA CON PROMOCIONES INCLUIDA ============`
       );
       logger.error(
-        `DATOS COMPLETOS PARA INSERCIÓN: ${JSON.stringify(
+        `🎁 DATOS COMPLETOS PARA INSERCIÓN: ${JSON.stringify(
           finalInsertData,
           null,
           2
         )}`
       );
 
-      // 5. MOSTRAR RESUMEN EJECUTIVO
-      logger.error(`============ RESUMEN EJECUTIVO ============`);
-      logger.error(`Tabla destino: ${finalInsertData.tabla}`);
+      // ✅ 5. MOSTRAR RESUMEN EJECUTIVO
+      logger.error(`🎁 ============ RESUMEN EJECUTIVO ============`);
+      logger.error(`🎁 Tabla destino: ${finalInsertData.tabla}`);
       logger.error(
-        `Total campos a insertar: ${finalInsertData.resumenCampos.total}`
+        `🎁 Total campos a insertar: ${finalInsertData.resumenCampos.total}`
       );
       logger.error(
-        `Campos de PROMOCIÓN: ${finalInsertData.resumenCampos.promocion}`
+        `🎁 Campos de PROMOCIÓN: ${finalInsertData.resumenCampos.promocion}`
       );
       logger.error(
-        `Campos REGULARES: ${finalInsertData.resumenCampos.regulares}`
+        `🎁 Campos REGULARES: ${finalInsertData.resumenCampos.regulares}`
       );
       logger.error(
-        `Campos SQL directo: ${finalInsertData.resumenCampos.sqlDirecto}`
+        `🎁 Campos SQL directo: ${finalInsertData.resumenCampos.sqlDirecto}`
       );
 
-      // 6. MOSTRAR ESPECÍFICAMENTE LOS CAMPOS DE PROMOCIÓN
+      // ✅ 6. MOSTRAR ESPECÍFICAMENTE LOS CAMPOS DE PROMOCIÓN
       const camposPromocion = [];
       Object.keys(finalInsertData.parametros).forEach((campo) => {
         if (
@@ -3086,44 +2854,46 @@ class DynamicTransferService {
       });
 
       if (camposPromocion.length > 0) {
-        logger.error(`============ CAMPOS DE PROMOCIÓN INCLUIDOS ============`);
         logger.error(
-          `CAMPOS DE PROMOCIÓN (${camposPromocion.length}): ${JSON.stringify(
+          `🎁 ============ CAMPOS DE PROMOCIÓN INCLUIDOS ============`
+        );
+        logger.error(
+          `🎁 CAMPOS DE PROMOCIÓN (${camposPromocion.length}): ${JSON.stringify(
             camposPromocion,
             null,
             2
           )}`
         );
       } else {
-        logger.error(`NO HAY CAMPOS DE PROMOCIÓN EN LA INSERCIÓN`);
+        logger.error(`🎁 ❌ NO HAY CAMPOS DE PROMOCIÓN EN LA INSERCIÓN`);
       }
 
-      // 7. MOSTRAR QUERY Y PARÁMETROS FINALES
-      logger.error(`============ QUERY Y PARÁMETROS FINALES ============`);
-      logger.error(`QUERY SQL: ${finalInsertData.query}`);
+      // ✅ 7. MOSTRAR QUERY Y PARÁMETROS FINALES
+      logger.error(`🎁 ============ QUERY Y PARÁMETROS FINALES ============`);
+      logger.error(`🎁 QUERY SQL: ${finalInsertData.query}`);
       logger.error(
-        `PARÁMETROS: ${JSON.stringify(finalInsertData.parametros, null, 2)}`
+        `🎁 PARÁMETROS: ${JSON.stringify(finalInsertData.parametros, null, 2)}`
       );
 
-      // 8. VALIDACIÓN FINAL
+      // ✅ 8. VALIDACIÓN FINAL
       if (finalInsertData.campos.length === 0) {
         throw new Error(
           `No hay campos válidos para insertar en ${targetTable}`
         );
       }
 
-      // 9. EJECUTAR INSERCIÓN
-      logger.error(`EJECUTANDO INSERCIÓN...`);
+      // ✅ 9. EJECUTAR INSERCIÓN
+      logger.error(`🚀 EJECUTANDO INSERCIÓN...`);
 
       const startTime = Date.now();
-      const result = await SqlService.query(
+      const result = await DatabaseServiceAdapter.query(
         targetConnection,
         finalInsertData.query,
         finalInsertData.parametros
       );
       const executionTime = Date.now() - startTime;
 
-      // 10. MOSTRAR RESULTADO FINAL
+      // ✅ 10. MOSTRAR RESULTADO FINAL
       const resultadoFinal = {
         estado: "ÉXITO",
         tabla: targetTable,
@@ -3135,23 +2905,23 @@ class DynamicTransferService {
         camposPromocion: finalInsertData.resumenCampos.promocion,
       };
 
-      logger.error(`============ RESULTADO FINAL DE INSERCIÓN ============`);
+      logger.error(`🎁 ============ RESULTADO FINAL DE INSERCIÓN ============`);
       logger.error(
-        `RESULTADO COMPLETO: ${JSON.stringify(resultadoFinal, null, 2)}`
+        `🎁 RESULTADO COMPLETO: ${JSON.stringify(resultadoFinal, null, 2)}`
       );
 
       if (finalInsertData.resumenCampos.promocion > 0) {
-        logger.error(`¡INSERCIÓN CON PROMOCIONES EXITOSA!`);
+        logger.error(`🎁 ✅ ¡INSERCIÓN CON PROMOCIONES EXITOSA!`);
         logger.error(
-          `Se insertaron ${finalInsertData.resumenCampos.promocion} campos de promoción en ${targetTable}`
+          `🎁 Se insertaron ${finalInsertData.resumenCampos.promocion} campos de promoción en ${targetTable}`
         );
       } else {
-        logger.error(`Inserción estándar exitosa (sin promociones)`);
+        logger.error(`📋 ✅ Inserción estándar exitosa (sin promociones)`);
       }
 
       return result;
     } catch (error) {
-      logger.error(`============ ERROR EN INSERCIÓN ============`);
+      logger.error(`🎁 ============ ERROR EN INSERCIÓN ============`);
       const errorInfo = {
         estado: "ERROR",
         tabla: targetTable,
@@ -3164,7 +2934,7 @@ class DynamicTransferService {
         },
       };
 
-      logger.error(`ERROR COMPLETO: ${JSON.stringify(errorInfo, null, 2)}`);
+      logger.error(`🎁 ERROR COMPLETO: ${JSON.stringify(errorInfo, null, 2)}`);
 
       throw error;
     }
@@ -3199,41 +2969,41 @@ class DynamicTransferService {
 
       if (schema) {
         query = `
-        SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
-        ORDER BY ORDINAL_POSITION
-      `;
+          SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
+          ORDER BY ORDINAL_POSITION
+        `;
         params = { schema, table };
       } else {
         query = `
-        SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH, TABLE_SCHEMA
-        FROM INFORMATION_SCHEMA.COLUMNS
-        WHERE TABLE_NAME = @table
-        ORDER BY TABLE_SCHEMA, ORDINAL_POSITION
-      `;
+          SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH, TABLE_SCHEMA
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_NAME = @table
+          ORDER BY TABLE_SCHEMA, ORDINAL_POSITION
+        `;
         params = { table };
       }
 
-      const result = await SqlService.query(connection, query, params);
+      const result = await DatabaseServiceAdapter.query(connection, query, params);
 
       if (!result.recordset || result.recordset.length === 0) {
         // Intentar con esquemas comunes
         const commonSchemas = ["dbo", "CATELLI", "sys"];
         for (const testSchema of commonSchemas) {
           try {
-            const testResult = await SqlService.query(
+            const testResult = await DatabaseServiceAdapter.query(
               connection,
               `SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, CHARACTER_MAXIMUM_LENGTH
-             FROM INFORMATION_SCHEMA.COLUMNS
-             WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
-             ORDER BY ORDINAL_POSITION`,
+               FROM INFORMATION_SCHEMA.COLUMNS
+               WHERE TABLE_SCHEMA = @schema AND TABLE_NAME = @table
+               ORDER BY ORDINAL_POSITION`,
               { schema: testSchema, table }
             );
 
             if (testResult.recordset && testResult.recordset.length > 0) {
               logger.info(
-                `Tabla encontrada en esquema: ${testSchema}.${table}`
+                `✅ Tabla encontrada en esquema: ${testSchema}.${table}`
               );
               return testResult.recordset;
             }
@@ -3257,37 +3027,23 @@ class DynamicTransferService {
   // ===============================
   // 8. MÉTODOS AUXILIARES Y UTILIDADES
   // ===============================
-
-  /**
-   * Establece conexiones con los servidores origen y destino - VERSIÓN MEJORADA
-   * @param {Object} mapping - Configuración de mapping
-   * @returns {Promise<Object>} - Conexiones establecidas
-   */
   async establishConnections(mapping) {
-    try {
-      // Usar el nuevo método de validación de conexiones
-      const sourceConnection = await this._ensureValidConnection(
-        mapping.sourceServer,
-        null
-      );
+    logger.warn("establishConnections está obsoleto, usar withConnections");
+    const sourceConnection = await DatabaseServiceAdapter.getConnection(
+      mapping.sourceServer
+    );
+    const targetConnection = await DatabaseServiceAdapter.getConnection(
+      mapping.targetServer
+    );
 
-      const targetConnection = await this._ensureValidConnection(
-        mapping.targetServer,
-        null
-      );
-
-      logger.info(
-        `Conexiones establecidas correctamente: ${mapping.sourceServer} ↔ ${mapping.targetServer}`
-      );
-
-      return {
-        source: sourceConnection,
-        target: targetConnection,
-      };
-    } catch (error) {
-      logger.error(`Error estableciendo conexiones: ${error.message}`);
-      throw error;
-    }
+    return {
+      source: sourceConnection,
+      target: targetConnection,
+      cleanup: async () => {
+        await DatabaseServiceAdapter.releaseConnection(sourceConnection);
+        await DatabaseServiceAdapter.releaseConnection(targetConnection);
+      },
+    };
   }
 
   /**
@@ -3349,7 +3105,7 @@ class DynamicTransferService {
       if (docResult.promotionsApplied) {
         results.promotionsProcessed++;
         logger.info(
-          `Promociones aplicadas automáticamente en documento ${documentId}`
+          `✅ Promociones aplicadas automáticamente en documento ${documentId}`
         );
       }
 
@@ -3379,7 +3135,7 @@ class DynamicTransferService {
           );
         } catch (markError) {
           logger.warn(
-            `Error al marcar documento ${documentId}: ${markError.message}`
+            `⚠️ Error al marcar documento ${documentId}: ${markError.message}`
           );
         }
       }
@@ -3399,7 +3155,7 @@ class DynamicTransferService {
 
     logger.info(
       `Documento ${documentId} procesado: ${
-        docResult.success ? "ÉXITO" : "ERROR"
+        docResult.success ? "✅ ÉXITO" : "❌ ERROR"
       }${docResult.promotionsApplied ? " (con promociones automáticas)" : ""}${
         currentConsecutive
           ? ` (consecutivo: ${currentConsecutive.formatted})`
@@ -3438,7 +3194,7 @@ class DynamicTransferService {
       errorDetails: error.stack,
     });
 
-    logger.error(`Error al procesar documento ${documentId}:`, error);
+    logger.error(`❌ Error al procesar documento ${documentId}:`, error);
 
     // Cancelar reserva si hubo error
     if (
@@ -3452,7 +3208,7 @@ class DynamicTransferService {
           currentConsecutive.reservationId
         );
       } catch (cancelError) {
-        logger.error(`Error cancelando reserva: ${cancelError.message}`);
+        logger.error(`❌ Error cancelando reserva: ${cancelError.message}`);
       }
     }
   }
@@ -3491,9 +3247,9 @@ class DynamicTransferService {
           sourceConnection,
           true
         );
-        logger.info("Marcado masivo completado exitosamente");
+        logger.info("✅ Marcado masivo completado exitosamente");
       } catch (markError) {
-        logger.warn(`Error en marcado masivo: ${markError.message}`);
+        logger.warn(`⚠️ Error en marcado masivo: ${markError.message}`);
       }
     }
 
@@ -3513,10 +3269,10 @@ class DynamicTransferService {
           sourceConnection,
           false
         );
-        logger.info("Rollback ejecutado exitosamente");
+        logger.info("✅ Rollback ejecutado exitosamente");
         results.rollbackExecuted = true;
       } catch (rollbackError) {
-        logger.error(`Error en rollback: ${rollbackError.message}`);
+        logger.error(`❌ Error en rollback: ${rollbackError.message}`);
         results.rollbackError = rollbackError.message;
       }
     }
@@ -3604,7 +3360,7 @@ class DynamicTransferService {
     });
 
     logger.info(
-      `Procesamiento completado: ${results.processed} éxitos, ${results.failed} fallos${promotionsMessage}${consecutiveMessage}`
+      `✅ Procesamiento completado: ${results.processed} éxitos, ${results.failed} fallos${promotionsMessage}${consecutiveMessage}`
     );
 
     return {
@@ -3737,7 +3493,7 @@ class DynamicTransferService {
 
       if (sourceConnection) {
         releasePromises.push(
-          ConnectionService.releaseConnection(sourceConnection).catch((e) =>
+          DatabaseServiceAdapter.releaseConnection(sourceConnection).catch((e) =>
             logger.error(`Error al liberar conexión origen: ${e.message}`)
           )
         );
@@ -3745,7 +3501,7 @@ class DynamicTransferService {
 
       if (targetConnection) {
         releasePromises.push(
-          ConnectionService.releaseConnection(targetConnection).catch((e) =>
+          DatabaseServiceAdapter.releaseConnection(targetConnection).catch((e) =>
             logger.error(`Error al liberar conexión destino: ${e.message}`)
           )
         );
@@ -3861,7 +3617,7 @@ class DynamicTransferService {
         promotionObject[candidate] !== null
       ) {
         logger.debug(
-          `Extraído valor de objeto promoción: ${targetField} <- ${candidate} = ${promotionObject[candidate]}`
+          `✅ Extraído valor de objeto promoción: ${targetField} <- ${candidate} = ${promotionObject[candidate]}`
         );
         return promotionObject[candidate];
       }
@@ -3886,7 +3642,7 @@ class DynamicTransferService {
           ) || numericFields[0];
 
         logger.warn(
-          `Usando campo numérico por defecto para ${targetField}: ${preferredField} = ${promotionObject[preferredField]}`
+          `⚠️ Usando campo numérico por defecto para ${targetField}: ${preferredField} = ${promotionObject[preferredField]}`
         );
         return promotionObject[preferredField];
       }
@@ -3895,7 +3651,7 @@ class DynamicTransferService {
     // Para campos de texto, buscar campos string válidos
     if (typeof promotionObject[sourceField] === "string") {
       logger.debug(
-        `Usando valor string del campo original: ${sourceField} = ${promotionObject[sourceField]}`
+        `✅ Usando valor string del campo original: ${sourceField} = ${promotionObject[sourceField]}`
       );
       return promotionObject[sourceField];
     }
@@ -3929,13 +3685,13 @@ class DynamicTransferService {
 
     // Verificar si la tabla existe
     const checkTableQuery = `
-    SELECT COUNT(*) as count
-    FROM INFORMATION_SCHEMA.TABLES
-    WHERE TABLE_SCHEMA = '${schema}'
-    AND TABLE_NAME = '${tableName}'
-  `;
+      SELECT COUNT(*) as count
+      FROM INFORMATION_SCHEMA.TABLES
+      WHERE TABLE_SCHEMA = '${schema}'
+      AND TABLE_NAME = '${tableName}'
+    `;
 
-    const tableCheckResult = await SqlService.query(
+    const tableCheckResult = await DatabaseServiceAdapter.query(
       connection,
       checkTableQuery
     );
@@ -3948,14 +3704,14 @@ class DynamicTransferService {
 
     // Obtener columnas de la tabla
     const columnsQuery = `
-    SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT
-    FROM INFORMATION_SCHEMA.COLUMNS
-    WHERE TABLE_SCHEMA = '${schema}'
-    AND TABLE_NAME = '${tableName}'
-    ORDER BY ORDINAL_POSITION
-  `;
+      SELECT COLUMN_NAME, DATA_TYPE, IS_NULLABLE, COLUMN_DEFAULT
+      FROM INFORMATION_SCHEMA.COLUMNS
+      WHERE TABLE_SCHEMA = '${schema}'
+      AND TABLE_NAME = '${tableName}'
+      ORDER BY ORDINAL_POSITION
+    `;
 
-    const columnsResult = await SqlService.query(connection, columnsQuery);
+    const columnsResult = await DatabaseServiceAdapter.query(connection, columnsQuery);
 
     if (!columnsResult.recordset || columnsResult.recordset.length === 0) {
       throw new Error(
@@ -4070,7 +3826,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Identifica si un campo es de cantidad
+   * ✅ NUEVO: Identifica si un campo es de cantidad
    * @param {string} fieldName - Nombre del campo
    * @returns {boolean}
    */
@@ -4090,7 +3846,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Aplica conversión universal a cualquier campo de cantidad
+   * ✅ NUEVO: Aplica conversión universal a cualquier campo de cantidad
    * @param {Object} sourceData - Datos completos de la línea
    * @param {number} originalValue - Valor original
    * @param {string} fieldName - Nombre del campo
@@ -4098,29 +3854,29 @@ class DynamicTransferService {
    */
   async applyUniversalUnitConversion(sourceData, originalValue, fieldName) {
     try {
-      // NUEVA VALIDACIÓN: No convertir CANTIDAD_PEDIDA si es línea de bonificación
+      // ✅ NUEVA VALIDACIÓN: No convertir CANTIDAD_PEDIDA si es línea de bonificación
       if (fieldName === "CANTIDAD_PEDIDA" && sourceData._IS_BONUS_LINE) {
         logger.info(
-          `Saltando conversión para CANTIDAD_PEDIDA en línea bonificación`
+          `🎁 Saltando conversión para CANTIDAD_PEDIDA en línea bonificación`
         );
         return 0; // Las bonificaciones NO tienen cantidad pedida
       }
 
-      // NUEVA VALIDACIÓN: No convertir CANTIDAD_A_FACTURA si es línea de bonificación
+      // ✅ NUEVA VALIDACIÓN: No convertir CANTIDAD_A_FACTURA si es línea de bonificación
       if (fieldName === "CANTIDAD_A_FACTURA" && sourceData._IS_BONUS_LINE) {
         logger.info(
-          `Saltando conversión para CANTIDAD_A_FACTURA en línea bonificación`
+          `🎁 Saltando conversión para CANTIDAD_A_FACTURA en línea bonificación`
         );
         return 0; // Las bonificaciones NO se facturan
       }
 
-      // PERMITIR conversión para líneas regulares con descuento
+      // ✅ PERMITIR conversión para líneas regulares con descuento
       if (
         fieldName === "CANTIDAD_PEDIDA" &&
         sourceData._IS_REGULAR_WITH_DISCOUNT
       ) {
         logger.info(
-          `Aplicando conversión normal para línea regular con descuento`
+          `🔍 Aplicando conversión normal para línea regular con descuento`
         );
         // Continuar con conversión normal
       }
@@ -4157,11 +3913,11 @@ class DynamicTransferService {
         return originalValue;
       }
 
-      // APLICAR TU LÓGICA: cantidad * factor = unidades
+      // ✅ APLICAR TU LÓGICA: cantidad * factor = unidades
       const convertedValue = Math.round(numericValue * factor);
 
       logger.info(
-        `Conversión universal: ${numericValue} ${unitMeasure} × ${factor} = ${convertedValue} UND`
+        `🔄 Conversión universal: ${numericValue} ${unitMeasure} × ${factor} = ${convertedValue} UND`
       );
 
       return convertedValue;
@@ -4177,6 +3933,7 @@ class DynamicTransferService {
    * @param {string} fromUnit - Unidad que requiere conversión
    * @returns {boolean}
    */
+  // En DynamicTransferService.js - método shouldApplyUnitConversion MEJORADO
   shouldApplyUnitConversion(currentUnit, fromUnit) {
     try {
       if (!currentUnit || !fromUnit) {
@@ -4276,7 +4033,7 @@ class DynamicTransferService {
 
       if (isMatch) {
         logger.info(
-          `Conversión requerida: ${normalizedCurrent} coincide con grupo ${matchedGroup}`
+          `✅ Conversión requerida: ${normalizedCurrent} coincide con grupo ${matchedGroup}`
         );
         return true;
       }
@@ -4290,7 +4047,7 @@ class DynamicTransferService {
           variation.includes(normalizedCurrent)
         ) {
           logger.info(
-            `Conversión requerida: ${normalizedCurrent} contiene variación ${variation}`
+            `✅ Conversión requerida: ${normalizedCurrent} contiene variación ${variation}`
           );
           return true;
         }
@@ -4302,7 +4059,7 @@ class DynamicTransferService {
 
       if (cleanCurrent === cleanFrom) {
         logger.info(
-          `Conversión requerida: coincidencia limpia ${cleanCurrent}`
+          `✅ Conversión requerida: coincidencia limpia ${cleanCurrent}`
         );
         return true;
       }
@@ -4325,7 +4082,7 @@ class DynamicTransferService {
             variations.includes(normalizedFrom)
           ) {
             logger.info(
-              `Conversión requerida: múltiple detectado ${baseUnit} x ${multiplier}`
+              `✅ Conversión requerida: múltiple detectado ${baseUnit} x ${multiplier}`
             );
             return true;
           }
@@ -4333,7 +4090,7 @@ class DynamicTransferService {
       }
 
       logger.debug(
-        `No se requiere conversión: ${normalizedCurrent} vs ${normalizedFrom}`
+        `❌ No se requiere conversión: ${normalizedCurrent} vs ${normalizedFrom}`
       );
       return false;
     } catch (error) {
@@ -4398,7 +4155,7 @@ class DynamicTransferService {
 
         // Verificar si el registro ya existe
         const checkQuery = `SELECT COUNT(*) as count FROM ${dependency.dependentTable} WHERE ${keyField.targetField} = @keyValue`;
-        const checkResult = await SqlService.query(
+        const checkResult = await DatabaseServiceAdapter.query(
           targetConnection,
           checkQuery,
           { keyValue: fieldValue }
@@ -4450,7 +4207,7 @@ class DynamicTransferService {
             const insertQuery = `INSERT INTO ${
               dependency.dependentTable
             } (${insertFields.join(", ")}) VALUES (${insertValues.join(", ")})`;
-            await SqlService.query(targetConnection, insertQuery, insertData);
+            await DatabaseServiceAdapter.query(targetConnection, insertQuery, insertData);
             logger.info(
               `Registro insertado exitosamente en ${dependency.dependentTable}`
             );
@@ -4521,14 +4278,16 @@ class DynamicTransferService {
     );
 
     try {
-      // 1. VERIFICAR SI EL MARCADO ESTÁ CONFIGURADO
+      // ✅ 1. VERIFICAR SI EL MARCADO ESTÁ CONFIGURADO
       if (
         !mapping.markProcessedField &&
         !mapping.markProcessedConfig?.processedField
       ) {
-        logger.info(`No hay campo de marcado configurado, omitiendo marcado`);
         logger.info(
-          `Documentos procesados exitosamente sin marcado: ${docArray.length}`
+          `📋 No hay campo de marcado configurado, omitiendo marcado`
+        );
+        logger.info(
+          `✅ Documentos procesados exitosamente sin marcado: ${docArray.length}`
         );
         return {
           success: docArray.length,
@@ -4539,23 +4298,23 @@ class DynamicTransferService {
         };
       }
 
-      // 2. OBTENER CONFIGURACIÓN DE MARCADO DESDE MAPPING
+      // ✅ 2. OBTENER CONFIGURACIÓN DE MARCADO DESDE MAPPING
       const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
       if (!mainTable) {
         logger.warn(
-          "No se encontró tabla principal para marcado, omitiendo marcado"
+          "⚠️ No se encontró tabla principal para marcado, omitiendo marcado"
         );
         return { success: docArray.length, failed: 0, errors: [] };
       }
 
-      // 3. DETERMINAR CAMPO DE MARCADO DESDE CONFIGURACIÓN
+      // ✅ 3. DETERMINAR CAMPO DE MARCADO DESDE CONFIGURACIÓN
       const config = mapping.markProcessedConfig || {};
       const processedFieldName =
         mapping.markProcessedField || config.processedField || "PROCESSED"; // fallback solo si no está configurado
 
-      logger.debug(`Campo de marcado configurado: ${processedFieldName}`);
+      logger.debug(`🔍 Campo de marcado configurado: ${processedFieldName}`);
 
-      // 4. VERIFICAR SI LA COLUMNA CONFIGURADA EXISTE
+      // ✅ 4. VERIFICAR SI LA COLUMNA CONFIGURADA EXISTE
       let hasConfiguredColumn = false;
       try {
         const columns = await this.getTableColumns(
@@ -4569,32 +4328,32 @@ class DynamicTransferService {
         );
 
         logger.debug(
-          `Verificación columna ${processedFieldName} en ${
+          `🔍 Verificación columna ${processedFieldName} en ${
             mainTable.sourceTable
           }: ${hasConfiguredColumn ? "EXISTE" : "NO EXISTE"}`
         );
       } catch (columnError) {
         logger.warn(
-          `Error verificando columnas en ${mainTable.sourceTable}: ${columnError.message}`
+          `⚠️ Error verificando columnas en ${mainTable.sourceTable}: ${columnError.message}`
         );
         hasConfiguredColumn = false;
       }
 
-      // 5. DECIDIR QUÉ HACER SEGÚN CONFIGURACIÓN
+      // ✅ 5. DECIDIR QUÉ HACER SEGÚN CONFIGURACIÓN
       if (!hasConfiguredColumn) {
         if (config.requiredForSuccess) {
           logger.error(
-            `Campo de marcado requerido ${processedFieldName} no existe en ${mainTable.sourceTable}`
+            `❌ Campo de marcado requerido ${processedFieldName} no existe en ${mainTable.sourceTable}`
           );
           throw new Error(
             `Campo de marcado requerido '${processedFieldName}' no encontrado en tabla ${mainTable.sourceTable}`
           );
         } else {
           logger.info(
-            `Campo de marcado ${processedFieldName} no existe en ${mainTable.sourceTable}, omitiendo marcado`
+            `⚠️ Campo de marcado ${processedFieldName} no existe en ${mainTable.sourceTable}, omitiendo marcado`
           );
           logger.info(
-            `Documentos procesados exitosamente sin marcado: ${docArray.length}`
+            `📋 Documentos procesados exitosamente sin marcado: ${docArray.length}`
           );
           return {
             success: docArray.length,
@@ -4606,10 +4365,10 @@ class DynamicTransferService {
         }
       }
 
-      // 6. EJECUTAR ESTRATEGIA DE MARCADO (SIN FLAG)
+      // ✅ 6. EJECUTAR ESTRATEGIA DE MARCADO (SIN FLAG)
       const strategy = mapping.markProcessedStrategy || "individual";
       logger.info(
-        `Ejecutando estrategia de marcado: ${strategy} con campo ${processedFieldName}`
+        `📋 Ejecutando estrategia de marcado: ${strategy} con campo ${processedFieldName}`
       );
 
       let result;
@@ -4635,12 +4394,12 @@ class DynamicTransferService {
           );
           break;
         case "none":
-          logger.info(`Estrategia 'none' configurada, omitiendo marcado`);
+          logger.info(`📋 Estrategia 'none' configurada, omitiendo marcado`);
           result = { success: docArray.length, failed: 0, errors: [] };
           break;
         default:
           logger.warn(
-            `Estrategia desconocida: ${strategy}, usando 'individual' por defecto`
+            `⚠️ Estrategia desconocida: ${strategy}, usando 'individual' por defecto`
           );
           result = await this.markDocumentsIndividually(
             docArray,
@@ -4660,13 +4419,13 @@ class DynamicTransferService {
         }`
       );
 
-      // DECIDIR SI EL ERROR ES CRÍTICO O NO
+      // ✅ DECIDIR SI EL ERROR ES CRÍTICO O NO
       const config = mapping.markProcessedConfig || {};
       if (config.requiredForSuccess) {
         throw error;
       } else {
         logger.warn(
-          `Continuando procesamiento a pesar del error de marcado no crítico`
+          `⚠️ Continuando procesamiento a pesar del error de marcado no crítico`
         );
         return {
           success: 0,
@@ -4719,11 +4478,11 @@ class DynamicTransferService {
           query = `UPDATE ${mainTable.sourceTable} SET ${setClause} WHERE ${primaryKey} = @documentId`;
         }
 
-        await SqlService.query(connection, query, params);
+        await DatabaseServiceAdapter.query(connection, query, params);
         results.success++;
 
         logger.debug(
-          `Documento ${documentId} ${
+          `✅ Documento ${documentId} ${
             shouldMark ? "marcado" : "desmarcado"
           } exitosamente usando campo ${processedFieldName}`
         );
@@ -4731,7 +4490,7 @@ class DynamicTransferService {
         results.failed++;
         results.errors.push({ documentId, error: error.message });
         logger.error(
-          `Error al ${
+          `❌ Error al ${
             shouldMark ? "marcar" : "desmarcar"
           } documento ${documentId}: ${error.message}`
         );
@@ -4790,11 +4549,11 @@ class DynamicTransferService {
           query = `UPDATE ${mainTable.sourceTable} SET ${setClause} WHERE ${primaryKey} IN (${placeholders})`;
         }
 
-        await SqlService.query(connection, query, params);
+        await DatabaseServiceAdapter.query(connection, query, params);
         results.success += batch.length;
 
         logger.debug(
-          `Lote de ${batch.length} documentos ${
+          `✅ Lote de ${batch.length} documentos ${
             shouldMark ? "marcados" : "desmarcados"
           } exitosamente usando campo ${processedFieldName}`
         );
@@ -4804,7 +4563,7 @@ class DynamicTransferService {
           results.errors.push({ documentId: docId, error: error.message });
         });
         logger.error(
-          `Error al ${
+          `❌ Error al ${
             shouldMark ? "marcar" : "desmarcar"
           } lote de documentos: ${error.message}`
         );
@@ -5133,20 +4892,27 @@ class DynamicTransferService {
         overall: false,
       };
 
-      // Probar conexión origen usando el nuevo método
+      // Probar conexión origen
       try {
-        const sourceConnection = await this._ensureValidConnection(
-          mapping.sourceServer,
-          null
+        const sourceConnResult = await DatabaseServiceAdapter.getConnection(
+          mapping.sourceServer
         );
-
-        results.sourceConnection = {
-          success: true,
-          message: "Conexión exitosa",
-          server: mapping.sourceServer,
-        };
-
-        await ConnectionService.releaseConnection(sourceConnection);
+        if (sourceConnResult.success) {
+          results.sourceConnection = {
+            success: true,
+            message: "Conexión exitosa",
+            server: mapping.sourceServer,
+          };
+          await DatabaseServiceAdapter.releaseConnection(
+            sourceConnResult.connection
+          );
+        } else {
+          results.sourceConnection = {
+            success: false,
+            message: sourceConnResult.error?.message || "Error desconocido",
+            server: mapping.sourceServer,
+          };
+        }
       } catch (sourceError) {
         results.sourceConnection = {
           success: false,
@@ -5155,20 +4921,27 @@ class DynamicTransferService {
         };
       }
 
-      // Probar conexión destino usando el nuevo método
+      // Probar conexión destino
       try {
-        const targetConnection = await this._ensureValidConnection(
-          mapping.targetServer,
-          null
+        const targetConnResult = await DatabaseServiceAdapter.getConnection(
+          mapping.targetServer
         );
-
-        results.targetConnection = {
-          success: true,
-          message: "Conexión exitosa",
-          server: mapping.targetServer,
-        };
-
-        await ConnectionService.releaseConnection(targetConnection);
+        if (targetConnResult.success) {
+          results.targetConnection = {
+            success: true,
+            message: "Conexión exitosa",
+            server: mapping.targetServer,
+          };
+          await DatabaseServiceAdapter.releaseConnection(
+            targetConnResult.connection
+          );
+        } else {
+          results.targetConnection = {
+            success: false,
+            message: targetConnResult.error?.message || "Error desconocido",
+            server: mapping.targetServer,
+          };
+        }
       } catch (targetError) {
         results.targetConnection = {
           success: false,
@@ -5207,11 +4980,16 @@ class DynamicTransferService {
         throw new Error(`Mapeo ${mappingId} no encontrado`);
       }
 
-      // Establecer conexión origen usando el nuevo método
-      sourceConnection = await this._ensureValidConnection(
-        mapping.sourceServer,
-        null
+      // Establecer conexión origen
+      const sourceConnResult = await DatabaseServiceAdapter.getConnection(
+        mapping.sourceServer
       );
+      if (!sourceConnResult.success) {
+        throw new Error(
+          `No se pudo conectar al servidor origen: ${sourceConnResult.error?.message}`
+        );
+      }
+      sourceConnection = sourceConnResult.connection;
 
       // Obtener documentos con límite
       const previewFilters = { ...filters, limit };
@@ -5284,7 +5062,7 @@ class DynamicTransferService {
       throw error;
     } finally {
       if (sourceConnection) {
-        await ConnectionService.releaseConnection(sourceConnection);
+        await DatabaseServiceAdapter.releaseConnection(sourceConnection);
       }
     }
   }
@@ -5404,12 +5182,8 @@ class DynamicTransferService {
     }
   }
 
-  // ===============================
-  // NUEVOS MÉTODOS DE PROMOCIONES MEJORADOS
-  // ===============================
-
   /**
-   * Detecta TODOS los campos de promoción disponibles en los datos
+   * 🔧 NUEVO MÉTODO: Detecta TODOS los campos de promoción disponibles en los datos
    * @param {Object} dataForProcessing - Datos a procesar
    * @param {Object} promotionFieldConfig - Configuración de campos de promoción
    * @param {Set} processedFieldNames - Nombres de campos ya procesados
@@ -5422,9 +5196,9 @@ class DynamicTransferService {
   ) {
     const fieldsToProcess = [];
 
-    logger.debug(`Detectando campos de promoción en datos...`);
+    logger.debug(`🎁 Detectando campos de promoción en datos...`);
     logger.debug(
-      `Campos disponibles en datos: ${Object.keys(dataForProcessing).join(
+      `🎁 Campos disponibles en datos: ${Object.keys(dataForProcessing).join(
         ", "
       )}`
     );
@@ -5512,12 +5286,12 @@ class DynamicTransferService {
       ) {
         fieldsToProcess.push(field);
         logger.debug(
-          `Campo promoción detectado: ${field.sourceField} -> ${field.targetField} (${field.description})`
+          `🎁 ✅ Campo promoción detectado: ${field.sourceField} -> ${field.targetField} (${field.description})`
         );
       }
     }
 
-    // NUEVO: Detectar cualquier campo que comience con CANTIDAD_ o termine con _BONIF
+    // 🔧 NUEVO: Detectar cualquier campo que comience con CANTIDAD_ o termine con _BONIF
     Object.keys(dataForProcessing).forEach((key) => {
       const isQuantityField =
         key.startsWith("CANTIDAD_") ||
@@ -5541,19 +5315,19 @@ class DynamicTransferService {
             targetField: key,
             description: `Campo promoción auto-detectado: ${key}`,
           });
-          logger.debug(`Campo promoción auto-detectado: ${key}`);
+          logger.debug(`🎁 🔍 Campo promoción auto-detectado: ${key}`);
         }
       }
     });
 
     logger.info(
-      `Total de campos de promoción a procesar: ${fieldsToProcess.length}`
+      `🎁 Total de campos de promoción a procesar: ${fieldsToProcess.length}`
     );
     return fieldsToProcess;
   }
 
   /**
-   * Busca un valor de campo en los datos usando múltiples estrategias
+   * 🔧 NUEVO MÉTODO: Busca un valor de campo en los datos usando múltiples estrategias
    * @param {string} sourceField - Campo origen a buscar
    * @param {Object} sourceData - Datos origen
    * @param {Object} mapping - Configuración de mapping
@@ -5562,7 +5336,7 @@ class DynamicTransferService {
   findFieldValueInData(sourceField, sourceData, mapping) {
     // 1. Buscar el campo exacto
     if (sourceData.hasOwnProperty(sourceField)) {
-      logger.debug(`Campo encontrado exacto: ${sourceField}`);
+      logger.debug(`🔍 Campo encontrado exacto: ${sourceField}`);
       return sourceData[sourceField];
     }
 
@@ -5573,7 +5347,7 @@ class DynamicTransferService {
       mapping
     );
     if (promotionValue !== null) {
-      logger.debug(`Campo encontrado en promociones: ${sourceField}`);
+      logger.debug(`🎁 Campo encontrado en promociones: ${sourceField}`);
       return promotionValue;
     }
 
@@ -5582,7 +5356,7 @@ class DynamicTransferService {
     for (const [key, value] of Object.entries(sourceData)) {
       if (key.toLowerCase() === lowerSourceField) {
         logger.debug(
-          `Campo encontrado case-insensitive: ${key} -> ${sourceField}`
+          `🔍 Campo encontrado case-insensitive: ${key} -> ${sourceField}`
         );
         return value;
       }
@@ -5595,7 +5369,9 @@ class DynamicTransferService {
     for (const [key, value] of Object.entries(sourceData)) {
       const normalizedKey = key.replace(/[_\s-]/g, "").toLowerCase();
       if (normalizedKey === normalizedSourceField) {
-        logger.debug(`Campo encontrado normalizado: ${key} -> ${sourceField}`);
+        logger.debug(
+          `🔍 Campo encontrado normalizado: ${key} -> ${sourceField}`
+        );
         return value;
       }
     }
@@ -5628,19 +5404,19 @@ class DynamicTransferService {
       for (const pattern of patterns[sourceFieldUpper]) {
         if (sourceData.hasOwnProperty(pattern)) {
           logger.debug(
-            `Campo encontrado por patrón: ${pattern} -> ${sourceField}`
+            `🔍 Campo encontrado por patrón: ${pattern} -> ${sourceField}`
           );
           return sourceData[pattern];
         }
       }
     }
 
-    logger.debug(`Campo no encontrado: ${sourceField}`);
+    logger.debug(`❌ Campo no encontrado: ${sourceField}`);
     return null;
   }
 
   /**
-   * Detecta si hay datos de promociones en el registro
+   * 🔧 NUEVO: Detecta si hay datos de promociones en el registro
    * @param {Object} dataForProcessing - Datos a analizar
    * @returns {boolean} - Si contiene datos de promociones
    */
@@ -5664,7 +5440,7 @@ class DynamicTransferService {
     );
 
     if (hasDirectIndicators) {
-      logger.debug(`Promociones detectadas por indicadores directos`);
+      logger.debug(`🎁 Promociones detectadas por indicadores directos`);
       return true;
     }
 
@@ -5672,7 +5448,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Genera fieldMappings automáticos para campos de promoción - COMPLETO
+   * 🔧 CORREGIDO: Genera fieldMappings automáticos para campos de promoción - COMPLETO
    * @param {Object} dataForProcessing - Datos con promociones
    * @param {Object} mapping - Configuración de mapping
    * @param {Set} processedFieldNames - Campos ya procesados
@@ -5685,15 +5461,15 @@ class DynamicTransferService {
   ) {
     const promotionFieldMappings = [];
 
-    logger.debug(`Generando mappings automáticos para promociones...`);
+    logger.debug(`🎁 Generando mappings automáticos para promociones...`);
 
-    // CRÍTICO: NO generar mappings de promoción para líneas regulares con descuento
+    // 🚨 CRÍTICO: NO generar mappings de promoción para líneas regulares con descuento
     if (dataForProcessing._IS_REGULAR_WITH_DISCOUNT) {
       logger.debug(
-        `Línea REGULAR_WITH_DISCOUNT - NO generar mappings de promoción especiales`
+        `📋 Línea REGULAR_WITH_DISCOUNT - NO generar mappings de promoción especiales`
       );
       logger.debug(
-        `Esta línea usará mappings normales del fieldMapping original`
+        `📋 Esta línea usará mappings normales del fieldMapping original`
       );
       return promotionFieldMappings; // Retorna array vacío
     }
@@ -5704,19 +5480,21 @@ class DynamicTransferService {
       (!dataForProcessing._IS_BONUS_LINE &&
         !dataForProcessing._IS_REGULAR_WITH_DISCOUNT)
     ) {
-      logger.debug(`Línea regular normal - NO generar mappings de promoción`);
+      logger.debug(
+        `📋 Línea regular normal - NO generar mappings de promoción`
+      );
       return promotionFieldMappings; // Retorna array vacío
     }
 
     // SOLO generar mappings si es bonificación REAL
     if (!dataForProcessing._IS_BONUS_LINE) {
       logger.debug(
-        `No es bonificación real - NO generar mappings de promoción`
+        `📋 No es bonificación real - NO generar mappings de promoción`
       );
       return promotionFieldMappings;
     }
 
-    // USAR CAMPOS ESENCIALES DEL NUEVO PROMOTIONPROCESSOR
+    // ✅ USAR CAMPOS ESENCIALES DEL NUEVO PROMOTIONPROCESSOR
     const essentialPromotionFields = [
       {
         sourceField: "PEDIDO_LINEA_BONIF",
@@ -5748,7 +5526,7 @@ class DynamicTransferService {
       },
     ];
 
-    // USAR TU LÓGICA EXISTENTE PARA EVITAR DUPLICADOS
+    // ✅ USAR TU LÓGICA EXISTENTE PARA EVITAR DUPLICADOS
     for (const field of essentialPromotionFields) {
       const targetFieldLower = field.targetField.toLowerCase();
 
@@ -5763,19 +5541,19 @@ class DynamicTransferService {
 
         processedFieldNames.add(targetFieldLower);
         logger.debug(
-          `Mapping promoción generado: ${field.sourceField} -> ${field.targetField}`
+          `🎁 ✅ Mapping promoción generado: ${field.sourceField} -> ${field.targetField}`
         );
       }
     }
 
     logger.info(
-      `Mappings de promoción generados: ${promotionFieldMappings.length}`
+      `🎁 Mappings de promoción generados: ${promotionFieldMappings.length}`
     );
     return promotionFieldMappings;
   }
 
   /**
-   * Obtiene valor de un campo de promoción desde los datos procesados
+   * 🎁 NUEVO: Obtiene valor de un campo de promoción desde los datos procesados
    * @param {string} targetField - Campo destino a buscar
    * @param {Object} sourceData - Datos procesados (incluye datos de promociones)
    * @param {Object} mapping - Configuración de mapping
@@ -5811,7 +5589,7 @@ class DynamicTransferService {
     ) {
       const value = sourceData[targetField];
       logger.debug(
-        `Campo promoción encontrado directo: ${targetField} = ${value}`
+        `🎁 Campo promoción encontrado directo: ${targetField} = ${value}`
       );
       return value;
     }
@@ -5837,7 +5615,7 @@ class DynamicTransferService {
         if (sourceData.hasOwnProperty(alternative)) {
           const value = sourceData[alternative];
           logger.debug(
-            `Campo promoción encontrado alternativo: ${alternative} -> ${targetField} = ${value}`
+            `🎁 Campo promoción encontrado alternativo: ${alternative} -> ${targetField} = ${value}`
           );
           return value;
         }
@@ -5851,16 +5629,18 @@ class DynamicTransferService {
       sourceData._PROMOTION_TYPE
     ) {
       logger.debug(
-        `Datos de promoción presentes pero campo ${targetField} no encontrado`
+        `🎁 Datos de promoción presentes pero campo ${targetField} no encontrado`
       );
-      logger.debug(`Campos disponibles: ${Object.keys(sourceData).join(", ")}`);
+      logger.debug(
+        `🎁 Campos disponibles: ${Object.keys(sourceData).join(", ")}`
+      );
     }
 
     return null;
   }
 
   /**
-   * Determina si un campo es de promociones
+   * ✅ Determina si un campo es de promociones
    * @param {string} targetField - Campo destino
    * @returns {boolean} - Si es campo de promociones
    */
@@ -5885,38 +5665,40 @@ class DynamicTransferService {
       upperField.includes("CANTIDAD_");
 
     if (isPromotionField) {
-      logger.debug(`Campo identificado como promoción: ${targetField}`);
+      logger.debug(`🎁 Campo identificado como promoción: ${targetField}`);
     }
 
     return isPromotionField;
   }
 
   /**
-   * Busca automáticamente el valor de un campo de promociones
+   * ✅ COMPLETO: Busca automáticamente el valor de un campo de promociones
    * @param {string} targetField - Campo destino
    * @param {Object} sourceData - Datos origen
    * @param {Object} mapping - Configuración de mapping
    * @returns {*} - Valor encontrado o null
    */
   findPromotionValue(targetField, sourceData, mapping) {
-    logger.error(`============ findPromotionValue ============`);
-    logger.error(`Campo solicitado: ${targetField}`);
-    logger.error(`_IS_BONUS_LINE: ${sourceData._IS_BONUS_LINE}`);
+    logger.error(`🎁 🔍 ============ findPromotionValue ============`);
+    logger.error(`🎁 🔍 Campo solicitado: ${targetField}`);
+    logger.error(`🎁 🔍 _IS_BONUS_LINE: ${sourceData._IS_BONUS_LINE}`);
     logger.error(
-      `_IS_REGULAR_WITH_DISCOUNT: ${sourceData._IS_REGULAR_WITH_DISCOUNT}`
+      `🎁 🔍 _IS_REGULAR_WITH_DISCOUNT: ${sourceData._IS_REGULAR_WITH_DISCOUNT}`
     );
-    logger.error(`_IS_NORMAL_LINE: ${sourceData._IS_NORMAL_LINE}`);
-    logger.error(`Datos disponibles: ${Object.keys(sourceData).join(", ")}`);
+    logger.error(`🎁 🔍 _IS_NORMAL_LINE: ${sourceData._IS_NORMAL_LINE}`);
+    logger.error(
+      `🎁 🔍 Datos disponibles: ${Object.keys(sourceData).join(", ")}`
+    );
 
-    // NUEVA LÓGICA CRÍTICA: Para líneas regulares con descuento
+    // ✅ NUEVA LÓGICA CRÍTICA: Para líneas regulares con descuento
     if (sourceData._IS_SELF_BONUS) {
-      logger.error(`Procesando SELF_BONUS para ${targetField}`);
+      logger.error(`📋 ✅ Procesando SELF_BONUS para ${targetField}`);
 
-      // CRÍTICO: Para REGULAR_WITH_DISCOUNT, CNT_MAX va a CANTIDAD_PEDIDA
+      // 🚨 CRÍTICO: Para REGULAR_WITH_DISCOUNT, CNT_MAX va a CANTIDAD_PEDIDA
       if (targetField === "CANTIDAD_PEDIDA") {
         const valor = sourceData.CNT_MAX || sourceData.CANTIDAD_PEDIDA || 0;
         logger.error(
-          `REGULAR_WITH_DISCOUNT - CANTIDAD_PEDIDA = ${valor} (desde CNT_MAX)`
+          `📋 ✅ REGULAR_WITH_DISCOUNT - CANTIDAD_PEDIDA = ${valor} (desde CNT_MAX)`
         );
         return valor;
       }
@@ -5924,91 +5706,93 @@ class DynamicTransferService {
       if (targetField === "CANTIDAD_A_FACTURA") {
         const valor = sourceData.CNT_MAX || sourceData.CANTIDAD_A_FACTURA || 0;
         logger.error(
-          `REGULAR_WITH_DISCOUNT - CANTIDAD_A_FACTURA = ${valor} (desde CNT_MAX)`
+          `📋 ✅ REGULAR_WITH_DISCOUNT - CANTIDAD_A_FACTURA = ${valor} (desde CNT_MAX)`
         );
         return valor;
       }
 
       if (targetField === "CANTIDAD_BONIFICAD") {
         logger.error(
-          `REGULAR_WITH_DISCOUNT - CANTIDAD_BONIFICAD = 0 (forzado)`
+          `📋 ✅ REGULAR_WITH_DISCOUNT - CANTIDAD_BONIFICAD = 0 (forzado)`
         );
         return 0; // SIEMPRE 0 para líneas con descuento (no son bonificaciones reales)
       }
 
       if (targetField === "PEDIDO_LINEA_BONIF") {
-        logger.error(`REGULAR_WITH_DISCOUNT - PEDIDO_LINEA_BONIF = null`);
+        logger.error(`📋 ✅ REGULAR_WITH_DISCOUNT - PEDIDO_LINEA_BONIF = null`);
         return null; // No tiene referencia de bonificación
       }
     }
 
-    // LÓGICA PARA LÍNEAS REGULARES NORMALES
+    // ✅ LÓGICA PARA LÍNEAS REGULARES NORMALES
     if (sourceData._IS_NORMAL_LINE && !sourceData._IS_BONUS_LINE) {
-      logger.error(`Procesando LÍNEA NORMAL para ${targetField}`);
+      logger.error(`📋 ✅ Procesando LÍNEA NORMAL para ${targetField}`);
 
       if (targetField === "CANTIDAD_PEDIDA") {
         const valor = sourceData.CNT_MAX || sourceData.CANTIDAD_PEDIDA || 0;
-        logger.error(`NORMAL - CANTIDAD_PEDIDA = ${valor}`);
+        logger.error(`📋 ✅ NORMAL - CANTIDAD_PEDIDA = ${valor}`);
         return valor;
       }
 
       if (targetField === "CANTIDAD_A_FACTURA") {
         const valor = sourceData.CNT_MAX || sourceData.CANTIDAD_A_FACTURA || 0;
-        logger.error(`NORMAL - CANTIDAD_A_FACTURA = ${valor}`);
+        logger.error(`📋 ✅ NORMAL - CANTIDAD_A_FACTURA = ${valor}`);
         return valor;
       }
 
       if (targetField === "CANTIDAD_BONIFICAD") {
-        logger.error(`NORMAL - CANTIDAD_BONIFICAD = 0`);
+        logger.error(`📋 ✅ NORMAL - CANTIDAD_BONIFICAD = 0`);
         return 0;
       }
 
       if (targetField === "PEDIDO_LINEA_BONIF") {
-        logger.error(`NORMAL - PEDIDO_LINEA_BONIF = null`);
+        logger.error(`📋 ✅ NORMAL - PEDIDO_LINEA_BONIF = null`);
         return null;
       }
     }
 
-    // LÓGICA PARA BONIFICACIONES REALES
+    // ✅ LÓGICA PARA BONIFICACIONES REALES
     if (sourceData._IS_BONUS_LINE) {
-      logger.error(`Procesando BONIFICACIÓN REAL para ${targetField}`);
+      logger.error(`🎁 ✅ Procesando BONIFICACIÓN REAL para ${targetField}`);
 
       if (targetField === "CANTIDAD_PEDIDA") {
         logger.error(
-          `BONUS - CANTIDAD_PEDIDA = 0 (bonificaciones no se piden)`
+          `🎁 ✅ BONUS - CANTIDAD_PEDIDA = 0 (bonificaciones no se piden)`
         );
         return 0;
       }
 
       if (targetField === "CANTIDAD_A_FACTURA") {
         logger.error(
-          `BONUS - CANTIDAD_A_FACTURA = 0 (bonificaciones no se facturan)`
+          `🎁 ✅ BONUS - CANTIDAD_A_FACTURA = 0 (bonificaciones no se facturan)`
         );
         return 0;
       }
 
       if (targetField === "CANTIDAD_BONIFICAD") {
         const valor = sourceData.CNT_MAX || sourceData.CANTIDAD_BONIFICAD || 0;
-        logger.error(`BONUS - CANTIDAD_BONIFICAD = ${valor} (desde CNT_MAX)`);
+        logger.error(
+          `🎁 ✅ BONUS - CANTIDAD_BONIFICAD = ${valor} (desde CNT_MAX)`
+        );
         return valor;
       }
 
       if (targetField === "PEDIDO_LINEA_BONIF") {
         const valor = sourceData.PEDIDO_LINEA_BONIF || null;
-        logger.error(`BONUS - PEDIDO_LINEA_BONIF = ${valor}`);
+        logger.error(`🎁 ✅ BONUS - PEDIDO_LINEA_BONIF = ${valor}`);
         return valor;
       }
     }
 
-    // FALLBACK: Buscar campo exacto
+    // ✅ FALLBACK: Buscar campo exacto
     if (sourceData.hasOwnProperty(targetField)) {
       logger.error(
-        `Campo encontrado exacto: ${targetField} = ${sourceData[targetField]}`
+        `🔍 ✅ Campo encontrado exacto: ${targetField} = ${sourceData[targetField]}`
       );
       return sourceData[targetField];
     }
 
-    // BÚSQUEDA POR PATRONES DE PROMOCIONES
+    // ✅ BÚSQUEDA POR PATRONES DE PROMOCIONES
     const promotionPatterns = {
       PEDIDO_LINEA_BONIF: [
         "PEDIDO_LINEA_BONIF",
@@ -6054,29 +5838,29 @@ class DynamicTransferService {
     for (const pattern of patterns) {
       if (sourceData.hasOwnProperty(pattern)) {
         logger.error(
-          `Campo encontrado por patrón: ${pattern} -> ${targetField} = ${sourceData[pattern]}`
+          `🔍 ✅ Campo encontrado por patrón: ${pattern} -> ${targetField} = ${sourceData[pattern]}`
         );
         return sourceData[pattern];
       }
     }
 
-    // BÚSQUEDA CASE-INSENSITIVE
+    // ✅ BÚSQUEDA CASE-INSENSITIVE
     const lowerTargetField = targetField.toLowerCase();
     for (const [key, value] of Object.entries(sourceData)) {
       if (key.toLowerCase() === lowerTargetField) {
         logger.error(
-          `Campo encontrado case-insensitive: ${key} -> ${targetField} = ${value}`
+          `🔍 ✅ Campo encontrado case-insensitive: ${key} -> ${targetField} = ${value}`
         );
         return value;
       }
     }
 
-    // VERIFICAR CAMPOS META DE PROMOCIONES
+    // ✅ VERIFICAR CAMPOS META DE PROMOCIONES
     if (sourceData._IS_BONUS_LINE || sourceData._IS_TRIGGER_LINE) {
       logger.error(
-        `Línea tiene metadatos de promoción pero no se encontró ${targetField}`
+        `🎁 Línea tiene metadatos de promoción pero no se encontró ${targetField}`
       );
-      logger.error(`Tipo de línea: ${sourceData._PROMOTION_TYPE}`);
+      logger.error(`🎁 Tipo de línea: ${sourceData._PROMOTION_TYPE}`);
 
       // Para líneas de bonificación, algunos campos deben ser null/0
       if (sourceData._IS_BONUS_LINE) {
@@ -6084,7 +5868,7 @@ class DynamicTransferService {
           upperTargetField.includes("PEDIDA") ||
           upperTargetField.includes("FACTURA")
         ) {
-          logger.error(`Línea bonificación: ${targetField} = 0`);
+          logger.error(`🎁 Línea bonificación: ${targetField} = 0`);
           return 0;
         }
       }
@@ -6092,18 +5876,18 @@ class DynamicTransferService {
       // Para líneas regulares, algunos campos deben ser null/0
       if (sourceData._IS_TRIGGER_LINE) {
         if (upperTargetField.includes("BONIF")) {
-          logger.error(`Línea trigger: ${targetField} = 0`);
+          logger.error(`🎁 Línea trigger: ${targetField} = 0`);
           return 0;
         }
       }
     }
 
-    logger.error(`No se encontró valor para ${targetField}`);
+    logger.error(`🔍 ❌ No se encontró valor para ${targetField}`);
     return null;
   }
 
   /**
-   * Obtiene datos de detalle garantizando campos de promociones - CON DETECCIÓN AUTOMÁTICA
+   * ✅ Obtiene datos de detalle garantizando campos de promociones - CON DETECCIÓN AUTOMÁTICA
    * @param {Object} detailConfig - Configuración de la tabla de detalle
    * @param {Object} parentTableConfig - Configuración de la tabla padre
    * @param {string} documentId - ID del documento
@@ -6118,9 +5902,9 @@ class DynamicTransferService {
     sourceConnection,
     mapping
   ) {
-    logger.debug(`Obteniendo datos con campos de promoción garantizados...`);
+    logger.debug(`🎁 Obteniendo datos con campos de promoción garantizados...`);
 
-    // DETECTAR AUTOMÁTICAMENTE LOS NOMBRES CORRECTOS DE CAMPOS
+    // ✅ DETECTAR AUTOMÁTICAMENTE LOS NOMBRES CORRECTOS DE CAMPOS
     const promotionFieldConfig = await this.detectPromotionFieldNames(
       sourceConnection,
       detailConfig.sourceTable,
@@ -6134,26 +5918,26 @@ class DynamicTransferService {
       promotionFieldConfig.discountField,
       promotionFieldConfig.lineNumberField,
       promotionFieldConfig.articleField,
-      promotionFieldConfig.quantityField, // Ahora será CNT_MAX
+      promotionFieldConfig.quantityField, // ✅ Ahora será CNT_MAX
     ];
 
     logger.info(
-      `Campos detectados para promociones: ${requiredPromotionFields.join(
+      `🎁 Campos detectados para promociones: ${requiredPromotionFields.join(
         ", "
       )}`
     );
 
     if (detailConfig.customQuery) {
-      logger.debug(`Usando query personalizada existente`);
+      logger.debug(`🎁 Usando query personalizada existente`);
       const query = detailConfig.customQuery.replace(
         /@documentId/g,
         documentId
       );
-      const result = await SqlService.query(sourceConnection, query, {
+      const result = await DatabaseServiceAdapter.query(sourceConnection, query, {
         documentId,
       });
 
-      // Guardar configuración detectada para uso posterior
+      // ✅ Guardar configuración detectada para uso posterior
       result.recordset.forEach((record) => {
         record._DETECTED_PROMOTION_CONFIG = promotionFieldConfig;
       });
@@ -6180,9 +5964,9 @@ class DynamicTransferService {
       ...new Set([...mappingFields, ...requiredPromotionFields]),
     ];
 
-    logger.debug(`Campos finales para query: ${allFields.join(", ")}`);
+    logger.debug(`🎁 Campos finales para query: ${allFields.join(", ")}`);
     logger.debug(
-      `Total campos: ${allFields.length} (${mappingFields.length} mapping + ${requiredPromotionFields.length} promoción)`
+      `🎁 Total campos: ${allFields.length} (${mappingFields.length} mapping + ${requiredPromotionFields.length} promoción)`
     );
 
     // Construir query
@@ -6197,17 +5981,19 @@ class DynamicTransferService {
       query += ` ORDER BY ${detailConfig.orderByColumn}`;
     }
 
-    logger.debug(`Query construida: ${query}`);
+    logger.debug(`🎁 Query construida: ${query}`);
 
     try {
-      const result = await SqlService.query(sourceConnection, query, {
+      const result = await DatabaseServiceAdapter.query(sourceConnection, query, {
         documentId,
       });
       const data = result.recordset || [];
 
-      logger.info(`Datos obtenidos con promociones: ${data.length} registros`);
+      logger.info(
+        `🎁 ✅ Datos obtenidos con promociones: ${data.length} registros`
+      );
 
-      // Agregar configuración detectada a cada registro
+      // ✅ Agregar configuración detectada a cada registro
       data.forEach((record) => {
         record._DETECTED_PROMOTION_CONFIG = promotionFieldConfig;
       });
@@ -6215,15 +6001,17 @@ class DynamicTransferService {
       if (data.length > 0) {
         const firstRecord = data[0];
         logger.debug(
-          `Campos en primer registro: ${Object.keys(firstRecord).join(", ")}`
+          `🎁 Campos en primer registro: ${Object.keys(firstRecord).join(", ")}`
         );
 
-        // Verificar que los campos de promoción estén presentes
+        // Verificar que los campos de promoción están presentes
         requiredPromotionFields.forEach((field) => {
           if (firstRecord.hasOwnProperty(field)) {
-            logger.debug(`Campo presente: ${field} = ${firstRecord[field]}`);
+            logger.debug(
+              `🎁 ✅ Campo presente: ${field} = ${firstRecord[field]}`
+            );
           } else {
-            logger.warn(`Campo faltante: ${field}`);
+            logger.warn(`🎁 ❌ Campo faltante: ${field}`);
           }
         });
       }
@@ -6237,7 +6025,7 @@ class DynamicTransferService {
   }
 
   /**
-   * Detecta automáticamente los nombres de campos en la tabla
+   * ✅ NUEVO: Detecta automáticamente los nombres de campos en la tabla
    * @param {Object} sourceConnection - Conexión origen
    * @param {string} tableName - Nombre de la tabla
    * @param {Object} mapping - Configuración de mapping
@@ -6245,13 +6033,13 @@ class DynamicTransferService {
    */
   async detectPromotionFieldNames(sourceConnection, tableName, mapping) {
     try {
-      logger.debug(`Detectando nombres de campos en tabla ${tableName}...`);
+      logger.debug(`🎁 Detectando nombres de campos en tabla ${tableName}...`);
 
       // Obtener columnas de la tabla
       const columns = await this.getTableColumns(sourceConnection, tableName);
       const columnNames = columns.map((col) => col.COLUMN_NAME.toUpperCase());
 
-      logger.debug(`Columnas disponibles: ${columnNames.join(", ")}`);
+      logger.debug(`🎁 Columnas disponibles: ${columnNames.join(", ")}`);
 
       const defaultConfig = {
         bonusField: "ART_BON",
@@ -6266,7 +6054,7 @@ class DynamicTransferService {
         bonusQuantity: "CANTIDAD_BONIFICAD",
       };
 
-      // DETECTAR AUTOMÁTICAMENTE VARIANTES DE NOMBRES
+      // ✅ DETECTAR AUTOMÁTICAMENTE VARIANTES DE NOMBRES
       const fieldVariants = {
         quantityField: [
           "CNT_MAX",
@@ -6297,7 +6085,7 @@ class DynamicTransferService {
           if (columnNames.includes(variant.toUpperCase())) {
             if (detectedConfig[configKey] !== variant) {
               logger.info(
-                `Campo detectado: ${configKey} = ${variant} (era ${detectedConfig[configKey]})`
+                `🎁 ✅ Campo detectado: ${configKey} = ${variant} (era ${detectedConfig[configKey]})`
               );
               detectedConfig[configKey] = variant;
             }
@@ -6315,13 +6103,13 @@ class DynamicTransferService {
         };
 
         logger.debug(
-          `Configuración final: ${JSON.stringify(finalConfig, null, 2)}`
+          `🎁 Configuración final: ${JSON.stringify(finalConfig, null, 2)}`
         );
         return finalConfig;
       }
 
       logger.debug(
-        `Configuración detectada: ${JSON.stringify(detectedConfig, null, 2)}`
+        `🎁 Configuración detectada: ${JSON.stringify(detectedConfig, null, 2)}`
       );
       return detectedConfig;
     } catch (error) {
@@ -6334,7 +6122,7 @@ class DynamicTransferService {
         discountField: "MON_DSC",
         lineNumberField: "NUM_LN",
         articleField: "COD_ART",
-        quantityField: "CNT_MAX", // Corregido
+        quantityField: "CNT_MAX", // ✅ Corregido
         bonusLineRef: "PEDIDO_LINEA_BONIF",
         orderedQuantity: "CANTIDAD_PEDIDA",
         invoiceQuantity: "CANTIDAD_A_FACTURA",
@@ -6413,7 +6201,7 @@ class DynamicTransferService {
         }
 
         // Ejecutar consulta
-        const result = await SqlService.query(
+        const result = await DatabaseServiceAdapter.query(
           targetConnection,
           fieldMapping.lookupQuery,
           params
@@ -6449,27 +6237,6 @@ class DynamicTransferService {
     }
 
     return lookupResults;
-  }
-
-  /**
-   * Aplica mapeo de valores si está configurado
-   * @param {Array} valueMappings - Configuración de mapeo de valores
-   * @param {*} value - Valor a mapear
-   * @returns {*} - Valor mapeado o null si no se encuentra mapeo
-   */
-  applyValueMapping(valueMappings, value) {
-    if (!valueMappings || valueMappings.length === 0) {
-      return null;
-    }
-
-    for (const mapping of valueMappings) {
-      if (mapping.sourceValue === value) {
-        logger.debug(`Valor mapeado: ${value} -> ${mapping.targetValue}`);
-        return mapping.targetValue;
-      }
-    }
-
-    return null; // No se encontró mapeo, mantener valor original
   }
 }
 
