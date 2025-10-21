@@ -30,25 +30,42 @@ class DatabaseService {
     if (this._initialized) return;
 
     try {
-      // Asegurar conexión a MongoDB
       if (!MongoDbService.isConnected()) {
         await MongoDbService.connect();
       }
 
-      // Cargar todas las configuraciones de BD
       const configs = await DBConfig.find({}).lean();
+
+      // MEJORADO: Filtrar configuraciones problemáticas
+      const validConfigs = configs.filter((config) => {
+        // Saltar configuraciones MongoDB (no son SQL Server)
+        if (config.type && config.type.toLowerCase() === "mongodb") {
+          logger.info(`Saltando ${config.serverName}: configuración MongoDB`);
+          return false;
+        }
+
+        // Saltar configuraciones que intentan usar puerto 27017 (típico de MongoDB)
+        if (config.port === 27017 || config.port === "27017") {
+          logger.info(
+            `Saltando ${config.serverName}: puerto MongoDB detectado`
+          );
+          return false;
+        }
+
+        return true;
+      });
+
       logger.info(
-        `Cargando ${configs.length} configuraciones de base de datos`
+        `Cargando ${validConfigs.length} configuraciones SQL Server válidas`
       );
 
-      // Crear pools para cada configuración
-      for (const config of configs) {
+      for (const config of validConfigs) {
         await this.createPool(config.serverName, config);
       }
 
       this._initialized = true;
       logger.info(
-        `DatabaseService inicializado exitosamente con ${configs.length} pools`
+        `DatabaseService inicializado exitosamente con ${validConfigs.length} pools`
       );
     } catch (error) {
       logger.error(`Error inicializando DatabaseService: ${error.message}`);
