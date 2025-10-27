@@ -1,8 +1,4 @@
-// services/healthMonitorService.js
 const logger = require("./logger");
-// // const ConnectionCentralService = require(...); // REMOVED
-// REMOVED - using DatabaseServiceAdapter
-
 const MongoDbService = require("./mongoDbService");
 const ConnectionDiagnostic = require("./connectionDiagnostic");
 const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
