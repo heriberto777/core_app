@@ -5,6 +5,7 @@ const TaskTracker = require("./TaskTracker");
 const TransferTask = require("../models/transferTaks");
 const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 const PromotionProcessor = require("./PromotionProcessor");
+const ConsecutiveService = require("./ConsecutiveService");
 
 /**
  * Servicio dinámico de transferencia de datos con soporte completo para promociones
