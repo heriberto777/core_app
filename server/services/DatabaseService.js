@@ -687,6 +687,14 @@ class DatabaseService {
     if (typeof serverKeyOrConnection === "string") {
       // Usar pool
       const connection = await this.getConnection(serverKeyOrConnection);
+
+      // AGREGAR VALIDACIÓN
+      if (!connection) {
+        throw new Error(
+          `getConnection returned null for server ${serverKeyOrConnection}`
+        );
+      }
+
       try {
         return await this._executeQuery(connection, sql, params);
       } finally {
@@ -694,14 +702,45 @@ class DatabaseService {
       }
     } else {
       // Usar conexión directa (para transacciones)
+
+      // AGREGAR VALIDACIONES PARA CONEXIÓN DIRECTA
+      if (!serverKeyOrConnection) {
+        throw new Error("Connection parameter is null or undefined");
+      }
+
+      if (typeof serverKeyOrConnection.execSql !== "function") {
+        throw new Error("Invalid connection object - missing execSql method");
+      }
+
+      if (serverKeyOrConnection.closed) {
+        throw new Error("Connection is closed");
+      }
+
       return await this._executeQuery(serverKeyOrConnection, sql, params);
     }
   }
 
   async _executeQuery(connection, sql, params) {
     return new Promise((resolve, reject) => {
-      const rows = [];
+      // AGREGAR VALIDACIONES AL INICIO
+      if (!connection) {
+        reject(new Error("Connection is null or undefined in _executeQuery"));
+        return;
+      }
 
+      if (typeof connection.execSql !== "function") {
+        reject(
+          new Error("Connection object is invalid - missing execSql method")
+        );
+        return;
+      }
+
+      if (connection.closed) {
+        reject(new Error("Connection is closed"));
+        return;
+      }
+
+      const rows = [];
       const request = new Request(sql, (err, rowCount) => {
         if (err) {
           reject(err);
@@ -737,7 +776,12 @@ class DatabaseService {
         }
       });
 
-      connection.execSql(request);
+      // ENVOLVER EN TRY-CATCH
+      try {
+        connection.execSql(request);
+      } catch (execError) {
+        reject(new Error(`Error calling execSql: ${execError.message}`));
+      }
     });
   }
 

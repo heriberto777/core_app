@@ -1,7 +1,6 @@
 // controllers/transferSummaryController.js
 const TransferSummary = require("../models/transferSummaryModel");
 const logger = require("../services/logger");
-const { SqlService } = require("../services/SqlService");
 const { realizarTraspaso } = require("../services/traspasoService");
 const { sendTransferReturnEmail } = require("../services/emailService");
 const { withConnection } = require("../utils/dbUtils");
