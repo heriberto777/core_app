@@ -129,8 +129,34 @@ class DynamicTransferService {
       return await DatabaseServiceAdapter.withConnections(
         mapping,
         async (connections) => {
+          // ✅ VALIDACIÓN DE CONEXIONES AGREGADA
+          if (!connections) {
+            throw new Error("Connections object is null or undefined");
+          }
+
+          if (!connections.source) {
+            throw new Error("Source connection is null or undefined");
+          }
+
+          if (!connections.target) {
+            throw new Error("Target connection is null or undefined");
+          }
+
           const sourceConnection = connections.source;
           const targetConnection = connections.target;
+
+          // ✅ VALIDAR CONEXIONES ANTES DE USARLAS
+          if (typeof sourceConnection.execSql !== "function") {
+            throw new Error(
+              "Invalid source connection - missing execSql method"
+            );
+          }
+
+          if (typeof targetConnection.execSql !== "function") {
+            throw new Error(
+              "Invalid target connection - missing execSql method"
+            );
+          }
 
           // 6. Actualizar tarea principal como "en ejecución"
           if (mapping.taskId) {
@@ -1213,6 +1239,17 @@ class DynamicTransferService {
     documentId,
     sourceConnection
   ) {
+    // ✅ AGREGAR VALIDACIÓN DE CONEXIÓN
+    if (!sourceConnection) {
+      throw new Error("sourceConnection is null or undefined in getDetailData");
+    }
+    if (typeof sourceConnection.execSql !== "function") {
+      throw new Error("Invalid sourceConnection object in getDetailData");
+    }
+    if (sourceConnection.closed) {
+      throw new Error("sourceConnection is closed in getDetailData");
+    }
+
     if (detailConfig.customQuery) {
       // Usar consulta personalizada
       const query = detailConfig.customQuery.replace(
@@ -1253,6 +1290,22 @@ class DynamicTransferService {
     documentId,
     sourceConnection
   ) {
+    // ✅ AGREGAR VALIDACIÓN DE CONEXIÓN
+    if (!sourceConnection) {
+      throw new Error(
+        "sourceConnection is null or undefined in getDetailDataFromSameTable"
+      );
+    }
+    if (typeof sourceConnection.execSql !== "function") {
+      throw new Error(
+        "Invalid sourceConnection object in getDetailDataFromSameTable"
+      );
+    }
+    if (sourceConnection.closed) {
+      throw new Error(
+        "sourceConnection is closed in getDetailDataFromSameTable"
+      );
+    }
     const tableAlias = "d1";
     const orderByColumn = detailConfig.orderByColumn || "";
 
@@ -1298,6 +1351,23 @@ class DynamicTransferService {
   async getDetailDataFromOwnTable(detailConfig, documentId, sourceConnection) {
     const orderByColumn = detailConfig.orderByColumn || "";
 
+    // ✅ AGREGAR VALIDACIÓN DE CONEXIÓN
+    if (!sourceConnection) {
+      throw new Error(
+        "sourceConnection is null or undefined in getDetailDataFromOwnTable"
+      );
+    }
+    if (typeof sourceConnection.execSql !== "function") {
+      throw new Error(
+        "Invalid sourceConnection object in getDetailDataFromOwnTable"
+      );
+    }
+    if (sourceConnection.closed) {
+      throw new Error(
+        "sourceConnection is closed in getDetailDataFromOwnTable"
+      );
+    }
+
     // Usar la función centralizada para obtener campos requeridos
     const requiredFields = this.getRequiredFieldsFromTableConfig(detailConfig);
 
@@ -1333,6 +1403,20 @@ class DynamicTransferService {
    * @returns {Promise<Object>} - Datos de origen
    */
   async getSourceData(documentId, tableConfig, sourceConnection) {
+     if (!sourceConnection) {
+       throw new Error(
+         "sourceConnection is null or undefined in getSourceData"
+       );
+     }
+
+     if (typeof sourceConnection.execSql !== "function") {
+       throw new Error("Invalid sourceConnection object in getSourceData");
+     }
+
+     if (sourceConnection.closed) {
+       throw new Error("sourceConnection is closed in getSourceData");
+     }
+
     if (tableConfig.customQuery) {
       // Usar consulta personalizada si existe
       const query = tableConfig.customQuery.replace(/@documentId/g, documentId);
@@ -1391,6 +1475,22 @@ class DynamicTransferService {
    */
   async getDocuments(mapping, filters, connection) {
     try {
+      // ✅ VALIDACIÓN DE CONEXIÓN AGREGADA
+      if (!connection) {
+        throw new Error(
+          "Connection parameter is null or undefined in getDocuments"
+        );
+      }
+
+      if (typeof connection.execSql !== "function") {
+        throw new Error(
+          "Invalid connection object in getDocuments - missing execSql method"
+        );
+      }
+
+      if (connection.closed) {
+        throw new Error("Connection is closed in getDocuments");
+      }
       // Validar que el mapeo sea válido
       if (
         !mapping ||
@@ -2457,6 +2557,21 @@ class DynamicTransferService {
         `Realizando consultas de lookup en BD destino para tabla ${tableConfig.name}`
       );
 
+      // ✅ AGREGAR VALIDACIÓN DE CONEXIÓN
+      if (!targetConnection) {
+        throw new Error(
+          "targetConnection is null or undefined in executeLookupInTarget"
+        );
+      }
+      if (typeof targetConnection.execSql !== "function") {
+        throw new Error(
+          "Invalid targetConnection object in executeLookupInTarget"
+        );
+      }
+      if (targetConnection.closed) {
+        throw new Error("targetConnection is closed in executeLookupInTarget");
+      }
+
       const lookupResults = {};
       const failedLookups = [];
 
@@ -2706,6 +2821,19 @@ class DynamicTransferService {
         )}`
       );
 
+      // ✅ AGREGAR VALIDACIÓN DE CONEXIÓN
+      if (!targetConnection) {
+        throw new Error(
+          "targetConnection is null or undefined in executeInsert"
+        );
+      }
+      if (typeof targetConnection.execSql !== "function") {
+        throw new Error("Invalid targetConnection object in executeInsert");
+      }
+      if (targetConnection.closed) {
+        throw new Error("targetConnection is closed in executeInsert");
+      }
+
       // ✅ 2. VALIDAR Y LIMPIAR DATOS
       const validatedParams = {};
       const problematicFields = [];
@@ -2951,6 +3079,23 @@ class DynamicTransferService {
    */
   async getTableColumns(connection, tableName) {
     try {
+      // ✅ VALIDACIÓN DE CONEXIÓN AGREGADA
+      if (!connection) {
+        throw new Error("Connection is null or undefined in getTableColumns");
+      }
+
+      if (typeof connection.execSql !== "function") {
+        throw new Error("Invalid connection object in getTableColumns");
+      }
+
+      if (connection.closed) {
+        throw new Error("Connection is closed in getTableColumns");
+      }
+
+      // ✅ VALIDACIÓN DE PARÁMETROS
+      if (!tableName || typeof tableName !== "string") {
+        throw new Error("tableName is required and must be a string");
+      }
       // Separar esquema y tabla
       let schema = null;
       let table = tableName;
@@ -3677,6 +3822,25 @@ class DynamicTransferService {
   // En DynamicTransferService.js - CORREGIR este método también
 
   async prepareTableForQuery(mainTable, connection) {
+    // ✅ VALIDACIÓN DE CONEXIÓN AGREGADA
+    if (!connection) {
+      throw new Error(
+        "Connection is null or undefined in prepareTableForQuery"
+      );
+    }
+
+    if (typeof connection.execSql !== "function") {
+      throw new Error("Invalid connection object in prepareTableForQuery");
+    }
+
+    if (connection.closed) {
+      throw new Error("Connection is closed in prepareTableForQuery");
+    }
+
+    // ✅ VALIDACIÓN DE TABLA
+    if (!mainTable || !mainTable.sourceTable) {
+      throw new Error("mainTable or mainTable.sourceTable is required");
+    }
     let schema = "dbo";
     let tableName = mainTable.sourceTable;
 
@@ -4135,6 +4299,31 @@ class DynamicTransferService {
     targetConnection,
     sourceData
   ) {
+     if (!sourceConnection) {
+       throw new Error(
+         "sourceConnection is null or undefined in processForeignKeyDependencies"
+       );
+     }
+     if (!targetConnection) {
+       throw new Error(
+         "targetConnection is null or undefined in processForeignKeyDependencies"
+       );
+     }
+     if (typeof sourceConnection.execSql !== "function") {
+       throw new Error(
+         "Invalid sourceConnection object in processForeignKeyDependencies"
+       );
+     }
+     if (typeof targetConnection.execSql !== "function") {
+       throw new Error(
+         "Invalid targetConnection object in processForeignKeyDependencies"
+       );
+     }
+     if (sourceConnection.closed || targetConnection.closed) {
+       throw new Error(
+         "One or both connections are closed in processForeignKeyDependencies"
+       );
+     }
     if (
       !mapping.foreignKeyDependencies ||
       mapping.foreignKeyDependencies.length === 0
@@ -4468,6 +4657,21 @@ class DynamicTransferService {
     config,
     processedFieldName
   ) {
+    // ✅ VALIDACIÓN DE CONEXIÓN AGREGADA
+    if (!connection) {
+      throw new Error(
+        "Connection is null or undefined in markDocumentsIndividually"
+      );
+    }
+
+    if (typeof connection.execSql !== "function") {
+      throw new Error("Invalid connection object in markDocumentsIndividually");
+    }
+
+    if (connection.closed) {
+      throw new Error("Connection is closed in markDocumentsIndividually");
+    }
+
     const results = { success: 0, failed: 0, errors: [] };
 
     const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
@@ -4531,6 +4735,18 @@ class DynamicTransferService {
     config,
     processedFieldName
   ) {
+    // ✅ VALIDACIÓN DE CONEXIÓN AGREGADA
+    if (!connection) {
+      throw new Error("Connection is null or undefined in markDocumentsBatch");
+    }
+
+    if (typeof connection.execSql !== "function") {
+      throw new Error("Invalid connection object in markDocumentsBatch");
+    }
+
+    if (connection.closed) {
+      throw new Error("Connection is closed in markDocumentsBatch");
+    }
     const results = { success: 0, failed: 0, errors: [] };
 
     const mainTable = mapping.tableConfigs.find((tc) => !tc.isDetailTable);
@@ -5924,6 +6140,23 @@ class DynamicTransferService {
   ) {
     logger.debug(`🎁 Obteniendo datos con campos de promoción garantizados...`);
 
+    // ✅ AGREGAR VALIDACIÓN DE CONEXIÓN
+    if (!sourceConnection) {
+      throw new Error(
+        "sourceConnection is null or undefined in getDetailDataWithPromotionFields"
+      );
+    }
+    if (typeof sourceConnection.execSql !== "function") {
+      throw new Error(
+        "Invalid sourceConnection object in getDetailDataWithPromotionFields"
+      );
+    }
+    if (sourceConnection.closed) {
+      throw new Error(
+        "sourceConnection is closed in getDetailDataWithPromotionFields"
+      );
+    }
+
     // ✅ DETECTAR AUTOMÁTICAMENTE LOS NOMBRES CORRECTOS DE CAMPOS
     const promotionFieldConfig = await this.detectPromotionFieldNames(
       sourceConnection,
@@ -6172,6 +6405,20 @@ class DynamicTransferService {
   async executeDetailLineLookups(detailLine, tableConfig, targetConnection) {
     const lookupResults = {};
 
+    if (!targetConnection) {
+      throw new Error(
+        "targetConnection is null or undefined in executeDetailLineLookups"
+      );
+    }
+    if (typeof targetConnection.execSql !== "function") {
+      throw new Error(
+        "Invalid targetConnection object in executeDetailLineLookups"
+      );
+    }
+    if (targetConnection.closed) {
+      throw new Error("targetConnection is closed in executeDetailLineLookups");
+    }
+
     // Encontrar todos los campos con lookup configurado
     const lookupFields = tableConfig.fieldMappings.filter(
       (fm) => fm.lookupFromTarget && fm.lookupQuery
@@ -6269,3 +6516,4 @@ class DynamicTransferService {
 }
 
 module.exports = new DynamicTransferService();
+
