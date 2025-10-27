@@ -225,11 +225,11 @@ const getDocumentsByMapping = async (req, res) => {
 
       // Obtener conexión al servidor origen
       logger.info(`Conectando a servidor origen: ${mapping.sourceServer}`);
-      const connectionResult = await DatabaseServiceAdapter.getConnection(
+      connection = await DatabaseServiceAdapter.getConnection(
         mapping.sourceServer
       );
 
-      if (!connectionResult) {
+      if (!connection) {
         return res.status(500).json({
           success: false,
           message: `No se pudo establecer conexión a ${mapping.sourceServer} || "Error desconocido"
@@ -325,10 +325,10 @@ const getDocumentDetailsByMapping = async (req, res) => {
     const mapping = await DynamicTransferService.getMappingById(mappingId);
 
     // Obtener conexión al servidor origen
-    const connectionResult = await DatabaseServiceAdapter.getConnection(
+    connection = await DatabaseServiceAdapter.getConnection(
       mapping.sourceServer
     );
-    if (!connectionResult) {
+    if (!connection) {
       throw new Error(
         `No se pudo establecer conexión a ${mapping.sourceServer} || "Error desconocido"
         }`
