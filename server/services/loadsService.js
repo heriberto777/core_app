@@ -1,4 +1,4 @@
-const { withConnection } = require("../utils/dbUtils");
+
 const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 const logger = require("./logger");
 const { LoadTracking, DeliveryPerson } = require("../models/loadsModel");
@@ -13,7 +13,7 @@ class LoadsService {
    */
   static async getPendingOrders(filters = {}) {
     console.log("Filters received:", filters);
-    return await withConnection("server1", async (connection) => {
+    return await DatabaseServiceAdapter.withConnections("server1", async (connection) => {
       try {
         let baseQuery = `
         WITH BaseData AS (
@@ -202,8 +202,10 @@ class LoadsService {
    */
   static async getOrderDetails(pedidoId) {
     try {
-      return await withConnection("server1", async (connection) => {
-        const query = `
+      return await DatabaseServiceAdapter.withConnections(
+        "server1",
+        async (connection) => {
+          const query = `
           WITH BaseData AS (
             SELECT
               pl.PEDIDO,
@@ -257,15 +259,16 @@ class LoadsService {
           ORDER BY PEDIDO_LINEA, lineType
         `;
 
-        const result = await DatabaseServiceAdapter.query(connection, query, {
-          pedidoId,
-        });
+          const result = await DatabaseServiceAdapter.query(connection, query, {
+            pedidoId,
+          });
 
-        return {
-          success: true,
-          data: result.recordset,
-        };
-      });
+          return {
+            success: true,
+            data: result.recordset,
+          };
+        }
+      );
     } catch (error) {
       logger.error(`Error obteniendo detalles del pedido ${pedidoId}:`, error);
       throw error;
@@ -277,8 +280,10 @@ class LoadsService {
    */
   static async getSellers() {
     try {
-      return await withConnection("server1", async (connection) => {
-        const query = `
+      return await DatabaseServiceAdapter.withConnections(
+        "server1",
+        async (connection) => {
+          const query = `
           SELECT
             VENDEDOR as code,
             NOMBRE as name,
@@ -290,13 +295,14 @@ class LoadsService {
           ORDER BY NOMBRE
         `;
 
-        const result = await DatabaseServiceAdapter.query(connection, query);
+          const result = await DatabaseServiceAdapter.query(connection, query);
 
-        return {
-          success: true,
-          data: result.recordset,
-        };
-      });
+          return {
+            success: true,
+            data: result.recordset,
+          };
+        }
+      );
     } catch (error) {
       logger.error("Error obteniendo vendedores/repartidores:", error);
       throw error;
@@ -348,7 +354,7 @@ class LoadsService {
       let ordersData = null;
 
       // USAR withTransaction para manejo automático de transacciones
-      return await DatabaseServiceAdapter.withTransaction(
+      return await DatabaseServiceAdapter.withConnections(
         "server1",
         async (server1Connection) => {
           try {
@@ -380,24 +386,27 @@ class LoadsService {
             );
 
             // PASOS 4 y 5: Insertar en server2 (conexión separada)
-            await withConnection("server2", async (server2Connection) => {
-              // PASO 4: Insertar en IMPLT_Orders
-              step = "insertToIMPLTOrders";
-              logger.info(`${step}: Insertando en IMPLT_Orders...`);
-              await this.insertToIMPLTOrders(server2Connection, ordersData);
-              logger.info(`${step}: Completado exitosamente`);
+            await DatabaseServiceAdapter.withConnections(
+              "server2",
+              async (server2Connection) => {
+                // PASO 4: Insertar en IMPLT_Orders
+                step = "insertToIMPLTOrders";
+                logger.info(`${step}: Insertando en IMPLT_Orders...`);
+                await this.insertToIMPLTOrders(server2Connection, ordersData);
+                logger.info(`${step}: Completado exitosamente`);
 
-              // PASO 5: Insertar en IMPLT_loads_detail
-              step = "insertToIMPLTLoadsDetail";
-              logger.info(`${step}: Insertando en IMPLT_loads_detail...`);
-              await this.insertToIMPLTLoadsDetail(
-                server2Connection,
-                loadId,
-                deliveryPersonCode,
-                ordersData
-              );
-              logger.info(`${step}: Completado exitosamente`);
-            });
+                // PASO 5: Insertar en IMPLT_loads_detail
+                step = "insertToIMPLTLoadsDetail";
+                logger.info(`${step}: Insertando en IMPLT_loads_detail...`);
+                await this.insertToIMPLTLoadsDetail(
+                  server2Connection,
+                  loadId,
+                  deliveryPersonCode,
+                  ordersData
+                );
+                logger.info(`${step}: Completado exitosamente`);
+              }
+            );
 
             // PASO 6: Ejecutar traspaso automático
             step = "realizarTraspaso";
@@ -876,8 +885,10 @@ class LoadsService {
    * Valida que el repartidor existe y está activo
    */
   static async validateDeliveryPerson(deliveryPersonCode) {
-    return await withConnection("server1", async (connection) => {
-      const query = `
+    return await DatabaseServiceAdapter.withConnections(
+      "server1",
+      async (connection) => {
+        const query = `
       SELECT
         VENDEDOR as code,
         NOMBRE as name,
@@ -889,31 +900,32 @@ class LoadsService {
       AND ACTIVO = 'S'
     `;
 
-      const result = await DatabaseServiceAdapter.query(connection, query, {
-        deliveryPersonCode,
-      });
+        const result = await DatabaseServiceAdapter.query(connection, query, {
+          deliveryPersonCode,
+        });
 
-      if (!result.recordset || result.recordset.length === 0) {
-        throw new Error(
-          `Repartidor ${deliveryPersonCode} no encontrado o inactivo. ` +
-            `Verifique que sea un repartidor válido`
+        if (!result.recordset || result.recordset.length === 0) {
+          throw new Error(
+            `Repartidor ${deliveryPersonCode} no encontrado o inactivo. ` +
+              `Verifique que sea un repartidor válido`
+          );
+        }
+
+        const deliveryPerson = result.recordset[0];
+
+        if (!deliveryPerson.assignedWarehouse) {
+          throw new Error(
+            `Repartidor ${deliveryPersonCode} no tiene bodega asignada (U_BODEGA)`
+          );
+        }
+
+        logger.info(
+          `Repartidor encontrado: ${deliveryPerson.name} - Bodega destino: ${deliveryPerson.assignedWarehouse}`
         );
+
+        return deliveryPerson;
       }
-
-      const deliveryPerson = result.recordset[0];
-
-      if (!deliveryPerson.assignedWarehouse) {
-        throw new Error(
-          `Repartidor ${deliveryPersonCode} no tiene bodega asignada (U_BODEGA)`
-        );
-      }
-
-      logger.info(
-        `Repartidor encontrado: ${deliveryPerson.name} - Bodega destino: ${deliveryPerson.assignedWarehouse}`
-      );
-
-      return deliveryPerson;
-    });
+    );
   }
 
   /**
@@ -1353,17 +1365,19 @@ class LoadsService {
    */
   static async cancelOrders(selectedPedidos, userId, reason) {
     try {
-      return await withConnection("server1", async (connection) => {
-        const placeholders = selectedPedidos
-          .map((_, index) => `@pedido${index}`)
-          .join(", ");
+      return await DatabaseServiceAdapter.withConnections(
+        "server1",
+        async (connection) => {
+          const placeholders = selectedPedidos
+            .map((_, index) => `@pedido${index}`)
+            .join(", ");
 
-        const params = {};
-        selectedPedidos.forEach((pedido, index) => {
-          params[`pedido${index}`] = pedido;
-        });
+          const params = {};
+          selectedPedidos.forEach((pedido, index) => {
+            params[`pedido${index}`] = pedido;
+          });
 
-        const query = `
+          const query = `
         UPDATE CATELLI.PEDIDO
         SET estado = 'C',
             U_estado_proceso = 'C'
@@ -1372,20 +1386,21 @@ class LoadsService {
         AND U_Code_Load IS NULL
       `;
 
-        const result = await DatabaseServiceAdapter.query(
-          connection,
-          query,
-          params
-        );
+          const result = await DatabaseServiceAdapter.query(
+            connection,
+            query,
+            params
+          );
 
-        logger.info(`${result.rowsAffected[0]} pedidos cancelados`);
+          logger.info(`${result.rowsAffected[0]} pedidos cancelados`);
 
-        return {
-          success: true,
-          message: `${result.rowsAffected[0]} pedidos cancelados correctamente`,
-          cancelledCount: result.rowsAffected[0],
-        };
-      });
+          return {
+            success: true,
+            message: `${result.rowsAffected[0]} pedidos cancelados correctamente`,
+            cancelledCount: result.rowsAffected[0],
+          };
+        }
+      );
     } catch (error) {
       logger.error("Error cancelando pedidos:", error);
       throw error;
@@ -1397,38 +1412,41 @@ class LoadsService {
    */
   static async removeOrderLines(pedidoId, selectedLines, userId) {
     try {
-      return await withConnection("server1", async (connection) => {
-        const linesList = selectedLines
-          .map((_, index) => `@line${index}`)
-          .join(", ");
-        const params = { pedidoId, userId };
+      return await DatabaseServiceAdapter.withConnections(
+        "server1",
+        async (connection) => {
+          const linesList = selectedLines
+            .map((_, index) => `@line${index}`)
+            .join(", ");
+          const params = { pedidoId, userId };
 
-        selectedLines.forEach((line, index) => {
-          params[`line${index}`] = line;
-        });
+          selectedLines.forEach((line, index) => {
+            params[`line${index}`] = line;
+          });
 
-        const query = `
+          const query = `
           DELETE FROM CATELLI.PEDIDO_LINEA
           WHERE PEDIDO = @pedidoId
           AND PEDIDO_LINEA IN (${linesList})
         `;
 
-        const result = await DatabaseServiceAdapter.query(
-          connection,
-          query,
-          params
-        );
+          const result = await DatabaseServiceAdapter.query(
+            connection,
+            query,
+            params
+          );
 
-        logger.info(
-          `${result.rowsAffected[0]} líneas eliminadas del pedido ${pedidoId}`
-        );
+          logger.info(
+            `${result.rowsAffected[0]} líneas eliminadas del pedido ${pedidoId}`
+          );
 
-        return {
-          success: true,
-          message: `${result.rowsAffected[0]} líneas eliminadas correctamente`,
-          removedCount: result.rowsAffected[0],
-        };
-      });
+          return {
+            success: true,
+            message: `${result.rowsAffected[0]} líneas eliminadas correctamente`,
+            removedCount: result.rowsAffected[0],
+          };
+        }
+      );
     } catch (error) {
       logger.error(`Error eliminando líneas del pedido ${pedidoId}:`, error);
       throw error;
@@ -1525,8 +1543,10 @@ class LoadsService {
 
   static async processInventoryTransfer(loadId, bodegaDestino) {
     try {
-      const loadData = await withConnection("server2", async (connection) => {
-        const query = `
+      const loadData = await DatabaseServiceAdapter.withConnections(
+        "server2",
+        async (connection) => {
+          const query = `
           SELECT
             Code_Product as codigo,
             Quantity as cantidad,
@@ -1535,11 +1555,12 @@ class LoadsService {
           WHERE Code = @loadId
         `;
 
-        const result = await DatabaseServiceAdapter.query(connection, query, {
-          loadId,
-        });
-        return result.recordset;
-      });
+          const result = await DatabaseServiceAdapter.query(connection, query, {
+            loadId,
+          });
+          return result.recordset;
+        }
+      );
 
       if (!loadData || loadData.length === 0) {
         throw new Error(`No se encontraron datos para la carga ${loadId}`);
