@@ -1,101 +1,103 @@
+const { withConnection } = require("../utils/dbUtils");
 const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 const logger = require("./logger");
 const { LoadTracking, DeliveryPerson } = require("../models/loadsModel");
 
 /**
  * Servicio para manejo de cargas de pedidos
- * MIGRADO COMPLETAMENTE: Usa DatabaseServiceAdapter en todos los métodos
- * Implementa lógica secuencial con control de estado U_estado_proceso
+ * Implementa lÃ³gica secuencial con control de estado U_estado_proceso
  */
 class LoadsService {
   /**
    * Obtiene pedidos pendientes desde CATELLI.PEDIDO usando consulta optimizada
-   * MIGRADO: Usa DatabaseServiceAdapter sin withConnection
    */
   static async getPendingOrders(filters = {}) {
     console.log("Filters received:", filters);
+    return await withConnection("server1", async (connection) => {
+      try {
+        let baseQuery = `
+      WITH BaseData AS (
+        SELECT
+          pl.PEDIDO,
+          pl.PEDIDO_LINEA,
+          pl.CANTIDAD_PEDIDA,
+          pl.CANTIDAD_BONIFICAD,
+          pl.PRECIO_UNITARIO,
+          pl.MONTO_DESCUENTO,
+          pl.PORC_DESCUENTO,
+          pl.PORC_IMPUESTO1,
+          pl.PORC_IMPUESTO2,
+          pe.RUBRO5,
+          pe.U_Code_Load,
+          pe.U_estado_proceso,
+          pe.FECHA_PROMETIDA,
+          pe.FECHA_PEDIDO,
+          pe.CLIENTE,
+          pe.VENDEDOR,
+          pe.RUBRO4,
+          cl.detalle_direccion,
+          ar.ARTICULO,
+          ar.UNIDAD_ALMACEN,
+          pl.BODEGA,
+          v.NOMBRE as NOMBRE_VENDEDOR
+        FROM CATELLI.PEDIDO_LINEA AS pl
+        INNER JOIN CATELLI.PEDIDO AS pe ON pe.PEDIDO = pl.PEDIDO
+        INNER JOIN CATELLI.CLIENTE AS cl ON cl.CLIENTE = pe.CLIENTE
+        LEFT JOIN CATELLI.ARTICULO AS ar ON ar.ARTICULO = pl.ARTICULO
+        LEFT JOIN CATELLI.VENDEDOR AS v ON v.VENDEDOR = pe.VENDEDOR
+        WHERE pe.estado = 'N'
+    `;
 
-    try {
-      let baseQuery = `
-        WITH BaseData AS (
-          SELECT
-            pl.PEDIDO,
-            pl.PEDIDO_LINEA,
-            pl.CANTIDAD_PEDIDA,
-            pl.CANTIDAD_BONIFICAD,
-            pl.PRECIO_UNITARIO,
-            pl.MONTO_DESCUENTO,
-            pl.PORC_DESCUENTO,
-            pl.PORC_IMPUESTO1,
-            pl.PORC_IMPUESTO2,
-            pe.RUBRO5,
-            pe.U_Code_Load,
-            pe.U_estado_proceso,
-            pe.FECHA_PROMETIDA,
-            pe.FECHA_PEDIDO,
-            pe.CLIENTE,
-            pe.VENDEDOR,
-            pe.RUBRO4,
-            cl.detalle_direccion,
-            ar.ARTICULO,
-            ar.UNIDAD_ALMACEN,
-            pl.BODEGA,
-            v.NOMBRE as NOMBRE_VENDEDOR
-          FROM CATELLI.PEDIDO_LINEA AS pl
-          INNER JOIN CATELLI.PEDIDO AS pe ON pe.PEDIDO = pl.PEDIDO
-          INNER JOIN CATELLI.CLIENTE AS cl ON cl.CLIENTE = pe.CLIENTE
-          LEFT JOIN CATELLI.ARTICULO AS ar ON ar.ARTICULO = pl.ARTICULO
-          LEFT JOIN CATELLI.VENDEDOR AS v ON v.VENDEDOR = pe.VENDEDOR
-          WHERE pe.estado = 'N'
-            AND (pe.U_Code_Load IS NULL OR pe.U_Code_Load = '')
-            AND pe.U_estado_proceso = 'N'
-      `;
+        const params = {};
 
-      const params = {};
-
-      // Aplicar filtros de fecha
-      if (filters.dateFrom) {
-        baseQuery += " AND pe.FECHA_PEDIDO >= @dateFrom";
-        params.dateFrom = new Date(filters.dateFrom);
-      }
-
-      if (filters.dateTo) {
-        baseQuery += " AND pe.FECHA_PEDIDO <= @dateTo";
-        const endDate = new Date(filters.dateTo);
-        endDate.setHours(23, 59, 59, 999);
-        params.dateTo = endDate;
-      }
-
-      // Aplicar filtro de vendedor
-      if (filters.seller && filters.seller !== "all") {
-        baseQuery += " AND pe.VENDEDOR = @seller";
-        params.seller = filters.seller;
-      }
-
-      // Aplicar filtro de transferStatus
-      if (filters.transferStatus && filters.transferStatus !== "all") {
-        switch (filters.transferStatus) {
-          case "pending":
-            baseQuery += " AND pe.U_estado_proceso = 'N'";
-            break;
-          case "processing":
-            baseQuery += " AND pe.U_estado_proceso = 'P'";
-            break;
-          case "completed":
-            baseQuery += " AND pe.U_estado_proceso = 'S'";
-            break;
-          case "cancelled":
-            baseQuery += " AND pe.estado = 'C'";
-            break;
+        // ✅ Aplicar filtro includeLoaded PRIMERO
+        if (!filters.includeLoaded) {
+          baseQuery += " AND (pe.U_Code_Load IS NULL OR pe.U_Code_Load = '')";
         }
-      }
 
-      // Aplicar filtro includeLoaded
-      if (!filters.includeLoaded) {
-        // Ya está incluido en la condición base: U_Code_Load IS NULL OR U_Code_Load = ''
-      }
+        // ✅ Aplicar filtro de transferStatus con lógica corregida
+        if (filters.transferStatus && filters.transferStatus !== "all") {
+          switch (filters.transferStatus) {
+            case "pending":
+              baseQuery +=
+                " AND (pe.U_estado_proceso = 'N' OR pe.U_estado_proceso IS NULL)";
+              break;
+            case "processing":
+              baseQuery += " AND pe.U_estado_proceso = 'P'";
+              break;
+            case "completed":
+              baseQuery += " AND pe.U_estado_proceso = 'S'";
+              break;
+            case "cancelled":
+              baseQuery += " AND pe.U_estado_proceso = 'C'";
+              break;
+          }
+        } else {
+          // ✅ Si no hay filtro específico, solo pedidos pendientes o en proceso
+          baseQuery +=
+            " AND (pe.U_estado_proceso IN ('N', 'P') OR pe.U_estado_proceso IS NULL)";
+        }
 
-      const fullQuery = `
+        // Aplicar filtros de fecha
+        if (filters.dateFrom) {
+          baseQuery += " AND pe.FECHA_PEDIDO >= @dateFrom";
+          params.dateFrom = new Date(filters.dateFrom);
+        }
+
+        if (filters.dateTo) {
+          baseQuery += " AND pe.FECHA_PEDIDO <= @dateTo";
+          const endDate = new Date(filters.dateTo);
+          endDate.setHours(23, 59, 59, 999);
+          params.dateTo = endDate;
+        }
+
+        // Aplicar filtro de vendedor
+        if (filters.seller && filters.seller !== "all") {
+          baseQuery += " AND pe.VENDEDOR = @seller";
+          params.seller = filters.seller;
+        }
+
+        const fullQuery = `
         ${baseQuery}
         ),
         Calc AS (
@@ -110,7 +112,8 @@ class LoadsService {
             VENDEDOR,
             NOMBRE_VENDEDOR,
             FECHA_PROMETIDA,
-            detalle_direccion
+            detalle_direccion,
+            U_Code_Load
           FROM BaseData
           WHERE CANTIDAD_PEDIDA <> 0
 
@@ -127,7 +130,8 @@ class LoadsService {
             VENDEDOR,
             NOMBRE_VENDEDOR,
             FECHA_PROMETIDA,
-            detalle_direccion
+            detalle_direccion,
+            U_Code_Load
           FROM BaseData
           WHERE CANTIDAD_BONIFICAD > 0
         )
@@ -142,42 +146,43 @@ class LoadsService {
           SUM(Cantidad) as totalQuantity,
           SUM(LineAmount) as totalAmount,
           detalle_direccion,
-          MIN(U_estado_proceso) as estadoProceso
+          MIN(U_estado_proceso) as estadoProceso,
+          MIN(U_Code_Load) as codeLoad
         FROM Calc
         GROUP BY PEDIDO, CLIENTE, VENDEDOR, NOMBRE_VENDEDOR,
                 FECHA_PEDIDO, FECHA_PROMETIDA, detalle_direccion
         ORDER BY FECHA_PEDIDO DESC, PEDIDO DESC
       `;
 
-      // ✅ MIGRADO: Solo serverKey, DatabaseServiceAdapter maneja la conexión
-      const result = await DatabaseServiceAdapter.query(
-        "server1",
-        fullQuery,
-        params
-      );
+        const result = await DatabaseServiceAdapter.query(
+          connection,
+          fullQuery,
+          params
+        );
 
-      // Retornar estructura consistente con transformación de datos
-      return {
-        success: true,
-        data: result.recordset.map((order) => ({
-          pedido: order.PEDIDO,
-          cliente: order.CLIENTE,
-          fechaPedido: order.FECHA_PEDIDO,
-          vendedor: order.VENDEDOR,
-          nombreVendedor: order.NOMBRE_VENDEDOR,
-          totalLineas: order.totalLines,
-          totalPedido: order.totalAmount || 0,
-          totalCantidad: order.totalQuantity || 0,
-          direccion: order.detalle_direccion,
-          codeLoad: order.codeLoad,
-          transferStatus: this.mapTransferStatus(order.estadoProceso),
-        })),
-        totalRecords: result.recordset.length,
-      };
-    } catch (error) {
-      logger.error("Error obteniendo pedidos pendientes:", error);
-      throw error;
-    }
+        // ✅ Retornar estructura consistente con transformación de datos
+        return {
+          success: true,
+          data: result.recordset.map((order) => ({
+            pedido: order.PEDIDO,
+            cliente: order.CLIENTE,
+            fechaPedido: order.FECHA_PEDIDO,
+            vendedor: order.VENDEDOR,
+            nombreVendedor: order.NOMBRE_VENDEDOR,
+            totalLineas: order.totalLines,
+            totalPedido: order.totalAmount || 0,
+            totalCantidad: order.totalQuantity || 0,
+            direccion: order.detalle_direccion,
+            codeLoad: order.codeLoad, // ✅ Ahora viene del SELECT
+            transferStatus: this.mapTransferStatus(order.estadoProceso),
+          })),
+          totalRecords: result.recordset.length,
+        };
+      } catch (error) {
+        logger.error("Error obteniendo pedidos pendientes:", error);
+        throw error;
+      }
+    });
   }
 
   /**
@@ -199,74 +204,74 @@ class LoadsService {
   }
 
   /**
-   * Obtiene detalles de líneas de un pedido específico
-   * MIGRADO: Usa DatabaseServiceAdapter sin withConnection
+   * Obtiene detalles de lÃ­neas de un pedido especÃ­fico
    */
   static async getOrderDetails(pedidoId) {
     try {
-      const query = `
-        WITH BaseData AS (
-          SELECT
-            pl.PEDIDO,
-            pl.PEDIDO_LINEA,
-            pl.CANTIDAD_PEDIDA,
-            pl.CANTIDAD_BONIFICAD,
-            pl.PRECIO_UNITARIO,
-            pl.MONTO_DESCUENTO,
-            ar.ARTICULO,
-            ar.DESCRIPCION as productDescription,
-            ar.UNIDAD_ALMACEN as unitMeasure
-          FROM CATELLI.PEDIDO_LINEA pl
-          INNER JOIN CATELLI.ARTICULO ar ON pl.ARTICULO = ar.ARTICULO
-          WHERE pl.PEDIDO = @pedidoId
-        ),
-        Details AS (
-          -- LÍNEAS DE CANTIDAD PEDIDA
-          SELECT
-            PEDIDO_LINEA,
-            CAST(PEDIDO_LINEA AS VARCHAR(10)) + '-P' AS lineId,
-            'P' AS lineType,
-            'Pedida' AS lineTypeLabel,
-            ARTICULO as Code_Product,
-            productDescription,
-            CANTIDAD_PEDIDA as quantity,
-            PRECIO_UNITARIO as price,
-            (CANTIDAD_PEDIDA * PRECIO_UNITARIO) as subtotal,
-            unitMeasure
-          FROM BaseData
-          WHERE CANTIDAD_PEDIDA <> 0
+      return await withConnection("server1", async (connection) => {
+        const query = `
+          WITH BaseData AS (
+            SELECT
+              pl.PEDIDO,
+              pl.PEDIDO_LINEA,
+              pl.CANTIDAD_PEDIDA,
+              pl.CANTIDAD_BONIFICAD,
+              pl.PRECIO_UNITARIO,
+              pl.MONTO_DESCUENTO,
+              ar.ARTICULO,
+              ar.DESCRIPCION as productDescription,
+              ar.UNIDAD_ALMACEN as unitMeasure
+            FROM CATELLI.PEDIDO_LINEA pl
+            INNER JOIN CATELLI.ARTICULO ar ON pl.ARTICULO = ar.ARTICULO
+            WHERE pl.PEDIDO = @pedidoId
+          ),
+          Details AS (
+            -- LÃNEAS DE CANTIDAD PEDIDA
+            SELECT
+              PEDIDO_LINEA,
+              CAST(PEDIDO_LINEA AS VARCHAR(10)) + '-P' AS lineId,
+              'P' AS lineType,
+              'Pedida' AS lineTypeLabel,
+              ARTICULO as Code_Product,
+              productDescription,
+              CANTIDAD_PEDIDA as quantity,
+              PRECIO_UNITARIO as price,
+              (CANTIDAD_PEDIDA * PRECIO_UNITARIO) as subtotal,
+              unitMeasure
+            FROM BaseData
+            WHERE CANTIDAD_PEDIDA <> 0
 
-          UNION ALL
+            UNION ALL
 
-          -- LÍNEAS DE CANTIDAD BONIFICADA
-          SELECT
-            PEDIDO_LINEA,
-            CAST(PEDIDO_LINEA AS VARCHAR(10)) + '-B' AS lineId,
-            'B' AS lineType,
-            'Bonificada' AS lineTypeLabel,
-            ARTICULO as Code_Product,
-            productDescription,
-            CANTIDAD_BONIFICAD as quantity,
-            0 as price,
-            0 as subtotal,
-            unitMeasure
-          FROM BaseData
-          WHERE CANTIDAD_BONIFICAD > 0
-        )
-        SELECT *
-        FROM Details
-        ORDER BY PEDIDO_LINEA, lineType
-      `;
+            -- LÃNEAS DE CANTIDAD BONIFICADA
+            SELECT
+              PEDIDO_LINEA,
+              CAST(PEDIDO_LINEA AS VARCHAR(10)) + '-B' AS lineId,
+              'B' AS lineType,
+              'Bonificada' AS lineTypeLabel,
+              ARTICULO as Code_Product,
+              productDescription,
+              CANTIDAD_BONIFICAD as quantity,
+              0 as price,
+              0 as subtotal,
+              unitMeasure
+            FROM BaseData
+            WHERE CANTIDAD_BONIFICAD > 0
+          )
+          SELECT *
+          FROM Details
+          ORDER BY PEDIDO_LINEA, lineType
+        `;
 
-      // ✅ MIGRADO: Solo serverKey, sin withConnection
-      const result = await DatabaseServiceAdapter.query("server1", query, {
-        pedidoId,
+        const result = await DatabaseServiceAdapter.query(connection, query, {
+          pedidoId,
+        });
+
+        return {
+          success: true,
+          data: result.recordset,
+        };
       });
-
-      return {
-        success: true,
-        data: result.recordset,
-      };
     } catch (error) {
       logger.error(`Error obteniendo detalles del pedido ${pedidoId}:`, error);
       throw error;
@@ -275,29 +280,29 @@ class LoadsService {
 
   /**
    * Obtiene vendedores activos que son repartidores (U_ESVENDEDOR = 'Re')
-   * MIGRADO: Usa DatabaseServiceAdapter sin withConnection
    */
   static async getSellers() {
     try {
-      const query = `
-        SELECT
-          VENDEDOR as code,
-          NOMBRE as name,
-          U_ESVENDEDOR as isVendedor,
-          U_BODEGA as assignedWarehouse,
-          ACTIVO as isActive
-        FROM CATELLI.VENDEDOR
-        WHERE ACTIVO = 'S'
-        ORDER BY NOMBRE
-      `;
+      return await withConnection("server1", async (connection) => {
+        const query = `
+          SELECT
+            VENDEDOR as code,
+            NOMBRE as name,
+            U_ESVENDEDOR as isVendedor,
+            U_BODEGA as assignedWarehouse,
+            ACTIVO as isActive
+          FROM CATELLI.VENDEDOR
+          WHERE ACTIVO = 'S'
+          ORDER BY NOMBRE
+        `;
 
-      // ✅ MIGRADO: Solo serverKey, sin withConnection
-      const result = await DatabaseServiceAdapter.query("server1", query);
+        const result = await DatabaseServiceAdapter.query(connection, query);
 
-      return {
-        success: true,
-        data: result.recordset,
-      };
+        return {
+          success: true,
+          data: result.recordset,
+        };
+      });
     } catch (error) {
       logger.error("Error obteniendo vendedores/repartidores:", error);
       throw error;
@@ -312,7 +317,7 @@ class LoadsService {
   }
 
   /**
-   * PROCESO PRINCIPAL: Procesa carga de pedidos con validación de resultado y transacciones
+   * PROCESO PRINCIPAL: Procesa carga de pedidos con validaciÃ³n de resultado y transacciones
    */
   static async processOrderLoad(deliveryPersonCode, selectedPedidos, userId) {
     let loadTracking = null;
@@ -331,12 +336,12 @@ class LoadsService {
       );
       const bodegaDestino = deliveryPerson.assignedWarehouse;
 
-      // 2. Generar loadId único
+      // 2. Generar loadId Ãºnico
       step = "generateLoadId";
       const loadId = await this.generateLoadId();
       logger.info(`LoadId generado: ${loadId}`);
 
-      // 3. Crear tracking inicial (MongoDB - sin transacción SQL)
+      // 3. Crear tracking inicial (MongoDB - sin transacciÃ³n SQL)
       step = "createLoadTracking";
       loadTracking = await this.createLoadTracking(
         loadId,
@@ -348,7 +353,7 @@ class LoadsService {
 
       let ordersData = null;
 
-      // USAR withTransaction para manejo automático de transacciones
+      // USAR withTransaction para manejo automÃ¡tico de transacciones
       return await DatabaseServiceAdapter.withTransaction(
         "server1",
         async (server1Connection) => {
@@ -380,30 +385,27 @@ class LoadsService {
               bodegaDestino
             );
 
-            // PASOS 4 y 5: Insertar en server2 (usar DatabaseServiceAdapter con transacción separada)
-            await DatabaseServiceAdapter.withTransaction(
-              "server2",
-              async (server2Connection) => {
-                // PASO 4: Insertar en IMPLT_Orders
-                step = "insertToIMPLTOrders";
-                logger.info(`${step}: Insertando en IMPLT_Orders...`);
-                await this.insertToIMPLTOrders(server2Connection, ordersData);
-                logger.info(`${step}: Completado exitosamente`);
+            // PASOS 4 y 5: Insertar en server2 (conexiÃ³n separada)
+            await withConnection("server2", async (server2Connection) => {
+              // PASO 4: Insertar en IMPLT_Orders
+              step = "insertToIMPLTOrders";
+              logger.info(`${step}: Insertando en IMPLT_Orders...`);
+              await this.insertToIMPLTOrders(server2Connection, ordersData);
+              logger.info(`${step}: Completado exitosamente`);
 
-                // PASO 5: Insertar en IMPLT_loads_detail
-                step = "insertToIMPLTLoadsDetail";
-                logger.info(`${step}: Insertando en IMPLT_loads_detail...`);
-                await this.insertToIMPLTLoadsDetail(
-                  server2Connection,
-                  loadId,
-                  deliveryPersonCode,
-                  ordersData
-                );
-                logger.info(`${step}: Completado exitosamente`);
-              }
-            );
+              // PASO 5: Insertar en IMPLT_loads_detail
+              step = "insertToIMPLTLoadsDetail";
+              logger.info(`${step}: Insertando en IMPLT_loads_detail...`);
+              await this.insertToIMPLTLoadsDetail(
+                server2Connection,
+                loadId,
+                deliveryPersonCode,
+                ordersData
+              );
+              logger.info(`${step}: Completado exitosamente`);
+            });
 
-            // PASO 6: Ejecutar traspaso automático
+            // PASO 6: Ejecutar traspaso automÃ¡tico
             step = "realizarTraspaso";
             logger.info(`${step}: Ejecutando traspaso de inventario...`);
 
@@ -417,7 +419,7 @@ class LoadsService {
             // VALIDAR RESULTADO DEL TRASPASO
             if (!traspasoResult || !traspasoResult.success) {
               logger.warn(
-                `Traspaso falló: ${
+                `Traspaso fallÃ³: ${
                   traspasoResult?.mensaje || "Error desconocido"
                 }`
               );
@@ -453,15 +455,15 @@ class LoadsService {
                 }
               );
 
-              // Lanzar error para activar rollback automático
+              // Lanzar error para activar rollback automÃ¡tico
               throw new Error(
-                `Traspaso falló: ${
+                `Traspaso fallÃ³: ${
                   traspasoResult?.mensaje || "Error desconocido"
                 }`
               );
             }
 
-            // VALIDAR QUE AL MENOS ALGUNAS LÍNEAS FUERON EXITOSAS
+            // VALIDAR QUE AL MENOS ALGUNAS LÃNEAS FUERON EXITOSAS
             if (
               traspasoResult.lineasExitosas === 0 &&
               traspasoResult.totalLineas > 0
@@ -488,14 +490,14 @@ class LoadsService {
                   processedOrders: selectedPedidos.length,
                   traspasoStatus: "total_failure",
                   traspasoTrackingId: trackingId,
-                  errorMessage: "Ninguna línea procesada exitosamente",
+                  errorMessage: "Ninguna lÃ­nea procesada exitosamente",
                   warehouseOrigin: "MULTIPLE",
                   warehouseDestination: bodegaDestino,
                   updatedAt: new Date(),
                 }
               );
 
-              throw new Error("Ninguna línea procesada exitosamente");
+              throw new Error("Ninguna lÃ­nea procesada exitosamente");
             }
 
             // VALIDAR FALLAS PARCIALES SIGNIFICATIVAS
@@ -512,7 +514,7 @@ class LoadsService {
                 )}%)`
               );
 
-              // GUARDAR tracking pero CONTINUAR con la transacción
+              // GUARDAR tracking pero CONTINUAR con la transacciÃ³n
               const trackingId = await this.saveSuccessfulTraspasoTracking(
                 server1Connection,
                 {
@@ -544,7 +546,7 @@ class LoadsService {
                   traspasoDocument: traspasoResult.documento_inv,
                   traspasoStatus: "partial_success",
                   traspasoTrackingId: trackingId,
-                  warningMessage: `Traspaso parcial: ${traspasoResult.lineasExitosas}/${traspasoResult.totalLineas} líneas exitosas`,
+                  warningMessage: `Traspaso parcial: ${traspasoResult.lineasExitosas}/${traspasoResult.totalLineas} lÃ­neas exitosas`,
                   warehouseOrigin: "MULTIPLE",
                   warehouseDestination: bodegaDestino,
                   updatedAt: new Date(),
@@ -554,7 +556,7 @@ class LoadsService {
               return {
                 success: true,
                 hasWarnings: true,
-                message: `Proceso completado con advertencias. Traspaso parcial: ${traspasoResult.lineasExitosas}/${traspasoResult.totalLineas} líneas exitosas`,
+                message: `Proceso completado con advertencias. Traspaso parcial: ${traspasoResult.lineasExitosas}/${traspasoResult.totalLineas} lÃ­neas exitosas`,
                 data: {
                   loadId,
                   traspasoTrackingId: trackingId,
@@ -611,7 +613,7 @@ class LoadsService {
             );
             logger.info(`${step}: Pedidos marcados como procesados`);
 
-            // PASO 8: Actualizar tracking MongoDB (fuera de transacción SQL)
+            // PASO 8: Actualizar tracking MongoDB (fuera de transacciÃ³n SQL)
             await LoadTracking.findOneAndUpdate(
               { loadId },
               {
@@ -652,7 +654,7 @@ class LoadsService {
             };
           } catch (transactionError) {
             logger.error(`Error en paso ${step}:`, transactionError);
-            // withTransaction hará rollback automáticamente
+            // withTransaction harÃ¡ rollback automÃ¡ticamente
             throw transactionError;
           }
         }
@@ -776,19 +778,19 @@ class LoadsService {
     try {
       // Determinar tipo de error
       let errorType = "failed";
-      let errorMessage = "Error en ejecución de traspaso";
+      let errorMessage = "Error en ejecuciÃ³n de traspaso";
 
       if (traspasoResult) {
         if (!traspasoResult.success) {
           errorType = "failed";
           errorMessage =
-            traspasoResult.mensaje || "Traspaso falló durante ejecución";
+            traspasoResult.mensaje || "Traspaso fallÃ³ durante ejecuciÃ³n";
         } else if (traspasoResult.lineasExitosas === 0) {
           errorType = "failed";
-          errorMessage = "Ninguna línea procesada exitosamente";
+          errorMessage = "Ninguna lÃ­nea procesada exitosamente";
         } else if (traspasoResult.lineasFallidas > 0) {
           errorType = "completed"; // Parcialmente exitoso
-          errorMessage = `Traspaso parcial: ${traspasoResult.lineasExitosas}/${traspasoResult.totalLineas} líneas exitosas`;
+          errorMessage = `Traspaso parcial: ${traspasoResult.lineasExitosas}/${traspasoResult.totalLineas} lÃ­neas exitosas`;
         }
       }
 
@@ -877,11 +879,11 @@ class LoadsService {
   }
 
   /**
-   * Valida que el repartidor existe y está activo
-   * MIGRADO: Usa DatabaseServiceAdapter sin withConnection
+   * Valida que el repartidor existe y estÃ¡ activo
    */
   static async validateDeliveryPerson(deliveryPersonCode) {
-    const query = `
+    return await withConnection("server1", async (connection) => {
+      const query = `
       SELECT
         VENDEDOR as code,
         NOMBRE as name,
@@ -893,31 +895,31 @@ class LoadsService {
       AND ACTIVO = 'S'
     `;
 
-    // ✅ MIGRADO: Solo serverKey, sin withConnection
-    const result = await DatabaseServiceAdapter.query("server1", query, {
-      deliveryPersonCode,
+      const result = await DatabaseServiceAdapter.query(connection, query, {
+        deliveryPersonCode,
+      });
+
+      if (!result.recordset || result.recordset.length === 0) {
+        throw new Error(
+          `Repartidor ${deliveryPersonCode} no encontrado o inactivo. ` +
+            `Verifique que sea un repartidor vÃ¡lido`
+        );
+      }
+
+      const deliveryPerson = result.recordset[0];
+
+      if (!deliveryPerson.assignedWarehouse) {
+        throw new Error(
+          `Repartidor ${deliveryPersonCode} no tiene bodega asignada (U_BODEGA)`
+        );
+      }
+
+      logger.info(
+        `Repartidor encontrado: ${deliveryPerson.name} - Bodega destino: ${deliveryPerson.assignedWarehouse}`
+      );
+
+      return deliveryPerson;
     });
-
-    if (!result.recordset || result.recordset.length === 0) {
-      throw new Error(
-        `Repartidor ${deliveryPersonCode} no encontrado o inactivo. ` +
-          `Verifique que sea un repartidor válido`
-      );
-    }
-
-    const deliveryPerson = result.recordset[0];
-
-    if (!deliveryPerson.assignedWarehouse) {
-      throw new Error(
-        `Repartidor ${deliveryPersonCode} no tiene bodega asignada (U_BODEGA)`
-      );
-    }
-
-    logger.info(
-      `Repartidor encontrado: ${deliveryPerson.name} - Bodega destino: ${deliveryPerson.assignedWarehouse}`
-    );
-
-    return deliveryPerson;
   }
 
   /**
@@ -942,7 +944,7 @@ class LoadsService {
    * Actualiza U_Code_Load en los pedidos seleccionados
    */
   static async updatePedidosWithLoadId(connection, selectedPedidos, loadId) {
-    // Validación inicial
+    // ValidaciÃ³n inicial
     if (!Array.isArray(selectedPedidos)) {
       throw new Error(
         `selectedPedidos debe ser un array, recibido: ${typeof selectedPedidos}`
@@ -950,12 +952,13 @@ class LoadsService {
     }
 
     if (selectedPedidos.length === 0) {
-      throw new Error("selectedPedidos no puede estar vacío");
+      throw new Error("selectedPedidos no puede estar vacÃ­o");
     }
 
     const pedidosList = selectedPedidos
       .map((_, index) => `@pedido${index}`)
       .join(", ");
+
     const params = { loadId };
 
     selectedPedidos.forEach((pedido, index) => {
@@ -984,7 +987,7 @@ class LoadsService {
     } else if (typeof result.rowsAffected === "number") {
       affectedRows = result.rowsAffected;
     } else {
-      // Verificación manual si no podemos determinar filas afectadas
+      // VerificaciÃ³n manual si no podemos determinar filas afectadas
       const verifyQuery = `
       SELECT COUNT(*) as count
       FROM CATELLI.PEDIDO
@@ -1011,7 +1014,7 @@ class LoadsService {
   }
 
   /**
-   * Actualiza U_estado_proceso ('N' → 'S' si exitoso)
+   * Actualiza U_estado_proceso ('N' â†’ 'S' si exitoso)
    */
   static async updateEstadoProceso(connection, selectedPedidos, estado) {
     const pedidosList = selectedPedidos
@@ -1040,7 +1043,7 @@ class LoadsService {
   }
 
   /**
-   * Prepara datos de traspaso usando bodegas origen reales de cada línea
+   * Prepara datos de traspaso usando bodegas origen reales de cada lÃ­nea
    */
   static prepareTraspasoData(ordersData, bodegaDestino) {
     const traspasoData = ordersData.map((order) => ({
@@ -1098,7 +1101,7 @@ class LoadsService {
       AND pe.U_Code_Load = @loadId
     ),
     Calc AS (
-      -- LÍNEAS DE CANTIDAD PEDIDA
+      -- LÃNEAS DE CANTIDAD PEDIDA
       SELECT
         PEDIDO,
         PEDIDO_LINEA,
@@ -1127,7 +1130,7 @@ class LoadsService {
 
       UNION ALL
 
-      -- LÍNEAS DE CANTIDAD BONIFICADA
+      -- LÃNEAS DE CANTIDAD BONIFICADA
       SELECT
         PEDIDO,
         PEDIDO_LINEA,
@@ -1255,7 +1258,7 @@ class LoadsService {
 
     if (!ordersData || !Array.isArray(ordersData)) {
       throw new Error(
-        `ordersData debe ser un array válido. Recibido: ${typeof ordersData}`
+        `ordersData debe ser un array vÃ¡lido. Recibido: ${typeof ordersData}`
       );
     }
 
@@ -1268,42 +1271,54 @@ class LoadsService {
     const productMap = new Map();
 
     ordersData.forEach((order) => {
-      const key = `${order.Code_Product}-${order.Code_Warehouse_Orig}`;
-
-      if (!productMap.has(key)) {
-        productMap.set(key, {
-          Code_Product: order.Code_Product,
-          Quantity: 0,
-          Order_Date: order.Order_Date,
-          Code_Warehouse_Orig: order.Code_Warehouse_Orig,
-        });
+      if (!order || !order.Code_Product) {
+        logger.warn(`Orden invÃ¡lida encontrada:`, order);
+        return;
       }
 
-      productMap.get(key).Quantity += order.Quantity || 0;
+      const bodegaOrigen = order.Code_Warehouse_Orig || order.bodega || "01";
+      const key = `${order.Code_Product}_${bodegaOrigen}`;
+
+      if (productMap.has(key)) {
+        const existing = productMap.get(key);
+        existing.Quantity += order.Quantity || 0;
+      } else {
+        productMap.set(key, {
+          Code_Product: order.Code_Product,
+          Quantity: order.Quantity || 0,
+          Unit_Measure: order.Unit_Measure || "UND",
+          Order_Date: order.Order_Date,
+          Code_Warehouse_Orig: route,
+        });
+      }
     });
 
-    const consolidatedProducts = Array.from(productMap.values());
-    logger.info(
-      `${consolidatedProducts.length} productos únicos con bodega para consolidar`
-    );
+    if (productMap.size === 0) {
+      throw new Error(
+        `No se pudieron procesar productos vÃ¡lidos de ordersData`
+      );
+    }
 
+    // Insertar lÃ­neas consolidadas
     let lineNumber = 1;
-    for (const productData of consolidatedProducts) {
+    for (const [productKey, productData] of productMap) {
       const query = `
-        INSERT INTO dbo.IMPLT_loads_detail (
-          Code, Line_Number, Code_Product, Product_Description, Date_Load,
-          Quantity, Unit_Type, Code_Warehouse_Sou, Code_Route, Source_Create, Transfer_status
-        ) VALUES (
-          @Code, @Line_Number, @Code_Product, @Product_Description, @Date_Load,
-          @Quantity, @Unit_Type, @Code_Warehouse_Sou, @Code_Route, @Source_Create, @Transfer_status
-        )
-      `;
+      INSERT INTO dbo.IMPLT_loads_detail (
+        Code, Num_Line, Lot_Group,
+        Code_Product, Date_Load, Quantity, Unit_Type, Code_Warehouse_Sou,
+        Code_Route, Source_Create, Transfer_status
+      ) VALUES (
+        @Code, @Num_Line, @Lot_Group,
+        @Code_Product, @Date_Load, @Quantity, @Unit_Type, @Code_Warehouse_Sou,
+        @Code_Route, @Source_Create, @Transfer_status
+      )
+    `;
 
       const params = {
         Code: loadId,
-        Line_Number: lineNumber,
+        Num_Line: lineNumber,
+        Lot_Group: "999999999",
         Code_Product: productData.Code_Product,
-        Product_Description: productData.Code_Product,
         Date_Load: productData.Order_Date,
         Quantity: productData.Quantity,
         Unit_Type: "UND",
@@ -1318,7 +1333,7 @@ class LoadsService {
         lineNumber++;
       } catch (error) {
         logger.error(
-          `Error insertando línea ${lineNumber} para producto ${productData.Code_Product}:`,
+          `Error insertando lÃ­nea ${lineNumber} para producto ${productData.Code_Product}:`,
           error
         );
         throw error;
@@ -1326,12 +1341,12 @@ class LoadsService {
     }
 
     logger.info(
-      `${lineNumber - 1} líneas consolidadas insertadas en IMPLT_loads_detail`
+      `${lineNumber - 1} lÃ­neas consolidadas insertadas en IMPLT_loads_detail`
     );
   }
 
   /**
-   * Genera un nuevo loadId único
+   * Genera un nuevo loadId Ãºnico
    */
   static async generateLoadId() {
     const timestamp = Date.now();
@@ -1341,19 +1356,20 @@ class LoadsService {
 
   /**
    * Cancela pedidos seleccionados (marca como anulados)
-   * MIGRADO: Usa DatabaseServiceAdapter sin withConnection
    */
   static async cancelOrders(selectedPedidos, userId, reason) {
     try {
-      const placeholders = selectedPedidos
-        .map((_, index) => `@pedido${index}`)
-        .join(", ");
-      const params = {};
-      selectedPedidos.forEach((pedido, index) => {
-        params[`pedido${index}`] = pedido;
-      });
+      return await withConnection("server1", async (connection) => {
+        const placeholders = selectedPedidos
+          .map((_, index) => `@pedido${index}`)
+          .join(", ");
 
-      const query = `
+        const params = {};
+        selectedPedidos.forEach((pedido, index) => {
+          params[`pedido${index}`] = pedido;
+        });
+
+        const query = `
         UPDATE CATELLI.PEDIDO
         SET estado = 'C',
             U_estado_proceso = 'C'
@@ -1362,20 +1378,20 @@ class LoadsService {
         AND U_Code_Load IS NULL
       `;
 
-      // ✅ MIGRADO: Solo serverKey, sin withConnection
-      const result = await DatabaseServiceAdapter.query(
-        "server1",
-        query,
-        params
-      );
+        const result = await DatabaseServiceAdapter.query(
+          connection,
+          query,
+          params
+        );
 
-      logger.info(`${result.rowsAffected[0]} pedidos cancelados`);
+        logger.info(`${result.rowsAffected[0]} pedidos cancelados`);
 
-      return {
-        success: true,
-        message: `${result.rowsAffected[0]} pedidos cancelados correctamente`,
-        cancelledCount: result.rowsAffected[0],
-      };
+        return {
+          success: true,
+          message: `${result.rowsAffected[0]} pedidos cancelados correctamente`,
+          cancelledCount: result.rowsAffected[0],
+        };
+      });
     } catch (error) {
       logger.error("Error cancelando pedidos:", error);
       throw error;
@@ -1383,109 +1399,50 @@ class LoadsService {
   }
 
   /**
-   * Elimina líneas específicas de un pedido
-   * MIGRADO: Usa DatabaseServiceAdapter sin withConnection
+   * Elimina lÃ­neas especÃ­ficas de un pedido
    */
   static async removeOrderLines(pedidoId, selectedLines, userId) {
     try {
-      const linesList = selectedLines
-        .map((_, index) => `@line${index}`)
-        .join(", ");
-      const params = { pedidoId, userId };
+      return await withConnection("server1", async (connection) => {
+        const linesList = selectedLines
+          .map((_, index) => `@line${index}`)
+          .join(", ");
+        const params = { pedidoId, userId };
 
-      selectedLines.forEach((line, index) => {
-        params[`line${index}`] = line;
+        selectedLines.forEach((line, index) => {
+          params[`line${index}`] = line;
+        });
+
+        const query = `
+          DELETE FROM CATELLI.PEDIDO_LINEA
+          WHERE PEDIDO = @pedidoId
+          AND PEDIDO_LINEA IN (${linesList})
+        `;
+
+        const result = await DatabaseServiceAdapter.query(
+          connection,
+          query,
+          params
+        );
+
+        logger.info(
+          `${result.rowsAffected[0]} lÃ­neas eliminadas del pedido ${pedidoId}`
+        );
+
+        return {
+          success: true,
+          message: `${result.rowsAffected[0]} lÃ­neas eliminadas correctamente`,
+          removedCount: result.rowsAffected[0],
+        };
       });
-
-      const query = `
-        DELETE FROM CATELLI.PEDIDO_LINEA
-        WHERE PEDIDO = @pedidoId
-        AND PEDIDO_LINEA IN (${linesList})
-      `;
-
-      // ✅ MIGRADO: Solo serverKey, sin withConnection
-      const result = await DatabaseServiceAdapter.query(
-        "server1",
-        query,
-        params
-      );
-
-      logger.info(
-        `${result.rowsAffected[0]} líneas eliminadas del pedido ${pedidoId}`
-      );
-
-      return {
-        success: true,
-        message: `${result.rowsAffected[0]} líneas eliminadas correctamente`,
-        removedCount: result.rowsAffected[0],
-      };
     } catch (error) {
-      logger.error(`Error eliminando líneas del pedido ${pedidoId}:`, error);
+      logger.error(`Error eliminando lÃ­neas del pedido ${pedidoId}:`, error);
       throw error;
     }
   }
 
   /**
-   * Procesa traspaso de inventario
-   * MIGRADO: Usa DatabaseServiceAdapter sin withConnection
-   */
-  static async processInventoryTransfer(loadId, bodegaDestino) {
-    try {
-      const query = `
-        SELECT
-          Code_Product as codigo,
-          Quantity as cantidad,
-          Code_Warehouse_Sou as bodegaOrigen
-        FROM dbo.IMPLT_loads_detail
-        WHERE Code = @loadId
-      `;
-
-      // ✅ MIGRADO: Solo serverKey, sin withConnection
-      const result = await DatabaseServiceAdapter.query("server2", query, {
-        loadId,
-      });
-      const loadData = result.recordset;
-
-      if (!loadData || loadData.length === 0) {
-        throw new Error(`No se encontraron datos para la carga ${loadId}`);
-      }
-
-      const traspasoService = require("./traspasoService");
-
-      const traspasoResult = await traspasoService.procesarTraspasoBodega(
-        loadData,
-        loadData[0].bodegaOrigen,
-        bodegaDestino,
-        loadId
-      );
-
-      await LoadTracking.findOneAndUpdate(
-        { loadId },
-        {
-          status: "transferred",
-          updatedAt: new Date(),
-        }
-      );
-
-      return {
-        success: true,
-        message: "Traspaso de inventario procesado correctamente",
-        data: {
-          loadId,
-          documentoGenerado: traspasoResult.documento_inv,
-          lineasProcesadas: traspasoResult.successCount,
-          bodegaOrigen: loadData[0].bodegaOrigen,
-          bodegaDestino,
-        },
-      };
-    } catch (error) {
-      logger.error("Error procesando traspaso de inventario:", error);
-      throw error;
-    }
-  }
-
-  /**
-   * Métodos sin cambios (Solo MongoDB/Mongoose)
+   * Resto de mÃ©todos sin cambios de transacciones...
    */
   static async createDeliveryPerson(deliveryPersonData) {
     try {
@@ -1568,6 +1525,62 @@ class LoadsService {
       };
     } catch (error) {
       logger.error("Error obteniendo historial de cargas:", error);
+      throw error;
+    }
+  }
+
+  static async processInventoryTransfer(loadId, bodegaDestino) {
+    try {
+      const loadData = await withConnection("server2", async (connection) => {
+        const query = `
+          SELECT
+            Code_Product as codigo,
+            Quantity as cantidad,
+            Code_Warehouse_Sou as bodegaOrigen
+          FROM dbo.IMPLT_loads_detail
+          WHERE Code = @loadId
+        `;
+
+        const result = await DatabaseServiceAdapter.query(connection, query, {
+          loadId,
+        });
+        return result.recordset;
+      });
+
+      if (!loadData || loadData.length === 0) {
+        throw new Error(`No se encontraron datos para la carga ${loadId}`);
+      }
+
+      const traspasoService = require("./traspasoService");
+
+      const traspasoResult = await traspasoService.procesarTraspasoBodega(
+        loadData,
+        loadData[0].bodegaOrigen,
+        bodegaDestino,
+        loadId
+      );
+
+      await LoadTracking.findOneAndUpdate(
+        { loadId },
+        {
+          status: "transferred",
+          updatedAt: new Date(),
+        }
+      );
+
+      return {
+        success: true,
+        message: "Traspaso de inventario procesado correctamente",
+        data: {
+          loadId,
+          documentoGenerado: traspasoResult.documento_inv,
+          lineasProcesadas: traspasoResult.successCount,
+          bodegaOrigen: loadData[0].bodegaOrigen,
+          bodegaDestino,
+        },
+      };
+    } catch (error) {
+      logger.error("Error procesando traspaso de inventario:", error);
       throw error;
     }
   }
