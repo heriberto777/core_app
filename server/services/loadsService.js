@@ -944,7 +944,7 @@ class LoadsService {
    * Actualiza U_Code_Load en los pedidos seleccionados
    */
   static async updatePedidosWithLoadId(connection, selectedPedidos, loadId) {
-    // ValidaciÃ³n inicial
+    // Validación inicial
     if (!Array.isArray(selectedPedidos)) {
       throw new Error(
         `selectedPedidos debe ser un array, recibido: ${typeof selectedPedidos}`
@@ -952,15 +952,62 @@ class LoadsService {
     }
 
     if (selectedPedidos.length === 0) {
-      throw new Error("selectedPedidos no puede estar vacÃ­o");
+      throw new Error("selectedPedidos no puede estar vacío");
     }
 
+    // ✅ PASO 1: Diagnosticar estado actual de los pedidos
     const pedidosList = selectedPedidos
       .map((_, index) => `@pedido${index}`)
       .join(", ");
 
-    const params = { loadId };
+    const diagnosticParams = {};
+    selectedPedidos.forEach((pedido, index) => {
+      diagnosticParams[`pedido${index}`] = pedido;
+    });
 
+    const diagnosticQuery = `
+    SELECT
+      PEDIDO,
+      estado,
+      U_Code_Load,
+      U_estado_proceso,
+      CASE
+        WHEN U_Code_Load IS NOT NULL AND U_Code_Load != '' THEN 'YA_TIENE_LOAD'
+        WHEN estado != 'N' THEN 'ESTADO_NO_NORMAL'
+        WHEN U_estado_proceso NOT IN ('N', 'P') AND U_estado_proceso IS NOT NULL THEN 'PROCESO_NO_VALIDO'
+        ELSE 'ACTUALIZABLE'
+      END as diagnostico
+    FROM CATELLI.PEDIDO
+    WHERE PEDIDO IN (${pedidosList})
+  `;
+
+    const diagnosticResult = await DatabaseServiceAdapter.query(
+      connection,
+      diagnosticQuery,
+      diagnosticParams
+    );
+
+    // Log del diagnóstico
+    logger.info("🔍 Diagnóstico de pedidos antes de actualizar:");
+    diagnosticResult.recordset.forEach((pedido) => {
+      logger.info(
+        `  Pedido ${pedido.PEDIDO}: estado=${pedido.estado}, U_Code_Load=${pedido.U_Code_Load}, U_estado_proceso=${pedido.U_estado_proceso}, diagnóstico=${pedido.diagnostico}`
+      );
+    });
+
+    // Verificar si hay pedidos no actualizables
+    const noActualizables = diagnosticResult.recordset.filter(
+      (p) => p.diagnostico !== "ACTUALIZABLE"
+    );
+    if (noActualizables.length > 0) {
+      const detalles = noActualizables
+        .map((p) => `Pedido ${p.PEDIDO}: ${p.diagnostico}`)
+        .join(", ");
+      throw new Error(`No se pueden actualizar algunos pedidos: ${detalles}`);
+    }
+
+    // ✅ PASO 2: UPDATE con condiciones corregidas
+    const params = { loadId };
     selectedPedidos.forEach((pedido, index) => {
       params[`pedido${index}`] = pedido;
     });
@@ -969,8 +1016,9 @@ class LoadsService {
     UPDATE CATELLI.PEDIDO
     SET U_Code_Load = @loadId
     WHERE PEDIDO IN (${pedidosList})
-    AND U_Code_Load IS NULL
-    AND U_estado_proceso = 'N'
+      AND (U_Code_Load IS NULL OR U_Code_Load = '')
+      AND estado = 'N'
+      AND (U_estado_proceso IN ('N', 'P') OR U_estado_proceso IS NULL)
   `;
 
     const result = await DatabaseServiceAdapter.query(
@@ -979,7 +1027,7 @@ class LoadsService {
       params
     );
 
-    // Verificar diferentes posibles formatos de rowsAffected
+    // ✅ PASO 3: Verificar resultados con logging mejorado
     let affectedRows = 0;
 
     if (Array.isArray(result.rowsAffected)) {
@@ -987,7 +1035,7 @@ class LoadsService {
     } else if (typeof result.rowsAffected === "number") {
       affectedRows = result.rowsAffected;
     } else {
-      // VerificaciÃ³n manual si no podemos determinar filas afectadas
+      // Verificación manual si no podemos determinar filas afectadas
       const verifyQuery = `
       SELECT COUNT(*) as count
       FROM CATELLI.PEDIDO
@@ -1003,43 +1051,225 @@ class LoadsService {
       affectedRows = verifyResult.recordset[0]?.count || 0;
     }
 
+    // ✅ PASO 4: Verificación post-actualización si falla
     if (affectedRows !== selectedPedidos.length) {
+      // Diagnóstico post-update
+      const postUpdateResult = await DatabaseServiceAdapter.query(
+        connection,
+        diagnosticQuery,
+        diagnosticParams
+      );
+
+      logger.error("❌ Error en actualización - Estado POST-UPDATE:");
+      postUpdateResult.recordset.forEach((pedido) => {
+        logger.error(
+          `  Pedido ${pedido.PEDIDO}: estado=${pedido.estado}, U_Code_Load=${pedido.U_Code_Load}, U_estado_proceso=${pedido.U_estado_proceso}`
+        );
+      });
+
       throw new Error(
         `Solo se actualizaron ${affectedRows} de ${selectedPedidos.length} pedidos. ` +
-          `Algunos pedidos pueden ya estar procesados o no existen.`
+          `Revise los logs para detalles específicos de cada pedido.`
       );
     }
 
-    logger.info(`${affectedRows} pedidos actualizados con loadId: ${loadId}`);
+    logger.info(
+      `✅ ${affectedRows} pedidos actualizados exitosamente con loadId: ${loadId}`
+    );
   }
 
   /**
-   * Actualiza U_estado_proceso ('N' â†’ 'S' si exitoso)
+   * Actualiza U_estado_proceso con validaciones y diagnóstico
    */
-  static async updateEstadoProceso(connection, selectedPedidos, estado) {
+  static async updateEstadoProceso(
+    connection,
+    selectedPedidos,
+    estado,
+    loadId = null
+  ) {
+    // ✅ Validaciones iniciales
+    if (!Array.isArray(selectedPedidos)) {
+      throw new Error(
+        `selectedPedidos debe ser un array, recibido: ${typeof selectedPedidos}`
+      );
+    }
+
+    if (selectedPedidos.length === 0) {
+      throw new Error("selectedPedidos no puede estar vacío");
+    }
+
+    if (!estado || !["N", "P", "S", "C"].includes(estado)) {
+      throw new Error(`Estado inválido: ${estado}. Debe ser N, P, S o C`);
+    }
+
     const pedidosList = selectedPedidos
       .map((_, index) => `@pedido${index}`)
       .join(", ");
-    const params = { estado };
 
+    // ✅ PASO 1: Diagnóstico pre-actualización
+    const diagnosticParams = {};
     selectedPedidos.forEach((pedido, index) => {
-      params[`pedido${index}`] = pedido;
+      diagnosticParams[`pedido${index}`] = pedido;
     });
 
-    const query = `
-      UPDATE CATELLI.PEDIDO
-      SET U_estado_proceso = @estado
-      WHERE PEDIDO IN (${pedidosList})
-    `;
+    const diagnosticQuery = `
+    SELECT
+      PEDIDO,
+      estado,
+      U_Code_Load,
+      U_estado_proceso,
+      CASE
+        WHEN estado != 'N' THEN 'PEDIDO_NO_NORMAL'
+        WHEN U_Code_Load IS NULL OR U_Code_Load = '' THEN 'SIN_LOAD_ASIGNADO'
+        ${loadId ? `WHEN U_Code_Load != '${loadId}' THEN 'LOAD_DIFERENTE'` : ""}
+        ELSE 'ACTUALIZABLE'
+      END as diagnostico
+    FROM CATELLI.PEDIDO
+    WHERE PEDIDO IN (${pedidosList})
+  `;
+
+    const diagnosticResult = await DatabaseServiceAdapter.query(
+      connection,
+      diagnosticQuery,
+      diagnosticParams
+    );
+
+    // Log del diagnóstico
+    logger.info(
+      `🔍 Diagnóstico antes de actualizar U_estado_proceso a '${estado}':`
+    );
+    diagnosticResult.recordset.forEach((pedido) => {
+      logger.info(
+        `  Pedido ${pedido.PEDIDO}: estado=${pedido.estado}, U_Code_Load=${pedido.U_Code_Load}, U_estado_proceso=${pedido.U_estado_proceso} → ${pedido.diagnostico}`
+      );
+    });
+
+    // Verificar pedidos no actualizables
+    const noActualizables = diagnosticResult.recordset.filter(
+      (p) => p.diagnostico !== "ACTUALIZABLE"
+    );
+    if (noActualizables.length > 0) {
+      const detalles = noActualizables
+        .map((p) => `Pedido ${p.PEDIDO}: ${p.diagnostico}`)
+        .join(", ");
+      logger.warn(`⚠️ Algunos pedidos no son actualizables: ${detalles}`);
+
+      // Dependiendo del caso, podrías querer fallar o continuar
+      if (estado === "S") {
+        // Para éxito, es crítico que todos se actualicen
+        throw new Error(
+          `No se pueden marcar como exitosos algunos pedidos: ${detalles}`
+        );
+      }
+    }
+
+    // ✅ PASO 2: UPDATE con condiciones de seguridad
+    const params = { estado };
+    selectedPedidos.forEach((pedido, index) => {
+      params[`pedido${index}`] = pedido; // ✅ Sintaxis corregida
+    });
+
+    // Agregar loadId a params si se proporciona
+    if (loadId) {
+      params.loadId = loadId;
+    }
+
+    let query = `
+    UPDATE CATELLI.PEDIDO
+    SET U_estado_proceso = @estado
+    WHERE PEDIDO IN (${pedidosList})
+      AND estado = 'N'
+  `;
+
+    // ✅ Condiciones adicionales según el estado
+    switch (estado) {
+      case "P": // Procesando
+        query += " AND (U_estado_proceso = 'N' OR U_estado_proceso IS NULL)";
+        if (loadId) {
+          query += " AND U_Code_Load = @loadId";
+        }
+        break;
+
+      case "S": // Exitoso
+        query += " AND U_estado_proceso = 'P'";
+        if (loadId) {
+          query += " AND U_Code_Load = @loadId";
+        }
+        break;
+
+      case "C": // Cancelado
+        // Puede cancelar desde cualquier estado
+        break;
+
+      case "N": // Resetear a normal
+        // Permitir resetear desde cualquier estado
+        break;
+    }
 
     const result = await DatabaseServiceAdapter.query(
       connection,
       query,
       params
     );
+
+    // ✅ PASO 3: Verificar resultados
+    let affectedRows = 0;
+
+    if (Array.isArray(result.rowsAffected)) {
+      affectedRows = result.rowsAffected[0] || 0;
+    } else if (typeof result.rowsAffected === "number") {
+      affectedRows = result.rowsAffected;
+    } else {
+      // Verificación manual
+      const verifyQuery = `
+      SELECT COUNT(*) as count
+      FROM CATELLI.PEDIDO
+      WHERE PEDIDO IN (${pedidosList})
+      AND U_estado_proceso = @estado
+    `;
+
+      const verifyResult = await DatabaseServiceAdapter.query(
+        connection,
+        verifyQuery,
+        params
+      );
+      affectedRows = verifyResult.recordset[0]?.count || 0;
+    }
+
+    // ✅ PASO 4: Verificación de integridad
+    const expectedUpdates = diagnosticResult.recordset.filter(
+      (p) => p.diagnostico === "ACTUALIZABLE"
+    ).length;
+
+    if (affectedRows !== expectedUpdates) {
+      // Diagnóstico post-update para debugging
+      const postUpdateResult = await DatabaseServiceAdapter.query(
+        connection,
+        diagnosticQuery,
+        diagnosticParams
+      );
+
+      logger.error("❌ Error en actualización de estado - Estado POST-UPDATE:");
+      postUpdateResult.recordset.forEach((pedido) => {
+        logger.error(
+          `  Pedido ${pedido.PEDIDO}: estado=${pedido.estado}, U_Code_Load=${pedido.U_Code_Load}, U_estado_proceso=${pedido.U_estado_proceso}`
+        );
+      });
+
+      throw new Error(
+        `Solo se actualizaron ${affectedRows} de ${expectedUpdates} pedidos esperados con estado '${estado}'.`
+      );
+    }
+
     logger.info(
-      `${result.rowsAffected[0]} pedidos actualizados con estado: ${estado}`
+      `✅ ${affectedRows} pedidos actualizados exitosamente con estado '${estado}'`
     );
+
+    return {
+      success: true,
+      updatedCount: affectedRows,
+      expectedCount: expectedUpdates,
+    };
   }
 
   /**
