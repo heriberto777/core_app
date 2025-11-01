@@ -317,7 +317,7 @@ class LoadsService {
   }
 
   /**
-   * PROCESO PRINCIPAL: Procesa carga de pedidos con validaciÃ³n de resultado y transacciones
+   * PROCESO PRINCIPAL: Procesa carga de pedidos con validación de resultado y transacciones
    */
   static async processOrderLoad(deliveryPersonCode, selectedPedidos, userId) {
     let loadTracking = null;
@@ -336,12 +336,12 @@ class LoadsService {
       );
       const bodegaDestino = deliveryPerson.assignedWarehouse;
 
-      // 2. Generar loadId Ãºnico
+      // 2. Generar loadId único
       step = "generateLoadId";
       const loadId = await this.generateLoadId();
       logger.info(`LoadId generado: ${loadId}`);
 
-      // 3. Crear tracking inicial (MongoDB - sin transacciÃ³n SQL)
+      // 3. Crear tracking inicial (MongoDB - sin transacción SQL)
       step = "createLoadTracking";
       loadTracking = await this.createLoadTracking(
         loadId,
@@ -353,7 +353,7 @@ class LoadsService {
 
       let ordersData = null;
 
-      // USAR withTransaction para manejo automÃ¡tico de transacciones
+      // USAR withTransaction para manejo automático de transacciones
       return await DatabaseServiceAdapter.withTransaction(
         "server1",
         async (server1Connection) => {
@@ -367,6 +367,17 @@ class LoadsService {
               loadId
             );
             logger.info(`${step}: Completado exitosamente`);
+
+            // ✅ PASO 1.5: Marcar pedidos como PROCESANDO ('P')
+            step = "markAsProcessing";
+            logger.info(`${step}: Marcando pedidos como procesando...`);
+            await this.updateEstadoProceso(
+              server1Connection,
+              selectedPedidos,
+              "P",
+              loadId
+            );
+            logger.info(`${step}: Pedidos marcados como procesando`);
 
             // PASO 2: Obtener datos transformados
             step = "getTransformedOrdersData";
@@ -385,7 +396,7 @@ class LoadsService {
               bodegaDestino
             );
 
-            // PASOS 4 y 5: Insertar en server2 (conexiÃ³n separada)
+            // PASOS 4 y 5: Insertar en server2 (conexión separada)
             await withConnection("server2", async (server2Connection) => {
               // PASO 4: Insertar en IMPLT_Orders
               step = "insertToIMPLTOrders";
@@ -405,7 +416,7 @@ class LoadsService {
               logger.info(`${step}: Completado exitosamente`);
             });
 
-            // PASO 6: Ejecutar traspaso automÃ¡tico
+            // PASO 6: Ejecutar traspaso automático
             step = "realizarTraspaso";
             logger.info(`${step}: Ejecutando traspaso de inventario...`);
 
@@ -419,9 +430,21 @@ class LoadsService {
             // VALIDAR RESULTADO DEL TRASPASO
             if (!traspasoResult || !traspasoResult.success) {
               logger.warn(
-                `Traspaso fallÃ³: ${
+                `Traspaso falló: ${
                   traspasoResult?.mensaje || "Error desconocido"
                 }`
+              );
+
+              // ✅ Marcar como CANCELADO ('C') en caso de fallo del traspaso
+              step = "markAsCancelled";
+              logger.info(
+                `${step}: Marcando pedidos como cancelados por fallo en traspaso...`
+              );
+              await this.updateEstadoProceso(
+                server1Connection,
+                selectedPedidos,
+                "C",
+                loadId
               );
 
               // Guardar tracking de fallo
@@ -455,19 +478,31 @@ class LoadsService {
                 }
               );
 
-              // Lanzar error para activar rollback automÃ¡tico
+              // Lanzar error para activar rollback automático
               throw new Error(
-                `Traspaso fallÃ³: ${
+                `Traspaso falló: ${
                   traspasoResult?.mensaje || "Error desconocido"
                 }`
               );
             }
 
-            // VALIDAR QUE AL MENOS ALGUNAS LÃNEAS FUERON EXITOSAS
+            // VALIDAR QUE AL MENOS ALGUNAS LÍNEAS FUERON EXITOSAS
             if (
               traspasoResult.lineasExitosas === 0 &&
               traspasoResult.totalLineas > 0
             ) {
+              // ✅ Marcar como CANCELADO ('C') por fallo total
+              step = "markAsCancelledTotalFailure";
+              logger.info(
+                `${step}: Marcando pedidos como cancelados por fallo total...`
+              );
+              await this.updateEstadoProceso(
+                server1Connection,
+                selectedPedidos,
+                "C",
+                loadId
+              );
+
               const trackingId = await this.saveFailedTraspasoTracking(
                 server1Connection,
                 {
@@ -490,14 +525,14 @@ class LoadsService {
                   processedOrders: selectedPedidos.length,
                   traspasoStatus: "total_failure",
                   traspasoTrackingId: trackingId,
-                  errorMessage: "Ninguna lÃ­nea procesada exitosamente",
+                  errorMessage: "Ninguna línea procesada exitosamente",
                   warehouseOrigin: "MULTIPLE",
                   warehouseDestination: bodegaDestino,
                   updatedAt: new Date(),
                 }
               );
 
-              throw new Error("Ninguna lÃ­nea procesada exitosamente");
+              throw new Error("Ninguna línea procesada exitosamente");
             }
 
             // VALIDAR FALLAS PARCIALES SIGNIFICATIVAS
@@ -514,7 +549,7 @@ class LoadsService {
                 )}%)`
               );
 
-              // GUARDAR tracking pero CONTINUAR con la transacciÃ³n
+              // GUARDAR tracking pero CONTINUAR con la transacción
               const trackingId = await this.saveSuccessfulTraspasoTracking(
                 server1Connection,
                 {
@@ -530,13 +565,18 @@ class LoadsService {
                 }
               );
 
-              // PASO 7: Actualizar U_estado_proceso = 'S' (con warnings)
-              step = "updateEstadoProceso";
+              // ✅ PASO 7: Actualizar U_estado_proceso = 'S' (con warnings)
+              step = "updateEstadoProcesoSuccess";
+              logger.info(
+                `${step}: Marcando pedidos como exitosos (con advertencias)...`
+              );
               await this.updateEstadoProceso(
                 server1Connection,
                 selectedPedidos,
-                "S"
+                "S",
+                loadId
               );
+              logger.info(`${step}: Pedidos marcados como exitosos`);
 
               await LoadTracking.findOneAndUpdate(
                 { loadId },
@@ -546,7 +586,7 @@ class LoadsService {
                   traspasoDocument: traspasoResult.documento_inv,
                   traspasoStatus: "partial_success",
                   traspasoTrackingId: trackingId,
-                  warningMessage: `Traspaso parcial: ${traspasoResult.lineasExitosas}/${traspasoResult.totalLineas} lÃ­neas exitosas`,
+                  warningMessage: `Traspaso parcial: ${traspasoResult.lineasExitosas}/${traspasoResult.totalLineas} líneas exitosas`,
                   warehouseOrigin: "MULTIPLE",
                   warehouseDestination: bodegaDestino,
                   updatedAt: new Date(),
@@ -556,7 +596,7 @@ class LoadsService {
               return {
                 success: true,
                 hasWarnings: true,
-                message: `Proceso completado con advertencias. Traspaso parcial: ${traspasoResult.lineasExitosas}/${traspasoResult.totalLineas} lÃ­neas exitosas`,
+                message: `Proceso completado con advertencias. Traspaso parcial: ${traspasoResult.lineasExitosas}/${traspasoResult.totalLineas} líneas exitosas`,
                 data: {
                   loadId,
                   traspasoTrackingId: trackingId,
@@ -601,19 +641,20 @@ class LoadsService {
               }
             );
 
-            // PASO 7: Actualizar U_estado_proceso = 'S' (TODO EXITOSO)
-            step = "updateEstadoProceso";
+            // ✅ PASO 7: Actualizar U_estado_proceso = 'S' (TODO EXITOSO)
+            step = "updateEstadoProcesoSuccess";
             logger.info(
               `${step}: Marcando pedidos como procesados exitosamente...`
             );
             await this.updateEstadoProceso(
               server1Connection,
               selectedPedidos,
-              "S"
+              "S",
+              loadId
             );
             logger.info(`${step}: Pedidos marcados como procesados`);
 
-            // PASO 8: Actualizar tracking MongoDB (fuera de transacciÃ³n SQL)
+            // PASO 8: Actualizar tracking MongoDB (fuera de transacción SQL)
             await LoadTracking.findOneAndUpdate(
               { loadId },
               {
@@ -654,7 +695,30 @@ class LoadsService {
             };
           } catch (transactionError) {
             logger.error(`Error en paso ${step}:`, transactionError);
-            // withTransaction harÃ¡ rollback automÃ¡ticamente
+
+            // ✅ ROLLBACK: Si estamos después de markAsProcessing, intentar marcar como cancelado
+            if (
+              step !== "updatePedidosWithLoadId" &&
+              step !== "markAsProcessing"
+            ) {
+              try {
+                logger.info(
+                  "Intentando marcar pedidos como cancelados debido a error..."
+                );
+                await this.updateEstadoProceso(
+                  server1Connection,
+                  selectedPedidos,
+                  "C",
+                  loadId
+                );
+                logger.info("Pedidos marcados como cancelados por rollback");
+              } catch (rollbackError) {
+                logger.error("Error en rollback de estado:", rollbackError);
+                // No lanzar error aquí para no ocultar el error original
+              }
+            }
+
+            // withTransaction hará rollback automáticamente
             throw transactionError;
           }
         }
