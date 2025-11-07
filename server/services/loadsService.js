@@ -389,6 +389,8 @@ class LoadsService {
             );
             logger.info(`${step}: ${ordersData.length} registros obtenidos`);
 
+             logger.info(`${step}: Pedidos cargados-> ${ordersData} registros obtenidos`);
+
             // PASO 3: Preparar datos de traspaso
             step = "prepareTraspasoData";
             const traspasoData = this.prepareTraspasoData(
@@ -1581,7 +1583,7 @@ class LoadsService {
           Code_Product: order.Code_Product,
           Quantity: order.Quantity || 0,
           Unit_Measure: order.Unit_Measure || "UND",
-          Order_Date: order.Order_Date,
+          Order_Date: order.Date_Delivery,
           Code_Warehouse_Orig: route,
         });
       }
