@@ -5,7 +5,7 @@ const { LoadTracking, DeliveryPerson } = require("../models/loadsModel");
 
 /**
  * Servicio para manejo de cargas de pedidos
- * Implementa lÃ³gica secuencial con control de estado U_estado_proceso
+ * Implementa li³gica secuencial con control de estado U_estado_proceso
  */
 class LoadsService {
   /**
@@ -204,7 +204,7 @@ class LoadsService {
   }
 
   /**
-   * Obtiene detalles de lÃ­neas de un pedido especÃ­fico
+   * Obtiene detalles de li­neas de un pedido especi­fico
    */
   static async getOrderDetails(pedidoId) {
     try {
@@ -226,7 +226,7 @@ class LoadsService {
             WHERE pl.PEDIDO = @pedidoId
           ),
           Details AS (
-            -- LÃNEAS DE CANTIDAD PEDIDA
+            -- LiNEAS DE CANTIDAD PEDIDA
             SELECT
               PEDIDO_LINEA,
               CAST(PEDIDO_LINEA AS VARCHAR(10)) + '-P' AS lineId,
@@ -243,7 +243,7 @@ class LoadsService {
 
             UNION ALL
 
-            -- LÃNEAS DE CANTIDAD BONIFICADA
+            -- LiNEAS DE CANTIDAD BONIFICADA
             SELECT
               PEDIDO_LINEA,
               CAST(PEDIDO_LINEA AS VARCHAR(10)) + '-B' AS lineId,
@@ -842,19 +842,19 @@ class LoadsService {
     try {
       // Determinar tipo de error
       let errorType = "failed";
-      let errorMessage = "Error en ejecuciÃ³n de traspaso";
+      let errorMessage = "Error en ejecucii³n de traspaso";
 
       if (traspasoResult) {
         if (!traspasoResult.success) {
           errorType = "failed";
           errorMessage =
-            traspasoResult.mensaje || "Traspaso fallÃ³ durante ejecuciÃ³n";
+            traspasoResult.mensaje || "Traspaso falli³ durante ejecucii³n";
         } else if (traspasoResult.lineasExitosas === 0) {
           errorType = "failed";
-          errorMessage = "Ninguna lÃ­nea procesada exitosamente";
+          errorMessage = "Ninguna li­nea procesada exitosamente";
         } else if (traspasoResult.lineasFallidas > 0) {
           errorType = "completed"; // Parcialmente exitoso
-          errorMessage = `Traspaso parcial: ${traspasoResult.lineasExitosas}/${traspasoResult.totalLineas} lÃ­neas exitosas`;
+          errorMessage = `Traspaso parcial: ${traspasoResult.lineasExitosas}/${traspasoResult.totalLineas} li­neas exitosas`;
         }
       }
 
@@ -943,7 +943,7 @@ class LoadsService {
   }
 
   /**
-   * Valida que el repartidor existe y estÃ¡ activo
+   * Valida que el repartidor existe y esti¡ activo
    */
   static async validateDeliveryPerson(deliveryPersonCode) {
     return await withConnection("server1", async (connection) => {
@@ -966,7 +966,7 @@ class LoadsService {
       if (!result.recordset || result.recordset.length === 0) {
         throw new Error(
           `Repartidor ${deliveryPersonCode} no encontrado o inactivo. ` +
-            `Verifique que sea un repartidor vÃ¡lido`
+            `Verifique que sea un repartidor vi¡lido`
         );
       }
 
@@ -1337,7 +1337,7 @@ class LoadsService {
   }
 
   /**
-   * Prepara datos de traspaso usando bodegas origen reales de cada lÃ­nea
+   * Prepara datos de traspaso usando bodegas origen reales de cada li­nea
    */
   static prepareTraspasoData(ordersData, bodegaDestino) {
     const traspasoData = ordersData.map((order) => ({
@@ -1552,7 +1552,7 @@ class LoadsService {
 
     if (!ordersData || !Array.isArray(ordersData)) {
       throw new Error(
-        `ordersData debe ser un array vÃ¡lido. Recibido: ${typeof ordersData}`
+        `ordersData debe ser un array vi¡lido. Recibido: ${typeof ordersData}`
       );
     }
 
@@ -1566,7 +1566,7 @@ class LoadsService {
 
     ordersData.forEach((order) => {
       if (!order || !order.Code_Product) {
-        logger.warn(`Orden invÃ¡lida encontrada:`, order);
+        logger.warn(`Orden invalida encontrada:`, order);
         return;
       }
 
@@ -1589,11 +1589,11 @@ class LoadsService {
 
     if (productMap.size === 0) {
       throw new Error(
-        `No se pudieron procesar productos vÃ¡lidos de ordersData`
+        `No se pudieron procesar productos vi¡lidos de ordersData`
       );
     }
 
-    // Insertar lÃ­neas consolidadas
+    // Insertar li­neas consolidadas
     let lineNumber = 1;
     for (const [productKey, productData] of productMap) {
       const query = `
@@ -1613,7 +1613,7 @@ class LoadsService {
         Num_Line: lineNumber,
         Lot_Group: "999999999",
         Code_Product: productData.Code_Product,
-        Date_Load: productData.Order_Date,
+        Date_Load: productData.Date_Delivery,
         Quantity: productData.Quantity,
         Unit_Type: "UND",
         Code_Warehouse_Sou: route,
@@ -1627,7 +1627,7 @@ class LoadsService {
         lineNumber++;
       } catch (error) {
         logger.error(
-          `Error insertando lÃ­nea ${lineNumber} para producto ${productData.Code_Product}:`,
+          `Error insertando li­nea ${lineNumber} para producto ${productData.Code_Product}:`,
           error
         );
         throw error;
@@ -1635,12 +1635,12 @@ class LoadsService {
     }
 
     logger.info(
-      `${lineNumber - 1} lÃ­neas consolidadas insertadas en IMPLT_loads_detail`
+      `${lineNumber - 1} li­neas consolidadas insertadas en IMPLT_loads_detail`
     );
   }
 
   /**
-   * Genera un nuevo loadId Ãºnico
+   * Genera un nuevo loadId iºnico
    */
   static async generateLoadId() {
     const timestamp = Date.now();
@@ -1693,7 +1693,7 @@ class LoadsService {
   }
 
   /**
-   * Elimina lÃ­neas especÃ­ficas de un pedido
+   * Elimina li­neas especi­ficas de un pedido
    */
   static async removeOrderLines(pedidoId, selectedLines, userId) {
     try {
@@ -1720,23 +1720,23 @@ class LoadsService {
         );
 
         logger.info(
-          `${result.rowsAffected[0]} lÃ­neas eliminadas del pedido ${pedidoId}`
+          `${result.rowsAffected[0]} li­neas eliminadas del pedido ${pedidoId}`
         );
 
         return {
           success: true,
-          message: `${result.rowsAffected[0]} lÃ­neas eliminadas correctamente`,
+          message: `${result.rowsAffected[0]} li­neas eliminadas correctamente`,
           removedCount: result.rowsAffected[0],
         };
       });
     } catch (error) {
-      logger.error(`Error eliminando lÃ­neas del pedido ${pedidoId}:`, error);
+      logger.error(`Error eliminando lineas del pedido ${pedidoId}:`, error);
       throw error;
     }
   }
 
   /**
-   * Resto de mÃ©todos sin cambios de transacciones...
+   * Resto de metodos sin cambios de transacciones...
    */
   static async createDeliveryPerson(deliveryPersonData) {
     try {
