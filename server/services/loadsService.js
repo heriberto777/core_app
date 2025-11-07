@@ -389,7 +389,9 @@ class LoadsService {
             );
             logger.info(`${step}: ${ordersData.length} registros obtenidos`);
 
-             logger.info(`${step}: Pedidos cargados-> ${ordersData} registros obtenidos`);
+            logger.info(
+              `${step}: Pedidos cargados-> ${ordersData} registros obtenidos`
+            );
 
             // PASO 3: Preparar datos de traspaso
             step = "prepareTraspasoData";
@@ -1552,9 +1554,30 @@ class LoadsService {
       `Insertando registros en IMPLT_loads_detail para load: ${loadId}`
     );
 
+    // LOGGING DETALLADO - Ver estructura completa de ordersData
+    logger.info(`=== DEBUG ordersData ===`);
+    logger.info(`Tipo de ordersData: ${typeof ordersData}`);
+    logger.info(`Es array: ${Array.isArray(ordersData)}`);
+    logger.info(
+      `Cantidad de elementos: ${
+        ordersData ? ordersData.length : "null/undefined"
+      }`
+    );
+
+    if (ordersData && ordersData.length > 0) {
+      logger.info(
+        `Primer elemento completo:`,
+        JSON.stringify(ordersData[0], null, 2)
+      );
+      logger.info(
+        `Estructura de campos del primer elemento:`,
+        Object.keys(ordersData[0])
+      );
+    }
+
     if (!ordersData || !Array.isArray(ordersData)) {
       throw new Error(
-        `ordersData debe ser un array vi¡lido. Recibido: ${typeof ordersData}`
+        `ordersData debe ser un array válido. Recibido: ${typeof ordersData}`
       );
     }
 
@@ -1566,38 +1589,81 @@ class LoadsService {
     // Agrupar por producto Y bodega origen (mantener origen separado)
     const productMap = new Map();
 
-    ordersData.forEach((order) => {
+    ordersData.forEach((order, index) => {
+      // LOGGING DETALLADO POR CADA ORDER
+      logger.info(`=== Procesando order ${index + 1} ===`);
+      logger.info(`Order completa:`, JSON.stringify(order, null, 2));
+
       if (!order || !order.Code_Product) {
-        logger.warn(`Orden invalida encontrada:`, order);
+        logger.warn(`Orden inválida encontrada en índice ${index}:`, order);
         return;
       }
+
+      // LOGGING ESPECÍFICO DE CAMPOS CLAVE
+      logger.info(`Code_Product: ${order.Code_Product}`);
+      logger.info(
+        `Date_Delivery: ${
+          order.Date_Delivery
+        } (tipo: ${typeof order.Date_Delivery})`
+      );
+      logger.info(`Code_Warehouse_Orig: ${order.Code_Warehouse_Orig}`);
+      logger.info(`bodega: ${order.bodega}`);
+      logger.info(`Quantity: ${order.Quantity}`);
+      logger.info(`Unit_Measure: ${order.Unit_Measure}`);
 
       const bodegaOrigen = order.Code_Warehouse_Orig || order.bodega || "01";
       const key = `${order.Code_Product}_${bodegaOrigen}`;
 
+      logger.info(`Bodega origen determinada: ${bodegaOrigen}`);
+      logger.info(`Key generada: ${key}`);
+
       if (productMap.has(key)) {
         const existing = productMap.get(key);
+        logger.info(
+          `Producto existente encontrado, sumando cantidad: ${
+            existing.Quantity
+          } + ${order.Quantity || 0}`
+        );
         existing.Quantity += order.Quantity || 0;
       } else {
-        productMap.set(key, {
+        const newProduct = {
           Code_Product: order.Code_Product,
           Quantity: order.Quantity || 0,
           Unit_Measure: order.Unit_Measure || "UND",
           Order_Date: order.Date_Delivery,
-          Code_Warehouse_Orig: route,
-        });
+          Code_Warehouse_Orig: bodegaOrigen,
+        };
+
+        logger.info(
+          `Nuevo producto creado:`,
+          JSON.stringify(newProduct, null, 2)
+        );
+        productMap.set(key, newProduct);
       }
     });
 
-    if (productMap.size === 0) {
-      throw new Error(
-        `No se pudieron procesar productos vi¡lidos de ordersData`
+    // LOGGING DEL MAPA FINAL
+    logger.info(`=== Mapa final de productos consolidados ===`);
+    logger.info(`Cantidad de productos únicos: ${productMap.size}`);
+
+    for (const [key, product] of productMap) {
+      logger.info(
+        `Producto consolidado [${key}]:`,
+        JSON.stringify(product, null, 2)
       );
     }
 
-    // Insertar li­neas consolidadas
+    if (productMap.size === 0) {
+      throw new Error(
+        `No se pudieron procesar productos válidos de ordersData`
+      );
+    }
+
+    // Insertar líneas consolidadas
     let lineNumber = 1;
     for (const [productKey, productData] of productMap) {
+      logger.info(`=== Insertando línea ${lineNumber} ===`);
+
       const query = `
       INSERT INTO dbo.IMPLT_loads_detail (
         Code, Num_Line, Lot_Group,
@@ -1615,7 +1681,7 @@ class LoadsService {
         Num_Line: lineNumber,
         Lot_Group: "999999999",
         Code_Product: productData.Code_Product,
-        Date_Load: productData.Date_Delivery,
+        Date_Load: productData.Order_Date,
         Quantity: productData.Quantity,
         Unit_Type: "UND",
         Code_Warehouse_Sou: route,
@@ -1624,12 +1690,16 @@ class LoadsService {
         Transfer_status: "1",
       };
 
+      // LOGGING DE PARÁMETROS DE INSERCIÓN
+      logger.info(`Parámetros de inserción:`, JSON.stringify(params, null, 2));
+
       try {
         await DatabaseServiceAdapter.query(connection, query, params);
+        logger.info(`Línea ${lineNumber} insertada exitosamente`);
         lineNumber++;
       } catch (error) {
         logger.error(
-          `Error insertando li­nea ${lineNumber} para producto ${productData.Code_Product}:`,
+          `Error insertando línea ${lineNumber} para producto ${productData.Code_Product}:`,
           error
         );
         throw error;
@@ -1637,7 +1707,7 @@ class LoadsService {
     }
 
     logger.info(
-      `${lineNumber - 1} li­neas consolidadas insertadas en IMPLT_loads_detail`
+      `${lineNumber - 1} líneas consolidadas insertadas en IMPLT_loads_detail`
     );
   }
 
