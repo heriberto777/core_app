@@ -1378,7 +1378,7 @@ class LoadsService {
         pl.PORC_IMPUESTO1,
         pl.PORC_IMPUESTO2,
         pe.RUBRO5,
-        pe.FECHA_PROMETIDA,
+        GETDATE() as FECHA_PROMETIDA,  --pe.FECHA_PROMETIDA,
         pe.FECHA_PEDIDO,
         pe.CLIENTE,
         pe.VENDEDOR,
@@ -1395,7 +1395,7 @@ class LoadsService {
       AND pe.U_Code_Load = @loadId
     ),
     Calc AS (
-      -- LÃNEAS DE CANTIDAD PEDIDA
+      -- LINEAS DE CANTIDAD PEDIDA
       SELECT
         PEDIDO,
         PEDIDO_LINEA,
@@ -1424,7 +1424,7 @@ class LoadsService {
 
       UNION ALL
 
-      -- LÃNEAS DE CANTIDAD BONIFICADA
+      -- LINEAS DE CANTIDAD BONIFICADA
       SELECT
         PEDIDO,
         PEDIDO_LINEA,
