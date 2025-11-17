@@ -1465,7 +1465,11 @@ class LoadsService {
       @loadId AS Code_load,
       CONVERT(VARCHAR, FECHA_PROMETIDA, 112) AS Date_Delivery,
       CONVERT(VARCHAR, FECHA_PEDIDO, 112) AS Order_Date,
-      CLIENTE AS Code_Account,
+      CASE
+        WHEN SUBSTRING(CLIENTE, PATINDEX('%[A-Za-z]%', CLIENTE), 1) NOT IN ('O','R')
+          THEN 'C' + CLIENTE
+        ELSE CLIENTE
+      END AS Code_Account,
       ARTICULO AS Code_Product,
       '999999999' AS Lot_Number,
       CAST(Cantidad AS NUMERIC(11,3)) AS Quantity,
