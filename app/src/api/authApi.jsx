@@ -27,14 +27,16 @@ export class AuthApi {
           errorData = await response.json();
         } catch (parseError) {
           console.error("❌ Error al parsear respuesta de error:", parseError);
+          // Intentar leer como texto si no es JSON
+          const errorText = await response.text().catch(() => "No se pudo leer el cuerpo de la respuesta");
           throw new Error(
-            `Error del servidor (${response.status}): ${response.statusText}`
+            `Error del servidor (${response.status}): ${errorText || response.statusText}`
           );
         }
 
         console.error("❌ Error HTTP:", errorData);
         throw new Error(
-          errorData.msg || `Error del servidor (${response.status})`
+          errorData.msg || errorData.message || `Error del servidor (${response.status})`
         );
       }
 

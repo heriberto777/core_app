@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import styled from "styled-components";
-import { useForm,  useAuth } from "../../index";
+import { useForm, useAuth } from "../../index";
 import { AuthApi } from "../../api/index";
 import { validateForm } from "../../utils/index";
 import Swal from "sweetalert2";
@@ -55,15 +55,18 @@ export function LoginForm() {
       console.error("❌ Error en login desde formulario:", error);
 
       // ⭐ MOSTRAR ERROR ESPECÍFICO AL USUARIO ⭐
+      const errorMessage = error.message || "Error desconocido al iniciar sesión";
+      console.log("🚨 Mostrando alerta de error:", errorMessage);
+
       Swal.fire({
         icon: "error",
         title: "Error de Autenticación",
-        text: error.message || "Error al iniciar sesión",
+        text: errorMessage,
         confirmButtonText: "Intentar nuevamente",
       });
 
       // ⭐ TAMBIÉN MOSTRAR EN INTERFAZ PARA MEJOR UX ⭐
-      setMessage(`Error: ${error.message}`);
+      setMessage(`Error: ${errorMessage}`);
     } finally {
       setLoading(false);
     }
