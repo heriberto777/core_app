@@ -434,8 +434,7 @@ class LoadsService {
             // VALIDAR RESULTADO DEL TRASPASO
             if (!traspasoResult || !traspasoResult.success) {
               logger.warn(
-                `Traspaso falló: ${
-                  traspasoResult?.mensaje || "Error desconocido"
+                `Traspaso falló: ${traspasoResult?.mensaje || "Error desconocido"
                 }`
               );
 
@@ -484,8 +483,7 @@ class LoadsService {
 
               // Lanzar error para activar rollback automático
               throw new Error(
-                `Traspaso falló: ${
-                  traspasoResult?.mensaje || "Error desconocido"
+                `Traspaso falló: ${traspasoResult?.mensaje || "Error desconocido"
                 }`
               );
             }
@@ -546,8 +544,7 @@ class LoadsService {
 
             if (porcentajeExito < 80 && traspasoResult.lineasFallidas > 0) {
               logger.warn(
-                `Traspaso con fallas significativas: ${
-                  traspasoResult.lineasExitosas
+                `Traspaso con fallas significativas: ${traspasoResult.lineasExitosas
                 }/${traspasoResult.totalLineas} (${porcentajeExito.toFixed(
                   1
                 )}%)`
@@ -970,7 +967,7 @@ class LoadsService {
       if (!result.recordset || result.recordset.length === 0) {
         throw new Error(
           `Repartidor ${deliveryPersonCode} no encontrado o inactivo. ` +
-            `Verifique que sea un repartidor vi¡lido`
+          `Verifique que sea un repartidor vi¡lido`
         );
       }
 
@@ -1137,7 +1134,7 @@ class LoadsService {
 
       throw new Error(
         `Solo se actualizaron ${affectedRows} de ${selectedPedidos.length} pedidos. ` +
-          `Revise los logs para detalles específicos de cada pedido.`
+        `Revise los logs para detalles específicos de cada pedido.`
       );
     }
 
@@ -1563,8 +1560,7 @@ class LoadsService {
     logger.info(`Tipo de ordersData: ${typeof ordersData}`);
     logger.info(`Es array: ${Array.isArray(ordersData)}`);
     logger.info(
-      `Cantidad de elementos: ${
-        ordersData ? ordersData.length : "null/undefined"
+      `Cantidad de elementos: ${ordersData ? ordersData.length : "null/undefined"
       }`
     );
 
@@ -1606,8 +1602,7 @@ class LoadsService {
       // LOGGING ESPECÍFICO DE CAMPOS CLAVE
       logger.info(`Code_Product: ${order.Code_Product}`);
       logger.info(
-        `Date_Delivery: ${
-          order.Date_Delivery
+        `Date_Delivery: ${order.Date_Delivery
         } (tipo: ${typeof order.Date_Delivery})`
       );
       logger.info(`Code_Warehouse_Orig: ${order.Code_Warehouse_Orig}`);
@@ -1624,8 +1619,7 @@ class LoadsService {
       if (productMap.has(key)) {
         const existing = productMap.get(key);
         logger.info(
-          `Producto existente encontrado, sumando cantidad: ${
-            existing.Quantity
+          `Producto existente encontrado, sumando cantidad: ${existing.Quantity
           } + ${order.Quantity || 0}`
         );
         existing.Quantity += order.Quantity || 0;
@@ -1688,7 +1682,7 @@ class LoadsService {
         Date_Load: productData.Order_Date,
         Quantity: productData.Quantity,
         Unit_Type: "UND",
-        Code_Warehouse_Sou: route,
+        Code_Warehouse_Sou: productData.Code_Warehouse_Orig,
         Code_Route: route,
         Source_Create: "0",
         Transfer_status: "1",
@@ -1719,9 +1713,9 @@ class LoadsService {
    * Genera un nuevo loadId iºnico
    */
   static async generateLoadId() {
-    const timestamp = Date.now();
-    const random = Math.floor(Math.random() * 1000);
-    return `LOAD${timestamp}${random}`;
+    const timestamp = Date.now().toString();
+    const random = Math.floor(Math.random() * 1e11).toString().padStart(11, '0');
+    return `${timestamp}${random}`;
   }
 
   /**
