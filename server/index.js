@@ -179,6 +179,7 @@ const startServerWithPort = async (serverPort) => {
 
     const hasSSLCerts =
       !isWindows &&
+      process.env.DISABLE_SSL !== "true" &&
       fs.existsSync(`${sslPath}/privkey.pem`) &&
       fs.existsSync(`${sslPath}/fullchain.pem`);
 

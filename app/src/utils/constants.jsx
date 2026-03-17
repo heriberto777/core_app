@@ -4,7 +4,8 @@
  * Refactor: ACTIONS centralizado para evitar repetir las mismas 5 acciones en cada recurso.
  */
 
-const SERVER_IP = `localhost:3979`;
+const isDev = import.meta.env.DEV;
+const SERVER_IP = isDev ? `localhost:3979` : window.location.host;
 const PROTOCOL = window.location.protocol;
 
 export const ENV = {
