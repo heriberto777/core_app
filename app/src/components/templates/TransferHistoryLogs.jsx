@@ -1,7 +1,6 @@
 import styled from "styled-components";
 import { useState, useEffect } from "react";
-import { Header, useAuth } from "../../index";
-import { TransferApi } from "../../api/index";
+import { Header, useAuth, useAuditLogs } from "../../index";
 import {
   FaSync,
   FaFilter,
@@ -15,180 +14,39 @@ import {
 import DatePicker from "react-datepicker";
 import "react-datepicker/dist/react-datepicker.css";
 
-const cnnApi = new TransferApi();
 
 export function TransferHistoryLogs() {
   const [openstate, setOpenState] = useState(false);
   const { accessToken } = useAuth();
-  const [history, setHistory] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState(null);
-  const [refreshing, setRefreshing] = useState(false);
 
-  const [stats, setStats] = useState({
-    completedToday: 0,
-    failedToday: 0,
-    total: 0,
-  });
-
-  console.log("stats", stats);
-
-  // Filters
-  const [filters, setFilters] = useState({
-    dateFrom: null,
-    dateTo: null,
-    status: "all",
-    taskName: "",
-    search: "",
-  });
-
-  // Pagination
-  const [pagination, setPagination] = useState({
-    page: 1,
-    limit: 20,
-    total: 0,
-    pages: 1,
-  });
-
-  // Load transfer history
-  const fetchHistory = async () => {
-    try {
-      setLoading(true);
-      setError(null);
-
-      // Prepare query parameters
-      const queryParams = new URLSearchParams();
-
-      if (filters.dateFrom) {
-        queryParams.append("dateFrom", filters.dateFrom.toISOString());
-      }
-
-      if (filters.dateTo) {
-        queryParams.append("dateTo", filters.dateTo.toISOString());
-      }
-
-      if (filters.status !== "all") {
-        queryParams.append("status", filters.status);
-      }
-
-      if (filters.taskName) {
-        queryParams.append("taskName", filters.taskName);
-      }
-
-      queryParams.append("page", pagination.page);
-      queryParams.append("limit", pagination.limit);
-
-      // Call API with appropriate filters
-      const historyResponse = await cnnApi.getTransferHistory(
-        accessToken,
-        Object.fromEntries(queryParams)
-      );
-
-      if (historyResponse.success) {
-        // Set history data
-        setHistory(historyResponse.history || []);
-
-        // Set statistics
-        setStats({
-          completedToday: historyResponse.completedToday || 0,
-          failedToday: historyResponse.failedToday || 0,
-          total:
-            historyResponse.pagination?.total ||
-            historyResponse.history?.length ||
-            0,
-        });
-
-        // Set pagination if available
-        if (historyResponse.pagination) {
-          setPagination(historyResponse.pagination);
-        }
-      } else {
-        throw new Error(
-          historyResponse.error || "No se pudo cargar el historial"
-        );
-      }
-    } catch (error) {
-      console.error("Error fetching transfer history:", error);
-      setError(
-        error.message || "Error al cargar el historial de transferencias"
-      );
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  // Load history on component mount and when filters/pagination change
-  useEffect(() => {
-    fetchHistory();
-  }, [accessToken, filters.status, pagination.page, pagination.limit]);
-
-  // Manually apply date and taskName filters (with a delay)
-  useEffect(() => {
-    const delayDebounceFn = setTimeout(() => {
-      // Only refetch if these specific filters change
-      if (filters.dateFrom || filters.dateTo || filters.taskName) {
-        fetchHistory();
-      }
-    }, 500);
-
-    return () => clearTimeout(delayDebounceFn);
-  }, [filters.dateFrom, filters.dateTo, filters.taskName]);
+  const {
+    logs: history,
+    meta: stats, // Mapeamos meta a stats para compatibilidad visual
+    loading,
+    refreshing,
+    error,
+    filters,
+    pagination,
+    actions
+  } = useAuditLogs(accessToken, "transfer");
 
   // Handle filter changes
   const handleFilterChange = (filterType, value) => {
-    setFilters((prev) => ({
-      ...prev,
-      [filterType]: value,
-    }));
-
-    // Reset to first page when changing filters
-    if (filterType !== "page") {
-      setPagination((prev) => ({
-        ...prev,
-        page: 1,
-      }));
-    }
+    actions.updateFilters({ [filterType]: value });
   };
 
   // Handle refresh button
   const handleRefresh = () => {
-    if (refreshing) return;
-    setRefreshing(true);
-    fetchHistory();
+    actions.refreshLogs();
   };
 
   // Handle pagination
   const handlePageChange = (newPage) => {
-    if (
-      newPage < 1 ||
-      newPage > pagination.pages ||
-      newPage === pagination.page
-    ) {
-      return;
-    }
-
-    setPagination((prev) => ({
-      ...prev,
-      page: newPage,
-    }));
+    actions.changePage(newPage);
   };
 
   // Filter history by search text (client-side filtering)
-  const filteredHistory = history.filter((item) => {
-    if (!filters.search) return true;
-
-    // Search in task name, status or any stringified property
-    return (
-      (item.name || item.taskName || "")
-        .toLowerCase()
-        .includes(filters.search.toLowerCase()) ||
-      (item.status || "")
-        .toLowerCase()
-        .includes(filters.search.toLowerCase()) ||
-      JSON.stringify(item).toLowerCase().includes(filters.search.toLowerCase())
-    );
-  });
+  const filteredHistory = history; // Filtrado ahora es en el hook/server
 
   // Export history to CSV
   const exportHistory = () => {
@@ -405,10 +263,10 @@ export function TransferHistoryLogs() {
                             {item.status === "completed"
                               ? "Completada"
                               : item.status === "failed"
-                              ? "Fallida"
-                              : item.status === "cancelled"
-                              ? "Cancelada"
-                              : item.status || "Desconocido"}
+                                ? "Fallida"
+                                : item.status === "cancelled"
+                                  ? "Cancelada"
+                                  : item.status || "Desconocido"}
                           </StatusBadge>
                         </td>
                         <td>
@@ -445,18 +303,18 @@ export function TransferHistoryLogs() {
                     </PaginationButton>
 
                     <PaginationCurrent>
-                      Página {pagination.page} de {pagination.pages}
+                      Página {pagination.page} de {meta.pages}
                     </PaginationCurrent>
 
                     <PaginationButton
-                      disabled={pagination.page >= pagination.pages}
+                      disabled={pagination.page >= meta.pages}
                       onClick={() => handlePageChange(pagination.page + 1)}
                     >
                       &rsaquo;
                     </PaginationButton>
                     <PaginationButton
-                      disabled={pagination.page >= pagination.pages}
-                      onClick={() => handlePageChange(pagination.pages)}
+                      disabled={pagination.page >= meta.pages}
+                      onClick={() => handlePageChange(meta.pages)}
                     >
                       &raquo;
                     </PaginationButton>

@@ -1,6 +1,6 @@
 import styled from "styled-components";
 import { useState, useMemo } from "react";
-import { OrderCard, LoadsButton, StatusBadge} from "../../index";
+import { OrderCard, LoadsButton, StatusBadge } from "../../index";
 import { FaList, FaTh, FaTable, FaTruck } from "react-icons/fa";
 
 const Container = styled.div`
@@ -242,6 +242,7 @@ export function OrdersList({
   onBulkLoad,
   onBulkCancel,
   loading = false,
+  isProcessing = false,
   viewMode = "cards",
 }) {
   const [currentViewMode, setCurrentViewMode] = useState(viewMode);
@@ -330,7 +331,8 @@ export function OrdersList({
           <LoadsButton
             variant="primary"
             onClick={() => onBulkLoad(selectedOrders)}
-            disabled={selectedOrders.some((id) => {
+            loading={isProcessing}
+            disabled={isProcessing || selectedOrders.some((id) => {
               const order = orders.find((o) => o.pedido === id);
               return order?.transferStatus !== "pending";
             })}
@@ -402,10 +404,10 @@ export function OrdersList({
                   {order.transferStatus === "pending"
                     ? "Pendiente"
                     : order.transferStatus === "processing"
-                    ? "Procesando"
-                    : order.transferStatus === "completed"
-                    ? "Completado"
-                    : order.transferStatus}
+                      ? "Procesando"
+                      : order.transferStatus === "completed"
+                        ? "Completado"
+                        : order.transferStatus}
                 </StatusBadge>
               </TableCell>
               <TableCell>{formatCurrency(order.totalPedido)}</TableCell>
@@ -425,6 +427,14 @@ export function OrdersList({
                     onClick={() => onView(order.pedido)}
                   >
                     Ver
+                  </LoadsButton>
+                  <LoadsButton
+                    variant="danger"
+                    size="small"
+                    onClick={() => onCancel(order.pedido)}
+                    disabled={order.transferStatus === "completed" || order.transferStatus === "cancelled"}
+                  >
+                    Anular
                   </LoadsButton>
                 </div>
               </TableCell>

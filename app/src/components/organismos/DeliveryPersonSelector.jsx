@@ -2,7 +2,7 @@
 import styled from "styled-components";
 import { useState } from "react";
 import { LoadsButton } from "../../index";
-import { FaTruck, FaWarehouse, FaTimes, FaUser, FaCheckCircle, FaCircle,  } from "react-icons/fa";
+import { FaTruck, FaWarehouse, FaTimes, FaUser, FaCheckCircle, FaCircle, } from "react-icons/fa";
 
 const ModalOverlay = styled.div`
   position: fixed;
@@ -450,7 +450,6 @@ export function DeliveryPersonSelector({
           ) : (
             <DeliveryPersonsGrid>
               {deliveryPersons
-                .filter((vendedor) => vendedor.isVendedor === "Re")
                 .map((vendedor) => {
                   const vendedorId =
                     vendedor.code || vendedor.VENDEDOR || vendedor.id;

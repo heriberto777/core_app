@@ -31,41 +31,26 @@ class DatabaseService {
 
     try {
       if (!MongoDbService.isConnected()) {
-        await MongoDbService.connect();
+        const connected = await MongoDbService.connect();
+        if (!connected) {
+          logger.error("❌ No se pudo conectar a MongoDB. No se pueden cargar configuraciones de SQL Server.");
+          throw new Error("Fallo de conexión crítico a MongoDB");
+        }
       }
 
       const configs = await DBConfig.find({}).lean();
 
-      // MEJORADO: Filtrar configuraciones problemáticas
-      const validConfigs = configs.filter((config) => {
-        // Saltar configuraciones MongoDB (no son SQL Server)
-        if (config.type && config.type.toLowerCase() === "mongodb") {
-          logger.info(`Saltando ${config.serverName}: configuración MongoDB`);
-          return false;
-        }
-
-        // Saltar configuraciones que intentan usar puerto 27017 (típico de MongoDB)
-        if (config.port === 27017 || config.port === "27017") {
-          logger.info(
-            `Saltando ${config.serverName}: puerto MongoDB detectado`
-          );
-          return false;
-        }
-
-        return true;
-      });
-
       logger.info(
-        `Cargando ${validConfigs.length} configuraciones SQL Server válidas`
+        `Cargando ${configs.length} configuraciones de base de datos`
       );
 
-      for (const config of validConfigs) {
+      for (const config of configs) {
         await this.createPool(config.serverName, config);
       }
 
       this._initialized = true;
       logger.info(
-        `DatabaseService inicializado exitosamente con ${validConfigs.length} pools`
+        `DatabaseService inicializado exitosamente con ${configs.length} configuraciones de BD`
       );
     } catch (error) {
       logger.error(`Error inicializando DatabaseService: ${error.message}`);
@@ -78,7 +63,17 @@ class DatabaseService {
    */
   async createPool(serverKey, dbConfig) {
     try {
-      logger.info(`Creando pool para ${serverKey}...`);
+      if (dbConfig.type && dbConfig.type.toLowerCase() === "mongodb") {
+        logger.info(`Registrando servidor MongoDB: ${serverKey}`);
+        this.pools.set(serverKey, {
+          type: "mongodb",
+          config: dbConfig,
+          isMongo: true,
+        });
+        return;
+      }
+
+      logger.info(`Creando pool SQL para ${serverKey}...`);
 
       const factory = {
         create: () => this._createConnection(dbConfig),
@@ -178,7 +173,7 @@ class DatabaseService {
         },
       },
       options: {
-        encrypt: isIpAddress ? false : dbConfig.options?.encrypt || false,
+        encrypt: dbConfig.options?.encrypt !== undefined ? dbConfig.options.encrypt : (isIpAddress ? false : true),
         trustServerCertificate: true,
         enableArithAbort: true,
         database: dbConfig.database,
@@ -336,7 +331,18 @@ class DatabaseService {
           throw new Error(`Pool no disponible para ${serverKey}`);
         }
 
-        // Verificar estado del pool
+        // NUEVO: Manejo directo de MongoDB (sin generic-pool)
+        if (pool.isMongo) {
+          logger.debug(`[${operationId}] Retornando conexión MongoDB para ${serverKey}`);
+          const mongoose = require("mongoose");
+          if (mongoose.connection.readyState !== 1) {
+            await MongoDbService.connect();
+          }
+          this.connectionStats.acquired++;
+          return mongoose.connection;
+        }
+
+        // Verificar estado del pool SQL
         if (pool._draining || pool.destroyed) {
           logger.warn(
             `[${operationId}] Pool corrupto para ${serverKey}, recreando...`
@@ -380,8 +386,7 @@ class DatabaseService {
       } catch (error) {
         attempt++;
         logger.warn(
-          `[${operationId}] Intento ${attempt}/${maxRetries + 1} falló: ${
-            error.message
+          `[${operationId}] Intento ${attempt}/${maxRetries + 1} falló: ${error.message
           }`
         );
 
@@ -435,8 +440,10 @@ class DatabaseService {
 
         logger.debug(`[${operationId}] Conexión liberada para ${serverKey}`);
       } else {
-        logger.warn(
-          `[${operationId}] Pool no disponible para liberar conexión de ${serverKey}`
+        // Reducir nivel de log durante shutdown para evitar ruido
+        const logLevel = this._shutdownInProgress ? "debug" : "warn";
+        logger[logLevel](
+          `[${operationId}] Pool no disponible o drenando para liberar conexión de ${serverKey}`
         );
       }
     } catch (error) {
@@ -626,6 +633,25 @@ class DatabaseService {
     }
   }
 
+  /**
+   * Ejecuta un callback con una conexión obtenida y liberada automáticamente
+   * Útil para compatibilidad con código legado que usaba conConnection
+   */
+  async withConnection(serverKey, callback) {
+    let connection = null;
+    try {
+      connection = await this.getConnection(serverKey);
+      return await callback(connection);
+    } catch (error) {
+      logger.error(`Error en withConnection para ${serverKey}: ${error.message}`);
+      throw error;
+    } finally {
+      if (connection) {
+        await this.releaseConnection(connection);
+      }
+    }
+  }
+
   async _beginTransaction(connection) {
     return new Promise((resolve, reject) => {
       const timeout = setTimeout(() => {
@@ -743,8 +769,15 @@ class DatabaseService {
       const rows = [];
       const request = new Request(sql, (err, rowCount) => {
         if (err) {
+          if (err instanceof AggregateError) {
+            logger.error(`[${connection._operationId || 'direct'}] SQL AggregateError (${err.errors.length} errors):`);
+            err.errors.forEach((e, i) => logger.error(`  Error ${i + 1}: ${e.message}`));
+          } else {
+            logger.debug(`[${connection._operationId || 'direct'}] SQL Error encountered: ${err.message}`);
+          }
           reject(err);
         } else {
+          logger.debug(`[${connection._operationId || 'direct'}] SQL Success: ${rowCount} rows`);
           resolve({
             recordset: rows,
             rowsAffected: rowCount || 0,

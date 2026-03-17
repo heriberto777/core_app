@@ -29,29 +29,39 @@ try {
 
 // Middleware de CORS mejorado
 
+// Fix #13 — Orígenes CORS desde variable de entorno para evitar valores hardcodeados.
+// En .env: CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,...
+// Si la variable no existe, usa el listado por defecto como fallback.
+const DEFAULT_CORS_ORIGINS = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:5175",
+  "http://localhost:5176",
+  "http://localhost:5177",
+  "http://localhost:5178",
+  "http://localhost:5179",
+  "http://localhost:5180",
+  "https://localhost:3000",
+  "https://catelli.ddns.net",
+  "https://catelli.ddns.net:3979",
+  "http://catelli.ddns.net",
+  "http://catelli.ddns.net:3979",
+  "https://catelli.ddns.net:8085",
+];
+
+const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS
+  ? process.env.CORS_ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+  : DEFAULT_CORS_ORIGINS;
+
 const corsOptions = {
   origin: function (origin, callback) {
-    // Lista de orígenes permitidos
-    const allowedOrigins = [
-      "http://localhost:3000",
-      "http://localhost:3001",
-      "http://localhost:5173",
-      "https://localhost:3000",
-      "https://catelli.ddns.net",
-      "https://catelli.ddns.net:3979",
-      "http://catelli.ddns.net",
-      "http://catelli.ddns.net:3979",
-      "https://catelli.ddns.net:8085",
-    ];
-
     // Permitir peticiones sin origin (Postman, apps móviles, etc.)
     if (!origin) return callback(null, true);
 
-    // Verificar si el origin está en la lista permitida
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      console.log("CORS blocked origin:", origin);
+      logger.warn(`CORS bloqueó origen: ${origin}`);
       callback(new Error("No permitido por política CORS"));
     }
   },
@@ -136,6 +146,8 @@ app.use(`/api/${API_VERSION}/modules`, require("./routes/moduleRoutes"));
 app.use(`/api/${API_VERSION}/task`, require("./routes/transferTaskRoutes"));
 app.use(`/api/${API_VERSION}/users`, require("./routes/userRoutes"));
 app.use(`/api/${API_VERSION}/config`, require("./routes/dbRoutes"));
+app.use(`/api/${API_VERSION}/scheduler`, require("./routes/schedulerRoutes"));
+app.use(`/api/${API_VERSION}/cache`, require("./routes/cacheRoutes"));
 
 app.use(
   `/api/${API_VERSION}/email-recipients`,
@@ -175,6 +187,8 @@ app.use(
   require("./routes/emailConfigRoutes")
 );
 app.use(`/api/${API_VERSION}/loads`, require("./routes/loadsRoutes"));
+app.use(`/api/${API_VERSION}/telemetry`, require("./routes/telemetryRoutes"));
+app.use(`/api/${API_VERSION}/customers`, require("./routes/customerRoutes"));
 //Comentario
 // Ruta para health check mejorada
 app.get("/health", async (req, res) => {
@@ -194,7 +208,7 @@ app.get("/health", async (req, res) => {
     res.json({
       status:
         health.mongodb?.connected &&
-        (health.server1?.connected || health.server2?.connected)
+          (health.server1?.connected || health.server2?.connected)
           ? "UP"
           : "DEGRADED",
       timestamp: new Date().toISOString(),

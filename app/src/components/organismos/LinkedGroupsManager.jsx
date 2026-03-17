@@ -2,9 +2,9 @@ import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import Swal from "sweetalert2";
 import { FaTrash, FaEye, FaSort, FaCrown, FaUsers } from "react-icons/fa";
-import { TransferApi } from "../../api/index";
+import { TransferTaskApi } from "../../api/index";
 
-const api = new TransferApi();
+const api = new TransferTaskApi();
 
 const LinkedGroupsManager = ({
   accessToken,
@@ -75,17 +75,15 @@ const LinkedGroupsManager = ({
       ">
         <div>
           <strong>${task.name}</strong>
-          ${
-            task.isCoordinator
-              ? '<span style="color: #4caf50; margin-left: 10px;">👑 Coordinadora</span>'
-              : ""
+          ${task.isCoordinator
+            ? '<span style="color: #4caf50; margin-left: 10px;">👑 Coordinadora</span>'
+            : ""
           }
           <br>
           <small>Orden: ${task.order} | Tipo: ${task.type}</small>
         </div>
-        <button onclick="window.removeTaskFromGroupHandler('${
-          task.id
-        }')" style="
+        <button onclick="window.removeTaskFromGroupHandler('${task.id
+          }')" style="
           background: #dc3545;
           color: white;
           border: none;

@@ -1,61 +1,56 @@
 const cacheService = require("../services/cacheService");
 const logger = require("../services/logger");
 
+/**
+ * Obtiene el estado detallado del cache
+ */
 async function getCacheStatus(req, res) {
   try {
     const stats = cacheService.getStats();
     const keys = cacheService.getKeys();
 
-    // Agrupar claves por tipo
-    const keysByType = {
-      userPermissions: keys.filter((k) => k.startsWith("user_permissions_"))
-        .length,
+    // Agrupar claves por tipo para el reporte
+    const keyDistribution = {
+      userPermissions: keys.filter((k) => k.startsWith("user_permissions_")).length,
       userProfiles: keys.filter((k) => k.startsWith("user_profile_")).length,
       modules: keys.filter((k) => k === "active_modules").length,
       stats: keys.filter((k) => k.includes("stats")).length,
-      other: keys.filter(
-        (k) =>
-          !k.startsWith("user_permissions_") &&
-          !k.startsWith("user_profile_") &&
-          !k.includes("stats") &&
-          k !== "active_modules"
+      other: keys.filter((k) =>
+        !k.startsWith("user_permissions_") &&
+        !k.startsWith("user_profile_") &&
+        !k.includes("stats") &&
+        k !== "active_modules"
       ).length,
     };
 
-    res.json({
+    return res.status(200).json({
       success: true,
       data: {
         cacheStats: stats,
-        keyDistribution: keysByType,
+        keyDistribution,
         totalKeys: keys.length,
         timestamp: new Date(),
       },
     });
   } catch (error) {
-    logger.error("Error obteniendo estado del cache:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error obteniendo estado del cache",
-      error: error.message,
-    });
+    logger.error("Error en getCacheStatus:", error);
+    return res.status(500).json({ success: false, message: "Error al obtener estado del cache", error: error.message });
   }
 }
 
+/**
+ * Invalida partes específicas o todo el cache
+ */
 async function invalidateCache(req, res) {
   try {
     const { type, userId, pattern } = req.body;
-
     let invalidatedCount = 0;
     let message = "";
 
     switch (type) {
       case "user":
         if (userId) {
-          const userKeys = [
-            `user_permissions_${userId}`,
-            `user_profile_${userId}`,
-            `user_roles_${userId}`,
-          ];
+          const userKeys = [`user_permissions_${userId}`, `user_profile_${userId}`, `user_roles_${userId}`];
           invalidatedCount = await cacheService.deleteMany(userKeys);
           message = `Cache invalidado para usuario ${userId}`;
         } else {
@@ -65,37 +60,26 @@ async function invalidateCache(req, res) {
         break;
 
       case "permissions":
-        invalidatedCount = await cacheService.invalidatePattern(
-          "user_permissions_"
-        );
+        invalidatedCount = await cacheService.invalidatePattern("user_permissions_");
         message = "Cache de permisos invalidado";
         break;
 
       case "modules":
         await cacheService.delete("active_modules");
-        invalidatedCount = await cacheService.invalidatePattern(
-          "user_permissions_"
-        );
+        invalidatedCount = (await cacheService.invalidatePattern("user_permissions_")) + 1;
         message = "Cache de módulos y permisos invalidado";
         break;
 
       case "stats":
         invalidatedCount = await cacheService.invalidatePattern("stats");
-        await cacheService.delete("user_stats");
-        await cacheService.delete("role_system_validation");
+        await cacheService.deleteMany(["user_stats", "role_system_validation"]);
         message = "Cache de estadísticas invalidado";
         break;
 
       case "pattern":
-        if (pattern) {
-          invalidatedCount = await cacheService.invalidatePattern(pattern);
-          message = `Cache invalidado con patrón: ${pattern}`;
-        } else {
-          return res.status(400).json({
-            success: false,
-            message: "Patrón requerido para invalidación por patrón",
-          });
-        }
+        if (!pattern) return res.status(400).json({ success: false, message: "Patrón requerido" });
+        invalidatedCount = await cacheService.invalidatePattern(pattern);
+        message = `Cache invalidado con patrón: ${pattern}`;
         break;
 
       case "all":
@@ -105,32 +89,19 @@ async function invalidateCache(req, res) {
         break;
 
       default:
-        return res.status(400).json({
-          success: false,
-          message: "Tipo de invalidación no válido",
-        });
+        return res.status(400).json({ success: false, message: "Tipo de invalidación no válido" });
     }
 
-    logger.info(
-      `🗑️ Cache invalidado: ${message} (${invalidatedCount} elementos)`
-    );
+    logger.info(`🗑️ Cache invalidado: ${message} por ${req.user?._id}`);
 
-    res.json({
+    return res.status(200).json({
       success: true,
-      message: message,
-      data: {
-        type: type,
-        invalidatedCount: invalidatedCount,
-        timestamp: new Date(),
-      },
+      message,
+      data: { type, invalidatedCount, timestamp: new Date() },
     });
   } catch (error) {
-    logger.error("Error invalidando cache:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error invalidando cache",
-      error: error.message,
-    });
+    logger.error("Error en invalidateCache:", error);
+    return res.status(500).json({ success: false, message: "Error al invalidar cache", error: error.message });
   }
 }
 

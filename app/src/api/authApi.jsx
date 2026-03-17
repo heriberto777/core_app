@@ -41,9 +41,7 @@ export class AuthApi {
       }
 
       const result = await response.json();
-      console.log("📥 Respuesta exitosa recibida:", result);
-
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error en AuthApi.login:", error);
       // ⭐ IMPORTANTE: Re-lanzar el error para que los niveles superiores lo manejen ⭐
@@ -65,11 +63,24 @@ export class AuthApi {
       };
 
       const response = await fetch(url, params);
+
+      // Fix #6 — mismo patrón robusto que login(): verificar response.ok antes de parsear
+      if (!response.ok) {
+        let errorData;
+        try {
+          errorData = await response.json();
+        } catch {
+          const errorText = await response.text().catch(() => response.statusText);
+          throw new Error(`Error del servidor (${response.status}): ${errorText}`);
+        }
+        throw new Error(
+          errorData.msg || errorData.message || `Error del servidor (${response.status})`
+        );
+      }
+
       const result = await response.json();
-      if (response.status != 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
-      console.log(error);
       throw error;
     }
   }

@@ -1,6 +1,17 @@
-// controllers/emailConfigController.js
 const EmailConfigService = require("../services/emailConfigService");
 const logger = require("../services/logger");
+
+/**
+ * Helper para limpiar datos sensibles (contraseñas)
+ */
+const sanitizeConfig = (config) => {
+  if (!config) return null;
+  const configObj = config.toObject ? config.toObject() : { ...config };
+  if (configObj.auth?.pass) {
+    configObj.auth.pass = "••••••••";
+  }
+  return configObj;
+};
 
 /**
  * Obtiene todas las configuraciones de email
@@ -8,23 +19,11 @@ const logger = require("../services/logger");
 const getAllConfigs = async (req, res) => {
   try {
     const configs = await EmailConfigService.getAllConfigs();
-
-    // No enviar las contraseñas en la respuesta
-    const safeConfigs = configs.map((config) => {
-      const configObj = config.toObject();
-      if (configObj.auth && configObj.auth.pass) {
-        configObj.auth.pass = "••••••••";
-      }
-      return configObj;
-    });
-
-    res.json(safeConfigs);
+    const data = configs.map(sanitizeConfig);
+    return res.status(200).json({ success: true, data });
   } catch (error) {
-    logger.error("Error al obtener configuraciones de email:", error);
-    res.status(500).json({
-      message: "Error al obtener configuraciones",
-      error: error.message,
-    });
+    logger.error("Error en getAllConfigs:", error);
+    return res.status(500).json({ success: false, message: "Error al obtener configuraciones", error: error.message });
   }
 };
 
@@ -33,29 +32,13 @@ const getAllConfigs = async (req, res) => {
  */
 const getConfigById = async (req, res) => {
   try {
-    const { id } = req.params;
-    const config = await EmailConfigService.getConfigById(id);
+    const config = await EmailConfigService.getConfigById(req.params.id);
+    if (!config) return res.status(404).json({ success: false, message: "Configuración no encontrada" });
 
-    if (!config) {
-      return res.status(404).json({ message: "Configuración no encontrada" });
-    }
-
-    // No enviar la contraseña en la respuesta
-    const safeConfig = config.toObject();
-    if (safeConfig.auth && safeConfig.auth.pass) {
-      safeConfig.auth.pass = "••••••••";
-    }
-
-    res.json(safeConfig);
+    return res.status(200).json({ success: true, data: sanitizeConfig(config) });
   } catch (error) {
-    logger.error(
-      `Error al obtener configuración con ID ${req.params.id}:`,
-      error
-    );
-    res.status(500).json({
-      message: "Error al obtener configuración",
-      error: error.message,
-    });
+    logger.error(`Error en getConfigById (${req.params.id}):`, error);
+    return res.status(500).json({ success: false, message: "Error al obtener configuración", error: error.message });
   }
 };
 
@@ -64,59 +47,25 @@ const getConfigById = async (req, res) => {
  */
 const createConfig = async (req, res) => {
   try {
-    const {
-      name,
-      host,
-      port,
-      secure,
-      auth,
-      from,
-      isActive,
-      isDefault,
-      options,
-    } = req.body;
+    const configData = req.body;
+    const newConfig = await EmailConfigService.createConfig({
+      ...configData,
+      isActive: configData.isActive !== undefined ? configData.isActive : true
+    });
 
-    // Validar datos obligatorios
-    if (!name || !host || !auth || !auth.user || !auth.pass || !from) {
-      return res.status(400).json({
-        message:
-          "Los campos name, host, auth.user, auth.pass y from son obligatorios",
-      });
-    }
-
-    const configData = {
-      name,
-      host,
-      port: port || 587,
-      secure: secure || false,
-      auth,
-      from,
-      isActive: isActive !== undefined ? isActive : true,
-      isDefault: isDefault || false,
-      options: options || {},
-    };
-
-    const newConfig = await EmailConfigService.createConfig(configData);
-
-    // No enviar la contraseña en la respuesta
-    const safeConfig = newConfig.toObject();
-    if (safeConfig.auth && safeConfig.auth.pass) {
-      safeConfig.auth.pass = "••••••••";
-    }
-
-    res.status(201).json(safeConfig);
+    logger.info(`Configuración de email creada: ${newConfig.name} por ${req.user?._id}`);
+    return res.status(201).json({
+      success: true,
+      message: "Configuración creada exitosamente",
+      data: sanitizeConfig(newConfig)
+    });
   } catch (error) {
-    logger.error("Error al crear configuración de email:", error);
-
-    if (error.message.includes("duplicate key") || error.code === 11000) {
-      return res.status(400).json({
-        message: "Ya existe una configuración con ese nombre",
-      });
-    }
-
-    res.status(500).json({
-      message: "Error al crear configuración",
-      error: error.message,
+    logger.error("Error en createConfig:", error);
+    const isDuplicate = error.message.includes("duplicate key") || error.code === 11000;
+    return res.status(isDuplicate ? 409 : 500).json({
+      success: false,
+      message: isDuplicate ? "Ya existe una configuración con ese nombre" : "Error al crear configuración",
+      error: error.message
     });
   }
 };
@@ -127,40 +76,27 @@ const createConfig = async (req, res) => {
 const updateConfig = async (req, res) => {
   try {
     const { id } = req.params;
-    const updateData = req.body;
-
-    // Remover campos que no se pueden actualizar directamente
+    const updateData = { ...req.body };
     delete updateData._id;
     delete updateData.createdAt;
 
     const updatedConfig = await EmailConfigService.updateConfig(id, updateData);
+    logger.info(`Configuración de email actualizada: ${updatedConfig.name} por ${req.user?._id}`);
 
-    // No enviar la contraseña en la respuesta
-    const safeConfig = updatedConfig.toObject();
-    if (safeConfig.auth && safeConfig.auth.pass) {
-      safeConfig.auth.pass = "••••••••";
-    }
-
-    res.json(safeConfig);
+    return res.status(200).json({
+      success: true,
+      message: "Configuración actualizada exitosamente",
+      data: sanitizeConfig(updatedConfig)
+    });
   } catch (error) {
-    logger.error(
-      `Error al actualizar configuración con ID ${req.params.id}:`,
-      error
-    );
+    logger.error(`Error en updateConfig (${req.params.id}):`, error);
+    const isNotFound = error.message.includes("No se encontró configuración");
+    const isDuplicate = error.message.includes("duplicate key") || error.code === 11000;
 
-    if (error.message.includes("duplicate key") || error.code === 11000) {
-      return res.status(400).json({
-        message: "Ya existe una configuración con ese nombre",
-      });
-    }
-
-    if (error.message.includes("No se encontró configuración")) {
-      return res.status(404).json({ message: error.message });
-    }
-
-    res.status(500).json({
-      message: "Error al actualizar configuración",
-      error: error.message,
+    return res.status(isNotFound ? 404 : (isDuplicate ? 409 : 500)).json({
+      success: false,
+      message: isNotFound ? "Configuración no encontrada" : (isDuplicate ? "El nombre ya está en uso" : "Error al actualizar"),
+      error: error.message
     });
   }
 };
@@ -172,25 +108,13 @@ const deleteConfig = async (req, res) => {
   try {
     const { id } = req.params;
     await EmailConfigService.deleteConfig(id);
-    res.json({ message: "Configuración eliminada correctamente" });
+    logger.warn(`Configuración de email eliminada: ${id} por ${req.user?._id}`);
+
+    return res.status(200).json({ success: true, message: "Configuración eliminada correctamente" });
   } catch (error) {
-    logger.error(
-      `Error al eliminar configuración con ID ${req.params.id}:`,
-      error
-    );
-
-    if (error.message.includes("No se encontró configuración")) {
-      return res.status(404).json({ message: error.message });
-    }
-
-    if (error.message.includes("No se puede eliminar la única configuración")) {
-      return res.status(400).json({ message: error.message });
-    }
-
-    res.status(500).json({
-      message: "Error al eliminar configuración",
-      error: error.message,
-    });
+    logger.error(`Error en deleteConfig (${req.params.id}):`, error);
+    const isNotFound = error.message.includes("No se encontró configuración");
+    return res.status(isNotFound ? 404 : 400).json({ success: false, message: error.message });
   }
 };
 
@@ -199,41 +123,18 @@ const deleteConfig = async (req, res) => {
  */
 const setAsDefault = async (req, res) => {
   try {
-    const { id } = req.params;
-    const updatedConfig = await EmailConfigService.setAsDefault(id);
+    const updatedConfig = await EmailConfigService.setAsDefault(req.params.id);
+    logger.info(`Configuración de email marcada como predeterminada: ${updatedConfig.name} por ${req.user?._id}`);
 
-    // No enviar la contraseña en la respuesta
-    const safeConfig = updatedConfig.toObject();
-    if (safeConfig.auth && safeConfig.auth.pass) {
-      safeConfig.auth.pass = "••••••••";
-    }
-
-    res.json({
+    return res.status(200).json({
+      success: true,
       message: "Configuración establecida como predeterminada",
-      config: safeConfig,
+      data: sanitizeConfig(updatedConfig),
     });
   } catch (error) {
-    logger.error(
-      `Error al establecer configuración como predeterminada ${req.params.id}:`,
-      error
-    );
-
-    if (error.message.includes("No se encontró configuración")) {
-      return res.status(404).json({ message: error.message });
-    }
-
-    if (
-      error.message.includes(
-        "No se puede establecer como predeterminada una configuración inactiva"
-      )
-    ) {
-      return res.status(400).json({ message: error.message });
-    }
-
-    res.status(500).json({
-      message: "Error al establecer configuración como predeterminada",
-      error: error.message,
-    });
+    logger.error(`Error en setAsDefault (${req.params.id}):`, error);
+    const isNotFound = error.message.includes("No se encontró configuración");
+    return res.status(isNotFound ? 404 : 400).json({ success: false, message: error.message });
   }
 };
 
@@ -242,68 +143,16 @@ const setAsDefault = async (req, res) => {
  */
 const testConfig = async (req, res) => {
   try {
-    const { id } = req.params;
     const { testEmail } = req.body;
+    await EmailConfigService.testConfig(req.params.id, testEmail);
 
-    if (!testEmail) {
-      return res.status(400).json({
-        message: "Es necesario proporcionar un email de prueba",
-      });
-    }
-
-    // Validar formato de email
-    const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
-    if (!emailRegex.test(testEmail)) {
-      return res.status(400).json({
-        message: "El formato del email de prueba no es válido",
-      });
-    }
-
-    const result = await EmailConfigService.testConfig(id, testEmail);
-
-    if (result) {
-      res.json({
-        message: "Correo de prueba enviado exitosamente",
-        success: true,
-      });
-    } else {
-      res.status(400).json({
-        message: "Error al enviar correo de prueba",
-        success: false,
-      });
-    }
-  } catch (error) {
-    logger.error(
-      `Error al probar configuración con ID ${req.params.id}:`,
-      error
-    );
-
-    if (error.message.includes("No se encontró configuración")) {
-      return res.status(404).json({ message: error.message });
-    }
-
-    res.status(500).json({
-      message: "Error al probar configuración",
-      error: error.message,
-    });
-  }
-};
-
-/**
- * Inicializa configuraciones por defecto
- */
-const initializeDefaultConfigs = async (req, res) => {
-  try {
-    await EmailConfigService.initializeDefaultConfigs();
-    res.json({
-      message: "Configuraciones por defecto inicializadas correctamente",
+    return res.status(200).json({
+      success: true,
+      message: "Correo de prueba enviado exitosamente"
     });
   } catch (error) {
-    logger.error("Error al inicializar configuraciones por defecto:", error);
-    res.status(500).json({
-      message: "Error al inicializar configuraciones",
-      error: error.message,
-    });
+    logger.error(`Error en testConfig (${req.params.id}):`, error);
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
@@ -313,79 +162,20 @@ const initializeDefaultConfigs = async (req, res) => {
 const toggleStatus = async (req, res) => {
   try {
     const { id } = req.params;
-
-    console.log("🔄 Alternando estado para ID:", id);
-
-    // Obtener configuración actual
     const currentConfig = await EmailConfigService.getConfigById(id);
-    if (!currentConfig) {
-      console.log("❌ Configuración no encontrada");
-      return res.status(404).json({ message: "Configuración no encontrada" });
-    }
+    if (!currentConfig) return res.status(404).json({ success: false, message: "Configuración no encontrada" });
 
-    console.log(
-      "📋 Configuración actual encontrada:",
-      currentConfig.name,
-      "- Estado:",
-      currentConfig.isActive
-    );
+    const updatedConfig = await EmailConfigService.updateConfig(id, { isActive: !currentConfig.isActive });
+    logger.info(`Estado de email config cambiado: ${updatedConfig.name} a ${updatedConfig.isActive} por ${req.user?._id}`);
 
-    // Alternar estado
-    const updatedConfig = await EmailConfigService.updateConfig(id, {
-      isActive: !currentConfig.isActive,
-    });
-
-    console.log("✅ Estado actualizado:", updatedConfig.isActive);
-
-    // No enviar la contraseña en la respuesta
-    const safeConfig = updatedConfig.toObject();
-    if (safeConfig.auth && safeConfig.auth.pass) {
-      safeConfig.auth.pass = "••••••••";
-    }
-
-    res.json({
-      message: `Configuración ${
-        updatedConfig.isActive ? "activada" : "desactivada"
-      } correctamente`,
-      config: safeConfig,
-    });
-  } catch (error) {
-    console.error("❌ Error completo:", error);
-    logger.error(
-      `Error al alternar estado de configuración con ID ${req.params.id}:`,
-      error
-    );
-
-    if (error.message.includes("No se encontró configuración")) {
-      return res.status(404).json({ message: error.message });
-    }
-
-    res.status(500).json({
-      message: "Error al alternar estado de configuración",
-      error: error.message,
-    });
-  }
-};
-
-/**
- * Limpia el cache de transporters
- */
-const clearTransporterCache = async (req, res) => {
-  try {
-    const { clearTransporterCache } = require("../services/emailService");
-
-    clearTransporterCache();
-
-    res.json({
-      message: "Cache de transporters limpiado correctamente",
+    return res.status(200).json({
       success: true,
+      message: `Configuración ${updatedConfig.isActive ? "activada" : "desactivada"} correctamente`,
+      data: sanitizeConfig(updatedConfig),
     });
   } catch (error) {
-    logger.error("Error al limpiar cache de transporters:", error);
-    res.status(500).json({
-      message: "Error al limpiar cache",
-      error: error.message,
-    });
+    logger.error(`Error en toggleStatus (${req.params.id}):`, error);
+    return res.status(500).json({ success: false, message: "Error al alternar estado", error: error.message });
   }
 };
 
@@ -397,6 +187,5 @@ module.exports = {
   deleteConfig,
   setAsDefault,
   testConfig,
-  initializeDefaultConfigs,
   toggleStatus,
 };

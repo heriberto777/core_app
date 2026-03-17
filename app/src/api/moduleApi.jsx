@@ -34,7 +34,7 @@ class ModuleApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error obteniendo módulos:", error);
       throw error;
@@ -55,7 +55,7 @@ class ModuleApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error obteniendo módulo:", error);
       throw error;
@@ -184,7 +184,7 @@ class ModuleApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error obteniendo acciones disponibles:", error);
       throw error;
@@ -205,7 +205,7 @@ class ModuleApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error obteniendo categorías:", error);
       throw error;
@@ -241,9 +241,8 @@ class ModuleApi {
         includeInactive: options.includeInactive || false,
       }).toString();
 
-      const url = `${this.baseApi}/${
-        ENV.API_ROUTERS.MODULE
-      }/search/${encodeURIComponent(searchTerm)}?${queryParams}`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.MODULE
+        }/search/${encodeURIComponent(searchTerm)}?${queryParams}`;
       const response = await fetch(url, {
         method: "GET",
         headers: {
@@ -254,7 +253,7 @@ class ModuleApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error buscando módulos:", error);
       throw error;
@@ -275,7 +274,7 @@ class ModuleApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error obteniendo configuración de módulos:", error);
       throw error;

@@ -1,20 +1,52 @@
-// index.js - Versión optimizada con HTTPS forzado
-require("dotenv").config();
-const app = require("./app");
 const fs = require("fs");
 const https = require("https");
 const http = require("http");
 const path = require("path");
 const logger = require("./services/logger");
+const MongoDbService = require("./services/mongoDbService");
 const AppBootstrap = require("./services/AppBootstrap");
 const DatabaseServiceAdapter = require("./services/DatabaseServiceAdapter");
 
-// ✅ AGREGAR INICIALIZACIÓN DE CONNECTIONCENTRALSERVICE
-// // const ConnectionCentralService = require(...); // REMOVED
-// REMOVED - using DatabaseServiceAdapter
+// ✅ 0. Lógica de Pre-Arranque
+const preBootstrap = async () => {
+  try {
+    console.log("🔗 Iniciando conexión base de MongoDB...");
+    await MongoDbService.connect();
+    console.log("✅ MongoDB base conectado");
+    return true;
+  } catch (error) {
+    console.error("❌ Fallo crítico al conectar a MongoDB durante el pre-bootstrap:", error);
+    return false;
+  }
+};
 
+let app;
 
-// Manejo de errores no capturados
+// ✅ 1. CICLO DE VIDA ASÍNCRONO
+(async () => {
+  const mongoReady = await preBootstrap();
+  if (!mongoReady) {
+    console.error("No se puede continuar sin conexión a MongoDB. Abortando.");
+    process.exit(1);
+  }
+
+  try {
+    app = require("./app");
+
+    console.log("🔌 Inicializando servicio de conexiones SQL...");
+    await DatabaseServiceAdapter.initialize();
+
+    console.log("🚀 Inicializando servicios de aplicación...");
+    await AppBootstrap.initialize();
+
+    // Iniciar el servidor
+    const serverInfo = await startServer();
+    server = serverInfo.server;
+  } catch (err) {
+    console.error("❌ Error fatal en inicialización:", err);
+    process.exit(1);
+  }
+})();
 process.on("uncaughtException", (error) => {
   console.error("🚨 ERROR NO CAPTURADO:", error);
 
@@ -153,8 +185,7 @@ const startServerWithPort = async (serverPort) => {
     console.log("hasSSLCerts:", hasSSLCerts);
 
     console.log(
-      `Modo: ${isDev ? "desarrollo" : "producción"}, Sistema: ${
-        isWindows ? "Windows" : "Linux/Unix"
+      `Modo: ${isDev ? "desarrollo" : "producción"}, Sistema: ${isWindows ? "Windows" : "Linux/Unix"
       }`
     );
     console.log(`SSL disponible: ${hasSSLCerts ? "Sí" : "No"}`);
@@ -302,12 +333,19 @@ function gracefulShutdown(signal) {
     console.log(
       `\n📴 Señal ${signal} recibida. Cerrando servidor gracefully...`
     );
-    logger.info(`Iniciando cierre ordenado por señal ${signal}`);
+    const log = (msg, level = 'info') => {
+      console.log(msg);
+      if (logger && typeof logger[level] === "function" && logger.transports?.length > 0) {
+        logger[level](msg);
+      }
+    };
+
+    log(`Iniciando cierre ordenado por señal ${signal}`);
 
     // Cierre ordenado de servicios
     await AppBootstrap.shutdown().catch((error) => {
       console.error("Error durante cierre ordenado de servicios:", error);
-      logger.error("Error en shutdown:", error);
+      if (logger && typeof logger.error === "function") logger.error("Error en shutdown:", error);
     });
 
     // ✅ CERRAR CONNECTIONCENTRALSERVICE
@@ -322,16 +360,25 @@ function gracefulShutdown(signal) {
     // Cerrar servidor HTTP/HTTPS
     if (server) {
       server.close(() => {
-        console.log("Servidor cerrado. Proceso terminando...");
+        console.log("Servidor cerrado.");
+        if (logger && typeof logger.closeLogger === "function") {
+          logger.closeLogger();
+        }
         process.exit(0);
       });
 
       // Salir después de un timeout por si server.close() se bloquea
       setTimeout(() => {
-        console.log("Forzando salida después de timeout en server.close()");
+        console.log("Forzando salida después de timeout...");
+        if (logger && typeof logger.closeLogger === "function") {
+          logger.closeLogger();
+        }
         process.exit(0);
       }, 10000);
     } else {
+      if (logger && typeof logger.closeLogger === "function") {
+        logger.closeLogger();
+      }
       process.exit(0);
     }
   };
@@ -369,23 +416,6 @@ console.log(`   - Puerto por defecto: ${defaultPort}`);
 console.log(`   - Plataforma: ${process.platform}`);
 console.log(`   - Versión Node.js: ${process.version}`);
 
-// ✅ INICIALIZAR CONNECTIONCENTRALSERVICE ANTES DEL SERVIDOR
-(async () => {
-  try {
-    console.log("🔌 Inicializando servicio de conexiones...");
-    await DatabaseServiceAdapter.initialize();
-    console.log("✅ Servicio de conexiones inicializado");
-
-    // Inicializar AppBootstrap
-    console.log("🚀 Inicializando servicios de aplicación...");
-    await AppBootstrap.initialize();
-    console.log("✅ Servicios de aplicación inicializados");
-
-    // Iniciar el servidor después de inicializar conexiones
-    const serverInfo = await startServer();
-    server = serverInfo.server; // Guardar referencia para cierre graceful
-  } catch (err) {
-    console.error("❌ Error fatal en inicialización:", err);
-    process.exit(1);
-  }
-})();
+// El arranque se controla mediante el bloque asíncrono al inicio del archivo
+ 
+ // update

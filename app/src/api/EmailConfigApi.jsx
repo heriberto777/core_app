@@ -55,7 +55,7 @@ export class EmailConfigApi {
       const result = await response.json();
       console.log("📧 Configuraciones de email obtenidas:", result.length || 0);
 
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error al obtener configuraciones de email:", error);
 
@@ -120,7 +120,7 @@ export class EmailConfigApi {
       const result = await response.json();
       console.log("📧 Configuración de email obtenida:", result.name);
 
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error(
         `❌ Error al obtener configuración de email ID ${id}:`,
@@ -590,8 +590,7 @@ export class EmailConfigApi {
 
       const result = await response.json();
       console.log(
-        `✅ Estado de configuración cambiado: ${
-          result.config?.isActive ? "Activa" : "Inactiva"
+        `✅ Estado de configuración cambiado: ${result.config?.isActive ? "Activa" : "Inactiva"
         }`
       );
 
@@ -656,7 +655,7 @@ export class EmailConfigApi {
       const result = await response.json();
       console.log("📊 Estadísticas de email obtenidas");
 
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error al obtener estadísticas de email:", error);
 

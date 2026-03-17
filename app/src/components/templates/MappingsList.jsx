@@ -1,42 +1,27 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
-import {  useAuth } from "../../index";
-import { TransferApi } from "../../api/index";
-import { FaEdit, FaTrash, FaPlus, FaSearch, FaEye } from "react-icons/fa";
+import { useAuth, useMappings } from "../../index";
+import { FaEdit, FaTrash, FaPlus, FaSearch, FaEye, FaSync } from "react-icons/fa";
 import Swal from "sweetalert2";
-
-const api = new TransferApi();
 
 export function MappingsList({
   onSelectMapping,
   onEditMapping,
   onCreateMapping,
+  canCreate = true,
+  canEdit = true,
+  canDelete = true,
+  canToggle = true,
 }) {
   const { accessToken } = useAuth();
-  const [mappings, setMappings] = useState([]);
-  const [loading, setLoading] = useState(true);
-  const [search, setSearch] = useState("");
-
-  useEffect(() => {
-    loadMappings();
-  }, []);
-
-  const loadMappings = async () => {
-    try {
-      setLoading(true);
-      const data = await api.getMappings(accessToken);
-      setMappings(data);
-      setLoading(false);
-    } catch (error) {
-      console.error("Error al cargar configuraciones:", error);
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: "No se pudieron cargar las configuraciones",
-      });
-      setLoading(false);
-    }
-  };
+  const {
+    filteredMappings,
+    loading,
+    search,
+    setSearch,
+    deleteMapping,
+    toggleMappingStatus
+  } = useMappings(accessToken, true);
 
   const handleDelete = async (id, name) => {
     try {
@@ -50,9 +35,8 @@ export function MappingsList({
       });
 
       if (result.isConfirmed) {
-        await api.deleteMapping(accessToken, id);
+        await deleteMapping(id);
         Swal.fire("Eliminado", "La configuración ha sido eliminada", "success");
-        loadMappings();
       }
     } catch (error) {
       console.error("Error al eliminar:", error);
@@ -64,11 +48,30 @@ export function MappingsList({
     }
   };
 
-  const filteredMappings = mappings.filter(
-    (mapping) =>
-      mapping.name.toLowerCase().includes(search.toLowerCase()) ||
-      mapping.description?.toLowerCase().includes(search.toLowerCase())
-  );
+  const handleToggleStatus = async (id, name, currentStatus) => {
+    try {
+      const result = await Swal.fire({
+        title: currentStatus ? "¿Desactivar?" : "¿Activar?",
+        text: `¿Desea cambiar el estado de "${name}" a ${currentStatus ? 'Inactivo' : 'Activo'}?`,
+        icon: "question",
+        showCancelButton: true,
+        confirmButtonText: "Sí, cambiar",
+        cancelButtonText: "Cancelar",
+      });
+
+      if (result.isConfirmed) {
+        await toggleMappingStatus(id, currentStatus);
+        Swal.fire(
+          currentStatus ? "Desactivado" : "Activado",
+          `El mapeo ahora está ${currentStatus ? 'Inactivo' : 'Activo'}`,
+          "success"
+        );
+      }
+    } catch (error) {
+      Swal.fire("Error", "No se pudo cambiar el estado", "error");
+    }
+  };
+
 
   return (
     <Container>
@@ -86,9 +89,11 @@ export function MappingsList({
               <FaSearch />
             </SearchIcon>
           </SearchContainer>
-          <Button onClick={onCreateMapping}>
-            <FaPlus /> Nueva Configuración
-          </Button>
+          {canCreate && (
+            <Button onClick={onCreateMapping}>
+              <FaPlus /> Nueva Configuración
+            </Button>
+          )}
         </ActionsBar>
       </HeaderSection>
 
@@ -130,17 +135,27 @@ export function MappingsList({
                       <td>
                         <ActionButtons>
                           <ActionButton
+                            title={mapping.active ? "Desactivar" : "Activar"}
+                            onClick={() => handleToggleStatus(mapping._id, mapping.name, mapping.active)}
+                            style={{ color: mapping.active ? '#f39c12' : '#27ae60' }}
+                          >
+                            <FaSync />
+                          </ActionButton>
+                          <ActionButton
                             title="Ver documentos"
                             onClick={() => onSelectMapping(mapping._id)}
                           >
                             <FaEye />
                           </ActionButton>
+                          {canEdit && (
                           <ActionButton
                             title="Editar configuración"
                             onClick={() => onEditMapping(mapping._id)}
                           >
                             <FaEdit />
                           </ActionButton>
+                          )}
+                          {canDelete && (
                           <ActionButton
                             title="Eliminar configuración"
                             $danger
@@ -150,6 +165,7 @@ export function MappingsList({
                           >
                             <FaTrash />
                           </ActionButton>
+                          )}
                         </ActionButtons>
                       </td>
                     </tr>
@@ -293,7 +309,7 @@ const ActionButton = styled.button`
 
   &:hover {
     color: ${(props) =>
-      props.$danger ? props.theme.dangerHover : props.theme.primaryHover};
+    props.$danger ? props.theme.dangerHover : props.theme.primaryHover};
     transform: scale(1.1);
   }
 `;

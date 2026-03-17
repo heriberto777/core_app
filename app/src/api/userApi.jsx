@@ -38,7 +38,7 @@ export class User {
       }
 
       console.log("✅ getMe exitoso:", result);
-      return result;
+      return result.data || result;
     } catch (error) {
       console.log(error);
       throw error;
@@ -60,7 +60,7 @@ export class User {
       const result = await response.json();
 
       if (response.status != 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.log(error);
     }
@@ -85,7 +85,7 @@ export class User {
       console.log(result);
 
       if (response.status != 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.log(error);
     }
@@ -126,8 +126,7 @@ export class User {
       const response = await fetch(url, params);
       const result = await response.json();
 
-      if (response.status != 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       return error;
     }
@@ -178,11 +177,7 @@ export class User {
       const response = await fetch(url, params);
       const result = await response.json();
 
-      if (response.status !== 200 && response.status !== 201) {
-        throw result;
-      }
-
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error en updateUser:", error);
       return error;
@@ -205,11 +200,7 @@ export class User {
       const response = await fetch(url, params);
       const result = await response.json();
 
-      if (response.status !== 200) {
-        throw result;
-      }
-
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error en deleteUser:", error);
       return error;
@@ -233,9 +224,7 @@ export class User {
       const response = await fetch(url, params);
       const result = await response.json();
 
-      if (response.status !== 200) throw result;
-
-      return result;
+      return result.data || result;
     } catch (error) {
       return error;
     }
@@ -264,7 +253,7 @@ export class User {
       console.log("📥 Respuesta getUsersWithRoles:", response.status, result);
 
       if (response.status != 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error en getUsersWithRoles:", error);
       return error;
@@ -318,7 +307,7 @@ export class User {
       const result = await response.json();
 
       if (response.status !== 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error obteniendo permisos:", error);
       return error;
@@ -343,7 +332,7 @@ export class User {
       const result = await response.json();
 
       if (response.status !== 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error obteniendo usuario por ID:", error);
       throw error;
@@ -383,7 +372,7 @@ export class User {
       const result = await response.json();
 
       if (response.status !== 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error en búsqueda avanzada:", error);
       throw error;
@@ -408,7 +397,7 @@ export class User {
       const result = await response.json();
 
       if (response.status !== 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error obteniendo estadísticas de usuarios:", error);
       throw error;
@@ -488,8 +477,8 @@ export class User {
       const response = await this.searchUsers(accessToken, searchOptions);
 
       // Filtrar usuarios que no tengan roles asignados
-      if (response.success) {
-        const usersWithoutRoles = response.data.filter(
+      if (response) {
+        const usersWithoutRoles = (response.users || response).filter(
           (user) => !user.roles || user.roles.length === 0
         );
 
@@ -517,7 +506,7 @@ export class User {
       });
 
       const userResponse = await this.getUserById(accessToken, userId);
-      if (!userResponse.success) {
+      if (!userResponse) {
         throw new Error("Usuario no encontrado");
       }
 
@@ -644,7 +633,7 @@ export class User {
       const result = await response.json();
 
       if (response.status !== 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error obteniendo permisos consolidados:", error);
       throw error;

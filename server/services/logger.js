@@ -403,18 +403,11 @@ const gracefulShutdown = () => {
   }
 
   logger.system.info("✅ Logger cerrado correctamente");
-  logger.close();
+  if (typeof logger.close === "function") logger.close();
 };
 
-process.on("SIGINT", gracefulShutdown);
-process.on("SIGTERM", gracefulShutdown);
-
-// Log de inicio del sistema
-logger.system.info("🚀 Sistema de logging inicializado", {
-  level: "debug",
-  transports: logger.transports.length,
-  mongoEnabled: logger.transports.some((t) => t.name === "mongodb"),
-  timestamp: new Date().toISOString(),
-});
+// El cierre del logger debe ser orquestado por el proceso principal (index.js/AppBootstrap)
+// para evitar condiciones de carrera durante el shutdown.
+logger.closeLogger = gracefulShutdown;
 
 module.exports = logger;

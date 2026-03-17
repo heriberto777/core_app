@@ -5,14 +5,20 @@ const {
   verifyToken,
   checkPermission, checkPermissions
 } = require("../middlewares/authMiddleware");
+const { validate } = require("../middlewares/validator");
+const {
+  processLoadSchema,
+  cancelOrdersSchema,
+  removeOrderLinesSchema,
+  deliveryPersonSchema,
+  historySchema
+} = require("../validators/loadsValidator");
 
 // Middleware de autenticación para todas las rutas
 router.use(verifyToken);
 
 /**
  * @route GET /api/loads/pending-orders
- * @desc Obtiene pedidos pendientes de cargar
- * @access Private (loads:read)
  */
 router.get('/pending-orders',
   checkPermission('loads', 'read'),
@@ -21,8 +27,6 @@ router.get('/pending-orders',
 
 /**
  * @route GET /api/loads/order-details/:pedidoId
- * @desc Obtiene detalles de líneas de un pedido específico
- * @access Private (loads:read)
  */
 router.get('/order-details/:pedidoId',
   checkPermission('loads', 'read'),
@@ -31,8 +35,6 @@ router.get('/order-details/:pedidoId',
 
 /**
  * @route GET /api/loads/sellers
- * @desc Obtiene lista de vendedores activos
- * @access Private (loads:read)
  */
 router.get('/sellers',
   checkPermission('loads', 'read'),
@@ -41,8 +43,6 @@ router.get('/sellers',
 
 /**
  * @route GET /api/loads/delivery-persons
- * @desc Obtiene lista de repartidores con sus bodegas asignadas
- * @access Private (loads:read)
  */
 router.get('/delivery-persons',
   checkPermission('loads', 'read'),
@@ -51,68 +51,66 @@ router.get('/delivery-persons',
 
 /**
  * @route POST /api/loads/process-load
- * @desc Procesa la carga de pedidos seleccionados
- * @access Private (loads:create)
  */
 router.post('/process-load',
   checkPermission('loads', 'create'),
+  processLoadSchema,
+  validate,
   LoadsController.processOrderLoad
 );
 
 /**
  * @route POST /api/loads/cancel-orders
- * @desc Cancela pedidos seleccionados
- * @access Private (loads:update)
  */
 router.post('/cancel-orders',
   checkPermission('loads', 'update'),
+  cancelOrdersSchema,
+  validate,
   LoadsController.cancelOrders
 );
 
 /**
  * @route DELETE /api/loads/order-lines/:pedidoId
- * @desc Elimina líneas específicas de un pedido
- * @access Private (loads:update)
  */
 router.delete('/order-lines/:pedidoId',
   checkPermission('loads', 'update'),
+  removeOrderLinesSchema,
+  validate,
   LoadsController.removeOrderLines
 );
 
 /**
  * @route POST /api/loads/delivery-persons
- * @desc Crea un nuevo repartidor
- * @access Private (loads:manage)
  */
 router.post('/delivery-persons',
   checkPermission('loads', 'manage'),
+  deliveryPersonSchema,
+  validate,
   LoadsController.createDeliveryPerson
 );
 
 /**
  * @route PUT /api/loads/delivery-persons/:id
- * @desc Actualiza un repartidor existente
- * @access Private (loads:manage)
  */
 router.put('/delivery-persons/:id',
   checkPermission('loads', 'manage'),
+  deliveryPersonSchema,
+  validate,
   LoadsController.updateDeliveryPerson
 );
 
 /**
  * @route GET /api/loads/history
- * @desc Obtiene el historial de cargas
- * @access Private (loads:read)
  */
 router.get('/history',
   checkPermission('loads', 'read'),
+  historySchema,
+  validate,
   LoadsController.getLoadHistory
 );
 
 /**
  * @route POST /api/loads/inventory-transfer
- * @desc Procesa traspaso de inventario
- * @access Private (loads:create)
  */
 router.post('/inventory-transfer',
   checkPermission('loads', 'create'),
@@ -120,7 +118,7 @@ router.post('/inventory-transfer',
 );
 
 // ================================================
-// RUTAS DE GESTIÓN DE TRASPASOS (NUEVAS)
+// RUTAS DE GESTIÓN DE TRASPASOS
 // ================================================
 
 router.get('/traspaso-history',

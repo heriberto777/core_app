@@ -2,9 +2,9 @@ import React, { useEffect, useState } from "react";
 import styled from "styled-components";
 import Swal from "sweetalert2";
 import { useAuth } from "../../index"; // Asegúrate de tener estas importaciones
-import { TransferApi } from "../../api/index";
+import { ConsecutiveApi } from "../../api/index";
 
-const api = new TransferApi();
+const api = new ConsecutiveApi();
 
 const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
   const { accessToken } = useAuth();
@@ -35,9 +35,11 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
             mapping._id
           );
 
-          if (response && response.data && response.data.length > 0) {
-            setAssignedConsecutives(response.data);
-            setSelectedCentralizedConsecutive(response.data[0]._id);
+          const allAssigned = Array.isArray(response) ? response : (response?.data || []);
+
+          if (allAssigned.length > 0) {
+            setAssignedConsecutives(allAssigned);
+            setSelectedCentralizedConsecutive(allAssigned[0]._id);
             setUseCentralizedSystem(true);
           } else {
             setUseCentralizedSystem(false);
@@ -80,28 +82,24 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
         selectedCentralizedConsecutive
       );
 
-      if (response.success && response.data) {
-        const consec = response.data;
+      const consec = (response && response._id) ? response : (response?.data);
 
+      if (consec && consec._id) {
         // Mostrar detalles en un modal
         Swal.fire({
           title: `Consecutivo: ${consec.name}`,
           html: `
             <div style="text-align: left; padding: 10px;">
-              <p><strong>Descripción:</strong> ${
-                consec.description || "N/A"
-              }</p>
+              <p><strong>Descripción:</strong> ${consec.description || "N/A"
+            }</p>
               <p><strong>Valor actual:</strong> ${consec.currentValue}</p>
-              <p><strong>Formato:</strong> ${
-                consec.pattern ||
-                `${consec.prefix || ""}[valor]${consec.suffix || ""}`
-              }</p>
-              <p><strong>Segmentado:</strong> ${
-                consec.segments?.enabled ? `Sí (${consec.segments.type})` : "No"
-              }</p>
-              <p><strong>Estado:</strong> ${
-                consec.active ? "Activo" : "Inactivo"
-              }</p>
+              <p><strong>Formato:</strong> ${consec.pattern ||
+            `${consec.prefix || ""}[valor]${consec.suffix || ""}`
+            }</p>
+              <p><strong>Segmentado:</strong> ${consec.segments?.enabled ? `Sí (${consec.segments.type})` : "No"
+            }</p>
+              <p><strong>Estado:</strong> ${consec.active ? "Activo" : "Inactivo"
+            }</p>
             </div>
           `,
           icon: "info",
@@ -122,13 +120,27 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
 
   // Función para asignar un consecutivo existente
   const handleAddNewAssignedConsecutive = async () => {
+    // Nota: Eliminamos el bloqueo estricto de mapping._id para permitir "selección pendiente"
+    const isNewMapping = !mapping || !mapping._id;
     try {
       setLoading(true);
       // Primero, obtener la lista de consecutivos disponibles
       const response = await api.getConsecutives(accessToken);
       setLoading(false);
 
-      if (!response.success || !response.data || response.data.length === 0) {
+      if (!response || (Array.isArray(response) && response.length === 0)) {
+        Swal.fire({
+          title: "Sin consecutivos",
+          text: "No hay consecutivos disponibles para asignar",
+          icon: "info",
+        });
+        return;
+      }
+
+      // La API puede retornar el array directamente o dentro de .data
+      const allConsecutives = Array.isArray(response) ? response : (response.data || []);
+
+      if (allConsecutives.length === 0) {
         Swal.fire({
           title: "Sin consecutivos",
           text: "No hay consecutivos disponibles para asignar",
@@ -139,7 +151,7 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
 
       // Filtrar los consecutivos ya asignados
       const assignedIds = assignedConsecutives.map((c) => c._id);
-      const availableConsecutives = response.data.filter(
+      const availableConsecutives = allConsecutives.filter(
         (c) => !assignedIds.includes(c._id)
       );
 
@@ -177,7 +189,35 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
       });
 
       if (selectedId) {
-        // Realizar la asignación
+        // Caso A: Mapping Nuevo (Sin ID) -> Selección Pendiente
+        if (isNewMapping) {
+          handleChange({
+            target: {
+              name: "consecutiveConfig",
+              type: "custom",
+              value: {
+                ...consecutiveConfig,
+                pendingAssignmentId: selectedId,
+                enabled: true
+              }
+            }
+          });
+
+          // Simular la lista para que el usuario reciba feedback visual
+          const selectedConsec = availableConsecutives.find(c => c._id === selectedId);
+          setAssignedConsecutives([selectedConsec]);
+          setSelectedCentralizedConsecutive(selectedId);
+          setUseCentralizedSystem(true);
+
+          Swal.fire({
+            title: "Seleccionado",
+            text: "Consecutivo seleccionado. La vinculación oficial se completará automáticamente al guardar el mapeo.",
+            icon: "info"
+          });
+          return;
+        }
+
+        // Caso B: Mapping Existente -> Asignación Real e Inmediata
         setLoading(true);
         const assignResult = await api.assignConsecutive(
           accessToken,
@@ -190,14 +230,13 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
         );
         setLoading(false);
 
-        if (assignResult.success) {
+        if (assignResult && (assignResult._id || assignResult.success)) {
           Swal.fire({
             title: "Éxito",
             text: "Consecutivo asignado correctamente",
             icon: "success",
           });
 
-          // Actualizar la lista de consecutivos asignados
           const newConsecutive = availableConsecutives.find(
             (c) => c._id === selectedId
           );
@@ -206,7 +245,7 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
           setUseCentralizedSystem(true);
         } else {
           throw new Error(
-            assignResult.message || "Error al asignar consecutivo"
+            (assignResult && assignResult.message) || "Error al asignar consecutivo"
           );
         }
       }
@@ -221,8 +260,15 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
     }
   };
 
-  // Función para crear y asignar un nuevo consecutivo
   const handleCreateAndAssignConsecutive = async () => {
+    if (!mapping || !mapping._id) {
+      Swal.fire({
+        title: "Funcionalidad Limitada",
+        text: "Para crear un nuevo consecutivo desde aquí, el mapeo debe estar guardado. Por favor, guarde primero o seleccione uno existente.",
+        icon: "warning",
+      });
+      return;
+    }
     try {
       const { value: formValues } = await Swal.fire({
         title: "Crear Nuevo Consecutivo",
@@ -286,9 +332,11 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
           formValues
         );
 
-        if (createResult.success && createResult.data) {
+        const newConsecutive = (createResult && createResult._id) ? createResult : (createResult?.data);
+
+        if (newConsecutive && newConsecutive._id) {
           // Asignar el consecutivo recién creado
-          const newConsecutiveId = createResult.data._id;
+          const newConsecutiveId = newConsecutive._id;
           const assignResult = await api.assignConsecutive(
             accessToken,
             newConsecutiveId,
@@ -299,7 +347,7 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
             }
           );
 
-          if (assignResult.success) {
+          if (assignResult && (assignResult._id || assignResult.success)) {
             Swal.fire({
               title: "Éxito",
               text: "Consecutivo creado y asignado correctamente",
@@ -309,7 +357,7 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
             // Actualizar la lista de consecutivos asignados
             setAssignedConsecutives([
               ...assignedConsecutives,
-              createResult.data,
+              newConsecutive,
             ]);
             setSelectedCentralizedConsecutive(newConsecutiveId);
             setUseCentralizedSystem(true);
@@ -319,7 +367,7 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
             );
           }
         } else {
-          throw new Error(createResult.message || "Error al crear consecutivo");
+          throw new Error((createResult && createResult.message) || "Error al crear consecutivo");
         }
 
         setLoading(false);
@@ -351,8 +399,7 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
     const tableOptions = availableTables
       .map(
         (table) =>
-          `<option value="${table.name}">${table.name} (${
-            table.isDetail ? "Detalle" : "Principal"
+          `<option value="${table.name}">${table.name} (${table.isDetail ? "Detalle" : "Principal"
           })</option>`
       )
       .join("");
@@ -617,10 +664,17 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
               ) : (
                 <EmptyAssigned>
                   <p>No hay consecutivos asignados actualmente.</p>
-                  <Button onClick={handleAddNewAssignedConsecutive}>
+                  <Button
+                    onClick={handleAddNewAssignedConsecutive}
+                    variant="secondary"
+                  >
                     Asignar un consecutivo existente
                   </Button>
-                  <Button onClick={handleCreateAndAssignConsecutive}>
+                  <Button
+                    onClick={handleCreateAndAssignConsecutive}
+                    disabled={!mapping?._id}
+                    title={!mapping?._id ? "Guarde el mapeo para habilitar la creación de nuevos consecutivos" : ""}
+                  >
                     Crear y asignar nuevo consecutivo
                   </Button>
                 </EmptyAssigned>
@@ -678,28 +732,30 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
               + Añadir tabla y campo
             </AddButton>
 
-            <TablesList>
-              {tableMappings && tableMappings.length > 0 ? (
-                tableMappings.map((mapping, index) => (
-                  <TableItem key={index}>
-                    <strong>Tabla:</strong> {mapping.tableName}
-                    <br />
-                    <strong>Campo:</strong> {mapping.fieldName}
-                    <RemoveButton
-                      onClick={() => removeTableFieldMapping(index)}
-                    >
-                      Eliminar
-                    </RemoveButton>
-                  </TableItem>
-                ))
-              ) : (
-                <HelpText>
-                  No hay asignaciones específicas configuradas. Si no configura
-                  asignaciones específicas, se usarán los campos generales
-                  definidos arriba.
-                </HelpText>
-              )}
-            </TablesList>
+            <div style={{ overflowX: 'auto', width: '100%' }}>
+              <TablesList>
+                {tableMappings && tableMappings.length > 0 ? (
+                  tableMappings.map((mapping, index) => (
+                    <TableItem key={index}>
+                      <strong>Tabla:</strong> {mapping.tableName}
+                      <br />
+                      <strong>Campo:</strong> {mapping.fieldName}
+                      <RemoveButton
+                        onClick={() => removeTableFieldMapping(index)}
+                      >
+                        Eliminar
+                      </RemoveButton>
+                    </TableItem>
+                  ))
+                ) : (
+                  <HelpText>
+                    No hay asignaciones específicas configuradas. Si no configura
+                    asignaciones específicas, se usarán los campos generales
+                    definidos arriba.
+                  </HelpText>
+                )}
+              </TablesList>
+            </div>
           </TableFieldMapping>
 
           <FormGroup>
@@ -790,20 +846,21 @@ export default ConsecutiveConfigSection;
 // Estilos para el componente
 const ConfigSection = styled.div`
   position: relative;
-  background-color: ${({ theme }) => theme?.cardBg || "#ffffff"};
-  border-radius: 8px;
+  background-color: ${({ theme }) => theme.cardBg};
+  border-radius: 12px;
   padding: 1.5rem;
   margin-bottom: 1.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+  box-shadow: ${({ theme }) => theme.shadows.soft};
+  border: 1px solid ${({ theme }) => theme.border};
 `;
 
 const SectionTitle = styled.h3`
-  font-size: 1.1rem;
-  font-weight: 600;
-  margin-bottom: 1.25rem;
-  color: ${({ theme }) => theme?.primary || "#333"};
-  border-bottom: 1px solid ${({ theme }) => theme?.border || "#eee"};
-  padding-bottom: 0.5rem;
+  font-size: 1.15rem;
+  font-weight: 700;
+  margin-bottom: 1.5rem;
+  color: ${({ theme }) => theme.primary};
+  border-bottom: 2px solid ${({ theme }) => theme.border}50;
+  padding-bottom: 0.75rem;
 `;
 
 const FormGroup = styled.div`
@@ -813,16 +870,20 @@ const FormGroup = styled.div`
 const FormLabel = styled.label`
   display: block;
   margin-bottom: 0.5rem;
-  font-weight: 500;
-  color: ${({ theme }) => theme?.textSecondary || "#555"};
+  font-weight: 600;
+  color: ${({ theme }) => theme.textSecondary};
+  font-size: 14px;
 `;
 
 const FormInput = styled.input`
   width: 100%;
-  padding: 0.5rem;
-  border: 1px solid ${({ theme }) => theme?.border || "#ccc"};
-  border-radius: 4px;
+  padding: 0.6rem 0.8rem;
+  background-color: ${({ theme }) => theme.bg2}50;
+  border: 1px solid ${({ theme }) => theme.border};
+  color: ${({ theme }) => theme.text};
+  border-radius: 8px;
   font-size: 14px;
+  transition: all 0.2s;
 
   &:focus {
     outline: none;
@@ -833,15 +894,18 @@ const FormInput = styled.input`
 
 const Select = styled.select`
   width: 100%;
-  padding: 0.5rem;
-  border: 1px solid ${({ theme }) => theme?.border || "#ccc"};
-  border-radius: 4px;
+  padding: 0.6rem 0.8rem;
+  background-color: ${({ theme }) => theme.bg2}50;
+  border: 1px solid ${({ theme }) => theme.border};
+  color: ${({ theme }) => theme.text};
+  border-radius: 8px;
   font-size: 14px;
-  margin-bottom: 1rem;
+  margin-bottom: 1.25rem;
+  transition: all 0.2s;
 
   &:focus {
     outline: none;
-    border-color: ${({ theme }) => theme?.primary || "#0275d8"};
+    border-color: ${({ theme }) => theme.primary};
   }
 `;
 
@@ -865,9 +929,10 @@ const CheckboxLabel = styled.label`
 
 const SystemSelectionContainer = styled.div`
   margin-bottom: 1.5rem;
-  padding: 1rem;
-  background-color: ${({ theme }) => theme?.tableHeader || "#f8f9fa"};
-  border-radius: 6px;
+  padding: 1.25rem;
+  background-color: ${({ theme }) => theme.bg2}40;
+  border: 1px solid ${({ theme }) => theme.border}50;
+  border-radius: 12px;
 `;
 
 const RadioGroup = styled.div`
@@ -890,10 +955,10 @@ const RadioOption = styled.div`
 
 const CentralizedOptions = styled.div`
   margin-top: 1rem;
-  padding: 0.75rem;
-  background-color: ${({ theme }) => theme?.cardBg || "#ffffff"};
-  border-radius: 6px;
-  border: 1px solid ${({ theme }) => theme?.border || "#eee"};
+  padding: 1rem;
+  background-color: ${({ theme }) => theme.cardBg};
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.border};
 `;
 
 const CentralizedActions = styled.div`
@@ -903,16 +968,24 @@ const CentralizedActions = styled.div`
 `;
 
 const Button = styled.button`
-  padding: 0.5rem 0.75rem;
-  background-color: ${({ theme }) => theme?.primary || "#0275d8"};
-  color: white;
+  padding: 0.6rem 1rem;
+  background-color: ${({ theme }) => theme.primary};
+  color: ${({ theme }) => theme.textBtn || "#fff"};
   border: none;
-  border-radius: 4px;
+  border-radius: 8px;
   font-size: 14px;
+  font-weight: 600;
   cursor: pointer;
+  transition: all 0.2s;
 
   &:hover {
-    background-color: ${({ theme }) => theme?.primaryHover || "#0269c2"};
+    background-color: ${({ theme }) => theme.primaryDark};
+    transform: translateY(-1px);
+    box-shadow: 0 4px 12px ${({ theme }) => theme.primary}40;
+  }
+
+  &:active {
+    transform: translateY(0);
   }
 `;
 
@@ -932,17 +1005,20 @@ const EmptyAssigned = styled.div`
 
 const HelpText = styled.small`
   display: block;
-  margin-top: 0.25rem;
-  color: ${({ theme }) => theme?.textSecondary || "#6c757d"};
+  margin-top: 0.4rem;
+  color: ${({ theme }) => theme.textSecondary};
+  opacity: 0.8;
   font-size: 12px;
+  font-weight: 500;
 `;
 
 // Componente para seleccionar tablas y campos
 const TableFieldMapping = styled.div`
-  margin-top: 1rem;
-  padding: 0.75rem;
-  background-color: ${({ theme }) => theme?.tableHeader || "#f8f9fa"};
-  border-radius: 6px;
+  margin: 1.5rem 0;
+  padding: 1.25rem;
+  background-color: ${({ theme }) => theme.bg2}40;
+  border: 1px solid ${({ theme }) => theme.border}50;
+  border-radius: 12px;
 `;
 
 const TablesList = styled.div`
@@ -952,11 +1028,12 @@ const TablesList = styled.div`
 `;
 
 const TableItem = styled.div`
-  padding: 0.5rem;
-  margin-bottom: 0.5rem;
-  background-color: ${({ theme }) => theme?.cardBg || "#fff"};
-  border: 1px solid ${({ theme }) => theme?.border || "#eee"};
-  border-radius: 4px;
+  padding: 1rem;
+  margin-bottom: 0.75rem;
+  background-color: ${({ theme }) => theme.cardBg};
+  border: 1px solid ${({ theme }) => theme.border};
+  border-radius: 10px;
+  box-shadow: ${({ theme }) => theme.shadows.soft};
 `;
 
 const AddButton = styled.button`
@@ -978,17 +1055,20 @@ const AddButton = styled.button`
 `;
 
 const RemoveButton = styled.button`
-  padding: 0.2rem 0.5rem;
-  font-size: 0.7rem;
-  background-color: ${({ theme }) => theme?.danger || "#dc3545"};
-  color: white;
-  border: none;
-  border-radius: 3px;
+  padding: 0.4rem 0.8rem;
+  font-size: 0.75rem;
+  font-weight: 700;
+  background-color: ${({ theme }) => theme.danger}15;
+  color: ${({ theme }) => theme.danger};
+  border: 1px solid ${({ theme }) => theme.danger}30;
+  border-radius: 6px;
   cursor: pointer;
   margin-left: 0.5rem;
+  transition: all 0.2s;
 
   &:hover {
-    background-color: ${({ theme }) => theme?.dangerHover || "#bd2130"};
+    background-color: ${({ theme }) => theme.danger};
+    color: white;
   }
 `;
 
@@ -998,15 +1078,17 @@ const LoadingOverlay = styled.div`
   left: 0;
   right: 0;
   bottom: 0;
-  background-color: rgba(255, 255, 255, 0.7);
+  background-color: ${({ theme }) => theme.bgAlpha};
+  backdrop-filter: blur(4px);
   display: flex;
   flex-direction: column;
   justify-content: center;
   align-items: center;
   z-index: 10;
-  border-radius: 8px;
+  border-radius: 12px;
   font-size: 14px;
-  color: ${({ theme }) => theme?.primary || "#0275d8"};
+  font-weight: 700;
+  color: ${({ theme }) => theme.primary};
 `;
 
 const LoadingSpinner = styled.div`

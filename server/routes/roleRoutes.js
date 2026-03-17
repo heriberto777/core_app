@@ -10,17 +10,23 @@ const {
   deleteRole,
   toggleRoleStatus,
   getRoleById,
+  getRoleStats,
   getAvailableResources,
   getAvailableActions,
   getAvailableRoles,
+  getUsersByRole,
   assignUsersToRole,
   removeUsersFromRole,
   duplicateRole,
-  getRoleStats,
-  getUsersByRole,
-  updateRolesWithModulesPermission,
 } = require("../controllers/roleController");
 
+const { validate } = require("../middlewares/validator");
+const {
+  createRoleSchema,
+  updateRoleSchema,
+  assignUsersSchema,
+  toggleStatusSchema,
+} = require("../validators/roleValidator");
 const {
   verifyToken,
   checkPermission,
@@ -29,34 +35,23 @@ const {
 // ⭐ MIDDLEWARE GLOBAL ⭐
 router.use(verifyToken);
 
-// ⭐ MIDDLEWARE DE DEBUG ⭐
-router.use((req, res, next) => {
-  console.log("🔍 ROLE ROUTE:", req.method, req.originalUrl);
-  console.log("🔍 Params:", req.params);
-  next();
-});
-
 // =====================================================
 // ⭐ RUTAS ESPECÍFICAS PRIMERO (ORDEN IMPORTANTE) ⭐
 // =====================================================
 
-// GET /api/v1/roles/resources - Obtener recursos disponibles
 router.get(
   "/resources",
   checkPermission("roles", "read"),
   getAvailableResources
 );
 
-// GET /api/v1/roles/actions - Obtener acciones disponibles
 router.get("/actions", checkPermission("roles", "read"), getAvailableActions);
 
-// GET /api/v1/roles/available - Obtener roles disponibles para asignación
 router.get("/available", checkPermission("roles", "read"), getAvailableRoles);
 
 // GET /api/v1/roles/role-stats - Obtener estadísticas de roles
 router.get("/role-stats", checkPermission("roles", "read"), getRoleStats);
 
-// GET /api/v1/roles/by-role/:roleName - Obtener usuarios por rol específico
 router.get(
   "/by-role/:roleName",
   checkPermission("users", "read"),
@@ -71,23 +66,24 @@ router.get(
 router.post("/get", checkPermission("roles", "read"), getRoles);
 
 // POST /api/v1/roles/create - Crear nuevo rol
-router.post("/create", checkPermission("roles", "create"), createRole);
+router.post("/create", checkPermission("roles", "create"), createRoleSchema, validate, createRole);
 
-// POST /api/v1/roles/assign-users - Asignar usuarios a rol
 router.post(
   "/assign-users",
   checkPermission("users", "update"),
+  assignUsersSchema,
+  validate,
   assignUsersToRole
 );
 
-// POST /api/v1/roles/remove-users - Remover usuarios de rol
 router.post(
   "/remove-users",
   checkPermission("users", "update"),
+  assignUsersSchema,
+  validate,
   removeUsersFromRole
 );
 
-// POST /api/v1/roles/duplicate/:id - Duplicar rol
 router.post(
   "/duplicate/:id",
   checkPermission("roles", "create"),
@@ -102,7 +98,7 @@ router.post(
 router.get("/get/:id", checkPermission("roles", "read"), getRoleById);
 
 // PUT /api/v1/roles/update/:id - Actualizar rol
-router.put("/update/:id", checkPermission("roles", "update"), updateRole);
+router.put("/update/:id", checkPermission("roles", "update"), updateRoleSchema, validate, updateRole);
 
 // DELETE /api/v1/roles/delete/:id - Eliminar rol
 router.delete("/delete/:id", checkPermission("roles", "delete"), deleteRole);
@@ -111,14 +107,16 @@ router.delete("/delete/:id", checkPermission("roles", "delete"), deleteRole);
 router.patch(
   "/update/:id/toggle",
   checkPermission("roles", "update"),
+  toggleStatusSchema,
+  validate,
   toggleRoleStatus
 );
 
-router.post(
-  "/update-modules-permissions",
-  checkPermission([{ resource: "roles", action: "update" }]),
-  updateRolesWithModulesPermission
-);
+// router.post(
+//   "/update-modules-permissions",
+//   checkPermission([{ resource: "roles", action: "update" }]),
+//   updateRolesWithModulesPermission
+// );
 
 // =====================================================
 // ⭐ MIDDLEWARE DE MANEJO DE ERRORES ⭐

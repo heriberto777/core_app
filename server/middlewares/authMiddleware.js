@@ -1,11 +1,11 @@
 const User = require("../models/userModel");
 const Role = require("../models/roleModel");
 const { decoded, decodeWithoutVerification } = require("../services/jwt");
+const logger = require("../services/logger");
 
 // Verificar token JWT mejorado
 const verifyToken = async (req, res, next) => {
   try {
-    // Obtener token del header
     const authHeader = req.headers.authorization;
 
     if (!authHeader) {
@@ -15,7 +15,6 @@ const verifyToken = async (req, res, next) => {
       });
     }
 
-    // Verificar formato del header (debe ser "Bearer TOKEN")
     const tokenParts = authHeader.split(" ");
     if (tokenParts.length !== 2 || tokenParts[0] !== "Bearer") {
       return res.status(401).json({
@@ -26,30 +25,11 @@ const verifyToken = async (req, res, next) => {
 
     const token = tokenParts[1];
 
-    // Log para debugging (puedes quitar esto en producción)
-    console.log("🔍 Verificando token...");
-    console.log(
-      "Token recibido:",
-      token ? `${token.substring(0, 20)}...` : "vacío"
-    );
+    // Fix #5 — usar logger en lugar de console.log con datos sensibles
+    logger.debug("Verificando token JWT...");
 
-    // Intentar decodificar sin verificar primero (para debugging)
-    const decodedInfo = decodeWithoutVerification(token);
-    if (decodedInfo) {
-      console.log("📋 Info del token:", {
-        user_id: decodedInfo.user_id,
-        token_type: decodedInfo.token_type,
-        exp: decodedInfo.exp
-          ? new Date(decodedInfo.exp * 1000)
-          : "sin expiración",
-        iat: decodedInfo.iat ? new Date(decodedInfo.iat * 1000) : "sin fecha",
-      });
-    }
-
-    // Verificar y decodificar el token
     const payload = decoded(token);
 
-    // Verificar que sea un token de acceso
     if (payload.token_type !== "access") {
       return res.status(401).json({
         success: false,
@@ -57,7 +37,6 @@ const verifyToken = async (req, res, next) => {
       });
     }
 
-    // Verificar que el user_id existe en el payload
     if (!payload.user_id) {
       return res.status(401).json({
         success: false,
@@ -65,8 +44,11 @@ const verifyToken = async (req, res, next) => {
       });
     }
 
-    // Buscar usuario
-    const user = await User.findById(payload.user_id).select("-password");
+    // Fix #2 — poblar roles UNA sola vez en verifyToken para que todos los
+    // middlewares downstream (checkPermissions, checkTransferPermission) reusen req.user
+    const user = await User.findById(payload.user_id)
+      .select("-password")
+      .populate("roles");
 
     if (!user) {
       return res.status(401).json({
@@ -82,27 +64,20 @@ const verifyToken = async (req, res, next) => {
       });
     }
 
-    // Agregar usuario al request
     req.user = user;
-    console.log("✅ Token verificado para usuario:", user.email);
+    // Fix #5 — no loguear email en producción; logger.debug filtra en producción
+    logger.debug(`Token verificado para userId: ${payload.user_id}`);
 
     next();
   } catch (error) {
-    console.error("❌ Error en verifyToken:", error.message);
+    logger.error("Error en verifyToken:", error.message);
 
-    // Respuestas específicas según el tipo de error
     let message = "Token inválido";
-    let statusCode = 401;
+    const statusCode = 401;
 
-    if (
-      error.message.includes("malformed") ||
-      error.message.includes("malformado")
-    ) {
+    if (error.message.includes("malformed") || error.message.includes("malformado")) {
       message = "Token malformado";
-    } else if (
-      error.message.includes("expired") ||
-      error.message.includes("expirado")
-    ) {
+    } else if (error.message.includes("expired") || error.message.includes("expirado")) {
       message = "Token expirado";
     } else if (error.message.includes("invalid signature")) {
       message = "Firma de token inválida";
@@ -110,7 +85,7 @@ const verifyToken = async (req, res, next) => {
 
     return res.status(statusCode).json({
       success: false,
-      message: message,
+      message,
       debug: process.env.NODE_ENV === "development" ? error.message : undefined,
     });
   }
@@ -178,8 +153,14 @@ const checkPermission = (resource, action) => {
   };
 };
 
-// Verificar si es admin
+// Fix #4 — early return guard: verifica que req.user exista antes de acceder a sus propiedades
 const requireAdmin = (req, res, next) => {
+  if (!req.user) {
+    return res.status(401).json({
+      success: false,
+      message: "No autenticado",
+    });
+  }
   if (!req.user.isAdmin) {
     return res.status(403).json({
       success: false,
@@ -269,10 +250,9 @@ const checkUserPermission = (user, resource, action) => {
 const checkPermissions = (permissions, type = "AND") => {
   return async (req, res, next) => {
     try {
-      const { user_id } = req.user;
+      // Fix #2 — req.user ya viene poblado con roles desde verifyToken
+      const user = req.user;
 
-      // Obtener usuario con roles poblados
-      const user = await User.findById(user_id).populate("roles");
       if (!user || !user.activo) {
         return res.status(403).json({
           success: false,
@@ -280,7 +260,6 @@ const checkPermissions = (permissions, type = "AND") => {
         });
       }
 
-      // Si es admin, permitir todo
       if (user.isAdmin === true) {
         return next();
       }
@@ -288,27 +267,25 @@ const checkPermissions = (permissions, type = "AND") => {
       let hasRequiredPermissions = false;
 
       if (type === "AND") {
-        // Verificar que tenga TODOS los permisos
-        hasRequiredPermissions = permissions.every(({ resource, action }) => {
-          return checkUserPermission(user, resource, action);
-        });
+        hasRequiredPermissions = permissions.every(({ resource, action }) =>
+          checkUserPermission(user, resource, action)
+        );
       } else if (type === "OR") {
-        // Verificar que tenga AL MENOS UNO de los permisos
-        hasRequiredPermissions = permissions.some(({ resource, action }) => {
-          return checkUserPermission(user, resource, action);
-        });
+        hasRequiredPermissions = permissions.some(({ resource, action }) =>
+          checkUserPermission(user, resource, action)
+        );
       }
 
       if (!hasRequiredPermissions) {
         return res.status(403).json({
           success: false,
-          message: `Acceso denegado. Permisos insuficientes.`,
+          message: "Acceso denegado. Permisos insuficientes.",
         });
       }
 
       next();
     } catch (error) {
-      console.error("Error verificando permisos:", error);
+      logger.error("Error verificando permisos:", error);
       res.status(500).json({
         success: false,
         message: "Error interno del servidor",
@@ -320,17 +297,14 @@ const checkPermissions = (permissions, type = "AND") => {
 // Middleware específico para transferencias
 const checkTransferPermission = async (req, res, next) => {
   try {
-    const { user_id } = req.user;
+    // Fix #2 — reusar req.user poblado desde verifyToken (no hacer nueva query)
+    const user = req.user;
     const { fromUserId, toUserId } = req.body;
 
-    const user = await User.findById(user_id).populate("roles");
-
-    // Si es admin, puede transferir cualquier tarea
     if (user.isAdmin === true) {
       return next();
     }
 
-    // Verificar permiso básico de transferencia
     if (!checkUserPermission(user, "tasks", "update")) {
       return res.status(403).json({
         success: false,
@@ -338,13 +312,11 @@ const checkTransferPermission = async (req, res, next) => {
       });
     }
 
-    // Si puede manejar tareas, puede transferir cualquiera
     if (checkUserPermission(user, "tasks", "manage")) {
       return next();
     }
 
-    // Solo puede transferir sus propias tareas
-    if (fromUserId && fromUserId !== user_id) {
+    if (fromUserId && fromUserId !== String(user._id)) {
       return res.status(403).json({
         success: false,
         message: "Solo puedes transferir tus propias tareas",
@@ -353,7 +325,7 @@ const checkTransferPermission = async (req, res, next) => {
 
     next();
   } catch (error) {
-    console.error("Error verificando permisos de transferencia:", error);
+    logger.error("Error verificando permisos de transferencia:", error);
     res.status(500).json({
       success: false,
       message: "Error verificando permisos",

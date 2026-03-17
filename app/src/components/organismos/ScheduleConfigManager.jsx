@@ -1,11 +1,11 @@
 import React, { useState } from "react";
 import { useAuth } from "../../index";
-import { TransferApi } from "../../api/index";
+import { TransferTaskApi } from "../../api/index";
 import Swal from "sweetalert2";
 import { FaCog } from "react-icons/fa";
 import styled from "styled-components";
 
-const cnnApi = new TransferApi();
+const cnnApi = new TransferTaskApi();
 
 // Estilos para SweetAlert2
 const scheduleManagerStyles = `
@@ -186,14 +186,12 @@ export function ScheduleConfigButton({ disabled = false, onSuccess }) {
         <div class="schedule-manager-form">
           <div class="toggle-section">
             <div class="toggle-label">Activar ejecución automática</div>
-            <button id="toggleScheduler" class="toggle-button ${
-              modalEnabled ? "active" : "inactive"
-            }">
-              ${
-                modalEnabled
-                  ? '<i class="fa fa-play"></i> Activado'
-                  : '<i class="fa fa-pause"></i> Desactivado'
-              }
+            <button id="toggleScheduler" class="toggle-button ${modalEnabled ? "active" : "inactive"
+        }">
+              ${modalEnabled
+          ? '<i class="fa fa-play"></i> Activado'
+          : '<i class="fa fa-pause"></i> Desactivado'
+        }
             </button>
           </div>
 
@@ -216,11 +214,10 @@ export function ScheduleConfigButton({ disabled = false, onSuccess }) {
             <div class="next-run-label">Próxima ejecución:</div>
             <div class="next-run-time">${getNextExecutionDisplay()}</div>
             <div class="schedule-description">
-              ${
-                modalEnabled
-                  ? 'A la hora programada, se ejecutarán automáticamente todas las tareas configuradas como "automáticas" o "ambas".'
-                  : "La ejecución automática está desactivada. Las tareas tendrán que ser ejecutadas manualmente."
-              }
+              ${modalEnabled
+          ? 'A la hora programada, se ejecutarán automáticamente todas las tareas configuradas como "automáticas" o "ambas".'
+          : "La ejecución automática está desactivada. Las tareas tendrán que ser ejecutadas manualmente."
+        }
             </div>
           </div>
 
@@ -326,11 +323,10 @@ export function ScheduleConfigButton({ disabled = false, onSuccess }) {
               success: true,
               hour: modalTime,
               enabled: modalEnabled,
-              message: `Configuración guardada correctamente. Las tareas ${
-                modalEnabled
+              message: `Configuración guardada correctamente. Las tareas ${modalEnabled
                   ? `se ejecutarán automáticamente todos los días a las ${modalTime}.`
                   : "automáticas han sido desactivadas."
-              }`,
+                }`,
             };
           } else {
             throw new Error("No se pudo actualizar la configuración.");
@@ -420,14 +416,12 @@ export function openScheduleConfigModal(accessToken, onSuccess) {
           <div class="schedule-manager-form">
             <div class="toggle-section">
               <div class="toggle-label">Activar ejecución automática</div>
-              <button id="toggleScheduler" class="toggle-button ${
-                modalEnabled ? "active" : "inactive"
-              }">
-                ${
-                  modalEnabled
-                    ? '<i class="fa fa-play"></i> Activado'
-                    : '<i class="fa fa-pause"></i> Desactivado'
-                }
+              <button id="toggleScheduler" class="toggle-button ${modalEnabled ? "active" : "inactive"
+          }">
+                ${modalEnabled
+            ? '<i class="fa fa-play"></i> Activado'
+            : '<i class="fa fa-pause"></i> Desactivado'
+          }
               </button>
             </div>
 
@@ -450,11 +444,10 @@ export function openScheduleConfigModal(accessToken, onSuccess) {
               <div class="next-run-label">Próxima ejecución:</div>
               <div class="next-run-time">${getNextExecutionDisplay()}</div>
               <div class="schedule-description">
-                ${
-                  modalEnabled
-                    ? 'A la hora programada, se ejecutarán automáticamente todas las tareas configuradas como "automáticas" o "ambas".'
-                    : "La ejecución automática está desactivada. Las tareas tendrán que ser ejecutadas manualmente."
-                }
+                ${modalEnabled
+            ? 'A la hora programada, se ejecutarán automáticamente todas las tareas configuradas como "automáticas" o "ambas".'
+            : "La ejecución automática está desactivada. Las tareas tendrán que ser ejecutadas manualmente."
+          }
               </div>
             </div>
 
@@ -560,11 +553,10 @@ export function openScheduleConfigModal(accessToken, onSuccess) {
                 success: true,
                 hour: modalTime,
                 enabled: modalEnabled,
-                message: `Configuración guardada correctamente. Las tareas ${
-                  modalEnabled
+                message: `Configuración guardada correctamente. Las tareas ${modalEnabled
                     ? `se ejecutarán automáticamente todos los días a las ${modalTime}.`
                     : "automáticas han sido desactivadas."
-                }`,
+                  }`,
               };
             } else {
               throw new Error("No se pudo actualizar la configuración.");

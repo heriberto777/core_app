@@ -420,6 +420,25 @@ async function validateBodega(connection, bodegaCode) {
 }
 
 /**
+ * Obtiene la primera localización válida para una bodega
+ */
+async function getValidLocation(connection, bodega) {
+  try {
+    const query = `
+      SELECT TOP 1 LOCALIZACION
+      FROM CATELLI.LOCALIZACION
+      WHERE BODEGA = @bodega
+      ORDER BY LOCALIZACION ASC
+    `;
+    const result = await DatabaseServiceAdapter.query(connection, query, { bodega });
+    return result.recordset?.[0]?.LOCALIZACION || null;
+  } catch (error) {
+    logger.error(`Error obteniendo localización para bodega ${bodega}:`, error);
+    return null;
+  }
+}
+
+/**
  * Ejecuta query directamente con la conexión sin pasar por SqlService
  */
 async function executeDirectQuery(connection, sql, params = {}) {
@@ -715,37 +734,8 @@ async function generateValidationReport(validation, route, loadId = null) {
  * Guarda registro de traspaso fallido en tracking
  */
 async function saveFailedTraspasoRecord(route, validation, reportResult, loadId = null) {
-  try {
-    return await withConnection("server1", async (connection) => {
-      const query = `
-        INSERT INTO dbo.IMPLT_traspaso_tracking
-        (load_id, delivery_person_code, status, error_message,
-         validation_report, manual_document_path, total_products, created_by)
-        VALUES
-        (@load_id, @route, @status, @error_message,
-         @validation_report, @document_path, @total_products, @created_by)
-      `;
-
-      const params = {
-        load_id: loadId || `VALIDATION_${route}_${Date.now()}`,
-        route,
-        status: 'validation_failed',
-        error_message: validation.errors.slice(0, 500).join('; '), // Limitar longitud
-        validation_report: JSON.stringify(validation),
-        document_path: reportResult.path,
-        total_products: validation.productos.length,
-        created_by: 'SYSTEM'
-      };
-
-      await DatabaseServiceAdapter.query(connection, query, params);
-
-      logger.info(`Registro de traspaso fallido guardado para ruta ${route}`);
-    });
-
-  } catch (error) {
-    logger.error(`Error al guardar registro de traspaso fallido: ${error.message}`);
-    // No lanzar error aquí para no interrumpir el flujo principal
-  }
+  logger.info(`Omitiendo saveFailedTraspasoRecord en IMPLT_traspaso_tracking (tabla deprecada)`);
+  return;
 }
 
 /**
@@ -763,7 +753,7 @@ function getTraspasoConfig() {
     tipo_pago: "ND",
     centro_costo: "00-00-00",
     cuenta_contable_default: "100-01-05-99-00",
-    localizacion_default: "ND",
+    localizacion_default: null, // Dinámico
     unidad_distribucion_default: "UND",
     usuario_default: "SA",
   };
@@ -804,6 +794,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
       const codigo = item.Code_Product.trim();
       const cantidad = Math.max(0, Number(item.Quantity) || 0);
       const bodegaOrigen = item.bodega || "01";
+      const localizacionOrigen = item.localizacion_origen || null;
 
       const key = `${codigo}_${bodegaOrigen}`;
 
@@ -812,7 +803,8 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
           productos[key] = {
             codigo,
             cantidad: 0,
-            bodegaOrigen
+            bodegaOrigen,
+            localizacionOrigen
           };
         }
         productos[key].cantidad += cantidad;
@@ -832,6 +824,10 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
 
     // 3. Ejecutar traspaso
     return await withConnection("server1", async (connection) => {
+      // Determinar localización válida para bodega destino (común para todas las líneas si bodega_destino es fija)
+      const locDestinoValida = await getValidLocation(connection, bodega_destino);
+      logger.info(`Localización destino resuelta: ${locDestinoValida} para bodega ${bodega_destino}`);
+
       // Obtener detalles de productos para correo
       detalleProductos = await obtenerDetalleProductos(connection, productosArray);
 
@@ -915,7 +911,6 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
             costo_total_dolar: 0,
             precio_total_local: 0,
             precio_total_dolar: 0,
-            localizacion_dest: config.localizacion_default,
             centro_costo: config.centro_costo,
             secuencia: "",
             unidad_distribucio: config.unidad_distribucion_default,
@@ -925,7 +920,8 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
             cai: "",
             tipo_operacion: config.tipo_operacion,
             tipo_pago: config.tipo_pago,
-            localizacion: config.localizacion_default,
+            localizacion: producto.localizacionOrigen || await getValidLocation(connection, producto.bodegaOrigen),
+            localizacion_dest: locDestinoValida,
           };
 
           const insertarLinea = `
@@ -952,9 +948,9 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
           lineasFallidas++;
           logger.error(`Error al insertar línea ${lineaNumero}:`, lineError);
 
-          // Intentar fallback directo
           try {
             const codigoProducto = producto.codigo.replace(/'/g, "''");
+            const locOriFinal = producto.localizacionOrigen || await getValidLocation(connection, producto.bodegaOrigen);
 
             const insertarLineaDirecto = `
               INSERT INTO CATELLI.LINEA_DOC_INV
@@ -967,8 +963,8 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
                 ('${config.paquete_inventario}', '${nuevoConsecutivo}', ${lineaNumero}, '${config.ajuste_config}', '${codigoProducto}',
                  '${producto.bodegaOrigen}', '${bodega_destino}', ${producto.cantidad}, 'T', '${config.subtipo}', '',
                  0, 0, 0, 0,
-                 '${config.localizacion_default}', '${config.centro_costo}', '', '${config.unidad_distribucion_default}', '${config.cuenta_contable_default}',
-                 0, 0, '', '${config.tipo_operacion}', '${config.tipo_pago}', '${config.localizacion_default}')
+                 '${locDestinoValida}', '${config.centro_costo}', '', '${config.unidad_distribucion_default}', '${config.cuenta_contable_default}',
+                 0, 0, '', '${config.tipo_operacion}', '${config.tipo_pago}', '${locOriFinal}')
             `;
 
             await DatabaseServiceAdapter.query(connection, insertarLineaDirecto);
@@ -1094,56 +1090,7 @@ async function traspasoBodega({ route, salesData, bodega_destino = "02" }) {
  * Función para reintentar traspaso fallido (nueva funcionalidad para el módulo de gestión)
  */
 async function retryFailedTraspaso(traspasoId, updatedData = null) {
-  logger.info(`Reintentando traspaso fallido: ${traspasoId}`);
-
-  try {
-    return await withConnection("server1", async (connection) => {
-      // Obtener datos del traspaso fallido
-      const query = `
-        SELECT * FROM dbo.IMPLT_traspaso_tracking
-        WHERE id = @traspasoId AND status IN ('validation_failed', 'failed')
-      `;
-
-      const result = await DatabaseServiceAdapter.query(connection, query, { traspasoId });
-
-      if (!result.recordset || result.recordset.length === 0) {
-        throw new Error("Traspaso no encontrado o no es reintentable");
-      }
-
-      const traspasoRecord = result.recordset[0];
-
-      // Usar datos actualizados o los originales
-      const salesDataToUse =
-        updatedData || JSON.parse(traspasoRecord.validation_report).productos;
-
-      // Intentar nuevamente el traspaso
-      const retryResult = await realizarTraspaso({
-        route: traspasoRecord.delivery_person_code,
-        salesData: salesDataToUse,
-        bodega_destino: "02", // o extraer del registro original
-      });
-
-      // Actualizar el registro de tracking
-      if (retryResult.success) {
-        await DatabaseServiceAdapter.query(
-          connection,
-          `
-          UPDATE dbo.IMPLT_traspaso_tracking
-          SET status = 'completed', processed_at = GETDATE(), processed_by = 'RETRY_SYSTEM'
-          WHERE id = @traspasoId
-        `,
-          { traspasoId }
-        );
-      }
-
-      return retryResult;
-    });
-  } catch (error) {
-    logger.error(
-      `Error al reintentar traspaso ${traspasoId}: ${error.message}`
-    );
-    throw error;
-  }
+  throw new Error("Reintento no soportado (Tabla IMPLT_traspaso_tracking desactivada).");
 }
 
 /**
@@ -1175,56 +1122,7 @@ async function processProductReturns(traspasoId, returnedProducts) {
  * Elimina un traspaso y sus detalles
  */
 async function deleteTraspaso(traspasoId, reason, userId) {
-  try {
-    return await withConnection("server1", async (connection) => {
-      // Verificar que el traspaso existe y se puede eliminar
-      const checkQuery = `
-        SELECT id, status, load_id, delivery_person_code
-        FROM dbo.IMPLT_traspaso_tracking
-        WHERE id = @traspasoId
-      `;
-
-      const checkResult = await DatabaseServiceAdapter.query(connection, checkQuery, { traspasoId });
-
-      if (!checkResult.recordset || checkResult.recordset.length === 0) {
-        throw new Error("Traspaso no encontrado");
-      }
-
-      const traspaso = checkResult.recordset[0];
-
-      // Solo permitir eliminar traspasos en ciertos estados
-      const deletableStatuses = ['validation_failed', 'failed', 'cancelled'];
-      if (!deletableStatuses.includes(traspaso.status)) {
-        throw new Error(`No se puede eliminar un traspaso con estado: ${traspaso.status}`);
-      }
-
-      // Eliminar detalles primero (foreign key constraint)
-      await DatabaseServiceAdapter.query(connection, `
-        DELETE FROM dbo.IMPLT_traspaso_detail
-        WHERE traspaso_tracking_id = @traspasoId
-      `, { traspasoId });
-
-      // Eliminar el registro principal
-      await DatabaseServiceAdapter.query(connection, `
-        DELETE FROM dbo.IMPLT_traspaso_tracking
-        WHERE id = @traspasoId
-      `, { traspasoId });
-
-      logger.info(`Traspaso ${traspasoId} eliminado por usuario ${userId}. Razón: ${reason || 'No especificada'}`);
-
-      return {
-        success: true,
-        message: "Traspaso eliminado correctamente",
-        deletedId: traspasoId,
-        deletedBy: userId,
-        reason: reason || null
-      };
-    });
-
-  } catch (error) {
-    logger.error("Error eliminando traspaso:", error);
-    throw error;
-  }
+  throw new Error("Eliminación manual no soportada (Tabla deprecada)");
 }
 
 /**
@@ -1299,68 +1197,14 @@ async function bulkTraspasoAction(action, traspasoIds, actionData, userId) {
  * Actualiza estado de traspaso
  */
 async function updateTraspasoStatus(traspasoId, status, notes, userId) {
-  try {
-    return await withConnection("server1", async (connection) => {
-      const query = `
-        UPDATE dbo.IMPLT_traspaso_tracking
-        SET status = @status,
-            processed_at = GETDATE(),
-            processed_by = @userId,
-            error_message = @notes
-        WHERE id = @traspasoId
-      `;
-
-      const result = await DatabaseServiceAdapter.query(connection, query, {
-        traspasoId,
-        status,
-        userId,
-        notes: notes || null
-      });
-
-      if (result.rowsAffected[0] === 0) {
-        throw new Error("Traspaso no encontrado");
-      }
-
-      return {
-        success: true,
-        message: "Estado actualizado correctamente",
-        traspasoId,
-        newStatus: status
-      };
-    });
-
-  } catch (error) {
-    logger.error("Error actualizando estado de traspaso:", error);
-    throw error;
-  }
+  throw new Error("Actualización manual no soportada (Tabla deprecada)");
 }
 
 /**
  * Exporta datos de traspaso
  */
 async function exportTraspasoData(traspasoId) {
-  try {
-    return await withConnection("server1", async (connection) => {
-      const query = `
-        SELECT t.*, d.product_code, d.quantity_requested, d.status as product_status
-        FROM dbo.IMPLT_traspaso_tracking t
-        LEFT JOIN dbo.IMPLT_traspaso_detail d ON t.id = d.traspaso_tracking_id
-        WHERE t.id = @traspasoId
-      `;
-
-      const result = await DatabaseServiceAdapter.query(connection, query, { traspasoId });
-
-      return {
-        success: true,
-        data: result.recordset,
-        recordCount: result.recordset.length
-      };
-    });
-
-  } catch (error) {
-    logger.error("Error exportando datos de traspaso:", error);
-    throw error;
-  }
+  throw new Error("Exportación no soportada (Tabla deprecada)");
 }
 
 
@@ -1370,55 +1214,7 @@ async function exportTraspasoData(traspasoId) {
  * Obtener detalles de traspaso específico
  */
 async function getTraspasoDetails(traspasoId) {
-  try {
-    return await withConnection("server1", async (connection) => {
-      const query = `
-        SELECT
-          t.*,
-          -- Información del documento de inventario
-          di.REFERENCIA as documento_referencia,
-          di.FECHA_DOCUMENTO as documento_fecha,
-
-          -- Contar líneas del documento
-          (SELECT COUNT(*) FROM CATELLI.LINEA_DOC_INV ld
-           WHERE ld.DOCUMENTO_INV = t.documento_generated) as lineas_documento
-
-        FROM dbo.IMPLT_traspaso_tracking t
-        LEFT JOIN CATELLI.DOCUMENTO_INV di ON t.documento_generated = di.DOCUMENTO_INV
-        WHERE t.id = @traspasoId
-      `;
-
-      const result = await DatabaseServiceAdapter.query(connection, query, { traspasoId });
-
-      if (!result.recordset || result.recordset.length === 0) {
-        throw new Error("Traspaso no encontrado");
-      }
-
-      const traspasoData = result.recordset[0];
-
-      // Parsear validation_report si existe
-      if (traspasoData.validation_report) {
-        try {
-          traspasoData.validation_report = JSON.parse(
-            traspasoData.validation_report
-          );
-        } catch (parseError) {
-          logger.warn("Error al parsear validation_report:", parseError);
-          traspasoData.validation_report = null;
-        }
-      }
-
-      logger.info(`Detalles de traspaso obtenidos para ID: ${traspasoId}`);
-
-      return {
-        success: true,
-        data: traspasoData,
-      };
-    });
-  } catch (error) {
-    logger.error("Error getting traspaso details:", error);
-    throw error;
-  }
+  throw new Error("Detalles no soportados (Tabla deprecada)");
 }
 
 
@@ -1426,84 +1222,20 @@ async function getTraspasoDetails(traspasoId) {
  * Obtiene estadísticas de traspasos
  */
 async function getTraspasoStats(filters = {}) {
-  try {
-    return await withConnection("server1", async (connection) => {
-      const { dateFrom, dateTo } = filters;
-      let whereClause = "WHERE 1=1";
-      const params = {};
-
-      if (dateFrom) {
-        whereClause += " AND created_at >= @dateFrom";
-        params.dateFrom = new Date(dateFrom);
-      }
-
-      if (dateTo) {
-        whereClause += " AND created_at <= @dateTo";
-        const endDate = new Date(dateTo);
-        endDate.setHours(23, 59, 59, 999);
-        params.dateTo = endDate;
-      }
-
-      const statsQuery = `
-        SELECT
-          status,
-          COUNT(*) as count,
-          SUM(total_products) as total_products,
-          SUM(lines_successful) as total_successful,
-          SUM(lines_failed) as total_failed,
-          AVG(CASE
-            WHEN total_products > 0 THEN
-              CAST((lines_successful * 100.0 / total_products) AS DECIMAL(5,2))
-            ELSE 0
-          END) as avg_success_rate
-        FROM dbo.IMPLT_traspaso_tracking
-        ${whereClause}
-        GROUP BY status
-      `;
-
-      const result = await DatabaseServiceAdapter.query(connection, statsQuery, params);
-
-      const stats = {
-        total: 0,
-        completed: 0,
-        failed: 0,
-        pending: 0,
-        processing: 0,
-        total_products: 0,
-        total_successful: 0,
-        total_failed: 0,
-        avg_success_rate: 0,
-      };
-
-      if (result.recordset) {
-        result.recordset.forEach((row) => {
-          stats[row.status] = row.count;
-          stats.total += row.count;
-          stats.total_products += row.total_products || 0;
-          stats.total_successful += row.total_successful || 0;
-          stats.total_failed += row.total_failed || 0;
-        });
-
-        // Calcular promedio general de éxito
-        if (stats.total_products > 0) {
-          stats.avg_success_rate = parseFloat(
-            ((stats.total_successful / stats.total_products) * 100).toFixed(2)
-          );
-        }
-      }
-
-      logger.info(`Estadísticas de traspasos calculadas:`, stats);
-
-      return {
-        success: true,
-        data: stats
-      };
-    });
-
-  } catch (error) {
-    logger.error('Error getting traspaso stats:', error);
-    throw error;
-  }
+  return {
+    success: true,
+    data: {
+      total: 0,
+      completed: 0,
+      failed: 0,
+      pending: 0,
+      processing: 0,
+      total_products: 0,
+      total_successful: 0,
+      total_failed: 0,
+      avg_success_rate: 0,
+    }
+  };
 }
 
 
@@ -1582,288 +1314,45 @@ async function getWarehouses() {
  * Obtener historial de traspasos con filtros y paginación
  */
 async function getTraspasoHistory(filters = {}) {
-  try {
-    return await withConnection("server2", async (connection) => {
-      const {
-        page = 1,
-        limit = 20,
-        status,
-        dateFrom,
-        dateTo,
-        deliveryPerson,
-        loadId,
-      } = filters;
-
-      const offset = (page - 1) * limit;
-      let whereClause = "WHERE 1=1";
-      const params = {};
-
-      // Aplicar filtros
-      if (status && status !== "all") {
-        whereClause += " AND status = @status";
-        params.status = status;
-      }
-
-      if (deliveryPerson) {
-        whereClause += " AND delivery_person_code = @deliveryPerson";
-        params.deliveryPerson = deliveryPerson;
-      }
-
-      if (loadId) {
-        whereClause += " AND load_id LIKE @loadId";
-        params.loadId = `%${loadId}%`;
-      }
-
-      if (dateFrom) {
-        whereClause += " AND created_at >= @dateFrom";
-        params.dateFrom = new Date(dateFrom);
-      }
-
-      if (dateTo) {
-        whereClause += " AND created_at <= @dateTo";
-        const endDate = new Date(dateTo);
-        endDate.setHours(23, 59, 59, 999);
-        params.dateTo = endDate;
-      }
-
-      // Consulta principal
-      const query = `
-        SELECT
-          id,
-          load_id,
-          delivery_person_code,
-          status,
-          created_at,
-          processed_at,
-          error_message,
-          total_products
-        FROM dbo.IMPLT_traspaso_tracking
-        ${whereClause}
-        ORDER BY created_at DESC
-        OFFSET @offset ROWS
-        FETCH NEXT @limit ROWS ONLY
-      `;
-
-      // Query para total
-      const countQuery = `
-        SELECT COUNT(*) as total
-        FROM dbo.IMPLT_traspaso_tracking
-        ${whereClause}
-      `;
-
-      const [result, countResult] = await Promise.all([
-        DatabaseServiceAdapter.query(connection, query, { ...params, offset, limit }),
-        DatabaseServiceAdapter.query(connection, countQuery, params),
-      ]);
-
-      const total = countResult.recordset[0]?.total || 0;
-      const totalPages = Math.ceil(total / limit);
-
-      return {
-        data: result.recordset,
-        pagination: {
-          currentPage: parseInt(page),
-          totalPages,
-          totalItems: total,
-          itemsPerPage: parseInt(limit),
-          hasNextPage: page < totalPages,
-          hasPrevPage: page > 1,
-        },
-      };
-    });
-
-  } catch (error) {
-    logger.error('Error getting traspaso history:', error);
-    throw error;
-  }
+  return {
+    data: [],
+    pagination: {
+      currentPage: 1,
+      totalPages: 0,
+      totalItems: 0,
+      itemsPerPage: 20,
+      hasNextPage: false,
+      hasPrevPage: false,
+    },
+  };
 }
 
 /**
  * Obtiene todos los traspasos con información completa
  */
 async function getTraspasosList(filters = {}) {
-  try {
-    return await withConnection("server1", async (connection) => {
-      const {
-        page = 1,
-        limit = 20,
-        status,
-        dateFrom,
-        dateTo,
-        deliveryPerson,
-        loadId,
-      } = filters;
-
-      // ✅ CONVERSIÓN EXPLÍCITA A ENTEROS PARA EVITAR ERROR SQL
-      const pageInt = parseInt(page) || 1;
-      const limitInt = parseInt(limit) || 20;
-      const offset = (pageInt - 1) * limitInt;
-
-      // Validar que sean números válidos
-      if (offset < 0) offset = 0;
-      if (limitInt < 1) limitInt = 20;
-
-      let whereClause = "WHERE 1=1";
-      const params = {};
-
-      // Aplicar filtros dinámicamente
-      if (status && status !== "all") {
-        whereClause += " AND status = @status";
-        params.status = status;
-      }
-
-      if (deliveryPerson && deliveryPerson !== "all") {
-        whereClause += " AND delivery_person_code = @deliveryPerson";
-        params.deliveryPerson = deliveryPerson;
-      }
-
-      if (loadId && loadId.trim() !== "") {
-        whereClause += " AND load_id LIKE @loadId";
-        params.loadId = `%${loadId.trim()}%`;
-      }
-
-      if (dateFrom) {
-        whereClause += " AND created_at >= @dateFrom";
-        params.dateFrom = new Date(dateFrom);
-      }
-
-      if (dateTo) {
-        whereClause += " AND created_at <= @dateTo";
-        const endDate = new Date(dateTo);
-        endDate.setHours(23, 59, 59, 999);
-        params.dateTo = endDate;
-      }
-
-      // ✅ QUERY PRINCIPAL SIN PARÁMETROS EN OFFSET/FETCH (VALORES DIRECTOS)
-      const query = `
-        SELECT
-          id,
-          load_id,
-          delivery_person_code,
-          delivery_person_name,
-          warehouse_origin,
-          warehouse_destination,
-          status,
-          error_message,
-          success_message,
-          created_at,
-          processed_at,
-          total_products,
-          documento_generated,
-          lines_successful,
-          lines_failed,
-          created_by,
-
-          -- Calcular porcentaje de éxito
-          CASE
-            WHEN total_products > 0 THEN
-              CAST((lines_successful * 100.0 / total_products) AS DECIMAL(5,2))
-            ELSE 0
-          END as success_percentage,
-
-          -- Estado descriptivo
-          CASE status
-            WHEN 'completed' THEN 'Completado'
-            WHEN 'failed' THEN 'Fallido'
-            WHEN 'pending' THEN 'Pendiente'
-            WHEN 'processing' THEN 'Procesando'
-            ELSE 'Desconocido'
-          END as status_description,
-
-          -- Determinar si es devolución
-          CASE
-            WHEN load_id LIKE '%_DEV' THEN 1
-            ELSE 0
-          END as is_return
-
-        FROM dbo.IMPLT_traspaso_tracking
-        ${whereClause}
-        ORDER BY created_at DESC
-        OFFSET ${offset} ROWS
-        FETCH NEXT ${limitInt} ROWS ONLY
-      `;
-
-      // ✅ QUERY PARA TOTAL DE REGISTROS
-      const countQuery = `
-        SELECT COUNT(*) as total
-        FROM dbo.IMPLT_traspaso_tracking
-        ${whereClause}
-      `;
-
-      logger.debug(`Ejecutando query de traspasos con filtros:`, {
-        filters,
-        whereClause,
-        params,
-        offset,
-        limit: limitInt,
-      });
-
-      // Ejecutar ambas consultas en paralelo
-      const [result, countResult] = await Promise.all([
-        DatabaseServiceAdapter.query(connection, query, params),
-        DatabaseServiceAdapter.query(connection, countQuery, params),
-      ]);
-
-      const traspasos = result.recordset || [];
-      const total = countResult.recordset[0]?.total || 0;
-      const totalPages = Math.ceil(total / limitInt);
-
-      logger.info(`Traspasos obtenidos: ${traspasos.length} de ${total} total`);
-
-      return {
-        success: true,
-        data: traspasos,
-        pagination: {
-          currentPage: pageInt,
-          totalPages,
-          totalItems: total,
-          itemsPerPage: limitInt,
-          hasNextPage: pageInt < totalPages,
-          hasPrevPage: pageInt > 1,
-        },
-      };
-    });
-  } catch (error) {
-    logger.error("Error getting traspasos list:", error);
-    throw error;
-  }
+  return {
+    success: true,
+    data: [],
+    pagination: {
+      currentPage: 1,
+      totalPages: 0,
+      totalItems: 0,
+      itemsPerPage: 20,
+      hasNextPage: false,
+      hasPrevPage: false,
+    },
+  };
 }
 
 /**
  * Obtiene repartidores para filtros
  */
 async function getDeliveryPersonsForFilter() {
-  try {
-    return await withConnection("server1", async (connection) => {
-      const query = `
-        SELECT DISTINCT
-          delivery_person_code as code,
-          delivery_person_name as name
-        FROM dbo.IMPLT_traspaso_tracking
-        WHERE delivery_person_code IS NOT NULL
-        AND delivery_person_name IS NOT NULL
-        AND delivery_person_code != ''
-        AND delivery_person_name != ''
-        ORDER BY delivery_person_name
-      `;
-
-      const result = await DatabaseServiceAdapter.query(connection, query);
-
-      const deliveryPersons = result.recordset || [];
-
-      logger.info(
-        `Repartidores obtenidos para filtros: ${deliveryPersons.length}`
-      );
-
-      return {
-        success: true,
-        data: deliveryPersons,
-      };
-    });
-  } catch (error) {
-    logger.error("Error getting delivery persons for filter:", error);
-    throw error;
-  }
+  return {
+    success: true,
+    data: [],
+  };
 }
 
 

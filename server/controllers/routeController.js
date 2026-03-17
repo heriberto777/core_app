@@ -14,7 +14,9 @@ const CACHE_TTL = {
   USER_ROUTES: 300, // 5 minutos
 };
 
-// ⭐ OBTENER TODAS LAS RUTAS ⭐
+/**
+ * Obtener todas las rutas con filtros
+ */
 async function getRoutes(req, res) {
   try {
     const { category, isActive, showInMenu } = req.query;
@@ -28,272 +30,184 @@ async function getRoutes(req, res) {
 
     const routes = await cacheService.getOrSet(
       cacheKey,
-      async () => {
-        return await RouteConfig.find(filters)
-          .sort({ category: 1, priority: 1 })
-          .lean();
-      },
+      async () => RouteConfig.find(filters).sort({ category: 1, priority: 1 }).lean(),
       CACHE_TTL.ROUTES
     );
 
-    res.json({
+    return res.status(200).json({
       success: true,
+      message: "Configuraciones de ruta obtenidas correctamente",
       data: routes,
     });
   } catch (error) {
-    logger.error("Error obteniendo rutas:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al obtener rutas",
-      error: error.message,
-    });
+    logger.error("Error en getRoutes:", error);
+    return res.status(500).json({ success: false, message: "Error al obtener rutas", error: error.message });
   }
 }
 
-// ⭐ OBTENER RUTAS ACCESIBLES PARA UN USUARIO ⭐
+/**
+ * Obtener rutas accesibles para el usuario actual
+ */
 async function getUserAccessibleRoutes(req, res) {
   try {
-    const userId = req.user.user_id || req.user._id;
+    const userId = req.user?.user_id || req.user?._id || "SYSTEM";
     const { includeRestricted = false } = req.query;
-
     const cacheKey = CACHE_KEYS.USER_ROUTES(userId);
 
     const accessibleRoutes = await cacheService.getOrSet(
       cacheKey,
       async () => {
-        // Obtener todas las rutas activas
-        const allRoutes = await RouteConfig.find({
-          isActive: true,
-        })
-          .sort({ category: 1, priority: 1 })
-          .lean();
-
-        // Obtener permisos del usuario (desde el request ya validado)
+        const allRoutes = await RouteConfig.find({ isActive: true }).sort({ category: 1, priority: 1 }).lean();
         const userPermissions = req.user.permissions || [];
         const isAdmin = req.user.isAdmin || false;
 
-        const accessibleRoutes = [];
-
+        const results = [];
         for (const route of allRoutes) {
           let hasAccess = false;
+          let reason = "access_denied";
 
-          // Verificar si es siempre accesible
           if (route.isAlwaysAccessible) {
             hasAccess = true;
-          }
-          // Verificar si requiere admin y el usuario es admin
-          else if (route.requiresAdmin && !isAdmin) {
+            reason = "always_accessible";
+          } else if (isAdmin) {
+            hasAccess = true;
+            reason = "admin_access";
+          } else if (route.requiresAdmin) {
             hasAccess = false;
-          }
-          // Verificar permisos específicos
-          else {
-            // Si es admin, tiene acceso a todo
-            if (isAdmin) {
-              hasAccess = true;
-            } else {
-              // Verificar si tiene el permiso requerido para el recurso
-              hasAccess = userPermissions.some(
-                (permission) =>
-                  permission.resource === route.resource &&
-                  (permission.actions.includes(route.requiredAction) ||
-                    permission.actions.includes("manage"))
-              );
-            }
+          } else {
+            hasAccess = userPermissions.some(p =>
+              p.resource === route.resource &&
+              (p.actions.includes(route.requiredAction) || p.actions.includes("manage"))
+            );
+            if (hasAccess) reason = "permission_granted";
           }
 
-          if (hasAccess) {
-            accessibleRoutes.push({
-              ...route,
-              hasAccess: true,
-              accessReason: route.isAlwaysAccessible
-                ? "always_accessible"
-                : isAdmin
-                ? "admin_access"
-                : "permission_granted",
-            });
-          } else if (includeRestricted) {
-            accessibleRoutes.push({
-              ...route,
-              hasAccess: false,
-              accessReason: "access_denied",
-            });
+          if (hasAccess || includeRestricted) {
+            results.push({ ...route, hasAccess, accessReason: reason });
           }
         }
-
-        return accessibleRoutes;
+        return results;
       },
       CACHE_TTL.USER_ROUTES
     );
 
-    res.json({
+    return res.status(200).json({
       success: true,
+      message: "Rutas accesibles obtenidas correctamente",
       data: {
         routes: accessibleRoutes,
         totalRoutes: accessibleRoutes.length,
-        accessibleCount: accessibleRoutes.filter((r) => r.hasAccess).length,
-        categories: [...new Set(accessibleRoutes.map((r) => r.category))],
+        accessibleCount: accessibleRoutes.filter(r => r.hasAccess).length,
+        categories: [...new Set(accessibleRoutes.map(r => r.category))],
       },
     });
   } catch (error) {
-    logger.error("Error obteniendo rutas de usuario:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al obtener rutas accesibles",
-      error: error.message,
-    });
+    logger.error("Error en getUserAccessibleRoutes:", error);
+    return res.status(500).json({ success: false, message: "Error al obtener rutas accesibles", error: error.message });
   }
 }
 
-// ⭐ CREAR NUEVA RUTA ⭐
+/**
+ * Crear nueva ruta
+ */
 async function createRoute(req, res) {
   try {
-    const routeData = req.body;
+    const userId = req.user?.user_id || req.user?._id || "SYSTEM";
+    const existingRoute = await RouteConfig.findOne({ path: req.body.path }).lean();
 
-    // Verificar que la ruta no exista
-    const existingRoute = await RouteConfig.findOne({ path: routeData.path });
-    if (existingRoute) {
-      return res.status(400).json({
-        success: false,
-        message: "La ruta ya existe",
-      });
-    }
+    if (existingRoute) return res.status(400).json({ success: false, message: "La ruta ya existe" });
 
-    const newRoute = new RouteConfig(routeData);
+    const newRoute = new RouteConfig(req.body);
     await newRoute.save();
 
-    // Invalidar caches
     await invalidateRouteCaches();
+    logger.info(`Ruta creada: ${newRoute.path} por ${userId}`);
 
-    logger.info(`✅ Ruta creada: ${newRoute.path}`, {
-      userId: req.user._id,
-      routeId: newRoute._id,
-    });
-
-    res.status(201).json({
+    return res.status(201).json({
       success: true,
       message: "Ruta creada exitosamente",
       data: newRoute,
     });
   } catch (error) {
-    logger.error("Error creando ruta:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al crear ruta",
-      error: error.message,
-    });
+    logger.error("Error en createRoute:", error);
+    return res.status(500).json({ success: false, message: "Error al crear ruta", error: error.message });
   }
 }
 
-// ⭐ ACTUALIZAR RUTA ⭐
+/**
+ * Actualizar ruta
+ */
 async function updateRoute(req, res) {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const userId = req.user?.user_id || req.user?._id || "SYSTEM";
 
-    const updatedRoute = await RouteConfig.findByIdAndUpdate(id, updateData, {
-      new: true,
-      runValidators: true,
-    });
+    const updatedRoute = await RouteConfig.findByIdAndUpdate(id, req.body, { new: true, runValidators: true });
 
-    if (!updatedRoute) {
-      return res.status(404).json({
-        success: false,
-        message: "Ruta no encontrada",
-      });
-    }
+    if (!updatedRoute) return res.status(404).json({ success: false, message: "Ruta no encontrada" });
 
-    // Invalidar caches
     await invalidateRouteCaches();
+    logger.info(`Ruta actualizada: ${updatedRoute.path} por ${userId}`);
 
-    logger.info(`✅ Ruta actualizada: ${updatedRoute.path}`, {
-      userId: req.user._id,
-      routeId: updatedRoute._id,
-    });
-
-    res.json({
+    return res.status(200).json({
       success: true,
       message: "Ruta actualizada exitosamente",
       data: updatedRoute,
     });
   } catch (error) {
-    logger.error("Error actualizando ruta:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al actualizar ruta",
-      error: error.message,
-    });
+    logger.error(`Error en updateRoute (${req.params.id}):`, error);
+    return res.status(500).json({ success: false, message: "Error al actualizar ruta", error: error.message });
   }
 }
 
-// ⭐ OBTENER RUTA POR DEFECTO PARA USUARIO ⭐
+/**
+ * Obtener ruta por defecto para el usuario
+ */
 async function getUserDefaultRoute(req, res) {
   try {
-    const userId = req.user.user_id || req.user._id;
+    const userId = req.user?.user_id || req.user?._id || "SYSTEM";
 
     const defaultRoute = await cacheService.getOrSet(
       `default_route_${userId}`,
       async () => {
-        // Obtener rutas accesibles ordenadas por prioridad
-        const accessibleRoutes = await RouteConfig.find({
-          isActive: true,
-          showInMenu: true,
-        })
-          .sort({ priority: 1 })
-          .lean();
-
+        const accessibleRoutes = await RouteConfig.find({ isActive: true, showInMenu: true }).sort({ priority: 1 }).lean();
         const userPermissions = req.user.permissions || [];
         const isAdmin = req.user.isAdmin || false;
 
         for (const route of accessibleRoutes) {
-          // Saltar dashboard (será el fallback)
           if (route.path === "/dashboard") continue;
 
           let hasAccess = false;
-
-          if (route.isAlwaysAccessible) {
+          if (route.isAlwaysAccessible || isAdmin) {
             hasAccess = true;
-          } else if (route.requiresAdmin && !isAdmin) {
-            hasAccess = false;
-          } else if (isAdmin) {
-            hasAccess = true;
-          } else {
-            hasAccess = userPermissions.some(
-              (permission) =>
-                permission.resource === route.resource &&
-                (permission.actions.includes(route.requiredAction) ||
-                  permission.actions.includes("manage"))
+          } else if (!route.requiresAdmin) {
+            hasAccess = userPermissions.some(p =>
+              p.resource === route.resource &&
+              (p.actions.includes(route.requiredAction) || p.actions.includes("manage"))
             );
           }
 
-          if (hasAccess) {
-            return route.path;
-          }
+          if (hasAccess) return route.path;
         }
-
-        // Fallback al dashboard
         return "/dashboard";
       },
       CACHE_TTL.USER_ROUTES
     );
 
-    res.json({
+    return res.status(200).json({
       success: true,
-      data: {
-        defaultRoute: defaultRoute,
-        reason: defaultRoute === "/dashboard" ? "fallback" : "priority_based",
-      },
+      message: "Ruta por defecto obtenida",
+      data: { defaultRoute, reason: defaultRoute === "/dashboard" ? "fallback" : "priority_based" },
     });
   } catch (error) {
-    logger.error("Error obteniendo ruta por defecto:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al obtener ruta por defecto",
-      error: error.message,
-    });
+    logger.error("Error en getUserDefaultRoute:", error);
+    return res.status(500).json({ success: false, message: "Error al obtener ruta por defecto", error: error.message });
   }
 }
 
-// ⭐ INVALIDAR CACHES DE RUTAS ⭐
+/**
+ * Invalida caches de rutas
+ */
 async function invalidateRouteCaches() {
   try {
     await cacheService.invalidatePattern("routes_");
@@ -301,10 +215,9 @@ async function invalidateRouteCaches() {
     await cacheService.invalidatePattern("default_route_");
     await cacheService.delete(CACHE_KEYS.ALL_ROUTES);
     await cacheService.delete(CACHE_KEYS.ACTIVE_ROUTES);
-
-    logger.info("🗑️ Caches de rutas invalidados");
+    logger.info("Caches de rutas invalidados globalmente");
   } catch (error) {
-    logger.error("Error invalidando caches de rutas:", error);
+    logger.error("Error en invalidateRouteCaches:", error);
   }
 }
 

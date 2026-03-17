@@ -17,9 +17,9 @@ import {
   FaUser,
 } from "react-icons/fa";
 import { useAuth, ScheduleConfigButton } from "../../index";
-import { TransferApi } from "../../api/index";
+import { TransferTaskApi } from "../../api/index";
 
-const cnnApi = new TransferApi();
+const cnnApi = new TransferTaskApi();
 
 export function ScheduleConfiguration() {
   const { accessToken } = useAuth();
@@ -286,42 +286,44 @@ export function ScheduleConfiguration() {
               <ViewAllButton>Ver Historial Completo</ViewAllButton>
             </HistoryHeader>
 
-            <HistoryTable>
-              <thead>
-                <tr>
-                  <th>Fecha y Hora</th>
-                  <th>Tareas Ejecutadas</th>
-                  <th>Estado</th>
-                  <th>Duración</th>
-                </tr>
-              </thead>
-              <tbody>
-                <tr>
-                  <td>06/06/2025 02:00:15</td>
-                  <td>8 tareas</td>
-                  <td>
-                    <SuccessBadge>Exitoso</SuccessBadge>
-                  </td>
-                  <td>12m 34s</td>
-                </tr>
-                <tr>
-                  <td>05/06/2025 02:00:12</td>
-                  <td>7 tareas</td>
-                  <td>
-                    <WarningBadge>Con advertencias</WarningBadge>
-                  </td>
-                  <td>15m 22s</td>
-                </tr>
-                <tr>
-                  <td>04/06/2025 02:00:08</td>
-                  <td>8 tareas</td>
-                  <td>
-                    <SuccessBadge>Exitoso</SuccessBadge>
-                  </td>
-                  <td>11m 45s</td>
-                </tr>
-              </tbody>
-            </HistoryTable>
+            <div style={{ overflowX: 'auto' }}>
+              <HistoryTable>
+                <thead>
+                  <tr>
+                    <th>Fecha y Hora</th>
+                    <th>Tareas Ejecutadas</th>
+                    <th>Estado</th>
+                    <th>Duración</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  <tr>
+                    <td>06/06/2025 02:00:15</td>
+                    <td>8 tareas</td>
+                    <td>
+                      <SuccessBadge>Exitoso</SuccessBadge>
+                    </td>
+                    <td>12m 34s</td>
+                  </tr>
+                  <tr>
+                    <td>05/06/2025 02:00:12</td>
+                    <td>7 tareas</td>
+                    <td>
+                      <WarningBadge>Con advertencias</WarningBadge>
+                    </td>
+                    <td>15m 22s</td>
+                  </tr>
+                  <tr>
+                    <td>04/06/2025 02:00:08</td>
+                    <td>8 tareas</td>
+                    <td>
+                      <SuccessBadge>Exitoso</SuccessBadge>
+                    </td>
+                    <td>11m 45s</td>
+                  </tr>
+                </tbody>
+              </HistoryTable>
+            </div>
           </HistorySection>
 
           {/* Acciones Rápidas */}

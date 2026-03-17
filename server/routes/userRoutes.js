@@ -12,37 +12,32 @@ const {
   createUser,
   updateUser,
   deleteUser,
-  validateisRuta,
   ActiveInactiveUser,
-  validateuserActive,
   getUserPermissions,
-  getUsersWithRoles,
   updateUserRoles,
   searchUsers,
   getUserStats,
   updateUserSpecificPermissions,
+  getUsersWithRoles,
   getUserAllPermissions,
-  validateUserRoleSystem,
+  validateRoleSystem,
 } = require("../controllers/userController");
 
-// ⭐ IMPORTAR MIDDLEWARE ⭐
+// ⭐ IMPORTAR MIDDLEWARE Y VALIDATORES ⭐
+const { validate } = require("../middlewares/validator");
+const {
+  createUserSchema,
+  updateUserSchema,
+  getUsersSchema,
+  updateRolesSchema
+} = require("../validators/userValidator");
 const {
   verifyToken,
   checkPermission,
-  requireAdmin,
-  checkPermissions,
-  checkUserPermission,
 } = require("../middlewares/authMiddleware");
 
 // ⭐ MIDDLEWARE GLOBAL ⭐
 router.use(verifyToken);
-
-// ⭐ MIDDLEWARE DE DEBUG ⭐
-router.use((req, res, next) => {
-  console.log("🔍 USER ROUTE:", req.method, req.originalUrl);
-  console.log("🔍 User ID:", req.user?.user_id || req.user?._id);
-  next();
-});
 
 // =====================================================
 // ⭐ RUTAS ESPECÍFICAS PRIMERO (ORDEN IMPORTANTE) ⭐
@@ -57,11 +52,10 @@ router.get("/user/permissions", getUserPermissions);
 // GET /api/v1/users/stats - Estadísticas de usuarios
 router.get("/stats", checkPermission("users", "read"), getUserStats);
 
-// GET /api/v1/users/system/validate - Validar sistema de roles
 router.get(
   "/system/validate",
   checkPermission("users", "manage"),
-  validateUserRoleSystem
+  validateRoleSystem
 );
 
 // =====================================================
@@ -72,9 +66,8 @@ router.get(
 router.post("/search", checkPermission("users", "read"), searchUsers);
 
 // POST /api/v1/users/lists - Lista paginada de usuarios
-router.post("/lists", checkPermission("users", "read"), getUsers);
+router.post("/lists", checkPermission("users", "read"), getUsersSchema, validate, getUsers);
 
-// POST /api/v1/users/with-roles - Usuarios con información de roles
 router.post("/with-roles", checkPermission("users", "read"), getUsersWithRoles);
 
 // =====================================================
@@ -86,6 +79,8 @@ router.post(
   "/user/create",
   checkPermission("users", "create"),
   upload.single("avatar"),
+  createUserSchema,
+  validate,
   createUser
 );
 
@@ -94,6 +89,8 @@ router.patch(
   "/user/update/:id",
   checkPermission("users", "update"),
   upload.single("avatar"),
+  updateUserSchema,
+  validate,
   updateUser
 );
 
@@ -116,7 +113,7 @@ router.delete(
 // =====================================================
 
 // PATCH /api/v1/users/:id/roles - Actualizar roles de usuario
-router.patch("/:id/roles", checkPermission("users", "update"), updateUserRoles);
+router.patch("/:id/roles", checkPermission("users", "update"), updateRolesSchema, validate, updateUserRoles);
 
 // POST /api/v1/users/:id/permissions - Actualizar permisos específicos
 router.post(
@@ -125,7 +122,6 @@ router.post(
   updateUserSpecificPermissions
 );
 
-// GET /api/v1/users/:id/all-permissions - Obtener todos los permisos de un usuario
 router.get(
   "/:id/all-permissions",
   checkPermission("users", "read"),
@@ -137,10 +133,10 @@ router.get(
 // =====================================================
 
 // POST /api/v1/users/validate-route - Validar ruta (legacy)
-router.post("/validate-route", validateisRuta);
+// router.post("/validate-route", validateisRuta);
 
 // POST /api/v1/users/validate-user-active - Validar usuario activo (legacy)
-router.post("/validate-user-active", validateuserActive);
+// router.post("/validate-user-active", validateuserActive);
 
 // =====================================================
 // ⭐ MIDDLEWARE DE MANEJO DE ERRORES ⭐

@@ -1,52 +1,34 @@
 const express = require("express");
-const router = express.Router();
 const cancelTransferController = require("../controllers/cancelTransferController");
 const logger = require("../services/logger");
+const { verifyToken, checkPermission } = require("../middlewares/authMiddleware");
+const { validate } = require("../middlewares/validator");
+const { cancelTaskSchema } = require("../validators/transferValidator");
 
-// Middleware para manejo de errores específico para estas rutas
+/**
+ * Middleware para manejo de errores específico para estas rutas
+ */
 const errorHandler = (controllerFn) => async (req, res, next) => {
   try {
     await controllerFn(req, res, next);
   } catch (error) {
-    logger.error(
-      `Error no controlado en ruta de cancelación: ${error.message}`,
-      error
-    );
-
-    // Asegurarse de que siempre envíe una respuesta JSON
-    res.status(500).json({
-      success: false,
-      message: error.message || "Error interno del servidor",
-    });
+    logger.error(`Error no controlado en ruta de cancelación: ${error.message}`, error);
+    res.status(500).json({ success: false, message: error.message || "Error interno del servidor" });
   }
 };
 
-// Rutas para cancelación de tareas individuales
-router.post(
-  "/tasks/:taskId/cancel",
-  errorHandler(cancelTransferController.cancelTransferTask)
-);
+const router = express.Router();
 
-router.get(
-  "/tasks/:taskId/status",
-  errorHandler(cancelTransferController.getTaskCancellationStatus)
-);
+// ⭐ MIDDLEWARE GLOBAL ⭐
+router.use(verifyToken);
+router.post("/tasks/:taskId/cancel", checkPermission("loads", "manage"), cancelTaskSchema, validate, errorHandler(cancelTransferController.cancelTransferTask));
+router.get("/tasks/:taskId/status", checkPermission("loads", "read"), errorHandler(cancelTransferController.getTaskCancellationStatus));
 
 // Rutas para tareas activas y cancelación masiva
-router.get(
-  "/active",
-  errorHandler(cancelTransferController.getActiveCancelableTasks)
-);
+router.get("/active", checkPermission("loads", "read"), errorHandler(cancelTransferController.getActiveCancelableTasks));
+router.post("/cancel-all", checkPermission("loads", "manage"), errorHandler(cancelTransferController.cancelAllTasks));
 
-router.post(
-  "/cancel-all",
-  errorHandler(cancelTransferController.cancelAllTasks)
-);
-
-// Ruta de retrocompatibilidad - Para mantener compatibilidad con el código existente
-router.post(
-  "/transfer/:taskId",
-  errorHandler(cancelTransferController.cancelTransferTask)
-);
+// Ruta de retrocompatibilidad
+router.post("/transfer/:taskId", checkPermission("loads", "manage"), cancelTaskSchema, validate, errorHandler(cancelTransferController.cancelTransferTask));
 
 module.exports = router;

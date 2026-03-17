@@ -9,16 +9,20 @@ import {
   TransferTasks,
   LoadsManagement,
   LoadsResumen,
+  LoadsTasks,
   Statistics,
   DocumentsVisualization,
-  TransferHistoryLogs,
+  ModuleManager,
+  AuditCenter,
+  TraspasoManagement,
   UserManagement,
   RoleManagement,
   ConfigurationPage,
   UserProfile,
-  ModuleManager,
-  LogsPage,
-  TraspasoManagement
+  UniversalDocumentManager,
+  TransferHistory,
+  TransferHistoryLogs,
+  LogsPage
 } from "../index";
 
 // ⭐ COMPONENTE DE LOADING MEJORADO ⭐
@@ -146,6 +150,18 @@ export function AdminRouter() {
       />
 
       <Route
+        path="/universal-manager"
+        element={
+          <ProtectedRoute resource="documents" action="read">
+            <LayoutWrapper
+              component={UniversalDocumentManager}
+              title="Gestión de Documentos"
+            />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
         path="/loads/cargas"
         element={
           <ProtectedRoute resource="loads" action="read">
@@ -207,25 +223,18 @@ export function AdminRouter() {
       />
 
       <Route
-        path="/historys"
+        path="/history"
         element={
           <ProtectedRoute resource="history" action="read">
             <LayoutWrapper
-              component={TransferHistoryLogs}
+              component={AuditCenter}
               title="Historial de Transferencias"
             />
           </ProtectedRoute>
         }
       />
 
-      <Route
-        path="/logs"
-        element={
-          <ProtectedRoute resource="logs" action="read">
-            <LayoutWrapper component={LogsPage} title="Logs" />
-          </ProtectedRoute>
-        }
-      />
+      {/* ⭐ RUTAS DE ANÁLISIS - LOGS ELIMINADO (DUPLICADO CON HISTORY) ⭐ */}
 
       {/* ⭐ RUTAS DE ADMINISTRACIÓN ⭐ */}
       <Route
@@ -271,6 +280,7 @@ export function AdminRouter() {
             <LayoutWrapper
               component={ConfigurationPage}
               title="Configuraciones"
+              subtitle="Panel central para la gestión técnica y operativa del ecosistema logístico"
             />
           </ProtectedRoute>
         }
@@ -280,6 +290,34 @@ export function AdminRouter() {
       <Route
         path="/perfil"
         element={<LayoutWrapper component={UserProfile} title="Mi Perfil" />}
+      />
+
+      {/* ⭐ RUTAS DE HISTORIAL Y LOGS ⭐ */}
+      <Route
+        path="/transfer-history"
+        element={
+          <ProtectedRoute resource="history" action="read">
+            <LayoutWrapper component={TransferHistory} title="Historial de Transferencias" />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/transfer-history/logs"
+        element={
+          <ProtectedRoute resource="history" action="read">
+            <LayoutWrapper component={TransferHistoryLogs} title="Logs de Transferencias" />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/system-logs"
+        element={
+          <ProtectedRoute resource="logs" action="read" requireAdmin>
+            <LayoutWrapper component={LogsPage} title="Logs del Sistema" />
+          </ProtectedRoute>
+        }
       />
 
       {/* ⭐ RUTA CATCH-ALL ⭐ */}
