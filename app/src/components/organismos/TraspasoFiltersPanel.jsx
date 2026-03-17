@@ -1,357 +1,201 @@
-// src/components/organismos/TraspasoFiltersPanel.jsx
-import React, { useState, useEffect, useCallback } from "react";
+import React, { useState, useEffect } from "react";
 import styled from "styled-components";
-import {
-  FilterInput,
-  MultiSelectInput,
-  DateRangeInput,
-  LoadsButton,
-} from "../../index";
+import { FaSearch, FaRedo, FaFilter, FaChevronDown, FaChevronUp } from "react-icons/fa";
+import { Button } from "../index";
 
-import { FaSearch, FaRedo, FaFilter } from "react-icons/fa";
-
-// 🔄 Usar el mismo estilo que FiltersPanel de LoadsManagement
-const FiltersContainer = styled.div`
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  margin-bottom: 24px;
+const GlassCard = styled.div`
+  background: ${({ theme }) => theme.cardBg};
+  backdrop-filter: blur(10px);
+  border: 1px solid ${({ theme }) => theme.border};
+  border-radius: 20px;
   overflow: hidden;
+  margin-bottom: 24px;
+  box-shadow: ${({ theme }) => theme.shadows.soft};
 `;
 
-const FiltersHeader = styled.div`
-  padding: 16px 20px;
-  border-bottom: 1px solid #e5e7eb;
+const Header = styled.div`
+  padding: 16px 24px;
   display: flex;
-  justify-content: between;
+  justify-content: space-between;
   align-items: center;
-  background: #f9fafb;
-
-  h3 {
-    margin: 0;
-    font-size: 16px;
-    font-weight: 600;
-    color: #374151;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-
-  .filter-count {
-    background: #3b82f6;
-    color: white;
-    padding: 2px 8px;
-    border-radius: 12px;
-    font-size: 12px;
-    font-weight: 500;
-    margin-left: 8px;
-  }
+  cursor: pointer;
+  border-bottom: ${props => props.expanded ? `1px solid ${props.theme.border}40` : "none"};
+  background: ${({ theme }) => theme.bg2}20;
 `;
 
-const FiltersBody = styled.div`
-  padding: 20px;
+const Title = styled.h3`
+  margin: 0;
+  font-size: 15px;
+  font-weight: 700;
+  color: ${({ theme }) => theme.titleColor};
+  display: flex;
+  align-items: center;
+  gap: 10px;
 `;
 
-const FiltersGrid = styled.div`
+const Content = styled.div`
+  padding: 24px;
+  display: ${props => props.expanded ? "block" : "none"};
+`;
+
+const Grid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 16px;
-  margin-bottom: 20px;
-
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-  }
+  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
+  gap: 20px;
+  margin-bottom: 24px;
 `;
 
-const FilterGroup = styled.div`
+const Field = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 4px;
+  gap: 8px;
 `;
 
-const FilterLabel = styled.label`
+const Label = styled.label`
+  font-size: 13px;
+  font-weight: 700;
+  color: ${({ theme }) => theme.textSecondary};
+  opacity: 0.9;
+`;
+
+const Input = styled.input`
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.border};
+  background: ${({ theme }) => theme.inputBg};
+  color: ${({ theme }) => theme.text};
   font-size: 14px;
-  font-weight: 500;
-  color: #374151;
-  margin-bottom: 4px;
+  transition: all 0.2s;
+
+  &:focus {
+    outline: none;
+    border-color: ${({ theme }) => theme.primary};
+    box-shadow: 0 0 0 3px ${({ theme }) => theme.primary}20;
+  }
 `;
 
-const ActionsContainer = styled.div`
+const Select = styled.select`
+  padding: 10px 14px;
+  border-radius: 10px;
+  border: 1px solid ${({ theme }) => theme.border};
+  background: ${({ theme }) => theme.inputBg};
+  color: ${({ theme }) => theme.text};
+  font-size: 14px;
+`;
+
+const Actions = styled.div`
   display: flex;
-  gap: 12px;
   justify-content: flex-end;
-  align-items: center;
-  padding-top: 16px;
-  border-top: 1px solid #e5e7eb;
-
-  @media (max-width: 768px) {
-    justify-content: stretch;
-
-    button {
-      flex: 1;
-    }
-  }
+  gap: 12px;
+  padding-top: 20px;
+  border-top: 1px solid ${({ theme }) => theme.border}40;
 `;
 
 const QuickFilters = styled.div`
   display: flex;
   gap: 8px;
-  margin-bottom: 16px;
+  margin-bottom: 20px;
   flex-wrap: wrap;
 `;
 
-const QuickFilterButton = styled.button`
-  padding: 6px 12px;
-  border: 1px solid #d1d5db;
-  border-radius: 6px;
-  background: ${(props) => (props.active ? "#3b82f6" : "white")};
-  color: ${(props) => (props.active ? "white" : "#374151")};
+const Badge = styled.button`
+  padding: 8px 16px;
+  border-radius: 10px;
   font-size: 12px;
-  font-weight: 500;
+  font-weight: 700;
+  border: 1px solid ${props => props.active ? props.theme.primary : props.theme.border};
+  background: ${props => props.active ? props.theme.primary : props.theme.bg2}40;
+  color: ${props => props.active ? "white" : props.theme.textSecondary};
   cursor: pointer;
   transition: all 0.2s;
 
   &:hover {
-    background: ${(props) => (props.active ? "#2563eb" : "#f3f4f6")};
+    background: ${props => props.active ? props.theme.primaryDark : props.theme.bg2};
+    color: ${props => props.active ? "white" : props.theme.primary};
   }
 `;
 
-export const TraspasoFiltersPanel = ({
-  filters,
-  onFiltersChange,
-  onReset,
-  onSearch,
-  loading = false,
-  warehouses = [],
-  loadOptions = [],
-}) => {
-  const [localFilters, setLocalFilters] = useState(filters);
+export const TraspasoFiltersPanel = ({ filters, onFiltersChange, onReset, onSearch, loading, metadata }) => {
   const [isExpanded, setIsExpanded] = useState(true);
+  // No necesitamos estado local si queremos reactividad pura, 
+  // pero mantendremos el patrón de 'apply' para evitar peticiones excesivas
+  // si el usuario así lo prefiere. Sin embargo, para solucionar el bug reportado,
+  // dispararemos el cambio inmediatamente.
 
-  // Sincronizar con props cuando cambien
-  useEffect(() => {
-    setLocalFilters(filters);
-  }, [filters]);
+  const handleChange = (e) => {
+    const { name, value } = e.target;
+    const newFilters = { ...filters, [name]: value };
+    onFiltersChange(newFilters);
+    // disparar búsqueda automática al cambiar ciertos filtros (loadId podría necesitar debounce)
+    if (name !== "loadId") {
+      onSearch();
+    }
+  };
 
-  // Opciones de estado
-  const statusOptions = [
-    { value: "all", label: "Todos los estados" },
-    { value: "PENDING", label: "Pendientes" },
-    { value: "PROCESSING", label: "Procesando" },
-    { value: "COMPLETED", label: "Completados" },
-    { value: "ERROR", label: "Con errores" },
-    { value: "CANCELLED", label: "Cancelados" },
-  ];
-
-  // Opciones de bodegas
-  const warehouseOptions = [
-    { value: "all", label: "Todas las bodegas" },
-    ...warehouses.map((warehouse) => ({
-      value: warehouse.code,
-      label: `${warehouse.code} - ${warehouse.name}`,
-    })),
-  ];
-
-  // Manejador de cambios en filtros locales
-  const handleLocalFilterChange = useCallback((filterName, value) => {
-    setLocalFilters((prev) => ({
-      ...prev,
-      [filterName]: value,
-    }));
-  }, []);
-
-  // Aplicar filtros
-  const handleApplyFilters = useCallback(() => {
-    onFiltersChange(localFilters);
-    onSearch?.();
-  }, [localFilters, onFiltersChange, onSearch]);
-
-  // Resetear filtros
-  const handleReset = useCallback(() => {
-    const resetFilters = {
-      dateFrom: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000)
-        .toISOString()
-        .split("T")[0],
-      dateTo: new Date().toISOString().split("T")[0],
-      status: "all",
-      sourceWarehouse: "all",
-      targetWarehouse: "all",
-      loadId: "",
-    };
-    setLocalFilters(resetFilters);
-    onReset?.(resetFilters);
-  }, [onReset]);
-
-  // Filtros rápidos
-  const quickFilters = [
-    {
-      label: "Hoy",
-      action: () => {
-        const today = new Date().toISOString().split("T")[0];
-        handleLocalFilterChange("dateFrom", today);
-        handleLocalFilterChange("dateTo", today);
-      },
-    },
-    {
-      label: "Esta semana",
-      action: () => {
-        const today = new Date();
-        const weekStart = new Date(
-          today.setDate(today.getDate() - today.getDay())
-        );
-        handleLocalFilterChange(
-          "dateFrom",
-          weekStart.toISOString().split("T")[0]
-        );
-        handleLocalFilterChange(
-          "dateTo",
-          new Date().toISOString().split("T")[0]
-        );
-      },
-    },
-    {
-      label: "Solo pendientes",
-      action: () => handleLocalFilterChange("status", "PENDING"),
-    },
-    {
-      label: "Solo errores",
-      action: () => handleLocalFilterChange("status", "ERROR"),
-    },
-  ];
-
-  // Contar filtros activos
-  const activeFiltersCount = Object.entries(localFilters).reduce(
-    (count, [key, value]) => {
-      if (key === "dateFrom" || key === "dateTo") return count;
-      if (value && value !== "all" && value !== "") return count + 1;
-      return count;
-    },
-    0
-  );
+  const setPeriod = (days) => {
+    const to = new Date().toISOString().split("T")[0];
+    const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const newF = { ...filters, dateFrom: from, dateTo: to };
+    onFiltersChange(newF);
+    onSearch();
+  };
 
   return (
-    <FiltersContainer>
-      <FiltersHeader>
-        <h3>
-          <FaFilter />
-          Filtros de Búsqueda
-          {activeFiltersCount > 0 && (
-            <span className="filter-count">{activeFiltersCount}</span>
-          )}
-        </h3>
-        <LoadsButton
-          variant="secondary"
-          size="small"
-          onClick={() => setIsExpanded(!isExpanded)}
-        >
-          {isExpanded ? "Contraer" : "Expandir"}
-        </LoadsButton>
-      </FiltersHeader>
+    <GlassCard>
+      <Header expanded={isExpanded} onClick={() => setIsExpanded(!isExpanded)}>
+        <Title><FaFilter /> Filtros de Auditoría</Title>
+        {isExpanded ? <FaChevronUp /> : <FaChevronDown />}
+      </Header>
 
-      {isExpanded && (
-        <FiltersBody>
-          {/* Filtros rápidos */}
-          <QuickFilters>
-            {quickFilters.map((filter, index) => (
-              <QuickFilterButton
-                key={index}
-                onClick={filter.action}
-                type="button"
-              >
-                {filter.label}
-              </QuickFilterButton>
-            ))}
-          </QuickFilters>
+      <Content expanded={isExpanded}>
+        <QuickFilters>
+          <Badge active={false} onClick={() => setPeriod(0)}>Hoy</Badge>
+          <Badge active={false} onClick={() => setPeriod(7)}>Última Semana</Badge>
+          <Badge active={false} onClick={() => setPeriod(30)}>Último Mes</Badge>
+        </QuickFilters>
 
-          <FiltersGrid>
-            {/* Rango de fechas */}
-            <FilterGroup>
-              <FilterLabel>Período de Transferencia</FilterLabel>
-              <DateRangeInput
-                startDate={localFilters.dateFrom}
-                endDate={localFilters.dateTo}
-                onStartDateChange={(date) =>
-                  handleLocalFilterChange("dateFrom", date)
-                }
-                onEndDateChange={(date) =>
-                  handleLocalFilterChange("dateTo", date)
-                }
-                maxDate={new Date().toISOString().split("T")[0]}
-              />
-            </FilterGroup>
+        <Grid>
+          <Field>
+            <Label>Load ID / Documento</Label>
+            <Input
+              name="loadId"
+              placeholder="Ej: 20240310..."
+              value={filters.loadId || ""}
+              onChange={handleChange}
+            />
+          </Field>
 
-            {/* Estado */}
-            <FilterGroup>
-              <FilterLabel>Estado del Traspaso</FilterLabel>
-              <FilterInput
-                type="select"
-                value={localFilters.status}
-                onChange={(value) => handleLocalFilterChange("status", value)}
-                options={statusOptions}
-                placeholder="Seleccionar estado..."
-              />
-            </FilterGroup>
+          <Field>
+            <Label>Estado</Label>
+            <Select name="status" value={filters.status || "all"} onChange={handleChange}>
+              <option value="all">Todos</option>
+              <option value="completed">Completados</option>
+              <option value="pending">Pendientes</option>
+              <option value="processing">Procesando</option>
+              <option value="failed">Fallidos</option>
+            </Select>
+          </Field>
 
-            {/* Bodega origen */}
-            <FilterGroup>
-              <FilterLabel>Bodega de Origen</FilterLabel>
-              <FilterInput
-                type="select"
-                value={localFilters.sourceWarehouse}
-                onChange={(value) =>
-                  handleLocalFilterChange("sourceWarehouse", value)
-                }
-                options={warehouseOptions}
-                placeholder="Seleccionar bodega origen..."
-              />
-            </FilterGroup>
+          <Field>
+            <Label>Desde</Label>
+            <Input type="date" name="dateFrom" value={filters.dateFrom || ""} onChange={handleChange} />
+          </Field>
 
-            {/* Bodega destino */}
-            <FilterGroup>
-              <FilterLabel>Bodega de Destino</FilterLabel>
-              <FilterInput
-                type="select"
-                value={localFilters.targetWarehouse}
-                onChange={(value) =>
-                  handleLocalFilterChange("targetWarehouse", value)
-                }
-                options={warehouseOptions}
-                placeholder="Seleccionar bodega destino..."
-              />
-            </FilterGroup>
+          <Field>
+            <Label>Hasta</Label>
+            <Input type="date" name="dateTo" value={filters.dateTo || ""} onChange={handleChange} />
+          </Field>
+        </Grid>
 
-            {/* Load ID */}
-            <FilterGroup>
-              <FilterLabel>Load ID</FilterLabel>
-              <FilterInput
-                type="text"
-                value={localFilters.loadId}
-                onChange={(value) => handleLocalFilterChange("loadId", value)}
-                placeholder="Buscar por Load ID..."
-              />
-            </FilterGroup>
-          </FiltersGrid>
-
-          <ActionsContainer>
-            <LoadsButton
-              variant="secondary"
-              onClick={handleReset}
-              disabled={loading}
-            >
-              <FaRedo /> Limpiar
-            </LoadsButton>
-
-            <LoadsButton
-              variant="primary"
-              onClick={handleApplyFilters}
-              loading={loading}
-              disabled={loading}
-            >
-              <FaSearch /> Buscar Traspasos
-            </LoadsButton>
-          </ActionsContainer>
-        </FiltersBody>
-      )}
-    </FiltersContainer>
+        <Actions>
+          <Button variant="outline" onClick={onReset} disabled={loading}>
+            <FaRedo /> Limpiar
+          </Button>
+          <Button variant="primary" onClick={onSearch} loading={loading}>
+            <FaSearch /> Filtrar Traspasos
+          </Button>
+        </Actions>
+      </Content>
+    </GlassCard>
   );
 };

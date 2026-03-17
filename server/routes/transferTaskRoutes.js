@@ -24,229 +24,90 @@ const {
   getTaskLinkingInfo,
   executeLinkedGroup,
 } = require("../controllers/transferTaskController");
+const { verifyToken, checkPermission } = require("../middlewares/authMiddleware");
+const { validate } = require("../middlewares/validator");
+const {
+  upsertTransferTaskSchema,
+  executeTransferTaskSchema,
+  runTaskSchema,
+  insertOrdersSchema,
+  insertLoadsSchema,
+  insertTrapasoSchema,
+  updateConfigSchema,
+  getTransferHistorySchema,
+  updateEntityDataSchema,
+} = require("../validators/transferValidator");
 
 const router = express.Router();
 
-// ===== MIDDLEWARE DE LOGGING PARA DEBUG =====
-router.use((req, res, next) => {
-  console.log(
-    `[TransferTaskRoutes] ${req.method} ${req.path} - Body:`,
-    Object.keys(req.body || {})
-  );
-  next();
-});
-
-// ===== RUTAS ESPECÍFICAS PRIMERO (ORDEN CRÍTICO) =====
+// ⭐ MIDDLEWARE GLOBAL ⭐
+router.use(verifyToken);
 
 /**
  * Rutas de configuración
  */
-// GET /api/v1/tasks/config/horas
-router.get("/config/horas", getConfigurarHora);
-
-// POST /api/v1/tasks/config/horas
-router.post("/config/horas", updateConfig);
-
-// GET /api/v1/tasks/config/task-status
-router.get("/config/task-status", getTaskStatus);
+router.get("/config/horas", checkPermission("loads", "read"), getConfigurarHora);
+router.post("/config/horas", checkPermission("loads", "manage"), updateConfigSchema, validate, updateConfig);
+router.get("/config/task-status", checkPermission("loads", "read"), getTaskStatus);
 
 /**
  * Rutas de transferencia y manipulación de datos
  */
-// POST /api/v1/tasks/transfer/insertOrders
-router.post("/transfer/insertOrders", insertOrders);
-
-// POST /api/v1/tasks/transfer/insertLoads
-router.post("/transfer/insertLoads", insertLoadsDetail);
-
-// POST /api/v1/tasks/transfer/insertTrapaso
-router.post("/transfer/insertTrapaso", insertLoadsTrapaso);
-
-// GET /api/v1/tasks/transfer/vendedores
-router.get("/transfer/vendedores", getVendedores);
+router.post("/transfer/insertOrders", checkPermission("loads", "create"), insertOrdersSchema, validate, insertOrders);
+router.post("/transfer/insertLoads", checkPermission("loads", "create"), insertLoadsSchema, validate, insertLoadsDetail);
+router.post("/transfer/insertTrapaso", checkPermission("loads", "create"), insertTrapasoSchema, validate, insertLoadsTrapaso);
+router.get("/transfer/vendedores", checkPermission("loads", "read"), getVendedores);
 
 /**
  * Rutas de historial y monitoreo
  */
-// GET /api/v1/tasks/history/logs
-router.get("/history/logs", getTransferHistory);
-
-// GET /api/v1/tasks/server-status/server
-router.get("/server-status/server", checkServerStatus);
-
-// GET /api/v1/tasks/task-summaries/recent
-router.get("/task-summaries/recent", getTransferSummaries);
+router.get("/history/logs", checkPermission("loads", "read"), getTransferHistorySchema, validate, getTransferHistory);
+router.get("/server-status/server", checkPermission("loads", "read"), checkServerStatus);
+router.get("/task-summaries/recent", checkPermission("loads", "read"), getTransferSummaries);
 
 /**
  * Rutas de consecutivos y carga
  */
-// GET /api/v1/tasks/load/lastLoad
-router.get("/load/lastLoad", getLoadConsecutiveMongo);
+router.get("/load/lastLoad", checkPermission("loads", "read"), getLoadConsecutiveMongo);
 
 /**
  * Rutas de mapping y datos de origen
  */
-// GET /api/v1/tasks/source-data/:mappingId/:documentId
-router.get("/source-data/:mappingId/:documentId", getSourceDataByMapping);
-
-// POST /api/v1/tasks/update-entity-data
-router.post("/update-entity-data", updateEntityData);
+router.get("/source-data/:mappingId/:documentId", checkPermission("loads", "read"), getSourceDataByMapping);
+router.post("/update-entity-data", checkPermission("loads", "update"), updateEntityDataSchema, validate, updateEntityData);
 
 /**
- * Rutas de vinculación de tareas (antes de las rutas con :taskId)
+ * Rutas de vinculación de tareas
  */
-// GET /api/v1/tasks/linking-info/:taskId
-router.get("/linking-info/:taskId", getTaskLinkingInfo);
-
-// POST /api/v1/tasks/execute-linked-group/:taskId
-router.post("/execute-linked-group/:taskId", executeLinkedGroup);
+router.get("/linking-info/:taskId", checkPermission("loads", "read"), getTaskLinkingInfo);
+router.post("/execute-linked-group/:taskId", checkPermission("loads", "create"), executeLinkedGroup);
 
 /**
- * Rutas de ejecución y control de tareas (CRÍTICAS - ANTES DE RUTAS GENÉRICAS)
+ * Rutas de ejecución y control de tareas
  */
-// POST /api/v1/tasks/execute/:taskId
-router.post(
-  "/execute/:taskId",
-  (req, res, next) => {
-    console.log(`[EXECUTE] Ejecutando tarea con ID: ${req.params.taskId}`);
-    console.log(`[EXECUTE] Headers:`, req.headers);
-    console.log(`[EXECUTE] Body:`, req.body);
-    next();
-  },
-  executeTransferTask
-);
-
-// POST /api/v1/tasks/cancel/:taskId
-router.post(
-  "/cancel/:taskId",
-  (req, res, next) => {
-    console.log(`[CANCEL] Cancelando tarea con ID: ${req.params.taskId}`);
-    next();
-  },
-  cancelTransferTask
-);
-
-// GET /api/v1/tasks/task-history/:taskId
-router.get(
-  "/task-history/:taskId",
-  (req, res, next) => {
-    console.log(
-      `[HISTORY] Obteniendo historial de tarea: ${req.params.taskId}`
-    );
-    next();
-  },
-  getTaskExecutionHistory
-);
+router.post("/execute/:taskId", checkPermission("loads", "create"), executeTransferTaskSchema, validate, executeTransferTask);
+router.post("/cancel/:taskId", checkPermission("loads", "manage"), cancelTransferTask);
+router.get("/task-history/:taskId", checkPermission("loads", "read"), getTaskExecutionHistory);
 
 /**
- * Rutas de run-loads (específicas con parámetro de nombre)
+ * Rutas de ejecución por nombre
  */
-// POST /api/v1/tasks/run-loads/:taskName
-router.post(
-  "/run-loads/:taskName",
-  (req, res, next) => {
-    console.log(
-      `[RUN-LOADS] Ejecutando run-loads para: ${req.params.taskName}`
-    );
-    next();
-  },
-  runTask
-);
+router.post("/run-loads/:taskName", checkPermission("loads", "create"), runTaskSchema, validate, runTask);
 
 /**
  * Rutas de administración de tareas
  */
-// POST /api/v1/tasks/addEdit
-router.post(
-  "/accion/addEdit",
-  (req, res, next) => {
-    console.log(
-      `[ADD-EDIT] Creando/editando tarea:`,
-      req.body.name || "Sin nombre"
-    );
-    next();
-  },
-  upsertTransferTaskController
-);
-
-// ===== RUTAS GENERALES (DEBEN IR AL FINAL) =====
+router.post("/accion/addEdit", checkPermission("loads", "manage"), upsertTransferTaskSchema, validate, upsertTransferTaskController);
 
 /**
  * Rutas de consulta general
  */
-// GET /api/v1/tasks/
-router.get(
-  "/accion",
-  (req, res, next) => {
-    console.log(`[GET-ALL] Obteniendo todas las tareas`);
-    next();
-  },
-  getTransferTasks
-);
+router.get("/accion", checkPermission("loads", "read"), getTransferTasks);
 
 /**
- * Rutas con parámetros genéricos (SIEMPRE AL FINAL)
- * Estas rutas capturan cualquier cosa, por eso van al final
+ * Rutas con parámetros genéricos (AL FINAL)
  */
-// GET /api/v1/tasks/:name
-router.get(
-  "/accion/:name",
-  (req, res, next) => {
-    console.log(
-      `[GET-BY-NAME] Obteniendo tarea por nombre: ${req.params.name}`
-    );
-    next();
-  },
-  getTransferTask
-);
-
-// DELETE /api/v1/tasks/:name
-router.delete(
-  "/accion/:name",
-  (req, res, next) => {
-    console.log(`[DELETE] Eliminando tarea: ${req.params.name}`);
-    next();
-  },
-  deleteTransferTask
-);
-
-// ===== MIDDLEWARE DE MANEJO DE ERRORES =====
-router.use((err, req, res, next) => {
-  console.error(
-    `[TransferTaskRoutes ERROR] ${req.method} ${req.path}:`,
-    err.message
-  );
-  console.error(`[TransferTaskRoutes ERROR] Stack:`, err.stack);
-
-  res.status(err.status || 500).json({
-    success: false,
-    message: err.message || "Error interno en rutas de tareas",
-    path: req.path,
-    method: req.method,
-    timestamp: new Date().toISOString(),
-  });
-});
-
-// ===== MIDDLEWARE PARA RUTAS NO ENCONTRADAS =====
-router.use("*", (req, res) => {
-  console.log(
-    `[TransferTaskRoutes 404] Ruta no encontrada: ${req.method} ${req.originalUrl}`
-  );
-
-  res.status(404).json({
-    success: false,
-    message: "Ruta no encontrada en transfer tasks",
-    path: req.originalUrl,
-    method: req.method,
-    availableRoutes: {
-      tasks: "GET /",
-      execute: "POST /execute/:taskId",
-      cancel: "POST /cancel/:taskId",
-      config: "GET /config/horas",
-      history: "GET /task-history/:taskId",
-    },
-    timestamp: new Date().toISOString(),
-  });
-});
+router.get("/accion/:name", checkPermission("loads", "read"), getTransferTask);
+router.delete("/accion/:name", checkPermission("loads", "delete"), deleteTransferTask);
 
 module.exports = router;

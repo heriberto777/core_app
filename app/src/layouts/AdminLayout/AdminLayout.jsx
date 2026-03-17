@@ -272,19 +272,16 @@ const SidebarWrapper = styled.div`
 
 const MainContent = styled.main`
   grid-area: content;
-  display: grid;
-  grid-template-areas:
-    "title-area"
-    "actions-area"
-    "main-content";
-  grid-template-rows: auto auto 1fr;
-  overflow: hidden;
+  display: flex;
+  flex-direction: column;
   background-color: ${({ theme }) => theme.contentBg || theme.bg};
+  min-height: 0;
+  overflow: visible;
 `;
 
 const TitleSection = styled.section`
-  grid-area: title-area;
   padding: 1.5rem;
+  flex-shrink: 0;
   border-bottom: 1px solid ${({ theme }) => theme.border};
   background-color: ${({ theme }) => theme.titleBg || "transparent"};
 
@@ -326,8 +323,8 @@ const ToolbarContainer = styled.div`
 `;
 
 const ActionsSection = styled.section`
-  grid-area: actions-area;
   padding: 0 1.5rem 1rem 1.5rem;
+  flex-shrink: 0;
 
   @media (max-width: 768px) {
     padding: 0 1rem 1rem 1rem;
@@ -339,8 +336,7 @@ const ActionsContainer = styled.div`
   flex-direction: column;
   gap: 1rem;
   width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
+  margin: 0;
 
   @media ${Device.tablet} {
     flex-direction: row;
@@ -350,9 +346,11 @@ const ActionsContainer = styled.div`
 `;
 
 const ContentSection = styled.section`
-  grid-area: main-content;
+  flex: 1;
   overflow: auto;
-  padding: 0 1.5rem 1.5rem 1.5rem;
+  padding: 1rem;
+  display: flex;
+  flex-direction: column;
 
   @media (max-width: 768px) {
     padding: 0 1rem 1rem 1rem;

@@ -21,36 +21,41 @@ class AppBootstrap {
    * Inicializa todos los servicios de la aplicación
    */
   async initialize() {
+    if (this.initialized) {
+      logger.info("ℹ️ AppBootstrap ya está inicializado, saltando...");
+      return { success: true, message: "Ya inicializado" };
+    }
+
     try {
       this.initialized = true;
       logger.info("🚀 Iniciando servicios de la aplicación...");
 
-      // ✅ 1. INICIALIZAR CONNECTIONCENTRALSERVICE PRIMERO
+      // ✅ 1. INICIALIZAR MONGODB (CAPA BASE)
       try {
-        logger.info("🔌 Inicializando servicio de conexiones...");
-        await DatabaseServiceAdapter.initialize();
-        this.state.connectionService = true;
-        logger.info("✅ Servicio de conexiones inicializado");
-      } catch (error) {
-        logger.error("❌ Error inicializando ConnectionCentralService:", error);
-        this.state.connectionService = false;
-        throw error;
-      }
-
-      // 2. Inicializar MongoDB
-      try {
-        logger.info("📊 Conectando a MongoDB...");
+        logger.info("📊 Asegurando conexión a MongoDB...");
         await MongoDbService.connect();
 
         if (MongoDbService.isConnected()) {
           this.state.mongodb = true;
-          logger.info("✅ MongoDB conectado correctamente");
+          logger.info("✅ MongoDB habilitado");
         } else {
-          throw new Error("MongoDB no se conectó correctamente");
+          throw new Error("MongoDB no está disponible");
         }
       } catch (error) {
-        logger.error("❌ Error conectando a MongoDB:", error);
+        logger.error("❌ Fallo crítico en base de datos (MongoDB):", error);
         this.state.mongodb = false;
+        throw error;
+      }
+
+      // ✅ 2. INICIALIZAR SERVICIO DE CONEXIONES SQL
+      try {
+        logger.info("🔌 Inicializando pool de conexiones SQL...");
+        await DatabaseServiceAdapter.initialize();
+        this.state.connectionService = true;
+        logger.info("✅ Servicio de conexiones SQL listo");
+      } catch (error) {
+        logger.error("❌ Error inicializando pools SQL:", error);
+        this.state.connectionService = false;
         throw error;
       }
 

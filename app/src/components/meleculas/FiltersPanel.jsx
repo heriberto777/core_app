@@ -151,15 +151,13 @@ export function FiltersPanel({
 
 
   // Map sellers to options for the select input
- const sellerOptions = [
-   { value: "all", label: "Todos los vendedores" },
-   ...sellers
-     .filter((seller) => seller.isVendedor === "Si")
-     .map((seller) => ({
-       value: seller.code,
-       label: seller.name,
-     })),
- ];
+  const sellerOptions = [
+    { value: "all", label: "Todos los vendedores" },
+    ...sellers.map((seller) => ({
+      value: seller.code,
+      label: seller.name,
+    })),
+  ];
 
 
 

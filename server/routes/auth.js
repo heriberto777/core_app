@@ -10,11 +10,13 @@ const {
 } = require("../controllers/auth");
 
 const { verifyToken } = require("../middlewares/authMiddleware");
+const { validate } = require("../middlewares/validator");
+const { loginSchema, registerSchema, refreshTokenSchema } = require("../validators/authValidator");
 
 // Rutas públicas
-router.post("/login", login);
-router.post("/register", upload.single("avatar"), register);
-router.post("/refresh_access_token", refreshAccessToken);
+router.post("/login", loginSchema, validate, login);
+router.post("/register", upload.single("avatar"), registerSchema, validate, register);
+router.post("/refresh_access_token", refreshTokenSchema, validate, refreshAccessToken);
 
 // Rutas protegidas
 router.get("/me/permissions", verifyToken, checkUserPermissions);

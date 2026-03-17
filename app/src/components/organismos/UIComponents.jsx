@@ -16,25 +16,25 @@ export const Card = styled.div`
   overflow: hidden;
   border-left: 4px solid
     ${(props) =>
-      props.variant === "danger"
-        ? "#dc3545"
-        : props.variant === "warning"
+    props.variant === "danger"
+      ? "#dc3545"
+      : props.variant === "warning"
         ? "#ffc107"
         : props.variant === "info"
-        ? "#17a2b8"
-        : props.variant === "success"
-        ? "#28a745"
-        : props.accent
-        ? props.accent
-        : props.theme.primary || "#007bff"};
+          ? "#17a2b8"
+          : props.variant === "success"
+            ? "#28a745"
+            : props.accent
+              ? props.accent
+              : props.theme.primary || "#007bff"};
   transition: all 0.2s;
   opacity: ${(props) => (props.disabled ? 0.7 : 1)};
 
   &:hover {
     box-shadow: ${(props) =>
-      props.interactive
-        ? "0 6px 12px rgba(0, 0, 0, 0.15)"
-        : "0 4px 6px rgba(0, 0, 0, 0.1)"};
+    props.interactive
+      ? "0 6px 12px rgba(0, 0, 0, 0.15)"
+      : "0 4px 6px rgba(0, 0, 0, 0.1)"};
     transform: ${(props) => (props.interactive ? "translateY(-2px)" : "none")};
   }
 `;
@@ -82,8 +82,8 @@ export const GridContainer = styled.div`
 
   @media (max-width: 992px) {
     grid-template-columns: ${(props) =>
-      props.responsiveColumns?.lg ||
-      (props.columns > 2 ? "repeat(2, 1fr)" : "1fr")};
+    props.responsiveColumns?.lg ||
+    (props.columns > 2 ? "repeat(2, 1fr)" : "1fr")};
   }
 
   @media (max-width: 768px) {
@@ -93,7 +93,7 @@ export const GridContainer = styled.div`
 
 // Botones y Acciones
 
-export const Button = styled.button`
+export const UIButton = styled.button`
   background-color: ${(props) => {
     if (props.variant === "primary") return props.theme.primary || "#007bff";
     if (props.variant === "secondary")
@@ -142,7 +142,7 @@ export const ButtonGroup = styled.div`
   }
 `;
 
-export const ActionButton = styled(Button)`
+export const ActionButton = styled(UIButton)`
   padding: 8px 12px;
 `;
 
@@ -170,9 +170,94 @@ export const IconButton = styled.button`
   }
 `;
 
+import ReactDOM from "react-dom";
+
+export const Modal = ({ children, isOpen, onClose, maxWidth }) => {
+  if (!isOpen) return null;
+
+  return ReactDOM.createPortal(
+    <ModalOverlay onClick={onClose}>
+      <ModalContent maxWidth={maxWidth} onClick={(e) => e.stopPropagation()}>
+        {children}
+      </ModalContent>
+    </ModalOverlay>,
+    document.body
+  );
+};
+
+const ModalOverlay = styled.div`
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background-color: rgba(0, 0, 0, 0.6);
+  backdrop-filter: blur(4px);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 9999;
+`;
+
+export const ModalContent = styled.div`
+  background-color: ${({ theme }) => theme.cardBg || "#fff"};
+  border-radius: 16px;
+  padding: 0;
+  max-width: ${(props) => props.maxWidth || "500px"};
+  width: 95%;
+  max-height: 90vh;
+  overflow-y: auto;
+  position: relative;
+  box-shadow: 0 20px 50px rgba(0,0,0,0.3);
+  border: 1px solid ${({ theme }) => theme.border}40;
+
+  /* Custom Scrollbar Premium */
+  &::-webkit-scrollbar {
+    width: 6px;
+    height: 6px;
+  }
+  &::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  &::-webkit-scrollbar-thumb {
+    background: ${({ theme }) => theme.border};
+    border-radius: 10px;
+  }
+  &::-webkit-scrollbar-thumb:hover {
+    background: ${({ theme }) => theme.primary}80;
+  }
+`;
+
+export const ModalHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 15px;
+  padding-bottom: 10px;
+  border-bottom: 1px solid ${({ theme }) => theme.border || "#ccc"};
+`;
+
+export const ModalTitle = styled.h2`
+  margin: 0;
+  font-size: 18px;
+  color: ${({ theme }) => theme.text || "#333"};
+`;
+
+export const ModalBody = styled.div`
+  margin-bottom: 15px;
+`;
+
+export const ModalFooter = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  gap: 10px;
+  padding-top: 15px;
+  border-top: 1px solid ${({ theme }) => theme.border || "#ccc"};
+`;
+
 // Inputs y Forms
 
-export const Input = styled.input`
+export const UIInput = styled.input`
   padding: 10px 15px;
   border: 1px solid ${({ theme }) => theme.border || "#ccc"};
   border-radius: 4px;
@@ -265,11 +350,11 @@ export const SearchContainer = styled.div`
   margin: 0 auto;
 `;
 
-export const SearchInput = styled(Input)`
+export const SearchInput = styled(UIInput)`
   border-radius: 4px 0 0 4px;
 `;
 
-export const SearchButton = styled(Button)`
+export const SearchButton = styled(UIButton)`
   border-radius: 0 4px 4px 0;
   padding: 10px 15px;
 `;
@@ -427,7 +512,7 @@ export const Flex = styled.div`
 
   @media (max-width: 768px) {
     flex-direction: ${(props) =>
-      props.responsiveDirection || props.direction || "row"};
+    props.responsiveDirection || props.direction || "row"};
   }
 `;
 
@@ -462,9 +547,9 @@ export const PageButton = styled.button`
 
   &:hover:not(:disabled) {
     background-color: ${(props) =>
-      props.active
-        ? props.theme.primaryHover || "#0069d9"
-        : props.theme.hoverBg || "#f8f9fa"};
+    props.active
+      ? props.theme.primaryHover || "#0069d9"
+      : props.theme.hoverBg || "#f8f9fa"};
   }
 
   &:disabled {

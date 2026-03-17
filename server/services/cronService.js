@@ -265,7 +265,7 @@ const executeAutomaticTransfers = async () => {
             let result;
             try {
               // Obtener la tarea desde MongoDB para ejecutar correctamente
-              const TransferTask = require("../models/transferTaks");
+              const TransferTask = require("../models/transferTaskModel");
               const taskDoc = await TransferTask.findById(item.taskId);
 
               if (!taskDoc) {
@@ -303,15 +303,13 @@ const executeAutomaticTransfers = async () => {
               errorDetail: result?.errorDetail || "N/A",
             });
             logger.info(
-              `${result?.success ? "✅" : "❌"} Tarea "${item.taskName}": ${
-                result?.success ? "Éxito" : "Error"
+              `${result?.success ? "✅" : "❌"} Tarea "${item.taskName}": ${result?.success ? "Éxito" : "Error"
               }`
             );
           }
         } catch (itemError) {
           logger.error(
-            `❌ Error ejecutando ${item.isGroup ? "grupo" : "tarea"} "${
-              item.taskName
+            `❌ Error ejecutando ${item.isGroup ? "grupo" : "tarea"} "${item.taskName
             }": ${itemError.message}`
           );
           results.push({
@@ -418,8 +416,7 @@ const setSchedulerEnabled = (enabled, hour = "02:00") => {
   }
 
   logger.info(
-    `🔧 Configurando planificador: ${
-      enabled ? "HABILITADO" : "DESHABILITADO"
+    `🔧 Configurando planificador: ${enabled ? "HABILITADO" : "DESHABILITADO"
     } a las ${currentHour}`
   );
 
@@ -439,8 +436,8 @@ const getSchedulerStatus = () => {
     hour: currentHour,
     nextExecution: task
       ? getNextExecutionTime(
-          `${currentHour.split(":")[1]} ${currentHour.split(":")[0]} * * *`
-        )
+        `${currentHour.split(":")[1]} ${currentHour.split(":")[0]} * * *`
+      )
       : null,
   };
 
@@ -499,8 +496,8 @@ const getCronDiagnostics = () => {
     taskActive: task ? !task.destroyed : false,
     nextExecution: task
       ? getNextExecutionTime(
-          `${currentHour.split(":")[1]} ${currentHour.split(":")[0]} * * *`
-        )
+        `${currentHour.split(":")[1]} ${currentHour.split(":")[0]} * * *`
+      )
       : null,
     transferServiceLoaded: !!transferService,
     linkedTasksServiceLoaded: !!LinkedTasksService,

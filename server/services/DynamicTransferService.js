@@ -2,7 +2,7 @@ const logger = require("./logger");
 const TransferMapping = require("../models/transferMappingModel");
 const TaskExecution = require("../models/taskExecutionModel");
 const TaskTracker = require("./TaskTracker");
-const TransferTask = require("../models/transferTaks");
+const TransferTask = require("../models/transferTaskModel");
 const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 const PromotionProcessor = require("./PromotionProcessor");
 const ConsecutiveService = require("./ConsecutiveService");
@@ -99,7 +99,7 @@ class DynamicTransferService {
       // 3. Registrar en TaskTracker para permitir cancelación
       TaskTracker.registerTask(
         cancelTaskId,
-        localAbortController || { abort: () => {} },
+        localAbortController || { abort: () => { } },
         {
           type: "dynamicProcess",
           mappingName: mapping.name,
@@ -187,8 +187,7 @@ class DynamicTransferService {
             // Verificar cancelación
             if (signal.aborted) {
               logger.warn(
-                `Procesamiento cancelado en documento ${i + 1}/${
-                  documentIds.length
+                `Procesamiento cancelado en documento ${i + 1}/${documentIds.length
                 }`
               );
               break;
@@ -199,10 +198,8 @@ class DynamicTransferService {
 
             try {
               logger.info(
-                `📋 Procesando documento ${i + 1}/${
-                  documentIds.length
-                }: ${documentId} ${
-                  shouldUsePromotions ? "(CON PROMOCIONES)" : "(ESTÁNDAR)"
+                `📋 Procesando documento ${i + 1}/${documentIds.length
+                }: ${documentId} ${shouldUsePromotions ? "(CON PROMOCIONES)" : "(ESTÁNDAR)"
                 }`
               );
 
@@ -366,8 +363,7 @@ class DynamicTransferService {
       );
 
       logger.info(
-        `Procesando ${
-          orderedMainTables.length
+        `Procesando ${orderedMainTables.length
         } tablas principales en orden: ${orderedMainTables
           .map((t) => t.name)
           .join(" -> ")}`
@@ -621,8 +617,7 @@ class DynamicTransferService {
     );
 
     logger.info(
-      `🎁 Procesando ${
-        orderedDetailTables.length
+      `🎁 Procesando ${orderedDetailTables.length
       } tablas de detalle CON PROMOCIONES en orden: ${orderedDetailTables
         .map((t) => t.name)
         .join(" -> ")}`
@@ -741,15 +736,13 @@ class DynamicTransferService {
         });
 
         logger.error(
-          `🎁 🔍   Campos promoción encontrados: ${
-            foundPromotionFields.join(", ") || "NINGUNO"
+          `🎁 🔍   Campos promoción encontrados: ${foundPromotionFields.join(", ") || "NINGUNO"
           }`
         );
       });
 
       logger.info(
-        `Procesando ${detailsData.length} registros de detalle en ${
-          detailConfig.name
+        `Procesando ${detailsData.length} registros de detalle en ${detailConfig.name
         } ${hasPromotions ? "CON PROMOCIONES" : "sin promociones"}`
       );
 
@@ -810,8 +803,7 @@ class DynamicTransferService {
           logger.error(`Registro ${recordIndex + 1} procesado exitosamente`);
         } catch (recordError) {
           logger.error(
-            `Error procesando registro ${recordIndex + 1}: ${
-              recordError.message
+            `Error procesando registro ${recordIndex + 1}: ${recordError.message
             }`
           );
 
@@ -880,8 +872,7 @@ class DynamicTransferService {
     );
 
     logger.info(
-      `Procesando ${
-        orderedDetailTables.length
+      `Procesando ${orderedDetailTables.length
       } tablas de detalle en orden: ${orderedDetailTables
         .map((t) => t.name)
         .join(" -> ")} (ESTÁNDAR)`
@@ -1322,17 +1313,15 @@ class DynamicTransferService {
       detailConfig.primaryKey || parentTableConfig.primaryKey || "NUM_PED";
 
     const query = `
-      SELECT ${finalSelectFields} FROM ${
-      parentTableConfig.sourceTable
-    } ${tableAlias}
+      SELECT ${finalSelectFields} FROM ${parentTableConfig.sourceTable
+      } ${tableAlias}
       WHERE ${tableAlias}.${primaryKey} = @documentId
-      ${
-        detailConfig.filterCondition
-          ? ` AND ${this.processFilterCondition(
-              detailConfig.filterCondition,
-              tableAlias
-            )}`
-          : ""
+      ${detailConfig.filterCondition
+        ? ` AND ${this.processFilterCondition(
+          detailConfig.filterCondition,
+          tableAlias
+        )}`
+        : ""
       }
       ${orderByColumn ? ` ORDER BY ${tableAlias}.${orderByColumn}` : ""}
     `;
@@ -1380,10 +1369,9 @@ class DynamicTransferService {
     const query = `
       SELECT ${finalSelectFields} FROM ${detailConfig.sourceTable}
       WHERE ${primaryKey} = @documentId
-      ${
-        detailConfig.filterCondition
-          ? ` AND ${detailConfig.filterCondition}`
-          : ""
+      ${detailConfig.filterCondition
+        ? ` AND ${detailConfig.filterCondition}`
+        : ""
       }
       ${orderByColumn ? ` ORDER BY ${orderByColumn}` : ""}
     `;
@@ -1404,19 +1392,19 @@ class DynamicTransferService {
    * @returns {Promise<Object>} - Datos de origen
    */
   async getSourceData(documentId, tableConfig, sourceConnection) {
-     if (!sourceConnection) {
-       throw new Error(
-         "sourceConnection is null or undefined in getSourceData"
-       );
-     }
+    if (!sourceConnection) {
+      throw new Error(
+        "sourceConnection is null or undefined in getSourceData"
+      );
+    }
 
-     if (typeof sourceConnection.execSql !== "function") {
-       throw new Error("Invalid sourceConnection object in getSourceData");
-     }
+    if (typeof sourceConnection.execSql !== "function") {
+      throw new Error("Invalid sourceConnection object in getSourceData");
+    }
 
-     if (sourceConnection.closed) {
-       throw new Error("sourceConnection is closed in getSourceData");
-     }
+    if (sourceConnection.closed) {
+      throw new Error("sourceConnection is closed in getSourceData");
+    }
 
     if (tableConfig.customQuery) {
       // Usar consulta personalizada si existe
@@ -1440,17 +1428,15 @@ class DynamicTransferService {
       const primaryKey = tableConfig.primaryKey || "NUM_PED";
 
       const query = `
-        SELECT ${finalSelectFields} FROM ${
-        tableConfig.sourceTable
-      } ${tableAlias}
+        SELECT ${finalSelectFields} FROM ${tableConfig.sourceTable
+        } ${tableAlias}
         WHERE ${tableAlias}.${primaryKey} = @documentId
-        ${
-          tableConfig.filterCondition
-            ? ` AND ${this.processFilterCondition(
-                tableConfig.filterCondition,
-                tableAlias
-              )}`
-            : ""
+        ${tableConfig.filterCondition
+          ? ` AND ${this.processFilterCondition(
+            tableConfig.filterCondition,
+            tableAlias
+          )}`
+          : ""
         }
       `;
 
@@ -1702,13 +1688,11 @@ class DynamicTransferService {
       }
 
       logger.error(
-        `---- PROCESANDO CAMPO ${fieldIndex + 1}/${
-          allFieldMappings.length
+        `---- PROCESANDO CAMPO ${fieldIndex + 1}/${allFieldMappings.length
         } ----`
       );
       logger.error(
-        `Campo: ${fieldMapping.sourceField || "(automático)"} -> ${
-          fieldMapping.targetField
+        `Campo: ${fieldMapping.sourceField || "(automático)"} -> ${fieldMapping.targetField
         }`
       );
       logger.error(`Es promoción: ${fieldMapping.isPromotionField || false}`);
@@ -1899,8 +1883,7 @@ class DynamicTransferService {
     });
 
     logger.info(
-      `Campos después del filtro: ${filteredTargetFields.length} (eliminados ${
-        targetFields.length - filteredTargetFields.length
+      `Campos después del filtro: ${filteredTargetFields.length} (eliminados ${targetFields.length - filteredTargetFields.length
       } auxiliares)`
     );
 
@@ -1956,8 +1939,7 @@ class DynamicTransferService {
     let value;
 
     logger.debug(
-      `Procesando campo: ${fieldMapping.sourceField || "(automático)"} -> ${
-        fieldMapping.targetField
+      `Procesando campo: ${fieldMapping.sourceField || "(automático)"} -> ${fieldMapping.targetField
       }`
     );
 
@@ -2287,14 +2269,12 @@ class DynamicTransferService {
     // Log detallado final para campos de promoción
     if (fieldMapping.isPromotionField) {
       logger.info(
-        `Campo promoción final: ${
-          fieldMapping.targetField
+        `Campo promoción final: ${fieldMapping.targetField
         } = ${value} (tipo: ${typeof value})`
       );
     } else {
       logger.debug(
-        `Valor final para ${
-          fieldMapping.targetField
+        `Valor final para ${fieldMapping.targetField
         }: ${value} (tipo: ${typeof value})`
       );
     }
@@ -2732,8 +2712,7 @@ class DynamicTransferService {
       }
 
       logger.info(
-        `Lookup completado: ${
-          Object.keys(lookupResults).length
+        `Lookup completado: ${Object.keys(lookupResults).length
         } campos procesados`
       );
       return {
@@ -3307,12 +3286,10 @@ class DynamicTransferService {
     results.details.push({ documentId, ...docResult });
 
     logger.info(
-      `Documento ${documentId} procesado: ${
-        docResult.success ? "✅ ÉXITO" : "❌ ERROR"
-      }${docResult.promotionsApplied ? " (con promociones automáticas)" : ""}${
-        currentConsecutive
-          ? ` (consecutivo: ${currentConsecutive.formatted})`
-          : ""
+      `Documento ${documentId} procesado: ${docResult.success ? "✅ ÉXITO" : "❌ ERROR"
+      }${docResult.promotionsApplied ? " (con promociones automáticas)" : ""}${currentConsecutive
+        ? ` (consecutivo: ${currentConsecutive.formatted})`
+        : ""
       }`
     );
   }
@@ -3500,14 +3477,13 @@ class DynamicTransferService {
         useCentralizedConsecutives: useCentralized,
         errorDetails: hasErrors
           ? results.details
-              .filter((d) => !d.success)
-              .map(
-                (d) =>
-                  `Documento ${d.documentId}: ${
-                    d.message || d.error || "Error no especificado"
-                  }`
-              )
-              .join("\n")
+            .filter((d) => !d.success)
+            .map(
+              (d) =>
+                `Documento ${d.documentId}: ${d.message || d.error || "Error no especificado"
+                }`
+            )
+            .join("\n")
           : null,
       },
     });
@@ -3972,7 +3948,9 @@ class DynamicTransferService {
       }
       if (filters.dateTo) {
         query += ` AND ${dateField} <= @dateTo`;
-        params.dateTo = filters.dateTo;
+        const endDate = new Date(filters.dateTo);
+        endDate.setHours(23, 59, 59, 999);
+        params.dateTo = endDate;
       }
     }
 
@@ -4300,31 +4278,31 @@ class DynamicTransferService {
     targetConnection,
     sourceData
   ) {
-     if (!sourceConnection) {
-       throw new Error(
-         "sourceConnection is null or undefined in processForeignKeyDependencies"
-       );
-     }
-     if (!targetConnection) {
-       throw new Error(
-         "targetConnection is null or undefined in processForeignKeyDependencies"
-       );
-     }
-     if (typeof sourceConnection.execSql !== "function") {
-       throw new Error(
-         "Invalid sourceConnection object in processForeignKeyDependencies"
-       );
-     }
-     if (typeof targetConnection.execSql !== "function") {
-       throw new Error(
-         "Invalid targetConnection object in processForeignKeyDependencies"
-       );
-     }
-     if (sourceConnection.closed || targetConnection.closed) {
-       throw new Error(
-         "One or both connections are closed in processForeignKeyDependencies"
-       );
-     }
+    if (!sourceConnection) {
+      throw new Error(
+        "sourceConnection is null or undefined in processForeignKeyDependencies"
+      );
+    }
+    if (!targetConnection) {
+      throw new Error(
+        "targetConnection is null or undefined in processForeignKeyDependencies"
+      );
+    }
+    if (typeof sourceConnection.execSql !== "function") {
+      throw new Error(
+        "Invalid sourceConnection object in processForeignKeyDependencies"
+      );
+    }
+    if (typeof targetConnection.execSql !== "function") {
+      throw new Error(
+        "Invalid targetConnection object in processForeignKeyDependencies"
+      );
+    }
+    if (sourceConnection.closed || targetConnection.closed) {
+      throw new Error(
+        "One or both connections are closed in processForeignKeyDependencies"
+      );
+    }
     if (
       !mapping.foreignKeyDependencies ||
       mapping.foreignKeyDependencies.length === 0
@@ -4410,9 +4388,8 @@ class DynamicTransferService {
           }
 
           if (insertFields.length > 0) {
-            const insertQuery = `INSERT INTO ${
-              dependency.dependentTable
-            } (${insertFields.join(", ")}) VALUES (${insertValues.join(", ")})`;
+            const insertQuery = `INSERT INTO ${dependency.dependentTable
+              } (${insertFields.join(", ")}) VALUES (${insertValues.join(", ")})`;
             await DatabaseServiceAdapter.query(
               targetConnection,
               insertQuery,
@@ -4482,8 +4459,7 @@ class DynamicTransferService {
     const docArray = Array.isArray(documentIds) ? documentIds : [documentIds];
 
     logger.info(
-      `${shouldMark ? "Marcando" : "Desmarcando"} ${
-        docArray.length
+      `${shouldMark ? "Marcando" : "Desmarcando"} ${docArray.length
       } documento(s) como procesado(s)`
     );
 
@@ -4538,8 +4514,7 @@ class DynamicTransferService {
         );
 
         logger.debug(
-          `🔍 Verificación columna ${processedFieldName} en ${
-            mainTable.sourceTable
+          `🔍 Verificación columna ${processedFieldName} en ${mainTable.sourceTable
           }: ${hasConfiguredColumn ? "EXISTE" : "NO EXISTE"}`
         );
       } catch (columnError) {
@@ -4624,8 +4599,7 @@ class DynamicTransferService {
       return result;
     } catch (error) {
       logger.error(
-        `Error al ${shouldMark ? "marcar" : "desmarcar"} documentos: ${
-          error.message
+        `Error al ${shouldMark ? "marcar" : "desmarcar"} documentos: ${error.message
         }`
       );
 
@@ -4707,16 +4681,14 @@ class DynamicTransferService {
         results.success++;
 
         logger.debug(
-          `✅ Documento ${documentId} ${
-            shouldMark ? "marcado" : "desmarcado"
+          `✅ Documento ${documentId} ${shouldMark ? "marcado" : "desmarcado"
           } exitosamente usando campo ${processedFieldName}`
         );
       } catch (error) {
         results.failed++;
         results.errors.push({ documentId, error: error.message });
         logger.error(
-          `❌ Error al ${
-            shouldMark ? "marcar" : "desmarcar"
+          `❌ Error al ${shouldMark ? "marcar" : "desmarcar"
           } documento ${documentId}: ${error.message}`
         );
       }
@@ -4790,8 +4762,7 @@ class DynamicTransferService {
         results.success += batch.length;
 
         logger.debug(
-          `✅ Lote de ${batch.length} documentos ${
-            shouldMark ? "marcados" : "desmarcados"
+          `✅ Lote de ${batch.length} documentos ${shouldMark ? "marcados" : "desmarcados"
           } exitosamente usando campo ${processedFieldName}`
         );
       } catch (error) {
@@ -4800,8 +4771,7 @@ class DynamicTransferService {
           results.errors.push({ documentId: docId, error: error.message });
         });
         logger.error(
-          `❌ Error al ${
-            shouldMark ? "marcar" : "desmarcar"
+          `❌ Error al ${shouldMark ? "marcar" : "desmarcar"
           } lote de documentos: ${error.message}`
         );
       }
@@ -4826,8 +4796,9 @@ class DynamicTransferService {
         const task = new TransferTask({
           name: `Mapeo: ${mappingData.name}`,
           description: `Tarea automática para mapeo ${mappingData.name}`,
-          type: "mapping",
-          status: "active",
+          type: "both",
+          status: "pending",
+          query: "DYNAMIC_MAPPING_PROCESS", // Campo obligatorio
           mappingId: null,
           schedule: {
             enabled: false,
@@ -4874,8 +4845,9 @@ class DynamicTransferService {
         const task = new TransferTask({
           name: `Mapeo: ${mappingData.name}`,
           description: `Tarea automática para mapeo ${mappingData.name}`,
-          type: "mapping",
-          status: "active",
+          type: "both",
+          status: "pending",
+          query: "DYNAMIC_MAPPING_PROCESS", // Campo obligatorio
           mappingId: mappingId,
           schedule: {
             enabled: false,
@@ -4907,9 +4879,20 @@ class DynamicTransferService {
    * Obtiene todas las configuraciones de mapeo
    * @returns {Promise<Array>} - Lista de configuraciones
    */
-  async getMappings() {
+  /**
+   * Obtiene todas las configuraciones de mapeo filtradas por campos necesarios para UI
+   * @param {Object} options - Opciones de filtrado
+   * @param {boolean} options.includeInactive - Si se deben incluir mapeos inactivos
+   * @returns {Promise<Array>} - Lista de configuraciones
+   */
+  async getMappings(options = { includeInactive: false }) {
     try {
-      return await TransferMapping.find().sort({ name: 1 });
+      const filter = options.includeInactive ? {} : { active: true };
+
+      return await TransferMapping.find(filter)
+        .select("name description entityType transferType active tableConfigs.fieldMappings.showInList tableConfigs.fieldMappings.displayName tableConfigs.fieldMappings.targetField tableConfigs.fieldMappings.fieldType tableConfigs.fieldMappings.displayOrder")
+        .sort({ name: 1 })
+        .lean();
     } catch (error) {
       logger.error(
         `Error al obtener configuraciones de mapeo: ${error.message}`
@@ -5253,8 +5236,8 @@ class DynamicTransferService {
       )) {
         const documentId =
           document[
-            mapping.tableConfigs.find((tc) => !tc.isDetailTable)?.primaryKey ||
-              "NUM_PED"
+          mapping.tableConfigs.find((tc) => !tc.isDetailTable)?.primaryKey ||
+          "NUM_PED"
           ];
 
         try {
@@ -5328,10 +5311,10 @@ class DynamicTransferService {
         foreignKeyDependencies: originalMapping.foreignKeyDependencies,
         consecutiveConfig: originalMapping.consecutiveConfig
           ? {
-              ...originalMapping.consecutiveConfig.toObject(),
-              enabled: false,
-              lastValue: 0,
-            }
+            ...originalMapping.consecutiveConfig.toObject(),
+            enabled: false,
+            lastValue: 0,
+          }
           : undefined,
         promotionConfig: originalMapping.promotionConfig,
         markProcessedStrategy: originalMapping.markProcessedStrategy,

@@ -144,8 +144,8 @@ class UnifiedCancellationService {
       completionStatus: result.success
         ? "completed"
         : result.cancelled
-        ? "cancelled"
-        : "failed",
+          ? "cancelled"
+          : "failed",
     });
 
     // Eliminar después de un tiempo
@@ -162,7 +162,7 @@ class UnifiedCancellationService {
    */
   updateTaskInDatabaseAsync(taskId, updates) {
     // Cargar módulos solo cuando sea necesario para evitar dependencias circulares
-    const TransferTask = require("../models/transferTaks");
+    const TransferTask = require("../models/transferTaskModel");
     const TaskExecution = require("../models/taskExecutionModel");
 
     // Verificar si es un ID válido de MongoDB
@@ -194,20 +194,20 @@ class UnifiedCancellationService {
               updates.status === "running"
                 ? 0
                 : updates.status === "cancelling"
-                ? -1
-                : updates.status === "cancelled"
-                ? -1
-                : 100,
+                  ? -1
+                  : updates.status === "cancelled"
+                    ? -1
+                    : 100,
             lastExecutionDate: updates.endTime
               ? new Date(updates.endTime)
               : undefined,
             lastExecutionResult: updates.result
               ? {
-                  success: updates.result.success === true,
-                  message: updates.result.message || updates.cancelReason || "",
-                  affectedRecords: updates.result.affectedRecords || 0,
-                  errorDetails: updates.result.error || "",
-                }
+                success: updates.result.success === true,
+                message: updates.result.message || updates.cancelReason || "",
+                affectedRecords: updates.result.affectedRecords || 0,
+                errorDetails: updates.result.error || "",
+              }
               : undefined,
           },
           { new: true }

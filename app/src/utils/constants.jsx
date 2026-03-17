@@ -1,13 +1,16 @@
 /*
-Seccion para definir las rutas para las apis
-*/
+ * constants.jsx
+ * Fuente de verdad para rutas de API, permisos y recursos.
+ * Refactor: ACTIONS centralizado para evitar repetir las mismas 5 acciones en cada recurso.
+ */
 
-const SERVER_IP = `${window.location.hostname}:3979`; // Direccion del servidor de las APIS
-const PROTOCOL = window.location.protocol; //Detecta el protocolo actual http:/ o https:/
+const SERVER_IP = `localhost:3979`;
+const PROTOCOL = window.location.protocol;
 
 export const ENV = {
   BASE_PATH: `${PROTOCOL}//${SERVER_IP}`,
   BASE_API: `${PROTOCOL}//${SERVER_IP}/api/v1`,
+  API_VERSION: "v1",
   API_ROUTERS: {
     REGISTER: "auth/register",
     LOGIN: "auth/login",
@@ -27,7 +30,7 @@ export const ENV = {
     EMAIL_RECIPIENTS: "email-recipients",
     EMAIL_CONFIG: "email-config",
     SUMMARIES: "summaries",
-    LOGS: "logs", // Nueva ruta para logs
+    LOGS: "logs",
   },
   JWT: {
     ACCESS: "access",
@@ -35,31 +38,37 @@ export const ENV = {
   },
 };
 
-// Constantes para permisos
-export const PERMISSIONS = {
-  USERS: {
-    CREATE: "create",
-    READ: "read",
-    UPDATE: "update",
-    DELETE: "delete",
-    MANAGE: "manage",
-  },
-  ROLES: {
-    CREATE: "create",
-    READ: "read",
-    UPDATE: "update",
-    DELETE: "delete",
-    MANAGE: "manage",
-  },
-  REPORTS: {
-    CREATE: "create",
-    READ: "read",
-    UPDATE: "update",
-    DELETE: "delete",
-    MANAGE: "manage",
-  },
+/**
+ * ACTIONS — Conjunto centralizado de acciones CRUD estándar.
+ * Úsalo en lugar de repetir los strings en cada objeto de PERMISSIONS.
+ */
+export const ACTIONS = {
+  CREATE: "create",
+  READ: "read",
+  UPDATE: "update",
+  DELETE: "delete",
+  MANAGE: "manage",
+  EXECUTE: "execute",
 };
 
+/**
+ * PERMISSIONS — Describe las acciones disponibles por recurso.
+ * Al usar ACTIONS, si mañana renombramos una acción solo se cambia en un lugar.
+ */
+export const PERMISSIONS = {
+  USERS: { ...ACTIONS },
+  ROLES: { ...ACTIONS },
+  REPORTS: { ...ACTIONS },
+  MODULES: { ...ACTIONS },
+  TASKS: { ...ACTIONS },
+  LOADS: { ...ACTIONS },
+  DOCUMENTS: { ...ACTIONS },
+  SETTINGS: { ...ACTIONS },
+};
+
+/**
+ * RESOURCES — Nombres de recursos del sistema tal como los entiende el backend.
+ */
 export const RESOURCES = {
   USERS: "users",
   ROLES: "roles",
@@ -67,4 +76,11 @@ export const RESOURCES = {
   SYSTEM: "system",
   SETTINGS: "settings",
   PROFILE: "profile",
+  MODULES: "modules",
+  TASKS: "tasks",
+  LOADS: "loads",
+  DOCUMENTS: "documents",
+  ANALYTICS: "analytics",
+  HISTORY: "history",
+  LOGS: "logs",
 };

@@ -1,115 +1,80 @@
-import React, { useState } from "react";
+import React from "react";
 import styled from "styled-components";
-import { useForm, useAuth } from "../../index";
-import { AuthApi } from "../../api/index";
-import { validateForm } from "../../utils/index";
-import Swal from "sweetalert2";
+import { useLogin, Input, Button } from "../../index";
 import { Helmet } from "react-helmet-async";
-
-const authController = new AuthApi();
+import LogoCatelli from "../../assets/LogoCatelli_Sin_Fondo.png";
 
 export function LoginForm() {
-  const { login } = useAuth();
-  const { formData, errors, handleChange, handleBlur, setErrors } = useForm(
-    { email: "", password: "" },
-    validateForm
-  );
+  const {
+    formData,
+    errors,
+    loading,
+    message,
+    handleChange,
+    handleBlur,
+    handleSubmit,
+  } = useLogin();
 
-  console.log(formData);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    const validationErrors = validateForm(formData);
-    setErrors(validationErrors);
-
-    if (Object.keys(validationErrors).length > 0) {
-      Swal.fire({
-        icon: "warning",
-        title: "Formulario Incompleto",
-        text: "Por favor, completa todos los campos requeridos.",
-      });
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setMessage(""); // Limpiar mensajes previos
-
-      console.log("🎯 Iniciando login desde formulario...");
-
-      // ⭐ USAR LA FUNCIÓN LOGIN DEL CONTEXTO Y VERIFICAR RESULTADO ⭐
-      const result = await login(formData);
-
-      if (result?.success) {
-        console.log("✅ Login exitoso desde formulario");
-        setMessage("Acceso autorizado. Redirigiendo...");
-        // El usuario será redirigido automáticamente por el AdminRouter
-      } else {
-        // ⭐ MANEJAR CASO DONDE NO HAY EXCEPCIÓN PERO EL LOGIN FALLÓ ⭐
-        throw new Error(result?.error || "Error desconocido en el login");
-      }
-    } catch (error) {
-      console.error("❌ Error en login desde formulario:", error);
-
-      // ⭐ MOSTRAR ERROR ESPECÍFICO AL USUARIO ⭐
-      const errorMessage = error.message || "Error desconocido al iniciar sesión";
-      console.log("🚨 Mostrando alerta de error:", errorMessage);
-
-      Swal.fire({
-        icon: "error",
-        title: "Error de Autenticación",
-        text: errorMessage,
-        confirmButtonText: "Intentar nuevamente",
-      });
-
-      // ⭐ TAMBIÉN MOSTRAR EN INTERFAZ PARA MEJOR UX ⭐
-      setMessage(`Error: ${errorMessage}`);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const isError = message?.startsWith("Error:");
 
   return (
     <Container>
       <Helmet>
-        <title>Login - Sistema Core ERP </title>
+        <title>Login - Catelli Core ERP</title>
       </Helmet>
-      <FormWrapper>
-        <Title>Iniciar Sesión</Title>
+
+      <GlassCard>
+        <LogoWrapper>
+          <Logo src={LogoCatelli} alt="Catelli Logo" />
+        </LogoWrapper>
+
+        <Title>Bienvenido</Title>
+        <Subtitle>Ingresa tus credenciales para continuar</Subtitle>
+
         {message && (
-          <Message error={message.startsWith("Error:")}>{message}</Message>
+          <StatusMessage error={isError}>
+            {message}
+          </StatusMessage>
         )}
+
         <Form onSubmit={handleSubmit}>
-          <Label>Email</Label>
           <Input
+            label="Correo Electrónico"
             type="email"
             name="email"
-            placeholder="Ingrese su correo"
+            placeholder="ejemplo@catelli.com"
             value={formData.email}
+            error={errors.email}
             onChange={handleChange}
             onBlur={handleBlur}
+            required
           />
-          {errors.email && <ErrorText>{errors.email}</ErrorText>}
 
-          <Label>Contraseña</Label>
           <Input
+            label="Contraseña"
             type="password"
             name="password"
-            placeholder="Ingrese su contraseña"
+            placeholder="••••••••"
             value={formData.password}
+            error={errors.password}
             onChange={handleChange}
             onBlur={handleBlur}
+            required
           />
-          {errors.password && <ErrorText>{errors.password}</ErrorText>}
 
-          <Button type="submit" disabled={loading}>
-            {loading ? "Cargando..." : "Iniciar Sesión"}
-          </Button>
+          <SubmitButton
+            type="submit"
+            variant="primary"
+            disabled={loading}
+          >
+            {loading ? "Verificando..." : "Iniciar Sesión"}
+          </SubmitButton>
         </Form>
-      </FormWrapper>
+
+        <Footer>
+          &copy; {new Date().getFullYear()} Catelli Hermanos S.A.
+        </Footer>
+      </GlassCard>
     </Container>
   );
 }
@@ -118,98 +83,107 @@ const Container = styled.div`
   display: flex;
   justify-content: center;
   align-items: center;
-  height: 100vh;
-  background: linear-gradient(to right, #4facfe, #00f2fe);
+  min-height: 100vh;
+  width: 100vw;
+  background: linear-gradient(135deg, #0f172a 0%, #1e293b 100%);
+  position: relative;
+  overflow: hidden;
+
+  &::before {
+    content: '';
+    position: absolute;
+    width: 140%;
+    height: 140%;
+    background: radial-gradient(circle at 0% 0%, rgba(52, 131, 235, 0.15) 0%, transparent 50%),
+                radial-gradient(circle at 100% 100%, rgba(144, 70, 255, 0.1) 0%, transparent 50%);
+    top: -20%;
+    left: -20%;
+    z-index: 0;
+  }
 `;
 
-const FormWrapper = styled.div`
-  background: white;
-  padding: 2rem;
-  border-radius: 10px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
+const GlassCard = styled.div`
+  background: rgba(30, 41, 59, 0.7);
+  backdrop-filter: blur(20px) saturate(160%);
+  -webkit-backdrop-filter: blur(20px) saturate(160%);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 32px;
+  padding: 3.5rem 2.8rem;
   width: 100%;
-  max-width: 400px;
-  text-align: center;
+  max-width: 440px;
+  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.6),
+              inset 0 0 0 1px rgba(255, 255, 255, 0.05);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  margin: 1rem;
+  z-index: 1;
 `;
 
-const Title = styled.h2`
-  color: #333;
-  margin-bottom: 1rem;
+const LogoWrapper = styled.div`
+  margin-bottom: 1.5rem;
+  filter: drop-shadow(0 0 8px rgba(255, 255, 255, 0.3));
+`;
+
+const Logo = styled.img`
+  width: 140px;
+  height: auto;
+  object-fit: contain;
+`;
+
+const Title = styled.h1`
+  font-size: 28px;
+  font-weight: 800;
+  color: #fff;
+  margin-bottom: 0.5rem;
+  letter-spacing: -0.5px;
+`;
+
+const Subtitle = styled.p`
+  color: rgba(255, 255, 255, 0.6);
+  font-size: 15px;
+  margin-bottom: 2rem;
+  text-align: center;
 `;
 
 const Form = styled.form`
+  width: 100%;
   display: flex;
   flex-direction: column;
+  gap: 1.25rem;
 `;
 
-const Label = styled.label`
-  text-align: left;
-  margin-top: 10px;
-  font-weight: bold;
-`;
-
-const Input = styled.input`
-  padding: 10px;
-  margin: 5px 0 15px;
-  border: 1px solid #ccc;
-  border-radius: 5px;
+const SubmitButton = styled(Button)`
+  margin-top: 1rem;
+  padding: 14px;
   font-size: 16px;
+  font-weight: 700;
+  border-radius: 14px;
   width: 100%;
-
-  @media (max-width: 480px) {
-    padding: 12px; /* Inputs más grandes en móviles pequeños */
-    margin: 4px 0 12px;
-  }
-`;
-
-const Button = styled.button`
-  background: #4facfe;
-  color: white;
-  padding: 10px;
-  border: none;
-  border-radius: 5px;
-  font-size: 18px;
-  cursor: pointer;
-  transition: background 0.3s;
-
+  
   &:hover {
-    background: #00c6fb;
-  }
-
-  &:disabled {
-    background: #ccc;
-    cursor: not-allowed;
-  }
-
-  @media (max-width: 480px) {
-    padding: 12px; /* Botones más grandes en móviles */
-    font-size: 16px; /* Texto más grande para mejor tap target */
+    transform: translateY(-2px);
+    box-shadow: 0 10px 20px -10px rgba(79, 172, 254, 0.5);
   }
 `;
 
-const ErrorText = styled.p`
-  color: red;
+const StatusMessage = styled.div`
+  width: 100%;
+  padding: 12px 16px;
+  border-radius: 12px;
   font-size: 14px;
-  margin: -10px 0 10px;
-`;
-
-const Message = styled.div`
-  padding: 12px;
-  margin-bottom: 16px;
-  border-radius: 6px;
-  font-size: 14px;
+  margin-bottom: 1.5rem;
   text-align: center;
+  font-weight: 500;
+  border: 1px solid ${props => props.error ? 'rgba(239, 68, 68, 0.2)' : 'rgba(34, 197, 94, 0.2)'};
+  background: ${props => props.error ? 'rgba(239, 68, 68, 0.1)' : 'rgba(34, 197, 94, 0.1)'};
+  color: ${props => props.error ? '#f87171' : '#4ade80'};
+`;
 
-  ${(props) =>
-    props.error
-      ? `
-    background-color: #fee;
-    color: #c53030;
-    border: 1px solid #fc8181;
-  `
-      : `
-    background-color: #f0fff4;
-    color: #2f855a;
-    border: 1px solid #9ae6b4;
-  `}
+const Footer = styled.div`
+  margin-top: 2.5rem;
+  color: rgba(255, 255, 255, 0.4);
+  font-size: 11px;
+  text-transform: uppercase;
+  letter-spacing: 1px;
 `;

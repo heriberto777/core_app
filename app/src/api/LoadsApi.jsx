@@ -26,9 +26,8 @@ class LoadsApi {
       if (filters.includeLoaded)
         queryParams.append("includeLoaded", filters.includeLoaded);
 
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/pending-orders${
-        queryParams.toString() ? `?${queryParams.toString()}` : ""
-      }`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/pending-orders${queryParams.toString() ? `?${queryParams.toString()}` : ""
+        }`;
 
       const response = await fetch(url, {
         headers: {
@@ -38,7 +37,7 @@ class LoadsApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("Error al obtener pedidos pendientes:", error);
       throw error;
@@ -60,7 +59,7 @@ class LoadsApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("Error al obtener detalles del pedido:", error);
       throw error;
@@ -82,7 +81,7 @@ class LoadsApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("Error al obtener vendedores:", error);
       throw error;
@@ -110,7 +109,7 @@ class LoadsApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("Error al procesar carga:", error);
       throw error;
@@ -138,7 +137,7 @@ class LoadsApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("Error al cancelar pedidos:", error);
       throw error;
@@ -165,7 +164,7 @@ class LoadsApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("Error al eliminar líneas:", error);
       throw error;
@@ -186,9 +185,8 @@ class LoadsApi {
       if (filters.dateFrom) queryParams.append("dateFrom", filters.dateFrom);
       if (filters.dateTo) queryParams.append("dateTo", filters.dateTo);
 
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/history${
-        queryParams.toString() ? `?${queryParams.toString()}` : ""
-      }`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/history${queryParams.toString() ? `?${queryParams.toString()}` : ""
+        }`;
 
       const response = await fetch(url, {
         headers: {
@@ -198,7 +196,7 @@ class LoadsApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("Error al obtener historial:", error);
       throw error;
@@ -226,7 +224,7 @@ class LoadsApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("Error al procesar traspaso:", error);
       throw error;
@@ -256,9 +254,8 @@ class LoadsApi {
       if (filters.dateFrom) queryParams.append("dateFrom", filters.dateFrom);
       if (filters.dateTo) queryParams.append("dateTo", filters.dateTo);
 
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/traspasos${
-        queryParams.toString() ? `?${queryParams.toString()}` : ""
-      }`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/traspasos${queryParams.toString() ? `?${queryParams.toString()}` : ""
+        }`;
 
       const response = await fetch(url, {
         headers: {
@@ -268,7 +265,7 @@ class LoadsApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("Error al obtener traspasos:", error);
       throw error;
@@ -286,9 +283,8 @@ class LoadsApi {
       if (filters.dateFrom) queryParams.append("dateFrom", filters.dateFrom);
       if (filters.dateTo) queryParams.append("dateTo", filters.dateTo);
 
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/traspasos/stats${
-        queryParams.toString() ? `?${queryParams.toString()}` : ""
-      }`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/traspasos/stats${queryParams.toString() ? `?${queryParams.toString()}` : ""
+        }`;
 
       const response = await fetch(url, {
         headers: {
@@ -298,7 +294,7 @@ class LoadsApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("Error al obtener estadísticas de traspasos:", error);
       throw error;
@@ -321,7 +317,7 @@ class LoadsApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("Error al obtener detalles del traspaso:", error);
       throw error;
@@ -344,7 +340,7 @@ class LoadsApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("Error al obtener repartidores para filtro:", error);
       throw error;
@@ -365,15 +361,9 @@ class LoadsApi {
       });
 
       const result = await response.json();
+      if (!response.ok) throw result;
 
-      if (!response.ok) {
-        throw new Error(result.message || "Error al obtener bodegas");
-      }
-
-      return {
-        success: true,
-        data: result.data?.warehouses || [],
-      };
+      return result.data?.warehouses || result.data || result || [];
     } catch (error) {
       console.error("Error fetching warehouses:", error);
       return {
@@ -400,7 +390,7 @@ class LoadsApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("Error al ejecutar traspaso:", error);
       throw error;
@@ -425,7 +415,7 @@ class LoadsApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("Error al ejecutar traspasos masivos:", error);
       throw error;
@@ -450,7 +440,7 @@ class LoadsApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("Error al cancelar traspaso:", error);
       throw error;

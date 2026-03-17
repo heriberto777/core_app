@@ -1,6 +1,6 @@
 import React, { useState, useRef } from "react";
 import styled from "styled-components";
-import { useAuth } from "../../index";
+import { useAuth, LoadingUI } from "../../index";
 import { User } from "../../api/index";
 import { ENV } from "../../utils/index";
 import Swal from "sweetalert2";
@@ -15,12 +15,13 @@ import {
   FaTimes,
   FaEye,
   FaEyeSlash,
+  FaShieldAlt,
 } from "react-icons/fa";
 
 const userApi = new User();
 
 export function UserProfile() {
-  const { user, accessToken, updateUser } = useAuth();
+  const { user, accessToken, updateUser, loading } = useAuth();
   const [editing, setEditing] = useState(false);
   const [showPasswords, setShowPasswords] = useState({
     current: false,
@@ -42,20 +43,16 @@ export function UserProfile() {
   const [previewAvatar, setPreviewAvatar] = useState(null);
   const fileInputRef = useRef(null);
 
+  if (loading) return <LoadingUI message="Cargando perfil..." />;
+
   const handleInputChange = (e) => {
     const { name, value } = e.target;
-    setFormData((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setFormData((prev) => ({ ...prev, [name]: value }));
   };
 
   const handlePasswordChange = (e) => {
     const { name, value } = e.target;
-    setPasswords((prev) => ({
-      ...prev,
-      [name]: value,
-    }));
+    setPasswords((prev) => ({ ...prev, [name]: value }));
   };
 
   const handleAvatarSelect = (e) => {
@@ -65,7 +62,6 @@ export function UserProfile() {
         Swal.fire("Error", "El archivo no puede ser mayor a 5MB", "error");
         return;
       }
-
       setSelectedAvatar(file);
       const reader = new FileReader();
       reader.onload = (e) => setPreviewAvatar(e.target.result);
@@ -75,18 +71,8 @@ export function UserProfile() {
 
   const handleUpdateProfile = async () => {
     try {
-      // ⭐ VERIFICAR TOKEN ANTES DE CONTINUAR ⭐
       if (!accessToken) {
-        Swal.fire(
-          "Error",
-          "No hay sesión activa. Por favor, inicia sesión nuevamente.",
-          "error"
-        );
-        return;
-      }
-
-      if (!user?._id) {
-        Swal.fire("Error", "No se pudo identificar al usuario.", "error");
+        Swal.fire("Error", "No hay sesión activa.", "error");
         return;
       }
 
@@ -96,91 +82,29 @@ export function UserProfile() {
         didOpen: () => Swal.showLoading(),
       });
 
-      // Preparar datos para enviar
       const updateData = { ...formData };
+      if (selectedAvatar) updateData.fileAvatar = selectedAvatar;
 
-      // Si hay una imagen seleccionada, la agregamos al FormData
-      if (selectedAvatar) {
-        updateData.fileAvatar = selectedAvatar;
-      }
+      const result = await userApi.updateUser(accessToken, user._id, updateData);
 
-      console.log("Datos a enviar:", {
-        ...updateData,
-        fileAvatar: selectedAvatar ? "archivo seleccionado" : "sin archivo",
-      });
-
-      const result = await userApi.updateUser(
-        accessToken,
-        user._id,
-        updateData
-      );
-
-      console.log("Respuesta de la API:", result);
-
-      // La API devuelve { success: true, msg: "..." } cuando es exitoso
       if (result && result.success) {
-        // Recargar datos del usuario actualizado
-        try {
-          const updatedUser = await userApi.getMe(accessToken);
-
-          Swal.fire("¡Éxito!", "Perfil actualizado correctamente", "success");
-
-          // Limpiar estados de edición
-          setEditing(false);
-          setSelectedAvatar(null);
-          setPreviewAvatar(null);
-
-          // ⭐ USAR updateUser EN LUGAR DE login PARA NO PERDER TOKENS ⭐
-          if (updateUser && typeof updateUser === "function") {
-            updateUser(updatedUser);
-          }
-
-          // Actualizar formData con los nuevos datos
-          setFormData({
-            name: updatedUser?.name || "",
-            lastname: updatedUser?.lastname || "",
-            email: updatedUser?.email || "",
-            telefono: updatedUser?.telefono || "",
-          });
-
-          // Si tienes una función para actualizar el contexto del usuario
-          // updateUserContext(updatedUser);
-        } catch (userError) {
-          console.error("Error al recargar usuario:", userError);
-          Swal.fire("¡Éxito!", "Perfil actualizado correctamente", "success");
-          setEditing(false);
-          setSelectedAvatar(null);
-          setPreviewAvatar(null);
-        }
+        const updatedUser = await userApi.getMe(accessToken);
+        Swal.fire("¡Éxito!", "Perfil actualizado correctamente", "success");
+        setEditing(false);
+        setSelectedAvatar(null);
+        setPreviewAvatar(null);
+        if (updateUser) updateUser(updatedUser);
       } else {
-        // Si result.success es false o no existe
-        const errorMessage =
-          result?.msg || result?.message || "Error al actualizar perfil";
-        console.error("Error de la API:", result);
-        throw new Error(errorMessage);
+        throw new Error(result?.msg || "Error al actualizar perfil");
       }
     } catch (error) {
-      console.error("Error completo:", error);
-      Swal.fire(
-        "Error",
-        error.message || "No se pudo actualizar el perfil",
-        "error"
-      );
+      Swal.fire("Error", error.message, "error");
     }
   };
 
   const handleChangePassword = async () => {
     if (passwords.new !== passwords.confirm) {
-      Swal.fire("Error", "Las contraseñas nuevas no coinciden", "error");
-      return;
-    }
-
-    if (passwords.new.length < 6) {
-      Swal.fire(
-        "Error",
-        "La nueva contraseña debe tener al menos 6 caracteres",
-        "error"
-      );
+      Swal.fire("Error", "Las contraseñas no coinciden", "error");
       return;
     }
 
@@ -197,338 +121,263 @@ export function UserProfile() {
       });
 
       if (result && result.success) {
-        Swal.fire("¡Éxito!", "Contraseña actualizada correctamente", "success");
+        Swal.fire("¡Éxito!", "Contraseña actualizada", "success");
         setPasswords({ current: "", new: "", confirm: "" });
       } else {
-        const errorMessage =
-          result?.msg || result?.message || "Error al cambiar contraseña";
-        throw new Error(errorMessage);
+        throw new Error(result?.msg || "Error al cambiar contraseña");
       }
     } catch (error) {
-      console.error("Error:", error);
-      Swal.fire(
-        "Error",
-        error.message || "No se pudo cambiar la contraseña",
-        "error"
-      );
+      Swal.fire("Error", error.message, "error");
     }
-  };
-
-  const togglePasswordVisibility = (field) => {
-    setShowPasswords((prev) => ({
-      ...prev,
-      [field]: !prev[field],
-    }));
   };
 
   const getAvatarSrc = () => {
-    // 1. Prioridad: preview de imagen seleccionada (antes de guardar)
     if (previewAvatar) return previewAvatar;
-
-    console.log("Avatar del usuario:", user?.avatar);
-
-    // 2. Avatar del usuario desde el servidor
     if (user?.avatar) {
-      // Si la ruta ya incluye el dominio completo, usarla tal como está
-      if (user.avatar.startsWith("http")) {
-        return user.avatar;
-      }
-
-      // ⭐ CONSTRUIR URL PARA ARCHIVOS ESTÁTICOS ⭐
-      // Si la ruta ya incluye 'uploads/', usarla directamente
-      if (user.avatar.startsWith("uploads/")) {
-        return `${ENV.BASE_PATH}/${user.avatar}`;
-      }
-
-      // Si no incluye 'uploads/', agregarla
-      return `${ENV.BASE_PATH}/uploads/avatar/${user.avatar}`;
+      if (user.avatar.startsWith("http")) return user.avatar;
+      return `${ENV.BASE_PATH}/${user.avatar.startsWith("uploads/") ? "" : "uploads/avatar/"}${user.avatar}`;
     }
-
-    // 3. Avatar por defecto
     return "/default-avatar.png";
   };
 
-  const cancelEdit = () => {
-    setEditing(false);
-    setSelectedAvatar(null);
-    setPreviewAvatar(null);
-    // Restaurar datos originales
-    setFormData({
-      name: user?.name || "",
-      lastname: user?.lastname || "",
-      email: user?.email || "",
-      telefono: user?.telefono || "",
-    });
-  };
-
   return (
-    <ProfileContainer>
-      <Header>
-        <h1>
-          <FaUser /> Mi Perfil
-        </h1>
-        <p>Gestiona tu información personal y configuraciones de cuenta</p>
-      </Header>
+    <ProfileWrapper>
+      <GlassProfile>
+        <Sidebar>
+          <AvatarWrapper>
+            <div className="img-container">
+              <AvatarImage src={getAvatarSrc()} alt="Avatar" />
+              {editing && (
+                <div className="overlay" onClick={() => fileInputRef.current?.click()}>
+                  <FaCamera />
+                </div>
+              )}
+            </div>
+            <input
+              ref={fileInputRef}
+              type="file"
+              accept="image/*"
+              onChange={handleAvatarSelect}
+              style={{ display: "none" }}
+            />
+            <div className="user-info">
+              <h2>{user?.name} {user?.lastname}</h2>
+              <Badge>{user?.role?.join(", ") || "Usuario"}</Badge>
+            </div>
+          </AvatarWrapper>
 
-      <ProfileContent>
-        {/* Sección de Avatar */}
-        <AvatarSection>
-          <AvatarContainer>
-            <AvatarImage src={getAvatarSrc()} alt="Avatar" />
+          <NavMenu>
+            <NavItem $active={!editing} onClick={() => setEditing(false)}>
+              <FaUser /> Datos Personales
+            </NavItem>
+            <NavItem $active={false} style={{ opacity: 0.5, cursor: "not-allowed" }}>
+              <FaShieldAlt /> Seguridad y Accesos
+            </NavItem>
+          </NavMenu>
+        </Sidebar>
+
+        <ContentArea>
+          <Section>
+            <div className="section-header">
+              <h3><FaUser /> Información del Perfil</h3>
+              <ActionButton onClick={() => (editing ? setEditing(false) : setEditing(true))}>
+                {editing ? <FaTimes /> : <FaEdit />}
+                <span>{editing ? "Cancelar" : "Editar"}</span>
+              </ActionButton>
+            </div>
+
+            <FormGrid>
+              <FormGroup>
+                <label>Nombres</label>
+                <div className="input-box">
+                  <FaUser className="icon" />
+                  <input
+                    name="name"
+                    value={formData.name}
+                    onChange={handleInputChange}
+                    disabled={!editing}
+                  />
+                </div>
+              </FormGroup>
+              <FormGroup>
+                <label>Apellidos</label>
+                <div className="input-box">
+                  <FaUser className="icon" />
+                  <input
+                    name="lastname"
+                    value={formData.lastname}
+                    onChange={handleInputChange}
+                    disabled={!editing}
+                  />
+                </div>
+              </FormGroup>
+              <FormGroup>
+                <label>Correo Electrónico</label>
+                <div className="input-box">
+                  <FaEnvelope className="icon" />
+                  <input
+                    name="email"
+                    value={formData.email}
+                    onChange={handleInputChange}
+                    disabled={!editing}
+                  />
+                </div>
+              </FormGroup>
+              <FormGroup>
+                <label>Teléfono</label>
+                <div className="input-box">
+                  <FaPhone className="icon" />
+                  <input
+                    name="telefono"
+                    value={formData.telefono}
+                    onChange={handleInputChange}
+                    disabled={!editing}
+                  />
+                </div>
+              </FormGroup>
+            </FormGrid>
+
             {editing && (
-              <AvatarOverlay onClick={() => fileInputRef.current?.click()}>
-                <FaCamera />
-                <span>Cambiar foto</span>
-              </AvatarOverlay>
-            )}
-          </AvatarContainer>
-          <input
-            ref={fileInputRef}
-            type="file"
-            accept="image/*"
-            onChange={handleAvatarSelect}
-            style={{ display: "none" }}
-          />
-          <UserInfo>
-            <h2>
-              {user?.name} {user?.lastname}
-            </h2>
-            <RoleBadge>{user?.role?.join(", ")}</RoleBadge>
-          </UserInfo>
-        </AvatarSection>
-
-        {/* Información Personal */}
-        <Section>
-          <SectionHeader>
-            <h3>Información Personal</h3>
-            <EditButton
-              onClick={() => (editing ? cancelEdit() : setEditing(true))}
-            >
-              {editing ? <FaTimes /> : <FaEdit />}
-              {editing ? "Cancelar" : "Editar"}
-            </EditButton>
-          </SectionHeader>
-
-          <FormGrid>
-            <FormGroup>
-              <label>Nombre</label>
-              <Input
-                name="name"
-                value={formData.name}
-                onChange={handleInputChange}
-                disabled={!editing}
-                icon={<FaUser />}
-                placeholder="Ingrese su nombre"
-              />
-            </FormGroup>
-
-            <FormGroup>
-              <label>Apellido</label>
-              <Input
-                name="lastname"
-                value={formData.lastname}
-                onChange={handleInputChange}
-                disabled={!editing}
-                icon={<FaUser />}
-                placeholder="Ingrese su apellido"
-              />
-            </FormGroup>
-
-            <FormGroup>
-              <label>Email</label>
-              <Input
-                name="email"
-                value={formData.email}
-                onChange={handleInputChange}
-                disabled={!editing}
-                icon={<FaEnvelope />}
-                placeholder="correo@ejemplo.com"
-              />
-            </FormGroup>
-
-            <FormGroup>
-              <label>Teléfono</label>
-              <Input
-                name="telefono"
-                value={formData.telefono}
-                onChange={handleInputChange}
-                disabled={!editing}
-                icon={<FaPhone />}
-                placeholder="Número de teléfono"
-              />
-            </FormGroup>
-          </FormGrid>
-
-          {editing && (
-            <ButtonGroup>
               <SaveButton onClick={handleUpdateProfile}>
                 <FaSave /> Guardar Cambios
               </SaveButton>
-            </ButtonGroup>
-          )}
-        </Section>
+            )}
+          </Section>
 
-        {/* Cambiar Contraseña */}
-        <Section>
-          <SectionHeader>
-            <h3>Seguridad</h3>
-          </SectionHeader>
-
-          <FormGrid>
-            <FormGroup>
-              <label>Contraseña Actual</label>
-              <PasswordInputWrapper>
-                <PasswordInputContainer>
-                  <InputIcon>
-                    <FaLock />
-                  </InputIcon>
-                  <PasswordField
+          <Section>
+            <div className="section-header">
+              <h3><FaLock /> Gestión de Seguridad</h3>
+            </div>
+            <FormGrid>
+              <FormGroup>
+                <label>Contraseña Actual</label>
+                <div className="input-box">
+                  <FaLock className="icon" />
+                  <input
                     type={showPasswords.current ? "text" : "password"}
                     name="current"
                     value={passwords.current}
                     onChange={handlePasswordChange}
-                    placeholder="Ingrese su contraseña actual"
+                    placeholder="••••••••"
                   />
-                  <PasswordToggle
-                    onClick={() => togglePasswordVisibility("current")}
-                  >
-                    {showPasswords.current ? <FaEyeSlash /> : <FaEye />}
-                  </PasswordToggle>
-                </PasswordInputContainer>
-              </PasswordInputWrapper>
-            </FormGroup>
-
-            <FormGroup>
-              <label>Nueva Contraseña</label>
-              <PasswordInputWrapper>
-                <PasswordInputContainer>
-                  <InputIcon>
-                    <FaLock />
-                  </InputIcon>
-                  <PasswordField
+                </div>
+              </FormGroup>
+              <FormGroup>
+                <label>Nueva Contraseña</label>
+                <div className="input-box">
+                  <FaLock className="icon" />
+                  <input
                     type={showPasswords.new ? "text" : "password"}
                     name="new"
                     value={passwords.new}
                     onChange={handlePasswordChange}
-                    placeholder="Ingrese su nueva contraseña"
+                    placeholder="Mín. 6 caracteres"
                   />
-                  <PasswordToggle
-                    onClick={() => togglePasswordVisibility("new")}
-                  >
-                    {showPasswords.new ? <FaEyeSlash /> : <FaEye />}
-                  </PasswordToggle>
-                </PasswordInputContainer>
-              </PasswordInputWrapper>
-            </FormGroup>
-
-            <FormGroup>
-              <label>Confirmar Nueva Contraseña</label>
-              <PasswordInputWrapper>
-                <PasswordInputContainer>
-                  <InputIcon>
-                    <FaLock />
-                  </InputIcon>
-                  <PasswordField
+                </div>
+              </FormGroup>
+              <FormGroup>
+                <label>Confirmar Nueva</label>
+                <div className="input-box">
+                  <FaLock className="icon" />
+                  <input
                     type={showPasswords.confirm ? "text" : "password"}
                     name="confirm"
                     value={passwords.confirm}
                     onChange={handlePasswordChange}
-                    placeholder="Confirme su nueva contraseña"
+                    placeholder="Repita contraseña"
                   />
-                  <PasswordToggle
-                    onClick={() => togglePasswordVisibility("confirm")}
-                  >
-                    {showPasswords.confirm ? <FaEyeSlash /> : <FaEye />}
-                  </PasswordToggle>
-                </PasswordInputContainer>
-              </PasswordInputWrapper>
-            </FormGroup>
-          </FormGrid>
-
-          <ButtonGroup>
+                </div>
+              </FormGroup>
+            </FormGrid>
             <SaveButton
               onClick={handleChangePassword}
-              disabled={
-                !passwords.current || !passwords.new || !passwords.confirm
-              }
+              disabled={!passwords.current || !passwords.new}
             >
-              <FaLock /> Cambiar Contraseña
+              <FaShieldAlt /> Actualizar Seguridad
             </SaveButton>
-          </ButtonGroup>
-        </Section>
-      </ProfileContent>
-    </ProfileContainer>
+          </Section>
+        </ContentArea>
+      </GlassProfile>
+    </ProfileWrapper>
   );
 }
 
-// Componente de Input reutilizable
-const InputComponent = ({ icon, disabled, ...props }) => (
-  <InputWrapper $disabled={disabled}>
-    <InputIcon>{icon}</InputIcon>
-    <StyledInput disabled={disabled} {...props} />
-  </InputWrapper>
-);
+// --- ESTILOS GLASSMORPHISM ---
 
-// Estilos (los mismos que antes pero aquí están organizados)
-const ProfileContainer = styled.div`
-  padding: 20px;
-  background-color: ${({ theme }) => theme.bg};
-  color: ${({ theme }) => theme.text};
-  min-height: 100vh;
-`;
+const ProfileWrapper = styled.div`
+  padding: 40px;
+  min-height: calc(100vh - 80px);
+  display: flex;
+  justify-content: center;
+  align-items: flex-start;
+  animation: fadeIn 0.6s ease;
 
-const Header = styled.div`
-  text-align: center;
-  margin-bottom: 30px;
-
-  h1 {
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 15px;
-    margin: 0 0 10px 0;
-    color: ${({ theme }) => theme.title};
-  }
-
-  p {
-    color: ${({ theme }) => theme.textSecondary};
-    margin: 0;
+  @keyframes fadeIn {
+    from { opacity: 0; transform: scale(0.98); }
+    to { opacity: 1; transform: scale(1); }
   }
 `;
 
-const ProfileContent = styled.div`
-  max-width: 800px;
-  margin: 0 auto;
+const GlassProfile = styled.div`
+  width: 100%;
+  max-width: 1100px;
+  background: rgba(255, 255, 255, 0.03);
+  backdrop-filter: blur(15px);
+  border: 1px solid rgba(255, 255, 255, 0.08);
+  border-radius: 30px;
+  display: grid;
+  grid-template-columns: 320px 1fr;
+  overflow: hidden;
+  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.2);
+
+  @media (max-width: 900px) {
+    grid-template-columns: 1fr;
+  }
+`;
+
+const Sidebar = styled.aside`
+  background: rgba(21, 28, 132, 0.15);
+  border-right: 1px solid rgba(255, 255, 255, 0.05);
+  padding: 40px;
   display: flex;
   flex-direction: column;
-  gap: 30px;
+  gap: 40px;
 `;
 
-const AvatarSection = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 20px;
-  padding: 30px;
-  background: ${({ theme }) => theme.cardBg};
-  border-radius: 12px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
+const AvatarWrapper = styled.div`
+  text-align: center;
+  
+  .img-container {
+    position: relative;
+    width: 160px;
+    height: 160px;
+    margin: 0 auto 20px;
+    border-radius: 40px;
+    overflow: hidden;
+    border: 3px solid rgba(255, 255, 255, 0.1);
+    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
 
-  @media (max-width: 768px) {
-    flex-direction: column;
-    text-align: center;
+    .overlay {
+      position: absolute;
+      inset: 0;
+      background: rgba(0,0,0,0.6);
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      font-size: 2rem;
+      color: white;
+      cursor: pointer;
+      opacity: 0;
+      transition: opacity 0.3s;
+    }
+
+    &:hover .overlay { opacity: 1; }
   }
-`;
 
-const AvatarContainer = styled.div`
-  position: relative;
-  width: 120px;
-  height: 120px;
-  border-radius: 50%;
-  overflow: hidden;
-  cursor: pointer;
-
-  &:hover > div {
-    opacity: 1;
+  h2 {
+    font-size: 1.5rem;
+    color: white;
+    margin-bottom: 8px;
   }
 `;
 
@@ -538,217 +387,144 @@ const AvatarImage = styled.img`
   object-fit: cover;
 `;
 
-const AvatarOverlay = styled.div`
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
+const Badge = styled.span`
+  background: ${({ theme }) => theme.primary};
+  padding: 4px 15px;
+  border-radius: 20px;
+  font-size: 0.8rem;
+  font-weight: 700;
+  text-transform: uppercase;
+  letter-spacing: 1px;
+`;
+
+const NavMenu = styled.nav`
   display: flex;
   flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  transition: opacity 0.3s;
-  color: white;
-  gap: 5px;
-
-  span {
-    font-size: 12px;
-  }
+  gap: 10px;
 `;
 
-const UserInfo = styled.div`
-  h2 {
-    margin: 0 0 10px 0;
-    color: ${({ theme }) => theme.title};
-  }
-`;
-
-const RoleBadge = styled.span`
-  background: ${({ theme }) => theme.primary};
-  color: white;
-  padding: 4px 12px;
-  border-radius: 16px;
-  font-size: 12px;
-  font-weight: 500;
-  text-transform: capitalize;
-`;
-
-const Section = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  border-radius: 12px;
-  padding: 30px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-`;
-
-const SectionHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-
-  h3 {
-    margin: 0;
-    color: ${({ theme }) => theme.title};
-  }
-`;
-
-const EditButton = styled.button`
+const NavItem = styled.div`
+  padding: 15px 20px;
+  border-radius: 15px;
   display: flex;
   align-items: center;
-  gap: 8px;
-  background: ${({ theme }) => theme.primary};
+  gap: 15px;
   color: white;
-  border: none;
-  border-radius: 8px;
-  padding: 8px 16px;
+  font-weight: 600;
   cursor: pointer;
-  transition: background-color 0.3s;
+  transition: 0.3s;
+  background: ${props => props.$active ? 'rgba(255,255,255,0.08)' : 'transparent'};
+  border: 1px solid ${props => props.$active ? 'rgba(255,255,255,0.1)' : 'transparent'};
 
-  &:hover {
-    background: ${({ theme }) => theme.primaryHover};
+  &:hover { background: rgba(255,255,255,0.05); }
+`;
+
+const ContentArea = styled.div`
+  padding: 50px;
+  display: flex;
+  flex-direction: column;
+  gap: 40px;
+`;
+
+const Section = styled.section`
+  .section-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 25px;
+    
+    h3 {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      font-size: 1.3rem;
+      color: #fff;
+    }
   }
+`;
+
+const ActionButton = styled.button`
+  background: rgba(255, 255, 255, 0.05);
+  border: 1px solid rgba(255, 255, 255, 0.1);
+  color: white;
+  padding: 8px 18px;
+  border-radius: 12px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  transition: 0.3s;
+
+  &:hover { background: rgba(255, 255, 255, 0.1); transform: scale(1.05); }
 `;
 
 const FormGrid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
+  grid-template-columns: 1fr 1fr;
   gap: 20px;
-  margin-bottom: 20px;
+
+  @media (max-width: 600px) { grid-template-columns: 1fr; }
 `;
 
 const FormGroup = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 8px;
+  gap: 10px;
 
   label {
-    font-weight: 500;
-    color: ${({ theme }) => theme.text};
-  }
-`;
-
-const InputWrapper = styled.div`
-  position: relative;
-  display: flex;
-  align-items: center;
-  opacity: ${({ $disabled }) => ($disabled ? 0.6 : 1)};
-`;
-
-const InputIcon = styled.div`
-  position: absolute;
-  left: 12px;
-  color: ${({ theme }) => theme.textSecondary};
-  z-index: 1;
-  pointer-events: none;
-`;
-
-const StyledInput = styled.input`
-  width: 100%;
-  padding: 12px 12px 12px 40px;
-  border: 1px solid ${({ theme }) => theme.border};
-  border-radius: 8px;
-  font-size: 14px;
-  background: ${({ theme, disabled }) =>
-    disabled ? theme.tableDisabled : theme.inputBg};
-  color: ${({ theme }) => theme.text};
-  transition: border-color 0.3s;
-
-  &:focus {
-    outline: none;
-    border-color: ${({ theme }) => theme.primary};
+    font-size: 0.85rem;
+    color: rgba(255, 255, 255, 0.5);
+    font-weight: 600;
+    text-transform: uppercase;
   }
 
-  &:disabled {
-    cursor: not-allowed;
+  .input-box {
+    position: relative;
+    display: flex;
+    align-items: center;
+
+    .icon {
+      position: absolute;
+      left: 15px;
+      color: rgba(255, 255, 255, 0.3);
+    }
+
+    input {
+      width: 100%;
+      background: rgba(255, 255, 255, 0.03);
+      border: 1px solid rgba(255, 255, 255, 0.08);
+      border-radius: 12px;
+      padding: 12px 15px 12px 45px;
+      color: white;
+      font-size: 1rem;
+      transition: 0.3s;
+
+      &:focus {
+        border-color: ${({ theme }) => theme.primary};
+        background: rgba(255, 255, 255, 0.06);
+        outline: none;
+      }
+
+      &:disabled { opacity: 0.6; cursor: not-allowed; }
+    }
   }
-`;
-
-const Input = InputComponent;
-
-// Estilos específicos para campos de contraseña
-const PasswordInputWrapper = styled.div`
-  width: 100%;
-`;
-
-const PasswordInputContainer = styled.div`
-  position: relative;
-  display: flex;
-  align-items: center;
-  width: 100%;
-`;
-
-const PasswordField = styled.input`
-  width: 100%;
-  padding: 12px 45px 12px 40px;
-  border: 1px solid ${({ theme }) => theme.border};
-  border-radius: 8px;
-  font-size: 14px;
-  background: ${({ theme }) => theme.inputBg};
-  color: ${({ theme }) => theme.text};
-  transition: border-color 0.3s;
-
-  &:focus {
-    outline: none;
-    border-color: ${({ theme }) => theme.primary};
-  }
-
-  &::placeholder {
-    color: ${({ theme }) => theme.textSecondary};
-  }
-`;
-
-const PasswordToggle = styled.button`
-  position: absolute;
-  right: 12px;
-  background: none;
-  border: none;
-  color: ${({ theme }) => theme.textSecondary};
-  cursor: pointer;
-  padding: 8px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  border-radius: 4px;
-  transition: color 0.3s, background-color 0.3s;
-
-  &:hover {
-    color: ${({ theme }) => theme.primary};
-    background-color: rgba(0, 0, 0, 0.05);
-  }
-
-  svg {
-    font-size: 16px;
-  }
-`;
-
-const ButtonGroup = styled.div`
-  display: flex;
-  gap: 10px;
-  margin-top: 10px;
 `;
 
 const SaveButton = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 8px;
+  margin-top: 20px;
   background: ${({ theme }) => theme.primary};
   color: white;
   border: none;
-  border-radius: 8px;
-  padding: 12px 24px;
+  padding: 14px 28px;
+  border-radius: 15px;
+  font-weight: 700;
+  display: flex;
+  align-items: center;
+  gap: 12px;
   cursor: pointer;
-  transition: background-color 0.3s;
+  transition: 0.3s;
+  box-shadow: 0 4px 15px rgba(21, 28, 132, 0.4);
 
-  &:hover {
-    background: ${({ theme }) => theme.primaryHover};
-  }
-
-  &:disabled {
-    background: ${({ theme }) => theme.textSecondary};
-    cursor: not-allowed;
-    opacity: 0.6;
-  }
+  &:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(21, 28, 132, 0.5); }
+  &:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
 `;

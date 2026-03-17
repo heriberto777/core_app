@@ -97,6 +97,8 @@ const TableConfigSchema = new Schema({
   targetPrimaryKey: { type: String }, // Clave primaria en tabla destino
   isDetailTable: { type: Boolean, default: false },
   parentTableRef: { type: String }, // Para tablas de detalle, referencia a la tabla padre
+  foreignKey: { type: String }, // Clave foránea que relaciona esta tabla con la tabla padre
+  joinType: { type: String, enum: ["INNER", "LEFT", "RIGHT"], default: "INNER" }, // Tipo de JOIN para detalle
   useSameSourceTable: { type: Boolean, default: false }, // Indica si usa la misma tabla del header
   fieldMappings: [FieldMappingSchema],
   filterCondition: { type: String }, // Condición SQL para filtrar registros (WHERE clause)

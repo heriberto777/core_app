@@ -1,6 +1,6 @@
 const logger = require("./logger");
 const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
-const TransferTask = require("../models/transferTaks");
+const TransferTask = require("../models/transferTaskModel");
 
 const UnifiedCancellationService = require("./UnifiedCancellationService");
 const { sendProgress } = require("./progressSse");
@@ -9,7 +9,7 @@ const {
   sendCriticalErrorEmail,
 } = require("./emailService");
 const TaskTracker = require("./TaskTracker");
-const RetryService  = require("./RetryService");
+const RetryService = require("./RetryService");
 const MemoryManager = require("./MemoryManager");
 const Telemetry = require("./Telemetry");
 const TaskExecution = require("../models/taskExecutionModel");
@@ -529,8 +529,7 @@ class TransferService {
           if (attempt > 0) {
             await this.verifyAndRefreshConnections(taskId);
             logger.info(
-              `Reintentando transferencia ${taskId} (intento ${
-                attempt + 1
+              `Reintentando transferencia ${taskId} (intento ${attempt + 1
               }/${maxRetries})...`
             );
           }
@@ -551,8 +550,7 @@ class TransferService {
 
           const delay = Math.min(2000 * Math.pow(2, attempt), 30000);
           logger.warn(
-            `Error recuperable en transferencia ${taskId}, reintentando en ${
-              delay / 1000
+            `Error recuperable en transferencia ${taskId}, reintentando en ${delay / 1000
             } segundos...`
           );
           await new Promise((resolve) => setTimeout(resolve, delay));
@@ -619,6 +617,15 @@ class TransferService {
 
       // 1. Preparar la transferencia
       const taskInfo = await this.prepareTransfer(taskId, signal);
+
+      // ACTUALIZACIÓN FALTANTE: Establecer explicitamente status running y progress=0 en mongodb
+      await TransferTask.findByIdAndUpdate(taskId, {
+        status: "running",
+        progress: 0,
+        lastExecutionDate: new Date(),
+      });
+      // Emitir primer checkpoint SSE
+      sendProgress(taskId, 0, "running");
 
       // Crear registro de ejecución
       const taskExecution = new TaskExecution({
@@ -924,8 +931,7 @@ class TransferService {
       }
 
       logger.debug(
-        `Ejecutando consulta en ${sourceServerKey} para ${
-          task.name
+        `Ejecutando consulta en ${sourceServerKey} para ${task.name
         }: ${finalQuery.substring(0, 200)}...`
       );
 
@@ -1310,8 +1316,7 @@ class TransferService {
                   Telemetry.trackTransfer("recordsDuplicated");
                 } else {
                   throw new Error(
-                    `Error al insertar registro: ${
-                      insertError.message || "Error desconocido"
+                    `Error al insertar registro: ${insertError.message || "Error desconocido"
                     }`
                   );
                 }
@@ -1709,8 +1714,7 @@ class TransferService {
     }
 
     logger.info(
-      `Programando procesamiento de cola de reintentos en ${
-        waitTime / 1000
+      `Programando procesamiento de cola de reintentos en ${waitTime / 1000
       } segundos`
     );
 
@@ -1785,8 +1789,7 @@ class TransferService {
         tasksToProcess.map(async (task) => {
           try {
             logger.info(
-              `Reintentando tarea ${task.taskId} (intento ${
-                task.retryCount + 1
+              `Reintentando tarea ${task.taskId} (intento ${task.retryCount + 1
               }/${this.retryQueue.maxRetries})...`
             );
             const result = await this.executeTransferWithRetry(task.taskId);
@@ -1811,9 +1814,8 @@ class TransferService {
               try {
                 await TransferTask.findByIdAndUpdate(task.taskId, {
                   status: "failed",
-                  lastError: `Fallido después de ${
-                    this.retryQueue.maxRetries
-                  } reintentos: ${error.message || "Error desconocido"}`,
+                  lastError: `Fallido después de ${this.retryQueue.maxRetries
+                    } reintentos: ${error.message || "Error desconocido"}`,
                 });
               } catch (dbError) {
                 logger.error(
@@ -1833,8 +1835,7 @@ class TransferService {
       );
 
       logger.info(
-        `Procesamiento de cola completado: ${
-          results.filter((r) => r.success).length
+        `Procesamiento de cola completado: ${results.filter((r) => r.success).length
         } exitosas, ${results.filter((r) => !r.success).length} fallidas`
       );
 
@@ -1961,7 +1962,7 @@ class TransferService {
 
       TaskTracker.registerTask(
         cancelTaskId,
-        localAbortController || { abort: () => {} },
+        localAbortController || { abort: () => { } },
         {
           type: "batchInsert",
           taskName,
@@ -2182,8 +2183,7 @@ class TransferService {
             );
             finalCount = countResult.recordset[0].total || 0;
             logger.info(
-              `Conteo final en tabla ${task.name}: ${finalCount} registros (${
-                finalCount - initialCount
+              `Conteo final en tabla ${task.name}: ${finalCount} registros (${finalCount - initialCount
               } nuevos)`
             );
           } catch (countError) {
@@ -2568,8 +2568,7 @@ class TransferService {
                 }
 
                 logger.info(
-                  `Tarea encadenada ${nextTask.name} completada: ${
-                    chainResult.success ? "Éxito" : "Error"
+                  `Tarea encadenada ${nextTask.name} completada: ${chainResult.success ? "Éxito" : "Error"
                   }`
                 );
 
@@ -2887,8 +2886,7 @@ class TransferService {
     for (let batchIndex = 0; batchIndex < batches.length; batchIndex++) {
       const batch = batches[batchIndex];
       logger.info(
-        `Procesando lote ${batchIndex + 1}/${batches.length} con ${
-          batch.length
+        `Procesando lote ${batchIndex + 1}/${batches.length} con ${batch.length
         } tareas`
       );
 
@@ -2937,8 +2935,7 @@ class TransferService {
     }
 
     logger.info(
-      `Procesamiento por lotes completado: ${
-        results.filter((r) => r.success).length
+      `Procesamiento por lotes completado: ${results.filter((r) => r.success).length
       } exitosas, ${results.filter((r) => !r.success).length} fallidas`
     );
     return results;

@@ -1,250 +1,120 @@
 const bcrypt = require("bcrypt");
 const User = require("../models/userModel");
 const Role = require("../models/roleModel");
-const {
-  createAccessToken,
-  createRefreshToken,
-  decoded,
-} = require("../services/jwt");
+const logger = require("../services/logger");
+const { createAccessToken, createRefreshToken, decoded } = require("../services/jwt");
 
-// Función de login adaptada con roles
+/**
+ * Función de login adaptada con roles
+ */
 async function login(req, res) {
   try {
     const { email, password } = req.body;
+    const emailCase = email?.toLowerCase().trim();
 
-    console.log("🔐 Intentando login para:", email);
+    logger.info(`Intento de login para: ${emailCase}`);
 
-    if (typeof email !== "string") {
-      return res.status(400).send({
-        state: false,
-        msg: "El email debe ser una cadena de texto válida",
-      });
-    }
-
-    // Validaciones básicas
-    if (!email || !password) {
-      return res.status(400).send({
-        state: false,
-        msg: "Email y contraseña son obligatorios",
-      });
-    }
-
-    // Buscar usuario por email y poblar roles
-    const emailCase = email.toLowerCase();
     const user = await User.findOne({ email: emailCase }).populate({
       path: "roles",
-      match: { isActive: true }, // Solo roles activos
+      match: { isActive: true },
       select: "name displayName description permissions isActive isSystem",
     });
 
-    console.log("❌ Usuario no encontrado:", email);
-
     if (!user) {
-      console.log("❌ Usuario no encontrado:", email);
-      return res.status(400).send({
-        state: false,
-        msg: "Email o contraseña incorrectos",
-      });
+      logger.warn(`Usuario no encontrado: ${emailCase}`);
+      return res.status(401).json({ success: false, message: "Email o contraseña incorrectos" });
     }
 
-    // Verificar si el usuario está activo
     if (!user.activo) {
-      console.log("❌ Usuario inactivo:", email);
-      return res.status(400).send({
-        state: false,
-        msg: "Usuario desactivado. Contacte al administrador",
-      });
+      logger.warn(`Acceso denegado: Usuario inactivo (${emailCase})`);
+      return res.status(403).json({ success: false, message: "Usuario desactivado. Contacte al administrador" });
     }
 
-    // Verificar contraseña
-    const passwordValid = bcrypt.compareSync(password, user.password);
-    if (!passwordValid) {
-      console.log("❌ Contraseña incorrecta para:", email);
-      return res.status(400).send({
-        state: false,
-        msg: "Email o contraseña incorrectos",
-      });
+    if (!bcrypt.compareSync(password, user.password)) {
+      logger.warn(`Contraseña incorrecta para: ${emailCase}`);
+      return res.status(401).json({ success: false, message: "Email o contraseña incorrectos" });
     }
 
-    console.log("✅ Credenciales válidas para:", email);
-
-    // ⭐ RECOPILAR PERMISOS DEL USUARIO ⭐
+    // ⭐ RECOPILAR PERMISOS
     let allPermissions = [];
-
-    // 1. Agregar permisos específicos del usuario (si los tiene)
-    if (user.permissions && user.permissions.length > 0) {
-      console.log(
-        "📋 Permisos específicos del usuario:",
-        user.permissions.length
-      );
+    if (user.permissions?.length > 0) {
       allPermissions = [...user.permissions];
     }
 
-    // 2. Agregar permisos de roles
-    if (user.roles && user.roles.length > 0) {
-      console.log(
-        "🎭 Roles del usuario:",
-        user.roles.map((role) => role.displayName).join(", ")
-      );
-
+    if (user.roles?.length > 0) {
       user.roles.forEach((role) => {
-        if (role.isActive && role.permissions) {
-          role.permissions.forEach((permission) => {
-            // Verificar si ya existe este recurso en los permisos
-            const existingPermission = allPermissions.find(
-              (p) => p.resource === permission.resource
-            );
-
-            if (existingPermission) {
-              // Combinar acciones evitando duplicados
-              const combinedActions = [
-                ...new Set([
-                  ...existingPermission.actions,
-                  ...permission.actions,
-                ]),
-              ];
-              existingPermission.actions = combinedActions;
-            } else {
-              // Agregar nueva permiso
-              allPermissions.push({
-                resource: permission.resource,
-                actions: [...permission.actions],
-              });
-            }
-          });
-        }
+        role.permissions?.forEach((permission) => {
+          const existingPermission = allPermissions.find((p) => p.resource === permission.resource);
+          if (existingPermission) {
+            existingPermission.actions = [...new Set([...existingPermission.actions, ...permission.actions])];
+          } else {
+            allPermissions.push({ resource: permission.resource, actions: [...permission.actions] });
+          }
+        });
       });
     }
 
-    // 3. Si es admin, agregar permisos completos
     if (user.isAdmin) {
-      console.log("👑 Usuario es administrador - agregando permisos completos");
-      // Los admins tienen acceso a todo, pero mantenemos la lista específica para referencia
-      const adminResources = [
-        "users",
-        "roles",
-        "system",
-        "settings",
-        "tasks",
-        "loads",
-        "reports",
-        "analytics",
-        "logs",
-        "documents",
-        "history",
-      ];
+      const adminResources = ["users", "roles", "system", "settings", "tasks", "loads", "reports", "analytics", "logs", "documents", "history"];
       adminResources.forEach((resource) => {
-        const existingPermission = allPermissions.find(
-          (p) => p.resource === resource
-        );
+        const existingPermission = allPermissions.find((p) => p.resource === resource);
         if (!existingPermission) {
-          allPermissions.push({
-            resource,
-            actions: ["manage"],
-          });
+          allPermissions.push({ resource, actions: ["manage"] });
         } else if (!existingPermission.actions.includes("manage")) {
           existingPermission.actions.push("manage");
         }
       });
     }
 
-    console.log("🔑 Total de permisos calculados:", allPermissions.length);
-
-    // Generar tokens
     const accessToken = createAccessToken(user);
     const refreshToken = createRefreshToken(user);
 
-    console.log("🎫 Tokens generados exitosamente");
+    logger.info(`Login exitoso: ${user.email} por ${user._id}`);
 
-    // ⭐ LOGS DETALLADOS PARA DEBUG ⭐
-    console.log(
-      "🔍 ACCESS TOKEN:",
-      accessToken ? `${accessToken.substring(0, 50)}...` : "❌ VACÍO"
-    );
-    console.log(
-      "🔍 REFRESH TOKEN:",
-      refreshToken ? `${refreshToken.substring(0, 50)}...` : "❌ VACÍO"
-    );
-
-    // ⭐ RESPUESTA ADAPTADA CON ROLES Y PERMISOS ⭐
-    const responseData = {
-      state: true,
-      msg: "Login exitoso",
-      accessToken,
-      refreshToken,
-      user: {
-        _id: user._id,
-        name: user.name,
-        lastname: user.lastname,
-        email: user.email,
-        telefono: user.telefono,
-        avatar: user.avatar,
-        activo: user.activo,
-
-        // ⭐ COMPATIBILIDAD CON SISTEMA ANTERIOR ⭐
-        role: user.role || [], // Mantener roles legacy
-
-        // ⭐ NUEVO SISTEMA DE ROLES ⭐
-        roles: user.roles || [], // Roles poblados del nuevo sistema
-        permissions: allPermissions, // Permisos calculados
-        isAdmin: user.isAdmin || false,
-
-        // Campos adicionales si existen
-        theme: user.theme,
-        isRuta: user.isRuta,
-        vendedor: user.vendedor,
-        retail: user.retail,
-        createdAt: user.createdAt,
-        updatedAt: user.updatedAt,
-      },
-    };
-
-    // ⭐ LOG DE LA RESPUESTA COMPLETA ⭐
-    console.log("📤 RESPUESTA ENVIADA:");
-    console.log("- state:", responseData.state);
-    console.log("- accessToken presente:", !!responseData.accessToken);
-    console.log("- refreshToken presente:", !!responseData.refreshToken);
-    console.log("- user presente:", !!responseData.user);
-
-    console.log(
-      "✅ Login completado exitosamente para:",
-      user.name,
-      user.lastname
-    );
-
-    res.status(200).send(responseData);
-  } catch (error) {
-    console.error("❌ Error en login:", error);
-    res.status(500).send({
-      state: false,
-      msg: "Error interno del servidor",
+    return res.status(200).json({
+      success: true,
+      message: "Login exitoso",
+      data: {
+        accessToken,
+        refreshToken,
+        user: {
+          _id: user._id,
+          name: user.name,
+          lastname: user.lastname,
+          email: user.email,
+          telefono: user.telefono,
+          avatar: user.avatar,
+          activo: user.activo,
+          roles: user.roles || [],
+          permissions: allPermissions,
+          isAdmin: user.isAdmin || false,
+          theme: user.theme,
+          isRuta: user.isRuta,
+          vendedor: user.vendedor,
+          retail: user.retail,
+          createdAt: user.createdAt,
+          updatedAt: user.updatedAt,
+        }
+      }
     });
+  } catch (error) {
+    logger.error("Error en login:", error);
+    return res.status(500).json({ success: false, message: "Error interno del servidor", error: error.message });
   }
 }
 
-// Función para refrescar token de acceso
+/**
+ * Función para refrescar token de acceso
+ */
 async function refreshAccessToken(req, res) {
   try {
     const { token } = req.body;
-
-    if (!token) {
-      return res.status(400).send({
-        state: false,
-        msg: "Token de refresh requerido",
-      });
-    }
-
-    // Verificar y decodificar el refresh token
     const payload = decoded(token);
 
-    if (payload.token_type !== "refresh") {
-      return res.status(400).send({
-        state: false,
-        msg: "Tipo de token inválido",
-      });
+    if (!payload || payload.token_type !== "refresh") {
+      return res.status(401).json({ success: false, message: "Token de refresh inválido o expirado" });
     }
 
-    // Buscar usuario y poblar roles
     const user = await User.findById(payload.user_id).populate({
       path: "roles",
       match: { isActive: true },
@@ -252,169 +122,115 @@ async function refreshAccessToken(req, res) {
     });
 
     if (!user || !user.activo) {
-      return res.status(400).send({
-        state: false,
-        msg: "Usuario no válido o inactivo",
-      });
+      logger.warn(`Refresh token fallido: Usuario no válido o inactivo (${payload.user_id})`);
+      return res.status(401).json({ success: false, message: "Usuario no válido o inactivo" });
     }
 
-    // Generar nuevo access token
     const accessToken = createAccessToken(user);
+    logger.debug(`AccessToken renovado: ${user.email}`);
 
-    console.log("✅ Access token renovado para:", user.email);
-
-    res.status(200).send({
-      state: true,
-      accessToken,
-    });
+    return res.status(200).json({ success: true, data: { accessToken } });
   } catch (error) {
-    console.error("❌ Error en refresh token:", error);
-    res.status(400).send({
-      state: false,
-      msg: "Token de refresh inválido o expirado",
-    });
+    logger.error("Error en refreshAccessToken:", error);
+    return res.status(401).json({ success: false, message: "Error al refrescar token", error: error.message });
   }
 }
 
-// Función para registro (opcional - si no la tienes)
+/**
+ * Función para registro
+ */
 async function register(req, res) {
   try {
     const { name, lastname, email, password, telefono } = req.body;
+    const emailCase = email?.toLowerCase().trim();
 
-    console.log("📝 Intentando registrar usuario:", email);
+    logger.info(`Intento de registro: ${emailCase}`);
 
-    // Validaciones básicas
-    if (!name || !lastname || !email || !password) {
-      return res.status(400).send({
-        state: false,
-        msg: "Todos los campos son obligatorios",
-      });
-    }
-
-    // Verificar si el email ya existe
-    const existingUser = await User.findOne({ email: email.toLowerCase() });
+    const existingUser = await User.findOne({ email: emailCase });
     if (existingUser) {
-      return res.status(400).send({
-        state: false,
-        msg: "El email ya está registrado",
-      });
+      return res.status(409).json({ success: false, message: "El email ya está registrado" });
     }
 
-    // Crear usuario
     const salt = bcrypt.genSaltSync(10);
     const hashedPassword = bcrypt.hashSync(password, salt);
+    const defaultRole = await Role.findOne({ name: "employee", isActive: true });
 
-    // Obtener rol por defecto (employee)
-    const defaultRole = await Role.findOne({
-      name: "employee",
-      isActive: true,
-    });
-
-    const userData = {
-      name: name.trim(),
-      lastname: lastname.trim(),
-      email: email.toLowerCase().trim(),
+    const user = new User({
+      name: name?.trim(),
+      lastname: lastname?.trim(),
+      email: emailCase,
       password: hashedPassword,
       telefono: telefono?.trim(),
       activo: true,
       roles: defaultRole ? [defaultRole._id] : [],
       isAdmin: false,
-    };
+    });
 
-    const user = new User(userData);
-    const savedUser = await user.save();
+    await user.save();
+    logger.info(`Usuario registrado exitosamente: ${user.email}`);
 
-    console.log("✅ Usuario registrado exitosamente:", savedUser.email);
-
-    res.status(201).send({
-      state: true,
-      msg: "Usuario registrado exitosamente",
-      user: {
-        _id: savedUser._id,
-        name: savedUser.name,
-        lastname: savedUser.lastname,
-        email: savedUser.email,
-        telefono: savedUser.telefono,
+    return res.status(201).json({
+      success: true,
+      message: "Usuario registrado exitosamente",
+      data: {
+        _id: user._id,
+        name: user.name,
+        lastname: user.lastname,
+        email: user.email,
+        telefono: user.telefono,
       },
     });
   } catch (error) {
-    console.error("❌ Error en registro:", error);
-    res.status(500).send({
-      state: false,
-      msg: "Error interno del servidor",
-    });
+    logger.error("Error en register:", error);
+    return res.status(500).json({ success: false, message: "Error interno del servidor", error: error.message });
   }
 }
 
-// Función para verificar si el usuario actual tiene permisos (útil para endpoints)
+/**
+ * Verifica permisos del usuario actual
+ */
 async function checkUserPermissions(req, res) {
   try {
-    const { user_id } = req.user; // Viene del middleware de autenticación
+    const userId = req.user?.user_id || req.user?._id;
 
-    const user = await User.findById(user_id)
+    const user = await User.findById(userId)
       .populate({
         path: "roles",
         match: { isActive: true },
         select: "name displayName permissions",
       })
-      .select("-password");
+      .select("-password")
+      .lean();
 
-    if (!user) {
-      return res.status(404).send({
-        state: false,
-        msg: "Usuario no encontrado",
-      });
-    }
+    if (!user) return res.status(404).json({ success: false, message: "Usuario no encontrado" });
 
-    // Calcular permisos (misma lógica que en login)
     let allPermissions = [];
-
-    if (user.permissions) {
-      allPermissions = [...user.permissions];
-    }
+    if (user.permissions) allPermissions = [...user.permissions];
 
     if (user.roles) {
       user.roles.forEach((role) => {
-        if (role.permissions) {
-          role.permissions.forEach((permission) => {
-            const existingPermission = allPermissions.find(
-              (p) => p.resource === permission.resource
-            );
-            if (existingPermission) {
-              existingPermission.actions = [
-                ...new Set([
-                  ...existingPermission.actions,
-                  ...permission.actions,
-                ]),
-              ];
-            } else {
-              allPermissions.push(permission);
-            }
-          });
-        }
+        role.permissions?.forEach((permission) => {
+          const existingPermission = allPermissions.find((p) => p.resource === permission.resource);
+          if (existingPermission) {
+            existingPermission.actions = [...new Set([...existingPermission.actions, ...permission.actions])];
+          } else {
+            allPermissions.push(permission);
+          }
+        });
       });
     }
 
-    res.status(200).send({
-      state: true,
+    return res.status(200).json({
+      success: true,
       data: {
-        user: {
-          _id: user._id,
-          name: user.name,
-          lastname: user.lastname,
-          email: user.email,
-          isAdmin: user.isAdmin,
-        },
+        user: { _id: user._id, name: user.name, lastname: user.lastname, email: user.email, isAdmin: user.isAdmin },
         roles: user.roles,
         permissions: allPermissions,
       },
     });
   } catch (error) {
-    console.error("❌ Error verificando permisos:", error);
-    res.status(500).send({
-      state: false,
-      msg: "Error interno del servidor",
-    });
+    logger.error("Error en checkUserPermissions:", error);
+    return res.status(500).json({ success: false, message: "Error interno del servidor", error: error.message });
   }
 }
 

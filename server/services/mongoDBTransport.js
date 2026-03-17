@@ -19,7 +19,8 @@ class MongoDBTransport extends Transport {
     this.lastError = 0;
     this.cooldownTime = 30000; // Reducido de 60s a 30s
     this.reconnectAttempts = 0;
-    this.maxReconnectAttempts = 3;
+    this.maxReconnectAttempts = 50; // Mucho más margen
+    this.reconnectInterval = 10000; // 10 segundos
 
     // Buffer mejorado
     this.logBuffer = [];
@@ -38,7 +39,7 @@ class MongoDBTransport extends Transport {
     // Restaurar buffer desde archivo si existe
     this.restoreBufferFromFile();
 
-    // Inicializar conexión
+    // Inicializar conexión con delay prudente
     setTimeout(() => this.initializeConnection(), 1000);
 
     // Limpiar buffer y procesar batches periódicamente
@@ -79,21 +80,28 @@ class MongoDBTransport extends Transport {
   }
 
   async handleReconnection() {
+    if (this.isReady || this.reconnectAttempts >= this.maxReconnectAttempts) {
+      if (this.reconnectAttempts >= this.maxReconnectAttempts) {
+        console.warn("⚠️ MongoDB Transport: Límite de reintentos alcanzado (en espera)");
+      }
+      return;
+    }
+
     this.reconnectAttempts++;
-    if (this.reconnectAttempts <= this.maxReconnectAttempts) {
-      console.log(
-        `🔄 Intento de reconexión ${this.reconnectAttempts}/${this.maxReconnectAttempts}`
-      );
-      const delay = Math.min(
-        3000 * Math.pow(1.5, this.reconnectAttempts - 1),
-        15000
-      );
-      setTimeout(() => this.initializeConnection(), delay);
+
+    // Loguear solo cada 5 intentos para evitar ruido
+    if (this.reconnectAttempts % 5 === 0 || this.reconnectAttempts === 1) {
+      console.log(`🔄 MongoDB Transport: Esperando conexión... (${this.reconnectAttempts}/${this.maxReconnectAttempts})`);
+    }
+
+    if (this._isMongoConnected()) {
+      this.isReady = true;
+      this.errorCount = 0;
+      this.reconnectAttempts = 0;
+      console.log("✅ MongoDB Transport conectado y listo");
+      await this.processBuffer();
     } else {
-      console.warn("⚠️ MongoDB Transport: máximo de reintentos alcanzado");
-      this.isReady = false;
-      // Persistir buffer en archivo
-      this.persistBufferToFile();
+      setTimeout(() => this.handleReconnection(), this.reconnectInterval);
     }
   }
 
@@ -446,8 +454,7 @@ class MongoDBTransport extends Transport {
 
     if (originalLength > this.logBuffer.length) {
       console.log(
-        `🧹 Buffer cleanup: eliminados ${
-          originalLength - this.logBuffer.length
+        `🧹 Buffer cleanup: eliminados ${originalLength - this.logBuffer.length
         } logs antiguos`
       );
     }

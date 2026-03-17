@@ -1,235 +1,165 @@
-// controllers/emailRecipientController.js
 const EmailRecipientService = require("../services/emailRecipientService");
 const logger = require("../services/logger");
 
 /**
  * Obtiene todos los destinatarios de correo
- * @param {Request} req - Objeto de solicitud Express
- * @param {Response} res - Objeto de respuesta Express
  */
 const getAllRecipients = async (req, res) => {
   try {
     const recipients = await EmailRecipientService.getAllRecipients();
-    res.json(recipients);
-  } catch (error) {
-    logger.error("Error al obtener destinatarios de correo:", error);
-    res.status(500).json({
-      message: "Error al obtener destinatarios",
-      error: error.message,
+    return res.status(200).json({
+      success: true,
+      message: "Destinatarios obtenidos correctamente",
+      data: recipients,
     });
+  } catch (error) {
+    logger.error("Error en getAllRecipients:", error);
+    return res.status(500).json({ success: false, message: "Error al obtener destinatarios", error: error.message });
   }
 };
 
 /**
- * Obtiene un destinatario de correo por ID
- * @param {Request} req - Objeto de solicitud Express
- * @param {Response} res - Objeto de respuesta Express
+ * Obtiene un destinatario por ID
  */
 const getRecipientById = async (req, res) => {
   try {
     const { id } = req.params;
     const recipient = await EmailRecipientService.getRecipientById(id);
+    if (!recipient) return res.status(404).json({ success: false, message: "Destinatario no encontrado" });
 
-    if (!recipient) {
-      return res.status(404).json({ message: "Destinatario no encontrado" });
-    }
-
-    res.json(recipient);
+    return res.status(200).json({
+      success: true,
+      message: "Destinatario obtenido correctamente",
+      data: recipient,
+    });
   } catch (error) {
-    logger.error(
-      `Error al obtener destinatario de correo con ID ${req.params.id}:`,
-      error
-    );
-    res
-      .status(500)
-      .json({ message: "Error al obtener destinatario", error: error.message });
+    logger.error(`Error en getRecipientById (${req.params.id}):`, error);
+    return res.status(500).json({ success: false, message: "Error al obtener destinatario", error: error.message });
   }
 };
 
 /**
- * Crea un nuevo destinatario de correo
- * @param {Request} req - Objeto de solicitud Express
- * @param {Response} res - Objeto de respuesta Express
+ * Crea un nuevo destinatario
  */
 const createRecipient = async (req, res) => {
   try {
     const { name, email, notificationTypes, isSend, isActive } = req.body;
+    const userId = req.user?.user_id || req.user?._id || "SYSTEM";
 
-    // Validar datos obligatorios
-    if (!name || !email) {
-      return res
-        .status(400)
-        .json({ message: "El nombre y correo son obligatorios" });
-    }
+    if (!name || !email) return res.status(400).json({ success: false, message: "Nombre y correo son obligatorios" });
 
-    // Crear el destinatario
     const newRecipient = await EmailRecipientService.addRecipient({
-      name,
-      email,
-      notificationTypes,
-      isSend,
-      isActive,
+      name, email, notificationTypes, isSend, isActive
     });
 
-    res.status(201).json(newRecipient);
+    logger.info(`Destinatario creado: ${email} por ${userId}`);
+    return res.status(201).json({
+      success: true,
+      message: "Destinatario creado correctamente",
+      data: newRecipient,
+    });
   } catch (error) {
-    logger.error("Error al crear destinatario de correo:", error);
-
-    // Verificar si es un error de duplicado
+    logger.error("Error en createRecipient:", error);
     if (error.message.includes("duplicate key") || error.code === 11000) {
-      return res
-        .status(400)
-        .json({ message: "El correo electrónico ya está registrado" });
+      return res.status(400).json({ success: false, message: "El correo electrónico ya está registrado" });
     }
-
-    res
-      .status(500)
-      .json({ message: "Error al crear destinatario", error: error.message });
+    return res.status(500).json({ success: false, message: "Error al crear destinatario", error: error.message });
   }
 };
 
 /**
- * Actualiza un destinatario de correo
- * @param {Request} req - Objeto de solicitud Express
- * @param {Response} res - Objeto de respuesta Express
+ * Actualiza un destinatario
  */
 const updateRecipient = async (req, res) => {
   try {
     const { id } = req.params;
     const { name, email, notificationTypes, isSend, isActive } = req.body;
+    const userId = req.user?.user_id || req.user?._id || "SYSTEM";
 
-    // Validar que exista algún dato para actualizar
-    if (
-      !name &&
-      !email &&
-      !notificationTypes &&
-      isSend === undefined &&
-      isActive === undefined
-    ) {
-      return res
-        .status(400)
-        .json({ message: "No se proporcionaron datos para actualizar" });
+    if (!name && !email && !notificationTypes && isSend === undefined && isActive === undefined) {
+      return res.status(400).json({ success: false, message: "No se proporcionaron datos para actualizar" });
     }
 
-    // Construir el objeto con los datos a actualizar
-    const updateData = {};
-    if (name) updateData.name = name;
-    if (email) updateData.email = email;
-    if (notificationTypes) updateData.notificationTypes = notificationTypes;
-    if (isSend !== undefined) updateData.isSend = isSend;
-    if (isActive !== undefined) updateData.isActive = isActive;
-
-    // Actualizar el destinatario
-    const updatedRecipient = await EmailRecipientService.updateRecipient(
-      id,
-      updateData
-    );
-
-    res.json(updatedRecipient);
-  } catch (error) {
-    logger.error(
-      `Error al actualizar destinatario de correo con ID ${req.params.id}:`,
-      error
-    );
-
-    // Verificar si es un error de duplicado
-    if (error.message.includes("duplicate key") || error.code === 11000) {
-      return res
-        .status(400)
-        .json({ message: "El correo electrónico ya está registrado" });
-    }
-
-    // Verificar si no se encontró el destinatario
-    if (error.message.includes("No se encontró destinatario")) {
-      return res.status(404).json({ message: error.message });
-    }
-
-    res.status(500).json({
-      message: "Error al actualizar destinatario",
-      error: error.message,
+    const updatedRecipient = await EmailRecipientService.updateRecipient(id, {
+      name, email, notificationTypes, isSend, isActive
     });
+
+    logger.info(`Destinatario actualizado: ${id} por ${userId}`);
+    return res.status(200).json({
+      success: true,
+      message: "Destinatario actualizado correctamente",
+      data: updatedRecipient,
+    });
+  } catch (error) {
+    logger.error(`Error en updateRecipient (${req.params.id}):`, error);
+    if (error.message.includes("duplicate key") || error.code === 11000) {
+      return res.status(400).json({ success: false, message: "El correo electrónico ya está registrado" });
+    }
+    if (error.message.includes("No se encontró destinatario")) {
+      return res.status(404).json({ success: false, message: error.message });
+    }
+    return res.status(500).json({ success: false, message: "Error al actualizar", error: error.message });
   }
 };
 
 /**
- * Elimina un destinatario de correo
- * @param {Request} req - Objeto de solicitud Express
- * @param {Response} res - Objeto de respuesta Express
+ * Elimina un destinatario
  */
 const deleteRecipient = async (req, res) => {
   try {
     const { id } = req.params;
+    const userId = req.user?.user_id || req.user?._id || "SYSTEM";
+
     await EmailRecipientService.deleteRecipient(id);
-    res.json({ message: "Destinatario eliminado correctamente" });
+    logger.info(`Destinatario eliminado: ${id} por ${userId}`);
+    return res.status(200).json({ success: true, message: "Destinatario eliminado correctamente" });
   } catch (error) {
-    logger.error(
-      `Error al eliminar destinatario de correo con ID ${req.params.id}:`,
-      error
-    );
-
-    // Verificar si no se encontró el destinatario
+    logger.error(`Error en deleteRecipient (${req.params.id}):`, error);
     if (error.message.includes("No se encontró destinatario")) {
-      return res.status(404).json({ message: error.message });
+      return res.status(404).json({ success: false, message: error.message });
     }
-
-    res.status(500).json({
-      message: "Error al eliminar destinatario",
-      error: error.message,
-    });
+    return res.status(500).json({ success: false, message: "Error al eliminar", error: error.message });
   }
 };
 
 /**
- * Alterna el estado de envío de un destinatario (activar/desactivar)
- * @param {Request} req - Objeto de solicitud Express
- * @param {Response} res - Objeto de respuesta Express
+ * Alterna el estado de envío
  */
 const toggleSendStatus = async (req, res) => {
-  console.log(req.params);
   try {
     const { id } = req.params;
-    const updatedRecipient = await EmailRecipientService.toggleSendStatus(id);
-    res.json({
-      message: `Estado de envío ${
-        updatedRecipient.isSend ? "activado" : "desactivado"
-      } correctamente`,
-      recipient: updatedRecipient,
+    const userId = req.user?.user_id || req.user?._id || "SYSTEM";
+
+    const updated = await EmailRecipientService.toggleSendStatus(id);
+    const msg = `Estado de envío ${updated.isSend ? "activado" : "desactivado"} correctamente`;
+
+    logger.info(`Toggle isSend para ${id} por ${userId}: ${updated.isSend}`);
+    return res.status(200).json({
+      success: true,
+      message: msg,
+      data: updated,
     });
   } catch (error) {
-    logger.error(
-      `Error al alternar estado de destinatario con ID ${req.params.id}:`,
-      error
-    );
-
-    // Verificar si no se encontró el destinatario
+    logger.error(`Error en toggleSendStatus (${req.params.id}):`, error);
     if (error.message.includes("No se encontró destinatario")) {
-      return res.status(404).json({ message: error.message });
+      return res.status(404).json({ success: false, message: error.message });
     }
-
-    res.status(500).json({
-      message: "Error al alternar estado de envío",
-      error: error.message,
-    });
+    return res.status(500).json({ success: false, message: "Error al alternar estado", error: error.message });
   }
 };
 
 /**
  * Inicializa destinatarios por defecto
- * @param {Request} req - Objeto de solicitud Express
- * @param {Response} res - Objeto de respuesta Express
  */
 const initializeDefaultRecipients = async (req, res) => {
   try {
+    const userId = req.user?.user_id || req.user?._id || "SYSTEM";
     await EmailRecipientService.initializeDefaultRecipients();
-    res.json({
-      message: "Destinatarios por defecto inicializados correctamente",
-    });
+    logger.info(`Destinatarios por defecto inicializados por ${userId}`);
+    return res.status(200).json({ success: true, message: "Destinatarios por defecto inicializados correctamente" });
   } catch (error) {
-    logger.error("Error al inicializar destinatarios por defecto:", error);
-    res.status(500).json({
-      message: "Error al inicializar destinatarios",
-      error: error.message,
-    });
+    logger.error("Error en initializeDefaultRecipients:", error);
+    return res.status(500).json({ success: false, message: "Error al inicializar destinatarios", error: error.message });
   }
 };
 

@@ -14,37 +14,37 @@ const Badge = styled.span`
   letter-spacing: 0.5px;
   white-space: nowrap;
 
-  ${({ variant }) => {
+  ${({ variant, theme }) => {
     const variants = {
       success: `
-        background: #dcfce7;
-        color: #166534;
-        border: 1px solid #bbf7d0;
+        background: ${theme.success}20;
+        color: ${theme.success};
+        border: 1px solid ${theme.success}40;
       `,
       warning: `
-        background: #fefce8;
-        color: #a16207;
-        border: 1px solid #fde047;
+        background: ${theme.warning}20;
+        color: ${theme.warning};
+        border: 1px solid ${theme.warning}40;
       `,
       danger: `
-        background: #fee2e2;
-        color: #dc2626;
-        border: 1px solid #fecaca;
+        background: ${theme.danger}20;
+        color: ${theme.danger};
+        border: 1px solid ${theme.danger}40;
       `,
       info: `
-        background: #dbeafe;
-        color: #2563eb;
-        border: 1px solid #bfdbfe;
+        background: ${theme.info}20;
+        color: ${theme.info};
+        border: 1px solid ${theme.info}40;
       `,
       secondary: `
-        background: #f1f5f9;
-        color: #64748b;
-        border: 1px solid #e2e8f0;
+        background: ${theme.secondary}20;
+        color: ${theme.secondary};
+        border: 1px solid ${theme.secondary}40;
       `,
       primary: `
-        background: #ede9fe;
-        color: #7c3aed;
-        border: 1px solid #d8b4fe;
+        background: ${theme.primary}20;
+        color: ${theme.primary};
+        border: 1px solid ${theme.primary}40;
       `,
     };
     return variants[variant] || variants.secondary;

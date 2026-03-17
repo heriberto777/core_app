@@ -3,7 +3,7 @@ import React, { useContext, useState, useMemo } from "react";
 import styled from "styled-components";
 import SwitchMode from "react-switch";
 import { ThemeContext, useAuth, usePermissions } from "../../index";
-import { v, Device} from "../../styles/index";
+import { v, Device } from "../../styles/index";
 import { NavLink, useLocation } from "react-router-dom";
 // import { Device } from "../../styles/breakpoints";
 import {
@@ -64,12 +64,21 @@ export function Sidebar({ state, setState }) {
       },
       {
         path: "/loads/transfers",
-        name: "Trapasos Control",
-        icon: "🚛",
+        name: "Traspasos",
+        icon: "🔄",
         category: "Operaciones",
         description: "Gestionar los trapasos entre bodegas",
-        order: 3,
+        order: 4,
         isAccessible: hasPermission("loads", "read"),
+      },
+      {
+        path: "/universal-manager",
+        name: "Gestor Universal",
+        icon: "🌍",
+        category: "Operaciones",
+        description: "Gestión dinámica de documentos (Pedidos, Facturas, Clientes)",
+        order: 5,
+        isAccessible: isAdmin || hasPermission("documents", "read"),
       },
 
       // {
@@ -109,7 +118,7 @@ export function Sidebar({ state, setState }) {
         isAccessible: hasPermission("analytics", "read"),
       },
       {
-        path: "/historys",
+        path: "/history",
         name: "Historial",
         icon: "🕐",
         category: "Análisis",
@@ -117,15 +126,15 @@ export function Sidebar({ state, setState }) {
         order: 7,
         isAccessible: hasPermission("history", "read"),
       },
-      {
-        path: "/logs",
-        name: "Logs",
-        icon: "🪲",
-        category: "Análisis",
-        description: "Logs de operaciones",
-        order: 7,
-        isAccessible: hasPermission("logs", "read"),
-      },
+      // {
+      //   path: "/logs",
+      //   name: "Logs",
+      //   icon: "🪲",
+      //   category: "Análisis",
+      //   description: "Logs de operaciones",
+      //   order: 7,
+      //   isAccessible: hasPermission("logs", "read"),
+      // },
       {
         path: "/users",
         name: "Usuarios",
@@ -163,13 +172,31 @@ export function Sidebar({ state, setState }) {
         isAccessible: hasPermission("settings", "read"),
       },
       {
+        path: "/transfer-history",
+        name: "Historial Transfer",
+        icon: "📜",
+        category: "Análisis",
+        description: "Historial de transferencias",
+        order: 8,
+        isAccessible: hasPermission("history", "read"),
+      },
+      {
+        path: "/system-logs",
+        name: "Logs Sistema",
+        icon: "📝",
+        category: "Análisis",
+        description: "Logs del sistema",
+        order: 9,
+        isAccessible: isAdmin && hasPermission("logs", "read"),
+      },
+      {
         path: "/perfil",
         name: "Mi Perfil",
         icon: "👤",
         category: "Personal",
         description: "Configuración del perfil personal",
-        order: 11,
-        isAccessible: true, // Siempre accesible
+        order: 20,
+        isAccessible: true,
       },
     ],
     [hasPermission, isAdmin]

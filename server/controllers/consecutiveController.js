@@ -4,34 +4,26 @@ const ConsecutiveMonitor = require("../services/consecutiveMonitor");
 const logger = require("../services/logger");
 
 /**
- * Obtiene todos los consecutivos
+ * Obtiene todos los consecutivos con filtros
  */
 const getConsecutives = async (req, res) => {
   try {
     const filter = {};
-
-    // Aplicar filtros si existen
-    if (req.query.active !== undefined) {
-      filter.active = req.query.active === "true";
-    }
-
+    if (req.query.active !== undefined) filter.active = req.query.active === "true";
     if (req.query.entityType && req.query.entityId) {
       filter["assignedTo.entityType"] = req.query.entityType;
       filter["assignedTo.entityId"] = req.query.entityId;
     }
 
     const consecutives = await ConsecutiveService.getConsecutives(filter);
-
-    res.json({
+    return res.status(200).json({
       success: true,
+      message: "Consecutivos obtenidos correctamente",
       data: consecutives,
     });
   } catch (error) {
-    logger.error(`Error al obtener consecutivos: ${error.message}`);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    logger.error("Error en getConsecutives:", error);
+    return res.status(500).json({ success: false, message: "Error al obtener consecutivos", error: error.message });
   }
 };
 
@@ -42,17 +34,16 @@ const getConsecutiveById = async (req, res) => {
   try {
     const { id } = req.params;
     const consecutive = await ConsecutiveService.getConsecutiveById(id);
+    if (!consecutive) return res.status(404).json({ success: false, message: "Consecutivo no encontrado" });
 
-    res.json({
+    return res.status(200).json({
       success: true,
+      message: "Consecutivo obtenido correctamente",
       data: consecutive,
     });
   } catch (error) {
-    logger.error(`Error al obtener consecutivo: ${error.message}`);
-    res.status(404).json({
-      success: false,
-      message: error.message,
-    });
+    logger.error(`Error en getConsecutiveById (${req.params.id}):`, error);
+    return res.status(500).json({ success: false, message: "Error interno", error: error.message });
   }
 };
 
@@ -62,27 +53,19 @@ const getConsecutiveById = async (req, res) => {
 const createConsecutive = async (req, res) => {
   try {
     const consecutiveData = req.body;
+    const userId = req.user?.user_id || req.user?._id || "SYSTEM";
+    consecutiveData.createdBy = userId;
 
-    // Añadir información del usuario si existe
-    if (req.user) {
-      consecutiveData.createdBy = req.user.id;
-    }
-
-    const consecutive = await ConsecutiveService.createConsecutive(
-      consecutiveData,
-      req.user
-    );
-
-    res.status(201).json({
+    const consecutive = await ConsecutiveService.createConsecutive(consecutiveData, req.user);
+    logger.info(`Consecutivo creado: ${consecutive.name} por ${userId}`);
+    return res.status(201).json({
       success: true,
+      message: "Consecutivo creado correctamente",
       data: consecutive,
     });
   } catch (error) {
-    logger.error(`Error al crear consecutivo: ${error.message}`);
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+    logger.error("Error en createConsecutive:", error);
+    return res.status(400).json({ success: false, message: error.message });
   }
 };
 
@@ -92,24 +75,18 @@ const createConsecutive = async (req, res) => {
 const updateConsecutive = async (req, res) => {
   try {
     const { id } = req.params;
-    const consecutiveData = req.body;
+    const userId = req.user?.user_id || req.user?._id || "SYSTEM";
 
-    const consecutive = await ConsecutiveService.updateConsecutive(
-      id,
-      consecutiveData,
-      req.user
-    );
-
-    res.json({
+    const consecutive = await ConsecutiveService.updateConsecutive(id, req.body, req.user);
+    logger.info(`Consecutivo actualizado: ${id} por ${userId}`);
+    return res.status(200).json({
       success: true,
+      message: "Consecutivo actualizado correctamente",
       data: consecutive,
     });
   } catch (error) {
-    logger.error(`Error al actualizar consecutivo: ${error.message}`);
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+    logger.error(`Error en updateConsecutive (${req.params.id}):`, error);
+    return res.status(400).json({ success: false, message: error.message });
   }
 };
 
@@ -119,18 +96,14 @@ const updateConsecutive = async (req, res) => {
 const deleteConsecutive = async (req, res) => {
   try {
     const { id } = req.params;
-    await ConsecutiveService.deleteConsecutive(id);
+    const userId = req.user?.user_id || req.user?._id || "SYSTEM";
 
-    res.json({
-      success: true,
-      message: "Consecutivo eliminado correctamente",
-    });
+    await ConsecutiveService.deleteConsecutive(id);
+    logger.info(`Consecutivo eliminado: ${id} por ${userId}`);
+    return res.status(200).json({ success: true, message: "Consecutivo eliminado correctamente" });
   } catch (error) {
-    logger.error(`Error al eliminar consecutivo: ${error.message}`);
-    res.status(404).json({
-      success: false,
-      message: error.message,
-    });
+    logger.error(`Error en deleteConsecutive (${req.params.id}):`, error);
+    return res.status(404).json({ success: false, message: error.message });
   }
 };
 
@@ -141,25 +114,16 @@ const getNextConsecutiveValue = async (req, res) => {
   try {
     const { id } = req.params;
     const { segment } = req.query;
+    const nextValue = await ConsecutiveService.getNextConsecutiveValue(id, { segment }, req.user);
 
-    const nextValue = await ConsecutiveService.getNextConsecutiveValue(
-      id,
-      { segment },
-      req.user
-    );
-
-    res.json({
+    return res.status(200).json({
       success: true,
-      data: {
-        value: nextValue,
-      },
+      message: "Siguiente valor obtenido",
+      data: { value: nextValue },
     });
   } catch (error) {
-    logger.error(`Error al obtener siguiente valor: ${error.message}`);
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+    logger.error(`Error en getNextConsecutiveValue (${req.params.id}):`, error);
+    return res.status(400).json({ success: false, message: error.message });
   }
 };
 
@@ -170,25 +134,19 @@ const resetConsecutive = async (req, res) => {
   try {
     const { id } = req.params;
     const { value = 0, segment = null } = req.query;
+    const userId = req.user?.user_id || req.user?._id || "SYSTEM";
 
-    const consecutive = await ConsecutiveService.resetConsecutive(
-      id,
-      parseInt(value),
-      segment,
-      req.user
-    );
+    const consecutive = await ConsecutiveService.resetConsecutive(id, parseInt(value), segment, req.user);
 
-    res.json({
+    logger.info(`Consecutivo ${id} reiniciado a ${value} por ${userId}`);
+    return res.status(200).json({
       success: true,
+      message: `Consecutivo reiniciado a ${value} correctamente`,
       data: consecutive,
-      message: `Consecutivo reiniciado a ${value}`,
     });
   } catch (error) {
-    logger.error(`Error al reiniciar consecutivo: ${error.message}`);
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+    logger.error(`Error en resetConsecutive (${req.params.id}):`, error);
+    return res.status(400).json({ success: false, message: error.message });
   }
 };
 
@@ -198,25 +156,19 @@ const resetConsecutive = async (req, res) => {
 const assignConsecutive = async (req, res) => {
   try {
     const { id } = req.params;
-    const assignment = req.body;
+    const userId = req.user?.user_id || req.user?._id || "SYSTEM";
 
-    const consecutive = await ConsecutiveService.assignConsecutive(
-      id,
-      assignment,
-      req.user
-    );
+    const consecutive = await ConsecutiveService.assignConsecutive(id, req.body, req.user);
 
-    res.json({
+    logger.info(`Consecutivo ${id} asignado por ${userId}`);
+    return res.status(200).json({
       success: true,
-      data: consecutive,
       message: "Consecutivo asignado correctamente",
+      data: consecutive,
     });
   } catch (error) {
-    logger.error(`Error al asignar consecutivo: ${error.message}`);
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+    logger.error(`Error en assignConsecutive (${req.params.id}):`, error);
+    return res.status(400).json({ success: false, message: error.message });
   }
 };
 
@@ -226,22 +178,16 @@ const assignConsecutive = async (req, res) => {
 const getConsecutivesByEntity = async (req, res) => {
   try {
     const { entityType, entityId } = req.params;
+    const consecutives = await ConsecutiveService.getConsecutivesByEntity(entityType, entityId);
 
-    const consecutives = await ConsecutiveService.getConsecutivesByEntity(
-      entityType,
-      entityId
-    );
-
-    res.json({
+    return res.status(200).json({
       success: true,
+      message: "Consecutivos de entidad obtenidos",
       data: consecutives,
     });
   } catch (error) {
-    logger.error(`Error al obtener consecutivos por entidad: ${error.message}`);
-    res.status(400).json({
-      success: false,
-      message: error.message,
-    });
+    logger.error("Error en getConsecutivesByEntity:", error);
+    return res.status(400).json({ success: false, message: error.message });
   }
 };
 
@@ -251,116 +197,86 @@ const getConsecutivesByEntity = async (req, res) => {
 const reserveConsecutiveValues = async (req, res) => {
   try {
     const { consecutiveId, quantity, segment, reservedBy } = req.body;
+    const userId = req.user?.user_id || req.user?._id || "SYSTEM";
 
-    if (!consecutiveId || !quantity) {
-      return res.status(400).json({
-        success: false,
-        message: "consecutiveId y quantity son requeridos",
-      });
-    }
+    if (!consecutiveId || !quantity) return res.status(400).json({ success: false, message: "consecutiveId y quantity requeridos" });
 
     const result = await ConsecutiveService.reserveConsecutiveValues(
       consecutiveId,
       quantity,
       { segment },
-      { id: req.user?.id || reservedBy, name: req.user?.name || "system" }
+      { id: req.user?.id || reservedBy || userId, name: req.user?.name || "system" }
     );
 
-    res.json({
+    return res.status(200).json({
       success: true,
+      message: "Valores reservados correctamente",
       data: result,
     });
   } catch (error) {
-    logger.error(`Error en reserva de lote: ${error.message}`);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    logger.error("Error en reserveConsecutiveValues:", error);
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
 /**
- * Confirma una reserva de valores consecutivos
+ * Confirma una reserva
  */
 const commitReservation = async (req, res) => {
   try {
     const { consecutiveId, reservationId, values } = req.body;
+    const userId = req.user?.user_id || req.user?._id || "SYSTEM";
 
-    if (!consecutiveId || !reservationId || !values) {
-      return res.status(400).json({
-        success: false,
-        message: "Todos los campos son requeridos",
-      });
-    }
+    if (!consecutiveId || !reservationId || !values) return res.status(400).json({ success: false, message: "Datos de confirmación incompletos" });
 
-    const result = await ConsecutiveService.commitReservation(
-      consecutiveId,
-      reservationId,
-      values
-    );
-
-    res.json({
+    const result = await ConsecutiveService.commitReservation(consecutiveId, reservationId, values);
+    logger.info(`Reserva ${reservationId} confirmada por ${userId}`);
+    return res.status(200).json({
       success: true,
+      message: "Reserva confirmada exitosamente",
       data: result,
     });
   } catch (error) {
-    logger.error(`Error al confirmar reserva: ${error.message}`);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    logger.error("Error en commitReservation:", error);
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
 /**
- * Cancela una reserva no utilizada
+ * Cancela una reserva
  */
 const cancelReservation = async (req, res) => {
   try {
     const { consecutiveId, reservationId } = req.body;
+    const userId = req.user?.user_id || req.user?._id || "SYSTEM";
 
-    if (!consecutiveId || !reservationId) {
-      return res.status(400).json({
-        success: false,
-        message: "consecutiveId y reservationId son requeridos",
-      });
-    }
+    if (!consecutiveId || !reservationId) return res.status(400).json({ success: false, message: "Datos de cancelación incompletos" });
 
-    const result = await ConsecutiveService.cancelReservation(
-      consecutiveId,
-      reservationId
-    );
-
-    res.json({
+    const result = await ConsecutiveService.cancelReservation(consecutiveId, reservationId);
+    logger.info(`Reserva ${reservationId} cancelada por ${userId}`);
+    return res.status(200).json({
       success: true,
+      message: "Reserva cancelada correctamente",
       data: result,
     });
   } catch (error) {
-    logger.error(`Error al cancelar reserva: ${error.message}`);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    logger.error("Error en cancelReservation:", error);
+    return res.status(500).json({ success: false, message: error.message });
   }
 };
 
 /**
- * Limpia reservas expiradas de todos los consecutivos
+ * Limpia reservas expiradas
  */
 const cleanupExpiredReservations = async (req, res) => {
   try {
+    const userId = req.user?.user_id || req.user?._id || "SYSTEM";
     await ConsecutiveService.cleanAllExpiredReservations();
-
-    res.json({
-      success: true,
-      message: "Reservas expiradas limpiadas correctamente",
-    });
+    logger.info(`Limpieza de reservas expiradas ejecutada por ${userId}`);
+    return res.status(200).json({ success: true, message: "Reservas expiradas limpiadas correctamente" });
   } catch (error) {
-    logger.error(`Error al limpiar reservas: ${error.message}`);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    logger.error("Error en cleanupExpiredReservations:", error);
+    return res.status(500).json({ success: false, message: "Error interno al limpiar reservas", error: error.message });
   }
 };
 
@@ -371,22 +287,16 @@ const getConsecutiveMetrics = async (req, res) => {
   try {
     const { consecutiveId } = req.params;
     const { timeRange = "24h" } = req.query;
+    const metrics = await ConsecutiveMonitor.getConsecutiveMetrics(consecutiveId, timeRange);
 
-    const metrics = await ConsecutiveMonitor.getConsecutiveMetrics(
-      consecutiveId,
-      timeRange
-    );
-
-    res.json({
+    return res.status(200).json({
       success: true,
+      message: "Métricas obtenidas correctamente",
       data: metrics,
     });
   } catch (error) {
-    logger.error(`Error al obtener métricas: ${error.message}`);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    logger.error("Error en getConsecutiveMetrics:", error);
+    return res.status(500).json({ success: false, message: "Error al obtener métricas", error: error.message });
   }
 };
 
@@ -395,34 +305,27 @@ const getConsecutiveMetrics = async (req, res) => {
  */
 const getDashboard = async (req, res) => {
   try {
-    const consecutives = await Consecutive.find({ active: true });
-    const dashboard = [];
+    const consecutives = await Consecutive.find({ active: true }).lean();
+    const dashboard = await Promise.all(consecutives.map(async (c) => {
+      const metrics = await ConsecutiveMonitor.getConsecutiveMetrics(c._id, "24h");
+      return {
+        id: c._id,
+        name: c.name,
+        currentValue: c.currentValue,
+        activeReservations: metrics.metrics?.activeReservations || 0,
+        totalIncrements: metrics.metrics?.totalIncrements || 0,
+        expiredReservations: metrics.metrics?.expiredReservations || 0,
+      };
+    }));
 
-    for (const consecutive of consecutives) {
-      const metrics = await ConsecutiveMonitor.getConsecutiveMetrics(
-        consecutive._id,
-        "24h"
-      );
-      dashboard.push({
-        id: consecutive._id,
-        name: consecutive.name,
-        currentValue: consecutive.currentValue,
-        activeReservations: metrics.metrics.activeReservations,
-        totalIncrements: metrics.metrics.totalIncrements,
-        expiredReservations: metrics.metrics.expiredReservations,
-      });
-    }
-
-    res.json({
+    return res.status(200).json({
       success: true,
+      message: "Dashboard de consecutivos obtenido",
       data: dashboard,
     });
   } catch (error) {
-    logger.error(`Error al generar dashboard: ${error.message}`);
-    res.status(500).json({
-      success: false,
-      message: error.message,
-    });
+    logger.error("Error en getDashboard:", error);
+    return res.status(500).json({ success: false, message: "Error al generar dashboard", error: error.message });
   }
 };
 

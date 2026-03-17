@@ -1,5 +1,6 @@
 const jwt = require("jsonwebtoken");
 const { JWT_SECRET_KEY } = require("../config");
+const logger = require("./logger");
 
 function createAccessToken(user) {
   const expToken = new Date();
@@ -29,35 +30,25 @@ function createRefreshToken(user) {
   return jwt.sign(payload, JWT_SECRET_KEY);
 }
 
-// ⭐ FUNCIÓN MEJORADA PARA VERIFICAR TOKEN ⭐
 function decoded(token) {
   try {
-    // Verificar que el token existe y tiene el formato correcto
     if (!token || typeof token !== "string") {
       throw new Error("Token no proporcionado o formato inválido");
     }
 
-    // Verificar que el token tiene la estructura JWT básica (3 partes separadas por puntos)
     const tokenParts = token.split(".");
     if (tokenParts.length !== 3) {
       throw new Error("Formato de token JWT inválido");
     }
 
-    // Verificar y decodificar el token
+    // jwt.verify ya valida la firma Y la expiración internamente
+    // No es necesario verificar exp manualmente
     const decodedToken = jwt.verify(token, JWT_SECRET_KEY);
 
-    // Verificar que el token no ha expirado
-    const currentTime = Math.floor(Date.now() / 1000);
-    if (decodedToken.exp && decodedToken.exp < currentTime) {
-      throw new Error("Token expirado");
-    }
-
-    console.log("✅ Token verificado exitosamente");
+    logger.debug("Token JWT verificado exitosamente");
     return decodedToken;
   } catch (error) {
-    console.log("❌ Error verificando token:", error.message);
-
-    // Proporcionar mensajes de error más específicos
+    // Normalizar mensajes de error para el middleware
     if (error.name === "JsonWebTokenError") {
       throw new Error("Token JWT malformado o inválido");
     } else if (error.name === "TokenExpiredError") {
@@ -70,23 +61,14 @@ function decoded(token) {
   }
 }
 
-// ⭐ FUNCIÓN ADICIONAL PARA DECODIFICAR SIN VERIFICAR (SOLO PARA DEBUG) ⭐
+// Solo para uso en logging/diagnóstico — nunca usar para decisiones de seguridad
 function decodeWithoutVerification(token) {
   try {
-    if (!token || typeof token !== "string") {
-      return null;
-    }
-
+    if (!token || typeof token !== "string") return null;
     const tokenParts = token.split(".");
-    if (tokenParts.length !== 3) {
-      return null;
-    }
-
-    // Decodificar sin verificar la firma (solo para debugging)
-    const decoded = jwt.decode(token);
-    return decoded;
-  } catch (error) {
-    console.log("❌ Error decodificando token:", error.message);
+    if (tokenParts.length !== 3) return null;
+    return jwt.decode(token);
+  } catch {
     return null;
   }
 }

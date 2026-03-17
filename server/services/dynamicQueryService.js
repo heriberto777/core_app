@@ -1,5 +1,4 @@
-
-const TransferTask = require("../models/transferTaks");
+const TransferTask = require("../models/transferTaskModel");
 const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 const logger = require("./logger");
 const MemoryManager = require("./MemoryManager");
@@ -152,7 +151,7 @@ async function executeDynamicSelect(
     // 3) Registrar la tarea en el TaskTracker
     TaskTracker.registerTask(
       task._id,
-      localAbortController || { abort: () => {} },
+      localAbortController || { abort: () => { } },
       {
         type: "dynamicQuery",
         taskName,
@@ -254,8 +253,8 @@ async function executeDynamicSelect(
             fieldValue === null
               ? null
               : typeof fieldValue === "number"
-              ? fieldValue
-              : String(fieldValue);
+                ? fieldValue
+                : String(fieldValue);
           params[param.field] = safeValue;
           conditions.push(`${param.field} ${param.operator} @${param.field}`);
         }
@@ -272,8 +271,7 @@ async function executeDynamicSelect(
 
     logger.info(`📄 Ejecutando query dinámico SELECT para '${taskName}'`);
     logger.debug(
-      `Query: ${finalQuery.substring(0, 500)}${
-        finalQuery.length > 500 ? "..." : ""
+      `Query: ${finalQuery.substring(0, 500)}${finalQuery.length > 500 ? "..." : ""
       }`
     );
 
@@ -301,8 +299,7 @@ async function executeDynamicSelect(
               // Actualizar la referencia si se obtuvo una nueva conexión
               if (revalidatedConnection !== connection) {
                 logger.info(
-                  `Conexión renovada en intento ${
-                    attempt + 1
+                  `Conexión renovada en intento ${attempt + 1
                   } para tarea '${taskName}'`
                 );
                 connectionInfo.connection = revalidatedConnection;
@@ -311,8 +308,7 @@ async function executeDynamicSelect(
               sendProgress(task._id, 35 + attempt * 5);
             } catch (connError) {
               logger.warn(
-                `Error validando conexión en intento ${
-                  attempt + 1
+                `Error validando conexión en intento ${attempt + 1
                 } para '${taskName}': ${connError.message}`
               );
               throw connError;
@@ -606,8 +602,8 @@ async function executeNonDestructiveQuery(
             fieldValue === null
               ? null
               : typeof fieldValue === "number"
-              ? fieldValue
-              : String(fieldValue);
+                ? fieldValue
+                : String(fieldValue);
           params[param.field] = safeValue;
           conditions.push(`${param.field} ${param.operator} @${param.field}`);
         }
@@ -624,8 +620,7 @@ async function executeNonDestructiveQuery(
 
     logger.info(`📄 Ejecutando query no-destructivo para '${taskName}'`);
     logger.debug(
-      `Query: ${finalQuery.substring(0, 500)}${
-        finalQuery.length > 500 ? "..." : ""
+      `Query: ${finalQuery.substring(0, 500)}${finalQuery.length > 500 ? "..." : ""
       }`
     );
 
@@ -650,16 +645,14 @@ async function executeNonDestructiveQuery(
 
               if (revalidatedConnection !== connection) {
                 logger.info(
-                  `Conexión renovada en intento ${
-                    attempt + 1
+                  `Conexión renovada en intento ${attempt + 1
                   } para tarea no destructiva '${taskName}'`
                 );
                 connectionInfo.connection = revalidatedConnection;
               }
             } catch (connError) {
               logger.warn(
-                `Error validando conexión en intento ${attempt + 1}: ${
-                  connError.message
+                `Error validando conexión en intento ${attempt + 1}: ${connError.message
                 }`
               );
               throw connError;
@@ -754,8 +747,7 @@ async function executeNonDestructiveQuery(
     Telemetry.updateAverage("avgQueryTime", queryTime);
 
     logger.info(
-      `✅ Consulta no destructiva para '${taskName}' completada en ${queryTime}ms con ${
-        result.rowsAffected || 0
+      `✅ Consulta no destructiva para '${taskName}' completada en ${queryTime}ms con ${result.rowsAffected || 0
       } filas afectadas`
     );
 

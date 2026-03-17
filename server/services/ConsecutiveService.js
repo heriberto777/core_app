@@ -481,6 +481,10 @@ class ConsecutiveService {
    */
   static async assignConsecutive(id, assignment, user = {}) {
     try {
+      if (!assignment || !assignment.entityId || !assignment.entityType) {
+        throw new Error("Datos de asignación incompletos: entityId y entityType son obligatorios");
+      }
+
       const consecutive = await this.getConsecutiveById(id);
 
       // Verificar si ya existe esta asignación

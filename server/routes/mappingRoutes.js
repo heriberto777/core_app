@@ -1,66 +1,33 @@
 const express = require("express");
 const router = express.Router();
 const mappingController = require("../controllers/mappingController");
-const logger = require("../services/logger"); // Asegúrate de importar el logger
+const { validate } = require("../middlewares/validator");
+const { createMappingSchema, getDocumentsSchema } = require("../validators/operationalValidator");
+const { verifyToken, checkPermission } = require("../middlewares/authMiddleware");
 
-// Middleware para manejo de errores específico para estas rutas
-const errorHandler = (controllerFn) => async (req, res, next) => {
-  try {
-    await controllerFn(req, res, next);
-  } catch (error) {
-    logger.error(
-      `Error no controlado en ruta de mapping: ${error.message}`,
-      error
-    );
-
-    // Asegurarse de que siempre envíe una respuesta JSON
-    res.status(500).json({
-      success: false,
-      message: error.message || "Error interno del servidor",
-    });
-  }
-};
+// Todas las rutas de mapping requieren autenticación
+router.use(verifyToken);
 
 // Rutas para configuraciones de mapeo
-router.get("/", errorHandler(mappingController.getMappings));
-router.get("/:mappingId", errorHandler(mappingController.getMappingById));
-router.post("/", errorHandler(mappingController.createMapping));
-router.put("/:mappingId", errorHandler(mappingController.updateMapping));
-router.delete("/:mappingId", errorHandler(mappingController.deleteMapping));
+router.get("/", checkPermission("mappings", "read"), mappingController.getMappings);
+router.get("/:mappingId", checkPermission("mappings", "read"), mappingController.getMappingById);
+router.post("/", checkPermission("mappings", "create"), createMappingSchema, validate, mappingController.createMapping);
+router.put("/:mappingId", checkPermission("mappings", "update"), mappingController.updateMapping);
+router.delete("/:mappingId", checkPermission("mappings", "delete"), mappingController.deleteMapping);
 
 // Rutas para documentos
-router.get(
-  "/:mappingId/documents",
-  errorHandler(mappingController.getDocumentsByMapping)
-);
-router.get(
-  "/:mappingId/documents/:documentId",
-  errorHandler(mappingController.getDocumentDetailsByMapping)
-);
-router.post(
-  "/:mappingId/process",
-  errorHandler(mappingController.processDocumentsByMapping)
-);
+router.get("/:mappingId/documents", checkPermission("mappings", "read"), getDocumentsSchema, validate, mappingController.getDocumentsByMapping);
+router.get("/:mappingId/documents/:documentId", checkPermission("mappings", "read"), mappingController.getDocumentDetailsByMapping);
+router.post("/:mappingId/process", checkPermission("mappings", "execute"), mappingController.processDocumentsByMapping);
 
-router.post(
-  "/:mappingId/consecutive",
-  mappingController.updateConsecutiveConfig
-);
-router.get("/:mappingId/reset-consecutive", mappingController.resetConsecutive);
+// Rutas para consecutivos
+router.post("/:mappingId/consecutive", checkPermission("mappings", "update"), mappingController.updateConsecutiveConfig);
+router.get("/:mappingId/reset-consecutive", checkPermission("mappings", "update"), mappingController.resetConsecutive);
 
-router.get(
-  "/:mappingId/document/:documentId/details-with-promotions",
-  mappingController.getDocumentDetailsWithPromotions
-);
-
-router.post(
-  "/:mappingId/process-with-promotions",
-  mappingController.processDocumentsWithPromotions
-);
-
-router.get(
-  "/:mappingId/validate-promotions",
-  mappingController.validatePromotionConfig
-);
+// Rutas avanzadas y promociones
+router.get("/:mappingId/document/:documentId/details-with-promotions", checkPermission("mappings", "read"), mappingController.getDocumentDetailsWithPromotions);
+router.post("/:mappingId/process-with-promotions", checkPermission("mappings", "execute"), mappingController.processDocumentsWithPromotions);
+router.post("/:mappingId/query-dynamic-value", checkPermission("mappings", "read"), mappingController.queryDynamicValue);
+router.get("/:mappingId/validate-promotions", checkPermission("mappings", "read"), mappingController.validatePromotionConfig);
 
 module.exports = router;

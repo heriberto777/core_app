@@ -10,87 +10,45 @@ import {
   FaFilter,
   FaCalendarAlt,
 } from "react-icons/fa";
-import { Header, useAuth, useFetchData } from "../../index";
-import { TransferApi } from "../../api/index";
+import { Header, useAuth, useTaskHistory } from "../../index";
 
-const cnnApi = new TransferApi();
 
 export function TransferHistory() {
   const [openstate, setOpenState] = useState(false);
+  const { accessToken } = useAuth();
+  const { taskId } = useParams();
+  const navigate = useNavigate();
+
   const [filters, setFilters] = useState({
-    page: 1,
-    limit: 10,
     dateFrom: "",
     dateTo: "",
     status: "",
   });
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
-  const { accessToken } = useAuth();
-  const navigate = useNavigate();
-  const { taskId } = useParams();
-  const location = useLocation();
-  const initialTaskData = location.state?.initialData;
 
-  // Estados para los datos
-  const [taskInfo, setTaskInfo] = useState(initialTaskData?.task || null);
-  const [historyData, setHistoryData] = useState(
-    initialTaskData?.history || []
-  );
-  const [loading, setLoading] = useState(!initialTaskData);
-  const [error, setError] = useState(null);
-
-  // Efecto para cargar los datos si no se pasaron en location.state
-  useEffect(() => {
-    if (!initialTaskData && taskId) {
-      loadTaskHistory();
-    }
-  }, [taskId, accessToken]);
-
-  const loadTaskHistory = async () => {
-    setLoading(true);
-    try {
-      const result = await cnnApi.getTaskHistory(accessToken, taskId, {
-        ...filters,
-        page: currentPage,
-      });
-
-      if (result.success) {
-        setTaskInfo(result.task);
-        setHistoryData(result.history);
-        setTotalPages(result.pagination?.pages || 1);
-      } else {
-        throw new Error(result.message || "Error al obtener historial");
-      }
-    } catch (error) {
-      console.error("Error cargando historial:", error);
-      setError(error.message);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const {
+    taskInfo,
+    history: historyData,
+    loading,
+    error,
+    pagination,
+    loadHistory
+  } = useTaskHistory(accessToken, taskId);
 
   const handleSearch = () => {
-    setCurrentPage(1);
-    loadTaskHistory();
+    loadHistory(filters);
   };
 
   const clearFilters = () => {
     setFilters({
-      page: 1,
-      limit: 10,
       dateFrom: "",
       dateTo: "",
       status: "",
     });
-    setCurrentPage(1);
+    loadHistory({ page: 1 });
   };
 
   const handlePageChange = (newPage) => {
-    if (newPage >= 1 && newPage <= totalPages) {
-      setCurrentPage(newPage);
-      loadTaskHistory();
-    }
+    loadHistory({ ...filters, page: newPage });
   };
 
   const goBack = () => {
@@ -182,7 +140,7 @@ export function TransferHistory() {
 
             <ClearButton onClick={clearFilters}>Limpiar Filtros</ClearButton>
 
-            <RefreshButton onClick={loadTaskHistory}>
+            <RefreshButton onClick={() => loadHistory(filters)}>
               <FaSync /> Refrescar
             </RefreshButton>
           </ButtonsContainer>
@@ -253,8 +211,8 @@ export function TransferHistory() {
                         entry.status === "full_return"
                           ? "returned"
                           : entry.status === "partial_return"
-                          ? "partial-returned"
-                          : ""
+                            ? "partial-returned"
+                            : ""
                       }
                     >
                       <td>{new Date(entry.date).toLocaleString()}</td>
@@ -265,10 +223,10 @@ export function TransferHistory() {
                           {entry.status === "completed"
                             ? "Completado"
                             : entry.status === "partial_return"
-                            ? "Devolución Parcial"
-                            : entry.status === "full_return"
-                            ? "Devolución Total"
-                            : entry.status}
+                              ? "Devolución Parcial"
+                              : entry.status === "full_return"
+                                ? "Devolución Total"
+                                : entry.status}
                         </StatusBadge>
                       </td>
                       <td>{entry.totalProducts}</td>
@@ -297,25 +255,25 @@ export function TransferHistory() {
                 Primera
               </PaginationButton>
               <PaginationButton
-                onClick={() => handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
+                onClick={() => handlePageChange(pagination.page - 1)}
+                disabled={pagination.page === 1}
               >
                 Anterior
               </PaginationButton>
 
               <PageInfo>
-                Página {currentPage} de {totalPages}
+                Página {pagination.page} de {pagination.pages}
               </PageInfo>
 
               <PaginationButton
-                onClick={() => handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
+                onClick={() => handlePageChange(pagination.page + 1)}
+                disabled={pagination.page === pagination.pages}
               >
                 Siguiente
               </PaginationButton>
               <PaginationButton
-                onClick={() => handlePageChange(totalPages)}
-                disabled={currentPage === totalPages}
+                onClick={() => handlePageChange(pagination.pages)}
+                disabled={pagination.page === pagination.pages}
               >
                 Última
               </PaginationButton>

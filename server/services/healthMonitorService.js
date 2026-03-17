@@ -159,8 +159,17 @@ async function checkSystemHealth() {
       }
     }
 
-    // 3. Verificar conexiones a SQL Server
+    // 3. Verificar conexiones a SQL Server y latencia
     const healthCheck = await ConnectionDiagnostic.checkConnectionHealth();
+
+    // Registrar latencias en telemetría para análisis
+    const Telemetry = require("./Telemetry");
+    if (healthCheck.server1?.responseTime) {
+      Telemetry.updateAverage("avgQueryTime", healthCheck.server1.responseTime);
+    }
+    if (healthCheck.server2?.responseTime) {
+      Telemetry.updateAverage("avgQueryTime", healthCheck.server2.responseTime);
+    }
 
     const allOk =
       healthCheck.mongodb?.connected &&
@@ -172,6 +181,9 @@ async function checkSystemHealth() {
       logger.warn(JSON.stringify(healthCheck, null, 2));
 
       HEALTH_CONFIG.errorCounters.connection++;
+
+      // Registrar error en telemetría
+      Telemetry.trackDBConnection("errors");
 
       if (
         HEALTH_CONFIG.errorCounters.connection >=
@@ -221,8 +233,7 @@ async function attemptDatabaseRecovery() {
   }
 
   logger.info(
-    `Iniciando intento de recuperación #${
-      HEALTH_CONFIG.recoveryAttemptCount + 1
+    `Iniciando intento de recuperación #${HEALTH_CONFIG.recoveryAttemptCount + 1
     }...`
   );
   HEALTH_CONFIG.recoveryAttemptCount++;
@@ -315,8 +326,7 @@ async function attemptConnectionRecovery() {
   }
 
   logger.info(
-    `Iniciando intento de recuperación de conexiones #${
-      HEALTH_CONFIG.recoveryAttemptCount + 1
+    `Iniciando intento de recuperación de conexiones #${HEALTH_CONFIG.recoveryAttemptCount + 1
     }...`
   );
   HEALTH_CONFIG.recoveryAttemptCount++;

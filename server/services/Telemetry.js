@@ -1,4 +1,6 @@
 const logger = require("./logger");
+const TelemetryModel = require("../models/Telemetry");
+const MongoDbService = require("./mongoDbService");
 
 /**
  * Servicio para recolección y análisis de métricas
@@ -317,7 +319,65 @@ class Telemetry {
 
     logger.info("Métricas de telemetría reseteadas (reseteo horario)");
 
+    // Persistir en MongoDB de forma asíncrona
+    this.saveSnapshot(hourlySnapshot).catch(err =>
+      logger.error(`[Telemetry] Error persistiendo snapshot: ${err.message}`)
+    );
+
     return hourlySnapshot;
+  }
+
+  /**
+   * Guarda un snapshot en MongoDB
+   * @param {Object} snapshot - Datos a persistir
+   */
+  async saveSnapshot(snapshot) {
+    if (!MongoDbService.isConnected()) {
+      logger.warn("[Telemetry] No se puede persistir snapshot: MongoDB no conectado");
+      return;
+    }
+
+    try {
+      const doc = new TelemetryModel({
+        ...snapshot,
+        system: {
+          uptime: process.uptime(),
+          memoryUsage: {
+            rss: process.memoryUsage().rss,
+            heapTotal: process.memoryUsage().heapTotal,
+            heapUsed: process.memoryUsage().heapUsed,
+          }
+        }
+      });
+
+      await doc.save();
+      logger.debug("[Telemetry] Snapshot persistido correctamente en MongoDB");
+    } catch (error) {
+      logger.error(`[Telemetry] Fallo al guardar en MongoDB: ${error.message}`);
+    }
+  }
+
+  /**
+   * Obtiene tendencias de las últimas N horas
+   * @param {number} hours - Número de horas atrás
+   */
+  async getTrends(hours = 24) {
+    if (!MongoDbService.isConnected()) return [];
+
+    try {
+      const since = new Date();
+      since.setHours(since.getHours() - hours);
+
+      return await TelemetryModel.find({
+        timestamp: { $gte: since },
+        period: "hourly"
+      })
+        .sort({ timestamp: 1 })
+        .lean();
+    } catch (error) {
+      logger.error(`[Telemetry] Error recuperando tendencias: ${error.message}`);
+      return [];
+    }
   }
 
   static trackError(operation, details) {

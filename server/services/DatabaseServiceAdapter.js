@@ -61,6 +61,11 @@ class DatabaseServiceAdapter {
     );
   }
 
+  async withConnection(serverKey, callback) {
+    await this.initialize();
+    return await DatabaseService.withConnection(serverKey, callback);
+  }
+
   getConnectionStats() {
     return DatabaseService.getStats();
   }

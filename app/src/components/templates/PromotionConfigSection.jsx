@@ -1,917 +1,473 @@
-import React, { useState, useEffect } from "react";
+import React from "react";
 import styled from "styled-components";
-import Swal from "sweetalert2";
 import {
   FaGift,
   FaPercentage,
   FaPlus,
   FaTrash,
   FaEdit,
-  FaCheck,
-  FaTimes,
   FaInfoCircle,
-  FaArrowRight,
+  FaChevronDown,
+  FaChevronUp,
 } from "react-icons/fa";
+import { usePromotionConfig, Button, Input } from "../../index";
 
 const PromotionConfigSection = ({ mapping = {}, handleChange }) => {
-  // Acceso seguro a la configuración de promociones
-  const promotionConfig = mapping.promotionConfig || {};
+  const {
+    promotionConfig,
+    rules,
+    showAdvanced,
+    setShowAdvanced,
+    handleEnableChange,
+    handleDetectFieldChange,
+    handleTargetFieldChange,
+    addRule,
+    editRule,
+    deleteRule,
+  } = usePromotionConfig(mapping, handleChange);
+
   const isEnabled = promotionConfig.enabled || false;
 
-  // Estados locales
-  const [rules, setRules] = useState(promotionConfig.rules || []);
-  const [showAdvanced, setShowAdvanced] = useState(false);
-
-  // Sincronizar con el estado principal cuando cambie
-  useEffect(() => {
-    setRules(promotionConfig.rules || []);
-  }, [promotionConfig.rules]);
-
-  // Función para actualizar la configuración completa
-  const updatePromotionConfig = (newConfig) => {
-    const updatedConfig = {
-      ...promotionConfig,
-      ...newConfig,
-    };
-
-    const event = {
-      target: {
-        name: "promotionConfig",
-        value: updatedConfig,
-        type: "custom",
-      },
-    };
-
-    handleChange(event);
-  };
-
-  // Manejar cambio de habilitación
-  const handleEnableChange = (e) => {
-    updatePromotionConfig({ enabled: e.target.checked });
-  };
-
-  // Manejar cambio de campos de detección
-  const handleDetectFieldChange = (fieldName, value) => {
-    const newDetectFields = {
-      ...promotionConfig.detectFields,
-      [fieldName]: value,
-    };
-
-    updatePromotionConfig({ detectFields: newDetectFields });
-  };
-
-  // Manejar cambio de campos destino
-  const handleTargetFieldChange = (fieldName, value) => {
-    const newTargetFields = {
-      ...promotionConfig.targetFields,
-      [fieldName]: value,
-    };
-
-    updatePromotionConfig({ targetFields: newTargetFields });
-  };
-
-  // Agregar nueva regla
-  const addRule = async () => {
-    const { value: formValues } = await Swal.fire({
-      title: "Nueva Regla de Promoción",
-      html: `
-        <div class="promotion-form-container">
-          <div class="promotion-form-group">
-            <label class="promotion-form-label">Nombre de la Regla *</label>
-            <input id="ruleName" class="promotion-form-input" placeholder="Ej: Descuento Familia Desechables">
-          </div>
-
-          <div class="promotion-form-group">
-            <label class="promotion-form-label">Tipo de Promoción *</label>
-            <select id="ruleType" class="promotion-form-select">
-              <option value="">Seleccione un tipo</option>
-              <option value="FAMILY_DISCOUNT">Descuento por Familia</option>
-              <option value="QUANTITY_BONUS">Bonificación por Cantidad</option>
-              <option value="SCALED_BONUS">Bonificación Escalada</option>
-              <option value="PRODUCT_BONUS">Bonificación por Producto</option>
-              <option value="INVOICE_DISCOUNT">Descuento en Factura</option>
-              <option value="ONE_TIME_OFFER">Oferta Única</option>
-            </select>
-          </div>
-
-          <div class="promotion-form-group">
-            <label class="promotion-form-label">Descripción</label>
-            <textarea id="ruleDescription" class="promotion-form-textarea" rows="3" placeholder="Describe cómo funciona esta promoción"></textarea>
-          </div>
-
-          <div class="promotion-form-group">
-            <label class="promotion-form-label">Prioridad</label>
-            <input id="rulePriority" type="number" class="promotion-form-input" value="0" min="0" max="100">
-          </div>
-
-          <div class="promotion-form-group">
-            <label class="promotion-form-checkbox">
-              <input id="ruleEnabled" type="checkbox" checked> Habilitada
-            </label>
-          </div>
-
-          <div class="promotion-form-group">
-            <label class="promotion-form-checkbox">
-              <input id="ruleOneTime" type="checkbox"> Oferta de una sola vez
-            </label>
-          </div>
-        </div>
-      `,
-      focusConfirm: false,
-      showCancelButton: true,
-      confirmButtonText: "Crear Regla",
-      cancelButtonText: "Cancelar",
-      customClass: {
-        popup: "promotion-popup",
-        title: "promotion-title",
-        content: "promotion-content",
-      },
-      preConfirm: () => {
-        const name = document.getElementById("ruleName").value;
-        const type = document.getElementById("ruleType").value;
-        const description = document.getElementById("ruleDescription").value;
-        const priority = parseInt(
-          document.getElementById("rulePriority").value
-        );
-        const enabled = document.getElementById("ruleEnabled").checked;
-        const isOneTime = document.getElementById("ruleOneTime").checked;
-
-        if (!name || !type) {
-          Swal.showValidationMessage("Nombre y tipo son requeridos");
-          return false;
-        }
-
-        return {
-          name,
-          type,
-          description,
-          priority,
-          enabled,
-          isOneTime,
-          conditions: {},
-          actions: {},
-        };
-      },
-    });
-
-    if (formValues) {
-      const newRules = [...rules, formValues];
-      setRules(newRules);
-      updatePromotionConfig({ rules: newRules });
-    }
-  };
-
-  // Editar regla existente
-  const editRule = async (index) => {
-    const rule = rules[index];
-
-    const { value: formValues } = await Swal.fire({
-      title: "Editar Regla de Promoción",
-      html: `
-        <div class="promotion-form-container">
-          <div class="promotion-form-group">
-            <label class="promotion-form-label">Nombre de la Regla *</label>
-            <input id="ruleName" class="promotion-form-input" value="${
-              rule.name
-            }">
-          </div>
-
-          <div class="promotion-form-group">
-            <label class="promotion-form-label">Tipo de Promoción *</label>
-            <select id="ruleType" class="promotion-form-select">
-              <option value="FAMILY_DISCOUNT" ${
-                rule.type === "FAMILY_DISCOUNT" ? "selected" : ""
-              }>Descuento por Familia</option>
-              <option value="QUANTITY_BONUS" ${
-                rule.type === "QUANTITY_BONUS" ? "selected" : ""
-              }>Bonificación por Cantidad</option>
-              <option value="SCALED_BONUS" ${
-                rule.type === "SCALED_BONUS" ? "selected" : ""
-              }>Bonificación Escalada</option>
-              <option value="PRODUCT_BONUS" ${
-                rule.type === "PRODUCT_BONUS" ? "selected" : ""
-              }>Bonificación por Producto</option>
-              <option value="INVOICE_DISCOUNT" ${
-                rule.type === "INVOICE_DISCOUNT" ? "selected" : ""
-              }>Descuento en Factura</option>
-              <option value="ONE_TIME_OFFER" ${
-                rule.type === "ONE_TIME_OFFER" ? "selected" : ""
-              }>Oferta Única</option>
-            </select>
-          </div>
-
-          <div class="promotion-form-group">
-            <label class="promotion-form-label">Descripción</label>
-            <textarea id="ruleDescription" class="promotion-form-textarea" rows="3">${
-              rule.description || ""
-            }</textarea>
-          </div>
-
-          <div class="promotion-form-group">
-            <label class="promotion-form-label">Prioridad</label>
-            <input id="rulePriority" type="number" class="promotion-form-input" value="${
-              rule.priority || 0
-            }" min="0" max="100">
-          </div>
-
-          <div class="promotion-form-group">
-            <label class="promotion-form-checkbox">
-              <input id="ruleEnabled" type="checkbox" ${
-                rule.enabled ? "checked" : ""
-              }> Habilitada
-            </label>
-          </div>
-
-          <div class="promotion-form-group">
-            <label class="promotion-form-checkbox">
-              <input id="ruleOneTime" type="checkbox" ${
-                rule.isOneTime ? "checked" : ""
-              }> Oferta de una sola vez
-            </label>
-          </div>
-        </div>
-      `,
-      focusConfirm: false,
-      showCancelButton: true,
-      confirmButtonText: "Guardar Cambios",
-      cancelButtonText: "Cancelar",
-      customClass: {
-        popup: "promotion-popup",
-        title: "promotion-title",
-        content: "promotion-content",
-      },
-      preConfirm: () => {
-        const name = document.getElementById("ruleName").value;
-        const type = document.getElementById("ruleType").value;
-        const description = document.getElementById("ruleDescription").value;
-        const priority = parseInt(
-          document.getElementById("rulePriority").value
-        );
-        const enabled = document.getElementById("ruleEnabled").checked;
-        const isOneTime = document.getElementById("ruleOneTime").checked;
-
-        if (!name || !type) {
-          Swal.showValidationMessage("Nombre y tipo son requeridos");
-          return false;
-        }
-
-        return {
-          ...rule,
-          name,
-          type,
-          description,
-          priority,
-          enabled,
-          isOneTime,
-        };
-      },
-    });
-
-    if (formValues) {
-      const newRules = [...rules];
-      newRules[index] = formValues;
-      setRules(newRules);
-      updatePromotionConfig({ rules: newRules });
-    }
-  };
-
-  // Eliminar regla
-  const deleteRule = async (index) => {
-    const rule = rules[index];
-
-    const result = await Swal.fire({
-      title: "¿Eliminar Regla?",
-      text: `¿Está seguro que desea eliminar la regla "${rule.name}"?`,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#d33",
-      cancelButtonColor: "#3085d6",
-      confirmButtonText: "Sí, eliminar",
-      cancelButtonText: "Cancelar",
-    });
-
-    if (result.isConfirmed) {
-      const newRules = rules.filter((_, i) => i !== index);
-      setRules(newRules);
-      updatePromotionConfig({ rules: newRules });
-    }
-  };
-
-  // Obtener icono según tipo de regla
-  const getRuleIcon = (type) => {
-    switch (type) {
-      case "FAMILY_DISCOUNT":
-      case "INVOICE_DISCOUNT":
-        return <FaPercentage />;
-      case "QUANTITY_BONUS":
-      case "SCALED_BONUS":
-      case "PRODUCT_BONUS":
-        return <FaGift />;
-      default:
-        return <FaInfoCircle />;
-    }
-  };
-
-  // Obtener color según tipo de regla
-  const getRuleColor = (type) => {
-    switch (type) {
-      case "FAMILY_DISCOUNT":
-      case "INVOICE_DISCOUNT":
-        return "#e74c3c";
-      case "QUANTITY_BONUS":
-      case "SCALED_BONUS":
-      case "PRODUCT_BONUS":
-        return "#2ecc71";
-      case "ONE_TIME_OFFER":
-        return "#f39c12";
-      default:
-        return "#3498db";
-    }
-  };
-
   return (
-    <ConfigSection>
-      <SectionTitle>
-        <FaGift /> Configuración de Promociones y Bonificaciones
-      </SectionTitle>
-
-      {/* Habilitación principal */}
-      <EnableSection>
-        <CheckboxContainer>
-          <CheckboxInput
+    <Container>
+      <Header>
+        <HeaderTitle>
+          <FaGift /> Configuración de Promociones
+        </HeaderTitle>
+        <ToggleSwitch>
+          <input
             type="checkbox"
+            id="promo-enable"
             checked={isEnabled}
             onChange={handleEnableChange}
           />
-          <FormLabel>Habilitar procesamiento de promociones</FormLabel>
-        </CheckboxContainer>
-        <HelpText>
-          Al habilitar esta opción, el sistema detectará automáticamente
-          promociones en los documentos y las procesará según la configuración
-          definida.
-        </HelpText>
-      </EnableSection>
+          <label htmlFor="promo-enable"></label>
+          <span style={{ marginLeft: "10px", fontWeight: 600, color: "#fff" }}>
+            {isEnabled ? "Activo" : "Inactivo"}
+          </span>
+        </ToggleSwitch>
+      </Header>
 
-      {isEnabled && (
-        <>
-          {/* Configuración básica */}
-          <BasicConfigSection>
-            <SubSectionTitle>Configuración Básica</SubSectionTitle>
-
-            <ConfigGrid>
-              <FormGroup>
-                <FormLabel>Campo de Bonificación</FormLabel>
-                <FormInput
-                  type="text"
+      {!isEnabled ? (
+        <EmptyState>
+          <FaInfoCircle size={40} opacity={0.5} />
+          <p>El procesamiento de promociones está desactivado.</p>
+          <small>Habilítalo para configurar reglas y campos de detección.</small>
+        </EmptyState>
+      ) : (
+        <Content>
+          <Grid>
+            <SectionCard>
+              <CardTitle>Detección de Campos</CardTitle>
+              <InputGroup>
+                <Input
+                  label="Campo Bonificación"
                   value={promotionConfig.detectFields?.bonusField || "ART_BON"}
-                  onChange={(e) =>
-                    handleDetectFieldChange("bonusField", e.target.value)
-                  }
+                  onChange={(e) => handleDetectFieldChange("bonusField", e.target.value)}
                   placeholder="Ej: ART_BON"
                 />
-                <HelpText>
-                  Campo que indica si una línea es bonificación (normalmente
-                  'B')
-                </HelpText>
-              </FormGroup>
-
-              <FormGroup>
-                <FormLabel>Campo de Referencia</FormLabel>
-                <FormInput
-                  type="text"
-                  value={
-                    promotionConfig.detectFields?.referenceField ||
-                    "COD_ART_RFR"
-                  }
-                  onChange={(e) =>
-                    handleDetectFieldChange("referenceField", e.target.value)
-                  }
+                <Input
+                  label="Campo Referencia"
+                  value={promotionConfig.detectFields?.referenceField || "COD_ART_RFR"}
+                  onChange={(e) => handleDetectFieldChange("referenceField", e.target.value)}
                   placeholder="Ej: COD_ART_RFR"
                 />
-                <HelpText>Campo que referencia al artículo regular</HelpText>
-              </FormGroup>
-
-              <FormGroup>
-                <FormLabel>Campo de Descuento</FormLabel>
-                <FormInput
-                  type="text"
-                  value={
-                    promotionConfig.detectFields?.discountField || "MON_DSC"
-                  }
-                  onChange={(e) =>
-                    handleDetectFieldChange("discountField", e.target.value)
-                  }
+                <Input
+                  label="Campo Descuento"
+                  value={promotionConfig.detectFields?.discountField || "MON_DSC"}
+                  onChange={(e) => handleDetectFieldChange("discountField", e.target.value)}
                   placeholder="Ej: MON_DSC"
                 />
-                <HelpText>Campo que contiene el monto de descuento</HelpText>
-              </FormGroup>
+              </InputGroup>
+            </SectionCard>
 
-              <FormGroup>
-                <FormLabel>Campo Número de Línea</FormLabel>
-                <FormInput
-                  type="text"
-                  value={
-                    promotionConfig.detectFields?.lineNumberField || "NUM_LN"
-                  }
-                  onChange={(e) =>
-                    handleDetectFieldChange("lineNumberField", e.target.value)
-                  }
-                  placeholder="Ej: NUM_LN"
-                />
-                <HelpText>Campo que contiene el número de línea</HelpText>
-              </FormGroup>
-            </ConfigGrid>
-          </BasicConfigSection>
+            <SectionCard>
+              <CardTitle>
+                Campos Destino
+                <AdvancedToggle onClick={() => setShowAdvanced(!showAdvanced)}>
+                  {showAdvanced ? <FaChevronUp /> : <FaChevronDown />}
+                </AdvancedToggle>
+              </CardTitle>
 
-          {/* Configuración avanzada */}
-          <AdvancedToggle onClick={() => setShowAdvanced(!showAdvanced)}>
-            {showAdvanced ? <FaTimes /> : <FaPlus />}
-            Configuración Avanzada
-          </AdvancedToggle>
-
-          {showAdvanced && (
-            <AdvancedConfigSection>
-              <SubSectionTitle>Campos Destino</SubSectionTitle>
-
-              <ConfigGrid>
-                <FormGroup>
-                  <FormLabel>Campo Línea Bonificación</FormLabel>
-                  <FormInput
-                    type="text"
-                    value={
-                      promotionConfig.targetFields?.bonusLineRef ||
-                      "PEDIDO_LINEA_BONIF"
-                    }
-                    onChange={(e) =>
-                      handleTargetFieldChange("bonusLineRef", e.target.value)
-                    }
-                    placeholder="Ej: PEDIDO_LINEA_BONIF"
+              {showAdvanced && (
+                <InputGroup>
+                  <Input
+                    label="Línea Bonificación Ref"
+                    value={promotionConfig.targetFields?.bonusLineRef || "PEDIDO_LINEA_BONIF"}
+                    onChange={(e) => handleTargetFieldChange("bonusLineRef", e.target.value)}
                   />
-                </FormGroup>
-
-                <FormGroup>
-                  <FormLabel>Campo Cantidad Pedida</FormLabel>
-                  <FormInput
-                    type="text"
-                    value={
-                      promotionConfig.targetFields?.orderedQuantity ||
-                      "CANTIDAD_PEDIDA"
-                    }
-                    onChange={(e) =>
-                      handleTargetFieldChange("orderedQuantity", e.target.value)
-                    }
-                    placeholder="Ej: CANTIDAD_PEDIDA"
+                  <Input
+                    label="Cantidad Pedida"
+                    value={promotionConfig.targetFields?.orderedQuantity || "CANTIDAD_PEDIDA"}
+                    onChange={(e) => handleTargetFieldChange("orderedQuantity", e.target.value)}
                   />
-                </FormGroup>
-
-                <FormGroup>
-                  <FormLabel>Campo Cantidad Bonificación</FormLabel>
-                  <FormInput
-                    type="text"
-                    value={
-                      promotionConfig.targetFields?.bonusQuantity ||
-                      "CANTIDAD_BONIF"
-                    }
-                    onChange={(e) =>
-                      handleTargetFieldChange("bonusQuantity", e.target.value)
-                    }
-                    placeholder="Ej: CANTIDAD_BONIF"
+                  <Input
+                    label="Cantidad Bonificación"
+                    value={promotionConfig.targetFields?.bonusQuantity || "CANTIDAD_BONIF"}
+                    onChange={(e) => handleTargetFieldChange("bonusQuantity", e.target.value)}
                   />
-                </FormGroup>
+                </InputGroup>
+              )}
+              {!showAdvanced && <HelpText>Haz clic para configurar mapeo de campos destino.</HelpText>}
+            </SectionCard>
+          </Grid>
 
-                <FormGroup>
-                  <FormLabel>Campo Cantidad a Facturar</FormLabel>
-                  <FormInput
-                    type="text"
-                    value={
-                      promotionConfig.targetFields?.invoiceQuantity ||
-                      "CANTIDAD_A_FACTURAR"
-                    }
-                    onChange={(e) =>
-                      handleTargetFieldChange("invoiceQuantity", e.target.value)
-                    }
-                    placeholder="Ej: CANTIDAD_A_FACTURAR"
-                  />
-                </FormGroup>
-              </ConfigGrid>
-            </AdvancedConfigSection>
-          )}
-
-          {/* Reglas de promoción */}
-          <RulesSection>
+          <RulesContainer>
             <RulesHeader>
-              <SubSectionTitle>Reglas de Promoción</SubSectionTitle>
-              <AddRuleButton onClick={addRule}>
-                <FaPlus /> Agregar Regla
-              </AddRuleButton>
+              <CardTitle><FaGift /> Reglas de Promoción ({rules.length})</CardTitle>
+              <Button variant="primary" onClick={addRule}>
+                <FaPlus /> Nueva Regla
+              </Button>
             </RulesHeader>
 
-            {rules.length > 0 ? (
+            {rules.length === 0 ? (
+              <EmptyRules>
+                No hay reglas configuradas. Las promociones se procesarán según los campos de detección por defecto.
+              </EmptyRules>
+            ) : (
               <RulesList>
                 {rules.map((rule, index) => (
-                  <RuleItem key={index} ruleColor={getRuleColor(rule.type)}>
-                    <RuleIcon ruleColor={getRuleColor(rule.type)}>
+                  <RuleCard key={index} type={rule.type} enabled={rule.enabled}>
+                    <RuleIconWrapper type={rule.type}>
                       {getRuleIcon(rule.type)}
-                    </RuleIcon>
+                    </RuleIconWrapper>
 
-                    <RuleContent>
-                      <RuleTitle>{rule.name}</RuleTitle>
-                      <RuleType>{rule.type.replace("_", " ")}</RuleType>
-                      {rule.description && (
-                        <RuleDescription>{rule.description}</RuleDescription>
-                      )}
-                      <RuleStatus>
-                        {rule.enabled ? (
-                          <StatusActive>
-                            <FaCheck /> Activa
-                          </StatusActive>
-                        ) : (
-                          <StatusInactive>
-                            <FaTimes /> Inactiva
-                          </StatusInactive>
-                        )}
-                        {rule.isOneTime && (
-                          <OneTimeTag>Oferta Única</OneTimeTag>
-                        )}
-                        <PriorityTag>
-                          Prioridad: {rule.priority || 0}
-                        </PriorityTag>
-                      </RuleStatus>
-                    </RuleContent>
+                    <RuleInfo>
+                      <RuleName>{rule.name}</RuleName>
+                      <RuleBadge type={rule.type}>{rule.type.replace(/_/g, " ")}</RuleBadge>
+                      <RuleDesc>{rule.description}</RuleDesc>
+                      <RuleMeta>
+                        <span>Prioridad: {rule.priority || 0}</span>
+                        {rule.isOneTime && <span className="one-time">Oferta Única</span>}
+                        <span className={rule.enabled ? "status-on" : "status-off"}>
+                          {rule.enabled ? "Habilitada" : "Deshabilitada"}
+                        </span>
+                      </RuleMeta>
+                    </RuleInfo>
 
                     <RuleActions>
-                      <ActionButton
-                        onClick={() => editRule(index)}
-                        title="Editar"
-                      >
+                      <ActionButton onClick={() => editRule(index)} title="Editar">
                         <FaEdit />
                       </ActionButton>
-                      <ActionButton
-                        onClick={() => deleteRule(index)}
-                        title="Eliminar"
-                        danger
-                      >
+                      <ActionButton danger onClick={() => deleteRule(index)} title="Eliminar">
                         <FaTrash />
                       </ActionButton>
                     </RuleActions>
-                  </RuleItem>
+                  </RuleCard>
                 ))}
               </RulesList>
-            ) : (
-              <EmptyRules>
-                <FaInfoCircle />
-                <p>No hay reglas de promoción configuradas.</p>
-                <p>Haz clic en "Agregar Regla" para crear tu primera regla.</p>
-              </EmptyRules>
             )}
-          </RulesSection>
-
-          {/* Información de ayuda */}
-          <HelpSection>
-            <HelpTitle>
-              <FaInfoCircle /> Información
-            </HelpTitle>
-            <HelpList>
-              <HelpListItem>
-                <FaArrowRight /> <strong>Detección automática:</strong> El
-                sistema detecta promociones usando los campos configurados
-              </HelpListItem>
-              <HelpListItem>
-                <FaArrowRight /> <strong>Transformación:</strong> Convierte
-                referencias de artículos a números de línea automáticamente
-              </HelpListItem>
-              <HelpListItem>
-                <FaArrowRight /> <strong>Reglas:</strong> Define reglas
-                específicas para diferentes tipos de promociones
-              </HelpListItem>
-              <HelpListItem>
-                <FaArrowRight /> <strong>Prioridad:</strong> Las reglas con
-                menor número tienen mayor prioridad
-              </HelpListItem>
-            </HelpList>
-          </HelpSection>
-        </>
+          </RulesContainer>
+        </Content>
       )}
-    </ConfigSection>
+    </Container>
   );
+};
+
+const getRuleIcon = (type) => {
+  switch (type) {
+    case "FAMILY_DISCOUNT":
+    case "INVOICE_DISCOUNT":
+      return <FaPercentage />;
+    case "QUANTITY_BONUS":
+    case "SCALED_BONUS":
+    case "PRODUCT_BONUS":
+      return <FaGift />;
+    default:
+      return <FaInfoCircle />;
+  }
+};
+
+const getRuleColor = (type) => {
+  switch (type) {
+    case "FAMILY_DISCOUNT": return "#ef4444";
+    case "INVOICE_DISCOUNT": return "#f87171";
+    case "QUANTITY_BONUS": return "#10b981";
+    case "SCALED_BONUS": return "#34d399";
+    case "PRODUCT_BONUS": return "#60a5fa";
+    default: return "#94a3b8";
+  }
 };
 
 export default PromotionConfigSection;
 
-// Estilos con styled-components
-const ConfigSection = styled.div`
-  position: relative;
-  background-color: ${({ theme }) => theme?.cardBg || "#ffffff"};
-  border-radius: 8px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
+// Estilos Glassmorphism
+const Container = styled.div`
+  background: ${({ theme }) => theme.cardBg};
+  backdrop-filter: blur(12px);
+  border: 1px solid ${({ theme }) => theme.border};
+  border-radius: 24px;
+  padding: 2rem;
+  margin-bottom: 2rem;
+  color: ${({ theme }) => theme.text};
+  box-shadow: ${({ theme }) => theme.shadows.medium};
 `;
 
-const SectionTitle = styled.h3`
-  font-size: 1.2rem;
-  font-weight: 600;
-  margin-bottom: 1.5rem;
-  color: ${({ theme }) => theme?.primary || "#333"};
-  border-bottom: 2px solid ${({ theme }) => theme?.border || "#eee"};
-  padding-bottom: 0.5rem;
+const Header = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 2.5rem;
+  padding-bottom: 1.5rem;
+  border-bottom: 1px solid ${({ theme }) => theme.border}80;
+`;
+
+const HeaderTitle = styled.h2`
   display: flex;
   align-items: center;
-  gap: 0.5rem;
-`;
-
-const SubSectionTitle = styled.h4`
-  font-size: 1rem;
-  font-weight: 500;
-  margin-bottom: 1rem;
-  color: ${({ theme }) => theme?.textSecondary || "#555"};
-`;
-
-const EnableSection = styled.div`
-  margin-bottom: 1.5rem;
-  padding: 1rem;
-  background-color: ${({ theme }) => theme?.background || "#f8f9fa"};
-  border-radius: 6px;
-`;
-
-const CheckboxContainer = styled.div`
-  display: flex;
-  align-items: center;
-  margin-bottom: 0.5rem;
-`;
-
-const CheckboxInput = styled.input`
-  margin-right: 8px;
-  width: 16px;
-  height: 16px;
-`;
-
-const FormLabel = styled.label`
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
-  color: ${({ theme }) => theme?.textSecondary || "#555"};
-`;
-
-const FormGroup = styled.div`
-  margin-bottom: 1rem;
-`;
-
-const FormInput = styled.input`
-  width: 100%;
-  padding: 0.5rem;
-  border: 1px solid ${({ theme }) => theme?.border || "#ccc"};
-  border-radius: 4px;
-  font-size: 14px;
-
-  &:focus {
-    outline: none;
-    border-color: ${({ theme }) => theme?.primary || "#0275d8"};
-    box-shadow: 0 0 0 2px rgba(2, 117, 216, 0.25);
+  gap: 12px;
+  font-size: 1.5rem;
+  font-weight: 800;
+  margin: 0;
+  color: ${({ theme }) => theme.titleColor};
+  
+  svg {
+    color: ${({ theme }) => theme.primary};
   }
 `;
 
-const HelpText = styled.p`
-  font-size: 0.8rem;
-  color: ${({ theme }) => theme?.textMuted || "#666"};
-  margin-top: 0.25rem;
-  margin-bottom: 0;
+const Content = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 2rem;
 `;
 
-const BasicConfigSection = styled.div`
-  margin-bottom: 1.5rem;
-  padding: 1rem;
-  border: 1px solid ${({ theme }) => theme?.border || "#eee"};
-  border-radius: 6px;
-`;
-
-const ConfigGrid = styled.div`
+const Grid = styled.div`
   display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 1rem;
+  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
+  gap: 1.5rem;
+`;
+
+const SectionCard = styled.div`
+  background: ${({ theme }) => theme.bg2}40;
+  border: 1px solid ${({ theme }) => theme.border};
+  border-radius: 20px;
+  padding: 1.5rem;
+`;
+
+const CardTitle = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  font-weight: 800;
+  font-size: 1.1rem;
+  margin-bottom: 1.5rem;
+  color: ${({ theme }) => theme.titleColor};
+`;
+
+const InputGroup = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
 `;
 
 const AdvancedToggle = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
   background: none;
   border: none;
-  color: ${({ theme }) => theme?.primary || "#0275d8"};
+  color: #4facfe;
   cursor: pointer;
-  padding: 0.5rem;
-  font-size: 0.9rem;
-  margin-bottom: 1rem;
-
-  &:hover {
-    text-decoration: underline;
-  }
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  transition: transform 0.2s;
+  &:hover { transform: scale(1.1); }
 `;
 
-const AdvancedConfigSection = styled.div`
-  margin-bottom: 1.5rem;
-  padding: 1rem;
-  border: 1px solid ${({ theme }) => theme?.border || "#eee"};
-  border-radius: 6px;
-  background-color: ${({ theme }) => theme?.background || "#f8f9fa"};
-`;
-
-const RulesSection = styled.div`
-  margin-bottom: 1.5rem;
+const RulesContainer = styled.div`
+  display: flex;
+  flex-direction: column;
+  gap: 1rem;
 `;
 
 const RulesHeader = styled.div`
   display: flex;
   justify-content: space-between;
   align-items: center;
-  margin-bottom: 1rem;
-`;
-
-const AddRuleButton = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  background-color: ${({ theme }) => theme?.primary || "#0275d8"};
-  color: white;
-  border: none;
-  padding: 0.5rem 1rem;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 0.9rem;
-
-  &:hover {
-    background-color: ${({ theme }) => theme?.primaryDark || "#025aa5"};
-  }
 `;
 
 const RulesList = styled.div`
-  display: flex;
-  flex-direction: column;
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
   gap: 1rem;
 `;
 
-const RuleItem = styled.div`
+const RuleCard = styled.div`
   display: flex;
-  align-items: center;
-  gap: 1rem;
-  padding: 1rem;
-  border: 1px solid ${({ theme }) => theme?.border || "#eee"};
-  border-left: 4px solid ${({ ruleColor }) => ruleColor};
-  border-radius: 6px;
-  background-color: ${({ theme }) => theme?.cardBg || "#ffffff"};
+  gap: 1.25rem;
+  background: ${({ theme }) => theme.cardBg};
+  border: 1px solid ${({ theme }) => theme.border};
+  border-left: 5px solid ${props => getRuleColor(props.type)};
+  border-radius: 18px;
+  padding: 1.25rem;
+  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+  opacity: ${props => props.enabled ? 1 : 0.6};
+  box-shadow: ${({ theme }) => theme.shadows.soft};
+
+  &:hover {
+    background: ${({ theme }) => theme.bg2}30;
+    transform: translateY(-4px);
+    box-shadow: ${({ theme }) => theme.shadows.medium};
+  }
 `;
 
-const RuleIcon = styled.div`
+const RuleIconWrapper = styled.div`
+  width: 40px;
+  height: 40px;
+  border-radius: 10px;
+  background: ${props => getRuleColor(props.type)}20;
+  color: ${props => getRuleColor(props.type)};
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background-color: ${({ ruleColor }) => ruleColor};
-  color: white;
-  font-size: 1.1rem;
+  flex-shrink: 0;
+  font-size: 1.2rem;
 `;
 
-const RuleContent = styled.div`
+const RuleInfo = styled.div`
   flex: 1;
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
 `;
 
-const RuleTitle = styled.h5`
-  font-size: 1rem;
-  font-weight: 600;
-  margin: 0 0 0.25rem 0;
-  color: ${({ theme }) => theme?.text || "#333"};
+const RuleName = styled.div`
+  font-weight: 700;
+  font-size: 0.95rem;
 `;
 
-const RuleType = styled.div`
-  font-size: 0.8rem;
-  color: ${({ theme }) => theme?.textMuted || "#666"};
+const RuleBadge = styled.span`
+  font-size: 10px;
+  font-weight: 800;
   text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin-bottom: 0.5rem;
+  color: ${props => getRuleColor(props.type)};
+  background: ${props => getRuleColor(props.type)}15;
+  padding: 2px 6px;
+  border-radius: 4px;
+  align-self: flex-start;
 `;
 
-const RuleDescription = styled.p`
-  font-size: 0.9rem;
-  color: ${({ theme }) => theme?.textSecondary || "#555"};
-  margin: 0 0 0.5rem 0;
+const RuleDesc = styled.div`
+  font-size: 13px;
+  color: ${({ theme }) => theme.textSecondary};
+  margin-top: 6px;
+  line-height: 1.5;
+  display: -webkit-box;
+  -webkit-line-clamp: 2;
+  -webkit-box-orient: vertical;
+  overflow: hidden;
 `;
 
-const RuleStatus = styled.div`
+const RuleMeta = styled.div`
   display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  flex-wrap: wrap;
-`;
+  gap: 14px;
+  font-size: 11px;
+  font-weight: 600;
+  margin-top: 10px;
+  color: ${({ theme }) => theme.textSecondary};
+  opacity: 0.7;
 
-const StatusActive = styled.span`
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.8rem;
-  color: #27ae60;
-  font-weight: 500;
-`;
-
-const StatusInactive = styled.span`
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  font-size: 0.8rem;
-  color: #e74c3c;
-  font-weight: 500;
-`;
-
-const OneTimeTag = styled.span`
-  font-size: 0.7rem;
-  background-color: #f39c12;
-  color: white;
-  padding: 0.2rem 0.4rem;
-  border-radius: 12px;
-  font-weight: 500;
-`;
-
-const PriorityTag = styled.span`
-  font-size: 0.7rem;
-  background-color: ${({ theme }) => theme?.textMuted || "#666"};
-  color: white;
-  padding: 0.2rem 0.4rem;
-  border-radius: 12px;
-  font-weight: 500;
+  .one-time { color: #fbbf24; font-weight: 600; }
+  .status-on { color: #34d399; font-weight: 600; }
+  .status-off { color: #f87171; font-weight: 600; }
 `;
 
 const RuleActions = styled.div`
   display: flex;
-  gap: 0.5rem;
+  flex-direction: column;
+  gap: 8px;
 `;
 
 const ActionButton = styled.button`
+  background: ${({ theme }) => theme.bg2}60;
+  border: 1px solid ${({ theme }) => theme.border};
+  color: ${props => props.danger ? theme.danger : theme.primary};
+  width: 36px;
+  height: 36px;
+  border-radius: 10px;
   display: flex;
   align-items: center;
   justify-content: center;
-  width: 32px;
-  height: 32px;
-  border: none;
-  border-radius: 4px;
   cursor: pointer;
-  background-color: ${({ danger, theme }) =>
-    danger ? "#e74c3c" : theme?.primary || "#0275d8"};
-  color: white;
+  transition: all 0.2s;
 
   &:hover {
-    opacity: 0.8;
+    background: ${props => props.danger ? theme.danger : theme.primary};
+    color: white;
+    border-color: transparent;
   }
+`;
+
+const ToggleSwitch = styled.div`
+  display: flex;
+  align-items: center;
+  
+  input {
+    height: 0;
+    width: 0;
+    visibility: hidden;
+  }
+
+  label {
+    cursor: pointer;
+    text-indent: -9999px;
+    width: 48px;
+    height: 26px;
+    background: ${({ theme }) => theme.bg2};
+    display: block;
+    border-radius: 100px;
+    position: relative;
+    border: 1px solid ${({ theme }) => theme.border};
+  }
+
+  label:after {
+    content: "";
+    position: absolute;
+    top: 2px;
+    left: 2px;
+    width: 18px;
+    height: 18px;
+    background: #fff;
+    border-radius: 90px;
+    transition: 0.3s;
+  }
+
+  input:checked + label {
+    background: #10b981;
+    border-color: #10b981;
+  }
+
+  input:checked + label:after {
+    left: calc(100% - 2px);
+    transform: translateX(-100%);
+  }
+`;
+
+const EmptyState = styled.div`
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  padding: 4rem 2rem;
+  text-align: center;
+  color: ${({ theme }) => theme.textSecondary};
+  gap: 1rem;
+  background: ${({ theme }) => theme.bg2}20;
+  border-radius: 24px;
+  border: 2px dashed ${({ theme }) => theme.border};
 `;
 
 const EmptyRules = styled.div`
-  text-align: center;
   padding: 2rem;
-  color: ${({ theme }) => theme?.textMuted || "#666"};
-
-  svg {
-    font-size: 2rem;
-    margin-bottom: 1rem;
-  }
-
-  p {
-    margin: 0.5rem 0;
-  }
-`;
-
-const HelpSection = styled.div`
-  margin-top: 1.5rem;
-  padding: 1rem;
-  background-color: ${({ theme }) => theme?.background || "#f8f9fa"};
-  border-radius: 6px;
-`;
-
-const HelpTitle = styled.h5`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
+  text-align: center;
+  background: rgba(255, 255, 255, 0.02);
+  border-radius: 14px;
+  border: 1px dashed rgba(255, 255, 255, 0.1);
+  color: rgba(255, 255, 255, 0.4);
   font-size: 0.9rem;
-  font-weight: 600;
-  margin-bottom: 0.5rem;
-  color: ${({ theme }) => theme?.primary || "#0275d8"};
 `;
 
-const HelpList = styled.ul`
-  list-style: none;
-  padding: 0;
-  margin: 0;
-`;
-
-const HelpListItem = styled.li`
-  display: flex;
-  align-items: flex-start;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-  color: ${({ theme }) => theme?.textSecondary || "#555"};
-  margin-bottom: 0.5rem;
-
-  svg {
-    margin-top: 0.2rem;
-    color: ${({ theme }) => theme?.primary || "#0275d8"};
-  }
+const HelpText = styled.div`
+  font-size: 12px;
+  color: rgba(255, 255, 255, 0.4);
+  font-style: italic;
 `;

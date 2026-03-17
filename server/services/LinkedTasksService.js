@@ -1,5 +1,5 @@
 // services/LinkedTasksService.js
-const TransferTask = require("../models/transferTaks");
+const TransferTask = require("../models/transferTaskModel");
 const logger = require("./logger");
 const { SqlService } = require("./SqlService");
 // const ConnectionService = require("./ConnectionCentralService"); // REMOVED
@@ -158,8 +158,7 @@ class LinkedTasksService {
       }
 
       logger.info(
-        `🔗 Ejecutando ${
-          tasksToExecute.length
+        `🔗 Ejecutando ${tasksToExecute.length
         } tareas vinculadas en grupo: ${tasksToExecute
           .map((t) => t.name)
           .join(", ")}`
@@ -223,8 +222,7 @@ class LinkedTasksService {
           }
 
           logger.info(
-            `✅ Tarea ${task.name} completada: ${
-              result.success ? "Éxito" : "Error"
+            `✅ Tarea ${task.name} completada: ${result.success ? "Éxito" : "Error"
             }`
           );
         } catch (taskError) {
@@ -261,8 +259,7 @@ class LinkedTasksService {
           );
 
           logger.info(
-            `✅ Post-update coordinado completado: ${
-              postUpdateResult.success ? "Éxito" : "Error"
+            `✅ Post-update coordinado completado: ${postUpdateResult.success ? "Éxito" : "Error"
             }`
           );
         } catch (postError) {
@@ -369,8 +366,7 @@ class LinkedTasksService {
       );
       if (!connectionResult.success) {
         throw new Error(
-          `No se pudo establecer conexión: ${
-            connectionResult.error?.message || "Error de conexión"
+          `No se pudo establecer conexión: ${connectionResult.error?.message || "Error de conexión"
           }`
         );
       }
@@ -423,8 +419,7 @@ class LinkedTasksService {
           totalUpdated += batchUpdated;
 
           logger.info(
-            `Post-update lote ${
-              Math.floor(i / batchSize) + 1
+            `Post-update lote ${Math.floor(i / batchSize) + 1
             }: ${batchUpdated} registros actualizados`
           );
         } catch (queryError) {
