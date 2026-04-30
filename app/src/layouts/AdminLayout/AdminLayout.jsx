@@ -44,25 +44,36 @@ export function AdminLayout({
     return () => window.removeEventListener("resize", handleResize);
   }, []);
 
-  // ⭐ RECARGAR PERMISOS PERIÓDICAMENTE ⭐
+  // ⭐ RECARGAR PERMISOS AL VOLVER A LA APP (solo si estuvo inactivo > 5 min y no hay input activo) ⭐
   useEffect(() => {
     if (!user || !reloadUserPermissions) return;
 
-    // Recargar permisos cada 10 minutos
-    const permissionsInterval = setInterval(() => {
-      reloadUserPermissions();
-    }, 10 * 60 * 1000);
+    let lastReload = Date.now();
+    let reloadTimeout = null;
 
-    // Recargar al enfocar la ventana
-    const handleFocus = () => {
-      reloadUserPermissions();
+    const shouldReload = () => {
+      const inputsActivos = document.querySelectorAll('input:focus, textarea:focus, select:focus');
+      return inputsActivos.length === 0 && Date.now() - lastReload > 5 * 60 * 1000;
     };
 
-    window.addEventListener("focus", handleFocus);
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        if (shouldReload()) {
+          reloadTimeout = setTimeout(() => {
+            if (shouldReload()) {
+              reloadUserPermissions();
+              lastReload = Date.now();
+            }
+          }, 1000);
+        }
+      }
+    };
+
+    document.addEventListener('visibilitychange', handleVisibilityChange);
 
     return () => {
-      clearInterval(permissionsInterval);
-      window.removeEventListener("focus", handleFocus);
+      document.removeEventListener('visibilitychange', handleVisibilityChange);
+      if (reloadTimeout) clearTimeout(reloadTimeout);
     };
   }, [user, reloadUserPermissions]);
 

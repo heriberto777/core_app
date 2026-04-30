@@ -1,0 +1,83 @@
+# Entorno — Fix: NODE_ENV estaba duplicado (production y development). Se unifica.
+NODE_ENV=development
+
+# Información del servicio
+SERVICE_NAME=transfer-control
+npm_package_version=1.0.0
+
+# Puerto
+PORT=3979
+
+# API versión
+API_VERSION=v1
+
+# Modo servidor (http o https)
+SERVER_MODE=https
+DISABLE_SSL=true
+
+# SSL (solo para HTTPS en producción)
+SSL_KEY_PATH=/etc/letsencrypt/live/catelli.ddns.net/privkey.pem
+SSL_CERT_PATH=/etc/letsencrypt/live/catelli.ddns.net/fullchain.pem
+SSL_CA_PATH=/etc/letsencrypt/live/catelli.ddns.net/chain.pem
+
+DISABLE_MONGO_LOGS=false
+
+# MongoDB
+DB_USER=heriberto777
+DB_PASS=eli112910
+DB_PORT=27017
+DB_HOST=127.0.0.1
+DB_NAME=core_app
+# Opcional: URI completo (tiene prioridad si está definido)
+# MONGO_URI=mongodb://heriberto777:eli112910@localhost:27017/core_app
+
+# JWT
+JWT_SECRET="HG3y$obesey@vqtvja+nsf7xvbe2u&0#&!bift=1%g(al=z7k$w%EG"
+
+# Email
+EMAIL_HOST=smtp.gmail.com
+EMAIL_PORT=587
+EMAIL_USER=info@catelli.net
+EMAIL_PASS='Catelli#2023'
+EMAIL_FROM=info@catelli.net
+
+# SQL Server 1 (Origen - CATELLI/Exactus)
+SERVER1_USER=sa
+SERVER1_PASS="Mercedes@262"
+SERVER1_HOST=10.0.10.120
+SERVER1_DB=EXACTUS
+SERVER1_PORT=1433
+SERVER1_ENCRYPT=false
+SERVER1_TRUST_SERVER_CERT=true
+
+# SQL Server 2 (Destino - TELYNET/Integración)
+# NOTA: En desarrollo apuntan al mismo host. En producción suelen ser distintos.
+SERVER2_USER=sa
+SERVER2_PASS="Mercedes@262"
+SERVER2_HOST=10.0.10.120
+SERVER2_DB=TELYNET
+SERVER2_PORT=1433
+SERVER2_ENCRYPT=true
+SERVER2_TRUST_SERVER_CERT=true
+SERVER2_INSTANCE=null
+
+# Debug
+# DEBUG=ioredis:*,tedious:*
+
+# Configuración de reintentos
+RETRY_ATTEMPTS=3
+RETRY_DELAY=5000
+
+# Configuración de lotes
+BATCH_SIZE=100
+INSERT_BATCH_SIZE=50
+
+# Nivel general de logs
+LOG_LEVEL=error
+
+# Niveles específicos por transporte
+CONSOLE_LOG_LEVEL=debug
+FILE_LOG_LEVEL=info
+MONGO_LOG_LEVEL=info
+
+CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,https://catelli.ddns.net,https://catelli.ddns.net:8085

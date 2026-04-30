@@ -1,0 +1,738 @@
+: Ejecutando consulta: SELECT TOP 100 TIP_DOC, DESCUENTO_VOLUMEN, NUM_PED, MON_IMP_VT, FEC_PED, MON_DSC, MON_CIV, FEC_PED, NUM_ITM, NOMBRE_CLIENTE, DIR_ENT, VERSION_PRECIO, MONEDA, NIVEL_PRECIO, VENDEDOR, RUTA, COD_CND, VENDEDOR, COD_CLT, COD_CLT, COD_CLT, COD_CLT, COD_PAIS, NOMBRE_CLIENTE FROM dbo.FAC_ENC_PED WHERE 1=1 AND FEC_PED >= @dateFrom AND FEC_PED <= @dateTo AND TIP_DOC = 'F' AND DOC_PRO IS NULL ORDER BY NUM_PED DESC
+10|core_app  | 2026-03-24 18:20:09: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:09:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:09:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:09:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:09:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:09: }
+                                                                   ]: [conn-1774390808918-7r8z2] SQL Success: 0 rows
+10|core_app  | 2026-03-24 18:20:09: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:09:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:09:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:09:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:09:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:09: }
+                                                                  ]: Consulta ejecutada exitosamente. Documentos encontrados: 0
+10|core_app  | 2026-03-24 18:20:09: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:09:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:09:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:09:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:09:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:09: }
+                                                                   ]: [conn-1774390808918-7r8z2] Conexión liberada para server2
+10|core_app  | 2026-03-24 18:20:09: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:09:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:09:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:09:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:09:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:09: }
+                                                                  ][http]: ::ffff:127.0.0.1 - - [24/Mar/2026:22:20:09 +0000] "GET /api/v1/mappings/69b8bb4d9bc73d3e6e311a36/documents?dateFrom=2026-02-22&dateTo=2026-03-24 HTTP/1.1" 304 - "https://catelli.ddns.net:8085/universal-manager" "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0"
+10|core_app  | 2026-03-24 18:20:09: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:09:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:09:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:09:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:09:   "pid": 3710859,
+10|core_app  | 2026-03-24 18:20:09:   "type": "request"
+10|core_app  | 2026-03-24 18:20:09: }
+                                                                   ]: Verificando token JWT...
+10|core_app  | 2026-03-24 18:20:12: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:12:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:12:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:12:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:12:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:12: }
+                                                                   ]: Token JWT verificado exitosamente
+10|core_app  | 2026-03-24 18:20:12: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:12:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:12:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:12:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:12:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:12: }
+                                                                   ]: Token verificado para userId: 685ea9828799497a442b86ef
+10|core_app  | 2026-03-24 18:20:12: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:12:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:12:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:12:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:12:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:12: }
+                                                                  ]: Solicitud de documentos para mapeo 69b8bb4d9bc73d3e6e311a36
+10|core_app  | 2026-03-24 18:20:12: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:12:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:12:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:12:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:12:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:12: }
+                                                                   ]: [conn-1774390813006-y71pa] Solicitando conexión para server2
+10|core_app  | 2026-03-24 18:20:13: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:13:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:13:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:13:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:13:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:13: }
+                                                                   ]: [conn-1774390813006-y71pa] Adquiriendo conexión del pool...
+10|core_app  | 2026-03-24 18:20:13: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:13:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:13:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:13:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:13:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:13: }
+                                                                   ]: [conn-1774390813006-y71pa] Conexión obtenida exitosamente para server2
+10|core_app  | 2026-03-24 18:20:13: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:13:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:13:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:13:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:13:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:13: }
+                                                                  ]: Obteniendo documentos de FAC_ENC_PED en server2
+10|core_app  | 2026-03-24 18:20:13: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:13:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:13:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:13:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:13:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:13: }
+                                                                  ]: Verificando tabla dbo.FAC_ENC_PED...
+10|core_app  | 2026-03-24 18:20:13: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:13:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:13:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:13:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:13:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:13: }
+                                                                   ]: [conn-1774390813006-y71pa] SQL Success: 1 rows
+10|core_app  | 2026-03-24 18:20:13: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:13:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:13:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:13:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:13:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:13: }
+                                                                   ]: [conn-1774390813006-y71pa] SQL Success: 48 rows
+10|core_app  | 2026-03-24 18:20:13: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:13:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:13:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:13:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:13:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:13: }
+                                                                  ]: Tabla dbo.FAC_ENC_PED encontrada con 48 columnas
+10|core_app  | 2026-03-24 18:20:13: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:13:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:13:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:13:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:13:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:13: }
+                                                                  ]: Ejecutando consulta: SELECT TOP 100 TIP_DOC, DESCUENTO_VOLUMEN, NUM_PED, MON_IMP_VT, FEC_PED, MON_DSC, MON_CIV, FEC_PED, NUM_ITM, NOMBRE_CLIENTE, DIR_ENT, VERSION_PRECIO, MONEDA, NIVEL_PRECIO, VENDEDOR, RUTA, COD_CND, VENDEDOR, COD_CLT, COD_CLT, COD_CLT, COD_CLT, COD_PAIS, NOMBRE_CLIENTE FROM dbo.FAC_ENC_PED WHERE 1=1 AND FEC_PED >= @dateFrom AND FEC_PED <= @dateTo AND TIP_DOC = 'F' AND DOC_PRO IS NULL ORDER BY NUM_PED DESC
+10|core_app  | 2026-03-24 18:20:13: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:13:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:13:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:13:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:13:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:13: }
+                                                                   ]: [conn-1774390813006-y71pa] SQL Success: 4 rows
+10|core_app  | 2026-03-24 18:20:13: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:13:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:13:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:13:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:13:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:13: }
+                                                                  ]: Consulta ejecutada exitosamente. Documentos encontrados: 4
+10|core_app  | 2026-03-24 18:20:13: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:13:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:13:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:13:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:13:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:13: }
+                                                                   ]: [conn-1774390813006-y71pa] Conexión liberada para server2
+10|core_app  | 2026-03-24 18:20:13: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:13:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:13:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:13:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:13:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:13: }
+                                                                  ][http]: ::ffff:127.0.0.1 - - [24/Mar/2026:22:20:13 +0000] "GET /api/v1/mappings/69b8bb4d9bc73d3e6e311a36/documents?dateFrom=2025-02-22&dateTo=2026-03-24 HTTP/1.1" 304 - "https://catelli.ddns.net:8085/universal-manager" "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0"
+10|core_app  | 2026-03-24 18:20:13: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:13:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:13:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:13:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:13:   "pid": 3710859,
+10|core_app  | 2026-03-24 18:20:13:   "type": "request"
+10|core_app  | 2026-03-24 18:20:13: }
+                                                                   ]: Verificando token JWT...
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: Token JWT verificado exitosamente
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: Token verificado para userId: 685ea9828799497a442b86ef
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: Procesando documentos para mapeo 69b8bb4d9bc73d3e6e311a36 (Auto-promociones)
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+10|core_app  | 2026-03-24 18:20:17: 🔍 DEBUG shouldUsePromotions - INICIANDO
+10|core_app  | 2026-03-24 18:20:17: 🔍 mapping.name: CargarFacturas
+10|core_app  | 2026-03-24 18:20:17: 🔍 mapping.promotionConfig: {
+10|core_app  | 2026-03-24 18:20:17:   detectFields: {
+10|core_app  | 2026-03-24 18:20:17:     bonusField: 'ART_BON',
+10|core_app  | 2026-03-24 18:20:17:     referenceField: 'COD_ART_RFR',
+10|core_app  | 2026-03-24 18:20:17:     discountField: 'MON_DSC',
+10|core_app  | 2026-03-24 18:20:17:     lineNumberField: 'NUM_LN',
+10|core_app  | 2026-03-24 18:20:17:     articleField: 'COD_ART',
+10|core_app  | 2026-03-24 18:20:17:     quantityField: 'CNT_MAX'
+10|core_app  | 2026-03-24 18:20:17:   },
+10|core_app  | 2026-03-24 18:20:17:   targetFields: {
+10|core_app  | 2026-03-24 18:20:17:     bonusLineRef: 'PEDIDO_LINEA_BONIF',
+10|core_app  | 2026-03-24 18:20:17:     orderedQuantity: 'CANTIDAD_PEDIDA',
+10|core_app  | 2026-03-24 18:20:17:     invoiceQuantity: 'CANTIDAD_A_FACTURAR',
+10|core_app  | 2026-03-24 18:20:17:     bonusQuantity: 'CANTIDAD_BONIF'
+10|core_app  | 2026-03-24 18:20:17:   },
+10|core_app  | 2026-03-24 18:20:17:   enabled: false,
+10|core_app  | 2026-03-24 18:20:17:   rules: [],
+10|core_app  | 2026-03-24 18:20:17:   _id: new ObjectId('69bc5fd84a86f299f8a2ab3b')
+10|core_app  | 2026-03-24 18:20:17: }
+10|core_app  | 2026-03-24 18:20:17: 🔍 DEBUG: Promociones deshabilitadas
+                                                                  ]: 📋 PROCESAMIENTO ESTÁNDAR: Sin promociones para mapping CargarFacturas
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: 🔍 Verificando sistema de consecutivos para mapping 69b8bb4d9bc73d3e6e311a36
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: ✅ Usando consecutivo centralizado asignado: 69b8baa59bc73d3e6e3114da
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: ID dynamic_process_69b8bb4d9bc73d3e6e311a36_1774390817117 no es un ObjectId válido de MongoDB
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: Task dynamic_process_69b8bb4d9bc73d3e6e311a36_1774390817117 registered for cancellation tracking
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: [tx-1774390817265-3qaoy] Iniciando transacción para server2
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: [conn-1774390817266-4ouwt] Solicitando conexión para server2
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: [conn-1774390817266-4ouwt] Adquiriendo conexión del pool...
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: [conn-1774390817266-4ouwt] Conexión obtenida exitosamente para server2
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: [tx-1774390817297-huadi] Iniciando transacción para server1
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: [conn-1774390817298-4ndmr] Solicitando conexión para server1
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: [conn-1774390817298-4ndmr] Adquiriendo conexión del pool...
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: [conn-1774390817298-4ndmr] Conexión obtenida exitosamente para server1
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: 📋 Procesando documento 1/1: 1654000000000265 (ESTÁNDAR)
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: 🔍 Generando consecutivo para documento 1654000000000265
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: Reservados 1 valores consecutivos para Facturacion
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: ✅ Consecutivo centralizado reservado: FA-0000010
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: Procesando documento 1654000000000265 (detección automática de promociones)
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+10|core_app  | 2026-03-24 18:20:17: 🔍 DEBUG shouldUsePromotions - INICIANDO
+10|core_app  | 2026-03-24 18:20:17: 🔍 mapping.name: CargarFacturas
+10|core_app  | 2026-03-24 18:20:17: 🔍 mapping.promotionConfig: {
+10|core_app  | 2026-03-24 18:20:17:   detectFields: {
+10|core_app  | 2026-03-24 18:20:17:     bonusField: 'ART_BON',
+10|core_app  | 2026-03-24 18:20:17:     referenceField: 'COD_ART_RFR',
+10|core_app  | 2026-03-24 18:20:17:     discountField: 'MON_DSC',
+10|core_app  | 2026-03-24 18:20:17:     lineNumberField: 'NUM_LN',
+10|core_app  | 2026-03-24 18:20:17:     articleField: 'COD_ART',
+10|core_app  | 2026-03-24 18:20:17:     quantityField: 'CNT_MAX'
+10|core_app  | 2026-03-24 18:20:17:   },
+10|core_app  | 2026-03-24 18:20:17:   targetFields: {
+10|core_app  | 2026-03-24 18:20:17:     bonusLineRef: 'PEDIDO_LINEA_BONIF',
+10|core_app  | 2026-03-24 18:20:17:     orderedQuantity: 'CANTIDAD_PEDIDA',
+10|core_app  | 2026-03-24 18:20:17:     invoiceQuantity: 'CANTIDAD_A_FACTURAR',
+10|core_app  | 2026-03-24 18:20:17:     bonusQuantity: 'CANTIDAD_BONIF'
+10|core_app  | 2026-03-24 18:20:17:   },
+10|core_app  | 2026-03-24 18:20:17:   enabled: false,
+10|core_app  | 2026-03-24 18:20:17:   rules: [],
+10|core_app  | 2026-03-24 18:20:17:   _id: new ObjectId('69bc5fd84a86f299f8a2ab3b')
+10|core_app  | 2026-03-24 18:20:17: }
+10|core_app  | 2026-03-24 18:20:17: 🔍 DEBUG: Promociones deshabilitadas
+                                                                  ]: Procesando 1 tablas principales en orden: FAC_ENC
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: Ejecutando consulta principal:
+10|core_app  | 2026-03-24 18:20:17:         SELECT t1.TIP_DOC, t1.DESCUENTO_VOLUMEN, t1.NUM_PED, t1.MON_IMP_VT, t1.FEC_PED, t1.MON_DSC, t1.MON_CIV, t1.NUM_ITM, t1.NOMBRE_CLIENTE, t1.DIR_ENT, t1.VERSION_PRECIO, t1.MONEDA, t1.NIVEL_PRECIO, t1.VENDEDOR, t1.RUTA, t1.COD_CND, t1.COD_CLT, t1.COD_PAIS FROM FAC_ENC_PED t1
+10|core_app  | 2026-03-24 18:20:17:         WHERE t1.NUM_PED = @documentId
+10|core_app  | 2026-03-24 18:20:17:          AND t1.TIP_DOC = 'F' AND t1.DOC_PRO IS NULL
+10|core_app  | 2026-03-24 18:20:17:
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: [conn-1774390817266-4ouwt] SQL Success: 1 rows
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: ============ INICIANDO processTable: FAC_ENC ============
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: isDetailTable: false
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: dataForProcessing claves: TIP_DOC, DESCUENTO_VOLUMEN, NUM_PED, MON_IMP_VT, FEC_PED, MON_DSC, MON_CIV, NUM_ITM, NOMBRE_CLIENTE, DIR_ENT, VERSION_PRECIO, MONEDA, NIVEL_PRECIO, VENDEDOR, RUTA, COD_CND, COD_CLT, COD_PAIS
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: ¿Detecta promociones? false
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: NO se detectaron promociones, usando 92 mappings normales
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: PROCESANDO 92 campos del mapping para tabla FAC_ENC
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: ---- PROCESANDO CAMPO 1/92 ----
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: Campo: TIP_DOC -> TIPO_DOCUMENTO
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: Es promoción: false
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: Procesando campo: TIP_DOC -> TIPO_DOCUMENTO
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: Valor final para TIPO_DOCUMENTO: F (tipo: string)
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: Campo normal procesado: TIPO_DOCUMENTO = F
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: ---- PROCESANDO CAMPO 2/92 ----
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: Campo: (automático) -> FACTURA
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: Es promoción: false
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: Procesando campo: (automático) -> FACTURA
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: Usando defaultValue para FACTURA:
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: Error procesando campo FACTURA: Campo requerido FACTURA está vacío
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: Error procesando documento 1654000000000265: Campo requerido FACTURA está vacío
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: Documento 1654000000000265 falló pero consecutivo FA-0000010 ya fue generado
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: Cancelada reserva batch_1774390817346_0.wkdsg6n61d para consecutivo Facturacion
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: Documento 1654000000000265 procesado: ❌ ERROR (consecutivo: FA-0000010)
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: ✅ Procesamiento completado: 0 éxitos, 1 fallos (consecutivos centralizados)
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: Task dynamic_process_69b8bb4d9bc73d3e6e311a36_1774390817117 removed from cancellation tracking
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: TaskId: dynamic_process_69b8bb4d9bc73d3e6e311a36_1774390817117, tipo: string, longitud: 54, esValidObjectId: false
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: Tarea con ID compuesto dynamic_process_69b8bb4d9bc73d3e6e311a36_1774390817117 completada con estado: failed (no se actualiza BD)
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: Información extraída de dynamic_process_69b8bb4d9bc73d3e6e311a36_1774390817117: {"type":"taskName","taskId":null,"taskName":"dynamic_process_69b8bb4d9bc73d3e6e311a36"}
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: No se encontró tarea con nombre: dynamic_process_69b8bb4d9bc73d3e6e311a36
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: Tarea dynamic_process_69b8bb4d9bc73d3e6e311a36_1774390817117 completada con estado: failed
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: [tx-1774390817297-huadi] Transacción confirmada exitosamente
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: [conn-1774390817298-4ndmr] Conexión liberada para server1
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: [tx-1774390817265-3qaoy] Transacción confirmada exitosamente
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: [conn-1774390817266-4ouwt] Conexión liberada para server2
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ][http]: ::ffff:127.0.0.1 - - [24/Mar/2026:22:20:17 +0000] "POST /api/v1/mappings/69b8bb4d9bc73d3e6e311a36/process HTTP/1.1" 200 1589 "https://catelli.ddns.net:8085/universal-manager" "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0"
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859,
+10|core_app  | 2026-03-24 18:20:17:   "type": "request"
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: Verificando token JWT...
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: Token JWT verificado exitosamente
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: Token verificado para userId: 685ea9828799497a442b86ef
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: Solicitud de documentos para mapeo 69b8bb4d9bc73d3e6e311a36
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: [conn-1774390817882-jsnof] Solicitando conexión para server2
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: [conn-1774390817882-jsnof] Adquiriendo conexión del pool...
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: [conn-1774390817882-jsnof] Conexión obtenida exitosamente para server2
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: Obteniendo documentos de FAC_ENC_PED en server2
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: Verificando tabla dbo.FAC_ENC_PED...
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: [conn-1774390817882-jsnof] SQL Success: 1 rows
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: [conn-1774390817882-jsnof] SQL Success: 48 rows
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: Tabla dbo.FAC_ENC_PED encontrada con 48 columnas
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                  ]: Ejecutando consulta: SELECT TOP 100 TIP_DOC, DESCUENTO_VOLUMEN, NUM_PED, MON_IMP_VT, FEC_PED, MON_DSC, MON_CIV, FEC_PED, NUM_ITM, NOMBRE_CLIENTE, DIR_ENT, VERSION_PRECIO, MONEDA, NIVEL_PRECIO, VENDEDOR, RUTA, COD_CND, VENDEDOR, COD_CLT, COD_CLT, COD_CLT, COD_CLT, COD_PAIS, NOMBRE_CLIENTE FROM dbo.FAC_ENC_PED WHERE 1=1 AND FEC_PED >= @dateFrom AND FEC_PED <= @dateTo AND TIP_DOC = 'F' AND DOC_PRO IS NULL ORDER BY NUM_PED DESC
+10|core_app  | 2026-03-24 18:20:17: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:17:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:17:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:17:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:17:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:17: }
+                                                                   ]: [conn-1774390817882-jsnof] SQL Success: 4 rows
+10|core_app  | 2026-03-24 18:20:18: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:18:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:18:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:18:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:18:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:18: }
+                                                                  ]: Consulta ejecutada exitosamente. Documentos encontrados: 4
+10|core_app  | 2026-03-24 18:20:18: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:18:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:18:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:18:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:18:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:18: }
+                                                                   ]: [conn-1774390817882-jsnof] Conexión liberada para server2
+10|core_app  | 2026-03-24 18:20:18: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:18:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:18:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:18:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:18:   "pid": 3710859
+10|core_app  | 2026-03-24 18:20:18: }
+                                                                  ][http]: ::ffff:127.0.0.1 - - [24/Mar/2026:22:20:18 +0000] "GET /api/v1/mappings/69b8bb4d9bc73d3e6e311a36/documents?dateFrom=2025-02-22&dateTo=2026-03-24 HTTP/1.1" 304 - "https://catelli.ddns.net:8085/universal-manager" "Mozilla/5.0 (Windows NT 10.0; Win64; x64; rv:148.0) Gecko/20100101 Firefox/148.0"
+10|core_app  | 2026-03-24 18:20:18: 🔍 Additional: {
+10|core_app  | 2026-03-24 18:20:18:   "service": "transfer-control",
+10|core_app  | 2026-03-24 18:20:18:   "environment": "production",
+10|core_app  | 2026-03-24 18:20:18:   "version": "1.0.0",
+10|core_app  | 2026-03-24 18:20:18:   "pid": 3710859,
+10|core_app  | 2026-03-24 18:20:18:   "type": "request"
+10|core_app  | 2026-03-24 18:20:18: }

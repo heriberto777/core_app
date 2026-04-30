@@ -5,12 +5,13 @@
  */
 
 const isDev = import.meta.env.DEV;
-const SERVER_IP = isDev ? `localhost:3979` : window.location.host;
+const SERVER_IP = isDev ? window.location.host : window.location.host;
 const PROTOCOL = window.location.protocol;
+const BASE_URL = isDev ? '' : `${PROTOCOL}//${SERVER_IP}`;
 
 export const ENV = {
-  BASE_PATH: `${PROTOCOL}//${SERVER_IP}`,
-  BASE_API: `${PROTOCOL}//${SERVER_IP}/api/v1`,
+  BASE_PATH: isDev ? '' : `${PROTOCOL}//${SERVER_IP}`,
+  BASE_API: isDev ? '/api/v1' : `${PROTOCOL}//${SERVER_IP}/api/v1`,
   API_VERSION: "v1",
   API_ROUTERS: {
     REGISTER: "auth/register",

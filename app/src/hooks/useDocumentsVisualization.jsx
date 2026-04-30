@@ -77,13 +77,45 @@ export function useDocumentsVisualization(accessToken) {
     const filteredDocuments = useMemo(() => {
         if (!documents || !Array.isArray(documents)) return [];
         return documents.filter((doc) => {
-            if (!search) return true;
-            const searchLower = search.toLowerCase();
-            return Object.values(doc).some(
-                (val) => val && typeof val === "string" && val.toLowerCase().includes(searchLower)
-            );
+            // 1. Filtro de búsqueda general
+            if (search) {
+                const searchLower = search.toLowerCase();
+                const matchesSearch = Object.values(doc).some(
+                    (val) => val && typeof val === "string" && val.toLowerCase().includes(searchLower)
+                );
+                if (!matchesSearch) return false;
+            }
+
+            // 2. Filtro por fecha desde
+            if (filterValues.dateFrom) {
+                const docDate = doc.FECHA || doc.FECHA_PED || doc.fec_ped || doc.fecha;
+                if (docDate) {
+                    const docDateObj = new Date(docDate);
+                    const filterDateFrom = new Date(filterValues.dateFrom);
+                    if (docDateObj < filterDateFrom) return false;
+                }
+            }
+
+            // 3. Filtro por fecha hasta
+            if (filterValues.dateTo) {
+                const docDate = doc.FECHA || doc.FECHA_PED || doc.fec_ped || doc.fecha;
+                if (docDate) {
+                    const docDateObj = new Date(docDate);
+                    const filterDateTo = new Date(filterValues.dateTo);
+                    filterDateTo.setHours(23, 59, 59, 999); // Incluir todo el día
+                    if (docDateObj > filterDateTo) return false;
+                }
+            }
+
+            // 4. Filtro por estado
+            if (filterValues.status && filterValues.status !== "all") {
+                const docStatus = doc.ESTADO || doc.Estado || doc.status;
+                if (docStatus && docStatus !== filterValues.status) return false;
+            }
+
+            return true;
         });
-    }, [documents, search]);
+    }, [documents, search, filterValues]);
 
     // Mapping Navigation
     const handleSelectMapping = useCallback((mappingId) => {

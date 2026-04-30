@@ -86,6 +86,45 @@ const FieldMappingSchema = new Schema({
       value: { type: String },
     },
   ],
+  // Campos para consecutivos específicos por campo
+  isConsecutive: { type: Boolean, default: false },
+  consecutiveId: { type: Schema.Types.ObjectId, ref: "Consecutive" },
+  
+  // === CAMPOS DE TRANSFORMACIÓN ===
+  transform: {
+    // Tipo de dato para transformación (diferente del fieldType de UI)
+    transformType: {
+      type: String,
+      enum: ["string", "number", "date", "datetime", "boolean"],
+    },
+    // Para strings
+    toUpperCase: { type: Boolean, default: false },
+    toLowerCase: { type: Boolean, default: false },
+    trim: { type: Boolean, default: true },
+    maxLength: { type: Number },
+    // Para numbers
+    decimalPlaces: { type: Number, default: 2 },
+    thousandsSeparator: { type: Boolean, default: false },
+    // Para dates (fecha sin hora)
+    dateFormat: {
+      type: String,
+      enum: ["YYYY-MM-DD", "DD/MM/YYYY", "MM/DD/YYYY", "DD-MM-YYYY"],
+      default: "YYYY-MM-DD",
+    },
+    // Para datetime (fecha con hora)
+    datetimeFormat: {
+      type: String,
+      enum: ["YYYY-MM-DDTHH:MM:SS", "YYYY-MM-DD HH:MM:SS", "DD/MM/YYYY HH:MM"],
+      default: "YYYY-MM-DDTHH:MM:SS",
+    },
+    // Para booleanos
+    trueValues: { type: [String], default: ["S", "Y", "1", "true"] },
+    falseValues: { type: [String], default: ["N", "0", "false"] },
+    trueOutput: { type: String, default: "S" },
+    falseOutput: { type: String, default: "N" },
+    // Valor por defecto si el campo es null/undefined
+    defaultValue: { type: Schema.Types.Mixed },
+  },
 });
 
 // Schema para la configuración de tabla
@@ -136,8 +175,8 @@ const ConsecutiveConfigSchema = new Schema({
 // NUEVO: Schema para configuración de marcado procesado
 const MarkProcessedConfigSchema = new Schema({
   batchSize: { type: Number, default: 100 }, // Para lotes grandes
-  includeTimestamp: { type: Boolean, default: true }, // Si agregar fecha de procesamiento
-  timestampField: { type: String, default: "LAST_PROCESSED_DATE" }, // Campo de fecha
+  includeTimestamp: { type: Boolean, default: false }, // Cambiado a false por defecto
+  timestampField: { type: String, default: null }, // Campo de fecha (opcional)
   allowRollback: { type: Boolean, default: false }, // Si permitir rollback en errores
 });
 

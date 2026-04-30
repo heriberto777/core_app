@@ -58,7 +58,6 @@ export function useRoles(accessToken, reloadUserPermissions) {
 
             if (resp) {
                 await loadRoles();
-                if (reloadUserPermissions) await reloadUserPermissions();
                 return { success: true };
             }
         } catch (error) {

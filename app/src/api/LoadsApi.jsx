@@ -19,8 +19,8 @@ class LoadsApi {
 
       if (filters.dateFrom) queryParams.append("dateFrom", filters.dateFrom);
       if (filters.dateTo) queryParams.append("dateTo", filters.dateTo);
-      if (filters.sellers && filters.sellers !== "all")
-        queryParams.append("sellers", filters.sellers);
+      if (filters.sellers && Array.isArray(filters.sellers) && filters.sellers.length > 0)
+        queryParams.append("sellers", filters.sellers.join(","));
       if (filters.transferStatus && filters.transferStatus !== "all")
         queryParams.append("transferStatus", filters.transferStatus);
       if (filters.includeLoaded)

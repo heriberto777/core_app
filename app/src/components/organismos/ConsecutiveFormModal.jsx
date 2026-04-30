@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
-import { FaTimes, FaSave, FaCog, FaLayerGroup } from "react-icons/fa";
+import { FaTimes, FaSave, FaCog, FaLayerGroup, FaSync } from "react-icons/fa";
 import { Button, StatusBadge, Input, Select } from "../../index";
 
 const ModalOverlay = styled.div`
@@ -72,6 +72,14 @@ export function ConsecutiveFormModal({ isOpen, onClose, onSave, consecutive = nu
             enabled: false,
             type: "year",
             field: ""
+        },
+        sqlSync: {
+            enabled: false,
+            serverKey: "server1",
+            tableName: "",
+            keyField: "",
+            keyValue: "",
+            valueField: ""
         }
     });
 
@@ -79,12 +87,16 @@ export function ConsecutiveFormModal({ isOpen, onClose, onSave, consecutive = nu
         if (consecutive) {
             setFormData({
                 ...consecutive,
-                segments: consecutive.segments || { enabled: false, type: "year", field: "" }
+                segments: consecutive.segments || { enabled: false, type: "year", field: "" },
+                sqlSync: consecutive.sqlSync || { 
+                    enabled: false, serverKey: "server1", tableName: "", keyField: "", keyValue: "", valueField: "" 
+                }
             });
         } else {
             setFormData({
                 name: "", description: "", currentValue: 0, prefix: "", padLength: 7, padChar: "0", pattern: "", active: true,
-                segments: { enabled: false, type: "year", field: "" }
+                segments: { enabled: false, type: "year", field: "" },
+                sqlSync: { enabled: false, serverKey: "server1", tableName: "", keyField: "", keyValue: "", valueField: "" }
             });
         }
     }, [consecutive, isOpen]);
@@ -216,6 +228,57 @@ export function ConsecutiveFormModal({ isOpen, onClose, onSave, consecutive = nu
                                         placeholder="Ej: SucursalID"
                                     />
                                 )}
+                            </Grid>
+                        )}
+                    </SegmentBox>
+
+                    <SectionTitle><FaSync /> Sincronización ERP (SQL Server)</SectionTitle>
+                    <SegmentBox>
+                        <CheckboxLabel>
+                            <input type="checkbox" name="sqlSync.enabled" checked={formData.sqlSync.enabled} onChange={handleChange} />
+                            <span>Habilitar Sincronización Directa con ERP</span>
+                        </CheckboxLabel>
+
+                        {formData.sqlSync.enabled && (
+                            <Grid>
+                                <Select
+                                    label="Servidor ERP"
+                                    name="sqlSync.serverKey"
+                                    value={formData.sqlSync.serverKey}
+                                    onChange={handleChange}
+                                >
+                                    <option value="server1">Server 1 (Producción)</option>
+                                    <option value="server2">Server 2 (Backup/Testing)</option>
+                                </Select>
+                                <Input
+                                    label="Nombre de Tabla"
+                                    name="sqlSync.tableName"
+                                    value={formData.sqlSync.tableName}
+                                    onChange={handleChange}
+                                    placeholder="Ej: catelli.CONSECUTIVO"
+                                />
+                                <Input
+                                    label="Campo de Clave (ID)"
+                                    name="sqlSync.keyField"
+                                    value={formData.sqlSync.keyField}
+                                    onChange={handleChange}
+                                    placeholder="Ej: CONSECUTIVO"
+                                />
+                                <Input
+                                    label="Valor de Clave (ID)"
+                                    name="sqlSync.keyValue"
+                                    value={formData.sqlSync.keyValue}
+                                    onChange={handleChange}
+                                    placeholder="Ej: 04"
+                                />
+                                <Input
+                                    label="Campo de Valor (Contador)"
+                                    name="sqlSync.valueField"
+                                    value={formData.sqlSync.valueField}
+                                    onChange={handleChange}
+                                    placeholder="Ej: ULTIMO_VALOR"
+                                    $fullWidth
+                                />
                             </Grid>
                         )}
                     </SegmentBox>

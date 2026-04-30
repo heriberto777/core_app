@@ -176,9 +176,11 @@ const FIELD_HELP = {
   linkedExecutionOrder: "Orden de ejecución dentro del grupo. Las tareas se ejecutan en orden ascendente (0, 1, 2...).",
   linkedTasks: "Selecciona otras tareas que se ejecutarán automáticamente después de completar esta tarea.",
   requiredFields: "Lista de campos que deben tener valor. Si están vacíos, la transferencia fallará.",
-  postUpdateQuery: "SQL que se ejecutará después de transferir los datos. Útil para actualizar estados o limpiar tablas.",
+  postUpdateQuery: "SQL que se ejecutará después de transferir los datos. Útil para actualizar estados o limpiar tablas. NO incluir WHERE, se agregará automáticamente con los registros afectados.",
   targetTable: "Tabla destino para transferencias internas (Server1 → Server1).",
   executionMode: "Normal: ejecuta todo de una vez. Batches: procesa en lotes para grandes volúmenes de datos.",
+  existenceCheck: "Tabla y campo clave para verificar existencia de registros y construir el WHERE del SQL Post-Ejecución.",
+
 };
 
 const FieldHelp = ({ field }) => (
@@ -195,7 +197,9 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
         name: "", type: "manual", transferType: "general", executionMode: "normal",
         active: true, clearBeforeInsert: false, query: "", parameters: "[]",
         linkedGroup: "", linkedExecutionOrder: 0, executeLinkedTasks: false,
-        linkedTasks: [], postUpdateQuery: "", validationRules: { requiredFields: [], existenceCheck: { table: "", key: "" } }
+        linkedTasks: [], postUpdateQuery: "", 
+        validationRules: { requiredFields: [], existenceCheck: { table: "", key: "" } },
+        postUpdateMapping: { viewKey: null, tableKey: null }
     });
 
     useEffect(() => {
@@ -207,14 +211,17 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                 linkedExecutionOrder: task.linkedExecutionOrder || 0,
                 linkedTasks: task.linkedTasks || [],
                 postUpdateQuery: task.postUpdateQuery || "",
-                validationRules: task.validationRules || { requiredFields: [], existenceCheck: { table: "", key: "" } }
+                validationRules: task.validationRules || { requiredFields: [], existenceCheck: { table: "", key: "" } },
+                postUpdateMapping: task.postUpdateMapping || { viewKey: null, tableKey: null }
             });
         } else {
             setFormData({
                 name: "", type: "manual", transferType: "general", executionMode: "normal",
                 active: true, clearBeforeInsert: false, query: "", parameters: "[]",
                 linkedGroup: "", linkedExecutionOrder: 0, executeLinkedTasks: false,
-                linkedTasks: [], postUpdateQuery: "", validationRules: { requiredFields: [], existenceCheck: { table: "", key: "" } }
+                linkedTasks: [], postUpdateQuery: "", 
+                validationRules: { requiredFields: [], existenceCheck: { table: "", key: "" } },
+                postUpdateMapping: { viewKey: null, tableKey: null }
             });
         }
     }, [task, isOpen]);
@@ -400,13 +407,34 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                 </small>
                             </FormGroup>
 
+                            <SectionTitle>Verificación de Existencia</SectionTitle>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                <FormGroup>
+                                    <Label>Tabla <FieldHelp field="existenceCheck" /></Label>
+                                    <Input 
+                                        value={formData.validationRules.existenceCheck?.table || ''}
+                                        onChange={(e) => handleValidationChange('existenceCheck', { ...formData.validationRules.existenceCheck, table: e.target.value })}
+                                        placeholder="CATELLI.CLIENTE" />
+                                </FormGroup>
+                                <FormGroup>
+                                    <Label>Campo Clave <FieldHelp field="existenceCheck" /></Label>
+                                    <Input 
+                                        value={formData.validationRules.existenceCheck?.key || ''}
+                                        onChange={(e) => handleValidationChange('existenceCheck', { ...formData.validationRules.existenceCheck, key: e.target.value })}
+                                        placeholder="Code_ofClient" />
+                                </FormGroup>
+                            </div>
+                            <small style={{ color: '#888', fontSize: '11px', marginBottom: '15px', display: 'block' }}>
+                                Tabla y campo PK para verificar existencia y construir el WHERE del SQL Post-Ejecución automáticamente.
+                            </small>
+
                             <SectionTitle>Consulta Post-Transferencia</SectionTitle>
                             <FormGroup>
                                 <Label>SQL Post-Ejecución <FieldHelp field="postUpdateQuery" /></Label>
                                 <TextArea name="postUpdateQuery" value={formData.postUpdateQuery} onChange={handleChange} 
-                                    placeholder="UPDATE PEDIDO SET PROCESADO = 1 WHERE NUM_PED = @NUM_PED" />
+                                    placeholder="UPDATE CATELLI.CLIENTE SET U_TRANSFER_STATUS = 'Normal'" />
                                 <small style={{ color: '#888', fontSize: '11px' }}>
-                                    Usa @nombre_campo para referenciar valores del registro actual
+                                    NO incluir WHERE. Se agregará automáticamente usando el Campo Clave de verificación de existencia.
                                 </small>
                             </FormGroup>
 

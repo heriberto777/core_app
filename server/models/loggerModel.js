@@ -8,26 +8,26 @@ const LogSchema = new Schema(
       required: true,
       enum: ["error", "warn", "info", "debug", "verbose"],
       default: "info",
-      // index: true,
+      index: true,
     },
     message: {
       type: String,
       required: true,
-      maxlength: 2000,
+      maxlength: 10000,
     },
     timestamp: {
       type: Date,
       default: Date.now,
-      // index: true,
+      index: true,
     },
     source: {
       type: String,
       default: "app",
-      // index: true,
+      index: true,
     },
     stack: {
       type: String,
-      maxlength: 5000,
+      maxlength: 10000,
     },
     metadata: {
       type: Schema.Types.Mixed,
@@ -35,13 +35,11 @@ const LogSchema = new Schema(
     },
     user: {
       type: String,
-      // index: true,
+      index: true,
     },
     ip: {
       type: String,
-      // index: true,
     },
-    // Nuevos campos para mejor tracking
     sessionId: String,
     requestId: String,
     processId: {
@@ -52,6 +50,54 @@ const LogSchema = new Schema(
       type: String,
       default: process.env.NODE_ENV || "development",
     },
+    // === CAMPOS OPERACIONALES (nuevos) ===
+    operationType: {
+      type: String,
+      enum: ["TRANSFER", "LOAD", "DELETE", "UPDATE", "CREATE", "QUERY", "EXECUTE", "OTHER"],
+      default: "OTHER",
+      index: true,
+    },
+    entityType: {
+      type: String,
+      enum: ["PEDIDO", "CLIENTE", "CARGA", "ARTICULO", "VENDEDOR", "TRASPASO", "TAREA", "USUARIO", "OTHER"],
+      default: "OTHER",
+      index: true,
+    },
+    entityId: String,
+    affectedRecords: {
+      type: Number,
+      default: 0,
+    },
+    durationMs: {
+      type: Number,
+      default: 0,
+    },
+    // === CAMPOS ADICIONALES (nuevos) ===
+    serverSource: {
+      type: String,
+      enum: ["server1", "server2", "mongodb", "unknown"],
+      default: "unknown",
+    },
+    query: {
+      type: String,
+      maxlength: 5000,
+    },
+    // === CONTEXTO HTTP (nuevos) ===
+    httpMethod: {
+      type: String,
+      enum: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    },
+    httpPath: String,
+    httpStatusCode: Number,
+    // === CAMPOS DE ERROR MEJORADOS (nuevos) ===
+    errorCode: String,
+    errorDetails: {
+      type: Schema.Types.Mixed,
+    },
+    // === CAMPOS DE TRANSACCIÓN (nuevos) ===
+    transactionId: String,
+    loadId: String,
+    taskId: String,
   },
   {
     timestamps: true,
@@ -81,6 +127,21 @@ LogSchema.statics.createLog = async function (level, message, options = {}) {
       ip: options.ip,
       sessionId: options.sessionId,
       requestId: options.requestId,
+      operationType: options.operationType || "OTHER",
+      entityType: options.entityType || "OTHER",
+      entityId: options.entityId,
+      affectedRecords: options.affectedRecords || 0,
+      durationMs: options.durationMs || 0,
+      serverSource: options.serverSource || "unknown",
+      query: options.query,
+      httpMethod: options.httpMethod,
+      httpPath: options.httpPath,
+      httpStatusCode: options.httpStatusCode,
+      errorCode: options.errorCode,
+      errorDetails: options.errorDetails,
+      transactionId: options.transactionId,
+      loadId: options.loadId,
+      taskId: options.taskId,
     };
 
     // Limpiar campos undefined
@@ -116,6 +177,21 @@ LogSchema.statics.createBulkLogs = async function (logs) {
       ip: log.ip,
       sessionId: log.sessionId,
       requestId: log.requestId,
+      operationType: log.operationType || "OTHER",
+      entityType: log.entityType || "OTHER",
+      entityId: log.entityId,
+      affectedRecords: log.affectedRecords || 0,
+      durationMs: log.durationMs || 0,
+      serverSource: log.serverSource || "unknown",
+      query: log.query,
+      httpMethod: log.httpMethod,
+      httpPath: log.httpPath,
+      httpStatusCode: log.httpStatusCode,
+      errorCode: log.errorCode,
+      errorDetails: log.errorDetails,
+      transactionId: log.transactionId,
+      loadId: log.loadId,
+      taskId: log.taskId,
     }));
 
     return await this.insertMany(cleanLogs, { ordered: false });

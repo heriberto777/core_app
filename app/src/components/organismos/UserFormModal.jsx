@@ -264,6 +264,8 @@ export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, rol
 
     const [loading, setLoading] = useState(false);
     const [activeTab, setActiveTab] = useState("info");
+    const [showPasswordChange, setShowPasswordChange] = useState(false);
+    const [newPassword, setNewPassword] = useState("");
 
     const handleTogglePermission = (resourceId, action) => {
         const currentPermissions = [...(formData.permissions || [])];
@@ -331,7 +333,13 @@ export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, rol
         e.preventDefault();
         setLoading(true);
         try {
-            await onSave(formData);
+            const dataToSave = { ...formData };
+            if (newPassword && newPassword.length >= 6) {
+                dataToSave.newPassword = newPassword;
+            }
+            await onSave(dataToSave);
+            setShowPasswordChange(false);
+            setNewPassword("");
         } catch (e) {
             console.error(e);
         } finally {
@@ -439,6 +447,43 @@ export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, rol
                         <FaUserShield color="#f39c12" />
                         <span>Administrador del sistema (Acceso total)</span>
                     </CheckboxLabel>
+
+                    {initialData && !showPasswordChange && (
+                        <FormGroup fullWidth>
+                            <Button 
+                                variant="secondary" 
+                                onClick={() => setShowPasswordChange(true)}
+                                style={{ alignSelf: 'flex-start' }}
+                            >
+                                <FaLock /> Cambiar Contraseña
+                            </Button>
+                        </FormGroup>
+                    )}
+
+                    {showPasswordChange && (
+                        <FormGroup fullWidth>
+                            <Label>Nueva Contraseña</Label>
+                            <InputWrapper>
+                                <FaLock />
+                                <Input
+                                    type="password"
+                                    value={newPassword}
+                                    onChange={e => setNewPassword(e.target.value)}
+                                    placeholder="Nueva contraseña (mín. 6 caracteres)"
+                                />
+                            </InputWrapper>
+                            <Button 
+                                variant="ghost" 
+                                onClick={() => {
+                                    setShowPasswordChange(false);
+                                    setNewPassword("");
+                                }}
+                                style={{ alignSelf: 'flex-start', marginTop: '8px', fontSize: '12px' }}
+                            >
+                                Cancelar
+                            </Button>
+                        </FormGroup>
+                    )}
                 </Form>
 
                 {activeTab === 'roles' && (

@@ -164,7 +164,10 @@ export function TableConfigModal({ isOpen, onClose, onSave, initialData }) {
                         </FormGroup>
                         <FormGroup>
                             <Label>Filtro SQL Adicional</Label>
-                            <Input name="filterCondition" value={formData.filterCondition} onChange={handleChange} placeholder="Ej: ESTADO = 'A'" />
+                            <Input name="filterCondition" value={formData.filterCondition} onChange={handleChange} placeholder="Ej: TIP_DOC = 'F' AND DOC_PRO IS NULL" />
+                            <small style={{ color: '#6b7280', fontSize: '11px', marginTop: '4px' }}>
+                                Usa operadores SQL: AND, OR, IS NULL, IN, etc.
+                            </small>
                         </FormGroup>
                     </Grid>
 

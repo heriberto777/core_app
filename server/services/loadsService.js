@@ -91,10 +91,12 @@ class LoadsService {
       logger.info(`Iniciando proceso de carga para repartidor: ${deliveryPersonCode}`);
       logger.info(`Pedidos seleccionados: ${selectedPedidos.join(", ")}`);
 
-      // 1. Validar repartidor y obtener bodega destino
+      // 1. Validar repartidor y obtener bodega destino y bodega central
       step = "validateDeliveryPerson";
       const deliveryPerson = await LoadsSQLService.validateDeliveryPerson(deliveryPersonCode);
       const bodegaDestino = deliveryPerson.assignedWarehouse;
+      const bodegaCentral = deliveryPerson.warehouseCentral;
+      logger.info(`Bodega Central: ${bodegaCentral} -> Bodega Destino: ${bodegaDestino}`);
 
       // 2. Generar loadId único
       step = "generateLoadId";

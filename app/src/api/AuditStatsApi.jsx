@@ -22,7 +22,7 @@ export class AuditStatsApi {
 
     async getTransferHistory(accessToken, filters = {}) {
         try {
-            const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/task-summaries/recent`;
+            const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/history/logs`;
             const response = await fetch(url, {
                 headers: { Authorization: `Bearer ${accessToken}` }
             });
@@ -33,26 +33,26 @@ export class AuditStatsApi {
             let completedToday = 0;
             let failedToday = 0;
 
-            if (result.success && result.history) {
-                history = result.history;
-                completedToday = result.completedToday || 0;
-                failedToday = result.failedToday || 0;
-            } else if (Array.isArray(result)) {
-                history = result;
-                const today = new Date();
-                today.setHours(0, 0, 0, 0);
-                const tomorrow = new Date(today);
-                tomorrow.setDate(tomorrow.getDate() + 1);
+            if (result.success && result.data) {
+              history = result.data.history || result.history || [];
+              completedToday = result.data.stats?.completedToday || result.completedToday || 0;
+              failedToday = result.data.stats?.failedToday || result.failedToday || 0;
+            } else if (result.success && result.history) {
+              history = result.history;
+              const today = new Date();
+              today.setHours(0, 0, 0, 0);
+              const tomorrow = new Date(today);
+              tomorrow.setDate(tomorrow.getDate() + 1);
 
-                completedToday = history.filter(item => {
-                    const d = new Date(item.date);
-                    return d >= today && d < tomorrow && item.status === "completed";
-                }).length;
+              completedToday = history.filter(item => {
+                const d = new Date(item.date);
+                return d >= today && d < tomorrow && item.status === "completed";
+              }).length;
 
-                failedToday = history.filter(item => {
-                    const d = new Date(item.date);
-                    return d >= today && d < tomorrow && (item.status === "failed" || item.status === "error" || item.status === "cancelled");
-                }).length;
+              failedToday = history.filter(item => {
+                const d = new Date(item.date);
+                return d >= today && d < tomorrow && (item.status === "failed" || item.status === "error" || item.status === "cancelled");
+              }).length;
             }
 
             return { history, completedToday, failedToday };
@@ -109,6 +109,16 @@ export class AuditStatsApi {
             if (filters.search) queryParams.append("search", filters.search);
             if (filters.limit) queryParams.append("limit", filters.limit);
             if (filters.page) queryParams.append("page", filters.page);
+            
+            // === Filtros nuevos ===
+            if (filters.operationType && filters.operationType.length > 0) 
+                queryParams.append("operationType", filters.operationType.join(","));
+            if (filters.entityType && filters.entityType.length > 0) 
+                queryParams.append("entityType", filters.entityType.join(","));
+            if (filters.durationMin) queryParams.append("durationMin", filters.durationMin);
+            if (filters.durationMax) queryParams.append("durationMax", filters.durationMax);
+            if (filters.affectedRecordsMin) queryParams.append("affectedRecordsMin", filters.affectedRecordsMin);
+            if (filters.affectedRecordsMax) queryParams.append("affectedRecordsMax", filters.affectedRecordsMax);
 
             const url = `${this.baseApi}/logs${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
             const response = await fetch(url, {
@@ -184,6 +194,21 @@ export class AuditStatsApi {
             return result.data || result;
         } catch (error) {
             console.error("Error fuentes de logs:", error);
+            throw error;
+        }
+    }
+
+    async getLogsDiagnostic(accessToken) {
+        try {
+            const url = `${this.baseApi}/${ENV.API_ROUTERS.LOGS}/diagnostic`;
+            const response = await fetch(url, {
+                headers: { Authorization: `Bearer ${accessToken}` }
+            });
+            const result = await response.json();
+            if (!response.ok) throw result;
+            return result.data || result;
+        } catch (error) {
+            console.error("Error diagnóstico logs:", error);
             throw error;
         }
     }

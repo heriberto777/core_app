@@ -1,6 +1,6 @@
 import styled from "styled-components";
-import { useState, useRef, useEffect } from "react";
-import { FaChevronDown, FaTimes, FaCheck } from "react-icons/fa";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { FaChevronDown, FaTimes, FaCheck, FaSearch } from "react-icons/fa";
 
 const SelectContainer = styled.div`
   position: relative;
@@ -69,10 +69,47 @@ const Dropdown = styled.div`
   border: 1px solid ${(props) => props.theme.border || "#e5e7eb"};
   border-radius: 6px;
   box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  max-height: 200px;
+  max-height: 250px;
   overflow-y: auto;
   display: ${(props) => (props.isOpen ? "block" : "none")};
   margin-top: 2px;
+`;
+
+const SearchContainer = styled.div`
+  position: sticky;
+  top: 0;
+  background: ${(props) => props.theme.cardBg || "white"};
+  padding: 8px;
+  border-bottom: 1px solid ${(props) => props.theme.border || "#e5e7eb"};
+`;
+
+const SearchInput = styled.input`
+  width: 100%;
+  padding: 6px 10px;
+  padding-left: 28px;
+  border: 1px solid ${(props) => props.theme.border || "#d1d5db"};
+  border-radius: 4px;
+  font-size: 13px;
+  color: ${(props) => props.theme.text || "#111827"};
+  
+  &:focus {
+    outline: none;
+    border-color: ${(props) => props.theme.primary || "#3b82f6"};
+  }
+  
+  &::placeholder {
+    color: ${(props) => props.theme.textTertiary || "#9ca3af"};
+  }
+`;
+
+const SearchIconWrapper = styled.div`
+  position: absolute;
+  left: 14px;
+  top: 50%;
+  transform: translateY(-50%);
+  color: ${(props) => props.theme.textTertiary || "#9ca3af"};
+  font-size: 12px;
+  pointer-events: none;
 `;
 
 const Option = styled.div`
@@ -170,15 +207,30 @@ export function MultiSelectInput({
   placeholder = "Seleccionar...",
   showTags = true,
   maxTagsShown = 3,
+  searchThreshold = 5,
   ...props
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const selectRef = useRef(null);
+  const searchInputRef = useRef(null);
+
+  const filteredOptions = useMemo(() => {
+    if (!search.trim()) return options;
+    const searchLower = search.toLowerCase();
+    return options.filter(opt => 
+      opt.label?.toLowerCase().includes(searchLower) || 
+      String(opt.value).toLowerCase().includes(searchLower)
+    );
+  }, [options, search]);
+
+  const showSearch = options.length > searchThreshold;
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (selectRef.current && !selectRef.current.contains(event.target)) {
         setIsOpen(false);
+        setSearch("");
       }
     };
 
@@ -186,8 +238,17 @@ export function MultiSelectInput({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (isOpen && showSearch && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [isOpen, showSearch]);
+
   const handleToggle = () => {
     setIsOpen(!isOpen);
+    if (!isOpen) {
+      setSearch("");
+    }
   };
 
   const handleOptionClick = (optionValue) => {
@@ -252,15 +313,35 @@ export function MultiSelectInput({
       )}
 
       <Dropdown isOpen={isOpen}>
-        {options.map((option) => (
-          <Option
-            key={option.value}
-            onClick={() => handleOptionClick(option.value)}
-          >
-            <CheckIcon visible={value.includes(option.value)} />
-            <OptionText>{option.label}</OptionText>
+        {showSearch && (
+          <SearchContainer>
+            <SearchIconWrapper>
+              <FaSearch />
+            </SearchIconWrapper>
+            <SearchInput
+              ref={searchInputRef}
+              placeholder="Buscar..."
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              onClick={(e) => e.stopPropagation()}
+            />
+          </SearchContainer>
+        )}
+        {filteredOptions.length > 0 ? (
+          filteredOptions.map((option) => (
+            <Option
+              key={option.value}
+              onClick={() => handleOptionClick(option.value)}
+            >
+              <CheckIcon visible={value.includes(option.value)} />
+              <OptionText>{option.label}</OptionText>
+            </Option>
+          ))
+        ) : (
+          <Option style={{ textAlign: 'center', color: '#9ca3af' }}>
+            Sin resultados
           </Option>
-        ))}
+        )}
       </Dropdown>
     </SelectContainer>
   );

@@ -32,7 +32,7 @@ export function RecentActivitiesTable({ transfers }) {
         <Card>
             <Header>
                 <Title><FaHistory color="var(--primary)" /> Últimas Actividades</Title>
-                <Link to="/historys" style={{ textDecoration: 'none' }}>
+                <Link to="/history" style={{ textDecoration: 'none' }}>
                     <Button variant="ghost" size="small">Ver Historial Completo <FaArrowRight /></Button>
                 </Link>
             </Header>

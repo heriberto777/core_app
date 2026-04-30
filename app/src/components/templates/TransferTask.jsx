@@ -3,7 +3,7 @@ import styled, { keyframes } from "styled-components";
 import { Helmet } from "react-helmet-async";
 import {
   FaPlus, FaSync, FaLink, FaChartLine, FaList, FaTable,
-  FaEdit, FaTrash, FaPlay, FaStop, FaHistory, FaEye, FaTimes
+  FaEdit, FaTrash, FaPlay, FaStop, FaHistory, FaEye, FaTimes, FaExclamationTriangle, FaFilter
 } from "react-icons/fa";
 import {
   useTransferTask,
@@ -186,6 +186,8 @@ export function TransferTasks() {
   const [viewMode, setViewMode] = useState("cards");
   const [showMetrics, setShowMetrics] = useState(true);
   const [linkedTasksModal, setLinkedTasksModal] = useState({ open: false, task: null, linkedTasks: [] });
+  const [historyModal, setHistoryModal] = useState({ open: false, taskId: null, data: [], loading: false, filter: 'all' });
+  const [errorModal, setErrorModal] = useState({ open: false, title: '', message: '', details: '' });
 
   const handleEdit = (task) => {
     if (!canEditTask) return;
@@ -218,11 +220,26 @@ export function TransferTasks() {
       }
     } else if (task.linkedTasks && task.linkedTasks.length > 0) {
       const linkedIds = task.linkedTasks || [];
-      linkedTasksData = allTasks.filter(t => linkedIds.includes(t._id));
+      linkedTasksData = (allTasks || []).filter(t => linkedIds.includes(t._id));
     }
     
     console.log("linkedTasksData:", linkedTasksData);
     setLinkedTasksModal({ open: true, task, linkedTasks: linkedTasksData });
+  };
+
+  const handleViewHistory = async (task) => {
+    setHistoryModal({ open: true, taskId: task._id, data: [], loading: true, filter: 'all' });
+    try {
+      const historyData = await getTaskHistory(task._id);
+      setHistoryModal(prev => ({ ...prev, data: historyData?.history || [], loading: false }));
+    } catch (error) {
+      console.error("Error al obtener historial:", error);
+      setHistoryModal(prev => ({ ...prev, loading: false, data: [] }));
+    }
+  };
+
+  const handleViewError = (title, message, details) => {
+    setErrorModal({ open: true, title, message, details });
   };
 
   const handleSave = async (formData) => {
@@ -344,6 +361,33 @@ export function TransferTasks() {
                       </div>
                     </InfoItem>
                     <InfoItem>
+                      <InfoLabel>Última Ejecución</InfoLabel>
+                      <InfoValue>
+                        {(task.lastExecutionResult?.success === false || task.status === 'error') && task.lastExecutionResult?.errorDetails ? (
+                          <span 
+                            style={{ color: '#dc3545', cursor: 'pointer', textDecoration: 'underline', fontSize: '11px' }}
+                            onClick={() => handleViewError(
+                              `Error en ${task.name}`,
+                              task.lastExecutionResult?.message || 'Error en la transferencia',
+                              task.lastExecutionResult?.errorDetails || 'Sin detalles'
+                            )}
+                          >
+                            <FaExclamationTriangle size={10} style={{ marginRight: '4px' }} />
+                            {task.lastExecutionResult?.message || 'Error'}
+                          </span>
+                        ) : task.lastExecutionResult?.success ? (
+                          <span style={{ color: '#198754', fontSize: '11px' }}>
+                            ✓ {task.lastExecutionResult?.message || 'Completado'} 
+                            ({task.lastExecutionResult?.affectedRecords || 0} reg.)
+                          </span>
+                        ) : task.status === 'running' ? (
+                          <span style={{ color: '#0d6efd', fontSize: '11px' }}>Ejecutando... {task.progress || 0}%</span>
+                        ) : (
+                          <span style={{ color: '#999', fontSize: '11px' }}>Sin ejecuciones</span>
+                        )}
+                      </InfoValue>
+                    </InfoItem>
+                    <InfoItem>
                       <InfoLabel>Ejecuciones</InfoLabel>
                       <InfoValue>{task.executionCount || 0}</InfoValue>
                     </InfoItem>
@@ -380,7 +424,7 @@ export function TransferTasks() {
                   {canDeleteTask && (
                     <Button variant="ghost" loading={actionStates[task._id] === 'deleting'} onClick={() => deleteTask(task._id)} disabled={task.status === "running"} style={{ color: '#dc3545' }} title="Eliminar"><FaTrash /></Button>
                   )}
-                  <Button variant="ghost" loading={actionStates[task._id] === 'history'} onClick={() => getTaskHistory(task._id)} title="Ver Historial"><FaHistory /></Button>
+                  <Button variant="ghost" loading={actionStates[task._id] === 'history'} onClick={() => handleViewHistory(task)} title="Ver Historial"><FaHistory /></Button>
                   {canExecuteTask && (
                     <Button variant="primary" loading={actionStates[task._id] === 'executing'} onClick={() => executeTask(task._id)} disabled={task.status === "running" || !task.active} title={!task.active ? "Tarea inactiva" : "Ejecutar"}><FaPlay /></Button>
                   )}
@@ -438,7 +482,7 @@ export function TransferTasks() {
               <Button variant="ghost" onClick={() => setShowGroupsManager(false)}>✕</Button>
             </ModalHeader>
             <div style={{ padding: '20px' }}>
-              <LinkedGroupsManager onGroupDeleted={fetchTasks} onClose={() => setShowGroupsManager(false)} />
+              <LinkedGroupsManager accessToken={accessToken} onGroupDeleted={fetchTasks} onClose={() => setShowGroupsManager(false)} />
             </div>
           </ModalContent>
         </ModalOverlay>
@@ -495,6 +539,173 @@ export function TransferTasks() {
           </ModalContent>
         </ModalOverlay>
       )}
+
+      {/* Modal de Historial de Tarea */}
+      {historyModal.open && (
+        <ModalOverlay onClick={() => setHistoryModal({ open: false, taskId: null, data: [], loading: false, filter: 'all' })}>
+          <ModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '900px', maxHeight: '85vh' }}>
+            <ModalHeader>
+              <h3 style={{ margin: 0 }}>
+                <FaHistory style={{ marginRight: '8px' }} />
+                Historial de Ejecuciones
+              </h3>
+              <Button variant="ghost" onClick={() => setHistoryModal({ open: false, taskId: null, data: [], loading: false, filter: 'all' })}>
+                <FaTimes />
+              </Button>
+            </ModalHeader>
+            <ModalBody style={{ padding: '20px', overflowY: 'auto' }}>
+              {/* Filtros */}
+              <div style={{ marginBottom: '15px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
+                <FilterButton 
+                  active={historyModal.filter === 'all'} 
+                  onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'all' }))}
+                >
+                  Todos
+                </FilterButton>
+                <FilterButton 
+                  active={historyModal.filter === 'completed'} 
+                  onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'completed' }))}
+                >
+                  Exitosos
+                </FilterButton>
+                <FilterButton 
+                  active={historyModal.filter === 'failed'} 
+                  onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'failed' }))}
+                >
+                  Errores
+                </FilterButton>
+                <FilterButton 
+                  active={historyModal.filter === 'running'} 
+                  onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'running' }))}
+                >
+                  En Proceso
+                </FilterButton>
+                <FilterButton 
+                  active={historyModal.filter === 'cancelled'} 
+                  onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'cancelled' }))}
+                >
+                  Cancelados
+                </FilterButton>
+              </div>
+
+              {historyModal.loading ? (
+                <div style={{ textAlign: 'center', padding: '40px' }}>Cargando historial...</div>
+              ) : (
+                (() => {
+                  const dataArray = Array.isArray(historyModal.data) ? historyModal.data : [];
+                  const filteredData = dataArray.filter(exec => {
+                    if (historyModal.filter === 'all') return true;
+                    return exec.status === historyModal.filter;
+                  });
+
+                  if (filteredData.length === 0) {
+                    return (
+                      <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+                        No hay historial de ejecuciones para esta tarea
+                      </div>
+                    );
+                  }
+
+                  return (
+                    <div style={{ overflowX: 'auto' }}>
+                      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
+                        <thead>
+                          <tr style={{ background: '#f8f9fa' }}>
+                            <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #dee2e6', fontSize: '12px' }}>Fecha</th>
+                            <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #dee2e6', fontSize: '12px' }}>Estado</th>
+                            <th style={{ padding: '10px', textAlign: 'center', borderBottom: '2px solid #dee2e6', fontSize: '12px' }}>Insertados</th>
+                            <th style={{ padding: '10px', textAlign: 'center', borderBottom: '2px solid #dee2e6', fontSize: '12px' }}>Actualizados</th>
+                            <th style={{ padding: '10px', textAlign: 'center', borderBottom: '2px solid #dee2e6', fontSize: '12px' }}>Duplicados</th>
+                            <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #dee2e6', fontSize: '12px' }}>Mensaje</th>
+                            <th style={{ padding: '10px', textAlign: 'center', borderBottom: '2px solid #dee2e6', fontSize: '12px' }}>Acción</th>
+                          </tr>
+                        </thead>
+                        <tbody>
+                          {filteredData.map((exec, idx) => (
+                            <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
+                              <td style={{ padding: '8px', fontSize: '12px' }}>
+                                {exec.date ? new Date(exec.date).toLocaleString() : '-'}
+                              </td>
+                              <td style={{ padding: '8px' }}>
+                                <StatusBadge status={exec.status}>{exec.status}</StatusBadge>
+                              </td>
+                              <td style={{ padding: '8px', textAlign: 'center', fontSize: '12px' }}>{exec.inserted || exec.successfulRecords || 0}</td>
+                              <td style={{ padding: '8px', textAlign: 'center', fontSize: '12px' }}>{exec.updated || 0}</td>
+                              <td style={{ padding: '8px', textAlign: 'center', fontSize: '12px' }}>{exec.duplicates || 0}</td>
+                              <td style={{ padding: '8px', fontSize: '12px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                                {exec.message || exec.error || '-'}
+                              </td>
+                              <td style={{ padding: '8px', textAlign: 'center' }}>
+                                {(exec.status === 'failed' || exec.errorDetails || exec.errorDetail) && (
+                                  <Button 
+                                    variant="ghost" 
+                                    style={{ padding: '4px 8px', fontSize: '11px', color: '#dc3545' }}
+                                    onClick={() => handleViewError(
+                                      `Error en Ejecución`,
+                                      exec.message || 'Error en la transferencia',
+                                      exec.errorDetails || exec.errorDetail || 'Sin detalles adicionales'
+                                    )}
+                                    title="Ver error"
+                                  >
+                                    <FaExclamationTriangle size={12} />
+                                  </Button>
+                                )}
+                              </td>
+                            </tr>
+                          ))}
+                        </tbody>
+                      </table>
+                      <div style={{ marginTop: '10px', fontSize: '11px', color: '#666' }}>
+                        Mostrando {filteredData.length} de {dataArray.length} registros
+                      </div>
+                    </div>
+                  );
+                })()
+              )}
+            </ModalBody>
+          </ModalContent>
+        </ModalOverlay>
+      )}
+
+      {/* Modal de Error Detallado */}
+      {errorModal.open && (
+        <ModalOverlay onClick={() => setErrorModal({ open: false, title: '', message: '', details: '' })}>
+          <ModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+            <ModalHeader style={{ background: '#dc3545', color: 'white' }}>
+              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
+                <FaExclamationTriangle /> {errorModal.title}
+              </h3>
+              <Button variant="ghost" style={{ color: 'white' }} onClick={() => setErrorModal({ open: false, title: '', message: '', details: '' })}>
+                <FaTimes />
+              </Button>
+            </ModalHeader>
+            <ModalBody style={{ padding: '20px' }}>
+              <div style={{ marginBottom: '15px' }}>
+                <strong style={{ display: 'block', marginBottom: '5px' }}>Mensaje:</strong>
+                <div style={{ padding: '10px', background: '#f8f9fa', borderRadius: '4px', borderLeft: '3px solid #dc3545' }}>
+                  {errorModal.message}
+                </div>
+              </div>
+              <div>
+                <strong style={{ display: 'block', marginBottom: '5px' }}>Detalles del Error:</strong>
+                <pre style={{ 
+                  padding: '12px', 
+                  background: '#1e1e1e', 
+                  color: '#ff6b6b', 
+                  borderRadius: '4px', 
+                  overflow: 'auto',
+                  maxHeight: '250px',
+                  fontSize: '12px',
+                  fontFamily: 'monospace',
+                  margin: 0
+                }}>
+                  {errorModal.details || 'Sin detalles adicionales'}
+                </pre>
+              </div>
+            </ModalBody>
+          </ModalContent>
+        </ModalOverlay>
+      )}
     </Container>
   );
 }
@@ -521,4 +732,21 @@ const ModalHeader = styled.div`
 const ModalBody = styled.div`
   padding: 20px;
   overflow-y: auto;
+`;
+
+const FilterButton = styled.button`
+  padding: 6px 14px;
+  font-size: 12px;
+  font-weight: 600;
+  border: 1px solid #dee2e6;
+  border-radius: 20px;
+  background: ${props => props.active ? '#0d6efd' : 'white'};
+  color: ${props => props.active ? 'white' : '#495057'};
+  cursor: pointer;
+  transition: all 0.2s;
+  
+  &:hover {
+    background: ${props => props.active ? '#0d6efd' : '#e9ecef'};
+    border-color: #adb5bd;
+  }
 `;

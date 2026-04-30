@@ -1,40 +1,58 @@
 import React, { useState, useEffect } from "react";
 import styled from "styled-components";
 import Swal from "sweetalert2";
-import { FaTrash, FaEye, FaSort, FaCrown, FaUsers } from "react-icons/fa";
-import { TransferTaskApi } from "../../api/index";
+import { FaTrash, FaEye, FaSort, FaCrown, FaUsers, FaSync } from "react-icons/fa";
+import { TransferTaskApi, Button } from "../../index";
 
 const api = new TransferTaskApi();
 
 const LinkedGroupsManager = ({
   accessToken,
-  onGroupDeleted = null, // 👈 Hacer opcional con valor por defecto
-  onClose = null, // 👈 También hacer opcional onClose
+  onGroupDeleted = null,
+  onClose = null,
 }) => {
   const [groups, setGroups] = useState([]);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
-    fetchGroups();
-  }, []);
+    if (accessToken) {
+      fetchGroups();
+    }
+  }, [accessToken]);
 
   const fetchGroups = async () => {
     try {
       setLoading(true);
-      const data = await api.getLinkedGroups(accessToken);
+      setError(null);
+      console.log("🔍 fetchGroups - accessToken:", accessToken ? "presente" : "VACÍO");
 
-      if (data.success) {
-        setGroups(data.groups);
-      } else {
-        throw new Error(data.message || "Error al obtener grupos");
+      if (!accessToken) {
+        throw new Error("No hay token de acceso");
       }
+
+      const data = await api.getLinkedGroups(accessToken);
+      console.log("🔍 fetchGroups - response:", data);
+
+      // La API puede devolver un array directamente o un objeto con success
+      let groupsList = [];
+      if (Array.isArray(data)) {
+        // La respuesta es un array directamente
+        groupsList = data;
+      } else if (data && data.success) {
+        // La respuesta es un objeto con success
+        groupsList = data.data?.groups || data.groups || [];
+      } else if (data && data.data && Array.isArray(data.data)) {
+        // La respuesta es un objeto con data que es array
+        groupsList = data.data;
+      } else {
+        throw new Error(data?.message || data?.error || "Formato de respuesta inválido");
+      }
+
+      setGroups(groupsList);
     } catch (error) {
-      console.error("Error al obtener grupos:", error);
-      Swal.fire(
-        "Error",
-        "No se pudieron cargar los grupos vinculados",
-        "error"
-      );
+      console.error("❌ Error al obtener grupos:", error);
+      setError(error.message || "No se pudieron cargar los grupos vinculados");
     } finally {
       setLoading(false);
     }
@@ -42,18 +60,30 @@ const LinkedGroupsManager = ({
 
   const viewGroupDetails = async (groupName) => {
     try {
-      const data = await api.getGroupDetails(accessToken, groupName);
+      console.log("🔍 viewGroupDetails - groupName:", groupName);
 
-      if (data.success) {
+      // Cerrar el modal principal si existe
+      if (onClose) {
+        onClose();
+      }
+
+      const data = await api.getGroupDetails(accessToken, groupName);
+      console.log("🔍 viewGroupDetails - response:", data);
+
+      // La API puede devolver un objeto con success o directamente los datos
+      if (data && (data.success || data.groupName || data.tasks)) {
         showGroupDetailsModal(data);
+      } else if (Array.isArray(data)) {
+        // Si devuelve un array, envolvemos en objeto
+        showGroupDetailsModal({ tasks: data, groupName });
       } else {
-        throw new Error(data.message || "Error al obtener detalles");
+        throw new Error(data?.message || data?.error || "Error al obtener detalles");
       }
     } catch (error) {
       console.error("Error al obtener detalles:", error);
       Swal.fire(
         "Error",
-        "No se pudieron cargar los detalles del grupo",
+        error.message || "No se pudieron cargar los detalles del grupo",
         "error"
       );
     }
@@ -244,7 +274,16 @@ const LinkedGroupsManager = ({
         <p>Administra los grupos de tareas vinculadas y sus configuraciones</p>
       </Header>
 
-      {groups.length === 0 ? (
+      {error && (
+        <ErrorState>
+          <p>{error}</p>
+          <Button variant="primary" onClick={fetchGroups}>
+            Reintentar
+          </Button>
+        </ErrorState>
+      )}
+
+      {!error && groups.length === 0 ? (
         <EmptyState>
           <FaUsers size={48} color="#6c757d" />
           <h3>No hay grupos vinculados</h3>
@@ -333,11 +372,25 @@ const Header = styled.div`
 
 const LoadingContainer = styled.div`
   display: flex;
-  justify-content: center;
   align-items: center;
+  justify-content: center;
   height: 200px;
   font-size: 18px;
   color: #666;
+`;
+
+const ErrorState = styled.div`
+  text-align: center;
+  padding: 40px 20px;
+  background: #fee2e2;
+  border-radius: 12px;
+  border: 1px solid #fecaca;
+  color: #dc2626;
+
+  p {
+    margin: 0 0 15px 0;
+    font-size: 14px;
+  }
 `;
 
 const EmptyState = styled.div`

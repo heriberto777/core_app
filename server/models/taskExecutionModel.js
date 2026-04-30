@@ -41,6 +41,9 @@ const TaskExecutionSchema = new mongoose.Schema(
     errorMessage: {
       type: String,
     },
+    errorDetails: {
+      type: String,
+    },
     details: {
       type: Object,
       default: {},

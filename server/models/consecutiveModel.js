@@ -17,6 +17,7 @@ const FormatRuleSchema = new Schema({
 const ConsecutiveSchema = new Schema({
   // ✅ CORRECCIÓN: Quitar unique: true aquí porque ya lo defines en el índice más abajo
   name: { type: String, required: true }, // Sin unique: true
+  code: { type: String }, // Campo para el índice code_1 en la DB
   description: { type: String },
   currentValue: { type: Number, default: 0 },
   incrementBy: { type: Number, default: 1 },
@@ -104,11 +105,28 @@ const ConsecutiveSchema = new Schema({
       createdAt: { type: Date, default: Date.now },
     },
   ],
+  blockReservations: [
+    {
+      blockId: { type: String },
+      reservedBy: { type: String },
+      createdAt: { type: Date, default: Date.now },
+    },
+  ],
 
   createdBy: { type: Schema.Types.ObjectId },
   createdAt: { type: Date, default: Date.now },
   updatedAt: { type: Date, default: Date.now },
   active: { type: Boolean, default: true },
+  
+  // Configuración para sincronización con SQL Server (ERP)
+  sqlSync: {
+    enabled: { type: Boolean, default: false },
+    serverKey: { type: String, enum: ["server1", "server2"] },
+    tableName: { type: String }, // ej: 'CATELLI.CONSECUTIVO'
+    keyField: { type: String },  // ej: 'CONSECUTIVO'
+    keyValue: { type: String },  // ej: '04'
+    valueField: { type: String } // ej: 'ULTIMO_VALOR'
+  },
 });
 
 // ✅ CORRECCIÓN: Índices únicos - definir solo una vez
@@ -124,6 +142,15 @@ ConsecutiveSchema.index({ active: 1, name: 1 }); // Índice compuesto para consu
 // Middleware para actualizar fecha de modificación
 ConsecutiveSchema.pre("save", function (next) {
   this.updatedAt = Date.now();
+
+  // Asegurar que 'code' tenga un valor si existe un índice único en la DB
+  if (!this.code && this.name) {
+    this.code = this.name
+      .toUpperCase()
+      .replace(/[^A-Z0-9]/g, "_")
+      .substring(0, 50);
+  }
+
   next();
 });
 
@@ -393,4 +420,22 @@ ConsecutiveSchema.statics.cleanAllExpiredReservations = async function () {
   }
 };
 
-module.exports = mongoose.model("Consecutive", ConsecutiveSchema);
+const Consecutive = mongoose.model("Consecutive", ConsecutiveSchema);
+
+// Helper para limpiar índices legacy que causan errores E11000
+// Error: blockReservations.blockId_1 dup key: { blockReservations.blockId: null }
+Consecutive.collection
+  .dropIndex("blockReservations.blockId_1")
+  .then(() =>
+    console.log(
+      "✅ Índice legacy 'blockReservations.blockId_1' eliminado correctamente."
+    )
+  )
+  .catch((err) => {
+    // Silenciar error si el índice no existe (code 27 o message index not found)
+    if (err.code !== 27 && !err.message.includes("not found")) {
+      console.warn("⚠️ Intentando borrar índice legacy:", err.message);
+    }
+  });
+
+module.exports = Consecutive;

@@ -14,7 +14,14 @@ export const useAuditLogs = (accessToken, initialType = "system") => {
         status: "all",
         taskName: "",
         search: "",
-        limit: 50
+        limit: 50,
+        // === Filtros nuevos ===
+        operationType: [],
+        entityType: [],
+        durationMin: null,
+        durationMax: null,
+        affectedRecordsMin: null,
+        affectedRecordsMax: null,
     });
 
     const [pagination, setPagination] = useState({
@@ -83,8 +90,19 @@ export const useAuditLogs = (accessToken, initialType = "system") => {
 
         let csvContent = "";
         if (logType === "system") {
-            csvContent = "Fecha,Nivel,Mensaje,Fuente\n" +
-                logs.map(l => `${new Date(l.timestamp).toLocaleString()},${l.level},"${l.message}","${l.source || ''}"`).join('\n');
+            csvContent = "Fecha,Nivel,Operación,Entidad,EntidadID,Registros,Duración(ms),Mensaje,Fuente\n" +
+                logs.map(l => {
+                    const date = new Date(l.timestamp).toLocaleString();
+                    const level = l.level || '';
+                    const operationType = l.operationType || '';
+                    const entityType = l.entityType || '';
+                    const entityId = l.entityId || '';
+                    const affectedRecords = l.affectedRecords || 0;
+                    const durationMs = l.durationMs || 0;
+                    const message = (l.message || '').replace(/"/g, '""').substring(0, 500);
+                    const source = l.source || '';
+                    return `${date},${level},${operationType},${entityType},${entityId},${affectedRecords},${durationMs},"${message}","${source}"`;
+                }).join('\n');
         } else {
             csvContent = "Fecha,Tarea,Estado,Registros,Duración(ms)\n" +
                 logs.map(l => `${new Date(l.date).toLocaleString()},${l.taskName || 'N/A'},${l.status},${l.totalRecords || 0},${l.executionTime || 0}`).join('\n');

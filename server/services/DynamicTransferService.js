@@ -6,6 +6,7 @@ const TransferTask = require("../models/transferTaskModel");
 const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 const PromotionProcessor = require("./PromotionProcessor");
 const ConsecutiveService = require("./ConsecutiveService");
+const transformerService = require("./transformerService");
 
 /**
  * Servicio dinámico de transferencia de datos con soporte completo para promociones
@@ -80,8 +81,8 @@ class DynamicTransferService {
       if (!mapping.markProcessedConfig) {
         mapping.markProcessedConfig = {
           batchSize: 100,
-          includeTimestamp: true,
-          timestampField: "LAST_PROCESSED_DATE",
+          includeTimestamp: false, // Cambiado a false por defecto para evitar errores
+          timestampField: null, // Campo opcional, solo se usa si includeTimestamp es true
           allowRollback: false,
         };
       }
@@ -327,6 +328,7 @@ class DynamicTransferService {
     let processedTables = [];
     let documentType = "unknown";
     let promotionsApplied = false;
+    let secondaryReservations = []; // Reservas para consecutivos por campo
 
     try {
       logger.info(
@@ -418,7 +420,8 @@ class DynamicTransferService {
           mapping,
           documentId,
           columnLengthCache,
-          false // isDetailTable = false
+          false, // isDetailTable = false
+          secondaryReservations
         );
 
         logger.info(`Insertados datos principales en ${tableConfig.name}`);
@@ -449,7 +452,8 @@ class DynamicTransferService {
                 currentConsecutive,
                 mapping,
                 columnLengthCache,
-                processedTables
+                processedTables,
+                secondaryReservations
               );
 
             if (promotionResult && promotionResult.promotionsApplied) {
@@ -473,7 +477,8 @@ class DynamicTransferService {
               currentConsecutive,
               mapping,
               columnLengthCache,
-              processedTables
+              processedTables,
+              secondaryReservations
             );
           }
         }
@@ -490,6 +495,7 @@ class DynamicTransferService {
           ? currentConsecutive.formatted
           : null,
         consecutiveValue: currentConsecutive ? currentConsecutive.value : null,
+        secondaryReservations, // Pasar para confirmación en handleDocumentResult
       };
     } catch (error) {
       return this.handleSingleDocumentError(
@@ -512,44 +518,52 @@ class DynamicTransferService {
    */
   shouldUsePromotions(mapping) {
     try {
-      console.log("🔍 DEBUG shouldUsePromotions - INICIANDO");
-      console.log("🔍 mapping.name:", mapping.name);
-      console.log("🔍 mapping.promotionConfig:", mapping.promotionConfig);
+      logger.debug("shouldUsePromotions - INICIANDO", {
+        mappingName: mapping.name,
+        promotionConfig: mapping.promotionConfig,
+      });
 
       // 1. Verificar si las promociones están habilitadas
       if (!mapping.promotionConfig || !mapping.promotionConfig.enabled) {
-        console.log("🔍 DEBUG: Promociones deshabilitadas");
+        logger.debug("Promociones deshabilitadas");
         return false;
       }
 
       // 2. Validar configuración de promociones
       if (!PromotionProcessor.validatePromotionConfig(mapping)) {
-        console.log("🔍 DEBUG: Configuración inválida");
-        logger.warn("Configuración de promociones inválida");
+        logger.debug("Configuración inválida");
+        logger.warn("Configuración de promociones inválida", {
+          entityType: "MAPPING",
+          entityId: mapping._id?.toString(),
+        });
         return false;
       }
 
       // 3. Verificar que existan tablas de detalle
       const detailTables =
         mapping.tableConfigs?.filter((tc) => tc.isDetailTable) || [];
-      console.log(
-        "🔍 DEBUG: Tablas de detalle encontradas:",
-        detailTables.length
-      );
+      logger.debug("Tablas de detalle encontradas", {
+        count: detailTables.length,
+      });
 
       if (detailTables.length === 0) {
-        console.log("🔍 DEBUG: No hay tablas de detalle");
+        logger.debug("No hay tablas de detalle");
         return false;
       }
 
-      console.log("🔍 DEBUG: ✅ Promociones activadas");
+      logger.debug("Promociones activadas");
       logger.info(
-        "✅ Condiciones para promociones cumplidas - activando procesamiento automático"
+        "Condiciones para promociones cumplidas - activando procesamiento automático",
+        { entityType: "MAPPING", entityId: mapping._id?.toString() }
       );
       return true;
     } catch (error) {
-      console.log("🔍 DEBUG: Error en shouldUsePromotions:", error.message);
-      logger.error(`Error al verificar promociones: ${error.message}`);
+      logger.debug("Error en shouldUsePromotions", { error: error.message });
+      logger.error(`Error al verificar promociones: ${error.message}`, {
+        stack: error.stack,
+        entityType: "MAPPING",
+        entityId: mapping._id?.toString(),
+      });
       return false;
     }
   }
@@ -609,7 +623,8 @@ class DynamicTransferService {
     currentConsecutive,
     mapping,
     columnLengthCache,
-    processedTables
+    processedTables,
+    secondaryReservations = []
   ) {
     // Ordenar tablas de detalle por executionOrder
     const orderedDetailTables = [...detailTables].sort(
@@ -797,7 +812,8 @@ class DynamicTransferService {
             mapping,
             documentId,
             columnLengthCache,
-            true // isDetailTable
+            true, // isDetailTable
+            secondaryReservations
           );
 
           logger.error(`Registro ${recordIndex + 1} procesado exitosamente`);
@@ -864,7 +880,8 @@ class DynamicTransferService {
     currentConsecutive,
     mapping,
     columnLengthCache,
-    processedTables
+    processedTables,
+    secondaryReservations = []
   ) {
     // Ordenar tablas de detalle por executionOrder
     const orderedDetailTables = [...detailTables].sort(
@@ -911,7 +928,8 @@ class DynamicTransferService {
           mapping,
           documentId,
           columnLengthCache,
-          true // isDetailTable = true
+          true, // isDetailTable = true
+          secondaryReservations
         );
       }
 
@@ -1552,7 +1570,8 @@ class DynamicTransferService {
     mapping,
     documentId,
     columnLengthCache,
-    isDetailTable = false
+    isDetailTable = false,
+    secondaryReservations = []
   ) {
     const targetData = {};
     const targetFields = [];
@@ -1706,9 +1725,9 @@ class DynamicTransferService {
           currentConsecutive,
           mapping,
           tableConfig,
-          isDetailTable,
           targetConnection,
-          columnLengthCache
+          columnLengthCache,
+          secondaryReservations
         );
 
         if (processedField && processedField.value !== undefined) {
@@ -1906,7 +1925,8 @@ class DynamicTransferService {
       filteredTargetValues,
       filteredTargetData,
       filteredDirectSqlFields,
-      targetConnection
+      targetConnection,
+      tableConfig.fieldMappings
     );
 
     logger.error(`Tabla ${tableConfig.name} procesada exitosamente`);
@@ -1934,7 +1954,8 @@ class DynamicTransferService {
     tableConfig,
     isDetailTable,
     targetConnection,
-    columnLengthCache
+    columnLengthCache,
+    secondaryReservations = []
   ) {
     let value;
 
@@ -2083,7 +2104,6 @@ class DynamicTransferService {
             `Valor obtenido por lookup: ${fieldMapping.targetField} = ${value}`
           );
         }
-
         // 4. Usar métodos existentes de consecutivos
         if (
           this.isConsecutiveField(fieldMapping, mapping) &&
@@ -2097,6 +2117,31 @@ class DynamicTransferService {
           logger.debug(
             `Consecutivo asignado usando sistema centralizado: ${value}`
           );
+        }
+
+        // NUEVO: Consecutivos específicos por campo (Multi-Consecutivo)
+        if (fieldMapping.isConsecutive && fieldMapping.consecutiveId) {
+          logger.info(`🔍 Solicitando consecutivo secundario para campo: ${fieldMapping.targetField}`);
+          const reservation = await ConsecutiveService.reserveConsecutiveValues(
+            fieldMapping.consecutiveId,
+            1,
+            { segment: null },
+            { id: mapping._id.toString(), name: "mapping_field" }
+          );
+
+          const secondaryConsecutive = {
+            value: reservation.values[0].numeric,
+            formatted: reservation.values[0].formatted,
+            isCentralized: true,
+            reservationId: reservation.reservationId,
+            consecutiveId: fieldMapping.consecutiveId,
+            targetField: fieldMapping.targetField
+          };
+
+          secondaryReservations.push(secondaryConsecutive);
+          value = secondaryConsecutive.formatted;
+
+          logger.info(`✅ Consecutivo secundario reservado para campo ${fieldMapping.targetField}: ${value}`);
         }
       } catch (error) {
         logger.error(
@@ -2279,8 +2324,28 @@ class DynamicTransferService {
       );
     }
 
+    // === APLICAR TRANSFORMACIÓN SEGÚN CONFIGURACIÓN DEL CAMPO ===
+    let finalValue = value;
+    if (fieldMapping.transform && fieldMapping.transform.transformType) {
+      try {
+        finalValue = transformerService.transformValue(value, fieldMapping.transform);
+        
+        // Log de transformación si el valor cambió
+        if (finalValue !== value) {
+          logger.debug(
+            `Transformando campo ${fieldMapping.targetField}: ${value} -> ${finalValue} (tipo: ${fieldMapping.transform.transformType})`
+          );
+        }
+      } catch (transformError) {
+        logger.warn(
+          `Error transformando campo ${fieldMapping.targetField}: ${transformError.message}. Usando valor original.`
+        );
+        finalValue = value;
+      }
+    }
+
     return {
-      value,
+      value: finalValue,
       isDirectSql,
       fieldName: fieldMapping.targetField,
       success: true,
@@ -2768,8 +2833,20 @@ class DynamicTransferService {
     targetValues,
     targetData,
     directSqlFields,
-    targetConnection
+    targetConnection,
+    fieldMappings = []
   ) {
+    // Inicializar finalInsertData antes del try para evitar errores de scope en catch
+    let finalInsertData = {
+      tabla: targetTable,
+      campos: [],
+      valores: [],
+      parametros: {},
+      camposSQL: [],
+      query: "",
+      resumenCampos: { total: 0, promocion: 0, regulares: 0, sqlDirecto: 0 },
+    };
+
     try {
       // ✅ 1. MOSTRAR DATOS COMPLETOS EN JSON ANTES DE PROCESAR
       logger.error(
@@ -2818,8 +2895,107 @@ class DynamicTransferService {
       const validatedParams = {};
       const problematicFields = [];
 
+      // ✅ 2.1 OBTENER SCHEMA DE LA TABLA DESTINO PARA CONVERSIÓN DE TIPOS
+      let columnTypes = {};
+      try {
+        const schemaQuery = `
+          SELECT COLUMN_NAME, DATA_TYPE, NUMERIC_PRECISION, NUMERIC_SCALE, IS_NULLABLE
+          FROM INFORMATION_SCHEMA.COLUMNS 
+          WHERE TABLE_NAME = @tableName AND TABLE_SCHEMA = 'CATELLI'
+        `;
+        const schemaResult = await DatabaseServiceAdapter.query(
+          targetConnection,
+          schemaQuery,
+          { tableName: targetTable.replace('CATELLI.', '') }
+        );
+        
+        if (schemaResult && schemaResult.recordset) {
+          schemaResult.recordset.forEach(col => {
+            columnTypes[col.COLUMN_NAME] = {
+              dataType: col.DATA_TYPE,
+              numericPrecision: col.NUMERIC_PRECISION,
+              numericScale: col.NUMERIC_SCALE,
+              nullable: col.IS_NULLABLE === 'YES'
+            };
+          });
+          logger.error(`🔍 SCHEMA OBTENIDO para ${targetTable}: ${Object.keys(columnTypes).length} columnas`);
+        }
+      } catch (schemaError) {
+        logger.warn(`⚠️ No se pudo obtener schema de ${targetTable}: ${schemaError.message}`);
+      }
+
+      // Función para convertir valores según el tipo de la columna destino (schema + valueType del usuario)
+      const convertValueByType = (fieldName, value) => {
+        if (value === null || value === undefined) {
+          return value;
+        }
+
+        const colType = columnTypes[fieldName];
+        const dataType = colType?.dataType?.toLowerCase();
+        
+        // Obtener configuración del campo desde mapping (valueType del usuario)
+        const fieldMapping = fieldMappings?.find(fm => fm.targetField === fieldName);
+        const userValueType = fieldMapping?.valueType;
+        
+        // Determinar tipos según schema
+        const isSchemaNumeric = dataType && ['int', 'bigint', 'smallint', 'tinyint', 'decimal', 'numeric', 'float', 'real', 'money', 'smallmoney'].includes(dataType);
+        const isSchemaDate = dataType && ['date', 'datetime', 'datetime2', 'smalldatetime', 'datetimeoffset', 'time'].includes(dataType);
+        
+        // Determinar tipos según usuario (valueType)
+        const isUserNumeric = userValueType === 'number';
+        const isUserDate = userValueType === 'date';
+        
+        // Solo convertir si schema O usuario dice que es numérico/fecha
+        const shouldConvertToNumber = isSchemaNumeric || isUserNumeric;
+        const shouldConvertToDate = isSchemaDate || isUserDate;
+        
+        // Si el valor ya es número, no convertir
+        if (typeof value === 'number') {
+          return value;
+        }
+
+        // Si es string vacío
+        if (value === '') {
+          // Si hay schema y es numérico, o usuario especificó número
+          if (shouldConvertToNumber) {
+            return colType?.nullable ? null : 0;
+          }
+          return value;
+        }
+
+        // Si es string, convertir según corresponda
+        if (typeof value === 'string') {
+          // Si debe convertir a número (schema o usuario)
+          if (shouldConvertToNumber) {
+            const trimmedValue = value.trim();
+            if (/^-?\d+(\.\d+)?$/.test(trimmedValue)) {
+              const numValue = Number(trimmedValue);
+              if (!isNaN(numValue)) {
+                logger.debug(`🔢 CONVERSIÓN NÚMERO: ${fieldName} = "${value}" → ${numValue} (schema: ${isSchemaNumeric}, user: ${isUserNumeric})`);
+                return numValue;
+              }
+            }
+          }
+          
+          // Si debe convertir a fecha (schema o usuario)
+          if (shouldConvertToDate) {
+            // Si es GETDATE() u otra función SQL, retornarla como está
+            if (value.toUpperCase().includes('GETDATE') || value.toUpperCase().includes('GETUTCDATE')) {
+              return value;
+            }
+            const dateValue = new Date(value);
+            if (!isNaN(dateValue.getTime())) {
+              logger.debug(`📅 CONVERSIÓN FECHA: ${fieldName} = "${value}" → ${dateValue.toISOString()} (schema: ${isSchemaDate}, user: ${isUserDate})`);
+              return dateValue;
+            }
+          }
+        }
+
+        return value;
+      };
+
       Object.keys(targetData).forEach((key) => {
-        const value = targetData[key];
+        let value = targetData[key];
 
         if (typeof value === "object" && value !== null) {
           if (value.sourceField || value.targetField || value.unitConversion) {
@@ -2836,7 +3012,8 @@ class DynamicTransferService {
             validatedParams[key] = value;
           }
         } else {
-          validatedParams[key] = value;
+          // ✅ 2.2 APLICAR CONVERSIÓN DE TIPOS BASADO EN SCHEMA
+          validatedParams[key] = convertValueByType(key, value);
         }
       });
 
@@ -2856,7 +3033,7 @@ class DynamicTransferService {
       }
 
       // ✅ 3. CONSTRUIR DATOS FINALES PARA INSERCIÓN
-      const finalInsertData = {
+      finalInsertData = {
         tabla: targetTable,
         campos: [],
         valores: [],
@@ -2993,10 +3170,213 @@ class DynamicTransferService {
         );
       }
 
+      // ✅ 9. VALIDACIÓN DETALLADA DE CADA PARÁMETRO CON AUTOCORRECCIÓN
+      logger.error(`🔍 ============ VALIDACIÓN DETALLADA DE PARÁMETROS ============`);
+      const paramValidation = [];
+      const corrections = [];
+      
+      // Límites de campos basados en schema de CATELLI.FACTURA
+      const fieldLimits = {
+        'TIPO_DOCUMENTO': 1,
+        'FACTURA': 50,
+        'ESTA_DESPACHADO': 1,
+        'EN_INVESTIGACION': 1,
+        'TRANS_ADICIONALES': 1,
+        'ESTADO_REMISION': 1,
+        'ASiento_DOCUMENTO': 10,
+        'MONEDA_FACTURA': 1,
+        'COMENTARIO_CXC': 249,
+        'PEDIDO': 50,
+        'FACTURA_ORIGINAL': 50,
+        'TIPO_ORIGINAL': 1,
+        'TARJETA_CREDITO': 20,
+        'NUMERO_AUTORIZA': 10,
+        'TIPO_DESCUENTO1': 1,
+        'TIPO_DESCUENTO2': 1,
+        'MODULO': 4,
+        'CARGADO_CG': 1,
+        'CARGADO_CXC': 1,
+        'EMBARCAR_A': 160,
+        'DIREC_EMBARQUE': 8,
+        'DIRECCION_FACTURA': 4000,
+        'RUBRO1': 50,
+        'RUBRO2': 50,
+        'RUBRO3': 50,
+        'RUBRO4': 50,
+        'RUBRO5': 50,
+        'MONEDA': 1,
+        'NIVEL_PRECIO': 12,
+        'COBRADOR': 4,
+        'RUTA': 4,
+        'USUARIO': 50,
+        'USUARIO_ANULA': 50,
+        'CONDICION_PAGO': 4,
+        'ZONA': 4,
+        'VENDEDOR': 4,
+        'DOC_CREDITO_CXC': 20,
+        'CLIENTE_DIRECCION': 20,
+        'CLIENTE_CORPORAC': 20,
+        'CLIENTE_ORIGEN': 20,
+        'CLIENTE': 20,
+        'PAIS': 4,
+        'TIPO_CREDITO_CXC': 3,
+        'TIPO_DOC_CXC': 3,
+        'CONTRATO': 20,
+        'USA_DESPACHOS': 1,
+        'COBRADA': 1,
+        'DESCUENTO_CASCADA': 1,
+        'CONSECUTIVO': 10,
+        'NOMBRE_CLIENTE': 150,
+        'ANULADA': 1,
+      };
+      
+      // Lista de campos de fecha que necesitan conversión
+      const dateFields = [
+        'FECHA', 'FECHA_PEDIDO', 'FECHA_DESPACHO', 'FECHA_RECIBIDO', 
+        'FECHA_ENTREGA', 'FECHA_ORDEN', 'FECHA_HORA', 'FECHA_HORA_ANULA',
+        'FECHA_RIGE', 'FECHA_INICIO_RESOLUCION', 'FECHA_FINAL_RESOLUCION',
+        'FECHA_REFERENCIA_DE', 'FECHA_FACTURA', 'FECHA_DOC'
+      ];
+      
+      Object.keys(finalInsertData.parametros).forEach((key) => {
+        let value = finalInsertData.parametros[key];
+        let valueStr = String(value || '');
+        let valueLength = valueStr.length;
+        
+        const maxLength = fieldLimits[key] || null;
+        let isProblematic = maxLength && valueLength > maxLength;
+        
+        // Auto-corrección: Si el valor es 'NULL' (string de SQL), convertir a cadena vacía
+        if (valueStr === "'NULL'" || valueStr === "'Null'" || valueStr === "'null'" || valueStr === "NULL") {
+          const originalValue = value;
+          value = "";
+          finalInsertData.parametros[key] = "";
+          
+          corrections.push({
+            campo: key,
+            original: originalValue,
+            corregido: "(vacío)",
+            razon: "Valor 'NULL' string convertido a vacío"
+          });
+          
+          logger.error(`🔧 CORRECCIÓN 'NULL': ${key} = "${originalValue}" → ""`);
+          
+          valueLength = 0;
+          valueStr = "";
+          isProblematic = false;
+        }
+        // Auto-corrección: Convertir fechas ISO a formato SQL Server
+        else if (dateFields.some(df => key.toUpperCase().includes(df))) {
+          // Verificar si es una fecha de JavaScript (formato: "Mon April 06 2026 20:00:00 GMT-0400")
+          const jsDatePattern = /^[A-Z][a-z]{2}\s[A-Z][a-z]{2}\s\d{1,2}\s\d{4}\s\d{2}:\d{2}:\d{2}\sGMT/;
+          const isJsDate = jsDatePattern.test(valueStr);
+          
+          // O verificar si es fecha ISO con T y Z
+          const isIsoDate = value instanceof Date === false && valueStr.includes('T') && valueStr.includes('Z');
+          
+          // O verificar si es formato SQL Server datetime (2022-01-28 00:00:00.000)
+          const isSqlServerDatetime = /^\d{4}-\d{2}-\d{2}\s\d{2}:\d{2}:\d{2}\.\d{3}$/.test(valueStr);
+          
+          if (isJsDate || isIsoDate || isSqlServerDatetime) {
+            try {
+              const dateObj = new Date(value);
+              if (!isNaN(dateObj.getTime())) {
+                const originalValue = value;
+                const year = dateObj.getFullYear();
+                const month = String(dateObj.getMonth() + 1).padStart(2, "0");
+                const day = String(dateObj.getDate()).padStart(2, "0");
+                
+                // Verificar si es campo datetime (contiene HORA en el nombre)
+                const isDateTimeField = key.toUpperCase().includes('HORA') || key.toUpperCase().includes('FECHA_HORA');
+                
+                let formattedDate;
+                if (isDateTimeField || isSqlServerDatetime) {
+                  // Para datetime: formato con hora fija 00:00:00.000
+                  formattedDate = `${year}-${month}-${day} 00:00:00.000`;
+                } else {
+                  // Para date: solo YYYY-MM-DD
+                  formattedDate = `${year}-${month}-${day}`;
+                }
+                
+                value = formattedDate;
+                finalInsertData.parametros[key] = formattedDate;
+                
+                let razon = isJsDate ? "Fecha JavaScript convertida a formato SQL Server" : "Fecha ISO convertida a formato SQL Server";
+                if (isSqlServerDatetime) {
+                  razon = "Formato SQL Server datetime validado y ajustado";
+                }
+                
+                corrections.push({
+                  campo: key,
+                  original: originalValue,
+                  corregido: formattedDate,
+                  razon
+                });
+                
+                logger.error(`🔧 CORRECCIÓN FECHA: ${key} = "${originalValue}" → "${formattedDate}"`);
+                
+                valueLength = formattedDate.length;
+                valueStr = formattedDate;
+                isProblematic = maxLength && valueLength > maxLength;
+              }
+            } catch (e) {
+              // Si falla la conversión, mantener el valor original
+            }
+          }
+        }
+        // Auto-corrección: Si el valor tiene comillas simples y excede el límite
+        else if (isProblematic && valueStr.startsWith("'") && valueStr.endsWith("'")) {
+          const cleanedValue = valueStr.slice(1, -1); // Quitar comillas
+          
+          // Si después de quitar comillas entra en el límite
+          if (cleanedValue.length <= maxLength) {
+            const originalValue = value;
+            value = cleanedValue;
+            finalInsertData.parametros[key] = cleanedValue;
+            
+            corrections.push({
+              campo: key,
+              original: originalValue,
+              corregido: cleanedValue,
+              razon: `Valor con comillas excedía límite de ${maxLength} chars`
+            });
+            
+            logger.error(`🔧 CORRECCIÓN AUTOMÁTICA: ${key} = "${originalValue}" → "${cleanedValue}"`);
+            
+            valueLength = cleanedValue.length;
+            isProblematic = false;
+          }
+        }
+        
+        paramValidation.push({
+          campo: key,
+          valor: valueStr.substring(0, 100),
+          longitud: valueLength,
+          limite: maxLength,
+          excede: isProblematic ? '⚠️ EXCEDE' : '✅ OK',
+          corregido: corrections.some(c => c.campo === key)
+        });
+        
+        if (isProblematic) {
+          logger.error(`⚠️ CAMPO PROBLEMÁTICO: ${key} = "${valueStr.substring(0, 50)}..." (longitud: ${valueLength}, límite: ${maxLength})`);
+        }
+      });
+      
+      if (corrections.length > 0) {
+        logger.error(`🔧 ============ CORRECCIONES AUTOMÁTICAS APLICADAS ============`);
+        logger.error(`🔧 TOTAL: ${corrections.length} correcciones`);
+        corrections.forEach(c => {
+          logger.error(`🔧 ${c.campo}: "${c.original}" → "${c.corregido}" (${c.razon})`);
+        });
+      }
+      
+      logger.error(`🔍 VALIDACIÓN COMPLETA: ${JSON.stringify(paramValidation, null, 2)}`);
+
       // ✅ 9. EJECUTAR INSERCIÓN
       logger.error(`🚀 EJECUTANDO INSERCIÓN...`);
 
       const startTime = Date.now();
+      
       const result = await DatabaseServiceAdapter.query(
         targetConnection,
         finalInsertData.query,
@@ -3031,18 +3411,43 @@ class DynamicTransferService {
       }
 
       return result;
+
     } catch (error) {
-      logger.error(`🎁 ============ ERROR EN INSERCIÓN ============`);
+      // Análisis detallado del error
+      logger.error(`🎁 ============ ERROR DETALLADO EN INSERCIÓN ============`);
+      
+      // Analizar cada parámetro para encontrar el problemático
+      const paramAnalysis = [];
+      if (finalInsertData && finalInsertData.parametros) {
+        Object.keys(finalInsertData.parametros).forEach((key) => {
+          const value = finalInsertData.parametros[key];
+          const valueStr = String(value || '');
+          
+          // Verificar si el valor parece ser demasiado largo
+          const seemsTooLong = valueStr.length > 50;
+          
+          paramAnalysis.push({
+            campo: key,
+            valor: valueStr.substring(0, 80),
+            longitud: valueStr.length,
+            pareceLargo: seemsTooLong
+          });
+          
+          if (seemsTooLong) {
+            logger.error(`🔍 POSIBLE PROBLEMA: ${key} = "${valueStr.substring(0, 50)}..." (longitud: ${valueStr.length})`);
+          }
+        });
+        
+        logger.error(`🔍 ANÁLISIS DE PARÁMETROS: ${JSON.stringify(paramAnalysis, null, 2)}`);
+      }
+      
       const errorInfo = {
         estado: "ERROR",
         tabla: targetTable,
         mensaje: error.message,
+        sqlQuery: finalInsertData?.query,
         stack: error.stack,
-        datosProblematicos: {
-          targetFields: targetFields,
-          targetValues: targetValues,
-          targetData: targetData,
-        },
+        parametrosAnalizados: paramAnalysis,
       };
 
       logger.error(`🎁 ERROR COMPLETO: ${JSON.stringify(errorInfo, null, 2)}`);
@@ -3226,6 +3631,37 @@ class DynamicTransferService {
           centralizedId,
           currentConsecutive.reservationId
         );
+      }
+    }
+
+    // NUEVO: Manejar reservas secundarias (Multi-Consecutivo)
+    if (docResult.secondaryReservations && docResult.secondaryReservations.length > 0) {
+      logger.info(`🔄 Procesando ${docResult.secondaryReservations.length} reservas secundarias`);
+      
+      for (const res of docResult.secondaryReservations) {
+        try {
+          if (docResult.success) {
+            await ConsecutiveService.commitReservation(
+              res.consecutiveId,
+              res.reservationId,
+              [
+                {
+                  numeric: res.value,
+                  formatted: res.formatted,
+                },
+              ]
+            );
+            logger.info(`✅ Reserva secundaria confirmada para campo ${res.targetField}: ${res.formatted}`);
+          } else {
+            await ConsecutiveService.cancelReservation(
+              res.consecutiveId,
+              res.reservationId
+            );
+            logger.warn(`🛑 Reserva secundaria cancelada para campo ${res.targetField}`);
+          }
+        } catch (resError) {
+          logger.error(`❌ Error al procesar reserva secundaria para ${res.targetField}: ${resError.message}`);
+        }
       }
     }
 
@@ -3695,27 +4131,73 @@ class DynamicTransferService {
    * @returns {string} - Condición procesada
    */
   processFilterCondition(filterCondition, tableAlias) {
-    return filterCondition.replace(/\b(\w+)\b/g, (m, field) => {
-      if (
-        !field.includes(".") &&
-        !field.match(/^[\d.]+$/) &&
-        ![
-          "AND",
-          "OR",
-          "NULL",
-          "IS",
-          "NOT",
-          "IN",
-          "LIKE",
-          "BETWEEN",
-          "TRUE",
-          "FALSE",
-        ].includes(field.toUpperCase())
-      ) {
-        return `${tableAlias}.${field}`;
+    if (!filterCondition) return "";
+    
+    // Lista de palabras reservadas SQL que no deben tener alias
+    const reservedWords = new Set([
+      "AND", "OR", "NULL", "IS", "NOT", "IN", "LIKE", 
+      "BETWEEN", "TRUE", "FALSE", "EXISTS", "CASE", "WHEN",
+      "THEN", "ELSE", "END", "AS", "ON", "JOIN", "LEFT",
+      "RIGHT", "INNER", "OUTER", "FULL", "CROSS", "WHERE",
+      "GROUP", "BY", "ORDER", "HAVING", "LIMIT", "OFFSET",
+      "ASC", "DESC", "UNION", "ALL", "DISTINCT", "FROM"
+    ]);
+    
+    let result = "";
+    let i = 0;
+    
+    while (i < filterCondition.length) {
+      // Si encuentra una comilla simple, proteger todo hasta la siguiente comilla
+      if (filterCondition[i] === "'") {
+        // Copiar la comilla y todo hasta la siguiente comilla (incluyendo comillas escapadas)
+        let j = i + 1;
+        result += "'";
+        while (j < filterCondition.length) {
+          result += filterCondition[j];
+          if (filterCondition[j] === "'") {
+            if (filterCondition[j + 1] === "'") {
+              // Comilla escapada ''
+              result += "'";
+              j += 2;
+            } else {
+              // Fin del string
+              j++;
+              break;
+            }
+          } else {
+            j++;
+          }
+        }
+        i = j;
+      } else {
+        // Procesar palabra
+        let word = "";
+        while (i < filterCondition.length && /[a-zA-Z0-9_]/.test(filterCondition[i])) {
+          word += filterCondition[i];
+          i++;
+        }
+        
+        if (word.length > 0) {
+          // Verificar si es una palabra que necesita alias
+          if (
+            !reservedWords.has(word.toUpperCase()) && 
+            !word.includes(".") && // Ya tiene punto (alias)
+            !/^\d+$/.test(word) && // Es número
+            word.toUpperCase() !== "NULL" // Es NULL
+          ) {
+            result += tableAlias + "." + word;
+          } else {
+            result += word;
+          }
+        } else {
+          // Caracter que no es alfanumérico
+          result += filterCondition[i];
+          i++;
+        }
       }
-      return m;
-    });
+    }
+    
+    return result;
   }
 
   /**
@@ -4663,15 +5145,15 @@ class DynamicTransferService {
 
         if (shouldMark) {
           let setClause = `${processedFieldName} = 1`;
-          if (config.includeTimestamp) {
-            const timestampField = config.timestampField || "PROCESSED_DATE";
+          if (config.includeTimestamp && config.timestampField) {
+            const timestampField = config.timestampField;
             setClause += `, ${timestampField} = GETDATE()`;
           }
           query = `UPDATE ${mainTable.sourceTable} SET ${setClause} WHERE ${primaryKey} = @documentId`;
         } else {
           let setClause = `${processedFieldName} = 0`;
-          if (config.includeTimestamp) {
-            const timestampField = config.timestampField || "PROCESSED_DATE";
+          if (config.includeTimestamp && config.timestampField) {
+            const timestampField = config.timestampField;
             setClause += `, ${timestampField} = NULL`;
           }
           query = `UPDATE ${mainTable.sourceTable} SET ${setClause} WHERE ${primaryKey} = @documentId`;
@@ -4744,15 +5226,15 @@ class DynamicTransferService {
         let query;
         if (shouldMark) {
           let setClause = `${processedFieldName} = 1`;
-          if (config.includeTimestamp) {
-            const timestampField = config.timestampField || "PROCESSED_DATE";
+          if (config.includeTimestamp && config.timestampField) {
+            const timestampField = config.timestampField;
             setClause += `, ${timestampField} = GETDATE()`;
           }
           query = `UPDATE ${mainTable.sourceTable} SET ${setClause} WHERE ${primaryKey} IN (${placeholders})`;
         } else {
           let setClause = `${processedFieldName} = 0`;
-          if (config.includeTimestamp) {
-            const timestampField = config.timestampField || "PROCESSED_DATE";
+          if (config.includeTimestamp && config.timestampField) {
+            const timestampField = config.timestampField;
             setClause += `, ${timestampField} = NULL`;
           }
           query = `UPDATE ${mainTable.sourceTable} SET ${setClause} WHERE ${primaryKey} IN (${placeholders})`;
@@ -5816,11 +6298,6 @@ class DynamicTransferService {
 
     // Buscar campos relacionados (para casos como CANTIDAD_A_FACTURA vs CANTIDAD_A_FACTURA)
     const fieldMappings = {
-      CANTIDAD_A_FACTURA: [
-        "CANTIDAD_A_FACTURA",
-        "CNT_FACTURAR",
-        "QTY_FACTURAR",
-      ],
       CANTIDAD_A_FACTURA: [
         "CANTIDAD_A_FACTURA",
         "CNT_FACTURAR",

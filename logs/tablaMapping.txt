@@ -1,0 +1,3069 @@
+{
+  "_id": {
+    "$oid": "69c4402d2531fe05c1f71c8f"
+  },
+  "name": "Carga_De_Facturas",
+  "description": "",
+  "taskId": {
+    "$oid": "69c4402d2531fe05c1f71c8d"
+  },
+  "transferType": "down",
+  "active": true,
+  "sourceServer": "server2",
+  "targetServer": "server1",
+  "documentTypeRules": [
+    {
+      "name": "ESTADO",
+      "sourceField": "ESTADO",
+      "sourceValues": [
+        "N",
+        "n"
+      ],
+      "description": "",
+      "_id": {
+        "$oid": "69c4402d2531fe05c1f71c90"
+      }
+    }
+  ],
+  "tableConfigs": [
+    {
+      "name": "FAC_ENC",
+      "sourceTable": "FAC_ENC_PED",
+      "targetTable": "CATELLI.FACTURA",
+      "primaryKey": "NUM_PED",
+      "targetPrimaryKey": "FACTURA",
+      "isDetailTable": false,
+      "parentTableRef": "",
+      "foreignKey": "",
+      "joinType": "INNER",
+      "useSameSourceTable": false,
+      "fieldMappings": [
+        {
+          "sourceField": "",
+          "targetField": "TIPO_DOCUMENTO",
+          "defaultValue": "F",
+          "isRequired": true,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4402d2531fe05c1f71c92"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "FACTURA",
+          "defaultValue": "",
+          "isRequired": true,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4402d2531fe05c1f71c93"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "ESTA_DESPACHADO",
+          "defaultValue": "N",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4402d2531fe05c1f71c94"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "EN_INVESTIGACION",
+          "defaultValue": "N",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4402d2531fe05c1f71c95"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "TRANS_ADICIONALES",
+          "defaultValue": "N",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4402d2531fe05c1f71c96"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "ESTADO_REMISION",
+          "defaultValue": "N",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4402d2531fe05c1f71c97"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "ASIENTO_DOCUMENTO",
+          "defaultValue": "NASIENTO",
+          "isRequired": true,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4402d2531fe05c1f71c98"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "DESCUENTO_VOLUMEN",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4402d2531fe05c1f71c99"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "MONEDA_FACTURA",
+          "defaultValue": "L",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4402d2531fe05c1f71c9a"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "CLASE_DOCUMENTO",
+          "defaultValue": "N",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4402d2531fe05c1f71c9b"
+          }
+        },
+        {
+          "sourceField": "NUM_PED",
+          "targetField": "PEDIDO",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4402d2531fe05c1f71c9c"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "COMISION_COBRADOR",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4402d2531fe05c1f71c9d"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "TOTAL_VOLUMEN",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4402d2531fe05c1f71c9e"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "TOTAL_PESO",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c441ef2531fe05c1f72317"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "MONTO_COBRADO",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c441ef2531fe05c1f72318"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "TOTAL_IMPUESTO1",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c441ef2531fe05c1f72319"
+          }
+        },
+        {
+          "sourceField": "FEC_PED",
+          "targetField": "FECHA",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "date",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4426c2531fe05c1f7264f"
+          }
+        },
+        {
+          "sourceField": "FEC_DES",
+          "targetField": "FECHA_ENTREGA",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "date",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4426c2531fe05c1f72650"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "TOTAL_IMPUESTO2",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4426c2531fe05c1f72651"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "PORC_DESCUENTO2",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4426c2531fe05c1f72652"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "MONTO_FLETE",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c443152531fe05c1f7299c"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "MONTO_SEGURO",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c443152531fe05c1f7299d"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "MONTO_DOCUMENTACIO",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c443152531fe05c1f7299e"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "TIPO_DESCUENTO1",
+          "defaultValue": "P",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c443152531fe05c1f7299f"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "TIPO_DESCUENTO2",
+          "defaultValue": "P",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c443152531fe05c1f729a0"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "MONTO_DESCUENTO1",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c443152531fe05c1f729a1"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "MONTO_DESCUENTO2",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c443152531fe05c1f729a2"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "PORC_DESCUENTO1",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c443152531fe05c1f729a3"
+          }
+        },
+        {
+          "sourceField": "MON_CIV",
+          "targetField": "TOTAL_FACTURA",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c443932531fe05c1f72cfd"
+          }
+        },
+        {
+          "sourceField": "FEC_DES",
+          "targetField": "FECHA_PEDIDO",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "date",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c443932531fe05c1f72cfe"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "FECHA_HORA",
+          "defaultValue": "GETDATE()",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "date",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c443932531fe05c1f72cff"
+          }
+        },
+        {
+          "sourceField": "NUM_ITM",
+          "targetField": "TOTAL_UNIDADES",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c444052531fe05c1f73062"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "NUMERO_PAGINAS",
+          "defaultValue": "1",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c444052531fe05c1f73063"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "TIPO_CAMBIO",
+          "defaultValue": "36.70",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c445aa2531fe05c1f73746"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "ANULADA",
+          "defaultValue": "N",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c446632531fe05c1f73ab2"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "MODULO",
+          "defaultValue": "FA",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c446632531fe05c1f73ab3"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "CARGADO_CG",
+          "defaultValue": "N",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c446632531fe05c1f73ab4"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "CARGADO_CXC",
+          "defaultValue": "N",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c446632531fe05c1f73ab5"
+          }
+        },
+        {
+          "sourceField": "NOMBRE_CLIENTE",
+          "targetField": "EMBARCAR_A",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c446632531fe05c1f73ab6"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "DIREC_EMBARQUE",
+          "defaultValue": "ND",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c446632531fe05c1f73ab7"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "DIRECCION_EMBARQUE",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": true,
+          "lookupQuery": "SELECT \n    LTRIM(REPLACE(CAST(DIRECCION AS VARCHAR(MAX)), 'DETALLE:', '')) AS DIRECCION\nFROM catelli.cliente\nWHERE cliente = @COD_CLT",
+          "lookupParams": [
+            {
+              "sourceField": "COD_CLT",
+              "paramName": "COD_CLT",
+              "removePrefix": "CN",
+              "_id": {
+                "$oid": "69c492c52531fe05c1f7ce2c"
+              }
+            }
+          ],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c446632531fe05c1f73ab8"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "MULTIPLICADOR_EV",
+          "defaultValue": "1",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c446632531fe05c1f73ab9"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "OBSERVACIONES",
+          "defaultValue": "CARGA DESDE TELYNET",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4482d2531fe05c1f74553"
+          }
+        },
+        {
+          "sourceField": "MONEDA",
+          "targetField": "MONEDA",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4482d2531fe05c1f74554"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "NIVEL_PRECIO",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": true,
+          "lookupQuery": "SELECT NIVEL_PRECIO FROM CATELLI.CLIENTE WHERE CLIENTE = @COD_CLT",
+          "lookupParams": [
+            {
+              "sourceField": "COD_CLT",
+              "paramName": "COD_CLT",
+              "removePrefix": "CN",
+              "_id": {
+                "$oid": "69c492042531fe05c1f7c9c6"
+              }
+            }
+          ],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4482d2531fe05c1f74555"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "COBRADOR",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": true,
+          "lookupQuery": "SELECT COBRADOR FROM CATELLI.CLIENTE WHERE CLIENTE = @COD_CLT",
+          "lookupParams": [
+            {
+              "sourceField": "COD_CLT",
+              "paramName": "COD_CLT",
+              "removePrefix": "CN",
+              "_id": {
+                "$oid": "69c492042531fe05c1f7c9c8"
+              }
+            }
+          ],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4482d2531fe05c1f74556"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "RUTA",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": true,
+          "lookupQuery": "SELECT RUTA FROM CATELLI.CLIENTE WHERE CLIENTE = @COD_CLT",
+          "lookupParams": [
+            {
+              "sourceField": "COD_CLT",
+              "paramName": "COD_CLT",
+              "removePrefix": "CN",
+              "_id": {
+                "$oid": "69c492042531fe05c1f7c9ca"
+              }
+            }
+          ],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4482d2531fe05c1f74557"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "USUARIO",
+          "defaultValue": "SA",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4482d2531fe05c1f74558"
+          }
+        },
+        {
+          "sourceField": "COD_CND",
+          "targetField": "CONDICION_PAGO",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4482d2531fe05c1f74559"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "ZONA",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": true,
+          "lookupQuery": "SELECT ZONA FROM CATELLI.CLIENTE WHERE CLIENTE = @COD_CLT",
+          "lookupParams": [
+            {
+              "sourceField": "COD_CLT",
+              "paramName": "COD_CLT",
+              "removePrefix": "CN",
+              "_id": {
+                "$oid": "69c492c52531fe05c1f7ce39"
+              }
+            }
+          ],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4482d2531fe05c1f7455a"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "VENDEDOR",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": true,
+          "lookupQuery": "SELECT VENDEDOR FROM CATELLI.CLIENTE WHERE CLIENTE = @COD_CLT",
+          "lookupParams": [
+            {
+              "sourceField": "COD_CLT",
+              "paramName": "COD_CLT",
+              "removePrefix": "CN",
+              "_id": {
+                "$oid": "69c492c52531fe05c1f7ce3b"
+              }
+            }
+          ],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4482d2531fe05c1f7455b"
+          }
+        },
+        {
+          "sourceField": "COD_CLT",
+          "targetField": "CLIENTE",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "CN",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4482d2531fe05c1f7455c"
+          }
+        },
+        {
+          "sourceField": "COD_CLT",
+          "targetField": "CLIENTE_DIRECCION",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "CN",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c4482d2531fe05c1f7455d"
+          }
+        },
+        {
+          "sourceField": "COD_CLT",
+          "targetField": "CLIENTE_CORPORAC",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "CN",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c448b52531fe05c1f74902"
+          }
+        },
+        {
+          "sourceField": "COD_CLT",
+          "targetField": "CLIENTE_ORIGEN",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "CN",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c448b52531fe05c1f74903"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "PAIS",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": true,
+          "lookupQuery": "SELECT PAIS FROM CATELLI.CLIENTE WHERE CLIENTE = @COD_CLT",
+          "lookupParams": [
+            {
+              "sourceField": "COD_CLT",
+              "paramName": "COD_CLT",
+              "removePrefix": "CN",
+              "_id": {
+                "$oid": "69c495b82531fe05c1f7e98d"
+              }
+            }
+          ],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c448b52531fe05c1f74904"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "USA_DESPACHOS",
+          "defaultValue": "N",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c448b52531fe05c1f74905"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "COBRADA",
+          "defaultValue": "N",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c448b52531fe05c1f74906"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "DESCUENTO_CASCADA",
+          "defaultValue": "N",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c448b52531fe05c1f74907"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "CreatedBy",
+          "defaultValue": "SA",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c448b52531fe05c1f74908"
+          }
+        },
+        {
+          "sourceField": "FEC_DES",
+          "targetField": "FECHA_DESPACHO",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "date",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c449ce2531fe05c1f75eec"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "FECHA_RECIBIDO",
+          "defaultValue": "GETDATE()",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c44a0e2531fe05c1f7654f"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "TOTAL_MERCADERIA",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c44a8b2531fe05c1f76bc0"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "COMISION_VENDEDOR",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c44f8b2531fe05c1f77684"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "VERSION_NP",
+          "defaultValue": "1",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c44fb42531fe05c1f77d21"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "FECHA_RIGE",
+          "defaultValue": "GETDATE()",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "date",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c44fd92531fe05c1f783dc"
+          }
+        }
+      ],
+      "filterCondition": "TIP_DOC = 'F' AND DOC_PRO IS NULL",
+      "orderByColumn": "",
+      "executionOrder": 0,
+      "dependsOn": [],
+      "_id": {
+        "$oid": "69c4402d2531fe05c1f71c91"
+      }
+    },
+    {
+      "name": "DET_FACTURA",
+      "sourceTable": "FAC_DET_PED",
+      "targetTable": "CATELLI.FACTURA_LINEA",
+      "primaryKey": "NUM_PED",
+      "targetPrimaryKey": "FACTURA",
+      "isDetailTable": true,
+      "parentTableRef": "FAC_ENC",
+      "foreignKey": "",
+      "joinType": "INNER",
+      "useSameSourceTable": false,
+      "fieldMappings": [
+        {
+          "sourceField": "",
+          "targetField": "FACTURA",
+          "defaultValue": "",
+          "isRequired": true,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c485522531fe05c1f7a244"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "TIPO_DOCUMENTO",
+          "defaultValue": "F",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c485522531fe05c1f7a245"
+          }
+        },
+        {
+          "sourceField": "NUM_LN",
+          "targetField": "LINEA",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c485522531fe05c1f7a246"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "BODEGA",
+          "defaultValue": "01",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c485522531fe05c1f7a247"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "COSTO_TOTAL_DOLAR",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c486392531fe05c1f7a64e"
+          }
+        },
+        {
+          "sourceField": "COD_ART",
+          "targetField": "ARTICULO",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c486392531fe05c1f7a64f"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "ANULADA",
+          "defaultValue": "N",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c486392531fe05c1f7a650"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "FECHA_FACTURA",
+          "defaultValue": "GETDATE()",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "date",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c486392531fe05c1f7a651"
+          }
+        },
+        {
+          "sourceField": "CNT_MAX",
+          "targetField": "CANTIDAD",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c486392531fe05c1f7a652"
+          }
+        },
+        {
+          "sourceField": "MON_PRC_MX",
+          "targetField": "PRECIO_UNITARIO",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c486392531fe05c1f7a653"
+          }
+        },
+        {
+          "sourceField": "PORC_IMPUESTO1",
+          "targetField": "TOTAL_IMPUESTO1",
+          "defaultValue": "",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c486ec2531fe05c1f7aa6c"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "TOTAL_IMPUESTO2",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c486ec2531fe05c1f7aa6d"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "DESC_TOT_LINEA",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c486ec2531fe05c1f7aa6e"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "DESC_TOT_GENERAL",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c486ec2531fe05c1f7aa6f"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "COSTO_TOTAL",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c48edb2531fe05c1f7aebe"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "PRECIO_TOTAL",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c48edb2531fe05c1f7aebf"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "CANTIDAD_DEVUELT",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c48edb2531fe05c1f7aec0"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "DESCUENTO_VOLUMEN",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c48edb2531fe05c1f7aec1"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "TIPO_LINEA",
+          "defaultValue": "N",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c48edb2531fe05c1f7aec2"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "CANTIDAD_ACEPTADA",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c48edb2531fe05c1f7aec3"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "CANT_NO_ENTREGADA",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c48faa2531fe05c1f7b2fa"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "COSTO_TOTAL_LOCAL",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c48faa2531fe05c1f7b2fb"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "MULTIPLICADOR_EV",
+          "defaultValue": "1",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c48faa2531fe05c1f7b2fc"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "CANT_DESPACHADA",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c48faa2531fe05c1f7b2fd"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "COSTO_ESTIM_LOCAL",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c48faa2531fe05c1f7b2fe"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "COSTO_ESTIM_DOLAR",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c48faa2531fe05c1f7b2ff"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "MONTO_RETENCION",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c48faa2531fe05c1f7b300"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "CreatedBy",
+          "defaultValue": "SA",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "text",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c48faa2531fe05c1f7b301"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "COSTO_TOTAL_COMP",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c48faa2531fe05c1f7b302"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "COSTO_TOTAL_COMP_LOCAL",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c490402531fe05c1f7b754"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "COSTO_TOTAL_COMP_DOLAR",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c490402531fe05c1f7b755"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "COSTO_ESTIM_COMP_LOCAL",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c490402531fe05c1f7b756"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "COSTO_ESTIM_COMP_DOLAR",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c490402531fe05c1f7b757"
+          }
+        },
+        {
+          "sourceField": "",
+          "targetField": "CANT_DEV_PROCESO",
+          "defaultValue": "0",
+          "isRequired": false,
+          "removePrefix": "",
+          "valueMappings": [],
+          "lookupFromTarget": false,
+          "lookupQuery": "",
+          "lookupParams": [],
+          "validateExistence": false,
+          "failIfNotFound": false,
+          "unitConversion": {
+            "enabled": false,
+            "operation": "multiply"
+          },
+          "isEditable": true,
+          "showInList": false,
+          "displayOrder": 0,
+          "displayName": "",
+          "fieldGroup": "",
+          "fieldType": "number",
+          "options": null,
+          "isConsecutive": false,
+          "consecutiveId": null,
+          "_id": {
+            "$oid": "69c490402531fe05c1f7b758"
+          }
+        }
+      ],
+      "filterCondition": "",
+      "orderByColumn": "",
+      "executionOrder": 0,
+      "dependsOn": [],
+      "_id": {
+        "$oid": "69c484a82531fe05c1f79893"
+      }
+    }
+  ],
+  "markProcessedField": "DOC_PRO",
+  "markProcessedValue": "S",
+  "markProcessedStrategy": "individual",
+  "markProcessedConfig": {
+    "batchSize": 100,
+    "includeTimestamp": false,
+    "timestampField": "",
+    "allowRollback": false,
+    "_id": {
+      "$oid": "69c4402d2531fe05c1f71c9f"
+    }
+  },
+  "entityType": "invoices",
+  "consecutiveConfig": {
+    "enabled": true,
+    "fieldName": "FACTURA",
+    "detailFieldName": "FACTURA",
+    "lastValue": 0,
+    "prefix": "",
+    "updateAfterTransfer": true,
+    "startValue": 1,
+    "applyToTables": [],
+    "_id": {
+      "$oid": "69c4402d2531fe05c1f71ca0"
+    }
+  },
+  "foreignKeyDependencies": [],
+  "createdAt": {
+    "$date": "2026-03-25T20:06:05.267Z"
+  },
+  "updatedAt": {
+    "$date": "2026-03-25T20:06:05.291Z"
+  },
+  "__v": 0
+}

@@ -2,11 +2,12 @@ import React, { useState } from "react";
 import styled from "styled-components";
 import { Helmet } from "react-helmet-async";
 import {
-  FaSave, FaTimes, FaPlus, FaEdit, FaTrash, FaTable, FaLink, FaFileAlt, FaCogs
+  FaSave, FaTimes, FaPlus, FaEdit, FaTrash, FaTable, FaLink, FaFileAlt, FaCogs, FaChevronDown, FaChevronUp, FaExpand, FaCompress
 } from "react-icons/fa";
 import {
   useAuth,
   useMappingEditor,
+  useConsecutiveManager,
   ConsecutiveConfigSection,
   PromotionConfigSection,
   TableConfigModal,
@@ -19,6 +20,8 @@ import {
   LoadingUI,
   ContentHeader,
 } from "../../index";
+
+const INITIAL_FIELDS_SHOWN = 8;
 
 // === ESTILOS ( Glassmorphism & Atomic Design ) ===
 const Container = styled.div`
@@ -92,7 +95,9 @@ const ListCard = styled.div`
 
 export function MappingEditor({ mappingId, onSave, onCancel }) {
   const { accessToken } = useAuth();
+  const { consecutives } = useConsecutiveManager(accessToken);
   const [activeTab, setActiveTab] = useState("general");
+  const [expandedTables, setExpandedTables] = useState({});
 
   const {
     mapping, loading, saving, isEditing, handleChange, handleSave,
@@ -104,6 +109,17 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
 
   // Estados para Modales
   const [modalState, setModalState] = useState({ type: null, isOpen: false, data: null, extraInfo: null });
+
+  const toggleTableExpansion = (tIdx) => {
+    setExpandedTables(prev => ({
+      ...prev,
+      [tIdx]: !prev[tIdx]
+    }));
+  };
+
+  const isTableExpanded = (tIdx) => {
+    return expandedTables[tIdx] === true;
+  };
 
   const openModal = (type, data = null, extraInfo = null) =>
     setModalState({ type, isOpen: true, data, extraInfo });
@@ -185,12 +201,40 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
             <FormGrid>
               <FormGroup>
                 <Label>Campo Marcado</Label>
-                <Input name="markProcessedField" value={mapping.markProcessedField} onChange={handleChange} />
+                <Input name="markProcessedField" value={mapping.markProcessedField || ""} onChange={handleChange} placeholder="Ej: IS_PROCESSED" />
               </FormGroup>
               <FormGroup>
                 <Label>Valor Marcado</Label>
-                <Input name="markProcessedValue" value={mapping.markProcessedValue} onChange={handleChange} />
+                <Input name="markProcessedValue" value={mapping.markProcessedValue || ""} onChange={handleChange} placeholder="Ej: 1" />
               </FormGroup>
+            </FormGrid>
+
+            <FormGrid>
+              <FormGroup>
+                <Label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                  <input 
+                    type="checkbox" 
+                    name="markProcessedConfig.includeTimestamp"
+                    checked={mapping.markProcessedConfig?.includeTimestamp || false}
+                    onChange={handleChange} 
+                  />
+                  Incluir Fecha de Procesamiento
+                </Label>
+                <small style={{ color: '#666', fontSize: '11px' }}>
+                  Agregar fecha/hora cuando se marca el documento
+                </small>
+              </FormGroup>
+              {mapping.markProcessedConfig?.includeTimestamp && (
+                <FormGroup>
+                  <Label>Campo de Fecha</Label>
+                  <Input 
+                    name="markProcessedConfig.timestampField" 
+                    value={mapping.markProcessedConfig?.timestampField || ""} 
+                    onChange={handleChange}
+                    placeholder="Ej: LAST_PROCESSED_DATE" 
+                  />
+                </FormGroup>
+              )}
             </FormGrid>
 
             <ConsecutiveConfigSection mapping={mapping} handleChange={handleChange} />
@@ -261,12 +305,21 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                 Mapee las tablas de origen con sus correspondientes en el destino y defina la transformación campo por campo.
               </p>
             </div>
-            {mapping.tableConfigs.map((table, tIdx) => (
+            {mapping.tableConfigs.map((table, tIdx) => {
+              const totalFields = table.fieldMappings?.length || 0;
+              const isExpanded = isTableExpanded(tIdx);
+              const fieldsToShow = isExpanded ? totalFields : Math.min(INITIAL_FIELDS_SHOWN, totalFields);
+              const hiddenFields = totalFields - fieldsToShow;
+              
+              return (
               <div key={tIdx} style={{ marginBottom: '32px', border: '1px solid #eee', borderRadius: '16px', padding: '20px' }}>
                 <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
                   <div>
                     <h4 style={{ margin: 0 }}>{table.name} {table.isDetailTable && <StatusBadge status="info">Detalle</StatusBadge>}</h4>
-                    <span style={{ fontSize: '12px', color: '#666' }}>{table.sourceTable || 'Padre'} → {table.targetTable}</span>
+                    <span style={{ fontSize: '12px', color: '#666' }}>
+                      {table.sourceTable || 'Padre'} → {table.targetTable} 
+                      <span style={{ marginLeft: '8px', color: '#999' }}>({totalFields} campos)</span>
+                    </span>
                   </div>
                   <div style={{ display: 'flex', gap: '8px' }}>
                     <Button variant="ghost" onClick={() => openModal('field', null, { tIdx })}><FaPlus /> Campo</Button>
@@ -283,17 +336,23 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                         <th style={{ padding: '12px' }}>Destino</th>
                         <th style={{ padding: '12px' }}>Tipo</th>
                         <th style={{ padding: '12px' }}>Lookup</th>
+                        <th style={{ padding: '12px' }}>Consecutivo</th>
                         <th style={{ padding: '12px' }}>Mapeos</th>
                         <th style={{ padding: '12px' }}>Acciones</th>
                       </tr>
                     </thead>
                     <tbody>
-                      {table.fieldMappings?.map((field, fIdx) => (
+                      {table.fieldMappings?.slice(0, fieldsToShow).map((field, fIdx) => (
                         <tr key={fIdx} style={{ borderBottom: '1px solid #eee' }}>
                           <td style={{ padding: '12px' }}>{field.sourceField || <span style={{ opacity: 0.5 }}>-</span>}</td>
                           <td style={{ padding: '12px' }}><strong>{field.targetField}</strong> {field.isRequired && <span style={{ color: 'red' }}>*</span>}</td>
                           <td style={{ padding: '12px' }}>{field.fieldType}</td>
                           <td style={{ padding: '12px' }}>{field.lookupFromTarget ? <StatusBadge status="active">Sí</StatusBadge> : '-'}</td>
+                          <td style={{ padding: '12px' }}>
+                            {field.isConsecutive
+                              ? <StatusBadge status="warning">🔢 Secuencia</StatusBadge>
+                              : <span style={{ opacity: 0.4 }}>-</span>}
+                          </td>
                           <td style={{ padding: '12px' }}>
                             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
                               <span>{field.valueMappings?.length || 0}</span>
@@ -310,9 +369,26 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
                       ))}
                     </tbody>
                   </table>
+                  
+                  {totalFields > INITIAL_FIELDS_SHOWN && (
+                    <div style={{ 
+                      display: 'flex', 
+                      justifyContent: 'center', 
+                      alignItems: 'center', 
+                      padding: '12px',
+                      marginTop: '8px',
+                      background: '#f8f9fa',
+                      borderRadius: '8px',
+                      cursor: 'pointer'
+                    }} onClick={() => toggleTableExpansion(tIdx)}>
+                      <Button variant="ghost" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                        {isExpanded ? <><FaChevronUp /> Mostrar menos</> : <><FaChevronDown /> Mostrar {hiddenFields} campos más</>}
+                      </Button>
+                    </div>
+                  )}
                 </div>
               </div>
-            ))}
+            )})}
           </div>
         )}
       </ContentCard>
@@ -328,6 +404,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
       <FieldMappingModal
         isOpen={modalState.isOpen && modalState.type === 'field'}
         initialData={modalState.data}
+        consecutives={consecutives}
         onClose={closeModal}
         onSave={(data) => modalState.data ? updateFieldMapping(modalState.extraInfo.tIdx, modalState.extraInfo.fIdx, data) : addFieldMapping(modalState.extraInfo.tIdx, data)}
       />

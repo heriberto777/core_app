@@ -7,16 +7,35 @@ class LoadsController {
    * Obtiene pedidos pendientes de cargar
    */
   static async getPendingOrders(req, res) {
+    const startTime = Date.now();
     try {
       const filters = {
         dateFrom: req.query.dateFrom,
         dateTo: req.query.dateTo,
-        seller: req.query.sellers,
+        sellers: req.query.sellers,
         transferStatus: req.query.transferStatus,
         includeLoaded: req.query.includeLoaded === "true",
       };
 
+      logger.info("Obteniendo pedidos pendientes", {
+        operationType: "QUERY",
+        entityType: "PEDIDO",
+        filters,
+        httpMethod: req.method,
+        httpPath: req.originalUrl,
+      });
+
       const result = await LoadsService.getPendingOrders(filters);
+
+      logger.info("Pedidos obtenidos correctamente", {
+        operationType: "QUERY",
+        entityType: "PEDIDO",
+        affectedRecords: result.totalRecords,
+        durationMs: Date.now() - startTime,
+        httpMethod: req.method,
+        httpPath: req.originalUrl,
+        httpStatusCode: 200,
+      });
 
       return res.status(200).json({
         success: true,
@@ -25,7 +44,17 @@ class LoadsController {
         totalRecords: result.totalRecords,
       });
     } catch (error) {
-      logger.error("Error en getPendingOrders:", error);
+      logger.error("Error en getPendingOrders", {
+        operationType: "QUERY",
+        entityType: "PEDIDO",
+        error: error.message,
+        stack: error.stack,
+        filters: req.query,
+        durationMs: Date.now() - startTime,
+        httpMethod: req.method,
+        httpPath: req.originalUrl,
+        httpStatusCode: 500,
+      });
       return res.status(500).json({
         success: false,
         message: "Error al obtener pedidos pendientes",
@@ -37,9 +66,30 @@ class LoadsController {
    * Obtiene detalles de líneas de un pedido específico
    */
   static async getOrderDetails(req, res) {
+    const startTime = Date.now();
     try {
       const { pedidoId } = req.params;
+      
+      logger.info("Obteniendo detalles del pedido", {
+        operationType: "QUERY",
+        entityType: "PEDIDO",
+        entityId: pedidoId,
+        httpMethod: req.method,
+        httpPath: req.originalUrl,
+      });
+
       const result = await LoadsService.getOrderDetails(pedidoId);
+
+      logger.info("Detalles del pedido obtenidos", {
+        operationType: "QUERY",
+        entityType: "PEDIDO",
+        entityId: pedidoId,
+        affectedRecords: result.data?.length || 0,
+        durationMs: Date.now() - startTime,
+        httpMethod: req.method,
+        httpPath: req.originalUrl,
+        httpStatusCode: 200,
+      });
 
       return res.status(200).json({
         success: true,
@@ -47,7 +97,17 @@ class LoadsController {
         data: result.data,
       });
     } catch (error) {
-      logger.error(`Error en getOrderDetails (${req.params.pedidoId}):`, error);
+      logger.error("Error en getOrderDetails", {
+        operationType: "QUERY",
+        entityType: "PEDIDO",
+        entityId: req.params.pedidoId,
+        error: error.message,
+        stack: error.stack,
+        durationMs: Date.now() - startTime,
+        httpMethod: req.method,
+        httpPath: req.originalUrl,
+        httpStatusCode: 500,
+      });
       return res.status(500).json({
         success: false,
         message: "Error al obtener detalles del pedido",
@@ -59,11 +119,22 @@ class LoadsController {
    * Obtiene lista de vendedores activos
    */
   static async getSellers(req, res) {
-    console.log("!!! [CONTROLLER] getSellers HIT !!!");
+    const startTime = Date.now();
     try {
-      console.log("DEBUG: Calling LoadsService.getSellers()...");
+      logger.debug("Obteniendo lista de vendedores");
+      
       const result = await LoadsService.getSellers();
-      console.log(`DEBUG: getSellers Success, found ${result.data?.length || 0} sellers`);
+
+      logger.info("Vendedores obtenidos correctamente", {
+        operationType: "QUERY",
+        entityType: "VENDEDOR",
+        affectedRecords: result.data?.length || 0,
+        durationMs: Date.now() - startTime,
+        httpMethod: req.method,
+        httpPath: req.originalUrl,
+        httpStatusCode: 200,
+      });
+
       return res.status(200).json({
         success: true,
         message: "Vendedores obtenidos correctamente",
@@ -71,15 +142,29 @@ class LoadsController {
       });
     } catch (error) {
       if (error instanceof AggregateError) {
-        logger.error(`AggregateError en getSellers (${error.errors.length} errores):`, {
-          errors: error.errors.map(e => ({ message: e.message, code: e.code, stack: e.stack }))
+        logger.error("AggregateError en getSellers", {
+          operationType: "QUERY",
+          entityType: "VENDEDOR",
+          errorCode: "AGGREGATE_ERROR",
+          errorDetails: {
+            errorsCount: error.errors.length,
+            errors: error.errors.map(e => ({ message: e.message, code: e.code }))
+          },
+          durationMs: Date.now() - startTime,
+          httpMethod: req.method,
+          httpPath: req.originalUrl,
+          httpStatusCode: 500,
         });
       } else {
-        logger.error("Error en getSellers:", {
-          message: error.message,
-          code: error.code,
+        logger.error("Error en getSellers", {
+          operationType: "QUERY",
+          entityType: "VENDEDOR",
+          error: error.message,
           stack: error.stack,
-          full: JSON.stringify(error, Object.getOwnPropertyNames(error))
+          durationMs: Date.now() - startTime,
+          httpMethod: req.method,
+          httpPath: req.originalUrl,
+          httpStatusCode: 500,
         });
       }
       return res.status(500).json({
@@ -93,11 +178,34 @@ class LoadsController {
    * Obtiene todos los repartidores
    */
   static async getDeliveryPersons(req, res) {
+    const startTime = Date.now();
     try {
+      logger.debug("Obteniendo lista de repartidores");
+      
       const result = await LoadsService.getDeliveryPersons();
+
+      logger.info("Repartidores obtenidos correctamente", {
+        operationType: "QUERY",
+        entityType: "VENDEDOR",
+        affectedRecords: result.data?.length || 0,
+        durationMs: Date.now() - startTime,
+        httpMethod: req.method,
+        httpPath: req.originalUrl,
+        httpStatusCode: 200,
+      });
+
       return res.status(200).json({ success: true, data: result });
     } catch (error) {
-      logger.error("Error en getDeliveryPersons:", error);
+      logger.error("Error en getDeliveryPersons", {
+        operationType: "QUERY",
+        entityType: "VENDEDOR",
+        error: error.message,
+        stack: error.stack,
+        durationMs: Date.now() - startTime,
+        httpMethod: req.method,
+        httpPath: req.originalUrl,
+        httpStatusCode: 500,
+      });
       return res.status(500).json({ success: false, message: "Error al obtener repartidores" });
     }
   }
@@ -107,17 +215,38 @@ class LoadsController {
    * Procesa la carga de pedidos seleccionados
    */
   static async processOrderLoad(req, res) {
+    const startTime = Date.now();
     try {
       const { selectedPedidos, deliveryPersonCode } = req.body;
       const userId = req.user?.user_id || req.user?._id || "SYSTEM";
 
-      logger.info(`Procesando carga de ${selectedPedidos?.length || 0} pedidos para repartidor ${deliveryPersonCode} por ${userId}`);
+      logger.info("Procesando carga de pedidos", {
+        operationType: "LOAD",
+        entityType: "CARGA",
+        affectedRecords: selectedPedidos?.length || 0,
+        deliveryPersonCode,
+        userId,
+        httpMethod: req.method,
+        httpPath: req.originalUrl,
+      });
 
       const result = await LoadsService.processOrderLoad(
         deliveryPersonCode.trim(),
         selectedPedidos,
         userId
       );
+
+      logger.info("Carga procesada correctamente", {
+        operationType: "LOAD",
+        entityType: "CARGA",
+        entityId: result.loadId,
+        loadId: result.loadId,
+        affectedRecords: selectedPedidos?.length || 0,
+        durationMs: Date.now() - startTime,
+        httpMethod: req.method,
+        httpPath: req.originalUrl,
+        httpStatusCode: 200,
+      });
 
       return res.status(200).json({
         success: result.success !== false,
@@ -133,7 +262,19 @@ class LoadsController {
         }
       });
     } catch (error) {
-      logger.error("Error en processOrderLoad:", error);
+      logger.error("Error en processOrderLoad", {
+        operationType: "LOAD",
+        entityType: "CARGA",
+        error: error.message,
+        stack: error.stack,
+        affectedRecords: req.body.selectedPedidos?.length || 0,
+        deliveryPersonCode: req.body.deliveryPersonCode,
+        userId: req.user?.user_id || req.user?._id || "SYSTEM",
+        durationMs: Date.now() - startTime,
+        httpMethod: req.method,
+        httpPath: req.originalUrl,
+        httpStatusCode: 500,
+      });
       return res.status(500).json({
         success: false,
         message: error.message || "Error al procesar la carga",

@@ -281,6 +281,26 @@ class MongoDBTransport extends Transport {
       ip: rest.ip,
       sessionId: rest.sessionId,
       requestId: rest.requestId,
+      // === CAMPOS OPERACIONALES ===
+      operationType: rest.operationType || "OTHER",
+      entityType: rest.entityType || "OTHER",
+      entityId: rest.entityId,
+      affectedRecords: rest.affectedRecords || 0,
+      durationMs: rest.durationMs || 0,
+      // === CAMPOS ADICIONALES ===
+      serverSource: rest.serverSource || "unknown",
+      query: rest.query,
+      // === CONTEXTO HTTP ===
+      httpMethod: rest.httpMethod,
+      httpPath: rest.httpPath,
+      httpStatusCode: rest.httpStatusCode,
+      // === CAMPOS DE ERROR ===
+      errorCode: rest.errorCode,
+      errorDetails: rest.errorDetails,
+      // === CAMPOS DE TRANSACCIÓN ===
+      transactionId: rest.transactionId,
+      loadId: rest.loadId,
+      taskId: rest.taskId,
     };
   }
 
