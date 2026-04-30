@@ -76,9 +76,18 @@ class LoadsSQLService {
                     params.dateTo = endDate;
                 }
 
-                if (filters.seller && filters.seller !== "all") {
-                    baseQuery += " AND pe.VENDEDOR = @seller";
-                    params.seller = filters.seller;
+                if (filters.sellers) {
+                    const sellerList = typeof filters.sellers === 'string'
+                        ? filters.sellers.split(',').filter(s => s.trim() !== '')
+                        : (Array.isArray(filters.sellers) ? filters.sellers : []);
+
+                    if (sellerList.length > 0) {
+                        const sellerPlaceholders = sellerList.map((_, i) => `@seller${i}`).join(", ");
+                        baseQuery += ` AND pe.VENDEDOR IN (${sellerPlaceholders})`;
+                        sellerList.forEach((s, i) => {
+                            params[`seller${i}`] = s.trim();
+                        });
+                    }
                 }
 
                 const fullQuery = `
@@ -254,7 +263,9 @@ class LoadsSQLService {
             const query = `
         SELECT
           VENDEDOR as code, NOMBRE as name,
-          U_BODEGA as assignedWarehouse, U_ESVENDEDOR as isVendedor, ACTIVO as isActive
+          U_BODEGA as assignedWarehouse, 
+          U_BODEGA_CENTRAL as warehouseCentral,
+          U_ESVENDEDOR as isVendedor, ACTIVO as isActive
         FROM CATELLI.VENDEDOR
         WHERE VENDEDOR = @deliveryPersonCode AND ACTIVO = 'S'
       `;
@@ -269,7 +280,7 @@ class LoadsSQLService {
                 throw new Error(`Repartidor ${deliveryPersonCode} no tiene bodega asignada (U_BODEGA)`);
             }
 
-            logger.info(`Repartidor: ${deliveryPerson.name} — Bodega: ${deliveryPerson.assignedWarehouse}`);
+            logger.info(`Repartidor: ${deliveryPerson.name} — Bodega: ${deliveryPerson.assignedWarehouse} — Bodega Central: ${deliveryPerson.warehouseCentral}`);
             return deliveryPerson;
         });
     }
@@ -427,12 +438,14 @@ class LoadsSQLService {
           pe.RUBRO5, GETDATE() as FECHA_PROMETIDA, pe.FECHA_PEDIDO,
           pe.CLIENTE, pe.VENDEDOR, pe.RUBRO4,
           cl.detalle_direccion, ar.ARTICULO, ar.UNIDAD_ALMACEN,
-          pl.BODEGA as BODEGA_ORIGEN_REAL,
-          pl.LOCALIZACION as LOCALIZACION_ORIGEN_REAL
+          pl.BODEGA as BODEGA_LINEA,
+          pl.LOCALIZACION as LOCALIZACION_ORIGEN_REAL,
+          v.U_BODEGA_CENTRAL as BODEGA_ORIGEN_REAL
         FROM CATELLI.PEDIDO_LINEA AS pl
         INNER JOIN CATELLI.PEDIDO AS pe ON pe.PEDIDO = pl.PEDIDO
         INNER JOIN CATELLI.CLIENTE AS cl ON cl.CLIENTE = pe.CLIENTE
         LEFT JOIN CATELLI.ARTICULO AS ar ON ar.ARTICULO = pl.ARTICULO
+        LEFT JOIN CATELLI.VENDEDOR AS v ON v.VENDEDOR = pe.VENDEDOR
         WHERE pe.PEDIDO IN (${pedidosList})
         AND pe.U_Code_Load = @loadId
       ),
@@ -463,7 +476,7 @@ class LoadsSQLService {
         CONVERT(VARCHAR, FECHA_PEDIDO, 112) AS Order_Date,
         CASE
           WHEN SUBSTRING(CLIENTE, PATINDEX('%[A-Za-z]%', CLIENTE), 1) NOT IN ('O','R')
-            THEN 'C' + CLIENTE ELSE CLIENTE
+            THEN 'CN' + CLIENTE ELSE CLIENTE
         END AS Code_Account,
         ARTICULO AS Code_Product, '999999999' AS Lot_Number,
         CAST(Cantidad AS NUMERIC(11,3)) AS Quantity,
@@ -548,7 +561,7 @@ class LoadsSQLService {
           Code_Warehouse_Sou, Code_Route, Source_Create, Transfer_status
         ) VALUES (
           @Code, @Num_Line, '999999999', @Code_Product, @Date_Load, @Quantity, 'UND',
-          @route, @route, '0', '1'
+          @warehouseSource, @route, '0', '1'
         )
       `, {
                 Code: loadId,
@@ -556,6 +569,7 @@ class LoadsSQLService {
                 Code_Product: product.Code_Product,
                 Date_Load: product.Order_Date,
                 Quantity: product.Quantity,
+                warehouseSource: product.Code_Warehouse_Orig,
                 route
             });
         }

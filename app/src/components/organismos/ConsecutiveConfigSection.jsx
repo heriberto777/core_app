@@ -684,7 +684,43 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
         </SystemSelectionContainer>
       )}
 
-      {/* Solo mostrar la configuración local si se selecciona el sistema local */}
+      {/* Mostrar configuración de campos de destino cuando está habilitado */}
+      {isEnabled && useCentralizedSystem && (
+        <FieldNameSection>
+          <FormLabel>Campo de destino para el consecutivo (encabezado):</FormLabel>
+          <HelpText>
+            Configure el nombre del campo en la tabla de destino donde se guardará el valor del consecutivo. 
+            Debe coincidir con el campo configurado en el mapping de campos (targetField).
+          </HelpText>
+          <FormGroup>
+            <FormInput
+              type="text"
+              id="field-name-centralized"
+              name="consecutiveConfig.fieldName"
+              placeholder="Ej: FACTURA, PEDIDO, NUM_FACTURA"
+              value={consecutiveConfig.fieldName || ""}
+              onChange={handleChange}
+            />
+          </FormGroup>
+
+          <FormLabel>Campo de destino para el consecutivo (detalle):</FormLabel>
+          <HelpText>
+            Campo en la tabla de detalle que recibirá el mismo valor del consecutivo (opcional).
+          </HelpText>
+          <FormGroup>
+            <FormInput
+              type="text"
+              id="detail-field-name-centralized"
+              name="consecutiveConfig.detailFieldName"
+              placeholder="Ej: PEDIDO, NUM_DOC"
+              value={consecutiveConfig.detailFieldName || ""}
+              onChange={handleChange}
+            />
+          </FormGroup>
+        </FieldNameSection>
+      )}
+
+      {/* Solo mostrar la configuración local completa si se selecciona el sistema local */}
       {isEnabled && !useCentralizedSystem && (
         <>
           <FormGroup>
@@ -840,6 +876,14 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
     </ConfigSection>
   );
 };
+
+const FieldNameSection = styled.div`
+  margin-top: 1.5rem;
+  padding: 1rem;
+  background-color: ${({ theme }) => theme.hoverBg}30;
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.border};
+`;
 
 export default ConsecutiveConfigSection;
 

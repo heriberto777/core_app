@@ -45,9 +45,38 @@ export function DocumentsDataTable({
     const displayFields = mainTable?.fieldMappings?.filter(f => f.showInList)
         .sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
 
+    // Usar primaryKey configurado o fallback a primera columna
+    const primaryKeyField = mainTable?.primaryKey;
+    
+    // Verificar qué columnas realmente existen en los datos
+    const sampleDoc = documents[0];
+    const availableKeys = Object.keys(sampleDoc || {});
+    
+    // Determinar el campo ID para selección
+    const idField = primaryKeyField && availableKeys.includes(primaryKeyField) 
+        ? primaryKeyField 
+        : availableKeys[0]; // Fallback a primera columna
+
     const columns = displayFields && displayFields.length > 0
-        ? displayFields.map(f => ({ key: f.sourceField, label: f.displayName || f.targetField }))
-        : Object.keys(documents[0]).map(k => ({ key: k, label: k }));
+        ? displayFields
+            .map(f => {
+                // Buscar coincidencia en datos (sourceField o targetField)
+                const sourceKey = f.sourceField;
+                const targetKey = f.targetField;
+                
+                // Verificar si existe el campo sourceField
+                if (availableKeys.includes(sourceKey)) {
+                    return { key: sourceKey, label: f.displayName || f.targetField || sourceKey, found: true };
+                }
+                // Si no existe sourceField, buscar por targetField (para backward compatibility)
+                else if (targetKey && availableKeys.includes(targetKey)) {
+                    return { key: targetKey, label: f.displayName || targetKey, found: true };
+                }
+                // No se encontró el campo
+                return { key: sourceKey, label: f.displayName || f.targetField || sourceKey, found: false };
+            })
+            .filter(col => col.found) // Solo mostrar columnas que existen en los datos
+        : availableKeys.map(k => ({ key: k, label: k, found: true }));
 
     const allSelected = documents.length > 0 && selectedIds.length === documents.length;
 
@@ -65,7 +94,8 @@ export function DocumentsDataTable({
                 </thead>
                 <tbody>
                     {documents.map((doc, idx) => {
-                        const id = doc[Object.keys(doc)[0]];
+                        // Usar primaryKey configurado o primera columna
+                        const id = doc[idField];
                         const isSelected = selectedIds.includes(id);
 
                         return (

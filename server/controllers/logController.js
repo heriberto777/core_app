@@ -201,10 +201,66 @@ const getLogSources = async (req, res) => {
   }
 };
 
+/**
+ * Diagnosticar estado del sistema de logging
+ */
+const getLogsDiagnostic = async (req, res) => {
+  try {
+    const logger = require("../services/logger");
+    const Log = require("../models/loggerModel");
+    
+    const diagnostics = logger.getDiagnostics();
+    
+    // Agregar estadísticas adicionales de MongoDB
+    const mongoStats = {
+      totalLogs: await Log.countDocuments(),
+      logsLast24h: await Log.countDocuments({
+        timestamp: { $gte: new Date(Date.now() - 24 * 60 * 60 * 1000) }
+      }),
+      logsLastHour: await Log.countDocuments({
+        timestamp: { $gte: new Date(Date.now() - 60 * 60 * 1000) }
+      }),
+      errorCount: await Log.countDocuments({ level: "error" }),
+      warnCount: await Log.countDocuments({ level: "warn" }),
+      infoCount: await Log.countDocuments({ level: "info" }),
+      debugCount: await Log.countDocuments({ level: "debug" }),
+    };
+    
+    // Obtener niveles disponibles en la colección
+    const levels = await Log.distinct("level");
+    const sources = await Log.distinct("source");
+    const operationTypes = await Log.distinct("operationType").catch(() => []);
+    const entityTypes = await Log.distinct("entityType").catch(() => []);
+    
+    return res.status(200).json({
+      success: true,
+      message: "Diagnóstico del sistema de logs",
+      data: {
+        ...diagnostics,
+        mongoStats,
+        availableFilters: {
+          levels,
+          sources,
+          operationTypes,
+          entityTypes,
+        },
+        timestamp: new Date().toISOString(),
+      }
+    });
+  } catch (error) {
+    return res.status(500).json({ 
+      success: false, 
+      message: "Error al obtener diagnóstico", 
+      error: error.message 
+    });
+  }
+};
+
 module.exports = {
   getLogs,
   getLogsSummary,
   getLogDetail,
   cleanOldLogs,
   getLogSources,
+  getLogsDiagnostic,
 };

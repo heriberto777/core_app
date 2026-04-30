@@ -9,7 +9,7 @@ const getLinkedGroups = async (req, res) => {
     const groups = await TransferTask.aggregate([
       {
         $match: {
-          linkedGroup: { $exists: true, $ne: null, $ne: "", $type: "string" },
+          linkedGroup: { $exists: true, $nin: [null, ""], $type: "string" },
           active: true,
         },
       },
@@ -222,9 +222,9 @@ const debugProblematicTasks = async (req, res) => {
   try {
     const problematicTasks = await TransferTask.find({
       $or: [
-        { linkedGroup: { $in: [null, ""] }, executeLinkedTasks: true },
-        { postUpdateQuery: { $exists: true, $ne: null, $ne: "" }, "linkingMetadata.isCoordinator": { $ne: true } },
-        { linkedGroup: { $exists: true, $ne: null, $ne: "" }, executeLinkedTasks: false },
+        { linkedGroup: { $exists: true, $nin: [null, ""] }, executeLinkedTasks: true },
+        { postUpdateQuery: { $exists: true, $nin: [null, ""] }, "linkingMetadata.isCoordinator": { $ne: true } },
+        { linkedGroup: { $exists: true, $nin: [null, ""] }, executeLinkedTasks: false },
       ],
     }).select("name linkedGroup executeLinkedTasks postUpdateQuery linkingMetadata").lean();
 

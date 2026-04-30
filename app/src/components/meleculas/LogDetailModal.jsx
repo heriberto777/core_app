@@ -104,7 +104,8 @@ export const LogDetailModal = ({ log, onClose }) => {
                     <CloseButton onClick={onClose}><FaTimes /></CloseButton>
                 </Header>
                 <Body>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '20px' }}>
+                    {/* Sección 1: Información básica */}
+                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px' }}>
                         <DetailRow>
                             <Label>Nivel</Label>
                             <StatusBadge status={log.level}>{log.level}</StatusBadge>
@@ -113,18 +114,110 @@ export const LogDetailModal = ({ log, onClose }) => {
                             <Label>Fecha</Label>
                             <Value>{new Date(log.timestamp).toLocaleString()}</Value>
                         </DetailRow>
+                        <DetailRow>
+                            <Label>Fuente</Label>
+                            <Value>{log.source || "Sistema Central"}</Value>
+                        </DetailRow>
                     </div>
 
-                    <DetailRow>
-                        <Label>Fuente</Label>
-                        <Value>{log.source || "Sistema Central"}</Value>
-                    </DetailRow>
+                    {/* Sección 2: Información operacional */}
+                    {(log.operationType || log.entityType) && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px' }}>
+                            {log.operationType && (
+                                <DetailRow>
+                                    <Label>Tipo de Operación</Label>
+                                    <Value style={{ color: '#3b82f6', fontWeight: 600 }}>{log.operationType}</Value>
+                                </DetailRow>
+                            )}
+                            {log.entityType && (
+                                <DetailRow>
+                                    <Label>Tipo de Entidad</Label>
+                                    <Value style={{ color: '#22c55e', fontWeight: 600 }}>{log.entityType}</Value>
+                                </DetailRow>
+                            )}
+                            {log.entityId && (
+                                <DetailRow>
+                                    <Label>ID de Entidad</Label>
+                                    <Value>{log.entityId}</Value>
+                                </DetailRow>
+                            )}
+                            {log.affectedRecords > 0 && (
+                                <DetailRow>
+                                    <Label>Registros Afectados</Label>
+                                    <Value style={{ fontWeight: 600 }}>{log.affectedRecords}</Value>
+                                </DetailRow>
+                            )}
+                        </div>
+                    )}
 
+                    {/* Sección 3: Rendimiento */}
+                    {(log.durationMs > 0 || log.durationMs !== undefined) && (
+                        <DetailRow>
+                            <Label>Duración</Label>
+                            <Value style={{ 
+                                color: log.durationMs < 1000 ? '#22c55e' : log.durationMs < 5000 ? '#eab308' : '#ef4444',
+                                fontWeight: 600 
+                            }}>
+                                {log.durationMs} ms
+                                {log.durationMs < 1000 && " ✅"}
+                                {log.durationMs >= 1000 && log.durationMs < 5000 && " ⚠️"}
+                                {log.durationMs >= 5000 && " 🔴"}
+                            </Value>
+                        </DetailRow>
+                    )}
+
+                    {/* Sección 4: Mensaje */}
                     <DetailRow>
                         <Label>Mensaje</Label>
-                        <Value style={{ fontWeight: 500 }}>{log.message}</Value>
+                        <Value style={{ fontWeight: 500, fontSize: '15px' }}>{log.message}</Value>
                     </DetailRow>
 
+                    {/* Sección 5: Contexto HTTP */}
+                    {(log.httpMethod || log.httpPath) && (
+                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px' }}>
+                            {log.httpMethod && (
+                                <DetailRow>
+                                    <Label>Método HTTP</Label>
+                                    <Value style={{ fontWeight: 600, color: '#8b5cf6' }}>{log.httpMethod}</Value>
+                                </DetailRow>
+                            )}
+                            {log.httpPath && (
+                                <DetailRow>
+                                    <Label>Ruta HTTP</Label>
+                                    <Value style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.httpPath}</Value>
+                                </DetailRow>
+                            )}
+                            {log.httpStatusCode && (
+                                <DetailRow>
+                                    <Label>Status Code</Label>
+                                    <Value style={{ 
+                                        fontWeight: 600,
+                                        color: log.httpStatusCode < 400 ? '#22c55e' : '#ef4444'
+                                    }}>
+                                        {log.httpStatusCode}
+                                    </Value>
+                                </DetailRow>
+                            )}
+                        </div>
+                    )}
+
+                    {/* Sección 6: Error */}
+                    {(log.errorCode || log.error) && (
+                        <DetailRow>
+                            <Label>Código de Error</Label>
+                            <Value style={{ color: '#ef4444', fontWeight: 600 }}>{log.errorCode || log.error}</Value>
+                        </DetailRow>
+                    )}
+
+                    {/* Sección 7: Query SQL */}
+                    {log.query && (
+                        <DetailRow>
+                            <Label>Query SQL</Label>
+                            <CodeBlock>{log.query}</CodeBlock>
+                        </DetailRow>
+                    )}
+
+                    {/* Sección 8: Metadata */}
                     {log.metadata && (
                         <DetailRow>
                             <Label>Metadata</Label>
@@ -136,10 +229,11 @@ export const LogDetailModal = ({ log, onClose }) => {
                         </DetailRow>
                     )}
 
+                    {/* Sección 9: Stack Trace */}
                     {log.stack && (
                         <DetailRow>
                             <Label>Stack Trace</Label>
-                            <CodeBlock style={{ color: ({ theme }) => theme.danger }}>
+                            <CodeBlock style={{ color: '#ef4444' }}>
                                 {log.stack}
                             </CodeBlock>
                         </DetailRow>

@@ -28,19 +28,61 @@ export function LogsPage() {
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [deleteOlderThan, setDeleteOlderThan] = useState(30);
 
-  const {
+const {
     logs,
     meta,
     loading,
     refreshing,
     error,
+    logType,
     filters,
     pagination,
     actions
   } = useAuditLogs(accessToken, "system");
 
+  const operationTypes = ["TRANSFER", "LOAD", "DELETE", "UPDATE", "CREATE", "QUERY", "EXECUTE"];
+  const entityTypes = ["PEDIDO", "CLIENTE", "CARGA", "ARTICULO", "VENDEDOR", "TRASPASO", "TAREA", "USUARIO"];
+
   const handleFilterChange = (name, value) => {
     actions.updateFilters({ [name]: value });
+  };
+
+  const handleMultiSelectChange = (name, options) => {
+    actions.updateFilters({ [name]: options });
+  };
+
+  const getOperationTypeColor = (type) => {
+    const colors = {
+      TRANSFER: "#3b82f6",
+      LOAD: "#22c55e",
+      DELETE: "#ef4444",
+      UPDATE: "#eab308",
+      CREATE: "#a855f7",
+      QUERY: "#06b6d4",
+      EXECUTE: "#f97316",
+    };
+    return colors[type] || "#6b7280";
+  };
+
+  const getEntityTypeColor = (type) => {
+    const colors = {
+      PEDIDO: "#f97316",
+      CLIENTE: "#3b82f6",
+      CARGA: "#22c55e",
+      ARTICULO: "#8b5cf6",
+      VENDEDOR: "#06b6d4",
+      TRASPASO: "#ec4899",
+      TAREA: "#eab308",
+      USUARIO: "#6366f1",
+    };
+    return colors[type] || "#6b7280";
+  };
+
+  const getDurationColor = (ms) => {
+    if (!ms) return "#6b7280";
+    if (ms < 1000) return "#22c55e";
+    if (ms < 5000) return "#eab308";
+    return "#ef4444";
   };
 
   const handleClearLogs = async () => {
@@ -72,10 +114,34 @@ export function LogsPage() {
             <FaFilter />
             <select value={filters.level} onChange={(e) => handleFilterChange("level", e.target.value)}>
               <option value="all">Todos los niveles</option>
-              <option value="INFO">Información</option>
-              <option value="WARNING">Advertencias</option>
-              <option value="ERROR">Errores</option>
-              <option value="CRITICAL">Críticos</option>
+              <option value="error">Errores</option>
+              <option value="warn">Advertencias</option>
+              <option value="info">Información</option>
+              <option value="debug">Debug</option>
+            </select>
+          </FilterItem>
+
+          <FilterItem>
+            <select 
+              value={filters.operationType?.[0] || ""} 
+              onChange={(e) => handleFilterChange("operationType", e.target.value ? [e.target.value] : [])}
+            >
+              <option value="">Todas las operaciones</option>
+              {operationTypes.map(op => (
+                <option key={op} value={op}>{op}</option>
+              ))}
+            </select>
+          </FilterItem>
+
+          <FilterItem>
+            <select 
+              value={filters.entityType?.[0] || ""} 
+              onChange={(e) => handleFilterChange("entityType", e.target.value ? [e.target.value] : [])}
+            >
+              <option value="">Todas las entidades</option>
+              {entityTypes.map(ent => (
+                <option key={ent} value={ent}>{ent}</option>
+              ))}
             </select>
           </FilterItem>
 
@@ -117,11 +183,26 @@ export function LogsPage() {
           <LogCard key={log._id} onClick={() => { setSelectedLog(log); setShowLogDetail(true); }}>
             <LogHeader>
               <StatusBadge status={log.level}>{log.level}</StatusBadge>
+              {log.operationType && (
+                <Badge $color={getOperationTypeColor(log.operationType)}>{log.operationType}</Badge>
+              )}
+              {log.entityType && (
+                <Badge $color={getEntityTypeColor(log.entityType)}>{log.entityType}</Badge>
+              )}
               <span className="timestamp">{new Date(log.timestamp).toLocaleString()}</span>
             </LogHeader>
             <LogContent>
               <p className="message">{log.message}</p>
-              {log.source && <span className="source">Source: {log.source}</span>}
+              <LogMeta>
+                {log.source && <span className="source">Source: {log.source}</span>}
+                {log.entityId && <span className="entityId">ID: {log.entityId}</span>}
+                {log.affectedRecords > 0 && <span className="affected">Registros: {log.affectedRecords}</span>}
+                {log.durationMs > 0 && (
+                  <span className="duration" $color={getDurationColor(log.durationMs)}>
+                    ⏱ {log.durationMs}ms
+                  </span>
+                )}
+              </LogMeta>
             </LogContent>
           </LogCard>
         ))}
@@ -267,16 +348,36 @@ const LogCard = styled.div`
 
 const LogHeader = styled.div`
   display: flex;
-  justify-content: space-between;
+  justify-content: flex-start;
   align-items: center;
   margin-bottom: 6px;
+  gap: 8px;
 
-  .timestamp { font-size: 12px; color: ${({ theme }) => theme.textSecondary}; font-family: monospace; }
+  .timestamp { font-size: 12px; color: ${({ theme }) => theme.textSecondary}; font-family: monospace; margin-left: auto; }
+`;
+
+const Badge = styled.span`
+  padding: 2px 8px;
+  border-radius: 4px;
+  font-size: 10px;
+  font-weight: 600;
+  color: white;
+  background: ${({ $color }) => $color || "#6b7280"};
+  text-transform: uppercase;
 `;
 
 const LogContent = styled.div`
   .message { margin: 0; font-size: 14px; color: ${({ theme }) => theme.text}; font-weight: 500; }
-  .source { font-size: 11px; color: ${({ theme }) => theme.textSecondary}; margin-top: 4px; display: block; }
+`;
+
+const LogMeta = styled.div`
+  display: flex;
+  gap: 12px;
+  margin-top: 6px;
+  flex-wrap: wrap;
+  
+  .source, .entityId, .affected { font-size: 11px; color: ${({ theme }) => theme.textSecondary}; }
+  .duration { font-size: 11px; font-weight: 600; }
 `;
 
 const PaginationArea = styled.div`

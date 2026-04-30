@@ -1,5 +1,6 @@
 const TransferTask = require("../models/transferTaskModel");
 const TransferSummary = require("../models/transferSummaryModel");
+const TaskExecution = require("../models/taskExecutionModel");
 const {
   executeTransferManual,
   insertInBatchesSSE,
@@ -132,7 +133,7 @@ const upsertTransferTaskController = async (req, res) => {
     if (cleanLinkedGroup && postUpdateQuery && postUpdateQuery.trim() !== "") {
       const existingCoordinators = await TransferTask.find({
         linkedGroup: cleanLinkedGroup,
-        postUpdateQuery: { $exists: true, $ne: null, $ne: "" },
+        postUpdateQuery: { $exists: true, $nin: [null, ""] },
         _id: { $ne: _id },
         active: true,
       }).lean();
@@ -663,7 +664,27 @@ const getTaskExecutionHistory = async (req, res) => {
     const task = await TransferTask.findById(taskId).lean();
     if (!task) return res.status(404).json({ success: false, message: "Tarea no encontrada" });
 
-    const summaries = await TransferSummary.find({ taskName: task.name }).sort({ date: -1 }).limit(50).lean();
+    // Obtener desde TaskExecution (donde realmente se guardan los datos)
+    const executions = await TaskExecution.find({ taskId: taskId })
+      .sort({ date: -1 })
+      .limit(50)
+      .lean();
+
+    const enrichedHistory = executions.map(exec => ({
+      _id: exec._id,
+      date: exec.date,
+      status: exec.status,
+      totalRecords: exec.totalRecords || 0,
+      successfulRecords: exec.successfulRecords || 0,
+      failedRecords: exec.failedRecords || 0,
+      inserted: exec.details?.inserted || exec.successfulRecords || 0,
+      updated: exec.details?.updated || 0,
+      duplicates: exec.details?.duplicates || 0,
+      message: exec.errorMessage || exec.details?.message || "Completado",
+      errorDetails: exec.errorDetails || exec.errorMessage || null,
+      errorDetail: exec.errorDetails || exec.errorMessage || null,
+      executionTime: exec.executionTime || 0,
+    }));
 
     return res.status(200).json({
       success: true,
@@ -673,9 +694,11 @@ const getTaskExecutionHistory = async (req, res) => {
           name: task.name,
           lastExecutionDate: task.lastExecutionDate,
           executionCount: task.executionCount,
-          lastExecutionResult: task.lastExecutionResult,
+          lastExecutionResult: task.lastExecutionResult || null,
+          status: task.status,
+          progress: task.progress,
         },
-        history: summaries,
+        history: enrichedHistory,
       },
     });
   } catch (error) {
@@ -697,12 +720,20 @@ const cancelTransferTask = async (req, res) => {
     const task = await TransferTask.findById(taskId).lean();
     if (!task) return res.status(404).json({ success: false, message: "Tarea no encontrada" });
 
-    if (!TaskTracker.isTaskActive(taskId)) {
+    // Verificar si la tarea está en ejecución usando la base de datos
+    // No依赖 solo del TaskTracker porque puede usar IDs diferentes
+    const isRunningInDB = task.status === "running" || task.status === "cancelling";
+    const isActiveInTracker = TaskTracker.isTaskActive(taskId);
+    
+    if (!isRunningInDB && !isActiveInTracker) {
       return res.status(400).json({ success: false, message: "La tarea no está en ejecución actualmente" });
     }
 
     const cancelled = TaskTracker.cancelTask(taskId);
-    if (!cancelled) return res.status(500).json({ success: false, message: "No se pudo cancelar la tarea en este momento" });
+    if (!cancelled) {
+      // Si no se pudo cancelar a través del tracker, aún intentar actualizar la DB
+      logger.warn(`No se pudo cancelar a través del TaskTracker, actualizando estado en DB`);
+    }
 
     await TransferTask.findByIdAndUpdate(taskId, { status: "cancelled", progress: -1 });
     logger.info(`Tarea ${task.name} (${taskId}) cancelada por ${userId}`);
@@ -974,7 +1005,7 @@ const getLinkedGroupStats = async (req, res) => {
   try {
     const stats = LinkedTasksService.getGroupExecutionStats();
     const linkedGroups = await TransferTask.aggregate([
-      { $match: { linkedGroup: { $exists: true, $ne: null, $ne: "" }, active: true } },
+      { $match: { linkedGroup: { $exists: true, $nin: [null, ""] }, active: true } },
       {
         $group: {
           _id: "$linkedGroup",

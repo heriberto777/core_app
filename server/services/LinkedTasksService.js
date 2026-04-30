@@ -188,18 +188,13 @@ class LinkedTasksService {
         try {
           logger.info(`🔄 Ejecutando tarea del grupo: ${task.name}`);
 
-          // Temporal: deshabilitar post-update para todas las tareas durante la ejecución del grupo
-          const originalPostUpdateQuery = task.postUpdateQuery;
-          task.postUpdateQuery = null;
-
+          // Ejecutar la tarea con skipPostUpdate para evitar que se ejecute el Post-Update
+          // durante la ejecución del grupo. El Post-Update se ejecutará solo al final por la tarea coordinadora.
           const result = await transferService.executeTransferWithRetry(
             task._id.toString(),
             3,
             { skipPostUpdate: true }
           );
-
-          // Restaurar post-update query
-          task.postUpdateQuery = originalPostUpdateQuery;
 
           results.push({
             taskId: task._id.toString(),
@@ -245,13 +240,27 @@ class LinkedTasksService {
         }
       }
 
-      // Ejecutar post-update coordinado si hay tarea coordinadora y registros afectados
+      // Ejecutar post-update coordinado si hay tarea coordenadora y registros afectados
       let postUpdateResult = null;
+
+      if (!coordinatorTask) {
+        logger.warn(
+          "⚠️ No se encontró tarefa coordenadora com postUpdateQuery no grupo"
+        );
+      } else if (allAffectedRecords.length === 0) {
+        logger.warn(
+          "⚠️ No hay registros afectados para post-update"
+        );
+      }
+
       if (coordinatorTask && allAffectedRecords.length > 0) {
         try {
           logger.info(
-            `🔄 Ejecutando post-update coordinado con ${allAffectedRecords.length} registros afectados`
+            `🔄 Ejecutando post-update Coordinado para ${allAffectedRecords.length} registros`
           );
+          logger.info(`   Tarefa coordenadora: ${coordinatorTask.name}`);
+          logger.info(`   SQL: ${coordinatorTask.postUpdateQuery}`);
+          logger.info(`   Clave primaria: ${coordinatorTask.postUpdateMapping?.tableKey || coordinatorTask.validationRules?.existenceCheck?.key || 'ID'}`);
 
           postUpdateResult = await this.executeCoordinatedPostUpdate(
             coordinatorTask,
@@ -357,20 +366,22 @@ class LinkedTasksService {
       }
 
       logger.info(
-        `🔄 Iniciando post-update coordinado para ${allAffectedRecords.length} registros`
+        `🔄 Iniciando post-update Coordinado para ${allAffectedRecords.length} registros`
       );
 
       // Obtener conexión (siempre a server1 para post-updates)
-      const connectionResult = await DatabaseServiceAdapter.getConnection(
-        "server1"
-      );
-      if (!connectionResult.success) {
-        throw new Error(
-          `No se pudo establecer conexión: ${connectionResult.error?.message || "Error de conexión"
-          }`
-        );
+      // NOTA: DatabaseServiceAdapter.getConnection retorna la conexión directamente, no un objeto {success, connection}
+      let connection;
+      try {
+        connection = await DatabaseServiceAdapter.getConnection("server1");
+        if (!connection) {
+          throw new Error("No se pudo obtener conexión: returned null/undefined");
+        }
+        logger.info(`✅ Conexión obtenida para server1`);
+      } catch (connError) {
+        logger.error(`❌ Error obteniendo conexión para server1: ${connError.message}`);
+        throw new Error(`No se pudo establecer conexión: ${connError.message}`);
       }
-      connection = connectionResult.connection;
 
       // Procesar registros en lotes para evitar consultas muy grandes
       const batchSize = 500;
@@ -398,6 +409,16 @@ class LinkedTasksService {
           coordinatorTask.validationRules?.existenceCheck?.key ||
           "ID";
 
+        logger.info(
+          `   Campo para WHERE: ${primaryKeyField}`
+        );
+        logger.info(
+          `   Primeros 5 registros: ${processedKeys.slice(0, 5).join(', ')}`
+        );
+        logger.info(
+          `   Parametros: ${JSON.stringify(params)}`
+        );
+
         // Crear lista de parámetros
         const keyParams = processedKeys
           .map((_, index) => `@key${index}`)
@@ -407,12 +428,15 @@ class LinkedTasksService {
         const dynamicUpdateQuery = `${coordinatorTask.postUpdateQuery} WHERE ${primaryKeyField} IN (${keyParams})`;
 
         try {
-          // Ejecutar la actualización
-          const sanitizedParams = SqlService.sanitizeParams(params);
+          // No sanitizar - DatabaseServiceAdapter maneja los parámetros
+          logger.info(
+            `   Query: ${dynamicUpdateQuery}`
+          );
+          
           const updateResult = await DatabaseServiceAdapter.query(
             connection,
             dynamicUpdateQuery,
-            sanitizedParams
+            params
           );
 
           const batchUpdated = updateResult.rowsAffected || 0;
@@ -423,8 +447,10 @@ class LinkedTasksService {
             }: ${batchUpdated} registros actualizados`
           );
         } catch (queryError) {
-          logger.error(`Error en lote de post-update: ${queryError.message}`);
-          // Continuar con el siguiente lote en lugar de fallar todo
+          logger.error(`❌ Error en lote de post-update: ${queryError.message}`);
+          logger.error(`   Query: ${dynamicUpdateQuery}`);
+          logger.error(`   Params: ${JSON.stringify(params)}`);
+          // Continuar pero loguear el error
           continue;
         }
       }

@@ -3,6 +3,7 @@ const User = require("../models/userModel");
 const Role = require("../models/roleModel");
 const ModuleConfig = require("../models/moduleConfigModel");
 const mongoose = require("mongoose");
+const bcrypt = require("bcrypt");
 const cacheService = require("../services/cacheService");
 const logger = require("../services/logger");
 
@@ -314,7 +315,11 @@ async function createUser(req, res) {
     const existingUser = await User.findOne({ email: emailLower }).lean();
     if (existingUser) return res.status(409).json({ success: false, message: "El email ya está registrado" });
 
-    const newUser = new User({ ...userData, email: emailLower });
+    // Hashear la contraseña antes de guardar
+    const salt = bcrypt.genSaltSync(10);
+    const hashedPassword = bcrypt.hashSync(userData.password, salt);
+
+    const newUser = new User({ ...userData, password: hashedPassword, email: emailLower });
     await newUser.save();
 
     await cacheService.invalidatePattern("user_");
@@ -564,6 +569,45 @@ async function validateRoleSystem(req, res) {
   }
 }
 
+async function changePassword(req, res) {
+  try {
+    const { id } = req.params;
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "La nueva contraseña debe tener al menos 6 caracteres" 
+      });
+    }
+    
+    const user = await User.findById(id).select("+password");
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Usuario no encontrado" });
+    }
+    
+    if (currentPassword) {
+      const isMatch = await user.comparePassword(currentPassword);
+      if (!isMatch) {
+        return res.status(401).json({ success: false, message: "La contraseña actual es incorrecta" });
+      }
+    }
+    
+    // Hashear la nueva contraseña antes de guardar
+    const salt = bcrypt.genSaltSync(10);
+    user.password = bcrypt.hashSync(newPassword, salt);
+    await user.save();
+    
+    await invalidateUserCache(id);
+    logger.info(`Contraseña cambiada para usuario: ${user.email} por ${req.user?.user_id || req.user?._id}`);
+    
+    return res.status(200).json({ success: true, message: "Contraseña actualizada exitosamente" });
+  } catch (error) {
+    logger.error("Error en changePassword:", error);
+    return res.status(500).json({ success: false, message: "Error al cambiar contraseña" });
+  }
+}
+
 module.exports = {
   getMe,
   getUserPermissions,
@@ -572,6 +616,7 @@ module.exports = {
   createUser,
   updateUser,
   deleteUser,
+  changePassword,
   ActiveInactiveUser,
   searchUsers,
   updateUserRoles,

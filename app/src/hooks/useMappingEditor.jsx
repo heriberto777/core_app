@@ -17,6 +17,12 @@ const INITIAL_MAPPING_STATE = {
     tableConfigs: [],
     markProcessedField: "IS_PROCESSED",
     markProcessedValue: 1,
+    markProcessedConfig: {
+        includeTimestamp: false,
+        timestampField: "",
+        batchSize: 100,
+        allowRollback: false
+    },
     consecutiveConfig: { enabled: false },
     foreignKeyDependencies: [],
 };
@@ -102,8 +108,15 @@ export function useMappingEditor(mappingId, accessToken, onSave, onCancel) {
                     field.isEditable = field.isEditable !== false;
                     field.showInList = field.showInList === true;
                     field.displayOrder = field.displayOrder || 0;
-                    field.fieldType = field.fieldType || "text";
+                    field.fieldType = field.fieldType || field.valueType || "text";
+                    field.valueType = field.valueType || field.fieldType || "text";
                     if (field.fieldType !== "select") field.options = null;
+
+                    // Evitar CastError en Mongoose: consecutiveId debe ser null si está vacío o isConsecutive es false
+                    if (!field.isConsecutive || !field.consecutiveId) {
+                        field.consecutiveId = null;
+                        field.isConsecutive = false;
+                    }
                 });
             });
 

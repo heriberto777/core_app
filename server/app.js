@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
+const fs = require("fs");
 const app = express();
 const errorHandler = require("./middlewares/errorHandler");
 const logRequests = require("./middlewares/loggerMiddleware");
@@ -61,7 +62,7 @@ const corsOptions = {
     if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      logger.warn(`CORS bloqueó origen: ${origin}`);
+      logger.error(`🚩 CORS BLOQUEADO: Origen "${origin}" no está en la lista blanca.`);
       callback(new Error("No permitido por política CORS"));
     }
   },
@@ -106,26 +107,20 @@ app.use(express.json({ limit: MAX_REQUEST_SIZE }));
 app.use(express.urlencoded({ limit: MAX_REQUEST_SIZE, extended: true }));
 
 // ⭐ AÑADIR ESTAS LÍNEAS PARA SERVIR ARCHIVOS ESTÁTICOS ⭐
-// Servir archivos estáticos desde la carpeta uploads
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-console.log(
-  "📁 Sirviendo archivos estáticos desde:",
-  path.join(__dirname, "uploads")
-);
+// Servir archivos estáticos desde la carpeta uploads - Usar truco de string para evitar que NCC lo incluya
+const _u = "up"; const _lo = "loads";
+const uploadBaseDir = path.join(process.cwd(), _u + _lo);
+app.use("/uploads", express.static(uploadBaseDir));
+console.log("📁 Sirviendo archivos estáticos desde:", uploadBaseDir);
 
-// Crear directorio de uploads si no existe
-const fs = require("fs");
-const uploadDirs = [
-  path.join(__dirname, "uploads"),
-  path.join(__dirname, "uploads/avatar"),
-];
-
-uploadDirs.forEach((dir) => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-    console.log(`📁 Directorio creado: ${dir}`);
-  }
-});
+// Crear directorios de uploads si no existen
+if (!fs.existsSync(uploadBaseDir)) {
+  fs.mkdirSync(uploadBaseDir, { recursive: true });
+}
+const avatarDir = path.join(uploadBaseDir, "avatar");
+if (!fs.existsSync(avatarDir)) {
+  fs.mkdirSync(avatarDir, { recursive: true });
+}
 
 // Middleware para manejar errores de parsing JSON
 app.use((err, req, res, next) => {

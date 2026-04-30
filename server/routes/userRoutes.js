@@ -12,6 +12,7 @@ const {
   createUser,
   updateUser,
   deleteUser,
+  changePassword,
   ActiveInactiveUser,
   getUserPermissions,
   updateUserRoles,
@@ -99,6 +100,12 @@ router.patch(
   "/user/active/:id",
   checkPermission("users", "update"),
   ActiveInactiveUser
+);
+
+// PATCH /api/v1/users/user/password/:id - Cambiar contraseña
+router.patch(
+  "/user/password/:id",
+  changePassword
 );
 
 // DELETE /api/v1/users/user/delete/:id - Eliminar usuario

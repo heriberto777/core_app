@@ -41,6 +41,7 @@ export function UserProfile() {
   });
   const [selectedAvatar, setSelectedAvatar] = useState(null);
   const [previewAvatar, setPreviewAvatar] = useState(null);
+  const [changingPassword, setChangingPassword] = useState(false);
   const fileInputRef = useRef(null);
 
   if (loading) return <LoadingUI message="Cargando perfil..." />;
@@ -86,18 +87,23 @@ export function UserProfile() {
       if (selectedAvatar) updateData.fileAvatar = selectedAvatar;
 
       const result = await userApi.updateUser(accessToken, user._id, updateData);
+      console.log("Resultado updateUser:", result);
 
-      if (result && result.success) {
-        const updatedUser = await userApi.getMe(accessToken);
+      if (result && (result.success !== false)) {
         Swal.fire("¡Éxito!", "Perfil actualizado correctamente", "success");
         setEditing(false);
         setSelectedAvatar(null);
         setPreviewAvatar(null);
-        if (updateUser) updateUser(updatedUser);
+        if (updateUser && result.data) {
+          updateUser(result.data);
+        } else if (updateUser && result) {
+          updateUser(result);
+        }
       } else {
-        throw new Error(result?.msg || "Error al actualizar perfil");
+        throw new Error(result?.message || result?.msg || "Error al actualizar perfil");
       }
     } catch (error) {
+      console.error("Error actualizando perfil:", error);
       Swal.fire("Error", error.message, "error");
     }
   };
@@ -108,6 +114,12 @@ export function UserProfile() {
       return;
     }
 
+    if (passwords.new.length < 6) {
+      Swal.fire("Error", "La nueva contraseña debe tener al menos 6 caracteres", "error");
+      return;
+    }
+
+    setChangingPassword(true);
     try {
       Swal.fire({
         title: "Cambiando contraseña...",
@@ -115,19 +127,23 @@ export function UserProfile() {
         didOpen: () => Swal.showLoading(),
       });
 
-      const result = await userApi.updateUser(accessToken, user._id, {
-        currentPassword: passwords.current,
-        password: passwords.new,
-      });
+      const result = await userApi.changePassword(
+        accessToken, 
+        user._id, 
+        passwords.current, 
+        passwords.new
+      );
 
       if (result && result.success) {
-        Swal.fire("¡Éxito!", "Contraseña actualizada", "success");
+        Swal.fire("¡Éxito!", "Contraseña actualizada correctamente", "success");
         setPasswords({ current: "", new: "", confirm: "" });
       } else {
-        throw new Error(result?.msg || "Error al cambiar contraseña");
+        throw new Error(result?.message || "Error al cambiar contraseña");
       }
     } catch (error) {
       Swal.fire("Error", error.message, "error");
+    } finally {
+      setChangingPassword(false);
     }
   };
 
@@ -135,327 +151,392 @@ export function UserProfile() {
     if (previewAvatar) return previewAvatar;
     if (user?.avatar) {
       if (user.avatar.startsWith("http")) return user.avatar;
-      return `${ENV.BASE_PATH}/${user.avatar.startsWith("uploads/") ? "" : "uploads/avatar/"}${user.avatar}`;
+      return `${ENV.BASE_API}/uploads/avatar/${user.avatar.replace('uploads/avatar/', '')}`;
     }
-    return "/default-avatar.png";
+    return null;
+  };
+
+  const getInitials = () => {
+    const name = user?.name || "";
+    const lastname = user?.lastname || "";
+    const initials = `${name.charAt(0)}${lastname.charAt(0)}`.toUpperCase();
+    return initials || "U";
   };
 
   return (
     <ProfileWrapper>
-      <GlassProfile>
-        <Sidebar>
-          <AvatarWrapper>
-            <div className="img-container">
-              <AvatarImage src={getAvatarSrc()} alt="Avatar" />
-              {editing && (
-                <div className="overlay" onClick={() => fileInputRef.current?.click()}>
-                  <FaCamera />
-                </div>
+      <ProfileCard>
+        <CardHeader>
+          <AvatarSection>
+            <AvatarContainer>
+              {getAvatarSrc() ? (
+                <>
+                  <AvatarImage src={getAvatarSrc()} alt="Avatar" onError={(e) => { e.target.style.display = 'none'; e.target.nextSibling.style.display = 'flex'; }} />
+                  <InitialsAvatar style={{ display: 'none' }}>{getInitials()}</InitialsAvatar>
+                </>
+              ) : (
+                <InitialsAvatar>{getInitials()}</InitialsAvatar>
               )}
-            </div>
-            <input
-              ref={fileInputRef}
-              type="file"
-              accept="image/*"
-              onChange={handleAvatarSelect}
-              style={{ display: "none" }}
-            />
+              {editing && (
+                <AvatarOverlay onClick={() => fileInputRef.current?.click()}>
+                  <FaCamera />
+                </AvatarOverlay>
+              )}
+              <input
+                ref={fileInputRef}
+                type="file"
+                accept="image/*"
+                onChange={handleAvatarSelect}
+                style={{ display: "none" }}
+              />
+            </AvatarContainer>
             <div className="user-info">
               <h2>{user?.name} {user?.lastname}</h2>
-              <Badge>{user?.role?.join(", ") || "Usuario"}</Badge>
+              <p className="user-email">{user?.email}</p>
+              {user?.isAdmin && <AdminBadge>Administrador</AdminBadge>}
             </div>
-          </AvatarWrapper>
-
-          <NavMenu>
-            <NavItem $active={!editing} onClick={() => setEditing(false)}>
-              <FaUser /> Datos Personales
-            </NavItem>
-            <NavItem $active={false} style={{ opacity: 0.5, cursor: "not-allowed" }}>
-              <FaShieldAlt /> Seguridad y Accesos
-            </NavItem>
-          </NavMenu>
-        </Sidebar>
-
-        <ContentArea>
-          <Section>
-            <div className="section-header">
-              <h3><FaUser /> Información del Perfil</h3>
-              <ActionButton onClick={() => (editing ? setEditing(false) : setEditing(true))}>
-                {editing ? <FaTimes /> : <FaEdit />}
-                <span>{editing ? "Cancelar" : "Editar"}</span>
+          </AvatarSection>
+          <HeaderActions>
+            {!editing && (
+              <ActionButton onClick={() => setEditing(true)}>
+                <FaEdit /> Editar Perfil
               </ActionButton>
-            </div>
+            )}
+          </HeaderActions>
+        </CardHeader>
+
+        <CardContent>
+          <Section>
+            <SectionHeader>
+              <h3><FaUser /> Información Personal</h3>
+              {editing && <span className="editing-badge">Modo edición</span>}
+            </SectionHeader>
 
             <FormGrid>
               <FormGroup>
                 <label>Nombres</label>
-                <div className="input-box">
+                <InputWrapper>
                   <FaUser className="icon" />
                   <input
                     name="name"
                     value={formData.name}
                     onChange={handleInputChange}
                     disabled={!editing}
+                    placeholder="Nombres"
                   />
-                </div>
+                </InputWrapper>
               </FormGroup>
+
               <FormGroup>
                 <label>Apellidos</label>
-                <div className="input-box">
+                <InputWrapper>
                   <FaUser className="icon" />
                   <input
                     name="lastname"
                     value={formData.lastname}
                     onChange={handleInputChange}
                     disabled={!editing}
+                    placeholder="Apellidos"
                   />
-                </div>
+                </InputWrapper>
               </FormGroup>
+
               <FormGroup>
                 <label>Correo Electrónico</label>
-                <div className="input-box">
+                <InputWrapper>
                   <FaEnvelope className="icon" />
                   <input
                     name="email"
+                    type="email"
                     value={formData.email}
                     onChange={handleInputChange}
                     disabled={!editing}
+                    placeholder="correo@ejemplo.com"
                   />
-                </div>
+                </InputWrapper>
               </FormGroup>
+
               <FormGroup>
                 <label>Teléfono</label>
-                <div className="input-box">
+                <InputWrapper>
                   <FaPhone className="icon" />
                   <input
                     name="telefono"
                     value={formData.telefono}
                     onChange={handleInputChange}
                     disabled={!editing}
+                    placeholder="999 999 999"
                   />
-                </div>
+                </InputWrapper>
               </FormGroup>
             </FormGrid>
 
             {editing && (
-              <SaveButton onClick={handleUpdateProfile}>
-                <FaSave /> Guardar Cambios
-              </SaveButton>
+              <FormActions>
+                <CancelButton onClick={() => {
+                  setEditing(false);
+                  setFormData({
+                    name: user?.name || "",
+                    lastname: user?.lastname || "",
+                    email: user?.email || "",
+                    telefono: user?.telefono || "",
+                  });
+                  setSelectedAvatar(null);
+                  setPreviewAvatar(null);
+                }}>
+                  <FaTimes /> Cancelar
+                </CancelButton>
+                <SaveButton onClick={handleUpdateProfile}>
+                  <FaSave /> Guardar Cambios
+                </SaveButton>
+              </FormActions>
             )}
           </Section>
 
+          <Divider />
+
           <Section>
-            <div className="section-header">
-              <h3><FaLock /> Gestión de Seguridad</h3>
-            </div>
-            <FormGrid>
+            <SectionHeader>
+              <h3><FaShieldAlt /> Seguridad</h3>
+            </SectionHeader>
+            <p className="section-description">
+              Cambia tu contraseña para mantener tu cuenta segura.
+            </p>
+
+            <PasswordForm>
               <FormGroup>
                 <label>Contraseña Actual</label>
-                <div className="input-box">
+                <PasswordInputWrapper>
                   <FaLock className="icon" />
                   <input
                     type={showPasswords.current ? "text" : "password"}
                     name="current"
                     value={passwords.current}
                     onChange={handlePasswordChange}
-                    placeholder="••••••••"
+                    placeholder="Contraseña actual"
                   />
-                </div>
+                  <TogglePassword onClick={() => setShowPasswords(p => ({...p, current: !p.current}))}>
+                    {showPasswords.current ? <FaEyeSlash /> : <FaEye />}
+                  </TogglePassword>
+                </PasswordInputWrapper>
               </FormGroup>
+
               <FormGroup>
                 <label>Nueva Contraseña</label>
-                <div className="input-box">
+                <PasswordInputWrapper>
                   <FaLock className="icon" />
                   <input
                     type={showPasswords.new ? "text" : "password"}
                     name="new"
                     value={passwords.new}
                     onChange={handlePasswordChange}
-                    placeholder="Mín. 6 caracteres"
+                    placeholder="Mínimo 6 caracteres"
                   />
-                </div>
+                  <TogglePassword onClick={() => setShowPasswords(p => ({...p, new: !p.new}))}>
+                    {showPasswords.new ? <FaEyeSlash /> : <FaEye />}
+                  </TogglePassword>
+                </PasswordInputWrapper>
               </FormGroup>
+
               <FormGroup>
                 <label>Confirmar Nueva</label>
-                <div className="input-box">
+                <PasswordInputWrapper>
                   <FaLock className="icon" />
                   <input
                     type={showPasswords.confirm ? "text" : "password"}
                     name="confirm"
                     value={passwords.confirm}
                     onChange={handlePasswordChange}
-                    placeholder="Repita contraseña"
+                    placeholder="Repite la contraseña"
                   />
-                </div>
+                  <TogglePassword onClick={() => setShowPasswords(p => ({...p, confirm: !p.confirm}))}>
+                    {showPasswords.confirm ? <FaEyeSlash /> : <FaEye />}
+                  </TogglePassword>
+                </PasswordInputWrapper>
               </FormGroup>
-            </FormGrid>
-            <SaveButton
-              onClick={handleChangePassword}
-              disabled={!passwords.current || !passwords.new}
-            >
-              <FaShieldAlt /> Actualizar Seguridad
-            </SaveButton>
+            </PasswordForm>
+
+            <FormActions>
+              <ChangePasswordButton 
+                onClick={handleChangePassword}
+                disabled={!passwords.current || !passwords.new || !passwords.confirm || changingPassword}
+              >
+                <FaShieldAlt /> {changingPassword ? "Cambiando..." : "Cambiar Contraseña"}
+              </ChangePasswordButton>
+            </FormActions>
           </Section>
-        </ContentArea>
-      </GlassProfile>
+        </CardContent>
+      </ProfileCard>
     </ProfileWrapper>
   );
 }
 
-// --- ESTILOS GLASSMORPHISM ---
+// --- ESTILOS ---
 
 const ProfileWrapper = styled.div`
-  padding: 40px;
+  padding: 24px;
   min-height: calc(100vh - 80px);
-  display: flex;
-  justify-content: center;
-  align-items: flex-start;
-  animation: fadeIn 0.6s ease;
-
-  @keyframes fadeIn {
-    from { opacity: 0; transform: scale(0.98); }
-    to { opacity: 1; transform: scale(1); }
-  }
+  background: ${({ theme }) => theme.contentBg};
 `;
 
-const GlassProfile = styled.div`
-  width: 100%;
-  max-width: 1100px;
-  background: rgba(255, 255, 255, 0.03);
-  backdrop-filter: blur(15px);
-  border: 1px solid rgba(255, 255, 255, 0.08);
-  border-radius: 30px;
-  display: grid;
-  grid-template-columns: 320px 1fr;
+const ProfileCard = styled.div`
+  max-width: 900px;
+  margin: 0 auto;
+  background: ${({ theme }) => theme.cardBg};
+  border-radius: 16px;
+  box-shadow: ${({ theme }) => theme.shadows?.medium || "0 4px 12px rgba(0, 0, 0, 0.1)"};
+  border: 1px solid ${({ theme }) => theme.border};
   overflow: hidden;
-  box-shadow: 0 25px 50px rgba(0, 0, 0, 0.2);
+`;
 
-  @media (max-width: 900px) {
-    grid-template-columns: 1fr;
+const CardHeader = styled.div`
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  padding: 24px;
+  background: linear-gradient(135deg, ${({ theme }) => theme.primary}15 0%, ${({ theme }) => theme.primary}05 100%);
+  border-bottom: 1px solid ${({ theme }) => theme.border};
+
+  @media (max-width: 600px) {
+    flex-direction: column;
+    gap: 16px;
   }
 `;
 
-const Sidebar = styled.aside`
-  background: rgba(21, 28, 132, 0.15);
-  border-right: 1px solid rgba(255, 255, 255, 0.05);
-  padding: 40px;
+const AvatarSection = styled.div`
   display: flex;
-  flex-direction: column;
-  gap: 40px;
-`;
+  align-items: center;
+  gap: 20px;
 
-const AvatarWrapper = styled.div`
-  text-align: center;
-  
-  .img-container {
-    position: relative;
-    width: 160px;
-    height: 160px;
-    margin: 0 auto 20px;
-    border-radius: 40px;
-    overflow: hidden;
-    border: 3px solid rgba(255, 255, 255, 0.1);
-    box-shadow: 0 10px 30px rgba(0,0,0,0.3);
-
-    .overlay {
-      position: absolute;
-      inset: 0;
-      background: rgba(0,0,0,0.6);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 2rem;
-      color: white;
-      cursor: pointer;
-      opacity: 0;
-      transition: opacity 0.3s;
+  .user-info {
+    h2 {
+      margin: 0;
+      font-size: 1.4rem;
+      color: ${({ theme }) => theme.titleColor};
+      font-weight: 700;
     }
 
-    &:hover .overlay { opacity: 1; }
+    .user-email {
+      margin: 4px 0 0 0;
+      font-size: 0.9rem;
+      color: ${({ theme }) => theme.textSecondary};
+    }
   }
+`;
 
-  h2 {
-    font-size: 1.5rem;
-    color: white;
-    margin-bottom: 8px;
-  }
+const AvatarContainer = styled.div`
+  position: relative;
+  width: 80px;
+  height: 80px;
 `;
 
 const AvatarImage = styled.img`
   width: 100%;
   height: 100%;
   object-fit: cover;
+  border-radius: 50%;
+  border: 3px solid ${({ theme }) => theme.primary};
 `;
 
-const Badge = styled.span`
-  background: ${({ theme }) => theme.primary};
-  padding: 4px 15px;
-  border-radius: 20px;
-  font-size: 0.8rem;
-  font-weight: 700;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-`;
-
-const NavMenu = styled.nav`
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-`;
-
-const NavItem = styled.div`
-  padding: 15px 20px;
-  border-radius: 15px;
+const InitialsAvatar = styled.div`
+  width: 100%;
+  height: 100%;
   display: flex;
   align-items: center;
-  gap: 15px;
+  justify-content: center;
+  background: ${({ theme }) => theme.primary};
   color: white;
-  font-weight: 600;
-  cursor: pointer;
-  transition: 0.3s;
-  background: ${props => props.$active ? 'rgba(255,255,255,0.08)' : 'transparent'};
-  border: 1px solid ${props => props.$active ? 'rgba(255,255,255,0.1)' : 'transparent'};
-
-  &:hover { background: rgba(255,255,255,0.05); }
+  font-size: 1.8rem;
+  font-weight: 700;
+  border-radius: 50%;
+  border: 3px solid ${({ theme }) => theme.primary};
 `;
 
-const ContentArea = styled.div`
-  padding: 50px;
+const AvatarOverlay = styled.div`
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.5);
+  border-radius: 50%;
   display: flex;
-  flex-direction: column;
-  gap: 40px;
-`;
+  align-items: center;
+  justify-content: center;
+  color: white;
+  font-size: 1.2rem;
+  cursor: pointer;
+  opacity: 0;
+  transition: opacity 0.2s;
 
-const Section = styled.section`
-  .section-header {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 25px;
-    
-    h3 {
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      font-size: 1.3rem;
-      color: #fff;
-    }
+  ${AvatarContainer}:hover & {
+    opacity: 1;
   }
 `;
 
+const AdminBadge = styled.span`
+  display: inline-block;
+  margin-top: 8px;
+  padding: 4px 12px;
+  background: ${({ theme }) => theme.warning};
+  color: #000;
+  font-size: 0.75rem;
+  font-weight: 700;
+  border-radius: 20px;
+  text-transform: uppercase;
+`;
+
+const HeaderActions = styled.div``;
+
 const ActionButton = styled.button`
-  background: rgba(255, 255, 255, 0.05);
-  border: 1px solid rgba(255, 255, 255, 0.1);
-  color: white;
-  padding: 8px 18px;
-  border-radius: 12px;
   display: flex;
   align-items: center;
-  gap: 10px;
+  gap: 8px;
+  padding: 10px 20px;
+  background: ${({ theme }) => theme.primary};
+  color: white;
+  border: none;
+  border-radius: 8px;
+  font-weight: 600;
   cursor: pointer;
-  transition: 0.3s;
+  transition: all 0.2s;
 
-  &:hover { background: rgba(255, 255, 255, 0.1); transform: scale(1.05); }
+  &:hover {
+    background: ${({ theme }) => theme.primaryDark || theme.primary};
+    transform: translateY(-1px);
+  }
+`;
+
+const CardContent = styled.div`
+  padding: 24px;
+`;
+
+const Section = styled.section``;
+
+const SectionHeader = styled.div`
+  display: flex;
+  align-items: center;
+  gap: 12px;
+  margin-bottom: 20px;
+
+  h3 {
+    margin: 0;
+    font-size: 1.1rem;
+    color: ${({ theme }) => theme.titleColor};
+    display: flex;
+    align-items: center;
+    gap: 10px;
+
+    svg {
+      color: ${({ theme }) => theme.primary};
+    }
+  }
+
+  .editing-badge {
+    font-size: 0.75rem;
+    padding: 4px 10px;
+    background: ${({ theme }) => theme.warning};
+    color: #000;
+    border-radius: 12px;
+    font-weight: 600;
+  }
 `;
 
 const FormGrid = styled.div`
@@ -463,68 +544,166 @@ const FormGrid = styled.div`
   grid-template-columns: 1fr 1fr;
   gap: 20px;
 
-  @media (max-width: 600px) { grid-template-columns: 1fr; }
+  @media (max-width: 600px) {
+    grid-template-columns: 1fr;
+  }
 `;
 
 const FormGroup = styled.div`
   display: flex;
   flex-direction: column;
-  gap: 10px;
+  gap: 8px;
 
   label {
     font-size: 0.85rem;
-    color: rgba(255, 255, 255, 0.5);
     font-weight: 600;
+    color: ${({ theme }) => theme.textSecondary};
     text-transform: uppercase;
+    letter-spacing: 0.5px;
+  }
+`;
+
+const InputWrapper = styled.div`
+  position: relative;
+  display: flex;
+  align-items: center;
+
+  .icon {
+    position: absolute;
+    left: 14px;
+    color: ${({ theme }) => theme.muted || "#9ca3af"};
   }
 
-  .input-box {
-    position: relative;
-    display: flex;
-    align-items: center;
+  input {
+    width: 100%;
+    padding: 12px 12px 12px 42px;
+    border: 1px solid ${({ theme }) => theme.border};
+    border-radius: 10px;
+    background: ${({ theme }) => theme.inputBg};
+    color: ${({ theme }) => theme.text};
+    font-size: 0.95rem;
+    transition: all 0.2s;
 
-    .icon {
-      position: absolute;
-      left: 15px;
-      color: rgba(255, 255, 255, 0.3);
+    &:focus {
+      outline: none;
+      border-color: ${({ theme }) => theme.primary};
+      box-shadow: 0 0 0 3px ${({ theme }) => theme.primary}20;
     }
 
-    input {
-      width: 100%;
-      background: rgba(255, 255, 255, 0.03);
-      border: 1px solid rgba(255, 255, 255, 0.08);
-      border-radius: 12px;
-      padding: 12px 15px 12px 45px;
-      color: white;
-      font-size: 1rem;
-      transition: 0.3s;
+    &:disabled {
+      background: ${({ theme }) => theme.hoverBg};
+      cursor: not-allowed;
+      opacity: 0.7;
+    }
 
-      &:focus {
-        border-color: ${({ theme }) => theme.primary};
-        background: rgba(255, 255, 255, 0.06);
-        outline: none;
-      }
-
-      &:disabled { opacity: 0.6; cursor: not-allowed; }
+    &::placeholder {
+      color: ${({ theme }) => theme.muted || "#9ca3af"};
     }
   }
 `;
 
-const SaveButton = styled.button`
+const PasswordInputWrapper = styled(InputWrapper)`
+  input {
+    padding-right: 45px;
+  }
+`;
+
+const TogglePassword = styled.button`
+  position: absolute;
+  right: 12px;
+  background: none;
+  border: none;
+  color: ${({ theme }) => theme.muted || "#9ca3af"};
+  cursor: pointer;
+  padding: 4px;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+
+  &:hover {
+    color: ${({ theme }) => theme.primary};
+  }
+`;
+
+const PasswordForm = styled.div`
+  display: grid;
+  grid-template-columns: 1fr;
+  gap: 16px;
+  max-width: 400px;
+`;
+
+const FormActions = styled.div`
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
   margin-top: 20px;
+`;
+
+const SaveButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
   background: ${({ theme }) => theme.primary};
   color: white;
   border: none;
-  padding: 14px 28px;
-  border-radius: 15px;
-  font-weight: 700;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+
+  &:hover {
+    background: ${({ theme }) => theme.primaryDark || theme.primary};
+    transform: translateY(-1px);
+  }
+`;
+
+const CancelButton = styled.button`
   display: flex;
   align-items: center;
-  gap: 12px;
+  gap: 8px;
+  padding: 12px 24px;
+  background: transparent;
+  color: ${({ theme }) => theme.textSecondary};
+  border: 1px solid ${({ theme }) => theme.border};
+  border-radius: 10px;
+  font-weight: 600;
   cursor: pointer;
-  transition: 0.3s;
-  box-shadow: 0 4px 15px rgba(21, 28, 132, 0.4);
+  transition: all 0.2s;
 
-  &:hover { transform: translateY(-3px); box-shadow: 0 8px 25px rgba(21, 28, 132, 0.5); }
-  &:disabled { opacity: 0.5; cursor: not-allowed; transform: none; }
+  &:hover {
+    background: ${({ theme }) => theme.hoverBg};
+  }
+`;
+
+const ChangePasswordButton = styled.button`
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 24px;
+  background: ${({ theme, disabled }) => disabled ? theme.muted || "#9ca3af" : theme.success};
+  color: white;
+  border: none;
+  border-radius: 10px;
+  font-weight: 600;
+  cursor: ${({ disabled }) => disabled ? "not-allowed" : "pointer"};
+  transition: all 0.2s;
+  opacity: ${({ disabled }) => disabled ? 0.6 : 1};
+
+  &:hover:not(:disabled) {
+    background: ${({ theme }) => theme.successHover || theme.success};
+    transform: translateY(-1px);
+  }
+`;
+
+const Divider = styled.hr`
+  border: none;
+  border-top: 1px solid ${({ theme }) => theme.border};
+  margin: 24px 0;
+`;
+
+const SectionDescription = styled.p`
+  color: ${({ theme }) => theme.textSecondary};
+  font-size: 0.9rem;
+  margin-bottom: 16px;
 `;

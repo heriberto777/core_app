@@ -503,10 +503,14 @@ class TransferService {
 
   /**
    * Función wrapper para ejecutar la transferencia con reintentos controlados
+   * @param {string} taskId - ID de la tarea
+   * @param {number} maxRetries - Número máximo de reintentos
+   * @param {Object} options - Opciones adicionales (skipPostUpdate)
    */
-  async executeTransferWithRetry(taskId, maxRetries = 3) {
+  async executeTransferWithRetry(taskId, maxRetries = 3, options = {}) {
     const abortController = new AbortController();
     const { signal } = abortController;
+    const skipPostUpdate = options?.skipPostUpdate === true;
 
     TaskTracker.registerTask(taskId, abortController, {
       type: "transfer",
@@ -534,7 +538,7 @@ class TransferService {
             );
           }
 
-          return await this.executeTransfer(taskId, signal);
+          return await this.executeTransfer(taskId, signal, { skipPostUpdate });
         } catch (error) {
           lastError = error;
 
@@ -607,8 +611,12 @@ class TransferService {
   /**
    * Implementación modular de la transferencia de datos
    * MIGRADO: Usa DatabaseServiceAdapter completamente
+   * @param {string} taskId - ID de la tarea
+   * @param {AbortSignal} signal - Signal para cancelación
+   * @param {Object} options - Opciones adicionales (skipPostUpdate)
    */
-  async executeTransfer(taskId, signal) {
+  async executeTransfer(taskId, signal, options = {}) {
+    const skipPostUpdate = options?.skipPostUpdate === true;
     let executionId = null;
     const startTime = Date.now();
 
@@ -692,7 +700,9 @@ class TransferService {
       this.checkCancellation(signal);
 
       // 5. Ejecutar operaciones post-transferencia si corresponde
+      // SkipPostUpdate evita que se ejecute durante ejecuciones de grupo vinculado
       if (
+        !skipPostUpdate &&
         taskInfo.postUpdateQuery &&
         result.affectedRecords &&
         result.affectedRecords.length > 0
@@ -702,6 +712,8 @@ class TransferService {
           result.affectedRecords,
           signal
         );
+      } else if (skipPostUpdate && taskInfo.postUpdateQuery) {
+        logger.info(`Post-Update omitido para tarea ${taskInfo.name} (skipPostUpdate=true)`);
       }
 
       const executionTime = Date.now() - startTime;
@@ -752,6 +764,7 @@ class TransferService {
         totalDuplicates: result.totalDuplicatesCount,
         initialCount: result.initialCount,
         finalCount: result.finalCount,
+        affectedRecords: result.affectedRecords || [],  // Agregado para LinkedTasks
         executionId,
       };
     } catch (error) {
@@ -785,6 +798,13 @@ class TransferService {
       await TransferTask.findByIdAndUpdate(taskId, {
         status: "failed",
         progress: -1,
+        lastExecutionDate: new Date(),
+        $inc: { executionCount: 1 },
+        lastExecutionResult: {
+          success: false,
+          message: error.message || "Error durante la transferencia",
+          errorDetails: error.stack || error.message,
+        },
       });
 
       if (executionId) {
@@ -792,6 +812,7 @@ class TransferService {
           status: "failed",
           executionTime: Date.now() - startTime,
           errorMessage: error.message || "Error desconocido",
+          errorDetails: error.stack,
         });
       }
 
@@ -1226,7 +1247,10 @@ class TransferService {
             try {
               const validatedRecord = this._validateRecord(record);
 
-              if (task.postUpdateQuery && primaryKeys.length > 0) {
+              // Recopilar affectedRecords para post-update coordinar
+              // Se hace independientemente de si tiene postUpdateQuery,
+              // para que el grupo pueda ejecutar el post-update al final
+              if (primaryKeys.length > 0) {
                 const primaryKey = primaryKeys[0];
                 if (
                   validatedRecord[primaryKey] !== null &&

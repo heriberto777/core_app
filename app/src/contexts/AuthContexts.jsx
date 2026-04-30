@@ -248,7 +248,6 @@ export function AuthProvider({ children }) {
             permsData.isAdmin || prevUser.isAdmin || false,
         }));
 
-        console.log("🔄 Permisos recargados exitosamente");
         return true;
       }
       return false;

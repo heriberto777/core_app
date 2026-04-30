@@ -104,7 +104,7 @@ export function useUsers(accessToken, currentUser, reloadUserPermissions) {
     const updateUser = async (userId, userData) => {
         setLoading(true);
         try {
-            const { roles, permissions, ...userDataWithoutRoles } = userData;
+            const { roles, permissions, newPassword, ...userDataWithoutRoles } = userData;
             const updateResponse = await userApi.updateUser(accessToken, userId, userDataWithoutRoles);
 
             if (Array.isArray(roles)) {
@@ -113,6 +113,10 @@ export function useUsers(accessToken, currentUser, reloadUserPermissions) {
 
             if (Array.isArray(permissions)) {
                 await userApi.updateUserSpecificPermissions(accessToken, userId, permissions);
+            }
+
+            if (newPassword && newPassword.length >= 6) {
+                await userApi.changePassword(accessToken, userId, null, newPassword);
             }
 
             await loadUsers();

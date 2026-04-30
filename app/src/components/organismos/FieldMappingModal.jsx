@@ -84,11 +84,12 @@ const ParamRow = styled.div`
   border: 1px solid ${({ theme }) => theme.border};
 `;
 
-export function FieldMappingModal({ isOpen, onClose, onSave, initialData }) {
+export function FieldMappingModal({ isOpen, onClose, onSave, initialData, consecutives = [] }) {
     const [formData, setFormData] = useState({
         sourceField: "",
         targetField: "",
         defaultValue: "",
+        valueType: "text",
         removePrefix: "",
         isRequired: false,
         lookupFromTarget: false,
@@ -102,16 +103,41 @@ export function FieldMappingModal({ isOpen, onClose, onSave, initialData }) {
         displayOrder: 0,
         fieldGroup: "",
         fieldType: "text",
-        unitConversion: { enabled: false }
+        unitConversion: { enabled: false },
+        isConsecutive: false,
+        consecutiveId: "",
+        transform: {
+          transformType: "",
+          toUpperCase: false,
+          toLowerCase: false,
+          trim: true,
+          maxLength: "",
+          decimalPlaces: 2,
+          thousandsSeparator: false,
+          dateFormat: "YYYY-MM-DD",
+          datetimeFormat: "YYYY-MM-DDTHH:MM:SS",
+          trueValues: ["S", "Y", "1"],
+          falseValues: ["N", "0"],
+          trueOutput: "S",
+          falseOutput: "N",
+          defaultValue: ""
+        }
     });
     const [loading, setLoading] = useState(false);
+    const [showTransformConfig, setShowTransformConfig] = useState(false);
 
     useEffect(() => {
         if (initialData) {
+            // Verificar si hay configuración de transform para mostrar la sección
+            if (initialData.transform?.transformType) {
+                setShowTransformConfig(true);
+            }
+            
             setFormData({
                 ...initialData,
                 sourceField: initialData.sourceField || "",
                 defaultValue: initialData.defaultValue || "",
+                valueType: initialData.fieldType || initialData.valueType || "text",
                 removePrefix: initialData.removePrefix || "",
                 lookupQuery: initialData.lookupQuery || "",
                 lookupParams: initialData.lookupParams || [],
@@ -123,6 +149,7 @@ export function FieldMappingModal({ isOpen, onClose, onSave, initialData }) {
                 sourceField: "",
                 targetField: "",
                 defaultValue: "",
+                valueType: "text",
                 removePrefix: "",
                 isRequired: false,
                 lookupFromTarget: false,
@@ -136,7 +163,9 @@ export function FieldMappingModal({ isOpen, onClose, onSave, initialData }) {
                 displayOrder: 0,
                 fieldGroup: "",
                 fieldType: "text",
-                unitConversion: { enabled: false }
+                unitConversion: { enabled: false },
+                isConsecutive: false,
+                consecutiveId: ""
             });
         }
     }, [initialData, isOpen]);
@@ -176,7 +205,12 @@ export function FieldMappingModal({ isOpen, onClose, onSave, initialData }) {
         if (!formData.targetField) return;
         setLoading(true);
         try {
-            await onSave(formData);
+            // Sincronizar valueType con fieldType antes de guardar
+            const dataToSave = {
+                ...formData,
+                fieldType: formData.valueType
+            };
+            await onSave(dataToSave);
             onClose();
         } finally {
             setLoading(false);
@@ -221,12 +255,59 @@ export function FieldMappingModal({ isOpen, onClose, onSave, initialData }) {
                         </Grid>
                     </Section>
 
+                    <Section>
+                        <SectionTitle>Sistema de Consecutivos (Multi-Secuencia)</SectionTitle>
+                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '12px', cursor: 'pointer' }}>
+                                <input 
+                                    type="checkbox" 
+                                    name="isConsecutive" 
+                                    checked={formData.isConsecutive} 
+                                    onChange={handleChange}
+                                    style={{ width: '18px', height: '18px' }}
+                                />
+                                <div>
+                                    <div style={{ fontSize: '14px', fontWeight: '600' }}>Usar Consecutivo Independiente</div>
+                                    <div style={{ fontSize: '12px', opacity: 0.7 }}>Habilita una secuencia numérica propia para este campo.</div>
+                                </div>
+                            </label>
+
+                            {formData.isConsecutive && (
+                                <FormGroup>
+                                    <Label>Seleccionar Consecutivo</Label>
+                                    <Select 
+                                        name="consecutiveId" 
+                                        value={formData.consecutiveId} 
+                                        onChange={handleChange}
+                                        required={formData.isConsecutive}
+                                    >
+                                        <option value="">-- Seleccione un consecutivo --</option>
+                                        {consecutives.map(c => (
+                                            <option key={c._id} value={c._id}>
+                                                {c.name} ({c.formatted || c.lastValue})
+                                            </option>
+                                        ))}
+                                    </Select>
+                                </FormGroup>
+                            )}
+                        </div>
+                    </Section>
+
                     {!formData.lookupFromTarget ? (
                         <Section>
                             <SectionTitle>Transformación y Valores</SectionTitle>
                             <FormGroup>
                                 <Label>Valor por Defecto / Función SQL</Label>
-                                <Textarea name="defaultValue" value={formData.defaultValue} onChange={handleChange} placeholder="Ej: GETDATE() o 'VALOR'" />
+                                <Textarea name="defaultValue" value={formData.defaultValue} onChange={handleChange} placeholder="Ej: GETDATE() o VALOR" />
+                            </FormGroup>
+                            <FormGroup>
+                                <Label>Tipo de Dato</Label>
+                                <Select name="valueType" value={formData.valueType || "text"} onChange={handleChange}>
+                                    <option value="text">Texto</option>
+                                    <option value="number">Número</option>
+                                    <option value="date">Fecha</option>
+                                    <option value="boolean">Boolean</option>
+                                </Select>
                             </FormGroup>
                             <FormGroup>
                                 <Label>Eliminar Prefijo</Label>
@@ -307,6 +388,210 @@ export function FieldMappingModal({ isOpen, onClose, onSave, initialData }) {
                                 <span style={{ fontSize: '13px' }}>Mostrar en Listas</span>
                             </label>
                         </div>
+
+                        {/* === SECCIÓN DE TRANSFORMACIÓN === */}
+                        <div style={{ marginTop: '15px' }}>
+                            <label style={{ display: 'flex', alignItems: 'center', gap: '8px', cursor: 'pointer', color: '#3b82f6', fontWeight: '600' }}>
+                                <input 
+                                    type="checkbox" 
+                                    checked={showTransformConfig} 
+                                    onChange={(e) => setShowTransformConfig(e.target.checked)} 
+                                />
+                                <span style={{ fontSize: '13px' }}>⚙️ Configurar Transformación</span>
+                            </label>
+                        </div>
+
+                        {showTransformConfig && (
+                            <div style={{ marginTop: '15px', padding: '12px', background: '#f8fafc', borderRadius: '8px', border: '1px solid #e2e8f0' }}>
+                                <Grid>
+                                    <FormGroup>
+                                        <Label>Tipo de Dato</Label>
+                                        <Select 
+                                            name="transform.transformType" 
+                                            value={formData.transform?.transformType || ""} 
+                                            onChange={(e) => handleChange({ target: { name: e.target.name, value: e.target.value } })}
+                                        >
+                                            <option value="">Sin transformación</option>
+                                            <option value="string">Texto (String)</option>
+                                            <option value="number">Número</option>
+                                            <option value="date">Fecha</option>
+                                            <option value="datetime">Fecha y Hora</option>
+                                            <option value="boolean">Booleano</option>
+                                        </Select>
+                                    </FormGroup>
+                                </Grid>
+
+                                {formData.transform?.transformType === "string" && (
+                                    <Grid>
+                                        <FormGroup>
+                                            <Label>Mayúsculas</Label>
+                                            <input 
+                                                type="checkbox" 
+                                                name="transform.toUpperCase"
+                                                checked={formData.transform?.toUpperCase || false} 
+                                                onChange={handleChange}
+                                            />
+                                        </FormGroup>
+                                        <FormGroup>
+                                            <Label>Minúsculas</Label>
+                                            <input 
+                                                type="checkbox" 
+                                                name="transform.toLowerCase"
+                                                checked={formData.transform?.toLowerCase || false} 
+                                                onChange={handleChange}
+                                            />
+                                        </FormGroup>
+                                        <FormGroup>
+                                            <Label>Recortar espacios</Label>
+                                            <input 
+                                                type="checkbox" 
+                                                name="transform.trim"
+                                                checked={formData.transform?.trim !== false} 
+                                                onChange={handleChange}
+                                            />
+                                        </FormGroup>
+                                        <FormGroup>
+                                            <Label>Máx. caracteres</Label>
+                                            <Input 
+                                                type="number" 
+                                                name="transform.maxLength"
+                                                value={formData.transform?.maxLength || ""} 
+                                                onChange={handleChange}
+                                                placeholder="Ej: 100"
+                                            />
+                                        </FormGroup>
+                                    </Grid>
+                                )}
+
+                                {formData.transform?.transformType === "number" && (
+                                    <Grid>
+                                        <FormGroup>
+                                            <Label>Decimales</Label>
+                                            <Select 
+                                                name="transform.decimalPlaces"
+                                                value={formData.transform?.decimalPlaces ?? 2}
+                                                onChange={handleChange}
+                                            >
+                                                <option value={0}>0</option>
+                                                <option value={1}>1</option>
+                                                <option value={2}>2</option>
+                                                <option value={3}>3</option>
+                                                <option value={4}>4</option>
+                                            </Select>
+                                        </FormGroup>
+                                        <FormGroup>
+                                            <Label>Separador miles</Label>
+                                            <input 
+                                                type="checkbox" 
+                                                name="transform.thousandsSeparator"
+                                                checked={formData.transform?.thousandsSeparator || false} 
+                                                onChange={handleChange}
+                                            />
+                                        </FormGroup>
+                                    </Grid>
+                                )}
+
+                                {formData.transform?.transformType === "date" && (
+                                    <Grid>
+                                        <FormGroup>
+                                            <Label>Formato de Fecha</Label>
+                                            <Select 
+                                                name="transform.dateFormat"
+                                                value={formData.transform?.dateFormat || "YYYY-MM-DD"}
+                                                onChange={handleChange}
+                                            >
+                                                <option value="YYYY-MM-DD">YYYY-MM-DD (2026-04-07)</option>
+                                                <option value="DD/MM/YYYY">DD/MM/YYYY (07/04/2026)</option>
+                                                <option value="MM/DD/YYYY">MM/DD/YYYY (04/07/2026)</option>
+                                                <option value="DD-MM-YYYY">DD-MM-YYYY (07-04-2026)</option>
+                                            </Select>
+                                        </FormGroup>
+                                    </Grid>
+                                )}
+
+                                {formData.transform?.transformType === "datetime" && (
+                                    <Grid>
+                                        <FormGroup>
+                                            <Label>Formato Fecha-Hora</Label>
+                                            <Select 
+                                                name="transform.datetimeFormat"
+                                                value={formData.transform?.datetimeFormat || "YYYY-MM-DDTHH:MM:SS"}
+                                                onChange={handleChange}
+                                            >
+                                                <option value="YYYY-MM-DDTHH:MM:SS">YYYY-MM-DDTHH:MM:SS</option>
+                                                <option value="YYYY-MM-DD HH:MM:SS">YYYY-MM-DD HH:MM:SS</option>
+                                                <option value="YYYY-MM-DD 00:00:00.000">YYYY-MM-DD 00:00:00.000 (SQL Server)</option>
+                                                <option value="DD/MM/YYYY HH:MM">DD/MM/YYYY HH:MM</option>
+                                            </Select>
+                                        </FormGroup>
+                                    </Grid>
+                                )}
+
+                                {formData.transform?.transformType === "boolean" && (
+                                    <>
+                                        <Grid>
+                                            <FormGroup>
+                                                <Label>Valores TRUE</Label>
+                                                <Input 
+                                                    name="transform.trueValues"
+                                                    value={(formData.transform?.trueValues || []).join(",")}
+                                                    onChange={(e) => handleChange({ 
+                                                        target: { 
+                                                            name: "transform.trueValues", 
+                                                            value: e.target.value.split(",").map(v => v.trim()) 
+                                                        } 
+                                                    })}
+                                                    placeholder="S, Y, 1"
+                                                />
+                                            </FormGroup>
+                                            <FormGroup>
+                                                <Label>Valores FALSE</Label>
+                                                <Input 
+                                                    name="transform.falseValues"
+                                                    value={(formData.transform?.falseValues || []).join(",")}
+                                                    onChange={(e) => handleChange({ 
+                                                        target: { 
+                                                            name: "transform.falseValues", 
+                                                            value: e.target.value.split(",").map(v => v.trim()) 
+                                                        } 
+                                                    })}
+                                                    placeholder="N, 0"
+                                                />
+                                            </FormGroup>
+                                        </Grid>
+                                        <Grid>
+                                            <FormGroup>
+                                                <Label>Output TRUE</Label>
+                                                <Input 
+                                                    name="transform.trueOutput"
+                                                    value={formData.transform?.trueOutput || "S"}
+                                                    onChange={handleChange}
+                                                />
+                                            </FormGroup>
+                                            <FormGroup>
+                                                <Label>Output FALSE</Label>
+                                                <Input 
+                                                    name="transform.falseOutput"
+                                                    value={formData.transform?.falseOutput || "N"}
+                                                    onChange={handleChange}
+                                                />
+                                            </FormGroup>
+                                        </Grid>
+                                    </>
+                                )}
+
+                                {/* Valor por defecto */}
+                                <FormGroup style={{ marginTop: '10px' }}>
+                                    <Label>Valor por defecto (si es null)</Label>
+                                    <Input 
+                                        name="transform.defaultValue"
+                                        value={formData.transform?.defaultValue || ""}
+                                        onChange={handleChange}
+                                        placeholder="Valor por defecto"
+                                    />
+                                </FormGroup>
+                            </div>
+                        )}
                     </Section>
                 </Body>
                 <Footer>

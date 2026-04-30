@@ -13,5 +13,6 @@ router.get("/summary", checkPermission("loads", "read"), logController.getLogsSu
 router.get("/detail/:id", checkPermission("loads", "read"), logController.getLogDetail);
 router.delete("/clean", checkPermission("loads", "manage"), logController.cleanOldLogs);
 router.get("/sources", checkPermission("loads", "read"), logController.getLogSources);
+router.get("/diagnostic", checkPermission("loads", "read"), logController.getLogsDiagnostic);
 
 module.exports = router;

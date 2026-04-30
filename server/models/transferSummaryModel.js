@@ -3,14 +3,15 @@ const mongoose = require("mongoose");
 
 const TransferSummarySchema = new mongoose.Schema(
   {
+    taskName: {
+      type: String,
+    },
     loadId: {
       type: String,
-      required: true,
       index: true,
     },
     route: {
       type: String,
-      required: true,
     },
     date: {
       type: Date,
@@ -18,8 +19,38 @@ const TransferSummarySchema = new mongoose.Schema(
     },
     status: {
       type: String,
-      enum: ["completed", "partial_return", "full_return"],
+      enum: ["completed", "failed", "partial_return", "full_return", "running", "cancelled"],
       default: "completed",
+    },
+    totalRecords: {
+      type: Number,
+      default: 0,
+    },
+    successfulRecords: {
+      type: Number,
+      default: 0,
+    },
+    failedRecords: {
+      type: Number,
+      default: 0,
+    },
+    inserted: {
+      type: Number,
+      default: 0,
+    },
+    updated: {
+      type: Number,
+      default: 0,
+    },
+    duplicates: {
+      type: Number,
+      default: 0,
+    },
+    message: {
+      type: String,
+    },
+    errorDetails: {
+      type: String,
     },
     documentId: {
       type: String, // Reference to the traspaso document ID (documento_inv)

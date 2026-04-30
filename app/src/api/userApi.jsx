@@ -677,4 +677,29 @@ export class User {
       throw error;
     }
   }
+
+  async changePassword(accessToken, userId, currentPassword, newPassword) {
+    try {
+      console.log("🔐 Cambiando contraseña para usuario:", userId);
+
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.USERS}/user/password/${userId}`;
+      const params = {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("❌ Error cambiando contraseña:", error);
+      throw error;
+    }
+  }
 }
