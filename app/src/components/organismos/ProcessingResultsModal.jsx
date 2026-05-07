@@ -77,7 +77,8 @@ const formatErrorMessage = (errMsg, errorCode) => {
 export function ProcessingResultsModal({ isOpen, onClose, results }) {
     if (!isOpen || !results) return null;
 
-    const { processed = 0, failed = 0, skipped = 0, errorDetails = [], details = [] } = results.data || {};
+    const resultData = results.data || results;
+    const { processed = 0, failed = 0, skipped = 0, errorDetails = [], details = [], chainedResults = [] } = resultData;
 
     // Normalizar errores de diferentes versiones de la API
     const errors = errorDetails.length > 0 ? errorDetails : (details || []).filter(d => !d.success);
@@ -123,7 +124,28 @@ export function ProcessingResultsModal({ isOpen, onClose, results }) {
                         </div>
                     )}
 
-                    {failed === 0 && processed > 0 && (
+                    {chainedResults && chainedResults.length > 0 && (
+                        <ChainedSection>
+                            <Label style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '12px' }}>
+                                <FaInfoCircle color="var(--primary)" /> Workflows Encadenados
+                            </Label>
+                            <ChainList>
+                                {chainedResults.map((chain, i) => (
+                                    <ChainItem key={i} $success={chain.failed === 0}>
+                                        <div className="info">
+                                            <span className="name">{chain.mappingName}</span>
+                                            <span className="stats">
+                                                {chain.processed} procesados, {chain.failed} fallidos
+                                            </span>
+                                        </div>
+                                        {chain.failed === 0 ? <FaCheckCircle color="#28a745" /> : <FaExclamationCircle color="#dc3545" />}
+                                    </ChainItem>
+                                ))}
+                            </ChainList>
+                        </ChainedSection>
+                    )}
+
+                    {failed === 0 && processed > 0 && (!chainedResults || chainedResults.length === 0) && (
                         <div style={{ textAlign: 'center', padding: '20px', color: '#28a745' }}>
                             <FaCheckCircle size={48} style={{ marginBottom: '16px' }} />
                             <p>Todos los documentos seleccionados han sido procesados correctamente en el ERP.</p>
@@ -140,4 +162,27 @@ export function ProcessingResultsModal({ isOpen, onClose, results }) {
 
 const Label = styled.div`
   font-size: 14px; font-weight: 700; color: ${({ theme }) => theme.text};
+`;
+
+const ChainedSection = styled.div`
+    border-top: 1px solid ${({ theme }) => theme.border};
+    padding-top: 20px;
+    margin-top: 10px;
+`;
+
+const ChainList = styled.div`
+    display: flex; flex-direction: column; gap: 12px;
+`;
+
+const ChainItem = styled.div`
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 14px; border-radius: 12px;
+    background: ${({ theme, $success }) => $success ? '#28a74510' : '#dc354510'};
+    border: 1px solid ${({ $success }) => $success ? '#28a74540' : '#dc354540'};
+
+    .info {
+        display: flex; flex-direction: column; gap: 2px;
+        .name { font-weight: 700; color: ${({ theme }) => theme.text}; font-size: 14px; }
+        .stats { font-size: 12px; color: ${({ theme }) => theme.textSecondary}; }
+    }
 `;

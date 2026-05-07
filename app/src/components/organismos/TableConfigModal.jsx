@@ -124,7 +124,10 @@ export function TableConfigModal({ isOpen, onClose, onSave, initialData }) {
     };
 
     const handleSubmit = async () => {
-        if (!formData.name || !formData.targetTable) return;
+        if (!formData.name || !formData.targetTable || (!formData.sourceTable && !formData.useSameSourceTable)) {
+            alert("Los campos Nombre, Tabla Destino y Tabla Origen son obligatorios.");
+            return;
+        }
         setLoading(true);
         try {
             await onSave(formData);

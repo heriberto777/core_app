@@ -285,16 +285,17 @@ const processDocumentsByMapping = async (req, res) => {
 
     logger.info(`Procesando documentos para mapeo ${mappingId} (Auto-promociones)`);
 
-    const result = await DynamicTransferService.processDocuments(documentIds, mappingId);
+    // Iniciar proceso en segundo plano
+    DynamicTransferService.processDocuments(documentIds, mappingId)
+      .then(result => logger.info(`Asíncrono finalizado para ${mappingId}`))
+      .catch(err => logger.error(`Error asíncrono ${mappingId}: ${err.message}`));
 
-    const successMessage = result.failed > 0
-      ? `Procesamiento completado con ${result.failed} errores`
-      : "Todos los documentos fueron procesados exitosamente";
-
+    const mapping = await TransferMapping.findById(mappingId);
     res.json({
       success: true,
-      message: successMessage,
-      data: result,
+      message: "Procesamiento iniciado",
+      async: true,
+      taskId: mapping?.taskId
     });
   } catch (error) {
     logger.error(`Error en procesamiento de documentos: ${error.message}`);

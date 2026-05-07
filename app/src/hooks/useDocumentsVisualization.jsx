@@ -174,7 +174,9 @@ export function useDocumentsVisualization(accessToken) {
             if (overrideIds && overrideIds.length === 1) {
                 setActionStates(prev => ({ ...prev, [overrideIds[0]]: null }));
             }
-            setIsProcessing(false);
+            // Solo quitamos el loading general si NO es asíncrono
+            // Si es asíncrono, el modal de progreso mantendrá el estado hasta que onFinished lo cierre
+            // setIsProcessing(false); // Movido a la lógica del modal o manejado por el componente
         }
     };
 
@@ -212,6 +214,7 @@ export function useDocumentsVisualization(accessToken) {
         selectedDocuments,
         selectAll,
         isProcessing,
+        setIsProcessing,
         fetchDocuments,
         handleSelectMapping,
         handleReturnToList,

@@ -59,6 +59,7 @@ export * from "./components/organismos/DocumentRuleModal";
 export * from "./components/organismos/ValueMappingModal";
 export * from "./components/organismos/DocumentsFilterPanel";
 export * from "./components/organismos/ProcessingResultsModal";
+export * from "./components/organismos/ProcessingStatusModal";
 export * from "./components/organismos/DocumentDetailsModal";
 export * from "./components/organismos/DocumentsDataTable";
 export * from "./components/organismos/ConsecutiveFormModal";
@@ -108,6 +109,7 @@ export { default as Header } from "./components/organismos/Header";
 export { default as LinkedGroupsManager } from "./components/organismos/LinkedGroupsManager";
 export { default as Spinner } from "./components/organismos/Spinner";
 export { default as UserRoleManager } from "./components/organismos/UserRoleManager";
+export { default as WorkflowConfigSection } from "./components/organismos/WorkflowConfigSection";
 
 
 // Templates

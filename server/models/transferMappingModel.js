@@ -242,6 +242,22 @@ const PromotionConfigSchema = new Schema({
   ],
 });
 
+// NUEVO: Schema para configuración de flujos encadenados
+const WorkflowConfigSchema = new Schema({
+  enabled: { type: Boolean, default: false },
+  nextMappings: [
+    {
+      mappingId: { type: Schema.Types.ObjectId, ref: "TransferMapping" },
+      linkField: { type: String, required: true }, // Campo en el mapping hijo que enlaza al padre
+      parentLinkField: { type: String }, // Campo en el mapping padre que se enviará al hijo
+      description: { type: String },
+      autoExecute: { type: Boolean, default: true },
+      executionOrder: { type: Number, default: 0 },
+    }
+  ],
+  stopWorkflowOnError: { type: Boolean, default: true }
+});
+
 // Schema principal para el mapeo
 const TransferMappingSchema = new Schema({
   name: { type: String, required: true, unique: true },
@@ -273,6 +289,7 @@ const TransferMappingSchema = new Schema({
   consecutiveConfig: ConsecutiveConfigSchema,
   foreignKeyDependencies: [ForeignKeyDependencySchema],
   promotionConfig: PromotionConfigSchema,
+  workflowConfig: WorkflowConfigSchema,
 });
 
 // Pre-save hook para actualizar fecha

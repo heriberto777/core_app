@@ -122,6 +122,21 @@ export class TransferTaskApi {
         }
     }
 
+    async getTaskStatusById(accessToken, taskId) {
+        try {
+            const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/accion/${taskId}`;
+            const response = await fetch(url, {
+                headers: { Authorization: `Bearer ${accessToken}` }
+            });
+            const result = await response.json();
+            if (!response.ok) throw result;
+            return result;
+        } catch (error) {
+            console.error("Error al obtener estado de tarea:", error);
+            throw error;
+        }
+    }
+
     async getTaskStatus(accessToken) {
         try {
             const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/config/task-status`;

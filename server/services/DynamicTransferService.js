@@ -28,7 +28,13 @@ class DynamicTransferService {
    * @param {Object} signal - Señal de AbortController para cancelación
    * @returns {Promise<Object>} - Resultado del procesamiento
    */
-  async processDocuments(documentIds, mappingId, signal = null) {
+  async processDocuments(documentIds, mappingId, signal = null, options = {}) {
+    logger.info(`🚀 INICIANDO processDocuments: ${Array.isArray(documentIds) ? documentIds.length : 0} documentos, mapping: ${mappingId}`);
+    
+    if (!Array.isArray(documentIds) || documentIds.length === 0) {
+      logger.warn(`⚠️ No hay documentos para procesar en mapeo ${mappingId}`);
+      return { success: true, processed: 0, message: "No hay documentos para procesar" };
+    }
     // Crear AbortController local si no se proporcionó signal
     const localAbortController = !signal ? new AbortController() : null;
     signal = signal || localAbortController.signal;
@@ -41,7 +47,7 @@ class DynamicTransferService {
         logger.warn(`Timeout interno activado para tarea ${mappingId}`);
         localAbortController.abort();
       }
-    }, 120000); // 2 minutos
+    }, 300000); // Aumentado a 5 minutos para soportar cadenas largas
 
     let sourceConnection = null;
     let targetConnection = null;
@@ -128,7 +134,7 @@ class DynamicTransferService {
       executionId = taskExecution._id;
 
       // 5. Establecer conexiones
-      return await DatabaseServiceAdapter.withConnections(
+      const parentExecutionData = await DatabaseServiceAdapter.withConnections(
         mapping,
         async (connections) => {
           // ✅ VALIDACIÓN DE CONEXIONES AGREGADA
@@ -147,6 +153,9 @@ class DynamicTransferService {
           const sourceConnection = connections.source;
           const targetConnection = connections.target;
 
+          logger.info(`🔌 Conexiones obtenidas: Origen (${mapping.sourceServer}), Destino (${mapping.targetServer})`);
+          logger.info(`📂 Iniciando bucle para ${documentIds.length} documentos`);
+
           // ✅ VALIDAR CONEXIONES ANTES DE USARLAS
           if (typeof sourceConnection.execSql !== "function") {
             throw new Error(
@@ -162,9 +171,11 @@ class DynamicTransferService {
 
           // 6. Actualizar tarea principal como "en ejecución"
           if (mapping.taskId) {
-            await TransferTask.findByIdAndUpdate(mapping.taskId, {
+            const rootTaskId = options.rootTaskId || mapping.taskId;
+            await TransferTask.findByIdAndUpdate(rootTaskId, {
               status: "running",
-              progress: 0,
+              progress: options.isWorkflow ? undefined : 0, // No resetear progreso si es hijo
+              currentStep: mapping.name,
               lastExecutionDate: new Date(),
             });
           }
@@ -177,6 +188,7 @@ class DynamicTransferService {
             byType: {},
             consecutivesUsed: [],
             promotionsProcessed: 0,
+            skipped: 0
           };
 
           const successfulDocuments = [];
@@ -223,8 +235,15 @@ class DynamicTransferService {
                 mapping,
                 sourceConnection,
                 targetConnection,
-                currentConsecutive
+                currentConsecutive,
+                options
               );
+
+              // Si el documento no devolvió resultado (posiblemente por filtros SQL), contarlo como omitido
+              if (!docResult || (!docResult.success && docResult.skipped)) {
+                results.skipped++;
+                continue;
+              }
 
               // Manejar resultado del documento
               await this.handleDocumentResult(
@@ -240,15 +259,18 @@ class DynamicTransferService {
                 sourceConnection
               );
 
-              // Actualizar progreso
-              if (mapping.taskId) {
-                const progress = Math.round(
-                  ((i + 1) / documentIds.length) * 100
-                );
-                await TransferTask.findByIdAndUpdate(mapping.taskId, {
-                  progress,
-                });
-              }
+
+                // Actualizar progreso
+                if (mapping.taskId) {
+                  const rootTaskId = options.rootTaskId || mapping.taskId;
+                  const progress = Math.round(
+                    ((i + 1) / documentIds.length) * 100
+                  );
+                  await TransferTask.findByIdAndUpdate(rootTaskId, {
+                    progress,
+                    currentStep: mapping.name
+                  });
+                }
             } catch (error) {
               hasErrors = true;
               await this.handleDocumentError(
@@ -284,18 +306,79 @@ class DynamicTransferService {
             startTime
           );
 
-          clearTimeout(timeoutId);
-          TaskTracker.completeTask(cancelTaskId, finalResult.status);
-
-          return {
-            success: true,
-            executionId,
-            useCentralizedConsecutives,
-            centralizedConsecutiveId,
-            ...finalResult,
+          return { 
+            finalResult, 
+            successfulDocuments, 
+            hasErrors, 
+            results // Pasar resultados completos para el reporte final
           };
         }
       );
+
+      // ================================================================
+      // 11. 🚀 FLUJO FUERA DE TRANSACCIÓN (PARA EVITAR DEADLOCKS)
+      // ================================================================
+      
+      // En este punto la transacción del padre ya hizo COMMIT.
+      // Los hijos pueden ver los datos y no habrá bloqueos de tablas.
+
+      logger.info(`✅ Bloque withConnections finalizado. parentExecutionData: ${parentExecutionData ? 'Recibido' : 'NULL'}`);
+      
+      if (!parentExecutionData) {
+        throw new Error("La ejecución del padre no devolvió datos");
+      }
+
+      const { finalResult, successfulDocuments, hasErrors, results } = parentExecutionData;
+      logger.info(`📊 Datos extraídos: Éxitos=${successfulDocuments.length}, Errores=${hasErrors}, Procesados=${results ? results.processed : 'N/A'}`);
+      
+      if (!finalResult) {
+        logger.error("❌ finalResult es NULL después de withConnections");
+      }
+
+      // Disparar Mappings Encadenados (Workflow Chaining)
+      let chainedResults = [];
+      if (successfulDocuments.length > 0) {
+        logger.info(`🔗 Iniciando cadena de workflows para ${successfulDocuments.length} documentos (Fuera de transacción)`);
+        chainedResults = await this.triggerChainedMappings(successfulDocuments, mapping, options);
+      }
+
+      const finalResultWithChained = {
+        success: true,
+        executionId,
+        useCentralizedConsecutives,
+        centralizedConsecutiveId,
+        ...finalResult,
+        chainedResults,
+      };
+
+      // Guardar resultado en la tarea para consulta posterior
+      if (mapping.taskId || options.rootTaskId) {
+        const rootTaskId = options.rootTaskId || mapping.taskId;
+        
+        if (!options.isWorkflow) {
+          logger.info(`🏁 FINALIZANDO TAREA RAÍZ ${rootTaskId}: ${results.processed} procesados`);
+          await TransferTask.findByIdAndUpdate(rootTaskId, {
+            status: hasErrors ? "error" : "completed",
+            progress: 100,
+            currentStep: "Proceso Finalizado",
+            lastProcessingResult: finalResultWithChained
+          });
+        } else {
+          logger.info(`🌿 HIJO FINALIZADO ${mapping.name}: ${results.processed} procesados`);
+          if (mapping.taskId && mapping.taskId.toString() !== rootTaskId.toString()) {
+            await TransferTask.findByIdAndUpdate(mapping.taskId, {
+              status: hasErrors ? "error" : "completed",
+              progress: 100,
+              lastProcessingResult: finalResultWithChained
+            });
+          }
+        }
+      }
+
+      clearTimeout(timeoutId);
+      TaskTracker.completeTask(cancelTaskId, finalResult.status);
+
+      return finalResultWithChained;
     } catch (error) {
       return await this.handleProcessingError(
         error,
@@ -323,7 +406,8 @@ class DynamicTransferService {
     mapping,
     sourceConnection,
     targetConnection,
-    currentConsecutive = null
+    currentConsecutive = null,
+    options = {} // Nuevo parámetro de opciones
   ) {
     let processedTables = [];
     let documentType = "unknown";
@@ -377,14 +461,15 @@ class DynamicTransferService {
         const sourceData = await this.getSourceData(
           documentId,
           tableConfig,
-          sourceConnection
+          sourceConnection,
+          options // Pasar opciones
         );
 
         if (!sourceData) {
           logger.warn(
-            `No se encontraron datos en ${tableConfig.sourceTable} para documento ${documentId}`
+            `No se encontraron datos en ${tableConfig.sourceTable} para documento ${documentId} (Filtro SQL Adicional puede estar activo)`
           );
-          continue;
+          return { success: false, skipped: true, message: "Filtrado por SQL Adicional" };
         }
 
         // Procesar dependencias de foreign key ANTES de insertar datos principales
@@ -1409,7 +1494,7 @@ class DynamicTransferService {
    * @param {Object} sourceConnection - Conexión origen
    * @returns {Promise<Object>} - Datos de origen
    */
-  async getSourceData(documentId, tableConfig, sourceConnection) {
+   async getSourceData(documentId, tableConfig, sourceConnection, options = {}) {
     if (!sourceConnection) {
       throw new Error(
         "sourceConnection is null or undefined in getSourceData"
@@ -1449,7 +1534,7 @@ class DynamicTransferService {
         SELECT ${finalSelectFields} FROM ${tableConfig.sourceTable
         } ${tableAlias}
         WHERE ${tableAlias}.${primaryKey} = @documentId
-        ${tableConfig.filterCondition
+        ${tableConfig.filterCondition && !options.isWorkflow && !options.forceIgnoreFilters
           ? ` AND ${this.processFilterCondition(
             tableConfig.filterCondition,
             tableAlias
@@ -3901,28 +3986,31 @@ class DynamicTransferService {
       : `Procesamiento completado con éxito: ${results.processed} documentos procesados${promotionsMessage}${consecutiveMessage}`;
 
     // Actualizar tarea principal
-    await TransferTask.findByIdAndUpdate(mapping.taskId, {
-      status: finalStatus,
-      progress: 100,
-      lastExecutionDate: new Date(),
-      lastExecutionResult: {
-        success: !hasErrors,
-        message: finalMessage,
-        affectedRecords: results.processed,
-        promotionsProcessed: results.promotionsProcessed,
-        useCentralizedConsecutives: useCentralized,
-        errorDetails: hasErrors
-          ? results.details
-            .filter((d) => !d.success)
-            .map(
-              (d) =>
-                `Documento ${d.documentId}: ${d.message || d.error || "Error no especificado"
-                }`
-            )
-            .join("\n")
-          : null,
-      },
-    });
+    if (mapping.taskId) {
+      logger.info(`📊 Actualizando estadísticas para tarea ${mapping.taskId}: ${results.processed} exitosos, ${results.failed} fallos`);
+      await TransferTask.findByIdAndUpdate(mapping.taskId, {
+        status: finalStatus,
+        progress: 100,
+        lastExecutionDate: new Date(),
+        lastExecutionResult: {
+          success: !hasErrors,
+          message: finalMessage,
+          affectedRecords: results.processed,
+          promotionsProcessed: results.promotionsProcessed,
+          useCentralizedConsecutives: useCentralized,
+          errorDetails: hasErrors
+            ? results.details
+              .filter((d) => !d.success)
+              .map(
+                (d) =>
+                  `Documento ${d.documentId}: ${d.message || d.error || "Error no especificado"
+                  }`
+              )
+              .join("\n")
+            : null,
+        },
+      });
+    }
 
     logger.info(
       `✅ Procesamiento completado: ${results.processed} éxitos, ${results.failed} fallos${promotionsMessage}${consecutiveMessage}`
@@ -4401,7 +4489,7 @@ class DynamicTransferService {
     const limit = filters.limit || 100;
     const selectFieldsStr = selectFields.join(", ");
 
-    let query = `SELECT TOP ${limit} ${selectFieldsStr} FROM ${tableInfo.fullTableName} WHERE 1=1`;
+    let query = `SELECT TOP ${limit} ${selectFieldsStr} FROM ${tableInfo.fullTableName} WITH (NOLOCK) WHERE 1=1`;
     const params = {};
 
     // Verificar y aplicar filtros de fecha
@@ -5275,26 +5363,34 @@ class DynamicTransferService {
     try {
       // Crear tarea relacionada si no existe
       if (!mappingData.taskId) {
-        const task = new TransferTask({
-          name: `Mapeo: ${mappingData.name}`,
-          description: `Tarea automática para mapeo ${mappingData.name}`,
-          type: "both",
-          status: "pending",
-          query: "DYNAMIC_MAPPING_PROCESS", // Campo obligatorio
-          mappingId: null,
-          schedule: {
-            enabled: false,
-            cron: "0 0 * * *",
-            timezone: "America/Santo_Domingo",
-          },
-          active: true,
-        });
+        const taskName = `Mapeo: ${mappingData.name}`;
+        
+        // Verificar si ya existe una tarea con este nombre
+        let task = await TransferTask.findOne({ name: taskName });
+        
+        if (!task) {
+          task = new TransferTask({
+            name: taskName,
+            description: `Tarea automática para mapeo ${mappingData.name}`,
+            type: "both",
+            status: "pending",
+            query: "DYNAMIC_MAPPING_PROCESS", // Campo obligatorio
+            mappingId: null,
+            schedule: {
+              enabled: false,
+              cron: "0 0 * * *",
+              timezone: "America/Santo_Domingo",
+            },
+            active: true,
+          });
 
-        const savedTask = await task.save();
-        logger.info(
-          `Tarea creada automáticamente para mapeo: ${savedTask._id}`
-        );
-        mappingData.taskId = savedTask._id;
+          await task.save();
+          logger.info(`Tarea creada automáticamente para mapeo: ${task._id}`);
+        } else {
+          logger.info(`Tarea existente reutilizada para mapeo: ${task._id}`);
+        }
+        
+        mappingData.taskId = task._id;
       }
 
       const mapping = new TransferMapping(mappingData);
@@ -5324,23 +5420,31 @@ class DynamicTransferService {
     try {
       // Crear tarea relacionada si no existe
       if (!mappingData.taskId) {
-        const task = new TransferTask({
-          name: `Mapeo: ${mappingData.name}`,
-          description: `Tarea automática para mapeo ${mappingData.name}`,
-          type: "both",
-          status: "pending",
-          query: "DYNAMIC_MAPPING_PROCESS", // Campo obligatorio
-          mappingId: mappingId,
-          schedule: {
-            enabled: false,
-            cron: "0 0 * * *",
-            timezone: "America/Santo_Domingo",
-          },
-          active: true,
-        });
+        const taskName = `Mapeo: ${mappingData.name}`;
+        
+        let task = await TransferTask.findOne({ name: taskName });
+        
+        if (!task) {
+          task = new TransferTask({
+            name: taskName,
+            description: `Tarea automática para mapeo ${mappingData.name}`,
+            type: "both",
+            status: "pending",
+            query: "DYNAMIC_MAPPING_PROCESS", // Campo obligatorio
+            mappingId: mappingId,
+            schedule: {
+              enabled: false,
+              cron: "0 0 * * *",
+              timezone: "America/Santo_Domingo",
+            },
+            active: true,
+          });
 
-        const savedTask = await task.save();
-        mappingData.taskId = savedTask._id;
+          await task.save();
+          logger.info(`Tarea creada automáticamente durante actualización: ${task._id}`);
+        }
+        
+        mappingData.taskId = task._id;
       }
 
       const mapping = await TransferMapping.findByIdAndUpdate(
@@ -6973,6 +7077,145 @@ class DynamicTransferService {
     }
 
     return lookupResults;
+  }
+
+  /**
+   * Dispara los mappings encadenados configurados en el flujo de trabajo
+   * @param {Array} successfulIds - IDs de los documentos procesados exitosamente
+   * @param {Object} mapping - Configuración del mapping actual
+   * @param {Object} options - Opciones adicionales
+   * @returns {Promise<Array>} - Resultados de los mappings encadenados
+   */
+  async triggerChainedMappings(successfulDocuments, mapping, options = {}) {
+    if (!mapping.workflowConfig || !mapping.workflowConfig.enabled || !successfulDocuments.length) {
+      return [];
+    }
+
+    const chainedResults = [];
+    const nextMappings = mapping.workflowConfig.nextMappings || [];
+
+    // Ordenar por executionOrder
+    const sortedNextMappings = [...nextMappings].sort((a, b) => (a.executionOrder || 0) - (b.executionOrder || 0));
+
+    for (const nextMappingConfig of sortedNextMappings) {
+      if (!nextMappingConfig.autoExecute) continue;
+
+      try {
+        const nextMappingId = nextMappingConfig.mappingId;
+        const nextMapping = await TransferMapping.findById(nextMappingId);
+        if (!nextMapping) {
+          logger.warn(`Mapping encadenado no encontrado: ${nextMappingId}`);
+          continue;
+        }
+
+        // Determinar qué IDs enviar al hijo
+        let childInputIds = successfulDocuments;
+
+        // Si el usuario especificó que el enlace no es por la PK del padre (ej: usar NCF en lugar de NUM_PED)
+        if (nextMappingConfig.parentLinkField) {
+          logger.info(`🔍 RESOLVIENDO: Valores de '${nextMappingConfig.parentLinkField}' para ${successfulDocuments.length} documentos...`);
+          
+          const parentMainTable = mapping.tableConfigs.find(tc => !tc.isDetailTable);
+          if (parentMainTable) {
+            const pk = parentMainTable.primaryKey;
+            const linkField = nextMappingConfig.parentLinkField;
+            
+            // Consulta masiva para obtener los valores de enlace
+            const resolutionQuery = `
+              SELECT DISTINCT [${linkField}] as val
+              FROM ${parentMainTable.sourceTable}
+              WHERE [${pk}] IN (${successfulDocuments.map((_, i) => `@id${i}`).join(',')})
+            `;
+            
+            const params = {};
+            successfulDocuments.forEach((id, i) => params[`id${i}`] = id);
+            
+            try {
+              const resolutionResult = await DatabaseServiceAdapter.query(mapping.sourceServer, resolutionQuery, params);
+              if (resolutionResult && resolutionResult.recordset) {
+                childInputIds = resolutionResult.recordset
+                  .map(r => r.val)
+                  .filter(v => v !== null && v !== undefined && v !== "");
+                
+                logger.info(`✅ RESOLUCIÓN: Obtenidos ${childInputIds.length} valores únicos de '${linkField}'`);
+              }
+            } catch (resError) {
+              logger.error(`❌ Error al resolver campos de enlace: ${resError.message}`);
+              // Si falla la resolución, continuamos con los IDs originales para intentar herencia
+            }
+          }
+        }
+
+        // Buscar documentos hijos relacionados
+        const childDocumentIds = await this.findChildDocumentIds(childInputIds, nextMappingConfig, nextMapping);
+
+        if (childDocumentIds.length === 0) {
+          logger.info(`ℹ️ No se encontraron registros relacionados en ${nextMapping.name}.`);
+          continue;
+        }
+
+        logger.info(`🚀 DISPARANDO WORKFLOW: ${mapping.name} -> ${nextMapping.name} (${childDocumentIds.length} documentos)`);
+
+        // 2. Ejecutar el mapping hijo de forma recursiva
+        const result = await this.processDocuments(childDocumentIds, nextMappingId, null, { 
+          isWorkflow: true,
+          rootTaskId: options.rootTaskId || mapping.taskId,
+          forceIgnoreFilters: true 
+        });
+        
+        chainedResults.push({
+          mappingName: nextMapping.name,
+          mappingId: nextMappingId,
+          ...result
+        });
+
+        if (result.failed > 0 && mapping.workflowConfig.stopWorkflowOnError) {
+          logger.warn(`⚠️ Deteniendo workflow en ${nextMapping.name} debido a errores.`);
+          break;
+        }
+
+      } catch (error) {
+        logger.error(`❌ Error al ejecutar mapping encadenado: ${error.message}`);
+        if (mapping.workflowConfig.stopWorkflowOnError) break;
+      }
+    }
+
+    return chainedResults;
+  }
+
+  /**
+   * Busca los IDs de los documentos hijos basados en el campo de enlace
+   * @param {Array} parentIds - IDs de los documentos padres
+   * @param {Object} nextMappingConfig - Configuración del enlace
+   * @param {Object} nextMapping - Mapping hijo
+   * @returns {Promise<Array>} - Lista de IDs hijos encontrados
+   */
+  async findChildDocumentIds(parentIds, nextMappingConfig, nextMapping) {
+    const { linkField } = nextMappingConfig;
+    const mainTable = nextMapping.tableConfigs.find(tc => !tc.isDetailTable);
+    
+    if (!mainTable) throw new Error(`El mapping ${nextMapping.name} no tiene una tabla principal configurada.`);
+
+    const sourceServer = nextMapping.sourceServer;
+    const primaryKey = mainTable.primaryKey;
+    
+    // Consulta para encontrar IDs hijos
+    // SELECT DISTINCT [PrimaryKey] FROM [SourceTable] WHERE [LinkField] IN (...)
+    const query = `
+      SELECT DISTINCT [${primaryKey}] as id
+      FROM ${mainTable.sourceTable}
+      WHERE [${linkField}] IN (${parentIds.map((_, i) => `@id${i}`).join(',')})
+    `;
+
+    const params = {};
+    parentIds.forEach((id, i) => {
+      params[`id${i}`] = id;
+    });
+
+    const result = await DatabaseServiceAdapter.query(sourceServer, query, params);
+    if (!result || !result.recordset) return [];
+    
+    return result.recordset.map(r => r.id);
   }
 }
 

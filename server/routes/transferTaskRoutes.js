@@ -107,7 +107,7 @@ router.get("/accion", checkPermission("loads", "read"), getTransferTasks);
 /**
  * Rutas con parámetros genéricos (AL FINAL)
  */
-router.get("/accion/:name", checkPermission("loads", "read"), getTransferTask);
-router.delete("/accion/:name", checkPermission("loads", "delete"), deleteTransferTask);
+router.get("/accion/:id", checkPermission("loads", "read"), getTransferTask);
+router.delete("/accion/:id", checkPermission("loads", "delete"), deleteTransferTask);
 
 module.exports = router;
