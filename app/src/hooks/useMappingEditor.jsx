@@ -25,6 +25,7 @@ const INITIAL_MAPPING_STATE = {
     },
     consecutiveConfig: { enabled: false },
     foreignKeyDependencies: [],
+    workflowConfig: { enabled: false, nextMappings: [], stopWorkflowOnError: true },
 };
 
 export function useMappingEditor(mappingId, accessToken, onSave, onCancel) {

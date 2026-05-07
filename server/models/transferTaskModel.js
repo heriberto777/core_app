@@ -55,6 +55,10 @@ const transferTaskSchema = new mongoose.Schema(
     // Porcentaje de progreso (0..100)
     progress: { type: Number, default: 0 },
 
+    // Seguimiento de Workflows
+    currentStep: { type: String, default: "" }, // Nombre del mapping actual
+    totalSteps: { type: Number, default: 1 },    // Total de mappings en la cadena
+
     // transferType (indica dirección: up/down)
     transferType: {
       type: String,
@@ -122,6 +126,7 @@ const transferTaskSchema = new mongoose.Schema(
       affectedRecords: Number,
       errorDetails: String,
     },
+    lastProcessingResult: { type: mongoose.Schema.Types.Mixed, default: null },
 
     // Mapeo de campos para transferencias "down"
     fieldMapping: {

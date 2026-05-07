@@ -13,6 +13,7 @@ import {
     useMappings,
     DocumentsFilterPanel,
     ProcessingResultsModal,
+    ProcessingStatusModal,
     DocumentDetailsModal,
     DocumentsDataTable,
     CustomerEditor,
@@ -78,6 +79,7 @@ export function UniversalDocumentManager() {
         activeMappingId,
         setSelectedDocuments,
         isProcessing,
+        setIsProcessing,
         actionStates
     } = useDocumentsVisualization(accessToken);
 
@@ -122,19 +124,14 @@ export function UniversalDocumentManager() {
         if (!confirm.isConfirmed) return;
 
         try {
-            // Si es un ID específico (botón Play en la fila), lo seleccionamos temporalmente si no estaba
             if (specificId) {
-                // Ejecutamos pasándole el ID directamente si el API lo soporta o ajustamos el hook
-                // Por ahora, el hook useDocumentsVisualization usa selectedDocuments, así que lo sincronizamos
-                const prevSelection = [...selectedDocuments];
+                // Sincronizamos la selección para que el hook lo maneje
                 setSelectedDocuments([specificId]);
-                const result = await executeProcessing([specificId]);
-                setProcessingResults(result);
-                setIsResultsOpen(true);
+                await executeProcessing([specificId]);
+                // No abrimos el modal aquí, el ProcessingStatusModal lo hará al terminar
             } else {
-                const result = await executeProcessing();
-                setProcessingResults(result);
-                setIsResultsOpen(true);
+                await executeProcessing();
+                // No abrimos el modal aquí, el ProcessingStatusModal lo hará al terminar
             }
         } catch (error) {
             Swal.fire("Error", error.message || "Error operativo", "error");
@@ -285,6 +282,18 @@ export function UniversalDocumentManager() {
                 onClose={() => setIsDetailsOpen(false)}
                 document={selectedDoc}
                 details={docDetailsData}
+            />
+
+            <ProcessingStatusModal
+                isOpen={isProcessing}
+                taskId={activeConfig?.taskId}
+                accessToken={accessToken}
+                mappingName={activeMappingName}
+                onFinished={(result) => {
+                    setProcessingResults(result);
+                    setIsProcessing(false);
+                    setIsResultsOpen(true);
+                }}
             />
 
             <ProcessingResultsModal

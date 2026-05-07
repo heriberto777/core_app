@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import styled from "styled-components";
 import { Helmet } from "react-helmet-async";
 import {
-  FaSave, FaTimes, FaPlus, FaEdit, FaTrash, FaTable, FaLink, FaFileAlt, FaCogs, FaChevronDown, FaChevronUp, FaExpand, FaCompress
+  FaSave, FaTimes, FaPlus, FaEdit, FaTrash, FaTable, FaLink, FaFileAlt, FaCogs, FaChevronDown, FaChevronUp, FaExpand, FaCompress, FaArrowRight
 } from "react-icons/fa";
 import {
   useAuth,
@@ -19,6 +19,7 @@ import {
   StatusBadge,
   LoadingUI,
   ContentHeader,
+  WorkflowConfigSection,
 } from "../../index";
 
 const INITIAL_FIELDS_SHOWN = 8;
@@ -149,6 +150,7 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         <Tab $active={activeTab === "documentTypes"} onClick={() => setActiveTab("documentTypes")}><FaFileAlt /> Tipos Docto</Tab>
         <Tab $active={activeTab === "dependencies"} onClick={() => setActiveTab("dependencies")}><FaLink /> Dependencias FK</Tab>
         <Tab $active={activeTab === "tables"} onClick={() => setActiveTab("tables")}><FaTable /> Tablas y Campos</Tab>
+        <Tab $active={activeTab === "workflow"} onClick={() => setActiveTab("workflow")}><FaArrowRight /> Flujo de Trabajo</Tab>
       </TabsContainer>
 
       <ContentCard>
@@ -390,6 +392,14 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
               </div>
             )})}
           </div>
+        )}
+
+        {activeTab === "workflow" && (
+          <WorkflowConfigSection 
+            mapping={mapping} 
+            handleChange={handleChange} 
+            accessToken={accessToken} 
+          />
         )}
       </ContentCard>
 

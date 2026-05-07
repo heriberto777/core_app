@@ -53,18 +53,27 @@ const getTransferTasks = async (req, res) => {
  */
 const getTransferTask = async (req, res) => {
   try {
-    const { id } = req.params;
-    if (!id) return res.status(400).json({ success: false, message: "Se requiere el ID o nombre de la tarea" });
+    // Intentar capturar el identificador de cualquier parámetro posible para evitar errores de ruta
+    const identifier = req.params.id || req.params.name || req.params.identifier;
+    
+    if (!identifier) {
+      return res.status(400).json({ success: false, message: "Se requiere el ID o nombre de la tarea" });
+    }
 
-    const task = mongoose.Types.ObjectId.isValid(id)
-      ? await TransferTask.findById(id).lean()
-      : await TransferTask.findOne({ name: id }).lean();
+    const task = mongoose.Types.ObjectId.isValid(identifier)
+      ? await TransferTask.findById(identifier).lean()
+      : await TransferTask.findOne({ name: identifier }).lean();
 
     if (!task) return res.status(404).json({ success: false, message: "Tarea no encontrada" });
 
+    // ⭐ DESHABILITAR CACHE PARA CONSULTAS DE ESTADO ⭐
+    res.setHeader("Cache-Control", "no-store, no-cache, must-revalidate, proxy-revalidate");
+    res.setHeader("Pragma", "no-cache");
+    res.setHeader("Expires", "0");
+
     return res.status(200).json({ success: true, message: "Tarea obtenida correctamente", data: task });
   } catch (error) {
-    logger.error(`Error en getTransferTask (${req.params.id}):`, error);
+    logger.error(`Error en getTransferTask (${req.params.id || req.params.name}):`, error);
     return res.status(500).json({ success: false, message: "Error al obtener tarea", error: error.message });
   }
 };
@@ -390,13 +399,13 @@ const executeLinkedGroup = async (req, res) => {
  */
 const deleteTransferTask = async (req, res) => {
   try {
-    const { name } = req.params;
+    const identifier = req.params.id || req.params.name;
     const userId = req.user?.user_id || req.user?._id || "SYSTEM";
-    if (!name) return res.status(400).json({ success: false, message: "Se requiere el nombre o ID de la tarea" });
+    if (!identifier) return res.status(400).json({ success: false, message: "Se requiere el nombre o ID de la tarea" });
 
-    const result = mongoose.Types.ObjectId.isValid(name)
-      ? await TransferTask.findByIdAndDelete(name)
-      : await TransferTask.findOneAndDelete({ name: name });
+    const result = mongoose.Types.ObjectId.isValid(identifier)
+      ? await TransferTask.findByIdAndDelete(identifier)
+      : await TransferTask.findOneAndDelete({ name: identifier });
 
     if (!result) return res.status(404).json({ success: false, message: "Tarea no encontrada" });
 
