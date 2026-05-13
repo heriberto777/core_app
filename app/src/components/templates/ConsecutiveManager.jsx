@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import styled from "styled-components";
 import {
   FaPlus, FaSync, FaChartLine, FaSearch, FaPlay, FaInfoCircle,
   FaEdit, FaTrash, FaLink, FaHistory
@@ -14,13 +13,17 @@ import {
   ConsecutiveAssignModal,
   ConsecutiveDashboardPanel,
   Button,
-  StatusBadge
+  StatusBadge,
+  LoadingUI
 } from "../../index";
 
+/**
+ * ConsecutiveManager (Tailwind Edition)
+ * Gestión centralizada de folios y numeración con diseño corporativo premium.
+ */
 export function ConsecutiveManager() {
   const { accessToken } = useAuth();
 
-  // Hook de lógica centralizada
   const {
     filteredConsecutives,
     loading,
@@ -38,14 +41,11 @@ export function ConsecutiveManager() {
     getMetrics
   } = useConsecutiveManager(accessToken);
 
-  // Estados locales para modales
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isAssignOpen, setIsAssignOpen] = useState(false);
   const [selectedConsecutive, setSelectedConsecutive] = useState(null);
   const [metricsData, setMetricsData] = useState(null);
-
-  // --- Handlers de UI ---
 
   const openCreate = () => {
     setSelectedConsecutive(null);
@@ -61,10 +61,10 @@ export function ConsecutiveManager() {
     try {
       if (selectedConsecutive) {
         await handleUpdate(selectedConsecutive._id, data);
-        Swal.fire("Actualizado", "Consecutivo actualizado correctamente", "success");
+        Swal.fire({ icon: 'success', title: 'Actualizado', text: 'Consecutivo actualizado correctamente', toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
       } else {
         await handleCreate(data);
-        Swal.fire("Creado", "Consecutivo creado correctamente", "success");
+        Swal.fire({ icon: 'success', title: 'Creado', text: 'Consecutivo creado correctamente', toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
       }
       setIsFormOpen(false);
     } catch (error) {
@@ -90,7 +90,7 @@ export function ConsecutiveManager() {
   const onConfirmAssign = async (assignmentData) => {
     try {
       await handleAssign(selectedConsecutive._id, assignmentData);
-      Swal.fire("Asignado", "Asignación realizada con éxito", "success");
+      Swal.fire({ icon: 'success', title: 'Asignado', text: 'Asignación realizada con éxito', toast: true, position: 'top-end', showConfirmButton: false, timer: 3000 });
       setIsAssignOpen(false);
     } catch (error) {
       Swal.fire("Error", "No se pudo realizar la asignación", "error");
@@ -103,7 +103,7 @@ export function ConsecutiveManager() {
       text: `Esta acción no se puede deshacer. Se eliminará "${consecutive.name}".`,
       icon: 'warning',
       showCancelButton: true,
-      confirmButtonColor: '#d33',
+      confirmButtonColor: '#ef4444',
       confirmButtonText: 'Sí, eliminar'
     });
 
@@ -139,8 +139,6 @@ export function ConsecutiveManager() {
 
   const onGetNextValue = async (consecutive) => {
     try {
-      // Si requiere segmento, el hook o el modal debería manejarlo. 
-      // Por ahora simplificamos como estaba:
       let segment = null;
       if (consecutive.segments?.enabled && ['year', 'month'].includes(consecutive.segments.type)) {
         const date = new Date();
@@ -148,12 +146,7 @@ export function ConsecutiveManager() {
           ? date.getFullYear().toString()
           : `${date.getFullYear()}${(date.getMonth() + 1).toString().padStart(2, '0')}`;
       } else if (consecutive.segments?.enabled) {
-        const { value } = await Swal.fire({
-          title: 'Valor de Segmento',
-          input: 'text',
-          inputLabel: `Ingrese el valor para ${consecutive.segments.type}`,
-          showCancelButton: true
-        });
+        const { value } = await Swal.fire({ title: 'Valor de Segmento', input: 'text', inputLabel: `Ingrese el valor para ${consecutive.segments.type}`, showCancelButton: true });
         if (!value) return;
         segment = value;
       }
@@ -161,7 +154,7 @@ export function ConsecutiveManager() {
       const result = await getNextValue(consecutive._id, segment);
       Swal.fire({
         title: "Folio Generado",
-        html: `<div style="font-size: 2em; font-weight: 800; color: var(--primary); padding: 20px;">${result.value}</div>`,
+        html: `<div style="font-size: 2.5rem; font-weight: 900; color: #6366f1; padding: 30px; letter-spacing: -1px; font-family: monospace;">${result.value}</div>`,
         icon: 'success'
       });
     } catch (error) {
@@ -170,195 +163,124 @@ export function ConsecutiveManager() {
   };
 
   return (
-    <div style={{ animation: 'fadeIn 0.4s ease-out' }}>
-      <HeaderSection>
+    <div className="flex flex-col gap-8 w-full max-w-[1440px] mx-auto p-6 lg:p-10 animate-fadeIn">
+      {/* HEADER SECTION */}
+      <header className="flex flex-col xl:flex-row justify-between items-start xl:items-end gap-6">
         <div>
-          <Title>Gestión de Consecutivos</Title>
-          <Subtitle>Control centralizado de folios, numeración y segmentación de documentos</Subtitle>
+          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Gestión de Consecutivos</h1>
+          <p className="text-slate-500 mt-2 font-medium">Control centralizado de folios, numeración y segmentación de documentos.</p>
         </div>
-        <HeaderActions>
-          <SearchWrapper>
-            <FaSearch />
-            <SearchInput
-              placeholder="Buscar folio por nombre o descripción..."
+        <div className="flex items-center gap-3 w-full xl:w-auto">
+          <div className="relative flex-1 xl:w-80">
+            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              placeholder="Buscar por nombre o descripción..."
               value={search}
               onChange={e => setSearch(e.target.value)}
+              className="w-full py-3 pl-11 pr-4 rounded-xl border border-slate-200 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all text-sm font-medium"
             />
-          </SearchWrapper>
-          <Button variant="secondary" onClick={() => setShowDashboard(!showDashboard)}>
-            {showDashboard ? <><FaHistory /> Ver Lista</> : <><FaChartLine /> Dashboard</>}
+          </div>
+          <Button variant="secondary" onClick={() => setShowDashboard(!showDashboard)} className="whitespace-nowrap">
+            {showDashboard ? <><FaHistory /> Lista</> : <><FaChartLine /> Dashboard</>}
           </Button>
-          <Button variant="primary" onClick={openCreate}>
+          <Button variant="primary" onClick={openCreate} className="whitespace-nowrap">
             <FaPlus /> Nuevo Folio
           </Button>
-          <RefreshBtn onClick={loadConsecutives} $loading={loading}>
+          <button 
+            onClick={loadConsecutives} 
+            className={`w-12 h-12 rounded-xl bg-white border border-slate-200 text-slate-400 flex items-center justify-center hover:bg-slate-50 hover:text-primary-500 transition-all ${loading ? 'animate-spin' : ''}`}
+          >
             <FaSync />
-          </RefreshBtn>
-        </HeaderActions>
-      </HeaderSection>
+          </button>
+        </div>
+      </header>
 
-      <ContentArea>
+      {/* CONTENT AREA */}
+      <div className="min-h-[500px]">
         {showDashboard ? (
           <ConsecutiveDashboardPanel data={dashboardData} onClose={() => setShowDashboard(false)} />
         ) : (
-          <TableContainer>
+          <div className="bg-white rounded-[32px] border border-slate-200 shadow-soft overflow-hidden">
             {loading ? (
-              <LoadingState>Sincronizando consecutivos con el servidor...</LoadingState>
+              <LoadingUI message="Sincronizando consecutivos con el servidor de folios..." />
             ) : filteredConsecutives.length === 0 ? (
-              <EmptyState>No se encontraron consecutivos configurados.</EmptyState>
+              <div className="p-32 flex flex-col items-center justify-center text-center gap-4 text-slate-400">
+                <FaHistory size={48} className="opacity-20" />
+                <p className="font-bold">No se encontraron consecutivos configurados.</p>
+              </div>
             ) : (
-              <StyledTable>
-                <thead>
-                  <tr>
-                    <th>Consecutivo</th>
-                    <th>Valor Actual</th>
-                    <th>Formato / Máscara</th>
-                    <th>Tipo</th>
-                    <th>Estado</th>
-                    <th style={{ textAlign: 'right' }}>Acciones Operativas</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {filteredConsecutives.map(c => (
-                    <tr key={c._id}>
-                      <td>
-                        <div style={{ fontWeight: 700 }}>{c.name}</div>
-                        <div style={{ fontSize: '11px', opacity: 0.6 }}>{c.description || 'Sin descripción'}</div>
-                      </td>
-                      <td>
-                        <span style={{ fontSize: '18px', fontWeight: 800, color: 'var(--primary)' }}>{c.currentValue}</span>
-                      </td>
-                      <td>
-                        <code>{c.pattern || `${c.prefix || ''}[${c.padChar.repeat(c.padLength)}]`}</code>
-                      </td>
-                      <td>
-                        {c.segments?.enabled ? (
-                          <StatusBadge status="warning">SEGMENTADO ({c.segments.type})</StatusBadge>
-                        ) : (
-                          <StatusBadge status="info">GLOBAL</StatusBadge>
-                        )}
-                      </td>
-                      <td>
-                        <StatusBadge status={c.active ? 'active' : 'inactive'}>
-                          {c.active ? 'ACTIVO' : 'INACTIVO'}
-                        </StatusBadge>
-                      </td>
-                      <td>
-                        <ActionGrid>
-                          <Button variant="ghost" onClick={() => onGetNextValue(c)} title="Generar Siguiente"><FaPlay /></Button>
-                          <Button variant="ghost" onClick={() => onViewDetails(c)} title="Métricas"><FaInfoCircle /></Button>
-                          <Button variant="ghost" onClick={() => onAssignClick(c)} title="Vincular"><FaLink /></Button>
-                          <Button variant="ghost" onClick={() => onResetClick(c)} title="Reiniciar"><FaSync /></Button>
-                          <Button variant="ghost" onClick={() => openEdit(c)} title="Editar"><FaEdit /></Button>
-                          <Button variant="ghost" onClick={() => onDeleteClick(c)} title="Eliminar" style={{ color: '#ff4757' }}><FaTrash /></Button>
-                        </ActionGrid>
-                      </td>
+              <div className="overflow-x-auto">
+                <table className="w-full text-left border-collapse">
+                  <thead>
+                    <tr className="bg-slate-50/50 border-b border-slate-100">
+                      <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Consecutivo</th>
+                      <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Valor Actual</th>
+                      <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Máscara / Formato</th>
+                      <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Segmentación</th>
+                      <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Estado</th>
+                      <th className="px-6 py-5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-widest">Acciones</th>
                     </tr>
-                  ))}
-                </tbody>
-              </StyledTable>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {filteredConsecutives.map(c => (
+                      <tr key={c._id} className="hover:bg-slate-50/30 transition-colors group">
+                        <td className="px-6 py-5">
+                          <div className="font-extrabold text-slate-700 tracking-tight">{c.name}</div>
+                          <div className="text-[11px] font-bold text-slate-400 uppercase tracking-tighter mt-1">{c.description || 'Sin descripción'}</div>
+                        </td>
+                        <td className="px-6 py-5">
+                          <span className="text-2xl font-black text-primary-600 font-mono tracking-tighter">{c.currentValue}</span>
+                        </td>
+                        <td className="px-6 py-5">
+                          <code className="px-3 py-1 bg-slate-100 rounded-lg text-slate-600 text-xs font-bold border border-slate-200">
+                            {c.pattern || `${c.prefix || ''}[${c.padChar.repeat(c.padLength)}]`}
+                          </code>
+                        </td>
+                        <td className="px-6 py-5">
+                          {c.segments?.enabled ? (
+                            <StatusBadge status="PENDING">SEGMENTADO ({c.segments.type})</StatusBadge>
+                          ) : (
+                            <StatusBadge status="ACTIVE">GLOBAL</StatusBadge>
+                          )}
+                        </td>
+                        <td className="px-6 py-5">
+                          <StatusBadge status={c.active ? 'ACTIVE' : 'INACTIVE'}>
+                            {c.active ? 'ACTIVO' : 'INACTIVO'}
+                          </StatusBadge>
+                        </td>
+                        <td className="px-6 py-5">
+                          <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                            <button onClick={() => onGetNextValue(c)} className="p-2 text-slate-400 hover:text-primary-500 hover:bg-primary-50 rounded-lg transition-all" title="Generar Siguiente"><FaPlay size={14}/></button>
+                            <button onClick={() => onViewDetails(c)} className="p-2 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all" title="Métricas"><FaInfoCircle size={14}/></button>
+                            <button onClick={() => onAssignClick(c)} className="p-2 text-slate-400 hover:text-violet-500 hover:bg-violet-50 rounded-lg transition-all" title="Vincular"><FaLink size={14}/></button>
+                            <button onClick={() => onResetClick(c)} className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-all" title="Reiniciar"><FaSync size={14}/></button>
+                            <button onClick={() => openEdit(c)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all" title="Editar"><FaEdit size={14}/></button>
+                            <button onClick={() => onDeleteClick(c)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Eliminar"><FaTrash size={14}/></button>
+                          </div>
+                        </td>
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
             )}
-          </TableContainer>
+          </div>
         )}
-      </ContentArea>
+      </div>
 
-      {/* Modales de Organismos */}
-      <ConsecutiveFormModal
-        isOpen={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
-        onSave={onSaveForm}
-        consecutive={selectedConsecutive}
-      />
-
-      <ConsecutiveDetailsModal
-        isOpen={isDetailsOpen}
-        onClose={() => setIsDetailsOpen(false)}
-        metrics={metricsData}
-      />
-
-      <ConsecutiveAssignModal
-        isOpen={isAssignOpen}
-        onClose={() => setIsAssignOpen(false)}
-        consecutive={selectedConsecutive}
-        accessToken={accessToken}
-        onAssign={onConfirmAssign}
-      />
+      {/* MODALS */}
+      <ConsecutiveFormModal isOpen={isFormOpen} onClose={() => setIsFormOpen(false)} onSave={onSaveForm} consecutive={selectedConsecutive} />
+      <ConsecutiveDetailsModal isOpen={isDetailsOpen} onClose={() => setIsDetailsOpen(false)} metrics={metricsData} />
+      <ConsecutiveAssignModal isOpen={isAssignOpen} onClose={() => setIsAssignOpen(false)} consecutive={selectedConsecutive} accessToken={accessToken} onAssign={onConfirmAssign} />
 
       {isProcessing && (
-        <ProcessingOverlay>
-          <Spinner />
-          <span>Procesando solicitud técnica...</span>
-        </ProcessingOverlay>
+        <div className="fixed inset-0 z-[5000] bg-slate-900/60 backdrop-blur-md flex flex-col items-center justify-center gap-6 text-white animate-fadeIn">
+          <div className="w-16 h-16 border-4 border-white/20 border-t-white rounded-full animate-spin" />
+          <span className="font-extrabold text-lg tracking-tight uppercase">Procesando solicitud técnica...</span>
+        </div>
       )}
     </div>
   );
 }
-
-// --- Styled Components Premium ---
-
-// Eliminado PageWrapper redundante
-
-const HeaderSection = styled.div`
-  display: flex; justify-content: space-between; align-items: flex-end; gap: 20px;
-  @media (max-width: 1100px) { flex-direction: column; align-items: flex-start; }
-`;
-
-const Title = styled.h2` margin: 0; font-size: 32px; font-weight: 850; color: ${({ theme }) => theme.title}; letter-spacing: -0.5px; `;
-const Subtitle = styled.p` margin: 4px 0 0; color: ${({ theme }) => theme.textSecondary}; font-size: 16px; `;
-
-const HeaderActions = styled.div`
-  display: flex; align-items: center; gap: 12px;
-`;
-
-const SearchWrapper = styled.div`
-  position: relative; display: flex; align-items: center; background: ${({ theme }) => theme.cardBg};
-  border: 1px solid ${({ theme }) => theme.border}; border-radius: 14px; padding: 0 16px; width: 350px;
-  svg { color: ${({ theme }) => theme.textSecondary}; }
-`;
-
-const SearchInput = styled.input`
-  border: none; background: transparent; padding: 12px; color: ${({ theme }) => theme.text}; width: 100%;
-  font-size: 14px; &:focus { outline: none; }
-`;
-
-const RefreshBtn = styled.button`
-  width: 44px; height: 44px; border-radius: 14px; border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.cardBg}; color: ${({ theme }) => theme.textSecondary}; 
-  cursor: pointer; display: flex; align-items: center; justify-content: center; transition: all 0.3s;
-  svg { animation: ${({ $loading }) => $loading ? 'spin 1.5s linear infinite' : 'none'}; }
-  &:hover { background: ${({ theme }) => theme.bg2}; color: ${({ theme }) => theme.primary}; }
-  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-`;
-
-const ContentArea = styled.div` min-height: 500px; `;
-
-const TableContainer = styled.div`
-  background: ${({ theme }) => theme.cardBg}; border-radius: 24px; border: 1px solid ${({ theme }) => theme.border};
-  box-shadow: ${({ theme }) => theme.shadows.premium}; overflow-x: auto;
-`;
-
-const StyledTable = styled.table`
-  width: 100%; border-collapse: collapse; font-size: 14px;
-  thead { background: ${({ theme }) => theme.bg2}40; }
-  th { padding: 20px 24px; text-align: left; color: ${({ theme }) => theme.textSecondary}; border-bottom: 1px solid ${({ theme }) => theme.border}; font-weight: 700; text-transform: uppercase; font-size: 11px; letter-spacing: 1px; }
-  td { padding: 20px 24px; border-bottom: 1px solid ${({ theme }) => theme.border}40; color: ${({ theme }) => theme.text}; }
-  tr:hover { background: ${({ theme }) => theme.bg2}10; }
-`;
-
-const ActionGrid = styled.div` display: flex; gap: 4px; justify-content: flex-end; `;
-
-const LoadingState = styled.div` padding: 120px; text-align: center; font-weight: 600; color: ${({ theme }) => theme.primary}; font-size: 18px; `;
-const EmptyState = styled.div` padding: 120px; text-align: center; opacity: 0.5; font-size: 16px; `;
-
-const ProcessingOverlay = styled.div`
-  position: fixed; inset: 0; background: rgba(0,0,0,0.3); backdrop-filter: blur(4px);
-  z-index: 3000; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 16px;
-  color: white; font-weight: 700;
-`;
-
-const Spinner = styled.div`
-  width: 50px; height: 50px; border: 5px solid rgba(255,255,255,0.2); 
-  border-top-color: white; border-radius: 50%; animation: spin 1s linear infinite;
-`;
 
 export default ConsecutiveManager;

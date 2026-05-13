@@ -1,11 +1,13 @@
 import React, { useState, useEffect, createContext, useCallback } from "react";
-import styled from "styled-components";
 import { Sidebar, Header, useAuth, NotificationContainer, LoadingSpinner } from "../../index";
-import { Device } from "../../styles/breakpoints";
 
-// ⭐ CONTEXTO MEJORADO PARA EL LAYOUT ⭐
+// Contexto para el Layout
 export const LayoutContext = createContext();
 
+/**
+ * Corporate AdminLayout (Tailwind Edition)
+ * Estilo corporativo suave y ligero.
+ */
 export function AdminLayout({
   children,
   title,
@@ -18,440 +20,141 @@ export function AdminLayout({
   const { user, reloadUserPermissions } = useAuth();
 
   // Estados del layout
-  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 768);
+  const [sidebarOpen, setSidebarOpen] = useState(window.innerWidth > 1024);
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [pageLoading, setPageLoading] = useState(loading);
 
-  // ⭐ MANEJO RESPONSIVO MEJORADO ⭐
+  // Manejo responsivo
   useEffect(() => {
     const handleResize = () => {
-      const isMobile = window.innerWidth <= 768;
-      const isTablet = window.innerWidth <= 992 && window.innerWidth > 768;
-      const isDesktop = window.innerWidth > 992;
-
-      if (isMobile) {
+      const isLarge = window.innerWidth > 1024;
+      if (!isLarge && sidebarOpen) {
         setSidebarOpen(false);
-      } else if (isDesktop) {
+      } else if (isLarge && !sidebarOpen) {
         setSidebarOpen(true);
       }
-      // En tablet, mantener el estado actual
     };
 
-    // Configuración inicial y listener
-    handleResize();
     window.addEventListener("resize", handleResize);
-
     return () => window.removeEventListener("resize", handleResize);
-  }, []);
+  }, [sidebarOpen]);
 
-  // ⭐ RECARGAR PERMISOS AL VOLVER A LA APP (solo si estuvo inactivo > 5 min y no hay input activo) ⭐
-  useEffect(() => {
-    if (!user || !reloadUserPermissions) return;
+  // Funciones del layout
+  const toggleSidebar = useCallback(() => setSidebarOpen((prev) => !prev), []);
+  const closeSidebar = useCallback(() => setSidebarOpen(false), []);
+  const toggleUserMenu = useCallback(() => setUserMenuOpen((prev) => !prev), []);
+  const closeUserMenu = useCallback(() => setUserMenuOpen(false), []);
 
-    let lastReload = Date.now();
-    let reloadTimeout = null;
-
-    const shouldReload = () => {
-      const inputsActivos = document.querySelectorAll('input:focus, textarea:focus, select:focus');
-      return inputsActivos.length === 0 && Date.now() - lastReload > 5 * 60 * 1000;
-    };
-
-    const handleVisibilityChange = () => {
-      if (document.visibilityState === 'visible') {
-        if (shouldReload()) {
-          reloadTimeout = setTimeout(() => {
-            if (shouldReload()) {
-              reloadUserPermissions();
-              lastReload = Date.now();
-            }
-          }, 1000);
-        }
+  const handleOutsideClick = useCallback((e) => {
+    if (userMenuOpen) closeUserMenu();
+    if (window.innerWidth <= 1024 && sidebarOpen) {
+      if (!e.target.closest(".sidebar-wrapper") && !e.target.closest(".sidebar-toggle")) {
+        closeSidebar();
       }
-    };
+    }
+  }, [userMenuOpen, sidebarOpen, closeUserMenu, closeSidebar]);
 
-    document.addEventListener('visibilitychange', handleVisibilityChange);
-
-    return () => {
-      document.removeEventListener('visibilitychange', handleVisibilityChange);
-      if (reloadTimeout) clearTimeout(reloadTimeout);
-    };
-  }, [user, reloadUserPermissions]);
-
-  // ⭐ FUNCIONES DEL LAYOUT ⭐
-  const toggleSidebar = useCallback(() => {
-    setSidebarOpen((prev) => !prev);
-  }, []);
-
-  const closeSidebar = useCallback(() => {
-    setSidebarOpen(false);
-  }, []);
-
-  const toggleUserMenu = useCallback(() => {
-    setUserMenuOpen((prev) => !prev);
-  }, []);
-
-  const closeUserMenu = useCallback(() => {
-    setUserMenuOpen(false);
-  }, []);
-
-  // ⭐ MANEJAR CLICS FUERA DE ELEMENTOS ⭐
-  const handleOutsideClick = useCallback(
-    (e) => {
-      // Cerrar menú de usuario si está abierto
-      if (userMenuOpen) {
-        closeUserMenu();
-      }
-
-      // Cerrar sidebar en móvil si se hace clic en el overlay
-      if (window.innerWidth <= 768 && sidebarOpen) {
-        const sidebar = e.target.closest(".sidebar-wrapper");
-        const toggleButton = e.target.closest(".sidebar-toggle");
-
-        if (!sidebar && !toggleButton) {
-          closeSidebar();
-        }
-      }
-    },
-    [userMenuOpen, sidebarOpen, closeUserMenu, closeSidebar]
-  );
-
-  // ⭐ VALORES DEL CONTEXTO ⭐
   const layoutContextValue = {
-    sidebarOpen,
-    setSidebarOpen,
-    toggleSidebar,
-    closeSidebar,
-    userMenuOpen,
-    setUserMenuOpen,
-    toggleUserMenu,
-    closeUserMenu,
-    pageLoading,
-    setPageLoading,
+    sidebarOpen, setSidebarOpen, toggleSidebar, closeSidebar,
+    userMenuOpen, setUserMenuOpen, toggleUserMenu, closeUserMenu,
+    pageLoading, setPageLoading,
   };
 
-  // ⭐ RENDERIZAR CONTENIDO DE ERROR ⭐
   if (error) {
     return (
       <LayoutContext.Provider value={layoutContextValue}>
-        <Container>
-          <ErrorContainer>
-            <ErrorIcon>⚠️</ErrorIcon>
-            <ErrorTitle>Error en la aplicación</ErrorTitle>
-            <ErrorMessage>{error}</ErrorMessage>
-            <ErrorActions>
-              <button onClick={() => window.location.reload()}>
-                Recargar página
-              </button>
-            </ErrorActions>
-          </ErrorContainer>
-        </Container>
+        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-8 text-center">
+          <div className="text-5xl mb-4">⚠️</div>
+          <h2 className="text-2xl font-bold text-red-500 mb-2">Error en la aplicación</h2>
+          <p className="text-slate-500 mb-6 max-w-md">{error}</p>
+          <button 
+            onClick={() => window.location.reload()}
+            className="px-6 py-2 bg-primary-600 text-white rounded-xl font-semibold shadow-soft hover:bg-primary-700"
+          >
+            Recargar página
+          </button>
+        </div>
       </LayoutContext.Provider>
     );
   }
 
   return (
     <LayoutContext.Provider value={layoutContextValue}>
-      <Container
-        className={sidebarOpen ? "sidebar-open" : "sidebar-closed"}
+      <div 
+        className="flex min-h-screen bg-slate-50 text-slate-900 transition-all duration-300"
         onClick={handleOutsideClick}
       >
-        {/* ⭐ HEADER ⭐ */}
-        <HeaderWrapper className="header">
-          <Header
-            stateConfig={{
-              openstate: userMenuOpen,
-              setOpenState: () => setUserMenuOpen(!userMenuOpen),
-            }}
-            sidebarConfig={{
-              isOpen: sidebarOpen,
-              toggleSidebar: toggleSidebar,
-            }}
+        {/* SIDEBAR WRAPPER */}
+        <div className={`sidebar-wrapper transition-all duration-300 ${sidebarOpen ? 'w-[260px]' : 'w-[72px] lg:block hidden'}`}>
+          <Sidebar state={sidebarOpen} setState={setSidebarOpen} />
+        </div>
+
+        {/* OVERLAY PARA MÓVIL */}
+        {sidebarOpen && (
+          <div 
+            className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm z-40 lg:hidden"
+            onClick={closeSidebar}
           />
-        </HeaderWrapper>
-
-        {/* ⭐ SIDEBAR ⭐ */}
-        <SidebarWrapper className="sidebar-wrapper">
-          <Sidebar />
-        </SidebarWrapper>
-
-        {/* ⭐ CONTENIDO PRINCIPAL ⭐ */}
-        <MainContent className="content">
-          {/* Área de título y toolbar */}
-          {(title || toolbar) && (
-            <TitleSection className="title-area">
-              <TitleContainer>
-                {title && <PageTitle>{title}</PageTitle>}
-                {subtitle && <PageSubtitle>{subtitle}</PageSubtitle>}
-              </TitleContainer>
-              {toolbar && <ToolbarContainer>{toolbar}</ToolbarContainer>}
-            </TitleSection>
-          )}
-
-          {/* Área de acciones */}
-          {actions && (
-            <ActionsSection className="actions-area">
-              <ActionsContainer>{actions}</ActionsContainer>
-            </ActionsSection>
-          )}
-
-          {/* Área de contenido principal */}
-          <ContentSection className="main-content">
-            {pageLoading ? (
-              <LoadingContainer>
-                <LoadingSpinner size="large" type="ring" />
-                <LoadingText>Cargando contenido...</LoadingText>
-              </LoadingContainer>
-            ) : (
-              children
-            )}
-          </ContentSection>
-        </MainContent>
-
-        {/* ⭐ OVERLAY PARA MÓVIL ⭐ */}
-        {sidebarOpen && window.innerWidth <= 768 && (
-          <SidebarOverlay onClick={closeSidebar} />
         )}
-        {/* 🔔 CONTENEDOR DE NOTIFICACIONES - AGREGADO AQUÍ */}
+
+        {/* MAIN CONTAINER */}
+        <div className="flex-1 flex flex-col min-w-0 h-screen overflow-hidden">
+          {/* HEADER */}
+          <header className="h-[70px] bg-white/80 backdrop-blur-md border-b border-slate-200 sticky top-0 z-30 px-6 flex items-center justify-between">
+            <Header
+              stateConfig={{
+                openstate: userMenuOpen,
+                setOpenState: () => setUserMenuOpen(!userMenuOpen),
+              }}
+              sidebarConfig={{
+                isOpen: sidebarOpen,
+                toggleSidebar: toggleSidebar,
+              }}
+            />
+          </header>
+
+          {/* PAGE CONTENT */}
+          <main className="flex-1 overflow-y-auto custom-scrollbar flex flex-col">
+            {/* TITLE AREA */}
+            {(title || toolbar) && (
+              <div className="px-6 py-8 border-b border-slate-200 bg-white/30">
+                <div className="flex flex-col md:flex-row md:items-center justify-between gap-4">
+                  <div>
+                    {title && <h1 className="text-3xl font-bold text-slate-900 tracking-tight">{title}</h1>}
+                    {subtitle && <p className="text-slate-500 mt-1 font-medium">{subtitle}</p>}
+                  </div>
+                  {toolbar && <div className="flex flex-wrap gap-3">{toolbar}</div>}
+                </div>
+              </div>
+            )}
+
+            {/* ACTIONS AREA */}
+            {actions && (
+              <div className="px-6 py-4 flex flex-wrap gap-3 items-center justify-between">
+                {actions}
+              </div>
+            )}
+
+            {/* MAIN MAIN CONTENT */}
+            <div className="flex-1 p-6 flex flex-col">
+              {pageLoading ? (
+                <div className="flex-1 flex flex-col items-center justify-center py-20 gap-4">
+                  <LoadingSpinner size="large" type="ring" />
+                  <p className="text-slate-400 font-medium animate-pulse">Cargando contenido...</p>
+                </div>
+              ) : (
+                <div className="animate-fadeIn">
+                  {children}
+                </div>
+              )}
+            </div>
+          </main>
+        </div>
+
         <NotificationContainer />
-      </Container>
+      </div>
     </LayoutContext.Provider>
   );
 }
-
-// ⭐ STYLED COMPONENTS OPTIMIZADOS ⭐
-const Container = styled.div`
-  display: grid;
-  min-height: 100vh;
-  width: 100%;
-  background-color: ${({ theme }) => theme.bg};
-  color: ${({ theme }) => theme.text};
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-
-  /* Layout para móvil */
-  grid-template-areas:
-    "header"
-    "content";
-  grid-template-columns: 1fr;
-  grid-template-rows: auto 1fr;
-
-  /* Layout para tablet y desktop */
-  @media ${Device.tablet} {
-    grid-template-areas:
-      "header header"
-      "sidebar content";
-    grid-template-columns: auto 1fr;
-    grid-template-rows: auto 1fr;
-
-    &.sidebar-open {
-      grid-template-columns: 260px 1fr;
-    }
-
-    &.sidebar-closed {
-      grid-template-columns: 65px 1fr;
-    }
-  }
-`;
-
-const HeaderWrapper = styled.header`
-  grid-area: header;
-  position: sticky;
-  top: 0;
-  z-index: 100;
-  background-color: ${({ theme }) => theme.headerBg || theme.bg};
-  border-bottom: 1px solid ${({ theme }) => theme.border};
-  height: 70px;
-  display: flex;
-  align-items: center;
-  backdrop-filter: blur(10px);
-
-  @media (max-width: 768px) {
-    height: 60px;
-  }
-`;
-
-const SidebarWrapper = styled.div`
-  grid-area: sidebar;
-
-  @media (max-width: 768px) {
-    position: fixed;
-    left: 0;
-    top: 0;
-    height: 100vh;
-    z-index: 999;
-  }
-`;
-
-const MainContent = styled.main`
-  grid-area: content;
-  display: flex;
-  flex-direction: column;
-  background-color: ${({ theme }) => theme.contentBg || theme.bg};
-  min-height: 0;
-  overflow: visible;
-`;
-
-const TitleSection = styled.section`
-  padding: 1.5rem;
-  flex-shrink: 0;
-  border-bottom: 1px solid ${({ theme }) => theme.border};
-  background-color: ${({ theme }) => theme.titleBg || "transparent"};
-
-  @media (max-width: 768px) {
-    padding: 1rem;
-  }
-`;
-
-const TitleContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  margin-bottom: 1rem;
-`;
-
-const PageTitle = styled.h1`
-  margin: 0;
-  font-size: 1.8rem;
-  font-weight: 600;
-  color: ${({ theme }) => theme.titleColor || theme.text};
-
-  @media (max-width: 768px) {
-    font-size: 1.5rem;
-  }
-`;
-
-const PageSubtitle = styled.p`
-  margin: 0;
-  font-size: 1rem;
-  color: ${({ theme }) => theme.textSecondary};
-  opacity: 0.8;
-`;
-
-const ToolbarContainer = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 1rem;
-  align-items: center;
-`;
-
-const ActionsSection = styled.section`
-  padding: 0 1.5rem 1rem 1.5rem;
-  flex-shrink: 0;
-
-  @media (max-width: 768px) {
-    padding: 0 1rem 1rem 1rem;
-  }
-`;
-
-const ActionsContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-  width: 100%;
-  margin: 0;
-
-  @media ${Device.tablet} {
-    flex-direction: row;
-    justify-content: space-between;
-    align-items: center;
-  }
-`;
-
-const ContentSection = styled.section`
-  flex: 1;
-  overflow: auto;
-  padding: 1rem;
-  display: flex;
-  flex-direction: column;
-
-  @media (max-width: 768px) {
-    padding: 0 1rem 1rem 1rem;
-  }
-`;
-
-const LoadingContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  height: 200px;
-  gap: 1rem;
-`;
-
-// const LoadingSpinner = styled.div`
-//   font-size: 2rem;
-//   animation: spin 1s linear infinite;
-
-//   @keyframes spin {
-//     from {
-//       transform: rotate(0deg);
-//     }
-//     to {
-//       transform: rotate(360deg);
-//     }
-//   }
-// `;
-
-const LoadingText = styled.div`
-  color: ${({ theme }) => theme.textSecondary};
-  font-size: 0.9rem;
-`;
-
-const ErrorContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  gap: 1rem;
-  padding: 2rem;
-  text-align: center;
-`;
-
-const ErrorIcon = styled.div`
-  font-size: 3rem;
-`;
-
-const ErrorTitle = styled.h2`
-  margin: 0;
-  color: ${({ theme }) => theme.danger || "#e74c3c"};
-`;
-
-const ErrorMessage = styled.p`
-  margin: 0;
-  color: ${({ theme }) => theme.textSecondary};
-  max-width: 400px;
-`;
-
-const ErrorActions = styled.div`
-  button {
-    background: ${({ theme }) => theme.primary || "#4a90e2"};
-    color: white;
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: 6px;
-    cursor: pointer;
-    font-size: 0.9rem;
-    transition: background-color 0.2s;
-
-    &:hover {
-      background: ${({ theme }) => theme.primaryDark || "#357abd"};
-    }
-  }
-`;
-
-const SidebarOverlay = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(0, 0, 0, 0.5);
-  z-index: 998;
-  backdrop-filter: blur(2px);
-
-  @media (min-width: 769px) {
-    display: none;
-  }
-`;
 
 export default AdminLayout;

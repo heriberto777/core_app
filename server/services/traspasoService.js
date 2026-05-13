@@ -4,7 +4,6 @@ const logger = require("./logger");
 const { Request, TYPES } = require("tedious");
 const { sendTraspasoEmail } = require("./emailService");
 const PDFService = require("./pdfService");
-const TransferSummary = require("../models/transferSummaryModel");
 
 /**
  * Obtiene información adicional de los productos desde la base de datos
@@ -996,31 +995,32 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
 
       logger.info("Traspaso completado exitosamente:", resultado);
 
-      // Guardar resumen para tracking
+      // Guardar registro unificado en LOGS (Sustituye a TransferSummary)
       try {
-        const summaryProducts = detalleProductos.map((producto) => ({
-          code: producto.codigo,
-          description: producto.descripcion || "Sin descripción",
-          quantity: producto.cantidad,
-          unit: "UND",
-        }));
-
-        const summary = new TransferSummary({
-          loadId: salesData[0]?.Code_load || "N/A",
-          route: route,
-          documentId: nuevoConsecutivo,
-          products: summaryProducts,
-          totalProducts: summaryProducts.length,
-          totalQuantity: summaryProducts.reduce((sum, p) => sum + p.quantity, 0),
-          createdBy: config.usuario_default,
-          bodegaOrigen: 'MULTIPLE',
-          bodega_destino,
+        const totalQuantity = detalleProductos.reduce((sum, p) => sum + p.cantidad, 0);
+        
+        logger.info(`📦 Traspaso de inventario realizado: ${nuevoConsecutivo}`, {
+          operationType: "TRANSFER",
+          entityType: "TRASPASO",
+          transactionId: `traspaso_${nuevoConsecutivo}_${Date.now()}`,
+          affectedRecords: detalleProductos.length,
+          metadata: {
+            status: "completed",
+            documentId: nuevoConsecutivo,
+            loadId: salesData[0]?.Code_load || "N/A",
+            route: route,
+            bodegaOrigen: 'MULTIPLE',
+            bodegaDestino: bodega_destino,
+            totalQuantity,
+            details: detalleProductos.map(p => ({
+              code: p.codigo,
+              description: p.descripcion,
+              quantity: p.cantidad
+            }))
+          }
         });
-
-        await summary.save();
-        resultado.summaryId = summary._id;
-      } catch (summaryError) {
-        logger.error(`Error al guardar resumen: ${summaryError.message}`);
+      } catch (logError) {
+        logger.error(`Error al registrar log de traspaso: ${logError.message}`);
       }
 
       // Generar PDF del traspaso

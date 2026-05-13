@@ -126,15 +126,12 @@ export * from "./components/templates/LoadsResumen";
 export * from "./components/templates/LoadsTasks";
 export * from "./components/templates/LoginForm";
 export * from "./components/templates/ModuleManager";
-export * from "./components/templates/LogsPage";
 export * from "./components/templates/MappingEditor";
 export * from "./components/templates/MappingsList";
 export * from "./components/templates/RoleManagement";
 export * from "./components/templates/OrdersVisualization";
 export * from "./components/templates/PlanillaBase";
 export * from "./components/templates/Statistics";
-export * from "./components/templates/TransferHistory";
-export * from "./components/templates/TransferHistoryLogs";
 export * from "./components/templates/AuditCenter";
 export * from "./components/templates/UserManagement";
 export * from "./components/templates/TransferTask";
@@ -180,7 +177,6 @@ export * from "./hooks/useUsers";
 export * from "./hooks/useRoles";
 export * from "./hooks/useModules";
 export * from "./hooks/useMappings";
-export * from "./hooks/useTaskHistory";
 
 
 // ========== CONTEXTS ==========

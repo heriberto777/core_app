@@ -1,109 +1,131 @@
 import React from "react";
-import styled from "styled-components";
-import { FaTruck, FaTimes, FaCalendarAlt, FaBoxOpen, FaInfoCircle } from "react-icons/fa";
-import { Modal, Button } from "../../index";
-
-const Content = styled.div` display: flex; flex-direction: column; gap: 24px; padding: 24px; max-height: 80vh; overflow-y: auto; `;
-
-const HeaderGrid = styled.div` display: grid; grid-template-columns: repeat(2, 1fr); gap: 16px; `;
-
-const InfoCard = styled.div`
-  padding: 16px; background: ${({ theme }) => theme.bg2}08; border-radius: 16px; border: 1px solid ${({ theme }) => theme.border}40;
-  display: flex; flex-direction: column; gap: 4px;
-  label { font-size: 10px; font-weight: 800; text-transform: uppercase; color: ${({ theme }) => theme.textSecondary}; opacity: 0.6; }
-  span { font-size: 14px; font-weight: 700; color: ${({ theme }) => theme.text}; }
-`;
-
-const ReturnSection = styled.div`
-  padding: 16px; background: #f59e0b08; border: 1px dashed #f59e0b40; border-radius: 16px;
-  display: flex; flex-direction: column; gap: 8px;
-  h4 { margin: 0; font-size: 13px; font-weight: 800; color: #f59e0b; display: flex; align-items: center; gap: 8px; }
-  p { margin: 0; font-size: 12px; color: ${({ theme }) => theme.textSecondary}; }
-`;
-
-const TableContainer = styled.div` border-radius: 16px; border: 1px solid ${({ theme }) => theme.border}; overflow: hidden; `;
-
-const Table = styled.table`
-  width: 100%; border-collapse: collapse; font-size: 12px;
-  thead { background: ${({ theme }) => theme.bg2}10; }
-  th { padding: 12px; text-align: left; font-weight: 800; text-transform: uppercase; color: ${({ theme }) => theme.textSecondary}; border-bottom: 2px solid ${({ theme }) => theme.border}; }
-  td { padding: 12px; border-bottom: 1px solid ${({ theme }) => theme.border}20; color: ${({ theme }) => theme.text}; }
-  tr:last-child td { border-bottom: none; }
-  .text-right { text-align: right; }
-  .highlight { font-weight: 800; color: ${({ theme }) => theme.primary}; }
-  .warning { color: #ef4444; font-weight: 700; }
-`;
+import { FaTruck, FaTimes, FaCalendarAlt, FaBoxOpen, FaInfoCircle, FaCubes, FaArrowRight } from "react-icons/fa";
+import { Button } from "../../index";
 
 export function SummaryDetailsModal({ isOpen, onClose, summary }) {
     if (!isOpen || !summary) return null;
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} width="850px">
-            <Content>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                    <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '12px' }}>
-                        <FaBoxOpen color="var(--primary)" /> Inspección Técnica: Carga #{summary.loadId}
-                    </h2>
-                    <Button variant="ghost" icon={<FaTimes />} onClick={onClose} />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[2000] p-4 animate-in fade-in duration-300">
+            <div className="bg-white w-full max-w-[850px] max-h-[90vh] rounded-[32px] overflow-hidden shadow-2xl border border-slate-100 flex flex-col animate-in zoom-in-95 duration-300">
+                {/* Header */}
+                <div className="px-8 py-7 bg-white/80 backdrop-blur-md border-b border-slate-50 flex items-center justify-between sticky top-0 z-10">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-600/20">
+                            <FaBoxOpen className="text-xl" />
+                        </div>
+                        <div className="flex flex-col">
+                            <h2 className="text-xl font-black text-slate-900 leading-tight">Auditoría de Carga</h2>
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ID Operativo:</span>
+                                <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-md">#{summary.loadId}</span>
+                            </div>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+                        <FaTimes />
+                    </button>
                 </div>
 
-                <HeaderGrid>
-                    <InfoCard><label>Ruta / Vendedor</label><span>{summary.route}</span></InfoCard>
-                    <InfoCard><label>Documento de Traspaso</label><span>{summary.documentId || "N/A"}</span></InfoCard>
-                    <InfoCard><label><FaCalendarAlt /> Fecha de Carga</label><span>{new Date(summary.date).toLocaleString()}</span></InfoCard>
-                    <InfoCard><label>Estado Operativo</label><span style={{ textTransform: 'uppercase' }}>{summary.status}</span></InfoCard>
-                </HeaderGrid>
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-10">
+                    {/* Header Info Cards */}
+                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-[24px] flex flex-col gap-1 hover:bg-white transition-colors">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ruta / Vendedor</span>
+                            <span className="text-sm font-black text-slate-900">{summary.route}</span>
+                        </div>
+                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-[24px] flex flex-col gap-1 hover:bg-white transition-colors">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Documento Traspaso</span>
+                            <span className="text-sm font-black text-slate-900">{summary.documentId || "N/A"}</span>
+                        </div>
+                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-[24px] flex flex-col gap-1 hover:bg-white transition-colors">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><FaCalendarAlt className="text-[8px]" /> Fecha Carga</span>
+                            <span className="text-sm font-black text-slate-900">{new Date(summary.date).toLocaleDateString()}</span>
+                        </div>
+                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-[24px] flex flex-col gap-1 hover:bg-white transition-colors">
+                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Estatus Operativo</span>
+                            <span className={`text-[10px] font-black px-2 py-0.5 rounded-md self-start uppercase tracking-widest ${
+                                summary.status === 'completed' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+                            }`}>{summary.status}</span>
+                        </div>
+                    </div>
 
-                {summary.returnData && (
-                    <ReturnSection>
-                        <h4><FaInfoCircle /> Información de Última Devolución</h4>
-                        <p><strong>Doc. Retorno:</strong> {summary.returnData.documentId}</p>
-                        <p><strong>Motivo:</strong> {summary.returnData.reason}</p>
-                    </ReturnSection>
-                )}
+                    {/* Return Data Banner */}
+                    {summary.returnData && (
+                        <div className="p-6 bg-amber-50/50 border border-amber-100 rounded-[28px] space-y-4 animate-in slide-in-from-top-4 duration-500">
+                            <h4 className="text-[11px] font-black text-amber-600 uppercase tracking-[0.2em] flex items-center gap-3">
+                                <FaInfoCircle /> Última Devolución Detectada
+                            </h4>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                                <div className="flex flex-col gap-1">
+                                    <span className="text-[9px] font-black text-amber-400 uppercase tracking-widest">Referencia Retorno</span>
+                                    <span className="text-xs font-black text-amber-900">{summary.returnData.documentId}</span>
+                                </div>
+                                <div className="flex flex-col gap-1">
+                                    <span className="text-[9px] font-black text-amber-400 uppercase tracking-widest">Motivo de Regreso</span>
+                                    <span className="text-xs font-bold text-amber-800 line-clamp-2">{summary.returnData.reason}</span>
+                                </div>
+                            </div>
+                        </div>
+                    )}
 
-                <div>
-                    <h4 style={{ margin: '0 0 12px 0', fontSize: '13px', textTransform: 'uppercase', opacity: 0.6 }}>Desglose de Ítems</h4>
-                    <TableContainer>
-                        <Table>
-                            <thead>
-                                <tr>
-                                    <th>Código</th>
-                                    <th>Descripción</th>
-                                    <th className="text-right">Original</th>
-                                    <th className="text-right">Devuelto</th>
-                                    <th className="text-right">Remanente</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {summary.products?.map((p, i) => (
-                                    <tr key={i}>
-                                        <td className="highlight">{p.code}</td>
-                                        <td>{p.description || "Sin descripción"}</td>
-                                        <td className="text-right">{p.quantity}</td>
-                                        <td className="text-right warning">{p.returnedQuantity || 0}</td>
-                                        <td className="text-right highlight">{p.quantity - (p.returnedQuantity || 0)}</td>
-                                    </tr>
-                                ))}
-                            </tbody>
-                            <tfoot style={{ background: 'var(--primary)05', fontWeight: '800' }}>
-                                <tr>
-                                    <td colSpan={2}>TOTALES DE CARGA</td>
-                                    <td className="text-right">{summary.totalQuantity}</td>
-                                    <td className="text-right warning">{summary.products?.reduce((s, p) => s + (p.returnedQuantity || 0), 0)}</td>
-                                    <td className="text-right highlight">
-                                        {summary.totalQuantity - (summary.products?.reduce((s, p) => s + (p.returnedQuantity || 0), 0) || 0)}
-                                    </td>
-                                </tr>
-                            </tfoot>
-                        </Table>
-                    </TableContainer>
+                    {/* Items Breakdown Table */}
+                    <div className="space-y-6">
+                        <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3 border-l-4 border-indigo-600 pl-4">
+                            <FaCubes className="text-indigo-600" /> Desglose Analítico de Ítems
+                        </h4>
+                        
+                        <div className="rounded-[28px] border border-slate-100 overflow-hidden shadow-sm bg-white">
+                            <div className="overflow-x-auto">
+                                <table className="w-full border-collapse">
+                                    <thead className="bg-slate-50/50">
+                                        <tr>
+                                            <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Código</th>
+                                            <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Descripción</th>
+                                            <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Original</th>
+                                            <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Devuelto</th>
+                                            <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Neto</th>
+                                        </tr>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {summary.products?.map((p, i) => (
+                                            <tr key={i} className="hover:bg-slate-50/30 transition-colors group">
+                                                <td className="px-6 py-4 text-xs font-black text-indigo-600 group-hover:scale-105 transition-transform">{p.code}</td>
+                                                <td className="px-6 py-4 text-xs font-bold text-slate-500 truncate max-w-[200px]">{p.description || "Sin descripción"}</td>
+                                                <td className="px-6 py-4 text-right text-xs font-black text-slate-900">{p.quantity}</td>
+                                                <td className="px-6 py-4 text-right text-xs font-black text-red-500">{p.returnedQuantity || 0}</td>
+                                                <td className="px-6 py-4 text-right text-xs font-black text-emerald-600">{p.quantity - (p.returnedQuantity || 0)}</td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                    <tfoot className="bg-slate-900 text-white">
+                                        <tr>
+                                            <td colSpan={2} className="px-6 py-4 text-[10px] font-black uppercase tracking-widest">Resumen de Carga</td>
+                                            <td className="px-6 py-4 text-right text-xs font-black">{summary.totalQuantity}</td>
+                                            <td className="px-6 py-4 text-right text-xs font-black text-red-400">{summary.products?.reduce((s, p) => s + (p.returnedQuantity || 0), 0)}</td>
+                                            <td className="px-6 py-4 text-right text-xs font-black text-emerald-400">
+                                                {summary.totalQuantity - (summary.products?.reduce((s, p) => s + (p.returnedQuantity || 0), 0) || 0)}
+                                            </td>
+                                        </tr>
+                                    </tfoot>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
                 </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '12px' }}>
-                    <Button variant="primary" onClick={onClose}>Cerrar Auditoría</Button>
+                {/* Footer */}
+                <div className="px-8 py-6 border-t border-slate-50 flex justify-end gap-3 bg-white/80 backdrop-blur-md sticky bottom-0 z-10">
+                    <Button 
+                        variant="primary" 
+                        onClick={onClose}
+                        className="px-12 py-3 bg-slate-900 hover:bg-black text-white shadow-xl shadow-slate-900/20 font-black text-[10px] uppercase tracking-widest border-none rounded-2xl"
+                    >
+                        Cerrar Auditoría Técnica
+                    </Button>
                 </div>
-            </Content>
-        </Modal>
+            </div>
+        </div>
     );
 }

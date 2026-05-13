@@ -225,7 +225,7 @@ class ConnectionCentralService {
       },
       options: {
         // MEJORADO: Configuración SSL/TLS más robusta para AggregateError
-        encrypt: isIpAddress ? false : dbConfig.options?.encrypt || false,
+        encrypt: isIpAddress ? false : dbConfig.options?.mssqlEncrypt || false,
         trustServerCertificate: true,
         enableArithAbort: true,
 

@@ -1,114 +1,97 @@
 import React from "react";
-import styled from "styled-components";
-import { FaHeartbeat, FaClock, FaChartLine, FaExclamationTriangle, FaTimes } from "react-icons/fa";
+import { FaHeartbeat, FaClock, FaChartLine, FaExclamationTriangle, FaTimes, FaLayerGroup } from "react-icons/fa";
 import { Button } from "../../index";
-
-const DashboardContainer = styled.div`
-  display: flex; flex-direction: column; gap: 24px; animation: fadeIn 0.4s ease-out;
-`;
-
-const DashboardHeader = styled.div`
-  display: flex; justify-content: space-between; align-items: center;
-  padding: 16px 24px; background: ${({ theme }) => theme.cardBg}80; 
-  backdrop-filter: blur(10px); border-radius: 20px; border: 1px solid ${({ theme }) => theme.border};
-`;
-
-const CardsGrid = styled.div`
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(280px, 1fr)); gap: 20px;
-`;
-
-const Card = styled.div`
-  background: ${({ theme }) => theme.cardBg}; border-radius: 24px; padding: 24px;
-  border: 1px solid ${({ theme }) => theme.border}; box-shadow: ${({ theme }) => theme.shadows.medium};
-  display: flex; flex-direction: column; gap: 16px; transition: all 0.3s;
-  &:hover { transform: translateY(-4px); box-shadow: ${({ theme }) => theme.shadows.premium}; }
-`;
-
-const CardHead = styled.div`
-  display: flex; justify-content: space-between; align-items: flex-start;
-`;
-
-const CardTitle = styled.h4`
-  margin: 0; font-size: 16px; font-weight: 800; color: ${({ theme }) => theme.title};
-`;
-
-const HealthPoint = styled.div`
-  width: 12px; height: 12px; border-radius: 50%; 
-  background: ${({ color }) => color}; box-shadow: 0 0 10px ${({ color }) => color}60;
-`;
-
-const MetricRow = styled.div`
-  display: flex; justify-content: space-between; align-items: center; padding: 10px 0;
-  border-bottom: 1px solid ${({ theme }) => theme.border}40;
-  &:last-child { border-bottom: none; }
-`;
-
-const MetricLabel = styled.div`
-  font-size: 12px; color: ${({ theme }) => theme.textSecondary}; font-weight: 600;
-  display: flex; align-items: center; gap: 8px;
-`;
-
-const MetricValue = styled.div`
-  font-size: 15px; font-weight: 700; color: ${({ theme, $color }) => $color || theme.text};
-`;
 
 export function ConsecutiveDashboardPanel({ data, onClose }) {
     const getHealth = (item) => {
-        if (item.expiredReservations > 5) return { color: "#ff4757", label: "Crítico" };
-        if (item.activeReservations > 10) return { color: "#ffa502", label: "Atención" };
-        return { color: "#2ed573", label: "Óptimo" };
+        if (item.expiredReservations > 5) return { color: "bg-red-500", shadow: "shadow-red-500/50", label: "Crítico", text: "text-red-600" };
+        if (item.activeReservations > 10) return { color: "bg-amber-500", shadow: "shadow-amber-500/50", label: "Atención", text: "text-amber-600" };
+        return { color: "bg-emerald-500", shadow: "shadow-emerald-500/50", label: "Óptimo", text: "text-emerald-600" };
     };
 
     return (
-        <DashboardContainer>
-            <DashboardHeader>
-                <div style={{ display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <FaHeartbeat color="#ff4757" size={24} />
-                    <h3 style={{ margin: 0 }}>Monitor de Salud de Folios</h3>
+        <div className="flex flex-col gap-8 animate-in fade-in duration-500 slide-in-from-top-4">
+            {/* Header */}
+            <div className="flex justify-between items-center px-8 py-6 bg-white/50 backdrop-blur-xl border border-slate-200 rounded-[32px] shadow-sm">
+                <div className="flex items-center gap-4">
+                    <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center text-red-500">
+                        <FaHeartbeat className="text-xl animate-pulse" />
+                    </div>
+                    <div className="flex flex-col">
+                        <h3 className="text-lg font-black text-slate-900 leading-none mb-1">Salud de Folios</h3>
+                        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Monitoreo de disponibilidad y reservas</span>
+                    </div>
                 </div>
-                <Button variant="ghost" onClick={onClose}><FaTimes /> Cerrar Dashboard</Button>
-            </DashboardHeader>
+                <Button variant="ghost" onClick={onClose} className="text-slate-500 font-bold hover:text-red-500">
+                    <FaTimes className="mr-2" /> Cerrar Dashboard
+                </Button>
+            </div>
 
-            <CardsGrid>
+            {/* Grid */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
                 {data.map((item) => {
                     const health = getHealth(item);
                     return (
-                        <Card key={item.id}>
-                            <CardHead>
-                                <CardTitle>{item.name}</CardTitle>
-                                <HealthPoint color={health.color} title={`Estado: ${health.label}`} />
-                            </CardHead>
+                        <div key={item.id} className="bg-white border border-slate-100 rounded-[32px] p-8 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group">
+                            <div className="flex justify-between items-start mb-8">
+                                <div className="flex flex-col gap-1">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Identificador</span>
+                                    <h4 className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors">{item.name}</h4>
+                                </div>
+                                <div className="flex flex-col items-end gap-1">
+                                    <div className={`w-3 h-3 rounded-full ${health.color} ${health.shadow} shadow-lg ring-4 ring-white relative`}>
+                                        <div className={`absolute inset-0 rounded-full ${health.color} animate-ping opacity-20`} />
+                                    </div>
+                                    <span className={`text-[8px] font-black uppercase tracking-widest ${health.text}`}>{health.label}</span>
+                                </div>
+                            </div>
 
-                            <div style={{ display: 'flex', flexDirection: 'column' }}>
-                                <MetricRow>
-                                    <MetricLabel><FaChartLine /> Valor Actual</MetricLabel>
-                                    <MetricValue>{item.currentValue}</MetricValue>
-                                </MetricRow>
-                                <MetricRow>
-                                    <MetricLabel><FaClock /> Reservas Activas</MetricLabel>
-                                    <MetricValue $color="#1e90ff">{item.activeReservations}</MetricValue>
-                                </MetricRow>
-                                <MetricRow>
-                                    <MetricLabel><FaChartLine /> Carga (24h)</MetricLabel>
-                                    <MetricValue $color="#2ed573">+{item.totalIncrements}</MetricValue>
-                                </MetricRow>
+                            <div className="space-y-4">
+                                <div className="flex justify-between items-center py-3 border-b border-slate-50">
+                                    <div className="flex items-center gap-3 text-slate-400">
+                                        <FaLayerGroup className="text-xs" />
+                                        <span className="text-[10px] font-black uppercase tracking-wider">Valor Actual</span>
+                                    </div>
+                                    <span className="text-sm font-black text-slate-900">{item.currentValue}</span>
+                                </div>
+                                
+                                <div className="flex justify-between items-center py-3 border-b border-slate-50">
+                                    <div className="flex items-center gap-3 text-slate-400">
+                                        <FaClock className="text-xs" />
+                                        <span className="text-[10px] font-black uppercase tracking-wider">Reservas Activas</span>
+                                    </div>
+                                    <span className="text-sm font-black text-blue-600">{item.activeReservations}</span>
+                                </div>
+
+                                <div className="flex justify-between items-center py-3 border-b border-slate-50">
+                                    <div className="flex items-center gap-3 text-slate-400">
+                                        <FaChartLine className="text-xs" />
+                                        <span className="text-[10px] font-black uppercase tracking-wider">Carga (24h)</span>
+                                    </div>
+                                    <span className="text-sm font-black text-emerald-600">+{item.totalIncrements}</span>
+                                </div>
+
                                 {item.expiredReservations > 0 && (
-                                    <MetricRow>
-                                        <MetricLabel style={{ color: '#ff4757' }}><FaExclamationTriangle /> Expirados</MetricLabel>
-                                        <MetricValue $color="#ff4757">{item.expiredReservations}</MetricValue>
-                                    </MetricRow>
+                                    <div className="flex justify-between items-center py-3 border-b border-slate-50 animate-bounce-short">
+                                        <div className="flex items-center gap-3 text-red-500">
+                                            <FaExclamationTriangle className="text-xs" />
+                                            <span className="text-[10px] font-black uppercase tracking-wider">Expirados</span>
+                                        </div>
+                                        <span className="text-sm font-black text-red-600">{item.expiredReservations}</span>
+                                    </div>
                                 )}
                             </div>
-                        </Card>
+                        </div>
                     );
                 })}
-            </CardsGrid>
+            </div>
 
             {data.length === 0 && (
-                <div style={{ textAlign: 'center', padding: '60px', opacity: 0.5 }}>
-                    <p>No hay datos suficientes para generar métricas de salud en este momento.</p>
+                <div className="flex flex-col items-center justify-center py-24 text-center opacity-30 gap-4">
+                    <FaHeartbeat className="text-5xl" />
+                    <p className="text-sm font-black uppercase tracking-[0.2em]">No hay datos de telemetría disponibles</p>
                 </div>
             )}
-        </DashboardContainer>
+        </div>
     );
 }

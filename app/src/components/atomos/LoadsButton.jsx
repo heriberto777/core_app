@@ -1,61 +1,9 @@
-import styled from "styled-components";
+import React from "react";
 import { FaSpinner } from "react-icons/fa";
 
-const Button = styled.button`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  padding: ${props =>
-    props.size === 'small' ? '6px 12px' :
-    props.size === 'large' ? '12px 24px' : '8px 16px'};
-  border: none;
-  border-radius: 6px;
-  font-size: ${props =>
-    props.size === 'small' ? '12px' :
-    props.size === 'large' ? '16px' : '14px'};
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s ease;
-  min-width: ${props => props.minWidth || 'auto'};
-
-  background-color: ${props => {
-    if (props.disabled) return '#e5e7eb';
-    switch (props.variant) {
-      case 'primary': return '#3b82f6';
-      case 'success': return '#10b981';
-      case 'danger': return '#ef4444';
-      case 'warning': return '#f59e0b';
-      case 'secondary': return '#6b7280';
-      default: return '#3b82f6';
-    }
-  }};
-
-  color: ${props => props.disabled ? '#9ca3af' : 'white'};
-
-  &:hover:not(:disabled) {
-    opacity: 0.9;
-    transform: translateY(-1px);
-  }
-
-  &:active:not(:disabled) {
-    transform: translateY(0);
-  }
-
-  &:disabled {
-    cursor: not-allowed;
-  }
-
-  @media (max-width: 768px) {
-    padding: ${props =>
-      props.size === 'small' ? '4px 8px' :
-      props.size === 'large' ? '10px 20px' : '6px 12px'};
-    font-size: ${props =>
-      props.size === 'small' ? '11px' :
-      props.size === 'large' ? '15px' : '13px'};
-  }
-`;
-
+/**
+ * Corporate LoadsButton Component (Tailwind Edition)
+ */
 export function LoadsButton({
   children,
   loading = false,
@@ -65,20 +13,40 @@ export function LoadsButton({
   onClick,
   type = 'button',
   minWidth,
+  className = "",
   ...props
 }) {
+  const sizeClasses = {
+    small: 'px-3 py-1.5 text-xs',
+    medium: 'px-4 py-2 text-sm',
+    large: 'px-6 py-3 text-base',
+  };
+
+  const variantClasses = {
+    primary: 'bg-primary-600 hover:bg-primary-700 text-white',
+    success: 'bg-emerald-500 hover:bg-emerald-600 text-white',
+    danger: 'bg-red-500 hover:bg-red-600 text-white',
+    warning: 'bg-amber-500 hover:bg-amber-600 text-white',
+    secondary: 'bg-slate-500 hover:bg-slate-600 text-white',
+  };
+
   return (
-    <Button
-      variant={variant}
-      size={size}
+    <button
+      type={type}
       disabled={disabled || loading}
       onClick={onClick}
-      type={type}
-      minWidth={minWidth}
+      className={`
+        inline-flex items-center justify-center gap-2 font-medium rounded-lg cursor-pointer
+        transition-all duration-200 active:scale-95 disabled:opacity-50 disabled:cursor-not-allowed
+        ${sizeClasses[size] || sizeClasses.medium}
+        ${variantClasses[variant] || variantClasses.primary}
+        ${className}
+      `}
+      style={{ minWidth }}
       {...props}
     >
-      {loading && <FaSpinner className="spin" />}
+      {loading && <FaSpinner className="animate-spin" />}
       {children}
-    </Button>
+    </button>
   );
 }

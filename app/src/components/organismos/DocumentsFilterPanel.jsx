@@ -1,67 +1,15 @@
 import React from "react";
-import styled from "styled-components";
 import { FaSearch, FaSync, FaEraser } from "react-icons/fa";
 import { Button } from "../../index";
 
-const FilterWrapper = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  padding: 24px; border-radius: 16px; border: 1px solid ${({ theme }) => theme.border};
-  backdrop-filter: blur(10px); display: flex; flex-direction: column; gap: 20px;
-  box-shadow: ${({ theme }) => theme.shadows.premium};
-`;
-
-const SearchContainer = styled.div`
-  position: relative; width: 100%;
-`;
-
-const SearchInput = styled.input`
-  width: 100%; padding: 12px 16px 12px 44px; border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.border}; background: ${({ theme }) => theme.inputBg};
-  color: ${({ theme }) => theme.text}; font-size: 15px; transition: all 0.2s;
-  &:focus { outline: none; border-color: ${({ theme }) => theme.primary}; box-shadow: 0 0 0 3px ${({ theme }) => theme.primary}20; }
-`;
-
-const SearchIcon = styled(FaSearch)`
-  position: absolute; left: 16px; top: 50%; transform: translateY(-50%);
-  color: ${({ theme }) => theme.textSecondary};
-`;
-
-const FiltersGrid = styled.div`
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr)); gap: 16px; align-items: flex-end;
-`;
-
-const FormGroup = styled.div`
-  display: flex; flex-direction: column; gap: 6px;
-`;
-
-const Label = styled.label`
-  font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: 0.5px;
-  color: ${({ theme }) => theme.textSecondary};
-`;
-
-const Select = styled.select`
-  padding: 10px 14px; border-radius: 10px; border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.inputBg}; color: ${({ theme }) => theme.text};
-  font-size: 14px; cursor: pointer;
-`;
-
-const Input = styled.input`
-  padding: 10px 14px; border-radius: 10px; border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.inputBg}; color: ${({ theme }) => theme.text};
-  font-size: 14px;
-`;
-
-const CheckboxLabel = styled.label`
-  display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px;
-  background: ${({ theme }) => theme.bg2}20; border-radius: 10px; border: 1px solid ${({ theme }) => theme.border};
-  font-size: 13px; color: ${({ theme }) => theme.text}; transition: all 0.2s;
-  &:hover { background: ${({ theme }) => theme.bg2}40; border-color: ${({ theme }) => theme.primary}40; }
-`;
-
+/**
+ * Corporate DocumentsFilterPanel (Tailwind Edition)
+ */
 export function DocumentsFilterPanel({
     search, setSearch,
     filterValues, setFilterValues,
-    onRefresh, isRefreshing
+    onRefresh, isRefreshing,
+    className = ""
 }) {
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
@@ -83,51 +31,56 @@ export function DocumentsFilterPanel({
     };
 
     return (
-        <FilterWrapper>
-            <SearchContainer>
-                <SearchIcon />
-                <SearchInput
+        <div className={`bg-white p-6 rounded-2xl border border-slate-200 backdrop-blur-md flex flex-col gap-5 shadow-premium ${className}`}>
+            <div className="relative w-full">
+                <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <input
+                    type="text"
                     placeholder="Buscar documento por cualquier campo (Nro, Cliente, ERP...)"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
+                    className="w-full py-3 px-11 rounded-xl border border-slate-200 bg-white text-slate-800 text-[15px] transition-all duration-200 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
                 />
-            </SearchContainer>
+            </div>
 
-            <FiltersGrid>
-                <FormGroup>
-                    <Label>Fecha Desde</Label>
-                    <Input type="date" name="dateFrom" value={filterValues.dateFrom} onChange={handleChange} />
-                </FormGroup>
-                <FormGroup>
-                    <Label>Fecha Hasta</Label>
-                    <Input type="date" name="dateTo" value={filterValues.dateTo} onChange={handleChange} />
-                </FormGroup>
-                <FormGroup>
-                    <Label>Estado Documento</Label>
-                    <Select name="status" value={filterValues.status} onChange={handleChange}>
+            <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4 items-end">
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Fecha Desde</label>
+                    <input type="date" name="dateFrom" value={filterValues.dateFrom} onChange={handleChange}
+                        className="py-2.5 px-3.5 rounded-lg border border-slate-200 bg-white text-slate-800 text-sm" />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Fecha Hasta</label>
+                    <input type="date" name="dateTo" value={filterValues.dateTo} onChange={handleChange}
+                        className="py-2.5 px-3.5 rounded-lg border border-slate-200 bg-white text-slate-800 text-sm" />
+                </div>
+                <div className="flex flex-col gap-1.5">
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Estado Documento</label>
+                    <select name="status" value={filterValues.status} onChange={handleChange}
+                        className="py-2.5 px-3.5 rounded-lg border border-slate-200 bg-white text-slate-800 text-sm cursor-pointer">
                         <option value="all">Todos los estados</option>
                         <option value="P">Pendientes (P)</option>
                         <option value="F">Facturados (F)</option>
                         <option value="A">Anulados (A)</option>
-                    </Select>
-                </FormGroup>
+                    </select>
+                </div>
 
-                <FormGroup>
-                    <CheckboxLabel>
-                        <input type="checkbox" name="showProcessed" checked={filterValues.showProcessed} onChange={handleChange} />
+                <div className="flex flex-col gap-1.5">
+                    <label className="flex items-center gap-2.5 cursor-pointer p-2.5 bg-slate-50/50 rounded-lg border border-slate-200 text-sm text-slate-800 transition-all duration-200 hover:bg-slate-100 hover:border-primary-500/40">
+                        <input type="checkbox" name="showProcessed" checked={filterValues.showProcessed} onChange={handleChange} className="w-4 h-4 accent-primary-500" />
                         <span>Mostrar ya procesados</span>
-                    </CheckboxLabel>
-                </FormGroup>
+                    </label>
+                </div>
 
-                <div style={{ display: 'flex', gap: '8px' }}>
-                    <Button variant="secondary" onClick={resetFilters} title="Limpiar todos los filtros" style={{ flex: 1 }}>
+                <div className="flex gap-2">
+                    <Button variant="secondary" onClick={resetFilters} title="Limpiar todos los filtros" className="flex-1">
                         <FaEraser />
                     </Button>
-                    <Button variant="primary" onClick={onRefresh} disabled={isRefreshing} style={{ flex: 2 }}>
-                        <FaSync className={isRefreshing ? "spinning" : ""} /> {isRefreshing ? "Cargando..." : "Refrescar"}
+                    <Button variant="primary" onClick={onRefresh} disabled={isRefreshing} className="flex-2">
+                        <FaSync className={isRefreshing ? "animate-spin" : ""} /> {isRefreshing ? "Cargando..." : "Refrescar"}
                     </Button>
                 </div>
-            </FiltersGrid>
-        </FilterWrapper>
+            </div>
+        </div>
     );
 }

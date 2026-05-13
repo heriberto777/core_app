@@ -1,176 +1,112 @@
 import React from "react";
-import styled from "styled-components";
 import { FaEdit, FaTrash, FaEye, FaToggleOn, FaToggleOff, FaCrown } from "react-icons/fa";
-import { StatusBadge, Button } from "../index";
+import { StatusBadge } from "../index";
 
-const TableContainer = styled.div`
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 20px;
-  overflow: hidden;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
-`;
-
-const Table = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-`;
-
-const Th = styled.th`
-  padding: 20px;
-  text-align: left;
-  font-size: 11px;
-  font-weight: 800;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 1px;
-  border-bottom: 1px solid #f1f5f9;
-`;
-
-const Tr = styled.tr`
-  transition: all 0.2s;
-  &:hover {
-    background: rgba(248, 250, 252, 0.5);
-  }
-`;
-
-const Td = styled.td`
-  padding: 16px 20px;
-  font-size: 14px;
-  color: #1e293b;
-  border-bottom: 1px solid #f1f5f9;
-`;
-
-const UserCell = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 12px;
-`;
-
-const Avatar = styled.div`
-  width: 40px;
-  height: 40px;
-  border-radius: 12px;
-  background: ${props => props.isAdmin ? "#f39c1220" : "#3b82f620"};
-  color: ${props => props.isAdmin ? "#f39c12" : "#3b82f6"};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 800;
-  font-size: 16px;
-`;
-
-const Info = styled.div`
-  display: flex;
-  flex-direction: column;
-  
-  .name {
-    font-weight: 700;
-    display: flex;
-    align-items: center;
-    gap: 6px;
-  }
-  .role {
-    font-size: 12px;
-    color: #64748b;
-  }
-`;
-
-const RoleGrid = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-`;
-
-const RoleTag = styled.span`
-  padding: 2px 8px;
-  background: #f1f5f9;
-  border-radius: 6px;
-  font-size: 11px;
-  font-weight: 700;
-  color: #64748b;
-`;
-
-const ActionGroup = styled.div`
-  display: flex;
-  gap: 8px;
-`;
-
+/**
+ * UsersTable (Tailwind Edition)
+ * Tabla de identidades con diseño de alta fidelidad.
+ */
 export const UsersTable = ({ data, onEdit, onDelete, onToggleStatus, onView, currentUserId }) => {
     return (
-        <TableContainer>
-            <Table>
+        <div className="overflow-x-auto">
+            <table className="w-full text-left border-collapse">
                 <thead>
-                    <tr>
-                        <Th>Usuario</Th>
-                        <Th>Email / Contacto</Th>
-                        <Th>Roles</Th>
-                        <Th>Estado</Th>
-                        <Th>Acciones</Th>
+                    <tr className="bg-slate-50/50 border-b border-slate-100">
+                        <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em]">Usuario</th>
+                        <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em]">Contacto</th>
+                        <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em]">Roles</th>
+                        <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em]">Estado</th>
+                        <th className="px-6 py-5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-[0.1em]">Acciones</th>
                     </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-50">
                     {data.map((user) => (
-                        <Tr key={user._id}>
-                            <Td>
-                                <UserCell>
-                                    <Avatar isAdmin={user.isAdmin}>
+                        <tr key={user._id} className="hover:bg-slate-50/40 transition-colors group">
+                            {/* USER INFO */}
+                            <td className="px-6 py-4">
+                                <div className="flex items-center gap-4">
+                                    <div className={`
+                                        w-11 h-11 rounded-xl flex items-center justify-center font-extrabold text-lg shadow-sm
+                                        ${user.isAdmin 
+                                          ? "bg-amber-100 text-amber-600 border border-amber-200" 
+                                          : "bg-primary-100 text-primary-600 border border-primary-200"}
+                                    `}>
                                         {user.name?.charAt(0)}
-                                    </Avatar>
-                                    <Info>
-                                        <div className="name">
+                                    </div>
+                                    <div className="flex flex-col min-w-0">
+                                        <div className="font-extrabold text-slate-700 flex items-center gap-2 truncate">
                                             {user.name} {user.lastname}
-                                            {user.isAdmin && <FaCrown size={12} title="Administrador de Sistema" />}
+                                            {user.isAdmin && <FaCrown className="text-amber-500" size={12} title="Administrador" />}
                                         </div>
-                                        <div className="role">ID: {user._id}</div>
-                                    </Info>
-                                </UserCell>
-                            </Td>
-                            <Td>
-                                <div style={{ fontWeight: 600 }}>{user.email}</div>
-                                <div style={{ fontSize: '12px', opacity: 0.7 }}>{user.telefono || 'Sin teléfono'}</div>
-                            </Td>
-                            <Td>
-                                <RoleGrid>
+                                        <div className="text-[11px] font-bold text-slate-400 uppercase tracking-tighter">ID: {user._id?.slice(-8)}</div>
+                                    </div>
+                                </div>
+                            </td>
+
+                            {/* CONTACT */}
+                            <td className="px-6 py-4">
+                                <div className="text-sm font-bold text-slate-600">{user.email}</div>
+                                <div className="text-[11px] font-medium text-slate-400 mt-0.5">{user.telefono || 'Sin teléfono'}</div>
+                            </td>
+
+                            {/* ROLES */}
+                            <td className="px-6 py-4">
+                                <div className="flex flex-wrap gap-1.5 max-w-[250px]">
                                     {user.roles?.map(r => (
-                                        <RoleTag key={r._id}>{r.displayName}</RoleTag>
+                                        <span key={r._id} className="px-2 py-0.5 bg-slate-100 text-slate-500 rounded-md text-[10px] font-extrabold uppercase tracking-tight">
+                                          {r.displayName}
+                                        </span>
                                     ))}
-                                    {!user.roles?.length && <span style={{ opacity: 0.6, fontSize: '12px' }}>Sin roles</span>}
-                                </RoleGrid>
-                            </Td>
-                            <Td>
-                                <StatusBadge variant={user.activo ? "success" : "danger"}>
+                                    {!user.roles?.length && <span className="text-[11px] font-medium text-slate-300 italic">Sin privilegios</span>}
+                                </div>
+                            </td>
+
+                            {/* STATUS */}
+                            <td className="px-6 py-4">
+                                <StatusBadge status={user.activo ? "ACTIVE" : "INACTIVE"}>
                                     {user.activo ? "Activo" : "Inactivo"}
                                 </StatusBadge>
-                            </Td>
-                            <Td>
-                                <ActionGroup>
-                                    <Button variant="ghost" size="small" onClick={() => onView(user)}>
-                                        <FaEye />
-                                    </Button>
-                                    <Button variant="ghost" size="small" onClick={() => onEdit(user)}>
-                                        <FaEdit />
-                                    </Button>
-                                    <Button
-                                        variant="ghost"
-                                        size="small"
-                                        color={user.activo ? "#f59e0b" : "#10b981"}
-                                        onClick={() => onToggleStatus(user._id, user.activo)}
+                            </td>
+
+                            {/* ACTIONS */}
+                            <td className="px-6 py-4 text-right">
+                                <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                                    <button 
+                                      onClick={() => onView(user)}
+                                      className="p-2 text-slate-400 hover:text-primary-500 hover:bg-primary-50 rounded-lg transition-all"
+                                      title="Ver detalles"
                                     >
-                                        {user.activo ? <FaToggleOn /> : <FaToggleOff />}
-                                    </Button>
+                                        <FaEye size={14} />
+                                    </button>
+                                    <button 
+                                      onClick={() => onEdit(user)}
+                                      className="p-2 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all"
+                                      title="Editar"
+                                    >
+                                        <FaEdit size={14} />
+                                    </button>
+                                    <button
+                                        onClick={() => onToggleStatus(user._id, user.activo)}
+                                        className={`p-2 rounded-lg transition-all ${user.activo ? "text-amber-500 hover:bg-amber-50" : "text-emerald-500 hover:bg-emerald-50"}`}
+                                        title={user.activo ? "Desactivar" : "Activar"}
+                                    >
+                                        {user.activo ? <FaToggleOn size={16} /> : <FaToggleOff size={16} />}
+                                    </button>
                                     {user._id !== currentUserId && (
-                                        <Button variant="ghost" size="small" color="#ef4444" onClick={() => onDelete(user)}>
-                                            <FaTrash />
-                                        </Button>
+                                        <button 
+                                          onClick={() => onDelete(user)}
+                                          className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                                          title="Eliminar"
+                                        >
+                                            <FaTrash size={14} />
+                                        </button>
                                     )}
-                                </ActionGroup>
-                            </Td>
-                        </Tr>
+                                </div>
+                            </td>
+                        </tr>
                     ))}
                 </tbody>
-            </Table>
-        </TableContainer>
+            </table>
+        </div>
     );
 };

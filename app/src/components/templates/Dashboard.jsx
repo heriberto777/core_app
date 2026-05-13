@@ -1,5 +1,4 @@
-import React, { useState } from "react";
-import styled from "styled-components";
+import React from "react";
 import { FaSync } from "react-icons/fa";
 import { Helmet } from "react-helmet-async";
 
@@ -15,10 +14,13 @@ import {
   LiveHealthCard
 } from "../../index";
 
+/**
+ * Dashboard (Tailwind Edition)
+ * Re-diseño corporativo con énfasis en métricas y telemetría.
+ */
 export function Dashboard() {
   const { accessToken } = useAuth();
 
-  // Hook de lógica centralizada
   const {
     stats,
     serverStatus,
@@ -34,110 +36,72 @@ export function Dashboard() {
   const handleScheduleSuccess = () => fetchDashboardData(true);
 
   return (
-    <Container>
+    <div className="flex flex-col min-h-screen bg-slate-50 animate-fadeIn">
       <Helmet>
         <title>Dashboard - Sistema Core ERP</title>
       </Helmet>
 
-      <MainArea>
-        <WelcomeHeader>
+      <div className="flex-1 w-full max-w-[1400px] mx-auto p-6 lg:p-10 flex flex-col gap-8">
+        {/* HEADER DE BIENVENIDA */}
+        <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 py-2">
           <div>
-            <WelcomeTitle>Panel de Control</WelcomeTitle>
-            <WelcomeSubtitle>Sistema de Transferencia de Datos Inteligente</WelcomeSubtitle>
+            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Panel de Control</h1>
+            <p className="text-sm font-semibold text-slate-500 mt-1">Sistema de Transferencia de Datos Inteligente</p>
           </div>
           <Button
-            variant="ghost"
+            variant="secondary"
             onClick={handleRefresh}
             disabled={refreshing || loading}
+            className="shadow-sm"
           >
-            <FaSync className={refreshing ? "spin-icon" : ""} />
+            <FaSync className={`transition-transform duration-700 ${refreshing ? "animate-spin" : ""}`} />
             {refreshing ? "Actualizando..." : "Sincronizar"}
           </Button>
-        </WelcomeHeader>
+        </header>
 
         {loading && !refreshing ? (
-          <LoadingArea>
-            <Spinner />
-            <span>Optimizando telemetría del sistema...</span>
-          </LoadingArea>
+          <div className="flex-1 flex flex-col items-center justify-center min-h-[400px] gap-6">
+            <div className="w-12 h-12 border-4 border-primary-200 border-t-primary-600 rounded-full animate-spin" />
+            <span className="text-lg font-bold text-primary-600 animate-pulse">Optimizando telemetría del sistema...</span>
+          </div>
         ) : error ? (
-          <ErrorArea>
-            <p>{error}</p>
+          <div className="flex flex-col items-center justify-center p-16 bg-red-50/50 border border-red-100 rounded-[32px] text-center gap-4">
+            <div className="text-4xl">🔌</div>
+            <p className="text-red-600 font-bold text-lg">{error}</p>
             <Button variant="primary" onClick={() => fetchDashboardData()}>Reintentar Conexión</Button>
-          </ErrorArea>
+          </div>
         ) : (
-          <>
+          <div className="space-y-10">
+            {/* GRID DE ESTADÍSTICAS */}
             <StatCardsGrid stats={stats} />
 
-            <DashboardGrid>
-              <LiveHealthCard accessToken={accessToken} />
-              <ServerHealthPanel status={serverStatus} />
-              <SchedulerPanel
-                nextRun={nextScheduled}
-                onConfigSuccess={handleScheduleSuccess}
-                loading={loading}
-              />
-              <QuickAccessGrid />
-              <RecentActivitiesTable transfers={lastTransfers} />
-            </DashboardGrid>
-          </>
+            {/* GRID PRINCIPAL DE PANELES */}
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-8 items-start">
+              <div className="xl:col-span-1">
+                <LiveHealthCard accessToken={accessToken} />
+              </div>
+              <div className="xl:col-span-1">
+                <ServerHealthPanel status={serverStatus} />
+              </div>
+              <div className="xl:col-span-1">
+                <SchedulerPanel
+                  nextRun={nextScheduled}
+                  onConfigSuccess={handleScheduleSuccess}
+                  loading={loading}
+                />
+              </div>
+              <div className="xl:col-span-3">
+                <QuickAccessGrid />
+              </div>
+              <div className="xl:col-span-3">
+                <RecentActivitiesTable transfers={lastTransfers} />
+              </div>
+            </div>
+          </div>
         )}
-      </MainArea>
-
-      <style>{`
-        .spin-icon { animation: spin 1s linear infinite; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      `}</style>
-    </Container>
+      </div>
+    </div>
   );
 }
-
-// --- Styled Components Premium ---
-
-const Container = styled.div`
-  min-height: 100vh; background: ${({ theme }) => theme.bg};
-  display: flex; flex-direction: column;
-`;
-
-const MainArea = styled.main`
-  flex: 1; padding: 20px 40px; max-width: 1400px; margin: 0 auto; width: 100%;
-  display: flex; flex-direction: column; gap: 24px;
-  @media (max-width: 768px) { padding: 10px; }
-`;
-
-const WelcomeHeader = styled.div`
-  display: flex; justify-content: space-between; align-items: flex-end; padding: 10px 0;
-  @media (max-width: 600px) { flex-direction: column; align-items: flex-start; gap: 20px; }
-`;
-
-const WelcomeTitle = styled.h1`
-  margin: 0; font-size: 28px; font-weight: 800; color: ${({ theme }) => theme.title};
-`;
-
-const WelcomeSubtitle = styled.p`
-  margin: 4px 0 0; font-size: 14px; font-weight: 600; color: ${({ theme }) => theme.textSecondary};
-`;
-
-const DashboardGrid = styled.div`
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(350px, 1fr)); gap: 24px;
-  @media (max-width: 900px) { grid-template-columns: 1fr; }
-`;
-
-const LoadingArea = styled.div`
-  flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 20px;
-  min-height: 400px; font-weight: 700; color: ${({ theme }) => theme.primary};
-`;
-
-const ErrorArea = styled.div`
-  padding: 60px; text-align: center; background: #ef444405; border-radius: 32px;
-  border: 1px dashed #ef444440; display: flex; flex-direction: column; align-items: center; gap: 16px;
-  color: #ef4444; font-weight: 600;
-`;
-
-const Spinner = styled.div`
-  width: 50px; height: 50px; border: 4px solid ${({ theme }) => theme.primary}20;
-  border-top-color: ${({ theme }) => theme.primary}; border-radius: 50%;
-  animation: spin 1s linear infinite;
-`;
 
 export default Dashboard;

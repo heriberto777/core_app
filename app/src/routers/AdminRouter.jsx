@@ -1,29 +1,24 @@
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import {
-  AdminLayout,
-  Auth,
-  useAuth,
-  usePermissions,
-  Dashboard,
-  TransferTasks,
-  LoadsManagement,
-  LoadsResumen,
-  LoadsTasks,
-  Statistics,
-  DocumentsVisualization,
-  ModuleManager,
-  AuditCenter,
-  TraspasoManagement,
-  UserManagement,
-  RoleManagement,
-  ConfigurationPage,
-  UserProfile,
-  UniversalDocumentManager,
-  TransferHistory,
-  TransferHistoryLogs,
-  LogsPage
-} from "../index";
+import { AdminLayout } from "../layouts/AdminLayout/AdminLayout";
+import { Auth } from "../pages/admin/Auth/Auth";
+import { useAuth } from "../hooks/useAuth";
+import { usePermissions } from "../hooks/usePermissions";
+import { Dashboard } from "../components/templates/Dashboard";
+import { TransferTasks } from "../components/templates/TransferTask";
+import { LoadsManagement } from "../components/templates/LoadsManagement";
+import { LoadsResumen } from "../components/templates/LoadsResumen";
+import { LoadsTasks } from "../components/templates/LoadsTasks";
+import { Statistics } from "../components/templates/Statistics";
+import { DocumentsVisualization } from "../components/templates/DocumentsVisualization";
+import { ModuleManager } from "../components/templates/ModuleManager";
+import { AuditCenter } from "../components/templates/AuditCenter";
+import { TraspasoManagement } from "../components/templates/TraspasoManagement";
+import { UserManagement } from "../components/templates/UserManagement";
+import { RoleManagement } from "../components/templates/RoleManagement";
+import { ConfigurationPage } from "../components/templates/ConfigurationPage";
+import { UserProfile } from "../components/organismos/UserProfile";
+import { UniversalDocumentManager } from "../components/templates/UniversalDocumentManager";
 
 // ⭐ COMPONENTE DE LOADING MEJORADO ⭐
 const AuthLoader = () => (
@@ -228,13 +223,11 @@ export function AdminRouter() {
           <ProtectedRoute resource="history" action="read">
             <LayoutWrapper
               component={AuditCenter}
-              title="Historial de Transferencias"
+              title="Bitácora Centralizada"
             />
           </ProtectedRoute>
         }
       />
-
-      {/* ⭐ RUTAS DE ANÁLISIS - LOGS ELIMINADO (DUPLICADO CON HISTORY) ⭐ */}
 
       {/* ⭐ RUTAS DE ADMINISTRACIÓN ⭐ */}
       <Route
@@ -290,34 +283,6 @@ export function AdminRouter() {
       <Route
         path="/perfil"
         element={<LayoutWrapper component={UserProfile} title="Mi Perfil" />}
-      />
-
-      {/* ⭐ RUTAS DE HISTORIAL Y LOGS ⭐ */}
-      <Route
-        path="/transfer-history"
-        element={
-          <ProtectedRoute resource="history" action="read">
-            <LayoutWrapper component={TransferHistory} title="Historial de Transferencias" />
-          </ProtectedRoute>
-        }
-      />
-
-      <Route
-        path="/transfer-history/logs"
-        element={
-          <ProtectedRoute resource="history" action="read">
-            <LayoutWrapper component={TransferHistoryLogs} title="Logs de Transferencias" />
-          </ProtectedRoute>
-        }
-      />
-
-      <Route
-        path="/system-logs"
-        element={
-          <ProtectedRoute resource="logs" action="read" requireAdmin>
-            <LayoutWrapper component={LogsPage} title="Logs del Sistema" />
-          </ProtectedRoute>
-        }
       />
 
       {/* ⭐ RUTA CATCH-ALL ⭐ */}

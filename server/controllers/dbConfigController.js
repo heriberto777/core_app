@@ -97,7 +97,7 @@ const testDBConnection = async (req, res) => {
       },
     },
     options: {
-      encrypt: isIpAddress ? false : options?.encrypt || false,
+      encrypt: isIpAddress ? false : options?.mssqlEncrypt || false,
       trustServerCertificate: true,
       database: database,
       connectTimeout: 10000, // 10 segundos para la prueba

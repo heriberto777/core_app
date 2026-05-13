@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import styled from "styled-components";
 import { Helmet } from "react-helmet-async";
 import { FaPlus, FaSync, FaTools, FaBell } from "react-icons/fa";
 import {
@@ -12,73 +11,6 @@ import {
   NotificationContainer
 } from "../../index";
 import Swal from "sweetalert2";
-
-const Container = styled.div`
-  width: 100%;
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-`;
-
-const PageHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 32px;
-  gap: 20px;
-
-  @media (max-width: 768px) {
-    flex-direction: column;
-  }
-`;
-
-const HeaderInfo = styled.div`
-  flex: 1;
-`;
-
-const Title = styled.h1`
-  margin: 0 0 8px 0;
-  font-size: 32px;
-  font-weight: 800;
-  display: flex;
-  align-items: center;
-  gap: 12px;
-`;
-
-const Description = styled.p`
-  margin: 0;
-  font-size: 16px;
-  opacity: 0.7;
-  line-height: 1.6;
-`;
-
-const HeaderActions = styled.div`
-  display: flex;
-  gap: 12px;
-`;
-
-const InfoCard = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  padding: 24px;
-  border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.border};
-  margin-bottom: 24px;
-  display: flex;
-  align-items: center;
-  gap: 20px;
-`;
-
-const IconBox = styled.div`
-  width: 50px;
-  height: 50px;
-  border-radius: 12px;
-  background: rgba(59, 130, 246, 0.1);
-  color: #3b82f6;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-`;
 
 export function ControlPlanilla() {
   const { accessToken } = useAuth();
@@ -171,39 +103,43 @@ export function ControlPlanilla() {
         <title>Control de Notificaciones | Core App</title>
       </Helmet>
 
-      <Container>
-        <PageHeader>
-          <HeaderInfo>
-            <Title><FaBell /> Notificaciones del Sistema</Title>
-            <Description>
+      <div className="w-full flex flex-col gap-5">
+        <div className="flex justify-between items-start mb-8 gap-5 max-md:flex-col">
+          <div className="flex-1">
+            <h1 className="m-0 mb-2 text-3xl font-extrabold flex items-center gap-3">
+              <FaBell /> Notificaciones del Sistema
+            </h1>
+            <p className="m-0 text-base opacity-70 leading-relaxed">
               Administra los puntos de contacto para las alertas logísticas y operativas.
               Configura quién recibe reportes de traspasos, fallos técnicos y resúmenes de carga.
-            </Description>
-          </HeaderInfo>
-          <HeaderActions>
+            </p>
+          </div>
+          <div className="flex gap-3">
             <Button variant="outline" onClick={handleInitialize}>
               <FaTools /> Inicializar Defaults
             </Button>
             <Button variant="primary" onClick={() => { setEditingRecipient(null); setModalOpen(true); }}>
               <FaPlus /> Agregar Destinatario
             </Button>
-          </HeaderActions>
-        </PageHeader>
+          </div>
+        </div>
 
-        <InfoCard>
-          <IconBox><FaBell /></IconBox>
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 mb-6 flex items-center gap-5">
+          <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-2xl">
+            <FaBell />
+          </div>
           <div>
-            <h4 style={{ margin: '0 0 4px 0', fontSize: '16px' }}>Canales Activos</h4>
-            <p style={{ margin: 0, fontSize: '14px', opacity: 0.7 }}>
+            <h4 className="m-0 mb-1 text-base font-semibold">Canales Activos</h4>
+            <p className="m-0 text-sm opacity-70">
               Actualmente hay <b>{recipients.length}</b> destinatarios configurados en la red de alertas logísticas.
             </p>
           </div>
-          <div style={{ marginLeft: 'auto' }}>
+          <div className="ml-auto">
             <Button variant="ghost" onClick={actions.fetchRecipients} loading={refreshing}>
               <FaSync />
             </Button>
           </div>
-        </InfoCard>
+        </div>
 
         <RecipientsTable
           recipients={recipients}
@@ -222,7 +158,9 @@ export function ControlPlanilla() {
         />
 
         <NotificationContainer />
-      </Container>
+      </div>
     </>
   );
 }
+
+export default ControlPlanilla;

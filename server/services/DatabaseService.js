@@ -173,7 +173,7 @@ class DatabaseService {
         },
       },
       options: {
-        encrypt: dbConfig.options?.encrypt !== undefined ? dbConfig.options.encrypt : (isIpAddress ? false : true),
+        encrypt: dbConfig.options?.mssqlEncrypt !== undefined ? dbConfig.options.mssqlEncrypt : (isIpAddress ? false : true),
         trustServerCertificate: true,
         enableArithAbort: true,
         database: dbConfig.database,
@@ -502,8 +502,10 @@ class DatabaseService {
       const existingPool = this.pools.get(serverKey);
       if (existingPool) {
         try {
-          await existingPool.drain();
-          await existingPool.clear();
+          if (!existingPool.isMongo) {
+            await existingPool.drain();
+            await existingPool.clear();
+          }
         } catch (closeError) {
           logger.warn(`Error cerrando pool existente: ${closeError.message}`);
         }
@@ -560,11 +562,14 @@ class DatabaseService {
       async (serverKey) => {
         try {
           const pool = this.pools.get(serverKey);
-          if (pool) {
+          if (pool && !pool.isMongo) {
             await pool.drain();
             await pool.clear();
             this.pools.delete(serverKey);
             logger.info(`Pool ${serverKey} cerrado`);
+          } else if (pool && pool.isMongo) {
+            this.pools.delete(serverKey);
+            logger.info(`Conexión MongoDB ${serverKey} removida del registro`);
           }
         } catch (error) {
           logger.error(`Error cerrando pool ${serverKey}: ${error.message}`);

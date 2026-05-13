@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import styled from "styled-components";
 import Swal from "sweetalert2";
 import {
   FaUsers,
@@ -10,6 +9,9 @@ import {
   FaPlus,
   FaMinus,
   FaCrown,
+  FaCheck,
+  FaTimes,
+  FaUserShield,
 } from "react-icons/fa";
 
 import { useAuth, usePermissions } from "../../index";
@@ -41,13 +43,10 @@ const UserRoleManager = () => {
     }
   }, [canRead, accessToken]);
 
-  // ⭐ CARGAR USUARIOS USANDO userApi ⭐
   const loadUsers = async () => {
     if (!accessToken) return;
-
     setLoading(true);
     try {
-      // ⭐ USAR getUsersWithRoles QUE YA EXISTE EN userApi ⭐
       const response = await userApi.getUsersWithRoles(accessToken, {
         page: 1,
         limit: 100,
@@ -67,10 +66,8 @@ const UserRoleManager = () => {
     }
   };
 
-  // ⭐ CARGAR ROLES DISPONIBLES ⭐
   const loadRoles = async () => {
     if (!accessToken) return;
-
     try {
       const response = await fetch("/api/v1/roles/available", {
         headers: { Authorization: `Bearer ${accessToken}` },
@@ -84,14 +81,9 @@ const UserRoleManager = () => {
     }
   };
 
-  // ⭐ ASIGNAR ROL A MÚLTIPLES USUARIOS USANDO userApi ⭐
   const assignRoleToUsers = async () => {
     if (!selectedRole || selectedUsers.length === 0) {
-      Swal.fire(
-        "Advertencia",
-        "Selecciona un rol y al menos un usuario",
-        "warning"
-      );
+      Swal.fire("Advertencia", "Selecciona un rol y al menos un usuario", "warning");
       return;
     }
 
@@ -102,28 +94,35 @@ const UserRoleManager = () => {
     });
 
     const confirmResult = await Swal.fire({
-      title: "Confirmar asignación",
+      title: "Confirmar Asignación",
       html: `
-        <p>¿Asignar el rol <strong>"${role.displayName}"</strong> a:</p>
-        <ul style="text-align: left; margin: 10px 0;">
-          ${userNames.map((name) => `<li>${name}</li>`).join("")}
-        </ul>
+        <div class="space-y-4 mt-4">
+            <p class="text-sm text-slate-500 font-medium">¿Asignar el rol <strong>"${role.displayName}"</strong> a los siguientes usuarios?</p>
+            <div class="bg-blue-50 border border-blue-100 p-5 rounded-2xl text-left max-h-[200px] overflow-y-auto">
+                <ul class="space-y-2">
+                    ${userNames.map((name) => `<li class="text-[11px] font-black text-blue-700 uppercase tracking-widest flex gap-2"><span>•</span> ${name}</li>`).join("")}
+                </ul>
+            </div>
+        </div>
       `,
       icon: "question",
       showCancelButton: true,
       confirmButtonText: "Sí, asignar",
       cancelButtonText: "Cancelar",
+      customClass: {
+        popup: 'rounded-[32px] p-8',
+        confirmButton: 'px-10 py-3.5 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-blue-600/20',
+        cancelButton: 'px-10 py-3.5 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase tracking-widest text-[10px] ml-4'
+      },
+      buttonsStyling: false,
     });
 
     if (confirmResult.isConfirmed) {
       setLoading(true);
       try {
-        // ⭐ ASIGNAR ROL A CADA USUARIO USANDO updateUserRoles ⭐
         const promises = selectedUsers.map(async (userId) => {
           const user = users.find((u) => u._id === userId);
           const currentRoleIds = user.rolesInfo?.map((r) => r._id) || [];
-
-          // Agregar el nuevo rol si no lo tiene
           if (!currentRoleIds.includes(selectedRole)) {
             const newRoleIds = [...currentRoleIds, selectedRole];
             return userApi.updateUserRoles(accessToken, userId, newRoleIds);
@@ -132,20 +131,12 @@ const UserRoleManager = () => {
         });
 
         await Promise.all(promises);
-
         Swal.fire("¡Éxito!", "Roles asignados correctamente", "success");
-
-        // Limpiar selecciones y recargar
         setSelectedUsers([]);
         setSelectedRole("");
         await loadUsers();
-
-        // Recargar permisos si el usuario actual fue modificado
-        if (selectedUsers.includes(currentUser._id)) {
-          await reloadUserPermissions();
-        }
+        if (selectedUsers.includes(currentUser._id)) await reloadUserPermissions();
       } catch (error) {
-        console.error("Error asignando roles:", error);
         Swal.fire("Error", "No se pudieron asignar los roles", "error");
       } finally {
         setLoading(false);
@@ -153,14 +144,9 @@ const UserRoleManager = () => {
     }
   };
 
-  // ⭐ REMOVER ROL DE MÚLTIPLES USUARIOS ⭐
   const removeRoleFromUsers = async () => {
     if (!selectedRole || selectedUsers.length === 0) {
-      Swal.fire(
-        "Advertencia",
-        "Selecciona un rol y al menos un usuario",
-        "warning"
-      );
+      Swal.fire("Advertencia", "Selecciona un rol y al menos un usuario", "warning");
       return;
     }
 
@@ -171,22 +157,24 @@ const UserRoleManager = () => {
     });
 
     if (usersWithRole.length === 0) {
-      Swal.fire(
-        "Información",
-        "Ninguno de los usuarios seleccionados tiene este rol",
-        "info"
-      );
+      Swal.fire("Información", "Ninguno de los usuarios seleccionados tiene este rol", "info");
       return;
     }
 
     const confirmResult = await Swal.fire({
-      title: "Confirmar remoción",
+      title: "Confirmar Remoción",
       text: `¿Remover el rol "${role.displayName}" de ${usersWithRole.length} usuario(s)?`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonText: "Sí, remover",
       cancelButtonText: "Cancelar",
       confirmButtonColor: "#d33",
+      customClass: {
+        popup: 'rounded-[32px] p-8',
+        confirmButton: 'px-10 py-3.5 bg-red-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-red-600/20',
+        cancelButton: 'px-10 py-3.5 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase tracking-widest text-[10px] ml-4'
+      },
+      buttonsStyling: false,
     });
 
     if (confirmResult.isConfirmed) {
@@ -196,25 +184,16 @@ const UserRoleManager = () => {
           const user = users.find((u) => u._id === userId);
           const currentRoleIds = user.rolesInfo?.map((r) => r._id) || [];
           const newRoleIds = currentRoleIds.filter((id) => id !== selectedRole);
-
           return userApi.updateUserRoles(accessToken, userId, newRoleIds);
         });
 
         await Promise.all(promises);
-
         Swal.fire("¡Éxito!", "Roles removidos correctamente", "success");
-
-        // Limpiar selecciones y recargar
         setSelectedUsers([]);
         setSelectedRole("");
         await loadUsers();
-
-        // Recargar permisos si el usuario actual fue modificado
-        if (usersWithRole.includes(currentUser._id)) {
-          await reloadUserPermissions();
-        }
+        if (usersWithRole.includes(currentUser._id)) await reloadUserPermissions();
       } catch (error) {
-        console.error("Error removiendo roles:", error);
         Swal.fire("Error", "No se pudieron remover los roles", "error");
       } finally {
         setLoading(false);
@@ -222,16 +201,12 @@ const UserRoleManager = () => {
     }
   };
 
-  // ⭐ MANEJAR SELECCIÓN DE USUARIOS ⭐
   const handleUserSelection = (userId) => {
     setSelectedUsers((prev) =>
-      prev.includes(userId)
-        ? prev.filter((id) => id !== userId)
-        : [...prev, userId]
+      prev.includes(userId) ? prev.filter((id) => id !== userId) : [...prev, userId]
     );
   };
 
-  // ⭐ FILTRAR USUARIOS ⭐
   const filteredUsers = users.filter(
     (user) =>
       user.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -241,464 +216,155 @@ const UserRoleManager = () => {
 
   if (!canRead) {
     return (
-      <Container>
-        <ErrorMessage>
-          <FaShieldAlt />
-          <h3>Sin permisos</h3>
-          <p>No tienes permisos para gestionar usuarios y roles.</p>
-        </ErrorMessage>
-      </Container>
+      <div className="p-20 text-center flex flex-col items-center gap-6 animate-in fade-in duration-500">
+        <div className="w-20 h-20 bg-red-50 text-red-500 rounded-3xl flex items-center justify-center">
+            <FaShieldAlt className="text-4xl" />
+        </div>
+        <div className="space-y-2">
+            <h3 className="text-xl font-black text-slate-900">Acceso Restringido</h3>
+            <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No tiene permisos de lectura para la gestión de usuarios</p>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Container>
-      <Header>
-        <TitleSection>
-          <h2>
-            <FaUsers /> Gestión de Usuarios y Roles
+    <div className="p-8 max-w-7xl mx-auto space-y-12 animate-in fade-in duration-700">
+      <div className="flex flex-col md:flex-row justify-between items-start gap-8">
+        <div className="space-y-3">
+          <h2 className="text-3xl font-black text-slate-900 flex items-center gap-4">
+            <FaUserShield className="text-blue-600" /> Control de Acceso Maestro
           </h2>
-          <p>Asigna y gestiona roles para múltiples usuarios</p>
-        </TitleSection>
+          <p className="text-sm font-bold text-slate-400 uppercase tracking-widest max-w-xl">Gestione privilegios y roles de seguridad para la infraestructura de usuarios del ERP</p>
+        </div>
 
-        <ActionsSection>
-          <button onClick={loadUsers} disabled={loading}>
-            <FaSync /> {loading ? "Cargando..." : "Actualizar"}
+        <div className="flex items-center gap-4">
+          <button 
+            onClick={loadUsers} 
+            disabled={loading}
+            className="px-6 py-3 bg-white border border-slate-200 text-slate-900 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:border-blue-600 hover:text-blue-600 transition-all shadow-sm flex items-center gap-3 disabled:opacity-50"
+          >
+            <FaSync className={loading ? "animate-spin" : ""} /> {loading ? "Sincronizando..." : "Actualizar Lista"}
           </button>
-        </ActionsSection>
-      </Header>
+        </div>
+      </div>
 
-      <FilterSection>
-        <SearchBox>
-          <FaSearch />
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-6 items-center bg-white/50 backdrop-blur-xl p-8 rounded-[32px] border border-slate-100 shadow-sm">
+        <div className="relative group">
+          <FaSearch className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
           <input
             type="text"
-            placeholder="Buscar usuarios..."
+            placeholder="Filtrar por nombre, apellido o email..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
+            className="w-full pl-12 pr-6 py-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
           />
-        </SearchBox>
+        </div>
 
-        <RoleSelector>
+        <div className="relative">
           <select
             value={selectedRole}
             onChange={(e) => setSelectedRole(e.target.value)}
+            className="pl-6 pr-12 py-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:border-blue-500 transition-all appearance-none min-w-[220px]"
           >
-            <option value="">Seleccionar rol...</option>
+            <option value="">Seleccionar Rol...</option>
             {roles.map((role) => (
               <option key={role._id} value={role._id}>
                 {role.displayName}
               </option>
             ))}
           </select>
-        </RoleSelector>
+          <FaFilter className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none" />
+        </div>
 
-        <ButtonGroup>
+        <div className="flex gap-3">
           <button
             onClick={assignRoleToUsers}
-            disabled={
-              !selectedRole || selectedUsers.length === 0 || !canUpdateUsers
-            }
-            className="assign"
+            disabled={!selectedRole || selectedUsers.length === 0 || !canUpdateUsers}
+            className="px-8 py-4 bg-emerald-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-emerald-700 transition-all shadow-lg shadow-emerald-600/20 disabled:opacity-30 flex items-center gap-3"
           >
-            <FaPlus /> Asignar Rol
+            <FaPlus /> Asignar
           </button>
 
           <button
             onClick={removeRoleFromUsers}
-            disabled={
-              !selectedRole || selectedUsers.length === 0 || !canUpdateUsers
-            }
-            className="remove"
+            disabled={!selectedRole || selectedUsers.length === 0 || !canUpdateUsers}
+            className="px-8 py-4 bg-red-600 text-white rounded-2xl text-[10px] font-black uppercase tracking-widest hover:bg-red-700 transition-all shadow-lg shadow-red-600/20 disabled:opacity-30 flex items-center gap-3"
           >
-            <FaMinus /> Remover Rol
+            <FaMinus /> Remover
           </button>
-        </ButtonGroup>
-      </FilterSection>
+        </div>
+      </div>
 
-      <InfoSection>
-        <span>
-          {selectedUsers.length} usuario(s) seleccionado(s) de{" "}
-          {filteredUsers.length}
+      <div className="flex justify-between items-center px-8 py-4 bg-slate-50 border border-slate-100 rounded-2xl">
+        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+          <span className="text-blue-600">{selectedUsers.length}</span> usuarios seleccionados de {filteredUsers.length} totales
         </span>
         {selectedUsers.length > 0 && (
           <button
             onClick={() => setSelectedUsers([])}
-            className="clear-selection"
+            className="text-[10px] font-black text-blue-600 uppercase tracking-widest hover:underline"
           >
-            Limpiar selección
+            Limpiar Selección
           </button>
         )}
-      </InfoSection>
+      </div>
 
-      <UsersGrid>
+      <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
         {filteredUsers.map((user) => (
-          <UserCard
+          <div
             key={user._id}
-            className={selectedUsers.includes(user._id) ? "selected" : ""}
+            className={`bg-white rounded-[24px] p-6 border-2 transition-all duration-300 hover:shadow-xl cursor-pointer group relative ${
+                selectedUsers.includes(user._id) ? "border-blue-600 ring-4 ring-blue-500/10 translate-y-[-4px]" : "border-slate-100"
+            }`}
             onClick={() => handleUserSelection(user._id)}
           >
-            <UserHeader>
-              <UserAvatar>
+            <div className="flex items-center gap-4 mb-6">
+              <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center text-white font-black group-hover:bg-blue-600 transition-colors">
                 {user.name?.charAt(0)?.toUpperCase() || "U"}
-              </UserAvatar>
-              <UserInfo>
-                <UserName>
+              </div>
+              <div className="flex-1 truncate">
+                <div className="text-sm font-black text-slate-900 truncate flex items-center gap-2">
                   {user.name} {user.lastname}
-                  {user.isAdmin && <FaCrown className="admin-icon" />}
-                </UserName>
-                <UserEmail>{user.email}</UserEmail>
-              </UserInfo>
-              <SelectionCheckbox
-                type="checkbox"
-                checked={selectedUsers.includes(user._id)}
-                onChange={() => handleUserSelection(user._id)}
-              />
-            </UserHeader>
+                  {user.isAdmin && <FaCrown className="text-amber-500 text-xs shrink-0" />}
+                </div>
+                <div className="text-[10px] font-bold text-slate-400 truncate uppercase tracking-tight">{user.email}</div>
+              </div>
+              <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
+                  selectedUsers.includes(user._id) ? "bg-blue-600 border-blue-600 text-white" : "border-slate-200 bg-white"
+              }`}>
+                {selectedUsers.includes(user._id) && <FaCheck className="text-[10px]" />}
+              </div>
+            </div>
 
-            <RolesList>
+            <div className="flex flex-wrap gap-2">
               {user.rolesInfo && user.rolesInfo.length > 0 ? (
                 user.rolesInfo.map((role) => (
-                  <RoleTag key={role._id} active={role.isActive}>
+                  <span key={role._id} className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all ${
+                      role.isActive ? "bg-blue-50 border-blue-100 text-blue-700" : "bg-slate-50 border-slate-200 text-slate-400 opacity-60"
+                  }`}>
                     {role.displayName}
-                  </RoleTag>
+                  </span>
                 ))
               ) : (
-                <EmptyRoles>Sin roles asignados</EmptyRoles>
+                <span className="text-[10px] font-bold text-slate-300 italic">Sin roles vinculados</span>
               )}
-            </RolesList>
-          </UserCard>
+            </div>
+          </div>
         ))}
-      </UsersGrid>
+      </div>
 
       {filteredUsers.length === 0 && !loading && (
-        <EmptyState>
-          <FaUsers />
-          <h3>No se encontraron usuarios</h3>
-          <p>Intenta con otros términos de búsqueda</p>
-        </EmptyState>
+        <div className="flex flex-col items-center justify-center py-20 text-center opacity-30 gap-6">
+            <FaUsers className="text-6xl" />
+            <div className="space-y-1">
+                <h3 className="text-lg font-black text-slate-900">Búsqueda sin resultados</h3>
+                <p className="text-xs font-bold uppercase tracking-widest">No se encontraron usuarios con el término: "{searchTerm}"</p>
+            </div>
+        </div>
       )}
-    </Container>
+    </div>
   );
 };
-
-// ⭐ STYLED COMPONENTS ⭐
-const Container = styled.div`
-  padding: 2rem;
-  max-width: 1200px;
-  margin: 0 auto;
-`;
-
-const Header = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 2rem;
-
-  @media (max-width: 768px) {
-    flex-direction: column;
-    gap: 1rem;
-  }
-`;
-
-const TitleSection = styled.div`
-  h2 {
-    margin: 0 0 0.5rem 0;
-    color: ${({ theme }) => theme.text};
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-  }
-
-  p {
-    margin: 0;
-    color: ${({ theme }) => theme.textSecondary};
-  }
-`;
-
-const ActionsSection = styled.div`
-  button {
-    background: ${({ theme }) => theme.primary};
-    color: white;
-    border: none;
-    padding: 0.75rem 1.5rem;
-    border-radius: 6px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-weight: 500;
-
-    &:hover:not(:disabled) {
-      background: ${({ theme }) => theme.primaryDark};
-    }
-
-    &:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-  }
-`;
-
-const FilterSection = styled.div`
-  display: grid;
-  grid-template-columns: 1fr auto auto;
-  gap: 1rem;
-  margin-bottom: 1.5rem;
-  align-items: center;
-
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const SearchBox = styled.div`
-  position: relative;
-  display: flex;
-  align-items: center;
-
-  svg {
-    position: absolute;
-    left: 12px;
-    color: ${({ theme }) => theme.textSecondary};
-  }
-
-  input {
-    width: 100%;
-    padding: 0.75rem 0.75rem 0.75rem 2.5rem;
-    border: 1px solid ${({ theme }) => theme.border};
-    border-radius: 6px;
-    background: ${({ theme }) => theme.bg};
-    color: ${({ theme }) => theme.text};
-    font-size: 0.9rem;
-
-    &:focus {
-      outline: none;
-      border-color: ${({ theme }) => theme.primary};
-    }
-  }
-`;
-
-const RoleSelector = styled.div`
-  select {
-    padding: 0.75rem;
-    border: 1px solid ${({ theme }) => theme.border};
-    border-radius: 6px;
-    background: ${({ theme }) => theme.bg};
-    color: ${({ theme }) => theme.text};
-    min-width: 200px;
-
-    &:focus {
-      outline: none;
-      border-color: ${({ theme }) => theme.primary};
-    }
-  }
-`;
-
-const ButtonGroup = styled.div`
-  display: flex;
-  gap: 0.5rem;
-
-  button {
-    padding: 0.75rem 1rem;
-    border: none;
-    border-radius: 6px;
-    cursor: pointer;
-    display: flex;
-    align-items: center;
-    gap: 0.5rem;
-    font-weight: 500;
-    transition: all 0.2s;
-
-    &.assign {
-      background: ${({ theme }) => theme.success || "#28a745"};
-      color: white;
-
-      &:hover:not(:disabled) {
-        background: #218838;
-      }
-    }
-
-    &.remove {
-      background: ${({ theme }) => theme.danger || "#dc3545"};
-      color: white;
-
-      &:hover:not(:disabled) {
-        background: #c82333;
-      }
-    }
-
-    &:disabled {
-      opacity: 0.6;
-      cursor: not-allowed;
-    }
-  }
-`;
-
-const InfoSection = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 1rem;
-  padding: 0.75rem;
-  background: ${({ theme }) => theme.cardBg || theme.bg};
-  border-radius: 6px;
-  border: 1px solid ${({ theme }) => theme.border};
-
-  span {
-    color: ${({ theme }) => theme.textSecondary};
-    font-size: 0.9rem;
-  }
-
-  .clear-selection {
-    background: none;
-    border: none;
-    color: ${({ theme }) => theme.primary};
-    cursor: pointer;
-    padding: 0.25rem 0.5rem;
-    border-radius: 4px;
-
-    &:hover {
-      background: ${({ theme }) => theme.primaryLight || "#f0f8ff"};
-    }
-  }
-`;
-
-const UsersGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: 1rem;
-`;
-
-const UserCard = styled.div`
-  border: 1px solid ${({ theme }) => theme.border};
-  border-radius: 8px;
-  padding: 1rem;
-  background: ${({ theme }) => theme.cardBg || theme.bg};
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    border-color: ${({ theme }) => theme.primary};
-    box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
-  }
-
-  &.selected {
-    border-color: ${({ theme }) => theme.primary};
-    background: ${({ theme }) => theme.primaryLight || "#f0f8ff"};
-  }
-`;
-
-const UserHeader = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.75rem;
-  margin-bottom: 1rem;
-`;
-
-const UserAvatar = styled.div`
-  width: 40px;
-  height: 40px;
-  border-radius: 50%;
-  background: ${({ theme }) => theme.primary};
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-weight: 600;
-  font-size: 1.1rem;
-`;
-
-const UserInfo = styled.div`
-  flex: 1;
-`;
-
-const UserName = styled.div`
-  font-weight: 600;
-  color: ${({ theme }) => theme.text};
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-
-  .admin-icon {
-    color: #f39c12;
-    font-size: 0.9rem;
-  }
-`;
-
-const UserEmail = styled.div`
-  font-size: 0.85rem;
-  color: ${({ theme }) => theme.textSecondary};
-`;
-
-const SelectionCheckbox = styled.input`
-  width: 18px;
-  height: 18px;
-  cursor: pointer;
-`;
-
-const RolesList = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 0.5rem;
-`;
-
-const RoleTag = styled.span`
-  padding: 0.25rem 0.75rem;
-  background: ${({ active, theme }) =>
-    active ? theme.primary || "#007bff" : theme.textSecondary || "#6c757d"};
-  color: white;
-  border-radius: 12px;
-  font-size: 0.75rem;
-  font-weight: 500;
-  opacity: ${({ active }) => (active ? 1 : 0.6)};
-`;
-
-const EmptyRoles = styled.span`
-  color: ${({ theme }) => theme.textSecondary};
-  font-style: italic;
-  font-size: 0.85rem;
-`;
-
-const EmptyState = styled.div`
-  text-align: center;
-  padding: 3rem 1rem;
-  color: ${({ theme }) => theme.textSecondary};
-
-  svg {
-    font-size: 3rem;
-    margin-bottom: 1rem;
-    opacity: 0.5;
-  }
-
-  h3 {
-    margin: 0 0 0.5rem 0;
-  }
-
-  p {
-    margin: 0;
-  }
-`;
-
-const ErrorMessage = styled.div`
-  text-align: center;
-  padding: 3rem 1rem;
-  color: ${({ theme }) => theme.textSecondary};
-
-  svg {
-    font-size: 3rem;
-    margin-bottom: 1rem;
-    color: ${({ theme }) => theme.danger || "#dc3545"};
-  }
-
-  h3 {
-    margin: 0 0 0.5rem 0;
-    color: ${({ theme }) => theme.text};
-  }
-
-  p {
-    margin: 0;
-  }
-`;
 
 export default UserRoleManager;

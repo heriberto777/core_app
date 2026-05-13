@@ -1,43 +1,6 @@
 import React, { useState, useEffect } from "react";
-import styled from "styled-components";
 import { FaSave, FaTimes, FaServer, FaEnvelope, FaKey, FaShieldAlt } from "react-icons/fa";
-import { Modal, Button } from "../../index";
-
-const Form = styled.form` 
-  display: flex; 
-  flex-direction: column; 
-  gap: 24px; 
-  padding: 32px; 
-  overflow-x: hidden;
-`;
-
-const SectionTitle = styled.h4`
-  margin: 0; font-size: 13px; font-weight: 800; color: ${({ theme }) => theme.primary};
-  text-transform: uppercase; letter-spacing: 1px; display: flex; align-items: center; gap: 8px;
-  &::after { content: ''; flex: 1; height: 1px; background: ${({ theme }) => theme.border}40; }
-`;
-
-const Grid = styled.div` 
-  display: grid; 
-  grid-template-columns: repeat(2, 1fr); 
-  gap: 20px; 
-  width: 100%;
-  @media (max-width: 600px) { grid-template-columns: 1fr; } 
-`;
-
-const FormGroup = styled.div` display: flex; flex-direction: column; gap: 8px; `;
-
-const Label = styled.label` font-size: 11px; font-weight: 800; color: ${({ theme }) => theme.textSecondary}; display: flex; align-items: center; gap: 4px; span { color: #ef4444; } `;
-
-const InputWrapper = styled.div` display: flex; align-items: center; gap: 12px; background: ${({ theme }) => theme.bg2}10; border: 1px solid ${({ theme }) => theme.border}; border-radius: 12px; padding: 0 16px; transition: all 0.2s; &:focus-within { border-color: ${({ theme }) => theme.primary}; box-shadow: 0 0 0 3px ${({ theme }) => theme.primary}20; } `;
-
-const Icon = styled.div` color: ${({ theme }) => theme.textSecondary}; opacity: 0.5; font-size: 14px; `;
-
-const Input = styled.input` flex: 1; background: transparent; border: none; padding: 12px 0; color: ${({ theme }) => theme.text}; font-size: 14px; font-weight: 600; &:focus { outline: none; } &::placeholder { color: ${({ theme }) => theme.textSecondary}80; } `;
-
-const CheckGroup = styled.div` display: flex; flex-direction: column; gap: 12px; padding: 16px; background: ${({ theme }) => theme.bg2}08; border-radius: 16px; border: 1px dashed ${({ theme }) => theme.border}; `;
-
-const CheckItem = styled.label` display: flex; align-items: center; gap: 10px; cursor: pointer; input { width: 18px; height: 18px; accent-color: ${({ theme }) => theme.primary}; } span { font-size: 14px; font-weight: 700; color: ${({ theme }) => theme.text}; } `;
+import { Button } from "../../index";
 
 export function EmailConfigFormModal({ isOpen, onClose, config, onSave }) {
     const [formData, setFormData] = useState({
@@ -99,56 +62,185 @@ export function EmailConfigFormModal({ isOpen, onClose, config, onSave }) {
         }
     };
 
+    if (!isOpen) return null;
+
     return (
-        <Modal isOpen={isOpen} onClose={onClose} maxWidth="700px">
-            <Form onSubmit={handleSubmit}>
-                <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800 }}>{config ? "Editar Configuración SMTP" : "Nueva Configuración SMTP"}</h2>
-
-                <SectionTitle><FaServer /> Servidor de Salida</SectionTitle>
-                <Grid>
-                    <FormGroup>
-                        <Label>Nombre de la Cuenta <span>*</span></Label>
-                        <InputWrapper><Icon><FaEnvelope /></Icon><Input name="name" value={formData.name} onChange={handleChange} placeholder="Ej: Gmail Notificaciones" required /></InputWrapper>
-                    </FormGroup>
-                    <FormGroup>
-                        <Label>Servidor SMTP <span>*</span></Label>
-                        <InputWrapper><Icon><FaServer /></Icon><Input name="host" value={formData.host} onChange={handleChange} placeholder="Ej: smtp.gmail.com" required /></InputWrapper>
-                    </FormGroup>
-                    <FormGroup>
-                        <Label>Puerto <span>*</span></Label>
-                        <InputWrapper><Icon><FaShieldAlt /></Icon><Input type="number" name="port" value={formData.port} onChange={handleChange} placeholder="587" required /></InputWrapper>
-                    </FormGroup>
-                    <FormGroup>
-                        <Label>Remitente (From) <span>*</span></Label>
-                        <InputWrapper><Icon><FaEnvelope /></Icon><Input name="from" value={formData.from} onChange={handleChange} placeholder='"Nombre" <email@dominio.com>' required /></InputWrapper>
-                    </FormGroup>
-                </Grid>
-
-                <SectionTitle><FaKey /> Autenticación</SectionTitle>
-                <Grid>
-                    <FormGroup>
-                        <Label>Usuario / Email <span>*</span></Label>
-                        <InputWrapper><Icon><FaEnvelope /></Icon><Input type="email" name="auth.user" value={formData.auth.user} onChange={handleChange} placeholder="email@dominio.com" required /></InputWrapper>
-                    </FormGroup>
-                    <FormGroup>
-                        <Label>Contraseña {config ? "(Mantener vacía)" : " * "}</Label>
-                        <InputWrapper><Icon><FaKey /></Icon><Input type="password" name="auth.pass" value={formData.auth.pass} onChange={handleChange} placeholder="••••••••" required={!config} /></InputWrapper>
-                    </FormGroup>
-                </Grid>
-
-                <CheckGroup>
-                    <CheckItem><input type="checkbox" name="secure" checked={formData.secure} onChange={handleChange} /> <span>Usar conexión segura (SSL/TLS)</span></CheckItem>
-                    {(!config || !config.isDefault) && (
-                        <CheckItem><input type="checkbox" name="isDefault" checked={formData.isDefault} onChange={handleChange} /> <span>Establecer como cuenta predeterminada</span></CheckItem>
-                    )}
-                    <CheckItem><input type="checkbox" name="isActive" checked={formData.isActive} onChange={handleChange} /> <span>Activar configuración de inmediato</span></CheckItem>
-                </CheckGroup>
-
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px' }}>
-                    <Button variant="ghost" type="button" onClick={onClose}>Cancelar</Button>
-                    <Button variant="primary" type="submit" icon={<FaSave />} loading={loading}>{config ? "Actualizar Cuenta" : "Guardar Cuenta"}</Button>
+        <div className="fixed inset-0 bg-slate-900/70 backdrop-blur-sm flex items-center justify-center z-[2000] p-6" onClick={onClose}>
+            <div className="w-full max-w-[700px] bg-white rounded-2xl shadow-2xl overflow-hidden" onClick={e => e.stopPropagation()}>
+                {/* Header */}
+                <div className="px-6 py-5 border-b border-slate-200">
+                    <h2 className="text-2xl font-extrabold text-slate-900">
+                        {config ? "Editar Configuración SMTP" : "Nueva Configuración SMTP"}
+                    </h2>
                 </div>
-            </Form>
-        </Modal>
+
+                {/* Form */}
+                <form onSubmit={handleSubmit} className="p-6 space-y-8">
+                    {/* Section Title */}
+                    <h3 className="text-xs font-extrabold text-primary-500 uppercase tracking-wide flex items-center gap-2">
+                        <FaServer /> Servidor de Salida
+                        <div className="flex-1 h-[1px] bg-slate-200/40" />
+                    </h3>
+
+                    {/* Grid */}
+                    <div className="grid grid-cols-2 gap-5">
+                        <div className="flex flex-col gap-2">
+                            <label className="text-[13px] font-extrabold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                                Nombre de la Cuenta <span className="text-red-500">*</span>
+                            </label>
+                            <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                                <FaEnvelope className="text-slate-400" />
+                                <input
+                                    name="name"
+                                    value={formData.name}
+                                    onChange={handleChange}
+                                    placeholder="Ej: Gmail Notificaciones"
+                                    required
+                                    className="flex-1 bg-transparent border-none text-slate-900 font-semibold focus:outline-none placeholder:text-slate-400/60"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <label className="text-[13px] font-extrabold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                                Servidor SMTP <span className="text-red-500">*</span>
+                            </label>
+                            <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                                <FaServer className="text-slate-400" />
+                                <input
+                                    type="text"
+                                    name="host"
+                                    value={formData.host}
+                                    onChange={handleChange}
+                                    placeholder="Ej: smtp.gmail.com"
+                                    required
+                                    className="flex-1 bg-transparent border-none text-slate-900 font-semibold focus:outline-none placeholder:text-slate-400/60"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <label className="text-[13px] font-extrabold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                                Puerto <span className="text-red-500">*</span>
+                            </label>
+                            <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                                <FaShieldAlt className="text-slate-400" />
+                                <input
+                                    type="number"
+                                    name="port"
+                                    value={formData.port}
+                                    onChange={handleChange}
+                                    placeholder="587"
+                                    required
+                                    className="flex-1 bg-transparent border-none text-slate-900 font-semibold focus:outline-none placeholder:text-slate-400/60"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <label className="text-[13px] font-extrabold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                                Remitente (From) <span className="text-red-500">*</span>
+                            </label>
+                            <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                                <FaEnvelope className="text-slate-400" />
+                                <input
+                                    name="from"
+                                    value={formData.from}
+                                    onChange={handleChange}
+                                    placeholder='"Nombre" <email@dominio.com>'
+                                    required
+                                    className="flex-1 bg-transparent border-none text-slate-900 font-semibold focus:outline-none placeholder:text-slate-400/60"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Section Title */}
+                    <h3 className="text-xs font-extrabold text-primary-500 uppercase tracking-wide flex items-center gap-2">
+                        <FaKey /> Autenticación
+                        <div className="flex-1 h-[1px] bg-slate-200/40" />
+                    </h3>
+
+                    {/* Grid */}
+                    <div className="grid grid-cols-2 gap-5">
+                        <div className="flex flex-col gap-2">
+                            <label className="text-[13px] font-extrabold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                                Usuario / Email <span className="text-red-500">*</span>
+                            </label>
+                            <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                                <FaEnvelope className="text-slate-400" />
+                                <input
+                                    type="email"
+                                    name="auth.user"
+                                    value={formData.auth.user}
+                                    onChange={handleChange}
+                                    placeholder="email@dominio.com"
+                                    required
+                                    className="flex-1 bg-transparent border-none text-slate-900 font-semibold focus:outline-none placeholder:text-slate-400/60"
+                                />
+                            </div>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <label className="text-[13px] font-extrabold text-slate-400 uppercase tracking-wide flex items-center gap-1">
+                                Contraseña {config ? "(Mantener vacía)" : " * "}
+                            </label>
+                            <div className="flex items-center gap-3 bg-slate-50 border border-slate-200 rounded-lg px-4 py-3 focus-within:border-blue-500 focus-within:ring-2 focus-within:ring-blue-500/10 transition-all">
+                                <FaKey className="text-slate-400" />
+                                <input
+                                    type="password"
+                                    name="auth.pass"
+                                    value={formData.auth.pass}
+                                    onChange={handleChange}
+                                    placeholder="••••••••"
+                                    required={!config}
+                                    className="flex-1 bg-transparent border-none text-slate-900 font-semibold focus:outline-none placeholder:text-slate-400/60"
+                                />
+                            </div>
+                        </div>
+                    </div>
+
+                    {/* Check Group */}
+                    <div className="p-4 bg-slate-50 border border-slate-200 rounded-xl">
+                        <label className="flex items-center gap-3 cursor-pointer">
+                            <input
+                                type="checkbox"
+                                name="secure"
+                                checked={formData.secure}
+                                onChange={handleChange}
+                                className="w-4 h-4 accent-blue-500"
+                            />
+                            <span className="text-sm font-bold text-slate-700">Usar conexión segura (SSL/TLS)</span>
+                        </label>
+                        {(!config || !config.isDefault) && (
+                            <label className="flex items-center gap-3 cursor-pointer mt-2">
+                                <input
+                                    type="checkbox"
+                                    name="isDefault"
+                                    checked={formData.isDefault}
+                                    onChange={handleChange}
+                                    className="w-4 h-4 accent-blue-500"
+                                />
+                                <span className="text-sm font-bold text-slate-700">Establecer como cuenta predeterminada</span>
+                            </label>
+                        )}
+                        <label className="flex items-center gap-3 cursor-pointer mt-2">
+                            <input
+                                type="checkbox"
+                                name="isActive"
+                                checked={formData.isActive}
+                                onChange={handleChange}
+                                className="w-4 h-4 accent-blue-500"
+                            />
+                            <span className="text-sm font-bold text-slate-700">Activar configuración de inmediato</span>
+                        </label>
+                    </div>
+
+                    {/* Footer */}
+                    <div className="flex justify-end gap-3 pt-4 border-t border-slate-200">
+                        <Button variant="ghost" type="button" onClick={onClose}>Cancelar</Button>
+                        <Button variant="primary" type="submit" icon={<FaSave />} loading={loading}>
+                            {config ? "Actualizar Cuenta" : "Guardar Cuenta"}
+                        </Button>
+                    </div>
+                </form>
+            </div>
+        </div>
     );
 }

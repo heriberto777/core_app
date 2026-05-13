@@ -1,83 +1,11 @@
 import React from "react";
-import styled from "styled-components";
 import { FaEye, FaPlay, FaCheckCircle, FaExclamationCircle, FaSpinner } from "react-icons/fa";
-import { StatusBadge, Button } from "../index";
+import { StatusBadge } from "../index";
 
-const GlassTableWrapper = styled.div`
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(10px);
-  border: 1px solid rgba(255, 255, 255, 0.3);
-  border-radius: 16px;
-  box-shadow: 0 4px 15px rgba(0, 0, 0, 0.05);
-  overflow: hidden;
-`;
-
-const Table = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 14px;
-`;
-
-const THead = styled.thead`
-  background: rgba(248, 250, 252, 0.5);
-  border-bottom: 1px solid rgba(0, 0, 0, 0.05);
-`;
-
-const Th = styled.th`
-  padding: 16px;
-  text-align: left;
-  font-weight: 600;
-  color: #64748b;
-  text-transform: uppercase;
-  font-size: 11px;
-  letter-spacing: 0.8px;
-`;
-
-const Tr = styled.tr`
-  border-bottom: 1px solid rgba(0, 0, 0, 0.03);
-  transition: background 0.2s;
-
-  &:hover {
-    background: rgba(255, 255, 255, 0.5);
-  }
-`;
-
-const Td = styled.td`
-  padding: 16px;
-  color: #334155;
-  vertical-align: middle;
-`;
-
-const LoadCode = styled.code`
-  background: #f1f5f9;
-  padding: 4px 8px;
-  border-radius: 6px;
-  font-weight: 600;
-  color: #0f172a;
-  font-size: 13px;
-`;
-
-const SuccessRate = styled.div`
-  width: 100%;
-  max-width: 100px;
-  height: 6px;
-  background: #e2e8f0;
-  border-radius: 3px;
-  overflow: hidden;
-  margin-top: 4px;
-`;
-
-const Progress = styled.div`
-  height: 100%;
-  width: ${props => props.percent}%;
-  background: ${props => {
-    if (props.percent >= 90) return "#10b981";
-    if (props.percent >= 50) return "#f59e0b";
-    return "#ef4444";
-  }};
-  transition: width 1s ease;
-`;
-
+/**
+ * TraspasoTrackingTable (Tailwind Edition)
+ * Bitácora operativa de transferencias con monitoreo de éxito y trazabilidad.
+ */
 export const TraspasoTrackingTable = ({
   transfers = [],
   loading,
@@ -85,117 +13,143 @@ export const TraspasoTrackingTable = ({
   onExecute,
   selectedItems = [],
   onSelectItem,
-  onSelectAll
+  onSelectAll,
+  actionStates = {}
 }) => {
 
   const getStatusIcon = (status) => {
     switch (status) {
-      case 'completed': return <FaCheckCircle style={{ color: '#10b981' }} />;
-      case 'failed': return <FaExclamationCircle style={{ color: '#ef4444' }} />;
-      default: return <FaSpinner className="spinning" style={{ color: '#3b82f6' }} />;
+      case 'completed': return <FaCheckCircle className="text-emerald-500 shadow-emerald-500/20" />;
+      case 'failed': return <FaExclamationCircle className="text-red-500 shadow-red-500/20" />;
+      default: return <FaSpinner className="text-primary-500 animate-spin" />;
     }
   };
 
   if (loading && transfers.length === 0) {
     return (
-      <div style={{ textAlign: 'center', padding: '40px' }}>
-        <FaSpinner className="spinning" size={32} color="#3b82f6" />
-        <p style={{ marginTop: '16px', opacity: 0.7 }}>Cargando traspasos operativos...</p>
+      <div className="p-32 flex flex-col items-center justify-center text-center gap-6">
+        <div className="w-16 h-16 border-4 border-slate-100 border-t-primary-500 rounded-full animate-spin" />
+        <p className="text-lg font-extrabold text-slate-800 uppercase tracking-widest">Consultando bitácora operativa...</p>
       </div>
     );
   }
 
   return (
-    <GlassTableWrapper>
-      <div style={{ overflowX: 'auto' }}>
-        <Table>
-          <THead>
-            <Tr>
-              <Th style={{ width: '40px' }}>
-                <input
-                  type="checkbox"
-                  onChange={(e) => onSelectAll(e.target.checked)}
-                  checked={transfers.length > 0 && selectedItems.length === transfers.length}
-                />
-              </Th>
-              <Th>Estado / Origen</Th>
-              <Th>Load ID</Th>
-              <Th>Documento</Th>
-              <Th>Éxito (Líneas)</Th>
-              <Th>Fecha</Th>
-              <Th style={{ textAlign: 'right' }}>Acciones</Th>
-            </Tr>
-          </THead>
-          <tbody>
-            {transfers.length === 0 ? (
-              <Tr>
-                <Td colSpan="7" style={{ textAlign: 'center', padding: '60px', opacity: 0.7 }}>
-                  No se encontraron traspasos para este criterio.
-                </Td>
-              </Tr>
-            ) : (
-              transfers.map(t => (
-                <Tr key={t.id}>
-                  <Td>
-                    <input
-                      type="checkbox"
-                      checked={selectedItems.includes(t.id)}
-                      onChange={() => onSelectItem(t.id)}
-                    />
-                  </Td>
-                  <Td>
-                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+    <div className="overflow-x-auto animate-fadeIn">
+      <table className="w-full text-left border-collapse">
+        <thead>
+          <tr className="bg-slate-50/50 border-b border-slate-100">
+            <th className="px-6 py-5 w-10">
+              <input
+                type="checkbox"
+                className="w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 transition-all"
+                onChange={(e) => onSelectAll(e.target.checked)}
+                checked={transfers.length > 0 && selectedItems.length === transfers.length}
+              />
+            </th>
+            <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Trazabilidad / Estado</th>
+            <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Identificador</th>
+            <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Documento</th>
+            <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Ratio de Éxito</th>
+            <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Cronología</th>
+            <th className="px-6 py-5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-widest">Control</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-slate-50">
+          {transfers.length === 0 ? (
+            <tr>
+              <td colSpan="7" className="p-32 text-center text-slate-400">
+                <div className="flex flex-col items-center gap-4">
+                  <FaEye size={48} className="opacity-10" />
+                  <p className="font-bold">No se encontraron traspasos para este criterio.</p>
+                </div>
+              </td>
+            </tr>
+          ) : (
+            transfers.map(t => (
+              <tr 
+                key={t.id} 
+                className={`hover:bg-slate-50/40 transition-colors group ${selectedItems.includes(t.id) ? "bg-primary-50/20" : ""}`}
+              >
+                <td className="px-6 py-4">
+                  <input
+                    type="checkbox"
+                    className="w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 transition-all"
+                    checked={selectedItems.includes(t.id)}
+                    onChange={() => onSelectItem(t.id)}
+                  />
+                </td>
+                <td className="px-6 py-4">
+                  <div className="flex items-center gap-3">
+                    <div className="text-xl">
                       {getStatusIcon(t.status)}
-                      <div>
-                        <StatusBadge variant={t.status}>{t.status_description || t.status}</StatusBadge>
-                        {t.is_return === 1 && (
-                          <span style={{
-                            marginLeft: '4px',
-                            fontSize: '10px',
-                            background: '#fee2e2',
-                            color: '#ef4444',
-                            padding: '2px 4px',
-                            borderRadius: '4px',
-                            fontWeight: 'bold'
-                          }}>DEV</span>
-                        )}
-                      </div>
                     </div>
-                  </Td>
-                  <Td><LoadCode>{t.load_id}</LoadCode></Td>
-                  <Td>
-                    <span style={{ fontWeight: 500, color: '#3b82f6' }}>{t.documento_generated || '—'}</span>
-                  </Td>
-                  <Td>
-                    <div style={{ fontSize: '12px', fontWeight: 600 }}>
-                      {t.success_percentage}% ({t.lines_successful}/{t.total_products})
-                    </div>
-                    <SuccessRate>
-                      <Progress percent={t.success_percentage} />
-                    </SuccessRate>
-                  </Td>
-                  <Td>
-                    <div style={{ fontSize: '13px' }}>{new Date(t.created_at).toLocaleDateString()}</div>
-                    <div style={{ fontSize: '11px', opacity: 0.6 }}>{new Date(t.created_at).toLocaleTimeString()}</div>
-                  </Td>
-                  <Td style={{ textAlign: 'right' }}>
-                    <div style={{ display: 'flex', gap: '8px', justifyContent: 'flex-end' }}>
-                      <Button variant="ghost" size="small" loading={actionStates && actionStates[t.id] === 'details'} onClick={() => onViewDetails(t.id)}>
-                        <FaEye /> Detalle
-                      </Button>
-                      {t.status !== 'completed' && (
-                        <Button variant="primary" size="small" loading={actionStates && actionStates[t.load_id] === 'executing'} onClick={() => onExecute(t.load_id)}>
-                          <FaPlay /> Ejecutar
-                        </Button>
+                    <div className="flex flex-col">
+                      <StatusBadge status={t.status === 'completed' ? 'ACTIVE' : t.status === 'failed' ? 'INACTIVE' : 'PENDING'}>
+                        {t.status_description || t.status}
+                      </StatusBadge>
+                      {t.is_return === 1 && (
+                        <span className="mt-1 px-1.5 py-0.5 bg-red-100 text-red-600 rounded text-[9px] font-black uppercase tracking-widest w-fit border border-red-200">
+                          Devolución
+                        </span>
                       )}
                     </div>
-                  </Td>
-                </Tr>
-              ))
-            )}
-          </tbody>
-        </Table>
-      </div>
-    </GlassTableWrapper>
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <code className="px-2.5 py-1 bg-slate-100 rounded-lg text-slate-700 text-xs font-black border border-slate-200 font-mono">
+                    {t.load_id}
+                  </code>
+                </td>
+                <td className="px-6 py-4">
+                  <span className="text-sm font-extrabold text-primary-600 tracking-tight">{t.documento_generated || '—'}</span>
+                </td>
+                <td className="px-6 py-4">
+                  <div className="flex flex-col gap-1.5">
+                    <div className="text-[10px] font-black text-slate-600 uppercase tracking-tighter">
+                      {t.success_percentage}% <span className="text-slate-400 font-bold">({t.lines_successful}/{t.total_products})</span>
+                    </div>
+                    <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50">
+                      <div 
+                        className={`h-full transition-all duration-1000 ${
+                          t.success_percentage >= 90 ? "bg-emerald-500" : t.success_percentage >= 50 ? "bg-amber-500" : "bg-red-500"
+                        }`}
+                        style={{ width: `${t.success_percentage}%` }}
+                      />
+                    </div>
+                  </div>
+                </td>
+                <td className="px-6 py-4">
+                  <div className="text-xs font-bold text-slate-700">{new Date(t.created_at).toLocaleDateString()}</div>
+                  <div className="text-[10px] font-extrabold text-slate-400 uppercase tracking-tighter">{new Date(t.created_at).toLocaleTimeString()}</div>
+                </td>
+                <td className="px-6 py-4">
+                  <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button 
+                      onClick={() => onViewDetails(t.id)}
+                      disabled={actionStates[t.id] === 'details'}
+                      className="p-2.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all"
+                      title="Ver auditoría"
+                    >
+                      {actionStates[t.id] === 'details' ? <FaSpinner className="animate-spin" /> : <FaEye size={14} />}
+                    </button>
+                    {t.status !== 'completed' && (
+                      <button 
+                        onClick={() => onExecute(t.load_id)}
+                        disabled={actionStates[t.load_id] === 'executing'}
+                        className="p-2.5 text-primary-500 hover:bg-primary-50 rounded-xl transition-all"
+                        title="Reintentar ejecución"
+                      >
+                        {actionStates[t.load_id] === 'executing' ? <FaSpinner className="animate-spin" /> : <FaPlay size={12} />}
+                      </button>
+                    )}
+                  </div>
+                </td>
+              </tr>
+            ))
+          )}
+        </tbody>
+      </table>
+    </div>
   );
 };

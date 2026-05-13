@@ -1,60 +1,19 @@
 import React, { useState } from "react";
-import styled from "styled-components";
 import {
   useAuth,
   usePermissions,
   useSystemStats,
   IntelligenceGrids,
-  Button
+  Button,
+  LoadingUI
 } from "../../index";
-import { Container } from "../index";
 import { FaSync, FaChartLine } from "react-icons/fa";
 
-const StatsLayout = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 24px;
-  width: 100%;
-  max-width: 1400px;
-  margin: 0 auto;
-`;
-
-const Toolbar = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 24px;
-
-  @media (max-width: 768px) {
-    flex-direction: column;
-    align-items: flex-start;
-    gap: 16px;
-  }
-`;
-
-const FilterGroup = styled.div`
-  display: flex;
-  gap: 12px;
-`;
-
-const RangeButton = styled.button`
-  padding: 8px 16px;
-  border-radius: 12px;
-  border: 1px solid ${props => props.active ? "#3b82f6" : "#e2e8f0"};
-  background: ${props => props.active ? "rgba(59, 130, 246, 0.1)" : "white"};
-  color: ${props => props.active ? "#3b82f6" : "#64748b"};
-  font-size: 13px;
-  font-weight: 700;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    border-color: #3b82f6;
-  }
-`;
-
+/**
+ * Statistics (Tailwind Edition)
+ * Dashboard de inteligencia operativa con diseño corporativo avanzado.
+ */
 export function Statistics() {
-  const [openstate, setOpenState] = useState(false);
   const { accessToken } = useAuth();
   const { hasPermission, isAdmin } = usePermissions();
 
@@ -75,45 +34,59 @@ export function Statistics() {
   ];
 
   return (
-    <Container>
-      <main style={{ padding: '40px 20px' }}>
-        <StatsLayout>
-          <Toolbar>
-            <div>
-              <h1 style={{ fontSize: '28px', fontWeight: 900, marginBottom: '8px', color: 'inherit' }}>Dashboard de Inteligencia</h1>
-              <p style={{ opacity: 0.7 }}>Análisis métrico de operaciones y salud de infraestructura.</p>
-            </div>
+    <div className="flex flex-col gap-8 w-full max-w-[1440px] mx-auto p-6 lg:p-10 animate-fadeIn">
+      {/* HEADER SECTION */}
+      <header className="flex flex-col md:flex-row justify-between items-start gap-6">
+        <div>
+          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Centro de Inteligencia</h1>
+          <p className="text-slate-500 mt-2 font-medium">Análisis métrico de operaciones y salud de infraestructura en tiempo real.</p>
+        </div>
 
-            <FilterGroup>
-              {ranges.map(r => (
-                <RangeButton
-                  key={r.value}
-                  active={filters.timeRange === r.value}
-                  onClick={() => filters.setTimeRange(r.value)}
-                >
-                  {r.label}
-                </RangeButton>
-              ))}
-              <Button
-                variant="outline"
-                onClick={actions.refreshStats}
-                loading={refreshing}
+        <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-100 shadow-soft">
+          <div className="flex gap-1">
+            {ranges.map(r => (
+              <button
+                key={r.value}
+                onClick={() => filters.setTimeRange(r.value)}
+                className={`
+                  px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-widest transition-all
+                  ${filters.timeRange === r.value 
+                    ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/20' 
+                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}
+                `}
               >
-                <FaSync />
-              </Button>
-            </FilterGroup>
-          </Toolbar>
+                {r.label}
+              </button>
+            ))}
+          </div>
+          <div className="w-px h-6 bg-slate-100 mx-1" />
+          <button
+            onClick={actions.refreshStats}
+            disabled={refreshing}
+            className={`p-2.5 rounded-xl text-slate-400 hover:text-primary-500 hover:bg-primary-50 transition-all ${refreshing ? 'animate-spin' : ''}`}
+            title="Sincronizar métricas"
+          >
+            <FaSync size={14} />
+          </button>
+        </div>
+      </header>
 
-          {loading && !refreshing ? (
-            <div style={{ textAlign: 'center', padding: '100px', opacity: 0.7 }}>
-              <FaChartLine size={48} style={{ marginBottom: '20px', opacity: 0.2 }} />
-              <p>Analizando métricas del sistema...</p>
-            </div>
-          ) : (
-            <IntelligenceGrids stats={stats} />
-          )}
-        </StatsLayout>
-      </main>
-    </Container>
+      {/* CONTENT */}
+      {loading && !refreshing ? (
+        <LoadingUI message="Analizando macro-métricas del ecosistema..." />
+      ) : (
+        <div className="animate-fadeIn">
+          <IntelligenceGrids stats={stats} />
+        </div>
+      )}
+
+      {/* FOOTER INFO */}
+      {!loading && (
+        <footer className="mt-8 pt-8 border-t border-slate-100 flex justify-between items-center text-[10px] font-bold text-slate-300 uppercase tracking-[0.2em]">
+          <span>&copy; {new Date().getFullYear()} Catelli Intelligence Engine</span>
+          <span>Sincronizado: {new Date().toLocaleTimeString()}</span>
+        </footer>
+      )}
+    </div>
   );
 }

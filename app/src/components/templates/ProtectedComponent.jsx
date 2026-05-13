@@ -1,55 +1,41 @@
 import React from "react";
-import styled from "styled-components";
 import { usePermissions } from "../../index";
 import { FaLock, FaBan } from "react-icons/fa";
 
-const LockedContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 20px;
-  background: ${({ theme }) => theme.bg2}40;
-  border-radius: 8px;
-  border: 1px dashed ${({ theme }) => theme.border};
-  color: ${({ theme }) => theme.textSecondary};
-  min-height: ${({ $minHeight }) => $minHeight || '100px'};
-`;
+function LockedContainer({ children, minHeight }) {
+  return (
+    <div 
+      className="flex flex-col items-center justify-center p-5 bg-slate-800/40 rounded-lg border border-dashed border-slate-600 text-slate-400"
+      style={{ minHeight: minHeight || '100px' }}
+    >
+      {children}
+    </div>
+  );
+}
 
-const LockedIcon = styled(FaLock)`
-  font-size: 24px;
-  margin-bottom: 10px;
-  color: ${({ theme }) => theme.textSecondary};
-  opacity: 0.5;
-`;
+function LockedIcon() {
+  return <FaLock className="text-2xl mb-2.5 text-slate-400 opacity-50" />;
+}
 
-const LockedText = styled.span`
-  font-size: 13px;
-  font-weight: 500;
-`;
+function LockedText({ children }) {
+  return <span className="text-[13px] font-medium">{children}</span>;
+}
 
-const LockedTooltip = styled.div`
-  font-size: 11px;
-  margin-top: 6px;
-  opacity: 0.7;
-`;
+function LockedTooltip({ children }) {
+  return <div className="text-[11px] mt-1.5 opacity-70">{children}</div>;
+}
 
-const ForbiddenContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 30px;
-  background: ${({ theme }) => theme.dangerBg}30;
-  border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.danger}30;
-  color: ${({ theme }) => theme.danger};
-`;
+function ForbiddenContainer({ children }) {
+  return (
+    <div className="flex flex-col items-center justify-center p-7.5 bg-red-500/10 border border-red-500/30 rounded-lg text-red-400">
+      {children}
+    </div>
+  );
+}
 
-const ForbiddenIcon = styled(FaBan)`
-  font-size: 32px;
-  margin-bottom: 10px;
-`;
+function ForbiddenIcon() {
+  return <FaBan className="text-3xl mb-2.5" />;
+}
 
 const AccessDenied = ({
   children,
@@ -63,11 +49,11 @@ const AccessDenied = ({
   minHeight,
   tooltip = null,
 }) => {
-  const { hasPermission, hasRole, hasLegacyRole, isAdmin, loading } = usePermissions();
+  const { hasPermission, hasRole, isAdmin, loading } = usePermissions();
 
   if (loading) {
     return (
-      <LockedContainer $minHeight={minHeight}>
+      <LockedContainer minHeight={minHeight}>
         <LockedIcon />
         <LockedText>Verificando permisos...</LockedText>
       </LockedContainer>
@@ -94,7 +80,7 @@ const AccessDenied = ({
     }
 
     return (
-      <LockedContainer $minHeight={minHeight}>
+      <LockedContainer minHeight={minHeight}>
         <LockedIcon />
         <LockedText>{lockedMessage || "Sin acceso"}</LockedText>
         {tooltip && <LockedTooltip>{tooltip}</LockedTooltip>}

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import styled from "styled-components";
 import {
   FaClock,
   FaSync,
@@ -15,8 +14,9 @@ import {
   FaListOl,
   FaCog,
   FaUser,
+  FaCalendarCheck,
 } from "react-icons/fa";
-import { useAuth, ScheduleConfigButton } from "../../index";
+import { useAuth, ScheduleConfigButton, Button } from "../../index";
 import { TransferTaskApi } from "../../api/index";
 
 const cnnApi = new TransferTaskApi();
@@ -64,7 +64,6 @@ export function ScheduleConfiguration() {
   };
 
   const handleConfigSuccess = (result) => {
-    console.log("Configuración actualizada:", result);
     setScheduleConfig({
       hour: result.hour,
       enabled: result.enabled,
@@ -110,570 +109,210 @@ export function ScheduleConfiguration() {
   const nextExecution = getNextExecutionTime();
 
   return (
-    <ScheduleContainer>
-      <ScheduleHeader>
-        <div>
-          <h2>
-            <FaClock /> Configuración de Programación Automática
+    <div className="bg-white/50 backdrop-blur-xl border border-slate-200 rounded-[32px] p-8 flex flex-col gap-10 shadow-sm animate-in fade-in duration-500">
+      {/* Header */}
+      <div className="flex flex-col sm:flex-row justify-between items-start gap-6 border-b border-slate-100 pb-8">
+        <div className="flex flex-col gap-2">
+          <h2 className="text-xl font-black text-slate-900 flex items-center gap-3">
+            <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-600/20">
+              <FaClock />
+            </div>
+            Programación Automática
           </h2>
-          <p>
-            Configura cuándo se ejecutarán automáticamente las tareas del
-            sistema y revisa el estado actual.
+          <p className="text-sm text-slate-500 font-medium ml-13">
+            Configura la hora de ejecución automática y monitorea el estado del orquestador.
           </p>
         </div>
-        <ScheduleConfigButton onSuccess={handleConfigSuccess} />
-      </ScheduleHeader>
+        <div className="sm:ml-auto">
+          <ScheduleConfigButton onSuccess={handleConfigSuccess} />
+        </div>
+      </div>
 
       {loading ? (
-        <LoadingCard>
-          <FaSync className="spinning" />
-          <span>Cargando configuración...</span>
-        </LoadingCard>
+        <div className="flex flex-col items-center justify-center p-20 gap-4 opacity-50 animate-pulse">
+          <FaSync className="text-3xl text-blue-600 animate-spin" />
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Obteniendo configuración...</span>
+        </div>
       ) : (
-        <ScheduleContent>
-          {/* Estado Actual */}
-          <StatusCard $enabled={scheduleConfig?.enabled}>
-            <StatusHeader>
-              <StatusIcon $enabled={scheduleConfig?.enabled}>
+        <div className="flex flex-col gap-10">
+          {/* Status Card */}
+          <div className={`p-8 rounded-[24px] border-l-8 bg-white shadow-sm flex flex-col gap-6 animate-in slide-in-from-left-4 duration-500 ${
+            scheduleConfig?.enabled ? "border-emerald-500 shadow-emerald-500/5" : "border-red-500 shadow-red-500/5 opacity-80"
+          }`}>
+            <div className="flex items-center gap-6">
+              <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white text-xl shadow-lg ${
+                scheduleConfig?.enabled ? "bg-emerald-500 shadow-emerald-500/20" : "bg-red-500 shadow-red-500/20"
+              }`}>
                 {scheduleConfig?.enabled ? <FaCheck /> : <FaTimes />}
-              </StatusIcon>
-              <div>
-                <StatusTitle>Estado del Programador</StatusTitle>
-                <StatusSubtitle>
-                  {scheduleConfig?.enabled ? "Activo" : "Inactivo"}
-                </StatusSubtitle>
               </div>
-            </StatusHeader>
+              <div className="flex flex-col">
+                <span className="text-sm font-black text-slate-400 uppercase tracking-widest">Estado del Programador</span>
+                <span className={`text-xl font-black ${scheduleConfig?.enabled ? "text-emerald-600" : "text-red-600"}`}>
+                  {scheduleConfig?.enabled ? "SISTEMA ACTIVO" : "SISTEMA INACTIVO"}
+                </span>
+              </div>
+            </div>
 
-            {scheduleConfig?.enabled && (
-              <StatusDetails>
-                <DetailItem>
-                  <strong>Hora configurada:</strong> {scheduleConfig.hour}
-                </DetailItem>
-                {typeof nextExecution === "object" && (
-                  <>
-                    <DetailItem>
-                      <strong>Próxima ejecución:</strong> {nextExecution.time} -{" "}
-                      {nextExecution.date}
-                    </DetailItem>
-                    <DetailItem>
-                      <strong>Tiempo restante:</strong>{" "}
-                      {nextExecution.hoursUntil}
-                    </DetailItem>
-                  </>
-                )}
-              </StatusDetails>
-            )}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-slate-50 ml-20">
+              {scheduleConfig?.enabled ? (
+                <>
+                  <div className="flex flex-col gap-1">
+                    <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Hora Configurada</span>
+                    <span className="text-sm font-black text-slate-900 bg-slate-50 px-3 py-1 rounded-lg w-fit">{scheduleConfig.hour}</span>
+                  </div>
+                  {typeof nextExecution === "object" && (
+                    <>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Próxima Ejecución</span>
+                        <span className="text-sm font-black text-slate-900">{nextExecution.time} - {nextExecution.date}</span>
+                      </div>
+                      <div className="flex flex-col gap-1">
+                        <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Tiempo Restante</span>
+                        <span className="text-sm font-black text-emerald-600">{nextExecution.hoursUntil} aprox.</span>
+                      </div>
+                    </>
+                  )}
+                </>
+              ) : (
+                <div className="col-span-full">
+                  <p className="text-xs font-bold text-slate-400 italic">
+                    Las tareas automáticas están desactivadas. El sistema requiere intervención manual para disparar los procesos.
+                  </p>
+                </div>
+              )}
+            </div>
+          </div>
 
-            {!scheduleConfig?.enabled && (
-              <StatusDetails>
-                <DetailItem>
-                  Las tareas automáticas están desactivadas. Solo se ejecutarán
-                  manualmente.
-                </DetailItem>
-              </StatusDetails>
-            )}
-          </StatusCard>
+          {/* Stats Grid */}
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+            {[
+              { label: "Total Tareas", val: taskStats.total, color: "blue", icon: <FaListOl /> },
+              { label: "Automáticas", val: taskStats.automatic, color: "emerald", icon: <FaCog /> },
+              { label: "Manuales", val: taskStats.manual, color: "amber", icon: <FaUser /> },
+              { label: "Inactivas", val: taskStats.inactive, color: "red", icon: <FaTimes /> }
+            ].map(stat => (
+              <div key={stat.label} className="bg-white p-6 rounded-[20px] shadow-sm border border-slate-100 flex items-center gap-5 group hover:border-blue-200 transition-all">
+                <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg transition-colors bg-${stat.color}-50 text-${stat.color}-500 group-hover:bg-${stat.color}-500 group-hover:text-white`}>
+                  {stat.icon}
+                </div>
+                <div className="flex flex-col">
+                  <span className="text-2xl font-black text-slate-900 leading-none mb-1">{stat.val}</span>
+                  <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">{stat.label}</span>
+                </div>
+              </div>
+            ))}
+          </div>
 
-          {/* Estadísticas de Tareas */}
-          <StatsGrid>
-            <StatCard>
-              <StatIcon $color="#007bff">
-                <FaListOl />
-              </StatIcon>
-              <StatContent>
-                <StatNumber>{taskStats.total}</StatNumber>
-                <StatLabel>Total de Tareas</StatLabel>
-              </StatContent>
-            </StatCard>
-
-            <StatCard>
-              <StatIcon $color="#28a745">
-                <FaCog />
-              </StatIcon>
-              <StatContent>
-                <StatNumber>{taskStats.automatic}</StatNumber>
-                <StatLabel>Tareas Automáticas</StatLabel>
-              </StatContent>
-            </StatCard>
-
-            <StatCard>
-              <StatIcon $color="#ffc107">
-                <FaUser />
-              </StatIcon>
-              <StatContent>
-                <StatNumber>{taskStats.manual}</StatNumber>
-                <StatLabel>Tareas Manuales</StatLabel>
-              </StatContent>
-            </StatCard>
-
-            <StatCard>
-              <StatIcon $color="#dc3545">
-                <FaTimes />
-              </StatIcon>
-              <StatContent>
-                <StatNumber>{taskStats.inactive}</StatNumber>
-                <StatLabel>Tareas Inactivas</StatLabel>
-              </StatContent>
-            </StatCard>
-          </StatsGrid>
-
-          {/* Información Adicional */}
-          <InfoSection>
-            <InfoCard>
-              <InfoHeader>
-                <FaInfoCircle />
-                <h3>¿Cómo funciona la programación automática?</h3>
-              </InfoHeader>
-              <InfoContent>
-                <InfoList>
-                  <li>
-                    <strong>Ejecución diaria:</strong> El sistema ejecuta
-                    automáticamente todas las tareas marcadas como "automáticas"
-                    a la hora configurada.
-                  </li>
-                  <li>
-                    <strong>Tareas incluidas:</strong> Solo se ejecutan las
-                    tareas con tipo "automático" o "ambas" que estén activas.
-                  </li>
-                  <li>
-                    <strong>Logs y seguimiento:</strong> Todas las ejecuciones
-                    automáticas se registran en el sistema de logs.
-                  </li>
-                  <li>
-                    <strong>Manejo de errores:</strong> Si una tarea falla, se
-                    registra el error y continúa con las siguientes tareas.
-                  </li>
-                </InfoList>
-              </InfoContent>
-            </InfoCard>
-
-            <InfoCard>
-              <InfoHeader>
-                <FaShieldAlt />
-                <h3>Consideraciones importantes</h3>
-              </InfoHeader>
-              <InfoContent>
-                <InfoList>
-                  <li>
-                    <strong>Recursos del servidor:</strong> Las tareas
-                    automáticas consumen recursos. Evita programar en horas
-                    pico.
-                  </li>
-                  <li>
-                    <strong>Conexiones de red:</strong> Asegúrate de que las
-                    conexiones a bases de datos estén disponibles.
-                  </li>
-                  <li>
-                    <strong>Notificaciones:</strong> Configura destinatarios de
-                    email para recibir reportes de ejecución.
-                  </li>
-                  <li>
-                    <strong>Monitoreo:</strong> Revisa regularmente los logs
-                    para detectar problemas.
-                  </li>
-                </InfoList>
-              </InfoContent>
-            </InfoCard>
-          </InfoSection>
-
-          {/* Historial Reciente */}
-          <HistorySection>
-            <HistoryHeader>
-              <h3>
-                <FaHistory /> Últimas Ejecuciones Automáticas
+          {/* Info Section */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="p-8 bg-white border border-slate-100 rounded-[28px] shadow-sm flex flex-col gap-6">
+              <h3 className="text-[11px] font-black text-blue-600 uppercase tracking-[0.2em] flex items-center gap-3">
+                <FaInfoCircle /> Funcionamiento
               </h3>
-              <ViewAllButton>Ver Historial Completo</ViewAllButton>
-            </HistoryHeader>
+              <ul className="flex flex-col gap-4">
+                {[
+                  { t: "Ejecución Diaria", d: "El sistema orquesta automáticamente todas las tareas 'Automáticas' a la hora definida." },
+                  { t: "Criterios", d: "Solo se consideran tareas activas con tipo 'Automático' o 'Ambas'." },
+                  { t: "Logs", d: "Cada disparo genera una traza detallada en el sistema de auditoría central." }
+                ].map(item => (
+                  <li key={item.t} className="flex gap-4">
+                    <div className="min-w-[4px] h-4 mt-1 bg-blue-500 rounded-full" />
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-sm font-black text-slate-900">{item.t}</span>
+                      <span className="text-xs text-slate-500 leading-relaxed">{item.d}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
 
-            <div style={{ overflowX: 'auto' }}>
-              <HistoryTable>
+            <div className="p-8 bg-white border border-slate-100 rounded-[28px] shadow-sm flex flex-col gap-6">
+              <h3 className="text-[11px] font-black text-amber-600 uppercase tracking-[0.2em] flex items-center gap-3">
+                <FaShieldAlt /> Consideraciones
+              </h3>
+              <ul className="flex flex-col gap-4">
+                {[
+                  { t: "Recursos", d: "Evite programar ejecuciones pesadas en horas de alto tráfico operacional." },
+                  { t: "Red", d: "Verifique que los túneles y bases de datos destino estén disponibles." },
+                  { t: "Monitoreo", d: "Revise los logs semanalmente para asegurar la integridad de la sincronización." }
+                ].map(item => (
+                  <li key={item.t} className="flex gap-4">
+                    <div className="min-w-[4px] h-4 mt-1 bg-amber-500 rounded-full" />
+                    <div className="flex flex-col gap-0.5">
+                      <span className="text-sm font-black text-slate-900">{item.t}</span>
+                      <span className="text-xs text-slate-500 leading-relaxed">{item.d}</span>
+                    </div>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          </div>
+
+          {/* History Section */}
+          <div className="p-8 bg-white border border-slate-200 rounded-[32px] shadow-sm flex flex-col gap-8">
+            <div className="flex justify-between items-center px-2">
+              <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3">
+                <FaHistory /> Últimas Ejecuciones
+              </h3>
+              <Button variant="ghost" className="text-blue-600 font-bold text-xs uppercase tracking-widest">
+                Ver Todo el Historial
+              </Button>
+            </div>
+
+            <div className="overflow-x-auto">
+              <table className="w-full border-collapse">
                 <thead>
-                  <tr>
-                    <th>Fecha y Hora</th>
-                    <th>Tareas Ejecutadas</th>
-                    <th>Estado</th>
-                    <th>Duración</th>
+                  <tr className="bg-slate-50/50">
+                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Fecha y Hora</th>
+                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Carga</th>
+                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Estado</th>
+                    <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Duración</th>
                   </tr>
                 </thead>
-                <tbody>
-                  <tr>
-                    <td>06/06/2025 02:00:15</td>
-                    <td>8 tareas</td>
-                    <td>
-                      <SuccessBadge>Exitoso</SuccessBadge>
-                    </td>
-                    <td>12m 34s</td>
-                  </tr>
-                  <tr>
-                    <td>05/06/2025 02:00:12</td>
-                    <td>7 tareas</td>
-                    <td>
-                      <WarningBadge>Con advertencias</WarningBadge>
-                    </td>
-                    <td>15m 22s</td>
-                  </tr>
-                  <tr>
-                    <td>04/06/2025 02:00:08</td>
-                    <td>8 tareas</td>
-                    <td>
-                      <SuccessBadge>Exitoso</SuccessBadge>
-                    </td>
-                    <td>11m 45s</td>
-                  </tr>
+                <tbody className="divide-y divide-slate-50">
+                  {[
+                    { date: "06/06/2025 02:00:15", tasks: "8 tareas", status: "success", time: "12m 34s" },
+                    { date: "05/06/2025 02:00:12", tasks: "7 tareas", status: "warning", time: "15m 22s" },
+                    { date: "04/06/2025 02:00:08", tasks: "8 tareas", status: "success", time: "11m 45s" }
+                  ].map((row, i) => (
+                    <tr key={i} className="hover:bg-slate-50/50 transition-colors group">
+                      <td className="px-6 py-4 text-sm font-bold text-slate-700">{row.date}</td>
+                      <td className="px-6 py-4 text-sm font-medium text-slate-500">{row.tasks}</td>
+                      <td className="px-6 py-4">
+                        <span className={`inline-flex px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
+                          row.status === "success" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
+                        }`}>
+                          {row.status === "success" ? "Exitoso" : "Advertencia"}
+                        </span>
+                      </td>
+                      <td className="px-6 py-4 text-right text-xs font-bold text-slate-400">{row.time}</td>
+                    </tr>
+                  ))}
                 </tbody>
-              </HistoryTable>
+              </table>
             </div>
-          </HistorySection>
+          </div>
 
-          {/* Acciones Rápidas */}
-          <QuickActions>
-            <h3>Acciones Rápidas</h3>
-            <ActionButtons>
-              <ActionButton $color="#007bff">
-                <FaPlay /> Ejecutar Ahora
-              </ActionButton>
-              <ActionButton $color="#28a745">
-                <FaEye /> Ver Logs
-              </ActionButton>
-              <ActionButton $color="#6f42c1">
-                <FaTasks /> Gestionar Tareas
-              </ActionButton>
-              <ActionButton $color="#17a2b8">
-                <FaEnvelope /> Config. Email
-              </ActionButton>
-            </ActionButtons>
-          </QuickActions>
-        </ScheduleContent>
+          {/* Quick Actions */}
+          <div className="p-8 bg-slate-50/50 border border-slate-100 rounded-[32px] flex flex-col gap-6">
+            <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] px-2">Acciones Rápidas</h3>
+            <div className="flex gap-4 flex-wrap">
+              <Button variant="primary" className="px-8 py-3 shadow-lg shadow-blue-600/20 font-bold">
+                <FaPlay className="mr-2" /> Ejecutar Ahora
+              </Button>
+              <Button variant="ghost" className="px-6 py-3 bg-white border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 shadow-sm">
+                <FaEye className="mr-2" /> Ver Logs
+              </Button>
+              <Button variant="ghost" className="px-6 py-3 bg-white border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 shadow-sm">
+                <FaTasks className="mr-2" /> Gestionar Tareas
+              </Button>
+              <Button variant="ghost" className="px-6 py-3 bg-white border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 shadow-sm">
+                <FaEnvelope className="mr-2" /> Config. Email
+              </Button>
+            </div>
+          </div>
+        </div>
       )}
-    </ScheduleContainer>
+    </div>
   );
 }
-
-// Estilos
-const ScheduleContainer = styled.div`
-  h2 {
-    margin: 0 0 10px 0;
-    color: ${({ theme }) => theme.title};
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-
-  p {
-    color: ${({ theme }) => theme.textSecondary};
-    margin-bottom: 20px;
-  }
-`;
-
-const ScheduleHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 30px;
-  gap: 20px;
-
-  @media (max-width: 768px) {
-    flex-direction: column;
-    align-items: stretch;
-  }
-`;
-
-const LoadingCard = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 15px;
-  padding: 40px;
-  background: ${({ theme }) => theme.cardBg};
-  border-radius: 8px;
-  color: ${({ theme }) => theme.textSecondary};
-
-  .spinning {
-    animation: spin 1s linear infinite;
-  }
-
-  @keyframes spin {
-    from {
-      transform: rotate(0deg);
-    }
-    to {
-      transform: rotate(360deg);
-    }
-  }
-`;
-
-const ScheduleContent = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 25px;
-`;
-
-const StatusCard = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  border-radius: 12px;
-  padding: 25px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-  border-left: 4px solid ${({ $enabled }) => ($enabled ? "#28a745" : "#dc3545")};
-`;
-
-const StatusHeader = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  margin-bottom: 15px;
-`;
-
-const StatusIcon = styled.div`
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background: ${({ $enabled }) => ($enabled ? "#28a745" : "#dc3545")};
-  color: white;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-`;
-
-const StatusTitle = styled.h3`
-  margin: 0;
-  color: ${({ theme }) => theme.title};
-  font-size: 18px;
-`;
-
-const StatusSubtitle = styled.p`
-  margin: 0;
-  color: ${({ theme }) => theme.textSecondary};
-  font-size: 14px;
-`;
-
-const StatusDetails = styled.div`
-  padding-left: 65px;
-`;
-
-const DetailItem = styled.div`
-  margin-bottom: 8px;
-  color: ${({ theme }) => theme.text};
-  font-size: 14px;
-  line-height: 1.4;
-`;
-
-const StatsGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 20px;
-`;
-
-const StatCard = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  border-radius: 8px;
-  padding: 20px;
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  transition: transform 0.2s;
-
-  &:hover {
-    transform: translateY(-2px);
-  }
-`;
-
-const StatIcon = styled.div`
-  width: 50px;
-  height: 50px;
-  border-radius: 50%;
-  background: ${({ $color }) => $color}15;
-  color: ${({ $color }) => $color};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-`;
-
-const StatContent = styled.div``;
-
-const StatNumber = styled.div`
-  font-size: 24px;
-  font-weight: 700;
-  color: ${({ theme }) => theme.title};
-  margin-bottom: 4px;
-`;
-
-const StatLabel = styled.div`
-  font-size: 13px;
-  color: ${({ theme }) => theme.textSecondary};
-  font-weight: 500;
-`;
-
-const InfoSection = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(400px, 1fr));
-  gap: 20px;
-
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const InfoCard = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-`;
-
-const InfoHeader = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 15px;
-
-  svg {
-    color: ${({ theme }) => theme.primary};
-    font-size: 20px;
-  }
-
-  h3 {
-    margin: 0;
-    color: ${({ theme }) => theme.title};
-    font-size: 16px;
-  }
-`;
-
-const InfoContent = styled.div``;
-
-const InfoList = styled.ul`
-  margin: 0;
-  padding-left: 20px;
-  color: ${({ theme }) => theme.text};
-
-  li {
-    margin-bottom: 10px;
-    line-height: 1.5;
-    font-size: 14px;
-
-    strong {
-      color: ${({ theme }) => theme.title};
-    }
-  }
-`;
-
-const HistorySection = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-`;
-
-const HistoryHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-
-  h3 {
-    margin: 0;
-    color: ${({ theme }) => theme.title};
-    display: flex;
-    align-items: center;
-    gap: 10px;
-  }
-`;
-
-const ViewAllButton = styled.button`
-  background: none;
-  border: 1px solid ${({ theme }) => theme.primary};
-  color: ${({ theme }) => theme.primary};
-  padding: 6px 12px;
-  border-radius: 4px;
-  cursor: pointer;
-  font-size: 12px;
-  transition: all 0.2s;
-
-  &:hover {
-    background: ${({ theme }) => theme.primary};
-    color: white;
-  }
-`;
-
-const HistoryTable = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-
-  th,
-  td {
-    padding: 12px;
-    text-align: left;
-    border-bottom: 1px solid ${({ theme }) => theme.border};
-  }
-
-  th {
-    background: ${({ theme }) => theme.tableHeader};
-    color: ${({ theme }) => theme.tableHeaderText};
-    font-weight: 600;
-    font-size: 13px;
-  }
-
-  td {
-    color: ${({ theme }) => theme.text};
-    font-size: 14px;
-  }
-`;
-
-const SuccessBadge = styled.span`
-  background: #28a745;
-  color: white;
-  padding: 3px 8px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 500;
-`;
-
-const WarningBadge = styled.span`
-  background: #ffc107;
-  color: #212529;
-  padding: 3px 8px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 500;
-`;
-
-const QuickActions = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  border-radius: 8px;
-  padding: 20px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-
-  h3 {
-    margin: 0 0 15px 0;
-    color: ${({ theme }) => theme.title};
-  }
-`;
-
-const ActionButtons = styled.div`
-  display: flex;
-  gap: 10px;
-  flex-wrap: wrap;
-`;
-
-const ActionButton = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px 16px;
-  background: ${({ $color }) => $color};
-  color: white;
-  border: none;
-  border-radius: 6px;
-  cursor: pointer;
-  font-size: 13px;
-  font-weight: 500;
-  transition: all 0.2s;
-
-  &:hover {
-    filter: brightness(1.1);
-    transform: translateY(-1px);
-  }
-`;

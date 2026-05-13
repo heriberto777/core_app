@@ -1,9 +1,8 @@
-import React, { useState, useMemo } from "react";
-import styled, { keyframes } from "styled-components";
+import React, { useState } from "react";
 import { Helmet } from "react-helmet-async";
 import {
   FaPlus, FaSync, FaLink, FaChartLine, FaList, FaTable,
-  FaEdit, FaTrash, FaPlay, FaStop, FaHistory, FaEye, FaTimes, FaExclamationTriangle, FaFilter
+  FaEdit, FaTrash, FaPlay, FaStop, FaHistory, FaEye, FaTimes, FaExclamationTriangle
 } from "react-icons/fa";
 import {
   useTransferTask,
@@ -22,148 +21,63 @@ import {
 
 const taskApi = new TransferTaskApi();
 
-// === ANIMACIONES ===
-const fadeIn = keyframes`
-  from { opacity: 0; transform: translateY(10px); }
-  to { opacity: 1; transform: translateY(0); }
-`;
+function ModalOverlay({ children, onClick }) {
+  return (
+    <div 
+      className="fixed top-0 left-0 right-0 bottom-0 bg-black/60 flex items-center justify-center z-[2000] backdrop-blur-sm"
+      onClick={onClick}
+    >
+      {children}
+    </div>
+  );
+}
 
-const spin = keyframes`
-  from { transform: rotate(0deg); }
-  to { transform: rotate(360deg); }
-`;
+function ModalContent({ children, onClick, style }) {
+  return (
+    <div 
+      className="bg-white w-[90%] max-w-[800px] max-h-[90vh] rounded-xl overflow-hidden flex flex-col shadow-2xl"
+      style={style}
+      onClick={e => e.stopPropagation()}
+    >
+      {children}
+    </div>
+  );
+}
 
-// === ESTILOS BASE (GLASSMORPHISM) ===
-const Container = styled.div`
-  display: flex; flex-direction: column; gap: ${({ theme }) => theme.spacing.lg};
-  animation: ${fadeIn} 0.4s ease-out;
-`;
+function ModalHeader({ children, style }) {
+  return (
+    <div 
+      className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50"
+      style={style}
+    >
+      {children}
+    </div>
+  );
+}
 
-const ActionsBar = styled.div`
-  display: flex; flex-wrap: wrap; gap: ${({ theme }) => theme.spacing.md};
-  align-items: center; justify-content: space-between;
-  background: ${({ theme }) => theme.cardBg};
-  padding: ${({ theme }) => theme.spacing.md};
-  border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.border};
-  backdrop-filter: blur(10px);
-`;
+function ModalBody({ children, style }) {
+  return (
+    <div className="p-5 overflow-y-auto" style={style}>
+      {children}
+    </div>
+  );
+}
 
-const SearchInputContainer = styled.div`
-  flex: 1; min-width: 250px;
-`;
+function FilterButton({ children, active, onClick }) {
+  return (
+    <button
+      className={`px-3.5 py-1.5 text-[12px] font-semibold rounded-full border cursor-pointer transition-all ${
+        active 
+          ? 'bg-blue-500 text-white border-blue-500 hover:bg-blue-600' 
+          : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100 hover:border-slate-400'
+      }`}
+      onClick={onClick}
+    >
+      {children}
+    </button>
+  );
+}
 
-const FiltersContainer = styled.div`
-  display: flex; gap: 15px; align-items: center;
-`;
-
-const ButtonsRow = styled.div`
-  display: flex; gap: 10px; width: 100%; justify-content: flex-end;
-  margin-top: 10px;
-  border-top: 1px solid ${({ theme }) => theme.border}40;
-  padding-top: 10px;
-`;
-
-const ViewButtonsGroup = styled.div`
-  display: flex; background: ${({ theme }) => theme.bg2}; 
-  border-radius: 8px; padding: 2px; border: 1px solid ${({ theme }) => theme.border};
-`;
-
-const FiltersGroup = styled.div`
-  display: flex; gap: ${({ theme }) => theme.spacing.sm}; align-items: center;
-`;
-
-const Select = styled.select`
-  padding: 8px 12px; border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.bg2};
-  color: ${({ theme }) => theme.text};
-  font-size: 13px; font-weight: 500;
-  cursor: pointer; &:focus { border-color: ${({ theme }) => theme.primary}; outline: none; }
-`;
-
-const Grid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: ${({ theme }) => theme.spacing.lg};
-`;
-
-const Card = styled.div`
-  background: ${({ theme, $active }) => $active ? theme.cardBg : `${theme.bg2}80`};
-  border-radius: 16px;
-  border: 1px solid ${({ theme, $status }) =>
-    $status === 'running' ? theme.primary : theme.border};
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden;
-  position: relative;
-  box-shadow: ${({ theme }) => theme.shadows.premium};
-
-  &:hover {
-    transform: translateY(-4px);
-    border-color: ${({ theme }) => theme.primary}80;
-    box-shadow: 0 12px 24px rgba(0,0,0,0.15);
-  }
-`;
-
-const CardHeader = styled.div`
-  padding: 16px; border-bottom: 1px solid ${({ theme }) => theme.border};
-  display: flex; justify-content: space-between; align-items: center;
-  background: ${({ theme }) => theme.bg2}40;
-`;
-
-const CardBody = styled.div`
-  padding: 16px; display: flex; flex-direction: column; gap: 12px;
-`;
-
-const InfoGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(2, 1fr);
-  gap: 8px;
-  background: ${({ theme }) => theme.bg2}40;
-  padding: 10px;
-  border-radius: 8px;
-`;
-
-const CardInfo = styled.div`
-  display: flex; flex-direction: column; gap: 6px;
-`;
-
-const InfoItem = styled.div`
-  display: flex; justify-content: space-between; font-size: 13px;
-`;
-
-const InfoLabel = styled.span`
-  color: ${({ theme }) => theme.textSecondary}; font-weight: 500;
-`;
-
-const InfoValue = styled.span`
-  color: ${({ theme }) => theme.text}; font-weight: 600;
-`;
-
-const CardFooter = styled.div`
-  padding: 12px 16px; background: ${({ theme }) => theme.bg2}20;
-  border-top: 1px solid ${({ theme }) => theme.border};
-  display: flex; justify-content: flex-end; gap: 8px;
-`;
-
-const ProgressBar = styled.div`
-  height: 8px; background: ${({ theme }) => theme.border};
-  border-radius: 4px; overflow: hidden; margin-top: 8px;
-`;
-
-const ProgressFill = styled.div`
-  height: 100%; background: ${({ theme }) => theme.primary};
-  width: ${({ $width }) => $width}%; transition: width 0.5s ease;
-  box-shadow: 0 0 8px ${({ theme }) => theme.primary}80;
-`;
-
-const EmptyState = styled.div`
-  text-align: center; padding: 60px; color: ${({ theme }) => theme.textSecondary};
-  background: ${({ theme }) => theme.cardBg}; border-radius: 12px;
-  border: 1px dashed ${({ theme }) => theme.border};
-`;
-
-// === COMPONENTE PRINCIPAL ===
 export function TransferTasks() {
   const {
     tasks, allTasks, loading, refreshing, filters, search,
@@ -248,7 +162,7 @@ export function TransferTasks() {
   };
 
   return (
-    <Container>
+    <div className="flex flex-col gap-6 animate-fadeIn">
       <Helmet>
         <title>Tareas - Core ERP Premium</title>
       </Helmet>
@@ -260,28 +174,36 @@ export function TransferTasks() {
 
       {showMetrics && <TaskMetricsPanel tasks={allTasks} />}
 
-      <ActionsBar>
-        <div style={{ display: 'flex', gap: '15px', flex: 1 }}>
+      <div className="flex flex-wrap gap-4 items-center justify-between bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 backdrop-blur-sm">
+        <div className="flex gap-4 flex-1">
           <FilterInput
             placeholder="Buscar por nombre de tarea..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <FiltersGroup>
-            <Select value={filters.type} onChange={(e) => handleFilterChange("type", e.target.value)}>
+          <div className="flex gap-2 items-center">
+            <select 
+              className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[13px] font-medium cursor-pointer focus:border-blue-500 outline-none"
+              value={filters.type} 
+              onChange={(e) => handleFilterChange("type", e.target.value)}
+            >
               <option value="all">Tipos: Todos</option>
               <option value="manual">Manuales</option>
               <option value="auto">Automáticas</option>
-            </Select>
-            <Select value={filters.status} onChange={(e) => handleFilterChange("status", e.target.value)}>
+            </select>
+            <select 
+              className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[13px] font-medium cursor-pointer focus:border-blue-500 outline-none"
+              value={filters.status} 
+              onChange={(e) => handleFilterChange("status", e.target.value)}
+            >
               <option value="all">Estados: Todos</option>
               <option value="active">Activas</option>
               <option value="inactive">Inactivas</option>
-            </Select>
-          </FiltersGroup>
+            </select>
+          </div>
         </div>
 
-        <div style={{ display: 'flex', gap: '10px' }}>
+        <div className="flex gap-2.5">
           {canCreateTask && (
             <Button variant="success" onClick={handleCreate}><FaPlus /> Nueva Tarea</Button>
           )}
@@ -294,64 +216,69 @@ export function TransferTasks() {
           <Button variant="secondary" onClick={() => setShowMetrics(!showMetrics)}>
             <FaChartLine /> {showMetrics ? "Cerrar" : "Ver"} Métricas
           </Button>
-          <div style={{ display: 'flex', background: '#eee', borderRadius: '8px', padding: '2px' }}>
-            <Button variant={viewMode === "cards" ? "primary" : "ghost"} onClick={() => setViewMode("cards")} style={{ padding: '6px 12px' }}><FaList /></Button>
-            <Button variant={viewMode === "table" ? "primary" : "ghost"} onClick={() => setViewMode("table")} style={{ padding: '6px 12px' }}><FaTable /></Button>
+          <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-0.5">
+            <Button variant={viewMode === "cards" ? "primary" : "ghost"} onClick={() => setViewMode("cards")} className="px-3 py-1.5"><FaList /></Button>
+            <Button variant={viewMode === "table" ? "primary" : "ghost"} onClick={() => setViewMode("table")} className="px-3 py-1.5"><FaTable /></Button>
           </div>
         </div>
-      </ActionsBar>
+      </div>
 
-      <div style={{ position: "relative", minHeight: '300px' }}>
+      <div className="relative min-h-[300px]">
         {refreshing && <LoadingUI overlay message="Actualizando estados..." />}
         {loading && !refreshing && <LoadingUI message="Cargando repositorio..." />}
 
         {!loading && tasks.length === 0 && (
-          <EmptyState>
-            <FaList size={40} style={{ opacity: 0.3, marginBottom: '15px' }} />
+          <div className="text-center p-15 text-slate-500 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-600">
+            <FaList size={40} className="opacity-30 mb-4 mx-auto" />
             <p>No se encontraron tareas con estos criterios.</p>
-            <Button variant="primary" onClick={() => setSearch("")} style={{ marginTop: '10px' }}>Limpiar Búsqueda</Button>
-          </EmptyState>
+            <Button variant="primary" onClick={() => setSearch("")} className="mt-2.5">Limpiar Búsqueda</Button>
+          </div>
         )}
 
         {viewMode === "cards" ? (
-          <Grid>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-6">
             {tasks.map(task => (
-              <Card key={task._id} $active={task.active} $status={task.status}>
-                <CardHeader>
-                  <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                    <strong style={{ fontSize: '15px' }}>{task.name}</strong>
-                    <div style={{ display: 'flex', gap: '6px', alignItems: 'center' }}>
+              <div 
+                key={task._id} 
+                className={`bg-white dark:bg-slate-800 rounded-2xl border transition-all duration-300 overflow-hidden relative shadow-md hover:-translate-y-1 hover:border-blue-500/50 hover:shadow-lg ${
+                  task.status === 'running' ? 'border-blue-500' : 'border-slate-200 dark:border-slate-700'
+                } ${task.active ? '' : 'opacity-75'}`}
+              >
+                <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-700/50">
+                  <div className="flex flex-col gap-1">
+                    <strong className="text-[15px]">{task.name}</strong>
+                    <div className="flex gap-1.5 items-center">
                       <StatusBadge status={task.status || (task.active ? "active" : "inactive")} />
-                      {!task.active && <span style={{ fontSize: '10px', color: '#dc3545', fontWeight: 600 }}>INACTIVA</span>}
+                      {!task.active && <span className="text-[10px] text-red-500 font-semibold">INACTIVA</span>}
                     </div>
                   </div>
-                </CardHeader>
-                <CardBody>
-                  <InfoGrid>
-                    <InfoItem>
-                      <InfoLabel>Tipo</InfoLabel>
-                      <InfoValue style={{ textTransform: 'capitalize' }}>{task.type}</InfoValue>
-                    </InfoItem>
-                    <InfoItem>
-                      <InfoLabel>Transfer</InfoLabel>
-                      <InfoValue>
+                </div>
+                <div className="p-4 flex flex-col gap-3">
+                  <div className="grid grid-cols-2 gap-2 bg-slate-50/50 dark:bg-slate-700/50 p-2.5 rounded-lg">
+                    <div className="flex justify-between text-[13px]">
+                      <span className="text-slate-500 font-medium">Tipo</span>
+                      <span className="text-slate-800 dark:text-white font-semibold capitalize">{task.type}</span>
+                    </div>
+                    <div className="flex justify-between text-[13px]">
+                      <span className="text-slate-500 font-medium">Transfer</span>
+                      <span className="text-slate-800 dark:text-white font-semibold">
                         {task.transferType === 'up' && '↑ Up'}
                         {task.transferType === 'down' && '↓ Down'}
                         {task.transferType === 'internal' && '⇄ Internal'}
                         {task.transferType === 'general' && '○ General'}
                         {!task.transferType && '○ General'}
-                      </InfoValue>
-                    </InfoItem>
-                    <InfoItem>
-                      <InfoLabel>Vinculada</InfoLabel>
-                      <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        <InfoValue style={{ color: task.linkedGroup || (task.linkedTasks?.length > 0) ? '#10b981' : '#999' }}>
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-[13px]">
+                      <span className="text-slate-500 font-medium">Vinculada</span>
+                      <div className="flex items-center gap-2">
+                        <span className={`font-semibold ${task.linkedGroup || (task.linkedTasks?.length > 0) ? 'text-emerald-500' : 'text-slate-400'}`}>
                           {task.linkedGroup ? `Grupo: ${task.linkedGroup}` : (task.linkedTasks?.length > 0 ? `${task.linkedTasks.length} tareas` : 'No')}
-                        </InfoValue>
+                        </span>
                         {(task.linkedTasks?.length > 0 || task.linkedGroup) && (
                           <Button 
                             variant="ghost" 
-                            style={{ padding: '2px 6px', fontSize: '10px' }}
+                            className="px-1.5 py-0.5 text-[10px]"
                             onClick={() => openLinkedTasksModal(task)}
                             title="Ver tareas vinculadas"
                           >
@@ -359,82 +286,93 @@ export function TransferTasks() {
                           </Button>
                         )}
                       </div>
-                    </InfoItem>
-                    <InfoItem>
-                      <InfoLabel>Última Ejecución</InfoLabel>
-                      <InfoValue>
+                    </div>
+                    <div className="flex justify-between text-[13px]">
+                      <span className="text-slate-500 font-medium">Última Ejecución</span>
+                      <span className="font-semibold">
                         {(task.lastExecutionResult?.success === false || task.status === 'error') && task.lastExecutionResult?.errorDetails ? (
                           <span 
-                            style={{ color: '#dc3545', cursor: 'pointer', textDecoration: 'underline', fontSize: '11px' }}
+                            className="text-red-500 cursor-pointer underline text-[11px]"
                             onClick={() => handleViewError(
                               `Error en ${task.name}`,
                               task.lastExecutionResult?.message || 'Error en la transferencia',
                               task.lastExecutionResult?.errorDetails || 'Sin detalles'
                             )}
                           >
-                            <FaExclamationTriangle size={10} style={{ marginRight: '4px' }} />
+                            <FaExclamationTriangle className="text-[10px] mr-1" />
                             {task.lastExecutionResult?.message || 'Error'}
                           </span>
                         ) : task.lastExecutionResult?.success ? (
-                          <span style={{ color: '#198754', fontSize: '11px' }}>
+                          <span className="text-emerald-600 text-[11px]">
                             ✓ {task.lastExecutionResult?.message || 'Completado'} 
                             ({task.lastExecutionResult?.affectedRecords || 0} reg.)
                           </span>
                         ) : task.status === 'running' ? (
-                          <span style={{ color: '#0d6efd', fontSize: '11px' }}>Ejecutando... {task.progress || 0}%</span>
+                          <span className="text-blue-600 text-[11px]">Ejecutando... {task.progress || 0}%</span>
                         ) : (
-                          <span style={{ color: '#999', fontSize: '11px' }}>Sin ejecuciones</span>
+                          <span className="text-slate-400 text-[11px]">Sin ejecuciones</span>
                         )}
-                      </InfoValue>
-                    </InfoItem>
-                    <InfoItem>
-                      <InfoLabel>Ejecuciones</InfoLabel>
-                      <InfoValue>{task.executionCount || 0}</InfoValue>
-                    </InfoItem>
-                  </InfoGrid>
+                      </span>
+                    </div>
+                    <div className="flex justify-between text-[13px]">
+                      <span className="text-slate-500 font-medium">Ejecuciones</span>
+                      <span className="text-slate-800 dark:text-white font-semibold">{task.executionCount || 0}</span>
+                    </div>
+                  </div>
 
                   {task.status === "running" && (
-                    <div style={{ marginTop: '10px' }}>
-                      <ProgressBar>
-                        <ProgressFill $width={task.progress} />
-                      </ProgressBar>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', marginTop: '6px' }}>
-                        <small style={{ fontWeight: 'bold' }}>Progreso: {task.progress}%</small>
+                    <div className="mt-2.5">
+                      <div className="h-2 bg-slate-200 dark:bg-slate-600 rounded overflow-hidden">
+                        <div 
+                          className="h-full bg-blue-500 transition-all duration-500 shadow-[0_0_8px_rgba(59,130,246,0.5)]"
+                          style={{ width: `${task.progress}%` }}
+                        />
+                      </div>
+                      <div className="flex justify-between mt-1.5">
+                        <small className="font-bold">Progreso: {task.progress}%</small>
                         {taskEstimates[task._id] && (
-                          <small style={{ color: '#1565C0' }}>Restan {Math.floor(taskEstimates[task._id].remaining / 60000)}m</small>
+                          <small className="text-blue-700">Restan {Math.floor(taskEstimates[task._id].remaining / 60000)}m</small>
                         )}
                       </div>
                     </div>
                   )}
 
-                  <div style={{ fontSize: '11px', background: '#f8f9fa', padding: '8px', borderRadius: '6px', fontFamily: 'monospace', marginTop: '10px', color: '#666' }}>
+                  <div className="text-[11px] bg-slate-100 dark:bg-slate-700 p-2 rounded-md font-mono mt-2.5 text-slate-500 dark:text-slate-400">
                     {task.query?.substring(0, 60)}...
                   </div>
 
                   {task.lastExecutionDate && (
-                    <div style={{ fontSize: '10px', color: '#999', marginTop: '8px', textAlign: 'right' }}>
+                    <div className="text-[10px] text-slate-400 mt-2 text-right">
                       Última: {new Date(task.lastExecutionDate).toLocaleString()}
                     </div>
                   )}
-                </CardBody>
-                <CardFooter>
+                </div>
+                <div className="p-3 pr-4 bg-slate-50/20 dark:bg-slate-700/20 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2">
                   {canEditTask && (
                     <Button variant="ghost" onClick={() => handleEdit(task)} disabled={task.status === "running"} title="Editar"><FaEdit /></Button>
                   )}
                   {canDeleteTask && (
-                    <Button variant="ghost" loading={actionStates[task._id] === 'deleting'} onClick={() => deleteTask(task._id)} disabled={task.status === "running"} style={{ color: '#dc3545' }} title="Eliminar"><FaTrash /></Button>
+                    <Button variant="ghost" loading={actionStates[task._id] === 'deleting'} onClick={() => deleteTask(task._id)} disabled={task.status === "running"} className="text-red-500" title="Eliminar"><FaTrash /></Button>
                   )}
                   <Button variant="ghost" loading={actionStates[task._id] === 'history'} onClick={() => handleViewHistory(task)} title="Ver Historial"><FaHistory /></Button>
                   {canExecuteTask && (
-                    <Button variant="primary" loading={actionStates[task._id] === 'executing'} onClick={() => executeTask(task._id)} disabled={task.status === "running" || !task.active} title={!task.active ? "Tarea inactiva" : "Ejecutar"}><FaPlay /></Button>
+                    <Button 
+                      variant="primary" 
+                      loading={actionStates[task._id] === 'executing'} 
+                      onClick={() => executeTask(task._id)} 
+                      disabled={task.status === "running" || !task.active} 
+                      title={task.active ? "Ejecutar" : "Tarea inactiva"}
+                    >
+                      <FaPlay />
+                    </Button>
                   )}
                   {task.status === "running" && isAdmin && (
                     <Button variant="danger" loading={actionStates[task._id] === 'canceling'} onClick={() => cancelTask(task._id)} title="Cancelar"><FaStop /></Button>
                   )}
-                </CardFooter>
-              </Card>
+                </div>
+              </div>
             ))}
-          </Grid>
+          </div>
         ) : (
           <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eee', overflow: 'hidden' }}>
             <table style={{ width: '100%', borderCollapse: 'collapse' }}>
@@ -549,9 +487,20 @@ export function TransferTasks() {
                 <FaHistory style={{ marginRight: '8px' }} />
                 Historial de Ejecuciones
               </h3>
-              <Button variant="ghost" onClick={() => setHistoryModal({ open: false, taskId: null, data: [], loading: false, filter: 'all' })}>
-                <FaTimes />
-              </Button>
+              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                <Button 
+                  variant="outline" 
+                  size="small" 
+                  onClick={() => navigate(`/history?search=${tasks.find(t => t._id === historyModal.taskId)?.name || ''}`)}
+                  title="Ver en Bitácora Central"
+                  style={{ height: '32px', padding: '0 12px' }}
+                >
+                  <FaEye /> Ver en Bitácora
+                </Button>
+                <Button variant="ghost" onClick={() => setHistoryModal({ open: false, taskId: null, data: [], loading: false, filter: 'all' })}>
+                  <FaTimes />
+                </Button>
+              </div>
             </ModalHeader>
             <ModalBody style={{ padding: '20px', overflowY: 'auto' }}>
               {/* Filtros */}
@@ -706,47 +655,6 @@ export function TransferTasks() {
           </ModalContent>
         </ModalOverlay>
       )}
-    </Container>
+    </div>
   );
 }
-
-// === COMPONENTES ADICIONALES DEL MODAL ===
-const ModalOverlay = styled.div`
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.6); display: flex; align-items: center; justify-content: center;
-  z-index: 2000; backdrop-filter: blur(4px);
-`;
-
-const ModalContent = styled.div`
-  background: white; width: 90%; max-width: 800px; max-height: 90vh;
-  border-radius: 12px; overflow: hidden; display: flex; flex-direction: column;
-  box-shadow: 0 20px 40px rgba(0,0,0,0.3);
-`;
-
-const ModalHeader = styled.div`
-  padding: 15px 20px; border-bottom: 1px solid #eee;
-  display: flex; justify-content: space-between; align-items: center;
-  background: #f8f9fa;
-`;
-
-const ModalBody = styled.div`
-  padding: 20px;
-  overflow-y: auto;
-`;
-
-const FilterButton = styled.button`
-  padding: 6px 14px;
-  font-size: 12px;
-  font-weight: 600;
-  border: 1px solid #dee2e6;
-  border-radius: 20px;
-  background: ${props => props.active ? '#0d6efd' : 'white'};
-  color: ${props => props.active ? 'white' : '#495057'};
-  cursor: pointer;
-  transition: all 0.2s;
-  
-  &:hover {
-    background: ${props => props.active ? '#0d6efd' : '#e9ecef'};
-    border-color: #adb5bd;
-  }
-`;

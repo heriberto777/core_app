@@ -1,55 +1,31 @@
 import React from "react";
-import styled, { keyframes } from "styled-components";
 
-const spin = keyframes`
-  0% { transform: rotate(0deg); }
-  100% { transform: rotate(360deg); }
-`;
-
-const pulse = keyframes`
-  0%, 100% { opacity: 1; }
-  50% { opacity: 0.5; }
-`;
-
-const Container = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: ${({ theme }) => theme.spacing.xxl};
-  gap: ${({ theme }) => theme.spacing.md};
-  min-height: ${({ $fullPage }) => ($fullPage ? "60vh" : "200px")};
-`;
-
-const Spinner = styled.div`
-  width: 40px;
-  height: 40px;
-  border: 3px solid ${({ theme }) => theme.border};
-  border-top: 3px solid ${({ theme }) => theme.primary};
-  border-radius: 50%;
-  animation: ${spin} 1s linear infinite;
-`;
-
-const Text = styled.div`
-  color: ${({ theme }) => theme.textSecondary};
-  font-size: ${({ theme }) => theme.fontsm};
-  font-weight: 500;
-  animation: ${pulse} 2s ease-in-out infinite;
-`;
-
+/**
+ * Corporate LoadingUI (Tailwind Edition)
+ */
 export const LoadingUI = ({ message = "Cargando...", fullPage = false }) => {
     return (
-        <Container $fullPage={fullPage}>
-            <Spinner />
-            <Text>{message}</Text>
-        </Container>
+        <div 
+          className={`
+            flex flex-col items-center justify-center gap-4
+            ${fullPage ? "min-h-[60vh]" : "min-h-[200px]"}
+            p-12
+          `}
+        >
+            <div className="w-10 h-10 border-3 border-slate-200 border-t-primary-600 rounded-full animate-spin" />
+            <div className="text-sm font-semibold text-slate-400 animate-pulse uppercase tracking-widest">
+              {message}
+            </div>
+        </div>
     );
 };
 
-export const Skeleton = styled.div`
-  background: ${({ theme }) => theme.border};
-  border-radius: ${({ theme }) => theme.borderRadius};
-  width: ${({ width }) => width || "100%"};
-  height: ${({ height }) => height || "20px"};
-  animation: ${pulse} 1.5s ease-in-out infinite;
-`;
+/**
+ * Corporate Skeleton Loader
+ */
+export const Skeleton = ({ width = "100%", height = "20px", className = "" }) => (
+  <div 
+    className={`bg-slate-200 rounded-lg animate-pulse ${className}`}
+    style={{ width, height }}
+  />
+);

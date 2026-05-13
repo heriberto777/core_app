@@ -1,5 +1,4 @@
 import React from "react";
-import styled from "styled-components";
 import {
   FaGift,
   FaPercentage,
@@ -29,37 +28,43 @@ const PromotionConfigSection = ({ mapping = {}, handleChange }) => {
   const isEnabled = promotionConfig.enabled || false;
 
   return (
-    <Container>
-      <Header>
-        <HeaderTitle>
-          <FaGift /> Configuración de Promociones
-        </HeaderTitle>
-        <ToggleSwitch>
+    <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-3xl p-8 mb-8 text-slate-900 dark:text-white shadow-lg">
+      <div className="flex justify-between items-center mb-10 pb-6 border-b border-slate-200/50 dark:border-slate-700/50">
+        <h2 className="flex items-center gap-3 text-2xl font-extrabold m-0 text-slate-900 dark:text-white">
+          <FaGift className="text-blue-500" /> Configuración de Promociones
+        </h2>
+        <div className="flex items-center">
           <input
             type="checkbox"
             id="promo-enable"
+            className="absolute opacity-0 w-0 h-0"
             checked={isEnabled}
             onChange={handleEnableChange}
           />
-          <label htmlFor="promo-enable"></label>
-          <span style={{ marginLeft: "10px", fontWeight: 600, color: "#fff" }}>
+          <label
+            htmlFor="promo-enable"
+            className="cursor-pointer w-12 h-6 bg-slate-200 dark:bg-slate-700 rounded-full relative border border-slate-300 dark:border-slate-600 before:absolute before:top-0.5 before:left-0.5 before:w-4 before:h-4 before:bg-white before:rounded-full before:transition-all duration-300"
+          />
+          <span className="ml-3 font-semibold text-white">
             {isEnabled ? "Activo" : "Inactivo"}
           </span>
-        </ToggleSwitch>
-      </Header>
+        </div>
+      </div>
 
       {!isEnabled ? (
-        <EmptyState>
-          <FaInfoCircle size={40} opacity={0.5} />
+        <div className="flex flex-col items-center justify-center p-8 text-center text-slate-500 dark:text-slate-400 gap-4 bg-slate-50/10 dark:bg-slate-700/10 rounded-3xl border-2 border-dashed border-slate-300 dark:border-slate-600">
+          <FaInfoCircle size={40} className="opacity-50" />
           <p>El procesamiento de promociones está desactivado.</p>
           <small>Habilítalo para configurar reglas y campos de detección.</small>
-        </EmptyState>
+        </div>
       ) : (
-        <Content>
-          <Grid>
-            <SectionCard>
-              <CardTitle>Detección de Campos</CardTitle>
-              <InputGroup>
+        <div className="flex flex-col gap-8">
+          <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <div className="bg-slate-100/40 dark:bg-slate-700/40 border border-slate-200 dark:border-slate-700 rounded-3xl p-6">
+              <div className="flex justify-between items-center font-extrabold text-lg mb-6 text-slate-900 dark:text-white">
+                Detección de Campos
+              </div>
+              <div className="flex flex-col gap-2">
                 <Input
                   label="Campo Bonificación"
                   value={promotionConfig.detectFields?.bonusField || "ART_BON"}
@@ -78,19 +83,22 @@ const PromotionConfigSection = ({ mapping = {}, handleChange }) => {
                   onChange={(e) => handleDetectFieldChange("discountField", e.target.value)}
                   placeholder="Ej: MON_DSC"
                 />
-              </InputGroup>
-            </SectionCard>
+              </div>
+            </div>
 
-            <SectionCard>
-              <CardTitle>
+            <div className="bg-slate-100/40 dark:bg-slate-700/40 border border-slate-200 dark:border-slate-700 rounded-3xl p-6">
+              <div className="flex justify-between items-center font-extrabold text-lg mb-6 text-slate-900 dark:text-white">
                 Campos Destino
-                <AdvancedToggle onClick={() => setShowAdvanced(!showAdvanced)}>
+                <button
+                  onClick={() => setShowAdvanced(!showAdvanced)}
+                  className="bg-transparent border-none text-blue-400 cursor-pointer p-1 flex items-center hover:scale-110 transition-transform"
+                >
                   {showAdvanced ? <FaChevronUp /> : <FaChevronDown />}
-                </AdvancedToggle>
-              </CardTitle>
+                </button>
+              </div>
 
               {showAdvanced && (
-                <InputGroup>
+                <div className="flex flex-col gap-2">
                   <Input
                     label="Línea Bonificación Ref"
                     value={promotionConfig.targetFields?.bonusLineRef || "PEDIDO_LINEA_BONIF"}
@@ -106,61 +114,93 @@ const PromotionConfigSection = ({ mapping = {}, handleChange }) => {
                     value={promotionConfig.targetFields?.bonusQuantity || "CANTIDAD_BONIF"}
                     onChange={(e) => handleTargetFieldChange("bonusQuantity", e.target.value)}
                   />
-                </InputGroup>
+                </div>
               )}
-              {!showAdvanced && <HelpText>Haz clic para configurar mapeo de campos destino.</HelpText>}
-            </SectionCard>
-          </Grid>
+              {!showAdvanced && <div className="text-xs text-slate-400 italic">Haz clic para configurar mapeo de campos destino.</div>}
+            </div>
+          </div>
 
-          <RulesContainer>
-            <RulesHeader>
-              <CardTitle><FaGift /> Reglas de Promoción ({rules.length})</CardTitle>
+          <div className="flex flex-col gap-4">
+            <div className="flex justify-between items-center">
+              <div className="flex items-center gap-2 font-extrabold text-lg text-slate-900 dark:text-white">
+                <FaGift /> Reglas de Promoción ({rules.length})
+              </div>
               <Button variant="primary" onClick={addRule}>
                 <FaPlus /> Nueva Regla
               </Button>
-            </RulesHeader>
+            </div>
 
             {rules.length === 0 ? (
-              <EmptyRules>
+              <div className="p-8 text-center bg-white/5 dark:bg-slate-800/50 rounded-2xl border border-dashed border-slate-300/30 text-slate-500/50 text-sm">
                 No hay reglas configuradas. Las promociones se procesarán según los campos de detección por defecto.
-              </EmptyRules>
+              </div>
             ) : (
-              <RulesList>
+              <div className="grid grid-cols-1 xl:grid-cols-2 gap-4">
                 {rules.map((rule, index) => (
-                  <RuleCard key={index} type={rule.type} enabled={rule.enabled}>
-                    <RuleIconWrapper type={rule.type}>
+                  <div
+                    key={index}
+                    className={`flex gap-5 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-2xl p-5 transition-all duration-300 ${
+                      rule.enabled ? "" : "opacity-60"
+                    } hover:bg-slate-100/30 dark:hover:bg-slate-700/30 hover:-translate-y-1 hover:shadow-lg`}
+                    style={{ borderLeftWidth: "5px", borderLeftColor: getRuleColor(rule.type) }}
+                  >
+                    <div
+                      className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-lg"
+                      style={{
+                        backgroundColor: `${getRuleColor(rule.type)}20`,
+                        color: getRuleColor(rule.type),
+                      }}
+                    >
                       {getRuleIcon(rule.type)}
-                    </RuleIconWrapper>
+                    </div>
 
-                    <RuleInfo>
-                      <RuleName>{rule.name}</RuleName>
-                      <RuleBadge type={rule.type}>{rule.type.replace(/_/g, " ")}</RuleBadge>
-                      <RuleDesc>{rule.description}</RuleDesc>
-                      <RuleMeta>
+                    <div className="flex-1 flex flex-col gap-1">
+                      <div className="font-bold text-base">{rule.name}</div>
+                      <span
+                        className="text-xs font-extrabold uppercase px-1.5 py-0.5 rounded self-start"
+                        style={{
+                          color: getRuleColor(rule.type),
+                          backgroundColor: `${getRuleColor(rule.type)}15`,
+                        }}
+                      >
+                        {rule.type.replace(/_/g, " ")}
+                      </span>
+                      <div className="text-sm text-slate-500 dark:text-slate-400 mt-1.5 leading-relaxed line-clamp-2">
+                        {rule.description}
+                      </div>
+                      <div className="flex gap-3.5 text-xs font-semibold mt-2.5 text-slate-500 dark:text-slate-400 opacity-70">
                         <span>Prioridad: {rule.priority || 0}</span>
-                        {rule.isOneTime && <span className="one-time">Oferta Única</span>}
-                        <span className={rule.enabled ? "status-on" : "status-off"}>
+                        {rule.isOneTime && <span className="text-amber-400 font-semibold">Oferta Única</span>}
+                        <span className={rule.enabled ? "text-emerald-400 font-semibold" : "text-red-400 font-semibold"}>
                           {rule.enabled ? "Habilitada" : "Deshabilitada"}
                         </span>
-                      </RuleMeta>
-                    </RuleInfo>
+                      </div>
+                    </div>
 
-                    <RuleActions>
-                      <ActionButton onClick={() => editRule(index)} title="Editar">
+                    <div className="flex flex-col gap-2">
+                      <button
+                        onClick={() => editRule(index)}
+                        title="Editar"
+                        className="w-9 h-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100/60 dark:bg-slate-700/60 text-blue-500 hover:bg-blue-500 hover:text-white hover:border-transparent transition-all"
+                      >
                         <FaEdit />
-                      </ActionButton>
-                      <ActionButton danger onClick={() => deleteRule(index)} title="Eliminar">
+                      </button>
+                      <button
+                        onClick={() => deleteRule(index)}
+                        title="Eliminar"
+                        className="w-9 h-9 rounded-xl border border-slate-200 dark:border-slate-700 bg-slate-100/60 dark:bg-slate-700/60 text-red-500 hover:bg-red-500 hover:text-white hover:border-transparent transition-all"
+                      >
                         <FaTrash />
-                      </ActionButton>
-                    </RuleActions>
-                  </RuleCard>
+                      </button>
+                    </div>
+                  </div>
                 ))}
-              </RulesList>
+              </div>
             )}
-          </RulesContainer>
-        </Content>
+          </div>
+        </div>
       )}
-    </Container>
+    </div>
   );
 };
 
@@ -190,284 +230,3 @@ const getRuleColor = (type) => {
 };
 
 export default PromotionConfigSection;
-
-// Estilos Glassmorphism
-const Container = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  backdrop-filter: blur(12px);
-  border: 1px solid ${({ theme }) => theme.border};
-  border-radius: 24px;
-  padding: 2rem;
-  margin-bottom: 2rem;
-  color: ${({ theme }) => theme.text};
-  box-shadow: ${({ theme }) => theme.shadows.medium};
-`;
-
-const Header = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 2.5rem;
-  padding-bottom: 1.5rem;
-  border-bottom: 1px solid ${({ theme }) => theme.border}80;
-`;
-
-const HeaderTitle = styled.h2`
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  font-size: 1.5rem;
-  font-weight: 800;
-  margin: 0;
-  color: ${({ theme }) => theme.titleColor};
-  
-  svg {
-    color: ${({ theme }) => theme.primary};
-  }
-`;
-
-const Content = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 2rem;
-`;
-
-const Grid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 1.5rem;
-`;
-
-const SectionCard = styled.div`
-  background: ${({ theme }) => theme.bg2}40;
-  border: 1px solid ${({ theme }) => theme.border};
-  border-radius: 20px;
-  padding: 1.5rem;
-`;
-
-const CardTitle = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  font-weight: 800;
-  font-size: 1.1rem;
-  margin-bottom: 1.5rem;
-  color: ${({ theme }) => theme.titleColor};
-`;
-
-const InputGroup = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-`;
-
-const AdvancedToggle = styled.button`
-  background: none;
-  border: none;
-  color: #4facfe;
-  cursor: pointer;
-  padding: 4px;
-  display: flex;
-  align-items: center;
-  transition: transform 0.2s;
-  &:hover { transform: scale(1.1); }
-`;
-
-const RulesContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 1rem;
-`;
-
-const RulesHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-`;
-
-const RulesList = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 1rem;
-`;
-
-const RuleCard = styled.div`
-  display: flex;
-  gap: 1.25rem;
-  background: ${({ theme }) => theme.cardBg};
-  border: 1px solid ${({ theme }) => theme.border};
-  border-left: 5px solid ${props => getRuleColor(props.type)};
-  border-radius: 18px;
-  padding: 1.25rem;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  opacity: ${props => props.enabled ? 1 : 0.6};
-  box-shadow: ${({ theme }) => theme.shadows.soft};
-
-  &:hover {
-    background: ${({ theme }) => theme.bg2}30;
-    transform: translateY(-4px);
-    box-shadow: ${({ theme }) => theme.shadows.medium};
-  }
-`;
-
-const RuleIconWrapper = styled.div`
-  width: 40px;
-  height: 40px;
-  border-radius: 10px;
-  background: ${props => getRuleColor(props.type)}20;
-  color: ${props => getRuleColor(props.type)};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  flex-shrink: 0;
-  font-size: 1.2rem;
-`;
-
-const RuleInfo = styled.div`
-  flex: 1;
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-`;
-
-const RuleName = styled.div`
-  font-weight: 700;
-  font-size: 0.95rem;
-`;
-
-const RuleBadge = styled.span`
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-  color: ${props => getRuleColor(props.type)};
-  background: ${props => getRuleColor(props.type)}15;
-  padding: 2px 6px;
-  border-radius: 4px;
-  align-self: flex-start;
-`;
-
-const RuleDesc = styled.div`
-  font-size: 13px;
-  color: ${({ theme }) => theme.textSecondary};
-  margin-top: 6px;
-  line-height: 1.5;
-  display: -webkit-box;
-  -webkit-line-clamp: 2;
-  -webkit-box-orient: vertical;
-  overflow: hidden;
-`;
-
-const RuleMeta = styled.div`
-  display: flex;
-  gap: 14px;
-  font-size: 11px;
-  font-weight: 600;
-  margin-top: 10px;
-  color: ${({ theme }) => theme.textSecondary};
-  opacity: 0.7;
-
-  .one-time { color: #fbbf24; font-weight: 600; }
-  .status-on { color: #34d399; font-weight: 600; }
-  .status-off { color: #f87171; font-weight: 600; }
-`;
-
-const RuleActions = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-`;
-
-const ActionButton = styled.button`
-  background: ${({ theme }) => theme.bg2}60;
-  border: 1px solid ${({ theme }) => theme.border};
-  color: ${props => props.danger ? theme.danger : theme.primary};
-  width: 36px;
-  height: 36px;
-  border-radius: 10px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    background: ${props => props.danger ? theme.danger : theme.primary};
-    color: white;
-    border-color: transparent;
-  }
-`;
-
-const ToggleSwitch = styled.div`
-  display: flex;
-  align-items: center;
-  
-  input {
-    height: 0;
-    width: 0;
-    visibility: hidden;
-  }
-
-  label {
-    cursor: pointer;
-    text-indent: -9999px;
-    width: 48px;
-    height: 26px;
-    background: ${({ theme }) => theme.bg2};
-    display: block;
-    border-radius: 100px;
-    position: relative;
-    border: 1px solid ${({ theme }) => theme.border};
-  }
-
-  label:after {
-    content: "";
-    position: absolute;
-    top: 2px;
-    left: 2px;
-    width: 18px;
-    height: 18px;
-    background: #fff;
-    border-radius: 90px;
-    transition: 0.3s;
-  }
-
-  input:checked + label {
-    background: #10b981;
-    border-color: #10b981;
-  }
-
-  input:checked + label:after {
-    left: calc(100% - 2px);
-    transform: translateX(-100%);
-  }
-`;
-
-const EmptyState = styled.div`
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  padding: 4rem 2rem;
-  text-align: center;
-  color: ${({ theme }) => theme.textSecondary};
-  gap: 1rem;
-  background: ${({ theme }) => theme.bg2}20;
-  border-radius: 24px;
-  border: 2px dashed ${({ theme }) => theme.border};
-`;
-
-const EmptyRules = styled.div`
-  padding: 2rem;
-  text-align: center;
-  background: rgba(255, 255, 255, 0.02);
-  border-radius: 14px;
-  border: 1px dashed rgba(255, 255, 255, 0.1);
-  color: rgba(255, 255, 255, 0.4);
-  font-size: 0.9rem;
-`;
-
-const HelpText = styled.div`
-  font-size: 12px;
-  color: rgba(255, 255, 255, 0.4);
-  font-style: italic;
-`;

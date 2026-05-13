@@ -1,0 +1,11 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(powershell *)",
+      "Bash(Get-Content *)",
+      "Bash(Get-ChildItem -Path \"D:\\\\proyectos\\\\app\\\\core_app\\\\app\\\\src\\\\api\" -File)",
+      "Bash(Select-Object Name)",
+      "Bash(Get-ChildItem -Path \"D:\\\\proyectos\\\\app\\\\core_app\\\\app\\\\src\\\\utils\" -Recurse -File)"
+    ]
+  }
+}

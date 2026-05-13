@@ -1,6 +1,4 @@
-// src/components/moleculas/ConfirmDialog.jsx
 import React from "react";
-import styled from "styled-components";
 import {
   FaExclamationTriangle,
   FaQuestion,
@@ -8,220 +6,9 @@ import {
   FaTimes,
 } from "react-icons/fa";
 
-const Overlay = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 10001; /* 🔄 Sobre las notificaciones */
-  padding: 20px;
-  backdrop-filter: blur(2px);
-`;
-
-const Dialog = styled.div`
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 10px 25px rgba(0, 0, 0, 0.2);
-  max-width: 500px;
-  width: 100%;
-  max-height: 90vh;
-  overflow: auto;
-  animation: slideIn 0.2s ease-out;
-
-  @keyframes slideIn {
-    from {
-      opacity: 0;
-      transform: scale(0.9);
-    }
-    to {
-      opacity: 1;
-      transform: scale(1);
-    }
-  }
-`;
-
-const Header = styled.div`
-  padding: 20px 24px 16px;
-  border-bottom: 1px solid #e5e7eb;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-
-  .header-content {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    flex: 1;
-  }
-
-  .icon {
-    font-size: 20px;
-
-    &.warning {
-      color: #f59e0b;
-    }
-    &.danger {
-      color: #ef4444;
-    }
-    &.info {
-      color: #3b82f6;
-    }
-    &.primary {
-      color: #6366f1;
-    }
-    &.success {
-      color: #10b981;
-    }
-  }
-
-  h3 {
-    margin: 0;
-    font-size: 18px;
-    font-weight: 600;
-    color: #111827;
-  }
-`;
-
-const CloseButton = styled.button`
-  background: none;
-  border: none;
-  color: #6b7280;
-  cursor: pointer;
-  font-size: 16px;
-  padding: 4px;
-  border-radius: 4px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-
-  &:hover {
-    background: #f3f4f6;
-    color: #374151;
-  }
-`;
-
-const Body = styled.div`
-  padding: 16px 24px 20px;
-
-  p {
-    margin: 0;
-    color: #374151;
-    line-height: 1.5;
-    white-space: pre-line;
-  }
-
-  .details {
-    margin-top: 12px;
-    padding: 12px;
-    background: #f9fafb;
-    border-radius: 6px;
-    border-left: 3px solid #d1d5db;
-    font-size: 14px;
-    color: #6b7280;
-  }
-`;
-
-const Footer = styled.div`
-  padding: 16px 24px 20px;
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-  border-top: 1px solid #e5e7eb;
-
-  @media (max-width: 480px) {
-    flex-direction: column-reverse;
-
-    button {
-      width: 100%;
-    }
-  }
-`;
-
-const Button = styled.button`
-  display: inline-flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 16px;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.2s;
-  min-width: 80px;
-  justify-content: center;
-
-  ${({ variant = "secondary" }) => {
-    const variants = {
-      primary: `
-        background: #3b82f6;
-        color: white;
-        &:hover { background: #2563eb; }
-        &:focus { box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1); }
-      `,
-      secondary: `
-        background: #f3f4f6;
-        color: #374151;
-        border: 1px solid #d1d5db;
-        &:hover { background: #e5e7eb; }
-        &:focus { box-shadow: 0 0 0 3px rgba(156, 163, 175, 0.1); }
-      `,
-      danger: `
-        background: #ef4444;
-        color: white;
-        &:hover { background: #dc2626; }
-        &:focus { box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1); }
-      `,
-      warning: `
-        background: #f59e0b;
-        color: white;
-        &:hover { background: #d97706; }
-        &:focus { box-shadow: 0 0 0 3px rgba(245, 158, 11, 0.1); }
-      `,
-      success: `
-        background: #10b981;
-        color: white;
-        &:hover { background: #059669; }
-        &:focus { box-shadow: 0 0 0 3px rgba(16, 185, 129, 0.1); }
-      `,
-    };
-    return variants[variant];
-  }}
-
-  &:disabled {
-    opacity: 0.5;
-    cursor: not-allowed;
-  }
-
-  ${({ loading }) =>
-    loading &&
-    `
-    pointer-events: none;
-    opacity: 0.7;
-
-    &:before {
-      content: "";
-      display: inline-block;
-      width: 14px;
-      height: 14px;
-      border: 2px solid currentColor;
-      border-top-color: transparent;
-      border-radius: 50%;
-      animation: spin 0.8s linear infinite;
-      margin-right: 8px;
-    }
-
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-  `}
-`;
-
+/**
+ * Corporate ConfirmDialog Component (Tailwind Edition)
+ */
 export const ConfirmDialog = ({
   show = false,
   title = "Confirmar acción",
@@ -234,21 +21,38 @@ export const ConfirmDialog = ({
   onCancel,
   loading = false,
   showCloseButton = true,
+  className = "",
 }) => {
   if (!show) return null;
+
+  const iconColors = {
+    warning: "text-amber-500",
+    danger: "text-red-500",
+    info: "text-primary-500",
+    success: "text-emerald-500",
+    primary: "text-indigo-500",
+  };
+
+  const buttonVariants = {
+    primary: "bg-primary-600 hover:bg-primary-700 text-white focus:ring-primary-500/20",
+    secondary: "bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200 focus:ring-slate-500/20",
+    danger: "bg-red-500 hover:bg-red-600 text-white focus:ring-red-500/20",
+    warning: "bg-amber-500 hover:bg-amber-600 text-white focus:ring-amber-500/20",
+    success: "bg-emerald-500 hover:bg-emerald-600 text-white focus:ring-emerald-500/20",
+  };
 
   const getIcon = () => {
     switch (variant) {
       case "warning":
-        return <FaExclamationTriangle className="icon warning" />;
+        return <FaExclamationTriangle className={`text-xl ${iconColors.warning}`} />;
       case "danger":
-        return <FaExclamationTriangle className="icon danger" />;
+        return <FaExclamationTriangle className={`text-xl ${iconColors.danger}`} />;
       case "info":
-        return <FaInfo className="icon info" />;
+        return <FaInfo className={`text-xl ${iconColors.info}`} />;
       case "success":
-        return <FaQuestion className="icon success" />;
+        return <FaQuestion className={`text-xl ${iconColors.success}`} />;
       default:
-        return <FaQuestion className="icon primary" />;
+        return <FaQuestion className={`text-xl ${iconColors.primary}`} />;
     }
   };
 
@@ -265,44 +69,75 @@ export const ConfirmDialog = ({
   };
 
   return (
-    <Overlay onClick={handleOverlayClick} onKeyDown={handleKeyDown}>
-      <Dialog role="dialog" aria-modal="true" aria-labelledby="dialog-title">
-        <Header>
-          <div className="header-content">
+    <div
+      className="fixed inset-0 bg-black/50 flex items-center justify-center z-[10001] p-5 backdrop-blur-[2px]"
+      onClick={handleOverlayClick}
+      onKeyDown={handleKeyDown}
+    >
+      <div
+        className={`bg-white rounded-lg shadow-xl max-w-[500px] w-full max-h-[90vh] overflow-auto animate-scaleIn ${className}`}
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="dialog-title"
+      >
+        <div className="px-6 py-5 border-b border-slate-200 flex items-center justify-between">
+          <div className="flex items-center gap-3 flex-1">
             {getIcon()}
-            <h3 id="dialog-title">{title}</h3>
+            <h3 id="dialog-title" className="text-lg font-semibold text-slate-900 m-0">
+              {title}
+            </h3>
           </div>
           {showCloseButton && (
-            <CloseButton
+            <button
               onClick={onCancel}
               disabled={loading}
+              className="bg-transparent border-none text-slate-400 cursor-pointer p-1 rounded hover:bg-slate-100 hover:text-slate-600 transition-colors"
               aria-label="Cerrar"
             >
               <FaTimes />
-            </CloseButton>
+            </button>
           )}
-        </Header>
+        </div>
 
-        <Body>
-          <p>{message}</p>
-          {details && <div className="details">{details}</div>}
-        </Body>
+        <div className="px-6 py-4">
+          <p className="m-0 text-slate-600 leading-relaxed whitespace-pre-line">
+            {message}
+          </p>
+          {details && (
+            <div className="mt-3 p-3 bg-slate-50 rounded-md border-l-3 border-slate-300 text-sm text-slate-500">
+              {details}
+            </div>
+          )}
+        </div>
 
-        <Footer>
-          <Button variant="secondary" onClick={onCancel} disabled={loading}>
-            {cancelText}
-          </Button>
-
-          <Button
-            variant={variant}
-            onClick={onConfirm}
-            loading={loading}
+        <div className="px-6 py-5 flex gap-3 justify-end border-t border-slate-200">
+          <button
+            variant="secondary"
+            onClick={onCancel}
             disabled={loading}
+            className="inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium cursor-pointer transition-all duration-200 min-w-[80px] justify-center disabled:opacity-50 disabled:cursor-not-allowed bg-slate-100 hover:bg-slate-200 text-slate-700 border border-slate-200"
           >
+            {cancelText}
+          </button>
+
+          <button
+            onClick={onConfirm}
+            disabled={loading}
+            className={`
+              inline-flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium 
+              cursor-pointer transition-all duration-200 min-w-[80px] justify-center
+              disabled:opacity-50 disabled:cursor-not-allowed
+              ${loading ? "pointer-events-none opacity-70" : ""}
+              ${buttonVariants[variant] || buttonVariants.primary}
+            `}
+          >
+            {loading && (
+              <svg className="animate-spin h-4 w-4 border-2 border-current border-t-transparent rounded-full" />
+            )}
             {confirmText}
-          </Button>
-        </Footer>
-      </Dialog>
-    </Overlay>
+          </button>
+        </div>
+      </div>
+    </div>
   );
 };

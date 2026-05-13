@@ -1,52 +1,6 @@
 import React, { useState, useEffect } from "react";
-import styled from "styled-components";
-import { FaSave, FaTimes } from "react-icons/fa";
+import { FaSave, FaTimes, FaFileSignature, FaFilter } from "react-icons/fa";
 import { Button } from "../../index";
-
-const ModalOverlay = styled.div`
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px);
-  display: flex; align-items: center; justify-content: center; z-index: 2000;
-  animation: fadeIn 0.3s ease-out;
-`;
-
-const ModalContent = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  width: 90%; max-width: 500px;
-  border-radius: 20px; border: 1px solid ${({ theme }) => theme.border};
-  box-shadow: ${({ theme }) => theme.shadows.premium};
-  display: flex; flex-direction: column; overflow: hidden;
-  animation: slideUp 0.3s ease-out;
-`;
-
-const Header = styled.div`
-  padding: 20px 24px; border-bottom: 1px solid ${({ theme }) => theme.border};
-  display: flex; justify-content: space-between; align-items: center;
-`;
-
-const Body = styled.div`
-  padding: 24px; display: flex; flex-direction: column; gap: 20px;
-`;
-
-const Footer = styled.div`
-  padding: 20px 24px; border-top: 1px solid ${({ theme }) => theme.border};
-  display: flex; justify-content: flex-end; gap: 12px;
-`;
-
-const FormGroup = styled.div`
-  display: flex; flex-direction: column; gap: 8px;
-`;
-
-const Label = styled.label`
-  font-size: 14px; font-weight: 600; color: ${({ theme }) => theme.text};
-`;
-
-const Input = styled.input`
-  padding: 10px 14px; border-radius: 10px; border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.inputBg}; color: ${({ theme }) => theme.text};
-  font-size: 14px; transition: all 0.2s;
-  &:focus { outline: none; border-color: ${({ theme }) => theme.primary}; }
-`;
 
 export function DocumentRuleModal({ isOpen, onClose, onSave, initialData }) {
     const [formData, setFormData] = useState({
@@ -88,39 +42,84 @@ export function DocumentRuleModal({ isOpen, onClose, onSave, initialData }) {
     if (!isOpen) return null;
 
     return (
-        <ModalOverlay onClick={onClose}>
-            <ModalContent onClick={e => e.stopPropagation()}>
-                <Header>
-                    <h3 style={{ margin: 0 }}>Regla de Documento</h3>
-                    <Button variant="ghost" onClick={onClose} style={{ padding: '8px' }}>
-                        <FaTimes />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[2000] p-4 animate-in fade-in duration-300" onClick={onClose}>
+            <div className="bg-white w-full max-w-[500px] rounded-[32px] border border-slate-200 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
+                {/* Header */}
+                <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                    <div className="flex items-center gap-4">
+                        <div className="w-10 h-10 bg-blue-100 rounded-xl flex items-center justify-center text-blue-600">
+                            <FaFileSignature />
+                        </div>
+                        <h3 className="text-xl font-extrabold text-slate-900">Regla de Documento</h3>
+                    </div>
+                    <Button variant="ghost" onClick={onClose} className="rounded-full w-10 h-10 p-0 flex items-center justify-center">
+                        <FaTimes className="text-slate-400" />
                     </Button>
-                </Header>
-                <Body>
-                    <FormGroup>
-                        <Label>Nombre de la Regla</Label>
-                        <Input name="name" value={formData.name} onChange={handleChange} placeholder="Ej: pedido" />
-                    </FormGroup>
-                    <FormGroup>
-                        <Label>Campo Origen</Label>
-                        <Input name="sourceField" value={formData.sourceField} onChange={handleChange} placeholder="Ej: EST_PED" />
-                    </FormGroup>
-                    <FormGroup>
-                        <Label>Valores (separados por coma)</Label>
-                        <Input name="sourceValues" value={formData.sourceValues} onChange={handleChange} placeholder="Ej: P, p, A" />
-                    </FormGroup>
-                    <FormGroup>
-                        <Label>Descripción (Opcional)</Label>
-                        <Input name="description" value={formData.description} onChange={handleChange} placeholder="Ej: Solo pedidos aprobados" />
-                    </FormGroup>
-                </Body>
-                <Footer>
-                    <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-                    <Button variant="primary" onClick={handleSubmit}>
-                        <FaSave /> {initialData ? "Actualizar" : "Guardar"}
+                </div>
+
+                {/* Body */}
+                <div className="p-8 flex flex-col gap-6">
+                    <div className="flex flex-col gap-2">
+                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 px-1">Nombre de la Regla</label>
+                        <input
+                            name="name"
+                            className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 font-bold transition-all"
+                            value={formData.name}
+                            onChange={handleChange}
+                            placeholder="Ej: pedido_aprobado"
+                        />
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 px-1">Campo Origen (DB)</label>
+                        <div className="relative">
+                            <input
+                                name="sourceField"
+                                className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 font-bold transition-all"
+                                value={formData.sourceField}
+                                onChange={handleChange}
+                                placeholder="Ej: EST_PED"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 px-1 flex justify-between">
+                            <span>Valores Permitidos</span>
+                            <span className="text-[9px] text-blue-500 lowercase tracking-normal">Separados por coma</span>
+                        </label>
+                        <div className="relative flex items-center">
+                            <FaFilter className="absolute left-4 text-slate-300 text-xs" />
+                            <input
+                                name="sourceValues"
+                                className="w-full pl-10 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 font-bold transition-all"
+                                value={formData.sourceValues}
+                                onChange={handleChange}
+                                placeholder="Ej: P, p, A"
+                            />
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 px-1">Descripción (Opcional)</label>
+                        <textarea
+                            name="description"
+                            className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 font-bold transition-all h-20 resize-none"
+                            value={formData.description}
+                            onChange={handleChange}
+                            placeholder="Describe para qué sirve esta regla..."
+                        />
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-8 py-6 border-t border-slate-100 flex justify-end gap-3 bg-slate-50/50">
+                    <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+                    <Button variant="primary" onClick={handleSubmit} className="px-8 shadow-lg shadow-blue-500/20">
+                        <FaSave className="mr-2" /> {initialData ? "Actualizar Regla" : "Guardar Regla"}
                     </Button>
-                </Footer>
-            </ModalContent>
-        </ModalOverlay>
+                </div>
+            </div>
+        </div>
     );
 }

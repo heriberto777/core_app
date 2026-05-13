@@ -1,9 +1,12 @@
-import React, { useState, useEffect } from "react";
-import styled from "styled-components";
-import { useAuth, useMappings } from "../../index";
+import React from "react";
+import { useAuth, useMappings, StatusBadge, Button, LoadingUI } from "../../index";
 import { FaEdit, FaTrash, FaPlus, FaSearch, FaEye, FaSync } from "react-icons/fa";
 import Swal from "sweetalert2";
 
+/**
+ * MappingsList (Tailwind Edition)
+ * Gestión de configuraciones de mapeo con diseño corporativo suave.
+ */
 export function MappingsList({
   onSelectMapping,
   onEditMapping,
@@ -11,7 +14,6 @@ export function MappingsList({
   canCreate = true,
   canEdit = true,
   canDelete = true,
-  canToggle = true,
 }) {
   const { accessToken } = useAuth();
   const {
@@ -30,6 +32,7 @@ export function MappingsList({
         text: `¿Está seguro de eliminar la configuración "${name}"?`,
         icon: "warning",
         showCancelButton: true,
+        confirmButtonColor: '#ef4444',
         confirmButtonText: "Sí, eliminar",
         cancelButtonText: "Cancelar",
       });
@@ -40,11 +43,7 @@ export function MappingsList({
       }
     } catch (error) {
       console.error("Error al eliminar:", error);
-      Swal.fire({
-        icon: "error",
-        title: "Error",
-        text: "No se pudo eliminar la configuración",
-      });
+      Swal.fire({ icon: "error", title: "Error", text: "No se pudo eliminar la configuración" });
     }
   };
 
@@ -72,269 +71,121 @@ export function MappingsList({
     }
   };
 
-
   return (
-    <Container>
-      <HeaderSection>
-        <h2>Configuraciones de Mapeo</h2>
-        <ActionsBar>
-          <SearchContainer>
-            <SearchInput
+    <div className="flex flex-col gap-6 animate-fadeIn">
+      {/* HEADER & SEARCH */}
+      <div className="bg-white p-6 rounded-[24px] border border-slate-200 shadow-soft flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div>
+          <h2 className="text-2xl font-extrabold text-slate-800">Mapeos de Datos</h2>
+          <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Configuraciones de integración</p>
+        </div>
+        
+        <div className="flex flex-col md:flex-row gap-3 md:items-center flex-1 max-w-2xl justify-end">
+          <div className="relative flex-1 max-w-sm">
+            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
               type="text"
               placeholder="Buscar configuración..."
               value={search}
               onChange={(e) => setSearch(e.target.value)}
+              className="w-full py-2.5 pl-11 pr-4 rounded-xl border border-slate-200 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all text-sm font-medium"
             />
-            <SearchIcon>
-              <FaSearch />
-            </SearchIcon>
-          </SearchContainer>
+          </div>
           {canCreate && (
-            <Button onClick={onCreateMapping}>
-              <FaPlus /> Nueva Configuración
+            <Button variant="primary" onClick={onCreateMapping}>
+              <FaPlus /> Nuevo Mapeo
             </Button>
           )}
-        </ActionsBar>
-      </HeaderSection>
+        </div>
+      </div>
 
       {loading ? (
-        <LoadingMessage>Cargando configuraciones...</LoadingMessage>
+        <LoadingUI message="Obteniendo configuraciones..." />
       ) : (
-        <>
+        <div className="bg-white rounded-[32px] border border-slate-200 shadow-soft overflow-hidden">
           {filteredMappings.length === 0 ? (
-            <EmptyMessage>
-              No se encontraron configuraciones de mapeo.
-            </EmptyMessage>
+            <div className="p-20 text-center flex flex-col items-center gap-4">
+              <div className="text-5xl opacity-20">📂</div>
+              <p className="text-slate-500 font-bold uppercase tracking-widest text-sm">No se encontraron configuraciones.</p>
+            </div>
           ) : (
-            <TableContainer>
-              <Table>
+            <div className="overflow-x-auto">
+              <table className="w-full text-left">
                 <thead>
-                  <tr>
-                    <th>Nombre</th>
-                    <th>Descripción</th>
-                    <th>Tipo</th>
-                    <th>Servidor Origen</th>
-                    <th>Servidor Destino</th>
-                    <th>Estado</th>
-                    <th>Acciones</th>
+                  <tr className="bg-slate-50 border-b border-slate-100">
+                    <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Nombre</th>
+                    <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Tipo</th>
+                    <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Flujo (Origen → Destino)</th>
+                    <th className="px-6 py-4 text-[11px] font-bold text-slate-400 uppercase tracking-wider">Estado</th>
+                    <th className="px-6 py-4 text-right text-[11px] font-bold text-slate-400 uppercase tracking-wider">Acciones</th>
                   </tr>
                 </thead>
-                <tbody>
+                <tbody className="divide-y divide-slate-50">
                   {filteredMappings.map((mapping) => (
-                    <tr key={mapping._id}>
-                      <td>{mapping.name}</td>
-                      <td>{mapping.description || "-"}</td>
-                      <td>{mapping.transferType}</td>
-                      <td>{mapping.sourceServer}</td>
-                      <td>{mapping.targetServer}</td>
-                      <td>
-                        <StatusBadge $active={mapping.active}>
+                    <tr key={mapping._id} className="hover:bg-slate-50/50 transition-colors group">
+                      <td className="px-6 py-4">
+                        <div className="font-extrabold text-slate-700">{mapping.name}</div>
+                        <div className="text-[11px] text-slate-400 font-medium truncate max-w-[200px]">{mapping.description || "Sin descripción"}</div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[10px] font-bold uppercase tracking-tight">{mapping.transferType}</span>
+                      </td>
+                      <td className="px-6 py-4">
+                        <div className="flex items-center gap-2 text-xs font-bold text-slate-500">
+                          <span className="text-primary-600">{mapping.sourceServer}</span>
+                          <FaSync className="text-[10px] text-slate-300" />
+                          <span className="text-indigo-600">{mapping.targetServer}</span>
+                        </div>
+                      </td>
+                      <td className="px-6 py-4">
+                        <StatusBadge status={mapping.active ? "ACTIVE" : "INACTIVE"}>
                           {mapping.active ? "Activo" : "Inactivo"}
                         </StatusBadge>
                       </td>
-                      <td>
-                        <ActionButtons>
-                          <ActionButton
+                      <td className="px-6 py-4 text-right">
+                        <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                          <button 
+                            className={`p-2 rounded-lg transition-all ${mapping.active ? 'text-amber-500 hover:bg-amber-50' : 'text-emerald-500 hover:bg-emerald-50'}`}
                             title={mapping.active ? "Desactivar" : "Activar"}
                             onClick={() => handleToggleStatus(mapping._id, mapping.name, mapping.active)}
-                            style={{ color: mapping.active ? '#f39c12' : '#27ae60' }}
                           >
-                            <FaSync />
-                          </ActionButton>
-                          <ActionButton
-                            title="Ver documentos"
+                            <FaSync size={14} />
+                          </button>
+                          <button 
+                            className="p-2 text-slate-400 hover:text-primary-500 hover:bg-primary-50 rounded-lg transition-all"
+                            title="Ver detalles"
                             onClick={() => onSelectMapping(mapping._id)}
                           >
-                            <FaEye />
-                          </ActionButton>
+                            <FaEye size={14} />
+                          </button>
                           {canEdit && (
-                          <ActionButton
-                            title="Editar configuración"
-                            onClick={() => onEditMapping(mapping._id)}
-                          >
-                            <FaEdit />
-                          </ActionButton>
+                            <button 
+                              className="p-2 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all"
+                              title="Editar"
+                              onClick={() => onEditMapping(mapping._id)}
+                            >
+                              <FaEdit size={14} />
+                            </button>
                           )}
                           {canDelete && (
-                          <ActionButton
-                            title="Eliminar configuración"
-                            $danger
-                            onClick={() =>
-                              handleDelete(mapping._id, mapping.name)
-                            }
-                          >
-                            <FaTrash />
-                          </ActionButton>
+                            <button 
+                              className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
+                              title="Eliminar"
+                              onClick={() => handleDelete(mapping._id, mapping.name)}
+                            >
+                              <FaTrash size={14} />
+                            </button>
                           )}
-                        </ActionButtons>
+                        </div>
                       </td>
                     </tr>
                   ))}
                 </tbody>
-              </Table>
-            </TableContainer>
+              </table>
+            </div>
           )}
-        </>
+        </div>
       )}
-    </Container>
+    </div>
   );
 }
-
-// Estilos
-const Container = styled.div`
-  padding: 20px;
-  background-color: ${(props) => props.theme.bg};
-  color: ${(props) => props.theme.text};
-`;
-
-const HeaderSection = styled.div`
-  display: flex;
-  flex-direction: column;
-  margin-bottom: 20px;
-
-  h2 {
-    margin: 0 0 15px 0;
-    color: ${(props) => props.theme.title};
-  }
-`;
-
-const ActionsBar = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  gap: 10px;
-
-  @media (max-width: 768px) {
-    flex-direction: column;
-    align-items: stretch;
-  }
-`;
-
-const SearchContainer = styled.div`
-  position: relative;
-  flex: 1;
-  max-width: 400px;
-`;
-
-const SearchInput = styled.input`
-  width: 100%;
-  padding: 10px 15px 10px 35px;
-  border: 1px solid ${(props) => props.theme.border};
-  border-radius: 4px;
-  font-size: 14px;
-  color: ${(props) => props.theme.text};
-  background-color: ${(props) => props.theme.inputBg};
-`;
-
-const SearchIcon = styled.div`
-  position: absolute;
-  left: 10px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: ${(props) => props.theme.textSecondary};
-`;
-
-const Button = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 15px;
-  background-color: ${(props) => props.theme.primary};
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 14px;
-  cursor: pointer;
-
-  &:hover {
-    background-color: ${(props) => props.theme.primaryHover};
-  }
-`;
-
-const TableContainer = styled.div`
-  width: 100%;
-  max-width: 1200px;
-  margin: 0 auto;
-  overflow-x: auto; // Ya tienes esto, correcto
-  border-radius: 8px;
-  box-shadow: 0 4px 6px rgba(0, 0, 0, 0.1);
-
-  /* Añadir esto */
-  -webkit-overflow-scrolling: touch; /* Para mejor scroll en iOS */
-
-  @media (max-width: 576px) {
-    /* Mejora la visualización en móviles pequeños */
-    margin-left: -10px;
-    margin-right: -10px;
-    width: calc(100% + 20px);
-    border-radius: 0;
-  }
-`;
-
-const Table = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-
-  th,
-  td {
-    padding: 12px 15px;
-    text-align: left;
-    border-bottom: 1px solid ${(props) => props.theme.border};
-  }
-
-  th {
-    background-color: ${(props) => props.theme.tableHeader};
-    color: ${(props) => props.theme.tableHeaderText};
-    font-weight: 600;
-  }
-
-  tr:hover td {
-    background-color: ${(props) => props.theme.tableHover};
-  }
-`;
-
-const ActionButtons = styled.div`
-  display: flex;
-  gap: 5px;
-`;
-
-const ActionButton = styled.button`
-  background: none;
-  border: none;
-  font-size: 16px;
-  cursor: pointer;
-  color: ${(props) =>
-    props.$danger ? props.theme.danger : props.theme.primary};
-  padding: 5px;
-
-  &:hover {
-    color: ${(props) =>
-    props.$danger ? props.theme.dangerHover : props.theme.primaryHover};
-    transform: scale(1.1);
-  }
-`;
-
-const StatusBadge = styled.span`
-  display: inline-block;
-  padding: 4px 8px;
-  font-size: 12px;
-  border-radius: 12px;
-  background-color: ${(props) =>
-    props.$active ? props.theme.success : props.theme.secondary};
-  color: white;
-`;
-
-const LoadingMessage = styled.div`
-  text-align: center;
-  padding: 20px;
-  color: ${(props) => props.theme.textSecondary};
-`;
-
-const EmptyMessage = styled.div`
-  text-align: center;
-  padding: 30px;
-  color: ${(props) => props.theme.textSecondary};
-  background-color: ${(props) => props.theme.cardBg};
-  border-radius: 8px;
-  margin-top: 20px;
-`;

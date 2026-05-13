@@ -1,72 +1,11 @@
 import React, { useState, useEffect } from "react";
-import styled from "styled-components";
 import { FaSave, FaTimes } from "react-icons/fa";
-import { Button } from "../../index";
+import { Button, Input } from "../../index";
 
-const ModalOverlay = styled.div`
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px);
-  display: flex; align-items: center; justify-content: center; z-index: 2000;
-  animation: fadeIn 0.3s ease-out;
-`;
-
-const ModalContent = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  width: 90%; max-width: 600px; max-height: 90vh;
-  border-radius: 20px; border: 1px solid ${({ theme }) => theme.border};
-  box-shadow: ${({ theme }) => theme.shadows.premium};
-  display: flex; flex-direction: column; overflow: hidden;
-  animation: slideUp 0.3s ease-out;
-`;
-
-const Header = styled.div`
-  padding: 20px 24px; border-bottom: 1px solid ${({ theme }) => theme.border};
-  display: flex; justify-content: space-between; align-items: center;
-  background: ${({ theme }) => theme.bg2}40;
-`;
-
-const Body = styled.div`
-  padding: 24px; overflow-y: auto; display: flex; flex-direction: column; gap: 20px;
-`;
-
-const Footer = styled.div`
-  padding: 20px 24px; border-top: 1px solid ${({ theme }) => theme.border};
-  display: flex; justify-content: flex-end; gap: 12px;
-  background: ${({ theme }) => theme.bg2}20;
-`;
-
-const FormGroup = styled.div`
-  display: flex; flex-direction: column; gap: 8px;
-`;
-
-const Label = styled.label`
-  font-size: 14px; font-weight: 600; color: ${({ theme }) => theme.text};
-`;
-
-const Input = styled.input`
-  padding: 10px 14px; border-radius: 10px; border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.inputBg}; color: ${({ theme }) => theme.text};
-  font-size: 14px; transition: all 0.2s;
-  &:focus { outline: none; border-color: ${({ theme }) => theme.primary}; box-shadow: 0 0 0 3px ${({ theme }) => theme.primary}20; }
-`;
-
-const Select = styled.select`
-  padding: 10px 14px; border-radius: 10px; border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.inputBg}; color: ${({ theme }) => theme.text};
-  font-size: 14px; transition: all 0.2s;
-  &:focus { outline: none; border-color: ${({ theme }) => theme.primary}; box-shadow: 0 0 0 3px ${({ theme }) => theme.primary}20; }
-`;
-
-const CheckboxGroup = styled.div`
-  display: flex; align-items: center; gap: 10px;
-  padding: 12px; background: ${({ theme }) => theme.bg2}40; border-radius: 12px;
-`;
-
-const Grid = styled.div`
-  display: grid; grid-template-columns: 1fr 1fr; gap: 16px;
-  @media (max-width: 600px) { grid-template-columns: 1fr; }
-`;
-
+/**
+ * TableConfigModal (Tailwind Edition)
+ * Modal corporativo para configuración de tablas.
+ */
 export function TableConfigModal({ isOpen, onClose, onSave, initialData }) {
     const [formData, setFormData] = useState({
         name: "",
@@ -85,15 +24,20 @@ export function TableConfigModal({ isOpen, onClose, onSave, initialData }) {
     const [loading, setLoading] = useState(false);
 
     useEffect(() => {
+        if (!isOpen) return;
+
         if (initialData) {
             setFormData({
-                ...initialData,
+                name: initialData.name || "",
                 sourceTable: initialData.sourceTable || "",
+                targetTable: initialData.targetTable || "",
                 primaryKey: initialData.primaryKey || "",
                 targetPrimaryKey: initialData.targetPrimaryKey || "",
                 foreignKey: initialData.foreignKey || "",
                 joinType: initialData.joinType || "INNER",
+                isDetailTable: initialData.isDetailTable || false,
                 parentTableRef: initialData.parentTableRef || "",
+                useSameSourceTable: initialData.useSameSourceTable || false,
                 orderByColumn: initialData.orderByColumn || "",
                 filterCondition: initialData.filterCondition || "",
             });
@@ -140,96 +84,118 @@ export function TableConfigModal({ isOpen, onClose, onSave, initialData }) {
     if (!isOpen) return null;
 
     return (
-        <ModalOverlay onClick={onClose}>
-            <ModalContent onClick={e => e.stopPropagation()}>
-                <Header>
-                    <h3 style={{ margin: 0 }}>{initialData ? "Editar Tabla" : "Añadir Tabla"}</h3>
-                    <Button variant="ghost" onClick={onClose} style={{ padding: '8px' }}>
+        <div 
+          className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn"
+          onClick={onClose}
+        >
+            <div 
+              className="bg-white w-full max-w-2xl max-h-[90vh] rounded-[32px] shadow-premium flex flex-col overflow-hidden animate-slideUp"
+              onClick={e => e.stopPropagation()}
+            >
+                {/* HEADER */}
+                <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                    <h3 className="text-xl font-extrabold text-slate-800">
+                      {initialData ? "Editar Tabla" : "Añadir Tabla"}
+                    </h3>
+                    <button 
+                      onClick={onClose}
+                      className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all"
+                    >
                         <FaTimes />
-                    </Button>
-                </Header>
-                <Body>
-                    <Grid>
-                        <FormGroup>
-                            <Label>Nombre de Referencia</Label>
-                            <Input name="name" value={formData.name} onChange={handleChange} placeholder="Ej: pedidosHeader" />
-                        </FormGroup>
-                        <FormGroup>
-                            <Label>Tabla Destino (ERP)</Label>
-                            <Input name="targetTable" value={formData.targetTable} onChange={handleChange} placeholder="Ej: PEDIDO" />
-                        </FormGroup>
-                    </Grid>
+                    </button>
+                </div>
 
-                    <Grid>
-                        <FormGroup>
-                            <Label>Tabla Origen (Externo)</Label>
-                            <Input name="sourceTable" value={formData.sourceTable} onChange={handleChange} placeholder="Ej: FAC_ENC_PED" disabled={formData.isDetailTable && formData.useSameSourceTable} />
-                        </FormGroup>
-                        <FormGroup>
-                            <Label>Filtro SQL Adicional</Label>
-                            <Input name="filterCondition" value={formData.filterCondition} onChange={handleChange} placeholder="Ej: TIP_DOC = 'F' AND DOC_PRO IS NULL" />
-                            <small style={{ color: '#6b7280', fontSize: '11px', marginTop: '4px' }}>
-                                Usa operadores SQL: AND, OR, IS NULL, IN, etc.
-                            </small>
-                        </FormGroup>
-                    </Grid>
+                {/* BODY */}
+                <div className="p-8 overflow-y-auto custom-scrollbar space-y-6">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Input label="Nombre de Referencia" name="name" value={formData.name} onChange={handleChange} placeholder="Ej: pedidosHeader" />
+                        <Input label="Tabla Destino (ERP)" name="targetTable" value={formData.targetTable} onChange={handleChange} placeholder="Ej: PEDIDO" />
+                    </div>
 
-                    <Grid>
-                        <FormGroup>
-                            <Label>Clave Primaria Origen</Label>
-                            <Input name="primaryKey" value={formData.primaryKey} onChange={handleChange} placeholder="Ej: NUM_PED" />
-                        </FormGroup>
-                        <FormGroup>
-                            <Label>Clave Primaria Destino</Label>
-                            <Input name="targetPrimaryKey" value={formData.targetPrimaryKey} onChange={handleChange} placeholder="Ej: PEDIDO" />
-                        </FormGroup>
-                    </Grid>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Input 
+                          label="Tabla Origen (Externo)" 
+                          name="sourceTable" 
+                          value={formData.sourceTable} 
+                          onChange={handleChange} 
+                          placeholder="Ej: FAC_ENC_PED" 
+                          disabled={formData.isDetailTable && formData.useSameSourceTable} 
+                        />
+                        <div className="flex flex-col gap-1.5 w-full mb-3">
+                          <label className="text-[13px] font-semibold text-slate-500 ml-1">Filtro SQL Adicional</label>
+                          <input 
+                            name="filterCondition" 
+                            value={formData.filterCondition} 
+                            onChange={handleChange} 
+                            placeholder="Ej: TIP_DOC = 'F'..." 
+                            className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 bg-white focus:border-primary-500 outline-none transition-all"
+                          />
+                          <p className="text-[10px] font-medium text-slate-400 mt-1 ml-1 uppercase tracking-wider">Use operadores SQL: AND, OR, IS NULL, etc.</p>
+                        </div>
+                    </div>
 
-                    <CheckboxGroup>
-                        <input type="checkbox" name="isDetailTable" id="isDetailTable" checked={formData.isDetailTable} onChange={handleChange} />
-                        <Label htmlFor="isDetailTable" style={{ marginBottom: 0, cursor: 'pointer' }}>Es tabla de detalle</Label>
-                    </CheckboxGroup>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                        <Input label="Clave Primaria Origen" name="primaryKey" value={formData.primaryKey} onChange={handleChange} placeholder="Ej: NUM_PED" />
+                        <Input label="Clave Primaria Destino" name="targetPrimaryKey" value={formData.targetPrimaryKey} onChange={handleChange} placeholder="Ej: PEDIDO" />
+                    </div>
+
+                    <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
+                        <input 
+                          type="checkbox" 
+                          name="isDetailTable" 
+                          id="isDetailTable" 
+                          checked={formData.isDetailTable} 
+                          onChange={handleChange}
+                          className="w-5 h-5 rounded-lg text-primary-600 focus:ring-primary-500"
+                        />
+                        <label htmlFor="isDetailTable" className="text-sm font-bold text-slate-700 cursor-pointer">Es tabla de detalle</label>
+                    </div>
 
                     {formData.isDetailTable && (
-                        <div style={{ display: 'flex', flexDirection: 'column', gap: '16px', animation: 'fadeIn 0.3s ease-out' }}>
-                            <Grid>
-                                <FormGroup>
-                                    <Label>Referencia Tabla Padre</Label>
-                                    <Input name="parentTableRef" value={formData.parentTableRef} onChange={handleChange} placeholder="Ej: pedidosHeader" />
-                                </FormGroup>
-                                <FormGroup>
-                                    <Label>Columna Ordenamiento</Label>
-                                    <Input name="orderByColumn" value={formData.orderByColumn} onChange={handleChange} placeholder="Ej: SECUENCIA" />
-                                </FormGroup>
-                            </Grid>
-                            <Grid>
-                                <FormGroup>
-                                    <Label>Clave Foránea (Relación con Padre)</Label>
-                                    <Input name="foreignKey" value={formData.foreignKey} onChange={handleChange} placeholder="Ej: NUM_PED" />
-                                </FormGroup>
-                                <FormGroup>
-                                    <Label>Tipo de Join</Label>
-                                    <Select name="joinType" value={formData.joinType} onChange={handleChange}>
-                                        <option value="INNER">INNER JOIN</option>
-                                        <option value="LEFT">LEFT JOIN</option>
-                                        <option value="RIGHT">RIGHT JOIN</option>
-                                    </Select>
-                                </FormGroup>
-                            </Grid>
-                            <CheckboxGroup>
-                                <input type="checkbox" name="useSameSourceTable" id="useSameSourceTable" checked={formData.useSameSourceTable} onChange={handleChange} />
-                                <Label htmlFor="useSameSourceTable" style={{ marginBottom: 0, cursor: 'pointer' }}>Usar misma tabla origen que padre</Label>
-                            </CheckboxGroup>
+                        <div className="space-y-6 pt-2 animate-fadeIn">
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <Input label="Referencia Tabla Padre" name="parentTableRef" value={formData.parentTableRef} onChange={handleChange} placeholder="Ej: pedidosHeader" />
+                                <Input label="Columna Ordenamiento" name="orderByColumn" value={formData.orderByColumn} onChange={handleChange} placeholder="Ej: SECUENCIA" />
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+                                <Input label="Clave Foránea (Relación)" name="foreignKey" value={formData.foreignKey} onChange={handleChange} placeholder="Ej: NUM_PED" />
+                                <div className="flex flex-col gap-1.5 w-full">
+                                  <label className="text-[13px] font-semibold text-slate-500 ml-1">Tipo de Join</label>
+                                  <select 
+                                    name="joinType" 
+                                    value={formData.joinType} 
+                                    onChange={handleChange}
+                                    className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 bg-white focus:border-primary-500 outline-none"
+                                  >
+                                      <option value="INNER">INNER JOIN</option>
+                                      <option value="LEFT">LEFT JOIN</option>
+                                      <option value="RIGHT">RIGHT JOIN</option>
+                                  </select>
+                                </div>
+                            </div>
+                            <div className="flex items-center gap-3 p-4 bg-primary-50/50 rounded-2xl border border-primary-100">
+                                <input 
+                                  type="checkbox" 
+                                  name="useSameSourceTable" 
+                                  id="useSameSourceTable" 
+                                  checked={formData.useSameSourceTable} 
+                                  onChange={handleChange}
+                                  className="w-5 h-5 rounded-lg text-primary-600 focus:ring-primary-500"
+                                />
+                                <label htmlFor="useSameSourceTable" className="text-sm font-bold text-primary-700 cursor-pointer">Usar misma tabla origen que padre</label>
+                            </div>
                         </div>
                     )}
-                </Body>
-                <Footer>
+                </div>
+
+                {/* FOOTER */}
+                <div className="px-8 py-6 bg-slate-50/50 border-t border-slate-100 flex justify-end gap-3">
                     <Button variant="secondary" onClick={onClose}>Cancelar</Button>
                     <Button variant="primary" onClick={handleSubmit} loading={loading}>
                         <FaSave /> {initialData ? "Actualizar" : "Añadir"}
                     </Button>
-                </Footer>
-            </ModalContent>
-        </ModalOverlay>
+                </div>
+            </div>
+        </div>
     );
 }

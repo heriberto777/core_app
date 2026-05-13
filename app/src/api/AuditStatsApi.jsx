@@ -22,7 +22,15 @@ export class AuditStatsApi {
 
     async getTransferHistory(accessToken, filters = {}) {
         try {
-            const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/history/logs`;
+            const queryParams = new URLSearchParams();
+            if (filters.status && filters.status !== "all") queryParams.append("status", filters.status);
+            if (filters.startDate) queryParams.append("dateFrom", filters.startDate.toISOString());
+            if (filters.endDate) queryParams.append("dateTo", filters.endDate.toISOString());
+            if (filters.search) queryParams.append("search", filters.search);
+            if (filters.page) queryParams.append("page", filters.page);
+            if (filters.limit) queryParams.append("limit", filters.limit);
+
+            const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/history/logs${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
             const response = await fetch(url, {
                 headers: { Authorization: `Bearer ${accessToken}` }
             });

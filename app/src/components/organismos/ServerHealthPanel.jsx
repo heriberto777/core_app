@@ -1,84 +1,48 @@
 import React from "react";
-import styled from "styled-components";
 import { FaMicrochip, FaDatabase, FaWifi } from "react-icons/fa";
 
-const Card = styled.div`
-  background: ${({ theme }) => theme.cardBg}; border-radius: 24px; border: 1px solid ${({ theme }) => theme.border};
-  padding: 24px; display: flex; flex-direction: column; gap: 20px;
-  box-shadow: ${({ theme }) => theme.shadows.medium}; flex: 1;
-`;
-
-const Title = styled.h3`
-  margin: 0; font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 10px;
-  color: ${({ theme }) => theme.titleColor}; padding-bottom: 12px;
-`;
-
-const StatusList = styled.div` display: flex; flex-direction: column; gap: 16px; `;
-
-const StatusItem = styled.div`
-  display: flex; align-items: center; justify-content: space-between;
-  padding: 12px 16px; background: ${({ theme }) => theme.bg2}10; border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.border}40;
-`;
-
-const ServerInfo = styled.div` display: flex; align-items: center; gap: 12px; `;
-
-const StatusIndicator = styled.div`
-  width: 10px; height: 10px; border-radius: 50%;
-  background: ${({ $status }) => {
-    if ($status === "online") return "#10b981";
-    if ($status === "offline") return "#ef4444";
-    if ($status === "warning") return "#f59e0b";
-    return "#64748b";
-  }};
-  box-shadow: 0 0 8px ${({ $status }) => {
-    if ($status === "online") return "#10b98180";
-    if ($status === "offline") return "#ef444480";
-    return "transparent";
-  }};
-  position: relative;
-  &::after {
-    content: ''; position: absolute; inset: -4px; border-radius: 50%;
-    border: 2px solid ${({ $status }) => $status === "online" ? "#10b98140" : "transparent"};
-    animation: ${props => props.$status === "online" ? "pulse 2s infinite" : "none"};
-  }
-  @keyframes pulse { 0% { transform: scale(1); opacity: 1; } 100% { transform: scale(2.5); opacity: 0; } }
-`;
-
-const ServerText = styled.div` display: flex; flex-direction: column; `;
-const ServerName = styled.span` font-size: 14px; font-weight: 700; `;
-const ServerDetails = styled.span` font-size: 11px; color: ${({ theme }) => theme.textSecondary}; `;
-
-export function ServerHealthPanel({ status }) {
+/**
+ * Corporate ServerHealthPanel (Tailwind Edition)
+ */
+export function ServerHealthPanel({ status, className = "" }) {
   const servers = [
     { name: "Servidor Principal (S1)", id: "server1", icon: <FaMicrochip /> },
     { name: "Servidor Espejo (S2)", id: "server2", icon: <FaWifi /> },
     { name: "Base de Datos (NoSQL)", id: "mongodb", icon: <FaDatabase /> },
   ];
 
+  const getStatusColor = (s) => {
+    if (s === "online") return "bg-emerald-500 shadow-emerald-500/50";
+    if (s === "offline") return "bg-red-500 shadow-red-500/50";
+    if (s === "warning") return "bg-amber-500";
+    return "bg-slate-400";
+  };
+
   return (
-    <Card>
-      <Title><FaWifi color="var(--primary)" /> Salud de la Infraestructura</Title>
-      <StatusList>
+    <div className={`bg-white rounded-3xl border border-slate-200 p-6 flex flex-col gap-5 shadow-md flex-1 ${className}`}>
+      <h3 className="m-0 text-base font-extrabold flex items-center gap-2.5 text-slate-800 pb-3">
+        <FaWifi className="text-primary-500" /> Salud de la Infraestructura
+      </h3>
+      <div className="flex flex-col gap-4">
         {servers.map(s => {
           const sData = status[s.id] || { status: 'unknown' };
           return (
-            <StatusItem key={s.id}>
-              <ServerInfo>
-                <StatusIndicator $status={sData.status} />
-                <ServerText>
-                  <ServerName>{s.name}</ServerName>
-                  <ServerDetails>
+            <div key={s.id} className="flex items-center justify-between p-3 bg-slate-50/50 rounded-2xl border border-slate-200/40">
+              <div className="flex items-center gap-3">
+                <div className={`w-2.5 h-2.5 rounded-full ${getStatusColor(sData.status)} ${sData.status === 'online' ? 'animate-pulse' : ''}`} />
+                <div className="flex flex-col">
+                  <span className="text-sm font-bold text-slate-800">{s.name}</span>
+                  <span className="text-[11px] text-slate-500">
                     {sData.status === 'online' ? `Conectado - Latencia: ${sData.responseTime || 0}ms` :
                       sData.status === 'offline' ? 'Sin respuesta del host' : 'Estado: ' + sData.status}
-                  </ServerDetails>
-                </ServerText>
-              </ServerInfo>
-              <div style={{ color: 'var(--textSecondary)', opacity: 0.3 }}>{s.icon}</div>
-            </StatusItem>
+                  </span>
+                </div>
+              </div>
+              <div className="text-slate-300 opacity-30">{s.icon}</div>
+            </div>
           );
         })}
-      </StatusList>
-    </Card>
+      </div>
+    </div>
   );
 }

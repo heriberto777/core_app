@@ -1,6 +1,6 @@
 const logger = require("./logger");
 const TransferMapping = require("../models/transferMappingModel");
-const TaskExecution = require("../models/taskExecutionModel");
+const Log = require("../models/loggerModel");
 const TaskTracker = require("./TaskTracker");
 const TransferTask = require("../models/transferTaskModel");
 const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
@@ -51,7 +51,7 @@ class DynamicTransferService {
 
     let sourceConnection = null;
     let targetConnection = null;
-    let executionId = null;
+    const transactionId = `exec_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     let mapping = null;
     const startTime = Date.now();
 
@@ -66,6 +66,18 @@ class DynamicTransferService {
         clearTimeout(timeoutId);
         throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
       }
+
+      logger.info(`🚀 INICIANDO TRANSFERENCIA - Mapping: ${mapping.name}`, {
+        level: "info",
+        source: "transfer",
+        operationType: "TRANSFER",
+        mappingId: mapping._id.toString(),
+        mappingName: mapping.name,
+        documentCount: documentIds.length,
+        tableSource: mapping.sourceTable,
+        tableTarget: mapping.targetTable,
+        stepName: "INICIO",
+      });
 
       // 🎁 DETECCIÓN AUTOMÁTICA: Verificar si las promociones están habilitadas
       const shouldUsePromotions = this.shouldUsePromotions(mapping);
@@ -115,23 +127,21 @@ class DynamicTransferService {
         }
       );
 
-      // 4. Crear registro de ejecución
-      const taskExecution = new TaskExecution({
-        taskId: mapping.taskId,
-        taskName: mapping.name,
-        date: new Date(),
-        status: "running",
-        details: {
-          documentIds,
-          mappingId,
+      // 4. Registrar inicio en logs (Sustituye a TaskExecution)
+      logger.info(`📝 Iniciando ejecución de tarea: ${mapping.name}`, {
+        operationType: "TRANSFER",
+        entityType: "TAREA",
+        taskId: mapping.taskId ? mapping.taskId.toString() : null,
+        mappingId: mapping._id.toString(),
+        mappingName: mapping.name,
+        transactionId,
+        metadata: {
+          documentIdsCount: documentIds.length,
           promotionsEnabled: shouldUsePromotions,
           useCentralizedConsecutives,
           centralizedConsecutiveId,
-        },
+        }
       });
-
-      await taskExecution.save();
-      executionId = taskExecution._id;
 
       // 5. Establecer conexiones
       const parentExecutionData = await DatabaseServiceAdapter.withConnections(
@@ -280,7 +290,8 @@ class DynamicTransferService {
                 useCentralizedConsecutives,
                 centralizedConsecutiveId,
                 results,
-                failedDocuments
+                failedDocuments,
+                mapping
               );
             }
           }
@@ -295,9 +306,9 @@ class DynamicTransferService {
             results
           );
 
-          // 10. Finalización y estadísticas
+          // 10. Finalización y estadísticas (Sustituye a TaskExecution)
           const finalResult = await this.finalizationAndStats(
-            executionId,
+            transactionId,
             mapping,
             results,
             hasErrors,
@@ -344,7 +355,7 @@ class DynamicTransferService {
 
       const finalResultWithChained = {
         success: true,
-        executionId,
+        transactionId,
         useCentralizedConsecutives,
         centralizedConsecutiveId,
         ...finalResult,
@@ -378,12 +389,24 @@ class DynamicTransferService {
       clearTimeout(timeoutId);
       TaskTracker.completeTask(cancelTaskId, finalResult.status);
 
+      logger.info(`✅ TRANSFERENCIA FINALIZADA - Mapping: ${mapping.name}`, {
+        level: "info",
+        source: "transfer",
+        operationType: "TRANSFER",
+        mappingId: mapping._id.toString(),
+        mappingName: mapping.name,
+        successfulCount: successfulDocuments.length,
+        failedCount: results.failed,
+        durationMs: Date.now() - startTime,
+        stepName: "FIN",
+      });
+
       return finalResultWithChained;
     } catch (error) {
       return await this.handleProcessingError(
         error,
         signal,
-        executionId,
+        transactionId,
         mapping,
         cancelTaskId,
         timeoutId,
@@ -726,7 +749,7 @@ class DynamicTransferService {
     let totalPromotionsApplied = false;
 
     for (const detailConfig of orderedDetailTables) {
-      logger.error(
+      logger.info(
         `🎁 🔍 ============ PROCESANDO TABLA: ${detailConfig.name} ============`
       );
 
@@ -746,7 +769,7 @@ class DynamicTransferService {
         continue;
       }
 
-      logger.error(
+      logger.info(
         `🎁 🔍 DATOS OBTENIDOS DE getDetailDataWithPromotions: ${detailsData.length} registros`
       );
 
@@ -759,7 +782,7 @@ class DynamicTransferService {
           row._PROMOTION_TYPE !== "REGULAR_WITH_DISCOUNT" // AGREGAR ESTA LÍNEA
       );
 
-      logger.error(`🎁 🔍 ¿Tiene promociones aplicadas? ${hasPromotions}`);
+      logger.info(`🎁 🔍 ¿Tiene promociones aplicadas? ${hasPromotions}`);
 
       if (hasPromotions) {
         totalPromotionsApplied = true;
@@ -772,10 +795,10 @@ class DynamicTransferService {
         const triggerLines = detailsData.filter((row) => row._IS_TRIGGER_LINE);
         const normalLines = detailsData.filter((row) => row._IS_NORMAL_LINE);
 
-        logger.error(`🎁 🔍 RESUMEN DE PROMOCIONES EN ${detailConfig.name}:`);
-        logger.error(`🎁 🔍   Líneas bonificación: ${bonusLines.length}`);
-        logger.error(`🎁 🔍   Líneas trigger: ${triggerLines.length}`);
-        logger.error(`🎁 🔍   Líneas normales: ${normalLines.length}`);
+        logger.info(`🎁 🔍 RESUMEN DE PROMOCIONES EN ${detailConfig.name}:`);
+        logger.info(`🎁 🔍   Líneas bonificación: ${bonusLines.length}`);
+        logger.info(`🎁 🔍   Líneas trigger: ${triggerLines.length}`);
+        logger.info(`🎁 🔍   Líneas normales: ${normalLines.length}`);
 
         // Log específico de cada bonificación
         bonusLines.forEach((line, index) => {
@@ -1856,8 +1879,27 @@ class DynamicTransferService {
           logger.error(`Campo no procesado: ${fieldMapping.targetField}`);
         }
       } catch (fieldError) {
+        const failedValue = fieldMapping.sourceField ? dataForProcessing[fieldMapping.sourceField] : null;
         logger.error(
-          `Error procesando campo ${fieldMapping.targetField}: ${fieldError.message}`
+          `Error procesando campo ${fieldMapping.targetField}:`, fieldError,
+          {
+            level: "error",
+            source: "transfer",
+            operationType: "TRANSFER",
+            mappingId: mapping?._id?.toString(),
+            mappingName: mapping?.name,
+            fieldName: fieldMapping.targetField,
+            tableSource: tableConfig?.sourceTable,
+            tableTarget: tableConfig?.targetTable,
+            failedValue: failedValue,
+            stepName: "processField (en bulk)",
+            originalStack: fieldError.stack,
+            errorDetails: {
+              message: fieldError.message,
+              sourceField: fieldMapping.sourceField,
+              failedValue: failedValue,
+            }
+          }
         );
         if (fieldMapping.isRequired) {
           throw fieldError;
@@ -2229,8 +2271,27 @@ class DynamicTransferService {
           logger.info(`✅ Consecutivo secundario reservado para campo ${fieldMapping.targetField}: ${value}`);
         }
       } catch (error) {
+        const failedValue = fieldMapping.sourceField ? sourceData[fieldMapping.sourceField] : null;
         logger.error(
-          `Error procesando campo ${fieldMapping.targetField}: ${error.message}`
+          `Error procesando campo ${fieldMapping.targetField}:`, error,
+          {
+            level: "error",
+            source: "transfer",
+            operationType: "TRANSFER",
+            mappingId: mapping?._id?.toString(),
+            mappingName: mapping?.name,
+            fieldName: fieldMapping.targetField,
+            tableSource: fieldMapping.sourceTable,
+            tableTarget: fieldMapping.targetTable,
+            failedValue: failedValue,
+            stepName: "processField",
+            originalStack: error.stack,
+            errorDetails: {
+              message: error.message,
+              sourceField: fieldMapping.sourceField,
+              failedValue: failedValue,
+            }
+          }
         );
         if (fieldMapping.isRequired) {
           throw error;
@@ -2832,8 +2893,28 @@ class DynamicTransferService {
             }
           }
         } catch (fieldError) {
+          const failedValue = fieldMapping.sourceField ? sourceData[fieldMapping.sourceField] : null;
           logger.error(
-            `Error en lookup ${fieldMapping.targetField}: ${fieldError.message}`
+            `Error en lookup ${fieldMapping.targetField}:`, fieldError,
+            {
+              level: "error",
+              source: "transfer",
+              operationType: "QUERY",
+              mappingId: mapping?._id?.toString(),
+              mappingName: mapping?.name,
+              fieldName: fieldMapping.targetField,
+              tableTarget: tableConfig?.targetTable,
+              failedValue: failedValue,
+              query: fieldMapping.lookupQuery,
+              stepName: "executeLookupInTarget",
+              originalStack: fieldError.stack,
+              errorDetails: {
+                message: fieldError.message,
+                lookupQuery: fieldMapping.lookupQuery,
+                sourceField: fieldMapping.sourceField,
+                failedValue: failedValue,
+              }
+            }
           );
           if (fieldMapping.failIfNotFound) {
             failedLookups.push({
@@ -3833,19 +3914,51 @@ class DynamicTransferService {
     useCentralized,
     centralizedId,
     results,
-    failedDocuments
+    failedDocuments,
+    mapping = null,
+    additionalContext = {}
   ) {
     failedDocuments.push(documentId);
     results.failed++;
+
+    const contextInfo = {
+      mappingId: mapping?._id?.toString(),
+      mappingName: mapping?.name,
+      tableSource: mapping?.sourceTable,
+      tableTarget: mapping?.targetTable,
+      documentId: documentId,
+      ...additionalContext
+    };
 
     results.details.push({
       documentId,
       success: false,
       error: error.message,
       errorDetails: error.stack,
+      ...contextInfo
     });
 
-    logger.error(`❌ Error al procesar documento ${documentId}:`, error);
+    logger.error(`❌ Error al procesar documento ${documentId}:`, error, {
+      level: "error",
+      source: "transfer",
+      operationType: "TRANSFER",
+      entityType: additionalContext.entityType || "OTHER",
+      mappingId: contextInfo.mappingId,
+      mappingName: contextInfo.mappingName,
+      tableSource: contextInfo.tableSource,
+      tableTarget: contextInfo.tableTarget,
+      documentId: documentId,
+      fieldName: additionalContext.fieldName,
+      failedValue: additionalContext.failedValue,
+      query: additionalContext.query,
+      stepName: additionalContext.stepName,
+      originalStack: error.stack,
+      errorDetails: {
+        message: error.message,
+        fieldName: additionalContext.fieldName,
+        failedValue: additionalContext.failedValue,
+      }
+    });
 
     // Cancelar reserva si hubo error
     if (
@@ -3941,7 +4054,7 @@ class DynamicTransferService {
    * @returns {Promise<Object>} - Resultado final
    */
   async finalizationAndStats(
-    executionId,
+    transactionId,
     mapping,
     results,
     hasErrors,
@@ -3959,17 +4072,28 @@ class DynamicTransferService {
       finalStatus = "partial";
     }
 
-    // Actualizar registro de ejecución
-    await TaskExecution.findByIdAndUpdate(executionId, {
-      status: finalStatus,
-      executionTime,
-      totalRecords: results.processed + results.failed,
-      successfulRecords: results.processed,
-      failedRecords: results.failed,
-      promotionsProcessed: results.promotionsProcessed,
-      useCentralizedConsecutives: useCentralized,
-      centralizedConsecutiveId: centralizedId,
-      details: results,
+    // REGISTRO FINAL EN LOGS (Sustituye a TaskExecution)
+    const logMessage = hasErrors 
+      ? `❌ Finalizada ejecución de tarea con errores: ${mapping.name}`
+      : `✅ Finalizada ejecución de tarea con éxito: ${mapping.name}`;
+
+    logger.info(logMessage, {
+      operationType: "TRANSFER",
+      entityType: "TAREA",
+      taskId: mapping.taskId ? mapping.taskId.toString() : null,
+      mappingId: mapping._id.toString(),
+      mappingName: mapping.name,
+      transactionId,
+      durationMs: executionTime,
+      affectedRecords: results.processed,
+      metadata: {
+        status: finalStatus,
+        totalRecords: results.processed + results.failed,
+        failedRecords: results.failed,
+        promotionsProcessed: results.promotionsProcessed,
+        useCentralizedConsecutives: useCentralized,
+        details: results
+      }
     });
 
     // Mensaje final
@@ -4036,7 +4160,7 @@ class DynamicTransferService {
   async handleProcessingError(
     error,
     signal,
-    executionId,
+    transactionId,
     mapping,
     cancelTaskId,
     timeoutId,
@@ -4046,15 +4170,16 @@ class DynamicTransferService {
 
     // Verificar si fue cancelado
     if (signal?.aborted) {
-      logger.info("Tarea cancelada por el usuario");
-
-      if (executionId) {
-        await TaskExecution.findByIdAndUpdate(executionId, {
-          status: "cancelled",
-          executionTime: Date.now() - startTime,
-          errorMessage: "Cancelada por el usuario",
-        });
-      }
+      const executionTime = Date.now() - startTime;
+      logger.info(`⏹️ Tarea cancelada por el usuario: ${mapping.name}`, {
+        operationType: "TRANSFER",
+        entityType: "TAREA",
+        taskId: mapping.taskId ? mapping.taskId.toString() : null,
+        mappingId: mapping._id.toString(),
+        transactionId,
+        durationMs: executionTime,
+        metadata: { status: "cancelled" }
+      });
 
       if (mapping?.taskId) {
         await TransferTask.findByIdAndUpdate(mapping.taskId, {
@@ -4072,20 +4197,27 @@ class DynamicTransferService {
       return {
         success: false,
         message: "Tarea cancelada por el usuario",
-        executionId,
+        transactionId,
       };
     }
 
-    logger.error(`Error al procesar documentos: ${error.message}`);
+    logger.error(`Error al procesar documentos: ${error.message}`, error, {
+      level: "error",
+      source: "transfer",
+      operationType: "TRANSFER",
+      mappingId: mapping?._id?.toString(),
+      mappingName: mapping?.name,
+      documentId: null,
+      stepName: "ERROR_FINAL",
+      originalStack: error.stack,
+      errorDetails: {
+        message: error.message,
+        stack: error.stack,
+      }
+    });
 
     // Actualizar registros en caso de error
-    if (executionId) {
-      await TaskExecution.findByIdAndUpdate(executionId, {
-        status: "failed",
-        executionTime: Date.now() - startTime,
-        errorMessage: error.message,
-      });
-    }
+    // Ya no usamos TaskExecution, el logger centralizado ya registró el error arriba
 
     if (mapping?.taskId) {
       await TransferTask.findByIdAndUpdate(mapping.taskId, {
@@ -5476,7 +5608,7 @@ class DynamicTransferService {
       const filter = options.includeInactive ? {} : { active: true };
 
       return await TransferMapping.find(filter)
-        .select("name description entityType transferType active tableConfigs.fieldMappings.showInList tableConfigs.fieldMappings.displayName tableConfigs.fieldMappings.targetField tableConfigs.fieldMappings.fieldType tableConfigs.fieldMappings.displayOrder")
+        .select("name description entityType transferType active isWorkflowChild allowDirectExecution workflowConfig tableConfigs.fieldMappings.showInList tableConfigs.fieldMappings.displayName tableConfigs.fieldMappings.targetField tableConfigs.fieldMappings.fieldType tableConfigs.fieldMappings.displayOrder")
         .sort({ name: 1 })
         .lean();
     } catch (error) {
@@ -5934,23 +6066,25 @@ class DynamicTransferService {
         (m) => m.consecutiveConfig?.enabled
       ).length;
 
-      // Obtener ejecuciones recientes (últimos 30 días)
+      // Obtener ejecuciones recientes (últimos 30 días) desde LOGS
       const thirtyDaysAgo = new Date();
       thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
 
-      const recentExecutions = await TaskExecution.find({
-        startTime: { $gte: thirtyDaysAgo },
-      });
+      const recentExecutions = await Log.find({
+        timestamp: { $gte: thirtyDaysAgo },
+        operationType: "TRANSFER",
+        "metadata.status": { $exists: true }
+      }).lean();
 
       const totalExecutions = recentExecutions.length;
       const successfulExecutions = recentExecutions.filter(
-        (e) => e.status === "completed"
+        (e) => e.metadata?.status === "completed"
       ).length;
       const failedExecutions = recentExecutions.filter(
-        (e) => e.status === "failed"
+        (e) => ["failed", "cancelled"].includes(e.metadata?.status)
       ).length;
       const totalProcessedDocuments = recentExecutions.reduce(
-        (sum, e) => sum + (e.processedDocuments || 0),
+        (sum, e) => sum + (e.affectedRecords || 0),
         0
       );
 
@@ -6480,25 +6614,25 @@ class DynamicTransferService {
    * @returns {*} - Valor encontrado o null
    */
   findPromotionValue(targetField, sourceData, mapping) {
-    logger.error(`🎁 🔍 ============ findPromotionValue ============`);
-    logger.error(`🎁 🔍 Campo solicitado: ${targetField}`);
-    logger.error(`🎁 🔍 _IS_BONUS_LINE: ${sourceData._IS_BONUS_LINE}`);
-    logger.error(
+    logger.info(`🎁 🔍 ============ findPromotionValue ============`);
+    logger.info(`🎁 🔍 Campo solicitado: ${targetField}`);
+    logger.info(`🎁 🔍 _IS_BONUS_LINE: ${sourceData._IS_BONUS_LINE}`);
+    logger.info(
       `🎁 🔍 _IS_REGULAR_WITH_DISCOUNT: ${sourceData._IS_REGULAR_WITH_DISCOUNT}`
     );
-    logger.error(`🎁 🔍 _IS_NORMAL_LINE: ${sourceData._IS_NORMAL_LINE}`);
-    logger.error(
+    logger.info(`🎁 🔍 _IS_NORMAL_LINE: ${sourceData._IS_NORMAL_LINE}`);
+    logger.info(
       `🎁 🔍 Datos disponibles: ${Object.keys(sourceData).join(", ")}`
     );
 
     // ✅ NUEVA LÓGICA CRÍTICA: Para líneas regulares con descuento
     if (sourceData._IS_SELF_BONUS) {
-      logger.error(`📋 ✅ Procesando SELF_BONUS para ${targetField}`);
+      logger.info(`📋 ✅ Procesando SELF_BONUS para ${targetField}`);
 
       // 🚨 CRÍTICO: Para REGULAR_WITH_DISCOUNT, CNT_MAX va a CANTIDAD_PEDIDA
       if (targetField === "CANTIDAD_PEDIDA") {
         const valor = sourceData.CNT_MAX || sourceData.CANTIDAD_PEDIDA || 0;
-        logger.error(
+        logger.info(
           `📋 ✅ REGULAR_WITH_DISCOUNT - CANTIDAD_PEDIDA = ${valor} (desde CNT_MAX)`
         );
         return valor;
@@ -6506,65 +6640,65 @@ class DynamicTransferService {
 
       if (targetField === "CANTIDAD_A_FACTURA") {
         const valor = sourceData.CNT_MAX || sourceData.CANTIDAD_A_FACTURA || 0;
-        logger.error(
+        logger.info(
           `📋 ✅ REGULAR_WITH_DISCOUNT - CANTIDAD_A_FACTURA = ${valor} (desde CNT_MAX)`
         );
         return valor;
       }
 
       if (targetField === "CANTIDAD_BONIFICAD") {
-        logger.error(
+        logger.info(
           `📋 ✅ REGULAR_WITH_DISCOUNT - CANTIDAD_BONIFICAD = 0 (forzado)`
         );
         return 0; // SIEMPRE 0 para líneas con descuento (no son bonificaciones reales)
       }
 
       if (targetField === "PEDIDO_LINEA_BONIF") {
-        logger.error(`📋 ✅ REGULAR_WITH_DISCOUNT - PEDIDO_LINEA_BONIF = null`);
+        logger.info(`📋 ✅ REGULAR_WITH_DISCOUNT - PEDIDO_LINEA_BONIF = null`);
         return null; // No tiene referencia de bonificación
       }
     }
 
     // ✅ LÓGICA PARA LÍNEAS REGULARES NORMALES
     if (sourceData._IS_NORMAL_LINE && !sourceData._IS_BONUS_LINE) {
-      logger.error(`📋 ✅ Procesando LÍNEA NORMAL para ${targetField}`);
+      logger.info(`📋 ✅ Procesando LÍNEA NORMAL para ${targetField}`);
 
       if (targetField === "CANTIDAD_PEDIDA") {
         const valor = sourceData.CNT_MAX || sourceData.CANTIDAD_PEDIDA || 0;
-        logger.error(`📋 ✅ NORMAL - CANTIDAD_PEDIDA = ${valor}`);
+        logger.info(`📋 ✅ NORMAL - CANTIDAD_PEDIDA = ${valor}`);
         return valor;
       }
 
       if (targetField === "CANTIDAD_A_FACTURA") {
         const valor = sourceData.CNT_MAX || sourceData.CANTIDAD_A_FACTURA || 0;
-        logger.error(`📋 ✅ NORMAL - CANTIDAD_A_FACTURA = ${valor}`);
+        logger.info(`📋 ✅ NORMAL - CANTIDAD_A_FACTURA = ${valor}`);
         return valor;
       }
 
       if (targetField === "CANTIDAD_BONIFICAD") {
-        logger.error(`📋 ✅ NORMAL - CANTIDAD_BONIFICAD = 0`);
+        logger.info(`📋 ✅ NORMAL - CANTIDAD_BONIFICAD = 0`);
         return 0;
       }
 
       if (targetField === "PEDIDO_LINEA_BONIF") {
-        logger.error(`📋 ✅ NORMAL - PEDIDO_LINEA_BONIF = null`);
+        logger.info(`📋 ✅ NORMAL - PEDIDO_LINEA_BONIF = null`);
         return null;
       }
     }
 
     // ✅ LÓGICA PARA BONIFICACIONES REALES
     if (sourceData._IS_BONUS_LINE) {
-      logger.error(`🎁 ✅ Procesando BONIFICACIÓN REAL para ${targetField}`);
+      logger.info(`🎁 ✅ Procesando BONIFICACIÓN REAL para ${targetField}`);
 
       if (targetField === "CANTIDAD_PEDIDA") {
-        logger.error(
+        logger.info(
           `🎁 ✅ BONUS - CANTIDAD_PEDIDA = 0 (bonificaciones no se piden)`
         );
         return 0;
       }
 
       if (targetField === "CANTIDAD_A_FACTURA") {
-        logger.error(
+        logger.info(
           `🎁 ✅ BONUS - CANTIDAD_A_FACTURA = 0 (bonificaciones no se facturan)`
         );
         return 0;
@@ -6572,7 +6706,7 @@ class DynamicTransferService {
 
       if (targetField === "CANTIDAD_BONIFICAD") {
         const valor = sourceData.CNT_MAX || sourceData.CANTIDAD_BONIFICAD || 0;
-        logger.error(
+        logger.info(
           `🎁 ✅ BONUS - CANTIDAD_BONIFICAD = ${valor} (desde CNT_MAX)`
         );
         return valor;
@@ -6580,14 +6714,14 @@ class DynamicTransferService {
 
       if (targetField === "PEDIDO_LINEA_BONIF") {
         const valor = sourceData.PEDIDO_LINEA_BONIF || null;
-        logger.error(`🎁 ✅ BONUS - PEDIDO_LINEA_BONIF = ${valor}`);
+        logger.info(`🎁 ✅ BONUS - PEDIDO_LINEA_BONIF = ${valor}`);
         return valor;
       }
     }
 
     // ✅ FALLBACK: Buscar campo exacto
     if (sourceData.hasOwnProperty(targetField)) {
-      logger.error(
+      logger.info(
         `🔍 ✅ Campo encontrado exacto: ${targetField} = ${sourceData[targetField]}`
       );
       return sourceData[targetField];
@@ -6638,7 +6772,7 @@ class DynamicTransferService {
 
     for (const pattern of patterns) {
       if (sourceData.hasOwnProperty(pattern)) {
-        logger.error(
+        logger.info(
           `🔍 ✅ Campo encontrado por patrón: ${pattern} -> ${targetField} = ${sourceData[pattern]}`
         );
         return sourceData[pattern];
@@ -6649,7 +6783,7 @@ class DynamicTransferService {
     const lowerTargetField = targetField.toLowerCase();
     for (const [key, value] of Object.entries(sourceData)) {
       if (key.toLowerCase() === lowerTargetField) {
-        logger.error(
+        logger.info(
           `🔍 ✅ Campo encontrado case-insensitive: ${key} -> ${targetField} = ${value}`
         );
         return value;
@@ -6658,10 +6792,10 @@ class DynamicTransferService {
 
     // ✅ VERIFICAR CAMPOS META DE PROMOCIONES
     if (sourceData._IS_BONUS_LINE || sourceData._IS_TRIGGER_LINE) {
-      logger.error(
+      logger.info(
         `🎁 Línea tiene metadatos de promoción pero no se encontró ${targetField}`
       );
-      logger.error(`🎁 Tipo de línea: ${sourceData._PROMOTION_TYPE}`);
+      logger.info(`🎁 Tipo de línea: ${sourceData._PROMOTION_TYPE}`);
 
       // Para líneas de bonificación, algunos campos deben ser null/0
       if (sourceData._IS_BONUS_LINE) {
@@ -7115,15 +7249,26 @@ class DynamicTransferService {
         if (nextMappingConfig.parentLinkField) {
           logger.info(`🔍 RESOLVIENDO: Valores de '${nextMappingConfig.parentLinkField}' para ${successfulDocuments.length} documentos...`);
           
-          const parentMainTable = mapping.tableConfigs.find(tc => !tc.isDetailTable);
+          const parentMainTable = (mapping.tableConfigs || []).find(tc => !tc.isDetailTable);
           if (parentMainTable) {
             const pk = parentMainTable.primaryKey;
             const linkField = nextMappingConfig.parentLinkField;
             
+            const sourceTable = parentMainTable.sourceTable;
+            if (!sourceTable || sourceTable === "undefined") {
+              logger.warn(`⚠️ No se pudo resolver tabla origen válida ('${sourceTable}') para enlace en ${mapping.name}`);
+              continue;
+            }
+
+            if (!linkField) {
+              logger.warn(`⚠️ Campo de enlace (parentLinkField) no definido para workflow en ${mapping.name}`);
+              continue;
+            }
+
             // Consulta masiva para obtener los valores de enlace
             const resolutionQuery = `
               SELECT DISTINCT [${linkField}] as val
-              FROM ${parentMainTable.sourceTable}
+              FROM [${sourceTable}]
               WHERE [${pk}] IN (${successfulDocuments.map((_, i) => `@id${i}`).join(',')})
             `;
             
@@ -7192,18 +7337,26 @@ class DynamicTransferService {
    */
   async findChildDocumentIds(parentIds, nextMappingConfig, nextMapping) {
     const { linkField } = nextMappingConfig;
-    const mainTable = nextMapping.tableConfigs.find(tc => !tc.isDetailTable);
+    const mainTable = (nextMapping.tableConfigs || []).find(tc => !tc.isDetailTable);
     
     if (!mainTable) throw new Error(`El mapping ${nextMapping.name} no tiene una tabla principal configurada.`);
 
     const sourceServer = nextMapping.sourceServer;
     const primaryKey = mainTable.primaryKey;
     
+    const sourceTable = mainTable.sourceTable;
+    if (!sourceTable || sourceTable === "undefined") {
+      throw new Error(`El mapping ${nextMapping.name} no tiene una tabla origen válida definida ('${sourceTable}').`);
+    }
+
+    if (!linkField) {
+      throw new Error(`El campo de enlace (linkField) es requerido para buscar documentos hijos en ${nextMapping.name}.`);
+    }
+
     // Consulta para encontrar IDs hijos
-    // SELECT DISTINCT [PrimaryKey] FROM [SourceTable] WHERE [LinkField] IN (...)
     const query = `
       SELECT DISTINCT [${primaryKey}] as id
-      FROM ${mainTable.sourceTable}
+      FROM [${sourceTable}]
       WHERE [${linkField}] IN (${parentIds.map((_, i) => `@id${i}`).join(',')})
     `;
 

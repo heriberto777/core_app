@@ -14,7 +14,7 @@ const dbConfigSchema = new mongoose.Schema({
   database: { type: String, required: true },
   instance: { type: String, default: null },
   options: {
-    encrypt: { type: Boolean, default: true },
+    mssqlEncrypt: { type: Boolean, default: true },
     trustServerCertificate: { type: Boolean, default: true },
     enableArithAbort: { type: Boolean, default: true },
     ssl: { type: Boolean, default: false },

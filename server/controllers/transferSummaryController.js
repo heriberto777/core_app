@@ -1,4 +1,4 @@
-const TransferSummary = require("../models/transferSummaryModel");
+const Log = require("../models/loggerModel");
 const logger = require("../services/logger");
 const { realizarTraspaso } = require("../services/traspasoService");
 const { sendTransferReturnEmail } = require("../services/emailService");
@@ -17,29 +17,43 @@ const createTransferSummary = async (req, res) => {
       return res.status(400).json({ success: false, message: "Datos incompletos (loadId, route, products necesarios)." });
     }
 
-    const existingSummary = await TransferSummary.findOne({ loadId }).lean();
+    const existingSummary = await Log.findOne({ "metadata.loadId": loadId }).lean();
     if (existingSummary) {
-      return res.status(400).json({ success: false, message: `Ya existe un resumen para la carga ${loadId}` });
+      return res.status(400).json({ success: false, message: `Ya existe un registro para la carga ${loadId}` });
     }
 
     const calculatedQuantity = products.reduce((sum, p) => sum + (p.quantity || 0), 0);
-    const summary = new TransferSummary({
-      loadId,
-      route,
-      documentId,
-      products,
-      totalProducts: totalProducts || products.length,
-      totalQuantity: totalQuantity || calculatedQuantity,
-      createdBy: createdBy || userId,
+    
+    const logEntry = new Log({
+      level: "info",
+      message: `📦 Resumen de carga creado: ${loadId}`,
+      operationType: "TRANSFER",
+      entityType: "TRASPASO",
+      transactionId: `traspaso_${documentId || Date.now()}`,
+      mappingName: "Manual Transfer",
+      affectedRecords: products.length,
+      metadata: {
+        status: "completed",
+        loadId,
+        route,
+        documentId,
+        products: products.map(p => ({
+          ...p,
+          returnedQuantity: 0
+        })),
+        totalProducts: totalProducts || products.length,
+        totalQuantity: totalQuantity || calculatedQuantity,
+        createdBy: createdBy || userId,
+      }
     });
 
-    await summary.save();
-    logger.info(`Resumen creado para carga ${loadId} por ${userId}`);
+    await logEntry.save();
+    logger.info(`Resumen (Log) creado para carga ${loadId} por ${userId}`);
 
     return res.status(201).json({
       success: true,
-      message: "Resumen creado correctamente",
-      data: summary,
+      message: "Resumen (Log) creado correctamente",
+      data: logEntry,
     });
   } catch (error) {
     logger.error("Error en createTransferSummary:", error);
@@ -53,19 +67,22 @@ const createTransferSummary = async (req, res) => {
 const getTransferSummaries = async (req, res) => {
   try {
     const { page = 1, limit = 10, loadId, route, dateFrom, dateTo, status } = req.query;
-    const filter = {};
+    const filter = {
+      operationType: "TRANSFER",
+      entityType: "TRASPASO"
+    };
 
-    if (loadId) filter.loadId = loadId;
-    if (route) filter.route = route;
-    if (status) filter.status = status;
+    if (loadId) filter["metadata.loadId"] = loadId;
+    if (route) filter["metadata.route"] = route;
+    if (status) filter["metadata.status"] = status;
 
     if (dateFrom || dateTo) {
-      filter.date = {};
-      if (dateFrom) filter.date.$gte = new Date(dateFrom);
+      filter.timestamp = {};
+      if (dateFrom) filter.timestamp.$gte = new Date(dateFrom);
       if (dateTo) {
         const endDate = new Date(dateTo);
         endDate.setHours(23, 59, 59, 999);
-        filter.date.$lte = endDate;
+        filter.timestamp.$lte = endDate;
       }
     }
 
@@ -73,14 +90,21 @@ const getTransferSummaries = async (req, res) => {
     const limitInt = parseInt(limit, 10);
     const skip = (pageInt - 1) * limitInt;
 
-    const [summaries, total] = await Promise.all([
-      TransferSummary.find(filter).sort({ date: -1 }).skip(skip).limit(limitInt).lean(),
-      TransferSummary.countDocuments(filter),
+    const [logs, total] = await Promise.all([
+      Log.find(filter).sort({ timestamp: -1 }).skip(skip).limit(limitInt).lean(),
+      Log.countDocuments(filter),
     ]);
+
+    // Mapear al formato esperado por el frontend
+    const summaries = logs.map(l => ({
+      _id: l._id,
+      date: l.timestamp,
+      ...l.metadata
+    }));
 
     return res.status(200).json({
       success: true,
-      message: "Resúmenes obtenidos correctamente",
+      message: "Resúmenes obtenidos correctamente (vía logs)",
       data: summaries,
       pagination: { total, page: pageInt, limit: limitInt, pages: Math.ceil(total / limitInt) },
     });
@@ -96,11 +120,15 @@ const getTransferSummaries = async (req, res) => {
 const getTransferSummaryById = async (req, res) => {
   try {
     const { id } = req.params;
-    const summary = await TransferSummary.findById(id).lean();
+    const log = await Log.findById(id).lean();
 
-    if (!summary) return res.status(404).json({ success: false, message: "Resumen no encontrado" });
+    if (!log) return res.status(404).json({ success: false, message: "Registro no encontrado" });
 
-    return res.status(200).json({ success: true, message: "Resumen obtenido", data: summary });
+    return res.status(200).json({ 
+      success: true, 
+      message: "Resumen obtenido", 
+      data: { _id: log._id, date: log.timestamp, ...log.metadata } 
+    });
   } catch (error) {
     logger.error("Error en getTransferSummaryById:", error);
     return res.status(500).json({ success: false, message: "Error interno", error: error.message });
@@ -113,11 +141,15 @@ const getTransferSummaryById = async (req, res) => {
 const getTransferSummaryByLoadId = async (req, res) => {
   try {
     const { loadId } = req.params;
-    const summary = await TransferSummary.findOne({ loadId }).lean();
+    const log = await Log.findOne({ "metadata.loadId": loadId }).lean();
 
-    if (!summary) return res.status(404).json({ success: false, message: "Resumen no encontrado" });
+    if (!log) return res.status(404).json({ success: false, message: "Registro no encontrado" });
 
-    return res.status(200).json({ success: true, message: "Resumen obtenido", data: summary });
+    return res.status(200).json({ 
+      success: true, 
+      message: "Resumen obtenido", 
+      data: { _id: log._id, date: log.timestamp, ...log.metadata } 
+    });
   } catch (error) {
     logger.error("Error en getTransferSummaryByLoadId:", error);
     return res.status(500).json({ success: false, message: "Error interno", error: error.message });
@@ -136,8 +168,11 @@ const processTransferReturn = async (req, res) => {
       return res.status(400).json({ success: false, message: "Datos insuficientes para devolución." });
     }
 
-    const summary = await TransferSummary.findById(summaryId);
-    if (!summary) return res.status(404).json({ success: false, message: "Resumen no encontrado" });
+    const log = await Log.findById(summaryId);
+    if (!log) return res.status(404).json({ success: false, message: "Registro original no encontrado" });
+
+    const metadata = log.metadata || {};
+    if (!metadata.products) return res.status(400).json({ success: false, message: "El registro no contiene productos" });
 
     const validProducts = [];
     const invalidProducts = [];
@@ -170,17 +205,35 @@ const processTransferReturn = async (req, res) => {
 
     if (!returnResult.success) throw new Error(returnResult.mensaje || "Error en realizarTraspaso");
 
-    // Actualizar resumen
+    // Actualizar metadata del log
     validProducts.forEach(item => {
-      const sp = summary.products.find(p => p.code === item.code);
+      const sp = metadata.products.find(p => p.code === item.code);
       sp.returnedQuantity = (sp.returnedQuantity || 0) + item.quantity;
     });
 
-    const allReturned = summary.products.every(p => (p.returnedQuantity || 0) >= p.quantity);
-    summary.status = allReturned ? "full_return" : "partial_return";
-    summary.returnData = { documentId: returnResult.documento_inv, date: new Date(), reason: reason || "Devolución" };
+    const allReturned = metadata.products.every(p => (p.returnedQuantity || 0) >= p.quantity);
+    metadata.status = allReturned ? "full_return" : "partial_return";
+    metadata.returnData = { 
+      documentId: returnResult.documento_inv, 
+      date: new Date(), 
+      reason: reason || "Devolución",
+      processedBy: userId
+    };
 
-    await summary.save();
+    log.markModified('metadata');
+    await log.save();
+    
+    // Registrar la acción de retorno como un log separado para auditoría
+    logger.info(`↩️ Devolución procesada para carga ${metadata.loadId}`, {
+      operationType: "TRANSFER",
+      entityType: "RETORNO",
+      transactionId: `return_${returnResult.documento_inv}`,
+      metadata: {
+        originalLogId: log._id,
+        returnDocumentId: returnResult.documento_inv,
+        products: validProducts
+      }
+    });
     logger.info(`Devolución procesada para resumen ${summaryId} por ${userId}, documento: ${returnResult.documento_inv}`);
 
     // Email asíncrono
@@ -209,10 +262,11 @@ const processTransferReturn = async (req, res) => {
 const checkInventoryForReturns = async (req, res) => {
   try {
     const { summaryId } = req.params;
-    const summary = await TransferSummary.findById(summaryId).lean();
-    if (!summary) return res.status(404).json({ success: false, message: "Resumen no encontrado" });
+    const log = await Log.findById(summaryId).lean();
+    if (!log) return res.status(404).json({ success: false, message: "Registro no encontrado" });
 
-    const productCodes = summary.products.map(p => p.code);
+    const metadata = log.metadata || {};
+    const productCodes = metadata.products?.map(p => p.code) || [];
     if (!productCodes.length) return res.status(400).json({ success: false, message: "No hay productos que verificar" });
 
     return await withConnection("server1", async (connection) => {
@@ -230,7 +284,7 @@ const checkInventoryForReturns = async (req, res) => {
       const inventoryMap = {};
       result.recordset?.forEach(item => inventoryMap[item.Code_Product] = item.available_quantity || 0);
 
-      const productsWithInventory = summary.products.map(p => {
+      const productsWithInventory = metadata.products.map(p => {
         const available = inventoryMap[p.code] || 0;
         return {
           ...p,
@@ -241,8 +295,8 @@ const checkInventoryForReturns = async (req, res) => {
 
       return res.status(200).json({
         success: true,
-        message: "Inventario para retornos verificado",
-        data: { summaryId: summary._id, loadId: summary.loadId, productsWithInventory },
+        message: "Inventario para retornos verificado (vía logs)",
+        data: { summaryId: log._id, loadId: metadata.loadId, productsWithInventory },
       });
     });
   } catch (error) {

@@ -1,8 +1,13 @@
-import styled from "styled-components";
-export const ContentHeader = styled.div`
-  width: 100%;
-  display: flex;
-  align-items: center;
-  position: relative;
-  justify-content: end;
-`;
+import React from "react";
+
+/**
+ * Corporate ContentHeader Component (Tailwind Edition)
+ */
+export const ContentHeader = ({ children, className = "", ...props }) => (
+  <div 
+    className={`w-full flex items-center relative justify-end ${className}`} 
+    {...props}
+  >
+    {children}
+  </div>
+);

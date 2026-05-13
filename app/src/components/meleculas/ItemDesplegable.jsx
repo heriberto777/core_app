@@ -1,26 +1,21 @@
-import styled from "styled-components";
+import React from "react";
 import { Icono } from "../../index";
-export function ItemsDesplegable({ item, funcion }) {
+
+/**
+ * Corporate ItemDesplegable (Tailwind Edition)
+ */
+export function ItemsDesplegable({ item, funcion, className = "" }) {
   return (
-    <Container onClick={funcion}>
-      <Icono>{item.icono && <item.icono />}</Icono>
-      <span>{item.text}</span>
-    </Container>
+    <div 
+      onClick={funcion}
+      className={`
+        cursor-pointer p-2 rounded-[20px] flex items-center gap-2.5
+        hover:bg-slate-700
+        ${className}
+      `}
+    >
+      <Icono className="text-2xl block">{item.icono && <item.icono />}</Icono>
+      <span className="text-white text-sm">{item.text}</span>
+    </div>
   );
 }
-const Container = styled.div`
-  cursor: pointer;
-  padding: 8px;
-  border-radius: 20px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-
-  &:hover {
-    background-color: ${({ theme }) => theme.bg4};
-  }
-  svg {
-    font-size: 28px;
-    display: block;
-  }
-`;

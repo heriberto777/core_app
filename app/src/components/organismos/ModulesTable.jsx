@@ -1,140 +1,14 @@
 import React, { useState } from "react";
-import styled from "styled-components";
 import {
-    FaCog,
-    FaEdit,
-    FaTrash,
-    FaCopy,
-    FaToggleOn,
-    FaToggleOff,
-    FaShieldAlt,
-    FaLayerGroup,
-    FaChevronDown,
-    FaChevronUp,
-    FaCubes
+    FaCog, FaEdit, FaTrash, FaCopy, FaToggleOn, FaToggleOff,
+    FaLayerGroup, FaChevronDown, FaChevronUp, FaCubes
 } from "react-icons/fa";
-import { StatusBadge, Button } from "../index";
+import { StatusBadge } from "../index";
 
-const Grid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(380px, 1fr));
-  gap: 24px;
-`;
-
-const ModuleCard = styled.div`
-  background: rgba(255, 255, 255, 0.7);
-  backdrop-filter: blur(10px);
-  border: 1px solid ${props => props.isSystem ? "rgba(59, 130, 246, 0.3)" : "rgba(255, 255, 255, 0.3)"};
-  border-radius: 20px;
-  padding: 24px;
-  box-shadow: 0 8px 32px rgba(0, 0, 0, 0.05);
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  transition: all 0.2s;
-
-  &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 40px rgba(0, 0, 0, 0.08);
-  }
-`;
-
-const Header = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-`;
-
-const IconBox = styled.div`
-  width: 50px;
-  height: 50px;
-  border-radius: 15px;
-  background: ${props => props.isSystem ? "#eff6ff" : "#f8fafc"};
-  color: ${props => props.isSystem ? "#3b82f6" : "#64748b"};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 24px;
-`;
-
-const MainInfo = styled.div`
-  h3 {
-    font-size: 17px;
-    font-weight: 800;
-    color: #1e293b;
-    margin-bottom: 4px;
-    display: flex;
-    align-items: center;
-    gap: 8px;
-  }
-  p {
-    font-size: 13px;
-    color: #64748b;
-    line-height: 1.5;
-  }
-`;
-
-const MetaGrid = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 12px;
-  padding: 16px 0;
-  border-top: 1px solid #f1f5f9;
-  border-bottom: 1px solid #f1f5f9;
-`;
-
-const MetaItem = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 12px;
-  font-weight: 700;
-  color: #94a3b8;
-  
-  span {
-    color: #475569;
-  }
-`;
-
-const ActionsSection = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-`;
-
-const ActionHeader = styled.div`
-  font-size: 11px;
-  font-weight: 800;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  display: flex;
-  justify-content: space-between;
-  cursor: pointer;
-`;
-
-const ActionsBadgeList = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 6px;
-`;
-
-const ActionBadge = styled.span`
-  padding: 4px 10px;
-  background: #f1f5f9;
-  color: #64748b;
-  border-radius: 8px;
-  font-size: 10px;
-  font-weight: 800;
-  text-transform: uppercase;
-`;
-
-const ControlBar = styled.div`
-  display: flex;
-  gap: 8px;
-  margin-top: 8px;
-`;
-
+/**
+ * ModulesTable (Tailwind Edition)
+ * Grid de arquitectura modular con tarjetas de servicio expandibles.
+ */
 export const ModulesTable = ({ data, onEdit, onDelete, onDuplicate, onToggleStatus }) => {
     const [expanded, setExpanded] = useState({});
 
@@ -143,77 +17,127 @@ export const ModulesTable = ({ data, onEdit, onDelete, onDuplicate, onToggleStat
     };
 
     return (
-        <Grid>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {data.map(module => (
-                <ModuleCard key={module._id} isSystem={module.isSystem}>
-                    <Header>
-                        <IconBox isSystem={module.isSystem}>
+                <div 
+                  key={module._id} 
+                  className={`
+                    bg-white rounded-[32px] p-6 border transition-all duration-300 group hover:-translate-y-1
+                    ${module.isSystem 
+                      ? 'border-primary-200 bg-primary-50/10 shadow-primary-900/5' 
+                      : 'border-slate-100 shadow-soft hover:shadow-lg'}
+                  `}
+                >
+                    {/* CARD HEADER */}
+                    <div className="flex justify-between items-start mb-6">
+                        <div className={`
+                          w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-inner transition-transform group-hover:scale-110 duration-300
+                          ${module.isSystem ? "bg-primary-100 text-primary-600" : "bg-slate-100 text-slate-500"}
+                        `}>
                             <FaCog />
-                        </IconBox>
-                        <div style={{ display: 'flex', gap: '8px' }}>
-                            {module.isSystem && <StatusBadge variant="primary">SISTEMA</StatusBadge>}
-                            <StatusBadge variant={module.isActive ? "success" : "danger"}>
+                        </div>
+                        <div className="flex flex-col gap-2 items-end">
+                            {module.isSystem && (
+                              <span className="px-2 py-0.5 bg-primary-600 text-white rounded-md text-[9px] font-extrabold tracking-widest uppercase shadow-sm">Sistema</span>
+                            )}
+                            <StatusBadge status={module.isActive ? "ACTIVE" : "INACTIVE"}>
                                 {module.isActive ? "ACTIVO" : "INACTIVO"}
                             </StatusBadge>
                         </div>
-                    </Header>
+                    </div>
 
-                    <MainInfo>
-                        <h3>{module.displayName}</h3>
-                        <p>{module.description || "Módulo base del ecosistema CORE."}</p>
-                        <code style={{ fontSize: '11px', color: '#3b82f6', fontWeight: 700 }}>SLUG: {module.name}</code>
-                    </MainInfo>
+                    {/* MODULE INFO */}
+                    <div className="space-y-2 mb-6">
+                        <h3 className="text-lg font-extrabold text-slate-800">{module.displayName}</h3>
+                        <p className="text-sm text-slate-500 font-medium leading-relaxed line-clamp-2 min-h-[40px]">
+                          {module.description || "Módulo base del ecosistema CORE."}
+                        </p>
+                        <div className="inline-block px-2 py-0.5 bg-blue-50 rounded text-[10px] font-bold text-blue-500 uppercase tracking-widest border border-blue-100">
+                          {module.name}
+                        </div>
+                    </div>
 
-                    <MetaGrid>
-                        <MetaItem>
-                            <FaLayerGroup />
-                            <span>{module.uiConfig?.category?.toUpperCase() || "OTROS"}</span>
-                        </MetaItem>
-                        <MetaItem>
-                            <FaCubes />
-                            <span>ORDEN: {module.uiConfig?.order || 0}</span>
-                        </MetaItem>
-                    </MetaGrid>
+                    {/* METADATA */}
+                    <div className="grid grid-cols-2 gap-4 py-5 border-y border-slate-100">
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 flex items-center justify-center">
+                              <FaLayerGroup size={14} />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Categoría</span>
+                              <span className="text-xs font-extrabold text-slate-700 truncate max-w-[100px]">{module.uiConfig?.category || "OTROS"}</span>
+                            </div>
+                        </div>
+                        <div className="flex items-center gap-3">
+                            <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 flex items-center justify-center">
+                              <FaCubes size={14} />
+                            </div>
+                            <div className="flex flex-col">
+                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Prioridad</span>
+                              <span className="text-xs font-extrabold text-slate-700">Nivel {module.uiConfig?.order || 0}</span>
+                            </div>
+                        </div>
+                    </div>
 
-                    <ActionsSection>
-                        <ActionHeader onClick={() => toggleExpand(module._id)}>
-                            Capacidades Disponibles ({module.actions?.length || 0})
-                            {expanded[module._id] ? <FaChevronUp /> : <FaChevronDown />}
-                        </ActionHeader>
-                        {expanded[module._id] && (
-                            <ActionsBadgeList>
-                                {module.actions?.map(action => {
-                                    const actionLabel = typeof action === 'string' ? action : (action.displayName || action.name);
-                                    const actionKey = typeof action === 'string' ? action : (action._id || action.name);
-                                    return <ActionBadge key={actionKey}>{actionLabel}</ActionBadge>;
-                                })}
-                            </ActionsBadgeList>
-                        )}
-                    </ActionsSection>
-
-                    <ControlBar>
-                        <Button variant="ghost" size="small" onClick={() => onEdit(module)}>
-                            <FaEdit />
-                        </Button>
-                        <Button variant="ghost" size="small" onClick={() => onDuplicate(module)}>
-                            <FaCopy />
-                        </Button>
-                        <Button
-                            variant="ghost"
-                            size="small"
-                            color={module.isActive ? "#f59e0b" : "#10b981"}
-                            onClick={() => onToggleStatus(module)}
+                    {/* CAPABILITIES (EXPANDABLE) */}
+                    <div className="mt-4">
+                        <button 
+                          onClick={() => toggleExpand(module._id)}
+                          className="w-full flex justify-between items-center py-2 text-[10px] font-extrabold text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
                         >
-                            {module.isActive ? <FaToggleOn /> : <FaToggleOff />}
-                        </Button>
-                        {!module.isSystem && (
-                            <Button variant="ghost" size="small" color="#ef4444" onClick={() => onDelete(module)}>
-                                <FaTrash />
-                            </Button>
+                            <span>Capacidades ({module.actions?.length || 0})</span>
+                            {expanded[module._id] ? <FaChevronUp /> : <FaChevronDown />}
+                        </button>
+                        {expanded[module._id] && (
+                            <div className="flex flex-wrap gap-1.5 mt-2 animate-fadeIn">
+                                {module.actions?.map(action => {
+                                    const label = typeof action === 'string' ? action : (action.displayName || action.name);
+                                    const key = typeof action === 'string' ? action : (action._id || action.name);
+                                    return (
+                                      <span key={key} className="px-2 py-0.5 bg-slate-50 text-slate-500 rounded-md text-[9px] font-extrabold uppercase border border-slate-100">
+                                        {label}
+                                      </span>
+                                    );
+                                })}
+                            </div>
                         )}
-                    </ControlBar>
-                </ModuleCard>
+                    </div>
+
+                    {/* CONTROL BAR */}
+                    <div className="flex gap-2 justify-end mt-6 pt-4 border-t border-slate-50 opacity-0 group-hover:opacity-100 transition-opacity">
+                        <button 
+                          onClick={() => onEdit(module)}
+                          className="p-2.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all"
+                          title="Editar servicio"
+                        >
+                            <FaEdit size={16} />
+                        </button>
+                        <button 
+                          onClick={() => onDuplicate(module)}
+                          className="p-2.5 text-slate-400 hover:text-violet-500 hover:bg-violet-50 rounded-xl transition-all"
+                          title="Clonar esquema"
+                        >
+                            <FaCopy size={16} />
+                        </button>
+                        <button
+                            onClick={() => onToggleStatus(module)}
+                            className={`p-2.5 rounded-xl transition-all ${module.isActive ? "text-amber-500 hover:bg-amber-50" : "text-emerald-500 hover:bg-emerald-50"}`}
+                            title={module.isActive ? "Desactivar" : "Activar"}
+                        >
+                            {module.isActive ? <FaToggleOn size={18} /> : <FaToggleOff size={18} />}
+                        </button>
+                        {!module.isSystem && (
+                            <button 
+                              onClick={() => onDelete(module)}
+                              className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                              title="Extirpar servicio"
+                            >
+                                <FaTrash size={16} />
+                            </button>
+                        )}
+                    </div>
+                </div>
             ))}
-        </Grid>
+        </div>
     );
 };

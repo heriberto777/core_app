@@ -1,69 +1,50 @@
 import React from "react";
-import styled from "styled-components";
 import { FaHistory, FaArrowRight } from "react-icons/fa";
 import { Link } from "react-router-dom";
 import { StatusBadge, Button } from "../../index";
 
-const Card = styled.div`
-  background: ${({ theme }) => theme.cardBg}; border-radius: 24px; border: 1px solid ${({ theme }) => theme.border};
-  padding: 24px; display: flex; flex-direction: column; gap: 20px;
-  box-shadow: ${({ theme }) => theme.shadows.medium}; grid-column: 1 / -1;
-`;
-
-const Header = styled.div`
-  display: flex; justify-content: space-between; align-items: center;
-  border-bottom: 2px solid ${({ theme }) => theme.primary}20; padding-bottom: 12px;
-`;
-
-const Title = styled.h3` margin: 0; font-size: 16px; font-weight: 800; display: flex; align-items: center; gap: 10px; color: ${({ theme }) => theme.title}; `;
-
-const TableWrapper = styled.div` overflow-x: auto; `;
-
-const Table = styled.table`
-  width: 100%; border-collapse: collapse; font-size: 13px;
-  th { padding: 16px; text-align: left; font-weight: 800; text-transform: uppercase; font-size: 11px; letter-spacing: 1px; color: ${({ theme }) => theme.textSecondary}; border-bottom: 1px solid ${({ theme }) => theme.border}; }
-  td { padding: 16px; border-bottom: 1px solid ${({ theme }) => theme.border}40; color: ${({ theme }) => theme.text}; }
-  tr:hover { background: ${({ theme }) => theme.bg2}10; }
-  tr:last-child td { border-bottom: none; }
-`;
-
-export function RecentActivitiesTable({ transfers }) {
+/**
+ * Corporate RecentActivitiesTable (Tailwind Edition)
+ */
+export function RecentActivitiesTable({ transfers, className = "" }) {
     return (
-        <Card>
-            <Header>
-                <Title><FaHistory color="var(--primary)" /> Últimas Actividades</Title>
-                <Link to="/history" style={{ textDecoration: 'none' }}>
+        <div className={`bg-white rounded-3xl border border-slate-200 p-6 flex flex-col gap-5 shadow-md grid-column-1/-1 ${className}`}>
+            <div className="flex justify-between items-center border-b-2 border-primary-500/20 pb-3">
+                <h3 className="m-0 text-base font-extrabold flex items-center gap-2.5 text-slate-800">
+                    <FaHistory className="text-primary-500" /> Últimas Actividades
+                </h3>
+                <Link to="/history" className="no-underline">
                     <Button variant="ghost" size="small">Ver Historial Completo <FaArrowRight /></Button>
                 </Link>
-            </Header>
-            <TableWrapper>
-                <Table>
+            </div>
+            <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-[13px]">
                     <thead>
                         <tr>
-                            <th>Tarea de Transferencia</th>
-                            <th>Fecha y Hora</th>
-                            <th>Registros</th>
-                            <th>Estado Operativo</th>
+                            <th className="p-4 text-left font-extrabold uppercase text-[11px] tracking-wider text-slate-500 border-b border-slate-200">Tarea de Transferencia</th>
+                            <th className="p-4 text-left font-extrabold uppercase text-[11px] tracking-wider text-slate-500 border-b border-slate-200">Fecha y Hora</th>
+                            <th className="p-4 text-left font-extrabold uppercase text-[11px] tracking-wider text-slate-500 border-b border-slate-200">Registros</th>
+                            <th className="p-4 text-left font-extrabold uppercase text-[11px] tracking-wider text-slate-500 border-b border-slate-200">Estado Operativo</th>
                         </tr>
                     </thead>
                     <tbody>
                         {transfers.length > 0 ? transfers.map((tx, idx) => (
-                            <tr key={tx.id || idx}>
-                                <td style={{ fontWeight: 700 }}>{tx.name}</td>
-                                <td>{new Date(tx.date).toLocaleString()}</td>
-                                <td>{tx.totalRecords}</td>
-                                <td><StatusBadge status={tx.status}>{tx.status}</StatusBadge></td>
+                            <tr key={tx.id || idx} className="hover:bg-slate-50/10">
+                                <td className="p-4 border-b border-slate-200/40 text-slate-800 font-bold">{tx.name}</td>
+                                <td className="p-4 border-b border-slate-200/40 text-slate-600">{new Date(tx.date).toLocaleString()}</td>
+                                <td className="p-4 border-b border-slate-200/40 text-slate-600">{tx.totalRecords}</td>
+                                <td className="p-4 border-b border-slate-200/40"><StatusBadge status={tx.status}>{tx.status}</StatusBadge></td>
                             </tr>
                         )) : (
                             <tr>
-                                <td colSpan={4} style={{ textAlign: 'center', padding: '40px', opacity: 0.5, fontStyle: 'italic' }}>
+                                <td colSpan={4} className="text-center p-10 opacity-50 italic text-slate-500">
                                     No hay registros de transferencias recientes.
                                 </td>
                             </tr>
                         )}
                     </tbody>
-                </Table>
-            </TableWrapper>
-        </Card>
+                </table>
+            </div>
+        </div>
     );
 }

@@ -1,6 +1,10 @@
-import styled from "styled-components";
+import React from "react";
 
-export const Icono = styled.span`
-  color: ${(props) => props.theme.text};
-  font-size: 25px;
-`;
+/**
+ * Corporate Icon Component (Tailwind Edition)
+ */
+export const Icono = ({ children, className = "", ...props }) => (
+  <span className={`text-slate-600 text-2xl ${className}`} {...props}>
+    {children}
+  </span>
+);

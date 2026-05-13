@@ -1,4 +1,4 @@
-import { useState, useCallback, useMemo } from "react";
+import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { AuditStatsApi } from "../api/index";
 import { useFetchData } from "./useFetchData";
 
@@ -29,6 +29,10 @@ export const useAuditLogs = (accessToken, initialType = "system") => {
         limit: 50,
     });
 
+    const [autoRefresh, setAutoRefresh] = useState(false);
+    const [autoRefreshInterval, setAutoRefreshInterval] = useState(30000); // 30 segundos por defecto
+    const lastErrorCountRef = useRef(null);
+
     const fetchLogsCallback = useCallback(async () => {
         if (!accessToken) return null;
 
@@ -56,6 +60,36 @@ export const useAuditLogs = (accessToken, initialType = "system") => {
         fetchData: refreshLogs
     } = useFetchData(fetchLogsCallback, [accessToken, logType, filters, pagination.page]);
 
+    // Polling automático para detectar nuevos errores
+    useEffect(() => {
+        if (!autoRefresh || !accessToken) return;
+
+        const intervalId = setInterval(async () => {
+            const currentErrorCount = data?.stats?.error || 0;
+            
+            // Si hay más errores que antes, hacer refresh
+            if (lastErrorCountRef.current !== null && currentErrorCount > lastErrorCountRef.current) {
+                console.log(`[AuditLogs] Nuevos errores detectados: ${lastErrorCountRef.current} -> ${currentErrorCount}`);
+                await refreshLogs();
+            }
+            
+            lastErrorCountRef.current = currentErrorCount;
+        }, autoRefreshInterval);
+
+        return () => clearInterval(intervalId);
+    }, [autoRefresh, autoRefreshInterval, accessToken, data, refreshLogs]);
+
+    // También hacer refresh si estamos en autoRefresh y hay cambios en los filtros
+    useEffect(() => {
+        if (!autoRefresh || !accessToken) return;
+
+        const intervalId = setInterval(async () => {
+            await refreshLogs();
+        }, autoRefreshInterval);
+
+        return () => clearInterval(intervalId);
+    }, [autoRefresh, autoRefreshInterval, accessToken, refreshLogs]);
+
     const logs = useMemo(() => {
         if (!data) return [];
         return logType === "system" ? (data.logs || []) : (data.history || []);
@@ -67,6 +101,11 @@ export const useAuditLogs = (accessToken, initialType = "system") => {
             total: data.total_logs || data.pagination?.total || 0,
             pages: data.pages || data.pagination?.pages || 1
         };
+    }, [data]);
+
+    const stats = useMemo(() => {
+        if (!data?.stats) return null;
+        return data.stats;
     }, [data]);
 
     const updateFilters = (newFilters) => {
@@ -90,18 +129,20 @@ export const useAuditLogs = (accessToken, initialType = "system") => {
 
         let csvContent = "";
         if (logType === "system") {
-            csvContent = "Fecha,Nivel,Operación,Entidad,EntidadID,Registros,Duración(ms),Mensaje,Fuente\n" +
+            csvContent = "Fecha,Nivel,Operación,Entidad,Mapping,Campo,EntidadID,Registros,Duración(ms),Mensaje,Fuente\n" +
                 logs.map(l => {
                     const date = new Date(l.timestamp).toLocaleString();
                     const level = l.level || '';
                     const operationType = l.operationType || '';
                     const entityType = l.entityType || '';
+                    const mappingName = l.mappingName || '';
+                    const fieldName = l.fieldName || '';
                     const entityId = l.entityId || '';
                     const affectedRecords = l.affectedRecords || 0;
                     const durationMs = l.durationMs || 0;
                     const message = (l.message || '').replace(/"/g, '""').substring(0, 500);
                     const source = l.source || '';
-                    return `${date},${level},${operationType},${entityType},${entityId},${affectedRecords},${durationMs},"${message}","${source}"`;
+                    return `${date},${level},${operationType},${entityType},${mappingName},${fieldName},${entityId},${affectedRecords},${durationMs},"${message}","${source}"`;
                 }).join('\n');
         } else {
             csvContent = "Fecha,Tarea,Estado,Registros,Duración(ms)\n" +
@@ -117,22 +158,35 @@ export const useAuditLogs = (accessToken, initialType = "system") => {
         window.URL.revokeObjectURL(url);
     };
 
+    const toggleAutoRefresh = () => {
+        setAutoRefresh(prev => !prev);
+    };
+
+    const setRefreshInterval = (intervalMs) => {
+        setAutoRefreshInterval(intervalMs);
+    };
+
     return {
         logs,
         meta,
+        stats,
         loading,
         refreshing,
         error,
         logType,
         filters,
         pagination,
+        autoRefresh,
+        autoRefreshInterval,
         actions: {
             setLogType,
             updateFilters,
             changePage,
             refreshLogs,
             clearLogs,
-            exportCSV
+            exportCSV,
+            toggleAutoRefresh,
+            setRefreshInterval
         }
     };
 };
