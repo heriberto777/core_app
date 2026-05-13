@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import styled from "styled-components";
 import {
   FaCog,
   FaUsers,
@@ -79,183 +78,53 @@ export function ConfigurationPage() {
     },
   ];
 
-  // Filtrar tabs según permisos
   const availableTabs = configTabs.filter(
     (tab) => !tab.requiresAdmin || user?.role?.includes("admin")
   );
 
+  const activeTabData = availableTabs.find((t) => t.id === activeTab);
+
   return (
-    <ConfigContainer>
-
-      <MainLayout>
-        <SideNav>
+    <div className="flex flex-col gap-5 w-full flex-1 animate-fadeIn">
+      <div className="grid grid-cols-[220px_1fr] gap-4 w-full min-h-0 items-start max-[1024px]:grid-cols-1">
+        <aside className="flex flex-col gap-3 bg-slate-100/20 dark:bg-slate-700/20 p-3 rounded-3xl border border-slate-200/30 dark:border-slate-700/30 h-fit sticky top-6 backdrop-blur-sm min-w-[200px]">
           {availableTabs.map((tab) => (
-            <NavButton
+            <button
               key={tab.id}
-              $active={activeTab === tab.id}
               onClick={() => setActiveTab(tab.id)}
+              className={`relative flex items-center gap-4 p-4 bg-transparent rounded-xl cursor-pointer transition-all duration-300 font-semibold text-left overflow-hidden hover:bg-slate-200/60 dark:hover:bg-slate-600/60 hover:translate-x-2 ${
+                activeTab === tab.id
+                  ? "bg-gradient-to-r from-blue-500/20 to-blue-500/10 shadow-lg border border-blue-500/30 text-blue-500"
+                  : "text-slate-500 dark:text-slate-400 border border-transparent"
+              }`}
             >
-              <span className="icon">{tab.icon}</span>
-              <span className="label">{tab.label}</span>
-              {activeTab === tab.id && <ActiveIndicator layoutId="active" />}
-            </NavButton>
+              <span className="text-lg">{tab.icon}</span>
+              <span>{tab.label}</span>
+              {activeTab === tab.id && (
+                <div className="absolute left-0 top-[15%] h-[70%] w-1 bg-blue-500 rounded-r-full shadow-lg shadow-blue-500/50"></div>
+              )}
+            </button>
           ))}
-        </SideNav>
+        </aside>
 
-        <ContentArea>
-          <GlassCard>
-            <div className="content-header">
-              <div style={{ flex: 1 }}>
-                <h2>{availableTabs.find(t => t.id === activeTab)?.label}</h2>
-                <p style={{ margin: '8px 0 0', opacity: 0.7, fontSize: '14px' }}>
-                  {availableTabs.find(t => t.id === activeTab)?.description}
+        <main className="min-h-0 flex-1">
+          <div className="bg-white dark:bg-slate-800 backdrop-blur-md border border-slate-200 dark:border-slate-700 rounded-3xl p-6 w-full min-w-0 shadow-xl animate-slideUp">
+            <div className="mb-6 pb-5 border-b border-slate-200/40 dark:border-slate-700/40 flex justify-between items-center">
+              <div className="flex-1">
+                <h2 className="m-0 text-2xl font-extrabold text-slate-900 dark:text-white">
+                  {activeTabData?.label}
+                </h2>
+                <p className="mt-2 text-sm opacity-70">
+                  {activeTabData?.description}
                 </p>
               </div>
             </div>
-            <div className="content-body">
-              {availableTabs.find((tab) => tab.id === activeTab)?.component}
+            <div className="animate-slideUp">
+              {activeTabData?.component}
             </div>
-          </GlassCard>
-        </ContentArea>
-      </MainLayout>
-    </ConfigContainer>
+          </div>
+        </main>
+      </div>
+    </div>
   );
 }
-
-// --- ESTILOS MODERNIZADOS ---
-
-const ConfigContainer = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  width: 100%;
-  flex: 1;
-  animation: fadeIn 0.5s ease;
-
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-`;
-
-
-const MainLayout = styled.div`
-  display: grid;
-  grid-template-columns: 220px 1fr;
-  gap: 16px;
-  width: 100%;
-  min-height: 0;
-  align-items: flex-start;
-
-  @media (max-width: 1024px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const SideNav = styled.aside`
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  background: ${({ theme }) => theme.bg2}20;
-  padding: 12px;
-  border-radius: 24px;
-  border: 1px solid ${({ theme }) => theme.border}30;
-  height: fit-content;
-  position: sticky;
-  top: 24px;
-  backdrop-filter: blur(8px);
-  min-width: 200px;
-`;
-
-const NavButton = styled.button`
-  position: relative;
-  display: flex;
-  align-items: center;
-  gap: 15px;
-  padding: 16px 20px;
-  background: transparent;
-  color: ${({ $active, theme }) => ($active ? theme.primary : theme.textSecondary)};
-  border: none;
-  border-radius: 12px;
-  cursor: pointer;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  font-weight: 600;
-  text-align: left;
-  overflow: hidden;
-
-  &:hover {
-    background: ${({ theme }) => theme.bg2}60;
-    color: ${({ theme }) => theme.primary};
-    transform: translateX(8px);
-  }
-
-  .icon {
-    font-size: 1.2rem;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    transition: transform 0.3s;
-  }
-
-  &:hover .icon {
-    transform: scale(1.1);
-  }
-
-  ${({ $active, theme }) => $active && `
-    background: linear-gradient(135deg, ${theme.primary}25 0%, ${theme.primary}08 100%);
-    box-shadow: 0 8px 20px ${theme.primary}15;
-    border: 1px solid ${theme.primary}30;
-  `}
-`;
-
-const ActiveIndicator = styled.div`
-  position: absolute;
-  left: 0;
-  top: 15%;
-  height: 70%;
-  width: 4px;
-  background: ${({ theme }) => theme.primary};
-  border-radius: 0 4px 4px 0;
-  box-shadow: 2px 0 10px ${({ theme }) => theme.primary}50;
-`;
-
-const ContentArea = styled.main`
-  min-height: 0;
-  flex: 1;
-`;
-
-const GlassCard = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  backdrop-filter: blur(12px);
-  border: 1px solid ${({ theme }) => theme.border};
-  border-radius: 28px;
-  padding: 24px;
-  width: 100%;
-  min-width: 0;
-  box-shadow: 0 10px 40px rgba(0,0,0,0.06);
-
-  .content-header {
-    margin-bottom: 25px;
-    padding-bottom: 20px;
-    border-bottom: 1px solid ${({ theme }) => theme.border}40;
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-
-    h2 {
-      margin: 0;
-      font-size: 1.8rem;
-      font-weight: 800;
-      color: ${({ theme }) => theme.titleColor};
-    }
-  }
-
-  .content-body {
-    animation: slideUp 0.4s ease-out;
-  }
-
-  @keyframes slideUp {
-    from { opacity: 0; transform: translateY(20px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-`;

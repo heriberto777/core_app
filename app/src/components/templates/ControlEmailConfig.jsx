@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import styled from "styled-components";
 import { FaSync, FaPlus, FaCog, FaExclamationTriangle, FaEnvelope } from "react-icons/fa";
 import { Helmet } from "react-helmet-async";
 import Swal from "sweetalert2";
@@ -10,7 +9,8 @@ import {
   EmailConfigTable,
   EmailConfigFormModal,
   EmailTestModal,
-  Button
+  Button,
+  LoadingSpinner
 } from "../../index";
 
 export function ControlEmailConfig() {
@@ -20,7 +20,6 @@ export function ControlEmailConfig() {
   const [isTestOpen, setIsTestOpen] = useState(false);
   const [selectedConfig, setSelectedConfig] = useState(null);
 
-  // Hook de lógica técnica y telemetría SMTP
   const {
     configs,
     loading,
@@ -107,104 +106,65 @@ export function ControlEmailConfig() {
   };
 
   return (
-    <div style={{ animation: 'fadeIn 0.4s ease-out' }}>
+    <div className="min-h-screen bg-white dark:bg-slate-900 flex flex-col animate-fadeIn">
       <Helmet>
         <title>Email Config - Core ERP</title>
       </Helmet>
 
-      <TopBar>
-        <TitleSection>
-          <PageTitle><FaEnvelope color="var(--primary)" /> Infraestructura de Email</PageTitle>
-          <PageSubtitle>Gestión de servidores SMTP y notificaciones automatizadas del sistema.</PageSubtitle>
-        </TitleSection>
+      <div className="flex-1 p-5 p-10 max-w-[1400px] mx-auto w-full flex flex-col gap-8">
+        <div className="flex justify-between items-end py-2.5 max-md:flex-col max-md:items-start max-md:gap-6">
+          <div className="flex flex-col gap-1">
+            <h2 className="m-0 text-[28px] font-extrabold text-slate-800 dark:text-white flex items-center gap-3">
+              <FaEnvelope className="text-blue-500" /> Infraestructura de Email
+            </h2>
+            <p className="m-0 text-sm font-semibold text-slate-500">Gestión de servidores SMTP y notificaciones automatizadas del sistema.</p>
+          </div>
 
-        <Toolbar>
-          <Button variant="outline" icon={<FaCog />} onClick={onInitializeDefaults}>Inicializar Defaults</Button>
-          <Button variant="secondary" icon={<FaSync className={refreshing ? "spin" : ""} />} onClick={actions.refetch} disabled={loading}>Refrescar</Button>
-          <Button variant="primary" icon={<FaPlus />} onClick={handleOpenAdd}>Agregar Cuenta</Button>
-        </Toolbar>
-      </TopBar>
+          <div className="flex gap-3">
+            <Button variant="outline" icon={<FaCog />} onClick={onInitializeDefaults}>Inicializar Defaults</Button>
+            <Button variant="secondary" icon={<FaSync className={refreshing ? "animate-spin" : ""} />} onClick={actions.refetch} disabled={loading}>Refrescar</Button>
+            <Button variant="primary" icon={<FaPlus />} onClick={handleOpenAdd}>Agregar Cuenta</Button>
+          </div>
+        </div>
 
-      {loading && !refreshing ? (
-        <CenteredArea>
-          <Spinner />
-          <p>Sincronizando configuraciones SMTP...</p>
-        </CenteredArea>
-      ) : error ? (
-        <CenteredArea $error>
-          <FaExclamationTriangle size={40} />
-          <p>{error}</p>
-          <Button variant="primary" onClick={actions.refetch}>Reintentar Conexión</Button>
-        </CenteredArea>
-      ) : (
-        <EmailConfigTable
-          configs={configs}
-          onEdit={handleOpenEdit}
-          onDelete={onDeleteConfig}
-          onToggle={(c) => actions.toggleStatus(c._id)}
-          onSetDefault={onSetDefault}
-          onTest={handleOpenTest}
+        {loading && !refreshing ? (
+          <div className="flex flex-col items-center justify-center p-20 gap-5 text-center">
+            <LoadingSpinner />
+            <p className="font-bold text-slate-500">Sincronizando configuraciones SMTP...</p>
+          </div>
+        ) : error ? (
+          <div className="flex flex-col items-center justify-center p-20 gap-5 text-center">
+            <FaExclamationTriangle size={40} className="text-red-500" />
+            <p className="font-bold text-red-500">{error}</p>
+            <Button variant="primary" onClick={actions.refetch}>Reintentar Conexión</Button>
+          </div>
+        ) : (
+          <EmailConfigTable
+            configs={configs}
+            onEdit={handleOpenEdit}
+            onDelete={onDeleteConfig}
+            onToggle={(c) => actions.toggleStatus(c._id)}
+            onSetDefault={onSetDefault}
+            onTest={handleOpenTest}
+          />
+        )}
+
+        <EmailConfigFormModal
+          isOpen={isFormOpen}
+          onClose={() => setIsFormOpen(false)}
+          config={selectedConfig}
+          onSave={onSaveConfig}
+          loading={loading}
         />
-      )}
 
-      <EmailConfigFormModal
-        isOpen={isFormOpen}
-        onClose={() => setIsFormOpen(false)}
-        config={selectedConfig}
-        onSave={onSaveConfig}
-      />
-
-      <EmailTestModal
-        isOpen={isTestOpen}
-        onClose={() => setIsTestOpen(false)}
-        config={selectedConfig}
-        onSendTest={actions.testConfig}
-      />
-
-      <style>{`
-        .spin { animation: spin 1s linear infinite; }
-        @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-      `}</style>
+        <EmailTestModal
+          isOpen={isTestOpen}
+          onClose={() => setIsTestOpen(false)}
+          config={selectedConfig}
+        />
+      </div>
     </div>
   );
 }
-
-// --- Styled Components Premium ---
-
-const Container = styled.div`
-  min-height: 100vh; background: ${({ theme }) => theme.bg};
-  display: flex; flex-direction: column;
-`;
-
-const HeaderSection = styled.header` padding: 0 20px; `;
-
-const MainArea = styled.main`
-  flex: 1; padding: 20px 40px; max-width: 1400px; margin: 0 auto; width: 100%;
-  display: flex; flex-direction: column; gap: 32px;
-  @media (max-width: 768px) { padding: 10px; }
-`;
-
-const TopBar = styled.div`
-  display: flex; justify-content: space-between; align-items: flex-end; padding: 10px 0;
-  @media (max-width: 1024px) { flex-direction: column; align-items: flex-start; gap: 24px; }
-`;
-
-const TitleSection = styled.div` display: flex; flex-direction: column; gap: 4px; `;
-const PageTitle = styled.h2` margin: 0; font-size: 28px; font-weight: 800; color: ${({ theme }) => theme.title}; display: flex; align-items: center; gap: 12px; `;
-const PageSubtitle = styled.p` margin: 0; font-size: 14px; font-weight: 600; color: ${({ theme }) => theme.textSecondary}; `;
-
-const Toolbar = styled.div` display: flex; gap: 12px; `;
-
-const CenteredArea = styled.div`
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 80px; gap: 20px; text-align: center;
-  p { font-weight: 700; color: ${({ theme, $error }) => $error ? '#ef4444' : theme.textSecondary}; }
-`;
-
-const Spinner = styled.div`
-  width: 44px; height: 44px; border: 4px solid ${({ theme }) => theme.primary}20;
-  border-top-color: ${({ theme }) => theme.primary}; border-radius: 50%;
-  animation: spin 1s linear infinite;
-`;
 
 export default ControlEmailConfig;

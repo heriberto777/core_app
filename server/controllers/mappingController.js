@@ -288,7 +288,19 @@ const processDocumentsByMapping = async (req, res) => {
     // Iniciar proceso en segundo plano
     DynamicTransferService.processDocuments(documentIds, mappingId)
       .then(result => logger.info(`Asíncrono finalizado para ${mappingId}`))
-      .catch(err => logger.error(`Error asíncrono ${mappingId}: ${err.message}`));
+      .catch(err => logger.error(`Error asíncrono ${mappingId}:`, err, {
+        level: "error",
+        source: "api",
+        operationType: "TRANSFER",
+        mappingId: mappingId,
+        endpoint: req.originalUrl,
+        originalStack: err.stack,
+        errorDetails: {
+          message: err.message,
+          mappingId: mappingId,
+          documentCount: documentIds?.length,
+        }
+      }));
 
     const mapping = await TransferMapping.findById(mappingId);
     res.json({
@@ -298,7 +310,20 @@ const processDocumentsByMapping = async (req, res) => {
       taskId: mapping?.taskId
     });
   } catch (error) {
-    logger.error(`Error en procesamiento de documentos: ${error.message}`);
+    logger.error(`Error en procesamiento de documentos:`, error, {
+      level: "error",
+      source: "api",
+      operationType: "TRANSFER",
+      mappingId: req.params.mappingId,
+      endpoint: req.originalUrl,
+      method: req.method,
+      originalStack: error.stack,
+      errorDetails: {
+        message: error.message,
+        mappingId: req.params.mappingId,
+        documentCount: req.body.documentIds?.length,
+      }
+    });
     res.status(500).json({
       success: false,
       message: "Error durante el procesamiento de transferencia",

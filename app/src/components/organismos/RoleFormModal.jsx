@@ -1,183 +1,6 @@
 import React, { useState, useEffect } from "react";
-import styled from "styled-components";
-import { FaShieldAlt, FaInfoCircle, FaLock, FaCheckSquare, FaSquare } from "react-icons/fa";
+import { FaShieldAlt, FaInfoCircle, FaLock, FaCheckSquare, FaSquare, FaTimes, FaUnlockAlt, FaKey } from "react-icons/fa";
 import { Button } from "../index";
-
-const Overlay = styled.div`
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.4);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 20px;
-`;
-
-const Modal = styled.div`
-  background: white;
-  width: 100%;
-  max-width: 800px;
-  max-height: 90vh;
-  border-radius: 24px;
-  overflow: hidden;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  display: flex;
-  flex-direction: column;
-`;
-
-const Header = styled.div`
-  background: #f8fafc;
-  padding: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid #e2e8f0;
-
-  h2 {
-    font-size: 20px;
-    font-weight: 900;
-    color: #1e293b;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-`;
-
-const ScrollContent = styled.div`
-  padding: 24px;
-  overflow-y: auto;
-  flex: 1;
-`;
-
-const FormGrid = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 32px;
-
-  @media (max-width: 600px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const FormGroup = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  grid-column: ${props => props.fullWidth ? "1 / -1" : "auto"};
-`;
-
-const Label = styled.label`
-  font-size: 11px;
-  font-weight: 800;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-`;
-
-const Input = styled.input`
-  width: 100%;
-  padding: 12px 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  font-size: 14px;
-  transition: all 0.2s;
-
-  &:focus {
-    outline: none;
-    border-color: #3b82f6;
-  }
-  
-  &:disabled {
-    background: #f8fafc;
-    cursor: not-allowed;
-  }
-`;
-
-const SectionTitle = styled.h3`
-  font-size: 14px;
-  font-weight: 800;
-  color: #1e293b;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-`;
-
-const ResourceCard = styled.div`
-  background: #f8fafc;
-  border: 1px solid #e2e8f0;
-  border-radius: 16px;
-  padding: 16px;
-  margin-bottom: 16px;
-`;
-
-const ResourceHeader = styled.div`
-  margin-bottom: 12px;
-  h4 {
-    font-size: 14px;
-    font-weight: 700;
-    color: #1e293b;
-    margin-bottom: 4px;
-  }
-  p {
-    font-size: 12px;
-    color: #64748b;
-  }
-`;
-
-const ActionsGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(100px, 1fr));
-  gap: 8px;
-`;
-
-const PermissionCheck = styled.label`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 8px 12px;
-  background: ${props => props.checked ? "#dbeafe" : "white"};
-  border: 1px solid ${props => props.checked ? "#3b82f6" : "#e2e8f0"};
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-  color: ${props => props.checked ? "#1e40af" : "#64748b"};
-  transition: all 0.2s;
-
-  input {
-    display: none;
-  }
-
-  &:hover {
-    border-color: #3b82f6;
-  }
-`;
-
-const Footer = styled.div`
-  padding: 24px;
-  background: #f8fafc;
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  border-top: 1px solid #e2e8f0;
-`;
-
-const SystemAlert = styled.div`
-  background: #fffbeb;
-  border: 1px solid #fcd34d;
-  color: #92400e;
-  padding: 12px;
-  border-radius: 12px;
-  font-size: 13px;
-  margin-bottom: 20px;
-  display: flex;
-  gap: 12px;
-  align-items: center;
-`;
 
 export const RoleFormModal = ({ isOpen, onClose, onSave, initialData = null, resources = [] }) => {
     const [formData, setFormData] = useState({
@@ -242,97 +65,138 @@ export const RoleFormModal = ({ isOpen, onClose, onSave, initialData = null, res
     };
 
     return (
-        <Overlay>
-            <Modal>
-                <Header>
-                    <h2><FaShieldAlt /> {initialData ? "Editar Rol de Seguridad" : "Nuevo Rol de Seguridad"}</h2>
-                    <Button variant="ghost" onClick={onClose}>✕</Button>
-                </Header>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[1000] p-4 animate-in fade-in duration-300">
+            <div className="w-full max-w-[850px] max-h-[90vh] bg-white rounded-[32px] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-300">
+                {/* Header */}
+                <div className="bg-white/80 backdrop-blur-md px-8 py-7 flex items-center justify-between border-b border-slate-50">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-600/20">
+                            <FaShieldAlt className="text-xl" />
+                        </div>
+                        <div className="flex flex-col">
+                            <h2 className="text-xl font-black text-slate-900 leading-tight">
+                                {initialData ? "Editar Rol de Seguridad" : "Nuevo Rol de Seguridad"}
+                            </h2>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Gestión de Acceso y Privilegios</span>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+                        <FaTimes />
+                    </button>
+                </div>
 
-                <ScrollContent>
+                {/* Scroll Content */}
+                <div className="flex-1 overflow-y-auto p-8 space-y-10">
+                    {/* System Alert */}
                     {initialData?.isSystem && (
-                        <SystemAlert>
-                            <FaLock />
-                            <span>Este es un rol del sistema. Ciertas propiedades están bloqueadas por seguridad.</span>
-                        </SystemAlert>
+                        <div className="bg-amber-50/50 border border-amber-100 text-amber-800 px-6 py-4 rounded-[20px] text-sm flex gap-4 items-start animate-in slide-in-from-top-2 duration-500">
+                            <FaLock className="mt-1 shrink-0 text-amber-500" />
+                            <span className="font-medium leading-relaxed italic">
+                                Este es un rol crítico del sistema. Ciertas propiedades técnicas están restringidas para garantizar la integridad de la plataforma.
+                            </span>
+                        </div>
                     )}
 
-                    <FormGrid>
-                        <FormGroup>
-                            <Label>Nombre Técnico (Slug)</Label>
-                            <Input
+                    {/* Form Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="flex flex-col gap-2">
+                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-1">
+                                Identificador (Slug)
+                            </label>
+                            <input
                                 disabled={initialData?.isSystem}
                                 required
+                                className="w-full px-5 py-4 border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:border-indigo-500 bg-slate-50/50 transition-all placeholder:text-slate-300"
                                 value={formData.name}
                                 onChange={e => setFormData({ ...formData, name: e.target.value.toLowerCase().replace(/[^a-z0-9-_]/g, '') })}
                                 placeholder="ej: analista-ventas"
                             />
-                        </FormGroup>
-                        <FormGroup>
-                            <Label>Nombre Amigable</Label>
-                            <Input
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-1">
+                                Nombre Descriptivo
+                            </label>
+                            <input
                                 disabled={initialData?.isSystem}
                                 required
+                                className="w-full px-5 py-4 border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:border-indigo-500 bg-slate-50/50 transition-all"
                                 value={formData.displayName}
                                 onChange={e => setFormData({ ...formData, displayName: e.target.value })}
                                 placeholder="ej: Analista de Ventas"
                             />
-                        </FormGroup>
-                        <FormGroup fullWidth>
-                            <Label>Descripción del Rol</Label>
-                            <Input
+                        </div>
+                        <div className="md:col-span-2 flex flex-col gap-2">
+                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-1">
+                                Descripción de Responsabilidades
+                            </label>
+                            <textarea
                                 disabled={initialData?.isSystem}
-                                as="textarea"
-                                style={{ height: '60px' }}
+                                className="w-full px-5 py-4 border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:border-indigo-500 bg-slate-50/50 transition-all resize-none h-24"
                                 value={formData.description}
                                 onChange={e => setFormData({ ...formData, description: e.target.value })}
-                                placeholder="Describe las responsabilidades de este rol..."
+                                placeholder="Describa el alcance de las acciones permitidas para este perfil..."
                             />
-                        </FormGroup>
-                    </FormGrid>
+                        </div>
+                    </div>
 
-                    <SectionTitle><FaCheckSquare /> Matriz de Permisos</SectionTitle>
+                    {/* Section Title */}
+                    <div className="space-y-8">
+                        <h3 className="text-sm font-black text-slate-900 flex items-center gap-3 border-l-4 border-indigo-600 pl-4">
+                            <FaUnlockAlt className="text-indigo-600" /> Matriz de Permisos por Recurso
+                        </h3>
 
-                    {resources.map(res => {
-                        const resPerm = formData.permissions.find(p => p.resource === res.id);
-                        return (
-                            <ResourceCard key={res.id}>
-                                <ResourceHeader>
-                                    <h4>{res.name}</h4>
-                                    <p>{res.description}</p>
-                                </ResourceHeader>
-                                <ActionsGrid>
-                                    {res.actions.map(action => {
-                                        const checked = resPerm?.actions.includes(action);
-                                        return (
-                                            <PermissionCheck key={action} checked={checked}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={checked}
-                                                    onChange={() => handleTogglePermission(res.id, action)}
-                                                />
-                                                {checked ? <FaCheckSquare /> : <FaSquare />}
-                                                {action.toUpperCase()}
-                                            </PermissionCheck>
-                                        );
-                                    })}
-                                </ActionsGrid>
-                            </ResourceCard>
-                        );
-                    })}
-                </ScrollContent>
+                        {/* Resources */}
+                        <div className="space-y-6">
+                            {resources.map(res => {
+                                const resPerm = formData.permissions.find(p => p.resource === res.id);
+                                return (
+                                    <div key={res.id} className="bg-slate-50/50 border border-slate-100 rounded-[28px] p-8 space-y-6 hover:border-indigo-200 transition-all group">
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex items-center gap-2">
+                                                <div className="w-2 h-2 rounded-full bg-indigo-500" />
+                                                <h4 className="text-sm font-black text-slate-900 uppercase tracking-wider group-hover:text-indigo-600 transition-colors">{res.name}</h4>
+                                            </div>
+                                            <p className="text-xs text-slate-400 font-medium ml-4">{res.description}</p>
+                                        </div>
+                                        <div className="grid grid-cols-2 sm:grid-cols-4 lg:grid-cols-5 gap-3">
+                                            {res.actions.map(action => {
+                                                const checked = resPerm?.actions.includes(action);
+                                                return (
+                                                    <label key={action} className={`flex items-center gap-3 px-4 py-3 rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer transition-all border ${
+                                                        checked ? "bg-indigo-600 border-indigo-600 text-white shadow-lg shadow-indigo-600/20" : "bg-white border-slate-200 text-slate-500 hover:border-indigo-400"
+                                                    }`}>
+                                                        <input
+                                                            type="checkbox"
+                                                            checked={checked}
+                                                            onChange={() => handleTogglePermission(res.id, action)}
+                                                            className="sr-only"
+                                                        />
+                                                        {checked ? <FaKey className="text-xs" /> : <FaSquare className="text-xs opacity-20" />}
+                                                        {action}
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
 
-                <Footer>
-                    <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+                {/* Footer */}
+                <div className="px-8 py-6 bg-slate-50/50 backdrop-blur-md flex justify-end gap-3 border-t border-slate-50">
+                    <Button variant="ghost" onClick={onClose} className="font-bold">Cancelar</Button>
                     <Button
                         variant="primary"
                         onClick={handleSubmit}
                         loading={loading}
+                        className="px-10 shadow-lg shadow-indigo-600/20 font-black"
                     >
-                        {initialData ? "Guardar Cambios" : "Crear Rol"}
+                        {initialData ? "Guardar Cambios" : "Crear Rol de Seguridad"}
                     </Button>
-                </Footer>
-            </Modal>
-        </Overlay>
+                </div>
+            </div>
+        </div>
     );
 };

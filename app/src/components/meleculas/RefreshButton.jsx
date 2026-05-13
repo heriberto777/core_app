@@ -1,61 +1,30 @@
 import React from "react";
-import styled from "styled-components";
 import { FaSync } from "react-icons/fa";
-import { Spinner } from "../../index"; // Usando tu componente Spinner existente
+import { LoadingSpinner } from "../atomos/LoadingSpinner";
 
-// Versión mejorada del botón de refresco
-export const RefreshButton = ({ onClick, refreshing, label = "Refrescar" }) => {
+/**
+ * Corporate RefreshButton Component (Tailwind Edition)
+ */
+export const RefreshButton = ({ onClick, refreshing, label = "Refrescar", className = "" }) => {
   return (
-    <StyledRefreshButton onClick={onClick} disabled={refreshing}>
+    <button
+      onClick={onClick}
+      disabled={refreshing}
+      className={`
+        flex items-center gap-2 px-4 py-2.5 rounded-lg text-sm font-medium text-white
+        transition-all duration-300 cursor-pointer
+        ${refreshing 
+          ? 'bg-slate-500 cursor-not-allowed' 
+          : 'bg-cyan-600 hover:bg-cyan-700 active:scale-95'}
+        ${className}
+      `}
+    >
       {refreshing ? (
-        <>
-          <SpinnerWrapper>
-            <Spinner size="small" color="#ffffff" />
-          </SpinnerWrapper>
-          <span>Actualizando...</span>
-        </>
+        <LoadingSpinner size="tiny" color="#ffffff" type="ring" />
       ) : (
-        <>
-          <FaSync />
-          <span>{label}</span>
-        </>
+        <FaSync className={refreshing ? "animate-spin" : ""} />
       )}
-    </StyledRefreshButton>
+      <span>{refreshing ? "Actualizando..." : label}</span>
+    </button>
   );
 };
-
-// Estilos para el botón
-const StyledRefreshButton = styled.button`
-  background-color: #17a2b8;
-  color: white;
-  border: none;
-  border-radius: 4px;
-  padding: 10px 15px;
-  font-size: 14px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: background-color 0.3s;
-
-  &:hover {
-    background-color: #138496;
-  }
-
-  &:disabled {
-    background-color: #6c757d;
-    cursor: not-allowed;
-  }
-
-  @media (max-width: 480px) {
-    width: 100%;
-  }
-`;
-
-const SpinnerWrapper = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  width: 16px;
-  height: 16px;
-`;

@@ -1,73 +1,15 @@
 import React from "react";
-import styled from "styled-components";
 import {
     FaClipboardList,
     FaTruckLoading,
     FaCheckDouble,
     FaMoneyBillWave,
-    FaCalculator
 } from "react-icons/fa";
 
-const Grid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
-`;
-
-const StatCard = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  backdrop-filter: blur(12px);
-  border: 1px solid ${({ theme }) => theme.border};
-  padding: 24px;
-  border-radius: 20px;
-  box-shadow: ${({ theme }) => theme.shadows.soft};
-  display: flex;
-  flex-direction: column;
-  gap: 12px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-
-  &:hover {
-    transform: translateY(-8px);
-    box-shadow: ${({ theme }) => theme.shadows.medium};
-    border-color: ${({ theme }) => theme.primary}40;
-  }
-`;
-
-const IconBox = styled.div`
-  width: 44px;
-  height: 44px;
-  border-radius: 12px;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  font-size: 20px;
-  background: ${props => props.bgColor || "rgba(0,0,0,0.05)"};
-  color: ${props => props.color || "#333"};
-`;
-
-const Info = styled.div`
-  display: flex;
-  flex-direction: column;
-`;
-
-const Label = styled.span`
-  font-size: 13px;
-  font-weight: 700;
-  color: ${({ theme }) => theme.textSecondary};
-  text-transform: uppercase;
-  letter-spacing: 0.8px;
-  opacity: 0.8;
-`;
-
-const Value = styled.div`
-  font-size: 26px;
-  font-weight: 800;
-  color: ${({ theme }) => theme.titleColor};
-  font-family: 'Inter', sans-serif;
-`;
-
-export const LoadsStatsGrid = ({ stats, loading }) => {
+/**
+ * Corporate LoadsStatsGrid (Tailwind Edition)
+ */
+export const LoadsStatsGrid = ({ stats, loading, className = "" }) => {
     const formatCurrency = (amount) => {
         return new Intl.NumberFormat("es-DO", {
             style: "currency",
@@ -81,45 +23,52 @@ export const LoadsStatsGrid = ({ stats, loading }) => {
             label: "Pendientes",
             value: stats?.pending || 0,
             icon: <FaClipboardList />,
-            color: "#f59e0b",
-            bg: "rgba(245, 158, 11, 0.15)"
+            color: "text-amber-500",
+            bg: "bg-amber-50"
         },
         {
             label: "En Proceso",
             value: stats?.processing || 0,
             icon: <FaTruckLoading />,
-            color: "#3b82f6",
-            bg: "rgba(59, 130, 246, 0.15)"
+            color: "text-primary-500",
+            bg: "bg-primary-50"
         },
         {
             label: "Completados",
             value: stats?.completed || 0,
             icon: <FaCheckDouble />,
-            color: "#10b981",
-            bg: "rgba(16, 185, 129, 0.15)"
+            color: "text-emerald-500",
+            bg: "bg-emerald-50"
         },
         {
             label: "Valor Despacho",
             value: formatCurrency(stats?.totalAmount),
             icon: <FaMoneyBillWave />,
-            color: "#6366f1",
-            bg: "rgba(99, 102, 241, 0.15)"
+            color: "text-indigo-500",
+            bg: "bg-indigo-50"
         }
     ];
 
     return (
-        <Grid>
+        <div className={`grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4 mb-6 ${className}`}>
             {items.map((item, idx) => (
-                <StatCard key={idx}>
-                    <IconBox color={item.color} bgColor={item.bg}>
+                <div
+                    key={idx}
+                    className="bg-white backdrop-blur-md border border-slate-200 p-6 rounded-2xl shadow-soft flex flex-col gap-3 transition-all duration-300 hover:-translate-y-2 hover:shadow-md hover:border-primary-500/40"
+                >
+                    <div className={`w-11 h-11 rounded-xl flex items-center justify-center text-xl ${item.bg} ${item.color}`}>
                         {item.icon}
-                    </IconBox>
-                    <Info>
-                        <Label>{item.label}</Label>
-                        <Value>{loading ? "..." : item.value}</Value>
-                    </Info>
-                </StatCard>
+                    </div>
+                    <div className="flex flex-col">
+                        <span className="text-[13px] font-extrabold text-slate-500 uppercase tracking-wider opacity-80">
+                            {item.label}
+                        </span>
+                        <div className="text-[26px] font-extrabold text-slate-800 font-['Inter']">
+                            {loading ? "..." : item.value}
+                        </div>
+                    </div>
+                </div>
             ))}
-        </Grid>
+        </div>
     );
 };

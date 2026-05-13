@@ -1,37 +1,6 @@
 import React, { useState, useEffect } from "react";
-import styled from "styled-components";
-import { FaSave, FaTimes } from "react-icons/fa";
+import { FaSave, FaTimes, FaExchangeAlt } from "react-icons/fa";
 import { Button } from "../../index";
-
-const ModalOverlay = styled.div`
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px);
-  display: flex; align-items: center; justify-content: center; z-index: 2500;
-  animation: fadeIn 0.2s ease-out;
-`;
-
-const ModalContent = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  width: 90%; max-width: 400px;
-  border-radius: 20px; border: 1px solid ${({ theme }) => theme.border};
-  padding: 24px; display: flex; flex-direction: column; gap: 20px;
-  box-shadow: ${({ theme }) => theme.shadows.premium};
-  animation: scaleUp 0.2s ease-out;
-`;
-
-const FormGroup = styled.div`
-  display: flex; flex-direction: column; gap: 8px;
-`;
-
-const Label = styled.label`
-  font-size: 14px; font-weight: 600; color: ${({ theme }) => theme.text};
-`;
-
-const Input = styled.input`
-  padding: 10px 14px; border-radius: 10px; border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.inputBg}; color: ${({ theme }) => theme.text};
-  font-size: 14px;
-`;
 
 export function ValueMappingModal({ isOpen, onClose, onSave, initialData }) {
     const [formData, setFormData] = useState({ sourceValue: "", targetValue: "" });
@@ -50,22 +19,52 @@ export function ValueMappingModal({ isOpen, onClose, onSave, initialData }) {
     if (!isOpen) return null;
 
     return (
-        <ModalOverlay onClick={onClose}>
-            <ModalContent onClick={e => e.stopPropagation()}>
-                <h3 style={{ margin: 0 }}>Mapeo de Valor</h3>
-                <FormGroup>
-                    <Label>Valor Origen</Label>
-                    <Input value={formData.sourceValue} onChange={e => setFormData(prev => ({ ...prev, sourceValue: e.target.value }))} placeholder="Ej: P" />
-                </FormGroup>
-                <FormGroup>
-                    <Label>Valor Destino</Label>
-                    <Input value={formData.targetValue} onChange={e => setFormData(prev => ({ ...prev, targetValue: e.target.value }))} placeholder="Ej: PENDIENTE" />
-                </FormGroup>
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', marginTop: '10px' }}>
-                    <Button variant="secondary" onClick={onClose}>Cancelar</Button>
-                    <Button variant="primary" onClick={handleSubmit}><FaSave /> Guardar</Button>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[2500] p-4 animate-in fade-in duration-200" onClick={onClose}>
+            <div className="bg-white w-full max-w-[400px] rounded-[24px] border border-slate-200 shadow-2xl p-6 flex flex-col gap-6 animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+                <div className="flex items-center justify-between">
+                    <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
+                        <FaExchangeAlt className="text-blue-500 text-sm" /> Mapeo de Valor
+                    </h3>
+                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+                        <FaTimes />
+                    </button>
                 </div>
-            </ModalContent>
-        </ModalOverlay>
+
+                <div className="flex flex-col gap-4">
+                    <div className="flex flex-col gap-2">
+                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 px-1">Valor Origen</label>
+                        <input
+                            className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 font-bold transition-all"
+                            value={formData.sourceValue}
+                            onChange={e => setFormData(prev => ({ ...prev, sourceValue: e.target.value }))}
+                            placeholder="Ej: P"
+                        />
+                    </div>
+
+                    <div className="flex justify-center -my-2 relative z-10">
+                        <div className="bg-white p-2 rounded-full border border-slate-100 shadow-sm">
+                            <FaExchangeAlt className="text-slate-300 text-xs rotate-90" />
+                        </div>
+                    </div>
+
+                    <div className="flex flex-col gap-2">
+                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 px-1">Valor Destino</label>
+                        <input
+                            className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 font-bold transition-all"
+                            value={formData.targetValue}
+                            onChange={e => setFormData(prev => ({ ...prev, targetValue: e.target.value }))}
+                            placeholder="Ej: PENDIENTE"
+                        />
+                    </div>
+                </div>
+
+                <div className="flex justify-end gap-3 mt-2">
+                    <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+                    <Button variant="primary" onClick={handleSubmit} className="px-6 shadow-lg shadow-blue-500/20">
+                        <FaSave className="mr-2" /> Guardar
+                    </Button>
+                </div>
+            </div>
+        </div>
     );
 }

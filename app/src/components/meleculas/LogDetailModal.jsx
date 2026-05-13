@@ -1,6 +1,6 @@
-import React from "react";
+import React, { useState } from "react";
 import styled from "styled-components";
-import { FaTimes } from "react-icons/fa";
+import { FaTimes, FaChevronDown, FaChevronRight } from "react-icons/fa";
 import { StatusBadge } from "../index";
 
 const Overlay = styled.div`
@@ -92,6 +92,51 @@ const CodeBlock = styled.pre`
   border: 1px solid ${({ theme }) => theme.border};
   color: ${({ theme }) => theme.text};
 `;
+
+const CollapsibleSectionWrapper = styled.div`
+  border: 1px solid ${({ theme }) => theme.border};
+  border-radius: 8px;
+  overflow: hidden;
+`;
+
+const CollapsibleHeader = styled.div`
+  background: ${({ theme }) => theme.bg2};
+  padding: 12px 16px;
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  cursor: pointer;
+  user-select: none;
+  transition: background 0.2s;
+  &:hover {
+    background: ${({ theme }) => theme.hover};
+  }
+`;
+
+const CollapsibleTitle = styled.span`
+  font-size: 13px;
+  font-weight: 600;
+  color: ${({ theme }) => theme.text};
+  flex: 1;
+`;
+
+const CollapsibleContent = styled.div`
+  padding: ${({ theme }) => theme.spacing.md};
+  border-top: 1px solid ${({ theme }) => theme.border};
+`;
+
+const CollapsibleSection = ({ title, children, defaultOpen = false }) => {
+  const [isOpen, setIsOpen] = useState(defaultOpen);
+  return (
+    <CollapsibleSectionWrapper>
+      <CollapsibleHeader onClick={() => setIsOpen(!isOpen)}>
+        {isOpen ? <FaChevronDown size={14} color="#888" /> : <FaChevronRight size={14} color="#888" />}
+        <CollapsibleTitle>{title}</CollapsibleTitle>
+      </CollapsibleHeader>
+      {isOpen && <CollapsibleContent>{children}</CollapsibleContent>}
+    </CollapsibleSectionWrapper>
+  );
+};
 
 export const LogDetailModal = ({ log, onClose }) => {
     if (!log) return null;
@@ -217,7 +262,89 @@ export const LogDetailModal = ({ log, onClose }) => {
                         </DetailRow>
                     )}
 
-                    {/* Sección 8: Metadata */}
+                    {/* Sección 8: Context Details - Collapsible */}
+                    {(log.mappingId || log.mappingName || log.fieldName || log.tableSource || log.tableTarget || log.stepName) && (
+                        <CollapsibleSection title="Detalles del Mapping" defaultOpen={true}>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                                {log.mappingId && (
+                                    <DetailRow>
+                                        <Label>Mapping ID</Label>
+                                        <Value style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.mappingId}</Value>
+                                    </DetailRow>
+                                )}
+                                {log.mappingName && (
+                                    <DetailRow>
+                                        <Label>Mapping</Label>
+                                        <Value style={{ fontWeight: 600, color: '#3b82f6' }}>{log.mappingName}</Value>
+                                    </DetailRow>
+                                )}
+                                {log.fieldName && (
+                                    <DetailRow>
+                                        <Label>Campo</Label>
+                                        <Value style={{ fontWeight: 500 }}>{log.fieldName}</Value>
+                                    </DetailRow>
+                                )}
+                                {log.stepName && (
+                                    <DetailRow>
+                                        <Label>Paso</Label>
+                                        <Value style={{ color: '#f59e0b' }}>{log.stepName}</Value>
+                                    </DetailRow>
+                                )}
+                                {log.tableSource && (
+                                    <DetailRow>
+                                        <Label>Tabla Origen</Label>
+                                        <Value style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.tableSource}</Value>
+                                    </DetailRow>
+                                )}
+                                {log.tableTarget && (
+                                    <DetailRow>
+                                        <Label>Tabla Destino</Label>
+                                        <Value style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.tableTarget}</Value>
+                                    </DetailRow>
+                                )}
+                                {log.documentId && (
+                                    <DetailRow>
+                                        <Label>Document ID</Label>
+                                        <Value style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.documentId}</Value>
+                                    </DetailRow>
+                                )}
+                                {log.transactionId && (
+                                    <DetailRow>
+                                        <Label>Transaction ID</Label>
+                                        <Value style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.transactionId}</Value>
+                                    </DetailRow>
+                                )}
+                            </div>
+                        </CollapsibleSection>
+                    )}
+
+                    {/* Sección 9: Failed Value - Collapsible */}
+                    {(log.failedValue !== undefined && log.failedValue !== null) && (
+                        <CollapsibleSection title="Valor que Causó el Error" defaultOpen={true}>
+                            <DetailRow>
+                                <CodeBlock style={{ color: '#f59e0b' }}>
+                                    {typeof log.failedValue === "object"
+                                        ? JSON.stringify(log.failedValue, null, 2)
+                                        : String(log.failedValue)}
+                                </CodeBlock>
+                            </DetailRow>
+                        </CollapsibleSection>
+                    )}
+
+                    {/* Sección 10: Error Details - Collapsible */}
+                    {log.errorDetails && (
+                        <CollapsibleSection title="Detalles del Error" defaultOpen={true}>
+                            <DetailRow>
+                                <CodeBlock>
+                                    {typeof log.errorDetails === "object"
+                                        ? JSON.stringify(log.errorDetails, null, 2)
+                                        : log.errorDetails}
+                                </CodeBlock>
+                            </DetailRow>
+                        </CollapsibleSection>
+                    )}
+
+                    {/* Sección 11: Metadata */}
                     {log.metadata && (
                         <DetailRow>
                             <Label>Metadata</Label>
@@ -229,14 +356,15 @@ export const LogDetailModal = ({ log, onClose }) => {
                         </DetailRow>
                     )}
 
-                    {/* Sección 9: Stack Trace */}
-                    {log.stack && (
-                        <DetailRow>
-                            <Label>Stack Trace</Label>
-                            <CodeBlock style={{ color: '#ef4444' }}>
-                                {log.stack}
-                            </CodeBlock>
-                        </DetailRow>
+                    {/* Sección 12: Original Stack Trace - Collapsible */}
+                    {log.originalStack && (
+                        <CollapsibleSection title="Stack Trace Original" defaultOpen={false}>
+                            <DetailRow>
+                                <CodeBlock style={{ color: '#ef4444' }}>
+                                    {log.originalStack}
+                                </CodeBlock>
+                            </DetailRow>
+                        </CollapsibleSection>
                     )}
                 </Body>
             </Content>

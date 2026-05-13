@@ -1,6 +1,5 @@
 const TransferTask = require("../models/transferTaskModel");
-const TransferSummary = require("../models/transferSummaryModel");
-const TaskExecution = require("../models/taskExecutionModel");
+const Log = require("../models/loggerModel");
 const {
   executeTransferManual,
   insertInBatchesSSE,
@@ -673,31 +672,42 @@ const getTaskExecutionHistory = async (req, res) => {
     const task = await TransferTask.findById(taskId).lean();
     if (!task) return res.status(404).json({ success: false, message: "Tarea no encontrada" });
 
-    // Obtener desde TaskExecution (donde realmente se guardan los datos)
-    const executions = await TaskExecution.find({ taskId: taskId })
-      .sort({ date: -1 })
+    // Obtener desde Log (Sustituye a TaskExecution)
+    // Filtramos por taskId y buscamos los logs que marcan el FINAL de una ejecución (donde están los stats)
+    const executions = await Log.find({ 
+      taskId: taskId, 
+      operationType: "TRANSFER",
+      "metadata.status": { $exists: true } 
+    })
+      .sort({ timestamp: -1 })
       .limit(50)
       .lean();
 
-    const enrichedHistory = executions.map(exec => ({
-      _id: exec._id,
-      date: exec.date,
-      status: exec.status,
-      totalRecords: exec.totalRecords || 0,
-      successfulRecords: exec.successfulRecords || 0,
-      failedRecords: exec.failedRecords || 0,
-      inserted: exec.details?.inserted || exec.successfulRecords || 0,
-      updated: exec.details?.updated || 0,
-      duplicates: exec.details?.duplicates || 0,
-      message: exec.errorMessage || exec.details?.message || "Completado",
-      errorDetails: exec.errorDetails || exec.errorMessage || null,
-      errorDetail: exec.errorDetails || exec.errorMessage || null,
-      executionTime: exec.executionTime || 0,
-    }));
+    const enrichedHistory = executions.map(exec => {
+      const meta = exec.metadata || {};
+      const results = meta.details || {};
+      
+      return {
+        _id: exec._id,
+        transactionId: exec.transactionId,
+        date: exec.timestamp,
+        status: meta.status || (exec.level === "error" ? "failed" : "completed"),
+        totalRecords: meta.totalRecords || exec.affectedRecords || 0,
+        successfulRecords: exec.affectedRecords || 0,
+        failedRecords: meta.failedRecords || 0,
+        inserted: results.inserted || exec.affectedRecords || 0,
+        updated: results.updated || 0,
+        duplicates: results.duplicates || 0,
+        message: exec.message || "Completado",
+        errorDetails: exec.stack || meta.error || null,
+        errorDetail: exec.stack || meta.error || null,
+        executionTime: exec.durationMs || 0,
+      };
+    });
 
     return res.status(200).json({
       success: true,
-      message: "Historial de ejecución obtenido",
+      message: "Historial de ejecución obtenido (vía logs)",
       data: {
         task: {
           name: task.name,
@@ -789,32 +799,60 @@ const getVendedores = async (req, res) => {
 const getTransferHistory = async (req, res) => {
   try {
     const { dateFrom, dateTo, status, taskName, page = 1, limit = 20 } = req.query;
-    const query = {};
+    const query = { 
+      operationType: "TRANSFER",
+      "metadata.status": { $exists: true } // Solo finales de ejecución
+    };
 
     if (dateFrom || dateTo) {
-      query.date = {};
-      if (dateFrom) query.date.$gte = new Date(dateFrom);
-      if (dateTo) query.date.$lte = new Date(dateTo);
+      query.timestamp = {};
+      if (dateFrom) query.timestamp.$gte = new Date(dateFrom);
+      if (dateTo) query.timestamp.$lte = new Date(dateTo);
     }
 
-    if (status) query.status = status;
-    if (taskName) query.taskName = taskName;
+    if (status) query["metadata.status"] = status;
+    if (taskName) query.mappingName = taskName;
 
     const skip = (parseInt(page, 10) - 1) * parseInt(limit, 10);
-    const history = await TransferSummary.find(query).sort({ date: -1 }).skip(skip).limit(parseInt(limit, 10)).lean();
-    const total = await TransferSummary.countDocuments(query);
+    const logs = await Log.find(query).sort({ timestamp: -1 }).skip(skip).limit(parseInt(limit, 10)).lean();
+    const total = await Log.countDocuments(query);
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
 
     const [completedToday, failedToday] = await Promise.all([
-      TransferSummary.countDocuments({ date: { $gte: today }, status: "completed" }),
-      TransferSummary.countDocuments({ date: { $gte: today }, status: "failed" }),
+      Log.countDocuments({ 
+        timestamp: { $gte: today }, 
+        operationType: "TRANSFER", 
+        "metadata.status": "completed" 
+      }),
+      Log.countDocuments({ 
+        timestamp: { $gte: today }, 
+        operationType: "TRANSFER", 
+        "metadata.status": { $in: ["failed", "partial"] } 
+      }),
     ]);
+
+    // Mapear logs al formato esperado por el frontend
+    const history = logs.map(l => {
+      const meta = l.metadata || {};
+      const results = meta.details || {};
+      return {
+        _id: l._id,
+        date: l.timestamp,
+        taskName: l.mappingName,
+        status: meta.status || (l.level === "error" ? "failed" : "completed"),
+        totalRecords: meta.totalRecords || l.affectedRecords || 0,
+        successfulRecords: l.affectedRecords || 0,
+        failedRecords: meta.failedRecords || 0,
+        executionTime: l.durationMs || 0,
+        message: l.message
+      };
+    });
 
     return res.status(200).json({
       success: true,
-      message: "Historial obtenido correctamente",
+      message: "Historial obtenido correctamente (vía logs)",
       data: {
         history,
         pagination: { total, page: parseInt(page, 10), limit: parseInt(limit, 10), pages: Math.ceil(total / parseInt(limit, 10)) },
@@ -865,8 +903,13 @@ const checkServerStatus = async (req, res) => {
  */
 const getTransferSummaries = async (req, res) => {
   try {
-    const TaskExecution = require("../models/taskExecutionModel");
-    const summaries = await TaskExecution.find().sort({ date: -1 }).limit(20).lean();
+    const summaries = await Log.find({
+      operationType: "TRANSFER",
+      "metadata.status": { $exists: true }
+    })
+      .sort({ timestamp: -1 })
+      .limit(20)
+      .lean();
 
     const today = new Date();
     today.setHours(0, 0, 0, 0);
@@ -874,21 +917,32 @@ const getTransferSummaries = async (req, res) => {
     tomorrow.setDate(tomorrow.getDate() + 1);
 
     const [completedToday, failedToday] = await Promise.all([
-      TaskExecution.countDocuments({ date: { $gte: today, $lt: tomorrow }, status: "completed" }),
-      TaskExecution.countDocuments({ date: { $gte: today, $lt: tomorrow }, status: { $in: ["failed", "cancelled"] } }),
+      Log.countDocuments({ 
+        timestamp: { $gte: today, $lt: tomorrow }, 
+        operationType: "TRANSFER", 
+        "metadata.status": "completed" 
+      }),
+      Log.countDocuments({ 
+        timestamp: { $gte: today, $lt: tomorrow }, 
+        operationType: "TRANSFER", 
+        "metadata.status": { $in: ["failed", "cancelled"] } 
+      }),
     ]);
 
-    const history = summaries.map(s => ({
-      taskName: s.taskName,
-      date: s.date,
-      status: s.status,
-      totalRecords: s.totalRecords || 0,
-      successfulRecords: s.successfulRecords || 0,
-      failedRecords: s.failedRecords || 0,
-      executionTime: s.executionTime || 0,
-    }));
+    const history = summaries.map(s => {
+      const meta = s.metadata || {};
+      return {
+        taskName: s.mappingName,
+        date: s.timestamp,
+        status: meta.status || (s.level === "error" ? "failed" : "completed"),
+        totalRecords: meta.totalRecords || s.affectedRecords || 0,
+        successfulRecords: s.affectedRecords || 0,
+        failedRecords: meta.failedRecords || 0,
+        executionTime: s.durationMs || 0,
+      };
+    });
 
-    return res.status(200).json({ success: true, message: "Resúmenes obtenidos correctamente", data: { history, stats: { completedToday, failedToday } } });
+    return res.status(200).json({ success: true, message: "Resúmenes obtenidos correctamente (vía logs)", data: { history, stats: { completedToday, failedToday } } });
   } catch (error) {
     logger.error("Error en getTransferSummaries:", error);
     return res.status(500).json({ success: false, message: "Error al obtener resúmenes", error: error.message });
@@ -900,32 +954,35 @@ const getTransferSummaries = async (req, res) => {
  */
 const getDailyStats = async (req, res) => {
   try {
-    const TaskExecution = require("../models/taskExecutionModel");
     const today = new Date();
     today.setHours(0, 0, 0, 0);
     const tomorrow = new Date(today);
     tomorrow.setDate(tomorrow.getDate() + 1);
 
-    const executions = await TaskExecution.find({ date: { $gte: today, $lt: tomorrow } }).sort({ date: -1 }).lean();
+    const executions = await Log.find({ 
+      timestamp: { $gte: today, $lt: tomorrow },
+      operationType: "TRANSFER",
+      "metadata.status": { $exists: true }
+    }).sort({ timestamp: -1 }).lean();
 
     const stats = {
       total: executions.length,
-      completed: executions.filter(e => e.status === "completed").length,
-      failed: executions.filter(e => ["failed", "cancelled"].includes(e.status)).length,
+      completed: executions.filter(e => e.metadata?.status === "completed").length,
+      failed: executions.filter(e => ["failed", "cancelled"].includes(e.metadata?.status)).length,
     };
 
     return res.status(200).json({
       success: true,
-      message: "Estadísticas diarias obtenidas",
+      message: "Estadísticas diarias obtenidas (vía logs)",
       data: {
         date: today.toISOString().split("T")[0],
         executions: executions.map(e => ({
           taskId: e.taskId,
-          taskName: e.taskName,
-          date: e.date,
-          status: e.status,
-          totalRecords: e.totalRecords || 0,
-          executionTime: e.executionTime || 0,
+          taskName: e.mappingName,
+          date: e.timestamp,
+          status: e.metadata?.status || (e.level === "error" ? "failed" : "completed"),
+          totalRecords: e.metadata?.totalRecords || e.affectedRecords || 0,
+          executionTime: e.durationMs || 0,
         })),
         stats,
       },

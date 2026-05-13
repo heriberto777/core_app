@@ -1,174 +1,6 @@
 import React, { useState, useEffect } from "react";
-import styled from "styled-components";
-import { FaCog, FaEye, FaShieldAlt, FaList, FaSortAmountDown, FaCheckSquare, FaSquare, FaInfoCircle } from "react-icons/fa";
+import { FaCog, FaEye, FaShieldAlt, FaList, FaSortAmountDown, FaCheckSquare, FaSquare, FaInfoCircle, FaTimes, FaLayerGroup } from "react-icons/fa";
 import { Button } from "../index";
-
-const Overlay = styled.div`
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.4);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 20px;
-`;
-
-const Modal = styled.div`
-  background: white;
-  width: 100%;
-  max-width: 800px;
-  max-height: 90vh;
-  border-radius: 24px;
-  overflow: hidden;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  display: flex;
-  flex-direction: column;
-`;
-
-const Header = styled.div`
-  background: #f8fafc;
-  padding: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid #e2e8f0;
-
-  h2 {
-    font-size: 20px;
-    font-weight: 900;
-    color: #1e293b;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-`;
-
-const ScrollContent = styled.div`
-  padding: 24px;
-  overflow-y: auto;
-  flex: 1;
-`;
-
-const FormGrid = styled.div`
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  margin-bottom: 32px;
-
-  @media (max-width: 600px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const FormGroup = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  grid-column: ${props => props.fullWidth ? "1 / -1" : "auto"};
-`;
-
-const Label = styled.label`
-  font-size: 11px;
-  font-weight: 800;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-`;
-
-const Input = styled.input`
-  width: 100%;
-  padding: 12px 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  font-size: 14px;
-  transition: all 0.2s;
-
-  &:focus {
-    outline: none;
-    border-color: #3b82f6;
-  }
-  
-  &:disabled {
-    background: #f8fafc;
-    cursor: not-allowed;
-  }
-`;
-
-const Select = styled.select`
-  width: 100%;
-  padding: 12px 16px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: white;
-  font-size: 14px;
-`;
-
-const SectionTitle = styled.h3`
-  font-size: 14px;
-  font-weight: 800;
-  color: #1e293b;
-  margin-bottom: 16px;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-`;
-
-const ActionsGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(130px, 1fr));
-  gap: 10px;
-  background: #f8fafc;
-  padding: 20px;
-  border-radius: 16px;
-  border: 1px solid #e2e8f0;
-`;
-
-const ActionCheck = styled.label`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 10px;
-  background: ${props => props.checked ? "#dbeafe" : "white"};
-  border: 1px solid ${props => props.checked ? "#3b82f6" : "#e2e8f0"};
-  border-radius: 10px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 700;
-  color: ${props => props.checked ? "#1e40af" : "#64748b"};
-  transition: all 0.2s;
-
-  input {
-    display: none;
-  }
-
-  &:hover {
-    border-color: #3b82f6;
-  }
-`;
-
-const Footer = styled.div`
-  padding: 24px;
-  background: #f8fafc;
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  border-top: 1px solid #e2e8f0;
-`;
-
-const SystemAlert = styled.div`
-  background: #eff6ff;
-  border: 1px solid #bfdbfe;
-  color: #1e40af;
-  padding: 12px;
-  border-radius: 12px;
-  font-size: 13px;
-  margin-bottom: 20px;
-  display: flex;
-  gap: 12px;
-  align-items: center;
-`;
 
 export const ModuleFormModal = ({ isOpen, onClose, onSave, initialData = null, categories = [], availableActions = [] }) => {
     const [formData, setFormData] = useState({
@@ -218,8 +50,6 @@ export const ModuleFormModal = ({ isOpen, onClose, onSave, initialData = null, c
         }
     }, [initialData, isOpen]);
 
-    if (!isOpen) return null;
-
     const handleToggleAction = (action) => {
         const currentActions = [...formData.actions];
         if (currentActions.includes(action)) {
@@ -245,128 +75,154 @@ export const ModuleFormModal = ({ isOpen, onClose, onSave, initialData = null, c
         }
     };
 
+    if (!isOpen) return null;
+
     return (
-        <Overlay>
-            <Modal>
-                <Header>
-                    <h2><FaCog /> {initialData ? "Editar Módulo" : "Nuevo Módulo del Sistema"}</h2>
-                    <Button variant="ghost" onClick={onClose}>✕</Button>
-                </Header>
+        <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4 animate-in fade-in duration-300">
+            <div className="w-full max-w-[850px] max-h-[90vh] bg-white rounded-[32px] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-300">
+                {/* Header */}
+                <div className="bg-white/80 backdrop-blur-md px-8 py-6 flex items-center justify-between border-b border-slate-100">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-blue-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-blue-600/20">
+                            <FaCog className="text-xl" />
+                        </div>
+                        <div className="flex flex-col">
+                            <h2 className="text-xl font-black text-slate-900">
+                                {initialData ? "Editar Módulo" : "Nuevo Módulo"}
+                            </h2>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Configuración de Capacidad Operativa</span>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+                        <FaTimes />
+                    </button>
+                </div>
 
-                <ScrollContent>
-                    <SystemAlert>
-                        <FaInfoCircle />
-                        <span>La configuración del módulo define cómo se comporta y se visualiza en todo el ecosistema.</span>
-                    </SystemAlert>
+                {/* Scroll Content */}
+                <div className="flex-1 overflow-y-auto p-8 space-y-10">
+                    {/* System Alert */}
+                    <div className="bg-blue-50/50 border border-blue-100 text-blue-700 px-6 py-4 rounded-[20px] text-sm flex gap-4 items-start animate-in slide-in-from-top-2 duration-500">
+                        <FaInfoCircle className="mt-1 shrink-0 text-blue-500" />
+                        <span className="font-medium leading-relaxed">
+                            Los módulos son las unidades funcionales del sistema. Definen los permisos, la posición en el menú y el comportamiento general de la interfaz para los usuarios finales.
+                        </span>
+                    </div>
 
-                    <FormGrid>
-                        <FormGroup>
-                            <Label>Nombre Técnico (Indispensable)</Label>
-                            <Input
+                    {/* Form Grid */}
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
+                        <div className="flex flex-col gap-2">
+                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-1">
+                                Nombre Técnico
+                            </label>
+                            <input
                                 disabled={initialData?.isSystem}
                                 required
+                                className="w-full px-5 py-4 border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:border-blue-500 bg-slate-50/50 transition-all placeholder:text-slate-300"
                                 value={formData.name}
                                 onChange={e => setFormData({ ...formData, name: e.target.value.toLowerCase().replace(/[^a-z0-9_-]/g, '') })}
                                 placeholder="ej: facturacion_electronica"
                             />
-                        </FormGroup>
-                        <FormGroup>
-                            <Label>Nombre de Visualización</Label>
-                            <Input
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-1">
+                                Nombre Visible
+                            </label>
+                            <input
                                 required
+                                className="w-full px-5 py-4 border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:border-blue-500 bg-slate-50/50 transition-all"
                                 value={formData.displayName}
                                 onChange={e => setFormData({ ...formData, displayName: e.target.value })}
                                 placeholder="ej: Facturación Electrónica"
                             />
-                        </FormGroup>
-                        <FormGroup fullWidth>
-                            <Label>Descripción Funcional</Label>
-                            <Input
-                                as="textarea"
-                                style={{ height: '60px' }}
+                        </div>
+                        <div className="md:col-span-2 flex flex-col gap-2">
+                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-1">
+                                Descripción Funcional
+                            </label>
+                            <textarea
+                                className="w-full px-5 py-4 border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:border-blue-500 bg-slate-50/50 transition-all resize-none h-24"
                                 value={formData.description}
                                 onChange={e => setFormData({ ...formData, description: e.target.value })}
-                                placeholder="Escribe qué hace este módulo..."
+                                placeholder="Describa el propósito y alcance de este módulo..."
                             />
-                        </FormGroup>
+                        </div>
 
-                        <FormGroup>
-                            <Label>Categoría UI</Label>
-                            <Select
+                        <div className="flex flex-col gap-2">
+                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-1">
+                                Categoría UI
+                            </label>
+                            <select
+                                className="w-full px-5 py-4 border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:border-blue-500 bg-slate-50/50 transition-all appearance-none"
                                 value={formData.uiConfig.category}
                                 onChange={e => setFormData({ ...formData, uiConfig: { ...formData.uiConfig, category: e.target.value } })}
                             >
-                                <option value="principal">Principal</option>
-                                <option value="administracion">Administración</option>
-                                <option value="reportes">Reportes</option>
-                                <option value="configuracion">Configuración</option>
-                                <option value="otros">Otros</option>
+                                <option value="principal">🚀 Principal</option>
+                                <option value="administracion">🛡️ Administración</option>
+                                <option value="reportes">📊 Reportes</option>
+                                <option value="configuracion">⚙️ Configuración</option>
+                                <option value="otros">📦 Otros</option>
                                 {categories.map(c => !["principal", "administracion", "reportes", "configuracion", "otros"].includes(c.name) && (
                                     <option key={c.name} value={c.name}>{c.displayName || c.name}</option>
                                 ))}
-                            </Select>
-                        </FormGroup>
-                        <FormGroup>
-                            <Label>Orden de Visualización</Label>
-                            <Input
+                            </select>
+                        </div>
+                        <div className="flex flex-col gap-2">
+                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-1">
+                                Orden en Menú
+                            </label>
+                            <input
                                 type="number"
+                                className="w-full px-5 py-4 border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:border-blue-500 bg-slate-50/50 transition-all"
                                 value={formData.uiConfig.order}
                                 onChange={e => setFormData({ ...formData, uiConfig: { ...formData.uiConfig, order: parseInt(e.target.value) || 0 } })}
                             />
-                        </FormGroup>
-                        <FormGroup>
-                            <Label>Identificador de Icono (FontAwesome)</Label>
-                            <Input
-                                value={formData.uiConfig.icon}
-                                onChange={e => setFormData({ ...formData, uiConfig: { ...formData.uiConfig, icon: e.target.value } })}
-                                placeholder="FaCog, FaUsers, etc."
-                            />
-                        </FormGroup>
-                        <FormGroup>
-                            <Label>Estado Inicial</Label>
-                            <Select
-                                value={formData.isActive}
-                                onChange={e => setFormData({ ...formData, isActive: e.target.value === 'true' })}
-                            >
-                                <option value="true">Activo / Visible</option>
-                                <option value="false">Desactivado / Oculto</option>
-                            </Select>
-                        </FormGroup>
-                    </FormGrid>
+                        </div>
+                    </div>
 
-                    <SectionTitle><FaCheckSquare /> Capacidades Atómicas (Acciones)</SectionTitle>
-                    <ActionsGrid>
-                        {availableActions.map(actionObj => {
-                            const actionValue = typeof actionObj === 'string' ? actionObj : (actionObj.name || actionObj.value || '');
-                            const actionLabel = typeof actionObj === 'string' ? actionObj : (actionObj.displayName || actionObj.name || '');
-                            
-                            const checked = formData.actions.includes(actionValue);
-                            return (
-                                <ActionCheck key={actionValue} checked={checked}>
-                                    <input
-                                        type="checkbox"
-                                        checked={checked}
-                                        onChange={() => handleToggleAction(actionValue)}
-                                    />
-                                    {checked ? <FaCheckSquare /> : <FaSquare />}
-                                    {actionLabel.toUpperCase()}
-                                </ActionCheck>
-                            );
-                        })}
-                    </ActionsGrid>
-                </ScrollContent>
+                    {/* Section Title */}
+                    <div className="space-y-6">
+                        <h3 className="text-sm font-black text-slate-900 flex items-center gap-3 border-l-4 border-blue-600 pl-4">
+                            <FaCheckSquare className="text-blue-600" /> Capacidades Atómicas (Acciones)
+                        </h3>
 
-                <Footer>
-                    <Button variant="ghost" onClick={onClose}>Cancelar</Button>
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50/80 p-6 rounded-[24px] border border-slate-100">
+                            {availableActions.map(actionObj => {
+                                const actionValue = typeof actionObj === 'string' ? actionObj : (actionObj.name || actionObj.value || '');
+                                const actionLabel = typeof actionObj === 'string' ? actionObj : (actionObj.displayName || actionObj.name || '');
+                                const checked = formData.actions.includes(actionValue);
+                                
+                                return (
+                                    <label key={actionValue} className={`flex items-center gap-3 px-4 py-3.5 rounded-xl text-[10px] font-black uppercase tracking-wider cursor-pointer transition-all border ${
+                                        checked ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/20" : "bg-white border-slate-200 text-slate-500 hover:border-blue-400"
+                                    }`}>
+                                        <input
+                                            type="checkbox"
+                                            checked={checked}
+                                            onChange={() => handleToggleAction(actionValue)}
+                                            className="sr-only"
+                                        />
+                                        {checked ? <FaCheckSquare className="text-xs" /> : <FaSquare className="text-xs opacity-30" />}
+                                        {actionLabel}
+                                    </label>
+                                );
+                            })}
+                        </div>
+                    </div>
+                </div>
+
+                {/* Footer */}
+                <div className="px-8 py-6 bg-slate-50/50 backdrop-blur-md flex justify-end gap-3 border-t border-slate-100">
+                    <Button variant="ghost" onClick={onClose} className="font-bold">Cancelar</Button>
                     <Button
                         variant="primary"
                         onClick={handleSubmit}
                         loading={loading}
+                        className="px-10 shadow-lg shadow-blue-600/20"
                     >
                         {initialData ? "Actualizar Módulo" : "Registrar Módulo"}
                     </Button>
-                </Footer>
-            </Modal>
-        </Overlay>
+                </div>
+            </div>
+        </div>
     );
 };

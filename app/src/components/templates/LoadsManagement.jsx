@@ -1,10 +1,8 @@
 import React, { useEffect } from "react";
-import styled from "styled-components";
 import { Helmet } from "react-helmet-async";
 import {
   FaSync,
   FaHistory,
-  FaSearch,
   FaTruck,
   FaTimes,
   FaCheckCircle
@@ -14,78 +12,23 @@ import {
   useLoadsManagement,
   usePermissions,
   useNotification,
-  Header,
   Button,
   LoadsStatsGrid,
   FiltersPanel,
   OrdersList,
   OrderDetailsModal,
   DeliveryPersonSelector,
-  NotificationContainer
+  LoadingUI
 } from "../../index";
 import Swal from "sweetalert2";
 
-const Container = styled.div`
-  min-height: 100vh;
-  padding: 24px;
-  background: #f1f5f9;
-`;
-
-const PageHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 32px;
-  gap: 20px;
-
-  @media (max-width: 768px) {
-    flex-direction: column;
-  }
-`;
-
-const HeaderInfo = styled.div`
-  flex: 1;
-`;
-
-const Title = styled.h1`
-  margin: 0 0 8px 0;
-  font-size: 32px;
-  font-weight: 800;
-`;
-
-const Description = styled.p`
-  margin: 0;
-  font-size: 16px;
-  opacity: 0.7;
-  line-height: 1.6;
-`;
-
-const HeaderActions = styled.div`
-  display: flex;
-  gap: 12px;
-`;
-
-const BulkActionBanner = styled.div`
-  background: #1e293b;
-  color: white;
-  padding: 16px 32px;
-  border-radius: 16px;
-  margin-bottom: 24px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.1);
-  animation: slideIn 0.3s cubic-bezier(0.16, 1, 0.3, 1);
-
-  @keyframes slideIn {
-    from { transform: translateY(-20px); opacity: 0; }
-    to { transform: translateY(0); opacity: 1; }
-  }
-`;
-
+/**
+ * LoadsManagement (Tailwind Edition)
+ * Orquestación logística de despacho con diseño corporativo premium.
+ */
 export function LoadsManagement() {
   const { accessToken } = useAuth();
-  const { showSuccess, showError, showInfo, showWarning } = useNotification();
+  const { showSuccess, showError } = useNotification();
   const {
     orders,
     stats,
@@ -135,7 +78,7 @@ export function LoadsManagement() {
 
       Swal.fire({
         title: "Procesando Carga",
-        text: "Por favor espere mientras se sincronizan los servidores y se genera el traspaso...",
+        text: "Sincronizando inventarios y generando transferencia logística...",
         allowOutsideClick: false,
         didOpen: () => {
           Swal.showLoading();
@@ -146,14 +89,15 @@ export function LoadsManagement() {
 
       Swal.fire({
         icon: "success",
-        title: "¡Carga Procesada!",
-        html: `Se han despachado <b>${res.totalOrders}</b> pedidos con el Load ID: <b>${res.loadId || 'N/A'}</b>`,
-        confirmButtonColor: "#3b82f6"
+        title: "¡Despacho Exitoso!",
+        html: `<div class="text-left p-2"><p>Se han procesado <b>${res.totalOrders}</b> pedidos.</p><p class="mt-2 text-primary-600 font-bold">Load ID: ${res.loadId || 'N/A'}</p></div>`,
+        confirmButtonColor: "#6366f1",
+        confirmButtonText: "Entendido"
       });
     } catch (err) {
       Swal.fire({
         icon: "error",
-        title: "Error al procesar carga",
+        title: "Error Logístico",
         text: err.message,
         confirmButtonColor: "#ef4444"
       });
@@ -163,12 +107,12 @@ export function LoadsManagement() {
   const handleBulkCancel = async () => {
     const result = await Swal.fire({
       title: "¿Anular pedidos seleccionados?",
-      text: `Se cancelarán ${selectedOrders.length} pedidos. Esta acción es irreversible.`,
+      text: `Se cancelarán ${selectedOrders.length} pedidos. Esta acción no se puede deshacer.`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#ef4444",
-      confirmButtonText: "Sí, anular todos",
-      cancelButtonText: "No"
+      confirmButtonText: "Sí, anular selección",
+      cancelButtonText: "Mantener pedidos"
     });
 
     if (result.isConfirmed) {
@@ -190,79 +134,110 @@ export function LoadsManagement() {
   };
 
   return (
-    <>
+    <div className="min-h-screen bg-slate-50/50 animate-fadeIn">
       <Helmet>
-        <title>Despacho de Cargas | Core App</title>
+        <title>Gestión de Despachos | Catelli Core</title>
       </Helmet>
 
-      <Container>
-        <PageHeader>
-          <HeaderInfo>
-            <Title>Despacho de Cargas</Title>
-            <Description>
-              Orquesta la logística de salida. Filtra pedidos pendientes,
-              asigna repartidores y genera certificados de carga en segundos.
-            </Description>
-          </HeaderInfo>
-          <HeaderActions>
-            <Button variant="outline" onClick={() => window.location.href = "/loads/history"}>
+      <div className="max-w-[1600px] mx-auto p-6 lg:p-10 flex flex-col gap-8">
+        {/* PAGE HEADER */}
+        <header className="flex flex-col xl:flex-row justify-between items-start gap-6">
+          <div className="max-w-2xl">
+            <h1 className="text-4xl font-black text-slate-900 tracking-tight">Despacho de Cargas</h1>
+            <p className="text-slate-500 mt-2 text-lg font-medium leading-relaxed">
+              Orquesta la logística de salida. Filtra pedidos pendientes, asigna transportistas y genera certificados de carga en segundos.
+            </p>
+          </div>
+          <div className="flex gap-3 shrink-0">
+            <Button variant="secondary" onClick={() => window.location.href = "/loads/history"} className="!px-6">
               <FaHistory /> Historial
             </Button>
-            <Button variant="primary" onClick={actions.fetchOrders} loading={refreshing}>
+            <Button variant="primary" onClick={actions.fetchOrders} loading={refreshing} className="!px-8 shadow-indigo-500/20">
               <FaSync /> Sincronizar
             </Button>
-          </HeaderActions>
-        </PageHeader>
+          </div>
+        </header>
 
+        {/* METRICS */}
         <LoadsStatsGrid stats={stats} loading={loading} />
 
-        <FiltersPanel
-          filters={filters}
-          onFiltersChange={actions.updateFilters}
-          onReset={actions.resetFilters}
-          onRefresh={actions.fetchOrders}
-          onSearch={handleSearch}
-          search={search}
-          onSearchChange={actions.setSearch}
-          sellers={metadata.sellers}
-          loading={loading || refreshing}
-        />
+        {/* FILTERS */}
+        <div className="bg-white rounded-[32px] border border-slate-100 shadow-soft p-2">
+          <FiltersPanel
+            filters={filters}
+            onFiltersChange={actions.updateFilters}
+            onReset={actions.resetFilters}
+            onRefresh={actions.fetchOrders}
+            onSearch={handleSearch}
+            search={search}
+            onSearchChange={actions.setSearch}
+            sellers={metadata.sellers}
+            loading={loading || refreshing}
+          />
+        </div>
 
+        {/* BULK ACTIONS STICKY BANNER */}
         {selectedOrders.length > 0 && canProcessLoad && (
-          <BulkActionBanner>
-            <div>
-              <FaTruck style={{ marginRight: '12px' }} />
-              <strong>{selectedOrders.length}</strong> pedidos listos para despacho
+          <div className="sticky top-6 z-[100] animate-slideDown">
+            <div className="bg-slate-900 text-white p-5 px-8 rounded-[24px] shadow-2xl shadow-slate-900/40 flex flex-col sm:flex-row justify-between items-center gap-4 border border-white/10 backdrop-blur-xl">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-500 flex items-center justify-center text-xl shadow-lg shadow-indigo-500/30">
+                  <FaTruck />
+                </div>
+                <div>
+                  <div className="text-lg font-black tracking-tight leading-tight">
+                    {selectedOrders.length} {selectedOrders.length === 1 ? 'Pedido listo' : 'Pedidos listos'}
+                  </div>
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Acción masiva en curso</div>
+                </div>
+              </div>
+              <div className="flex gap-3 w-full sm:w-auto">
+                <button 
+                  onClick={handleBulkCancel}
+                  className="flex-1 sm:flex-none px-6 py-3 rounded-xl bg-white/5 border border-white/10 text-sm font-bold hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 transition-all flex items-center justify-center gap-2"
+                >
+                  <FaTimes /> Anular
+                </button>
+                <button 
+                  onClick={handleBulkLoad}
+                  disabled={isProcessing}
+                  className="flex-1 sm:flex-none px-8 py-3 rounded-xl bg-indigo-500 text-sm font-black hover:bg-indigo-400 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20"
+                >
+                  {isProcessing ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : <FaCheckCircle />}
+                  Procesar Despacho
+                </button>
+              </div>
             </div>
-            <div style={{ display: 'flex', gap: '12px' }}>
-              <Button variant="outline" size="small" style={{ color: 'white', borderColor: 'rgba(255,255,255,0.3)' }} onClick={handleBulkCancel}>
-                <FaTimes /> Anular Seleccionados
-              </Button>
-              <Button variant="primary" size="small" onClick={handleBulkLoad} loading={isProcessing}>
-                <FaCheckCircle /> Procesar Carga
-              </Button>
-            </div>
-          </BulkActionBanner>
+          </div>
         )}
 
-        <OrdersList
-          orders={orders}
-          selectedOrders={selectedOrders}
-          onOrderSelect={actions.toggleOrderSelection}
-          onSelectAll={actions.selectAllOrders}
-          onView={handleViewOrder}
-          onLoad={(id) => {
-            actions.selectAllOrders([id]);
-            setModals(prev => ({ ...prev, delivery: true }));
-          }}
-          onBulkLoad={handleBulkLoad}
-          onBulkCancel={handleBulkCancel}
-          loading={loading}
-          isProcessing={isProcessing}
-          viewMode="cards"
-        />
+        {/* LISTING */}
+        <div className="bg-white rounded-[40px] border border-slate-100 shadow-premium overflow-hidden">
+          {loading && !refreshing ? (
+            <LoadingUI message="Cargando pedidos pendientes de despacho..." />
+          ) : (
+            <OrdersList
+              orders={orders}
+              selectedOrders={selectedOrders}
+              onOrderSelect={actions.toggleOrderSelection}
+              onSelectAll={actions.selectAllOrders}
+              onView={handleViewOrder}
+              onLoad={(id) => {
+                actions.selectAllOrders([id]);
+                setModals(prev => ({ ...prev, delivery: true }));
+              }}
+              onBulkLoad={handleBulkLoad}
+              onBulkCancel={handleBulkCancel}
+              loading={loading}
+              isProcessing={isProcessing}
+              viewMode="cards"
+            />
+          )}
+        </div>
 
-        {/* Modales */}
+        {/* MODALS */}
         <OrderDetailsModal
           isOpen={modals.details}
           onClose={() => setModals(prev => ({ ...prev, details: false }))}
@@ -279,9 +254,7 @@ export function LoadsManagement() {
           deliveryPersons={metadata.sellers}
           loading={loading}
         />
-
-        <NotificationContainer />
-      </Container>
-    </>
+      </div>
+    </div>
   );
 }

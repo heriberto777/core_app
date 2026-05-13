@@ -1,43 +1,42 @@
-import styled from "styled-components";
+import React from "react";
+
+/**
+ * Corporate BotonCircular (Tailwind Edition)
+ */
 export function BotonCircular({
   icono,
-  width,
-  height,
-  bgcolor,
-  textColor,
-  fontsize,
-  translateX,
-  translateY,
+  width = "24px",
+  height = "24px",
+  bgcolor = "transparent",
+  textColor = "currentColor",
+  fontsize = "12px",
+  translateX = "0",
+  translateY = "0",
+  className = "",
+  style = {},
+  ...props
 }) {
   return (
-    <Container
-      $bgcolor={bgcolor}
-      $textColor={textColor}
-      $height={height}
-      $width={width}
-      $fontsize={fontsize}
-      $translateX={translateX}
-      $translateY={translateY}
+    <div
+      className={`rounded-full flex items-center justify-center absolute ${className}`}
+      style={{
+        backgroundColor: bgcolor,
+        minWidth: width,
+        minHeight: height,
+        transform: `translate(${translateX}, ${translateY})`,
+        ...style,
+      }}
+      {...props}
     >
-      <span>{icono}</span>
-    </Container>
+      <span
+        style={{
+          fontSize: fontsize,
+          textAlign: "center",
+          color: textColor,
+        }}
+      >
+        {icono}
+      </span>
+    </div>
   );
 }
-const Container = styled.div`
-  background-color: ${(props) => props.$bgcolor};
-  min-width: ${(props) => props.$width};
-  min-height: ${(props) => props.$height};
-  border-radius: 50%;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  position: absolute;
-  transform: translatex(${(props) => props.$translateX})
-    translateY(${(props) => props.$translateY});
-
-  span {
-    font-size: ${(props) => props.$fontsize};
-    text-align: center;
-    color: ${(props) => props.$textColor};
-  }
-`;

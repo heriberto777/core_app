@@ -3,7 +3,6 @@
 const DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");
 const { withConnection } = DatabaseServiceAdapter;
 const TransferTask = require("../models/transferTaskModel");
-const TaskExecution = require("../models/taskExecutionModel");
 const transferService = require("../services/transferService");
 const logger = require("../services/logger");
 
@@ -158,33 +157,32 @@ const processOrders = async (req, res) => {
       return res.status(400).json({ success: false, message: `La tarea "${taskName}" está desactivada` });
     }
 
-    const taskExecution = new TaskExecution({
-      taskId: task._id,
-      taskName: task.name,
-      date: new Date(),
-      status: "running",
-      metadata: { orderCount: orders.length, orderIds: orders, startedBy: userId },
+    const transactionId = `ORD-${Date.now()}`;
+    const txn = logger.startTransaction(transactionId, "ORDER_PROCESS", userId, { orderCount: orders.length });
+
+    txn.info(`Iniciando procesamiento de ${orders.length} pedidos con tarea ${taskName}`);
+
+    await TransferTask.findByIdAndUpdate(task._id, { 
+      status: "running", 
+      progress: 0,
+      lastExecutionDate: new Date()
     });
-
-    await taskExecution.save();
-    const executionId = taskExecution._id;
-
-    logger.info(`Iniciando procesamiento de ${orders.length} pedidos con tarea ${taskName} (Exec: ${executionId}) por ${userId}`);
-
-    await TransferTask.findByIdAndUpdate(task._id, { status: "running", progress: 0 });
 
     // Ejecución asíncrona
     transferService
       .executeTransferWithRetry(task._id)
       .then(async (result) => {
-        logger.info(`Procesamiento completado para Exec ${executionId}: ${JSON.stringify(result)}`);
+        txn.finish("success", result);
 
-        await TaskExecution.findByIdAndUpdate(executionId, {
-          status: "completed",
-          executionTime: Date.now() - taskExecution.date.getTime(),
-          totalRecords: orders.length,
-          successfulRecords: result.inserted || 0,
-          details: result,
+        await TransferTask.findByIdAndUpdate(task._id, { 
+          status: "completed", 
+          progress: 100,
+          lastExecutionResult: {
+            success: true,
+            message: `Procesado: ${result.inserted} pedidos`,
+            affectedRecords: result.inserted || 0,
+            timestamp: new Date()
+          }
         });
 
         await withConnection("server2", async (connection) => {
@@ -194,22 +192,34 @@ const processOrders = async (req, res) => {
                 connection,
                 `INSERT INTO PROCESSED_ORDERS (NUM_PED, PROCESS_DATE, TASK_NAME, EXECUTION_ID)
                  VALUES (@orderId, @processDate, @taskName, @executionId)`,
-                { orderId, processDate: new Date(), taskName: task.name, executionId: executionId.toString() }
+                { orderId, processDate: new Date(), taskName: task.name, executionId: transactionId }
               );
             } catch (err) {
-              logger.warn(`No se pudo registrar pedido ${orderId} en PROCESSED_ORDERS para Exec ${executionId}: ${err.message}`);
+              logger.warn(`No se pudo registrar pedido ${orderId} en PROCESSED_ORDERS: ${err.message}`);
             }
           }
         });
       })
       .catch(async (error) => {
-        logger.error(`Fallo crítico en procesamiento de pedidos para Exec ${executionId}: ${error.message}`);
-        await TaskExecution.findByIdAndUpdate(executionId, {
-          status: "failed",
-          executionTime: Date.now() - taskExecution.date.getTime(),
-          errorMessage: error.message,
+        txn.finish("failed", { error: error.message });
+        logger.error(`Fallo crítico en procesamiento de pedidos: ${error.message}`);
+        
+        await TransferTask.findByIdAndUpdate(task._id, { 
+          status: "failed", 
+          progress: 0,
+          lastExecutionResult: {
+            success: false,
+            message: error.message,
+            timestamp: new Date()
+          }
         });
       });
+
+    return res.status(200).json({
+      success: true,
+      message: `Procesamiento de ${orders.length} pedidos iniciado en segundo plano`,
+      data: { executionId: transactionId }
+    });
 
     return res.status(200).json({
       success: true,

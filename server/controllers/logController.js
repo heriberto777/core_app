@@ -6,11 +6,15 @@ const logger = require("../services/logger");
  */
 const getLogs = async (req, res) => {
   try {
-    const { level, source, dateFrom, dateTo, search, limit = 50, page = 1, sort = "desc" } = req.query;
+    const { level, source, dateFrom, dateTo, search, limit = 50, page = 1, sort = "desc",
+            operationType, entityType, mappingId } = req.query;
 
     const filter = {};
     if (level && level !== "all") filter.level = level;
     if (source && source !== "all") filter.source = source;
+    if (operationType && operationType !== "all") filter.operationType = operationType;
+    if (entityType && entityType !== "all") filter.entityType = entityType;
+    if (mappingId && mappingId !== "all") filter.mappingId = mappingId;
 
     if (dateFrom || dateTo) {
       filter.timestamp = {};
@@ -26,6 +30,8 @@ const getLogs = async (req, res) => {
       filter.$or = [
         { message: { $regex: search, $options: "i" } },
         { source: { $regex: search, $options: "i" } },
+        { mappingName: { $regex: search, $options: "i" } },
+        { fieldName: { $regex: search, $options: "i" } },
       ];
     }
 

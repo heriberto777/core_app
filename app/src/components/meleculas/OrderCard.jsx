@@ -1,125 +1,9 @@
-import styled from "styled-components";
 import { StatusBadge, LoadsButton } from "../../index";
 import { FaEye, FaEdit, FaTrash, FaTruck, FaCalendar, FaUser, FaDollarSign } from "react-icons/fa";
 
-const Card = styled.div`
-  background: ${props => props.theme.cardBg || 'white'};
-  border: 1px solid ${props => props.theme.border || '#e5e7eb'};
-  border-radius: 8px;
-  padding: 16px;
-  transition: all 0.2s ease;
-  cursor: pointer;
-
-  &:hover {
-    box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-    transform: translateY(-2px);
-  }
-
-  ${props => props.selected && `
-    border-color: ${props.theme.primary || '#3b82f6'};
-    box-shadow: 0 0 0 2px ${props.theme.primary || '#3b82f6'}20;
-  `}
-
-  @media (max-width: 768px) {
-    padding: 12px;
-  }
-`;
-
-const CardHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 12px;
-  gap: 12px;
-
-  @media (max-width: 768px) {
-    flex-direction: column;
-    gap: 8px;
-  }
-`;
-
-const OrderInfo = styled.div`
-  flex: 1;
-`;
-
-const OrderNumber = styled.h4`
-  margin: 0 0 4px 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: ${props => props.theme.text || '#111827'};
-
-  @media (max-width: 768px) {
-    font-size: 15px;
-  }
-`;
-
-const ClientName = styled.p`
-  margin: 0 0 8px 0;
-  font-size: 14px;
-  color: ${props => props.theme.textSecondary || '#6b7280'};
-  font-weight: 500;
-
-  @media (max-width: 768px) {
-    font-size: 13px;
-  }
-`;
-
-const CardBody = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-  gap: 12px;
-  margin-bottom: 16px;
-
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr 1fr;
-    gap: 8px;
-    margin-bottom: 12px;
-  }
-`;
-
-const InfoItem = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  font-size: 12px;
-  color: ${props => props.theme.textSecondary || '#6b7280'};
-
-  svg {
-    color: ${props => props.theme.primary || '#3b82f6'};
-  }
-
-  @media (max-width: 768px) {
-    font-size: 11px;
-  }
-`;
-
-const InfoValue = styled.span`
-  font-weight: 500;
-  color: ${props => props.theme.text || '#111827'};
-`;
-
-const CardActions = styled.div`
-  display: flex;
-  gap: 8px;
-  flex-wrap: wrap;
-
-  @media (max-width: 768px) {
-    gap: 6px;
-  }
-`;
-
-const CheckboxContainer = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-`;
-
-const Checkbox = styled.input`
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-`;
-
+/**
+ * Corporate OrderCard (Tailwind Edition)
+ */
 export function OrderCard({
   order,
   selected = false,
@@ -128,7 +12,8 @@ export function OrderCard({
   onEdit,
   onCancel,
   onLoad,
-  showActions = true
+  showActions = true,
+  className = ""
 }) {
   const handleCardClick = (e) => {
     e.stopPropagation();
@@ -152,48 +37,57 @@ export function OrderCard({
   };
 
   return (
-    <Card selected={selected} onClick={handleCardClick}>
-      <CardHeader>
-        <CheckboxContainer onClick={e => e.stopPropagation()}>
-          <Checkbox
+    <div
+      className={`
+        bg-white border rounded-lg p-4 cursor-pointer transition-all duration-200
+        hover:shadow-lg hover:-translate-y-0.5
+        ${selected ? "border-primary-500 ring-2 ring-primary-500/20" : "border-slate-200"}
+        ${className}
+      `}
+      onClick={handleCardClick}
+    >
+      <div className="flex justify-between items-start gap-3 mb-3">
+        <div className="flex items-center gap-2 flex-1" onClick={e => e.stopPropagation()}>
+          <input
             type="checkbox"
             checked={selected}
             onChange={() => onSelect?.(order.pedido)}
+            className="w-4 h-4 cursor-pointer"
           />
-          <OrderInfo>
-            <OrderNumber>Pedido #{order.pedido}</OrderNumber>
-            <ClientName>{order.cliente}</ClientName>
-          </OrderInfo>
-        </CheckboxContainer>
+          <div>
+            <h4 className="m-0 text-base font-semibold text-slate-800 mb-1">Pedido #{order.pedido}</h4>
+            <p className="m-0 text-sm text-slate-500 font-medium">{order.cliente}</p>
+          </div>
+        </div>
         <StatusBadge status={order.transferStatus}>
           {order.transferStatus === 'pending' ? 'Pendiente' :
            order.transferStatus === 'processing' ? 'Procesando' :
            order.transferStatus === 'completed' ? 'Completado' :
            order.transferStatus}
         </StatusBadge>
-      </CardHeader>
+      </div>
 
-      <CardBody>
-        <InfoItem>
-          <FaCalendar />
-          <InfoValue>{formatDate(order.fechaPedido)}</InfoValue>
-        </InfoItem>
-        <InfoItem>
-          <FaUser />
-          <InfoValue>{order.nombreVendedor}</InfoValue>
-        </InfoItem>
-        <InfoItem>
-          <FaDollarSign />
-          <InfoValue>{formatCurrency(order.totalPedido)}</InfoValue>
-        </InfoItem>
-        <InfoItem>
-          <FaTruck />
-          <InfoValue>{order.totalLineas} líneas</InfoValue>
-        </InfoItem>
-      </CardBody>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-3 mb-4">
+        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <FaCalendar className="text-primary-500" />
+          <span className="font-medium text-slate-800">{formatDate(order.fechaPedido)}</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <FaUser className="text-primary-500" />
+          <span className="font-medium text-slate-800">{order.nombreVendedor}</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <FaDollarSign className="text-primary-500" />
+          <span className="font-medium text-slate-800">{formatCurrency(order.totalPedido)}</span>
+        </div>
+        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+          <FaTruck className="text-primary-500" />
+          <span className="font-medium text-slate-800">{order.totalLineas} líneas</span>
+        </div>
+      </div>
 
       {showActions && (
-        <CardActions onClick={e => e.stopPropagation()}>
+        <div className="flex gap-2 flex-wrap" onClick={e => e.stopPropagation()}>
           <LoadsButton
             variant="primary"
             size="small"
@@ -223,8 +117,8 @@ export function OrderCard({
           >
             <FaTrash /> Cancelar
           </LoadsButton>
-        </CardActions>
+        </div>
       )}
-    </Card>
+    </div>
   );
 }

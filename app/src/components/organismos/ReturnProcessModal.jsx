@@ -1,35 +1,6 @@
 import React, { useState, useEffect } from "react";
-import styled from "styled-components";
-import { FaUndo, FaTimes, FaCheckCircle, FaExclamationTriangle, FaBox } from "react-icons/fa";
-import { Modal, Button } from "../../index";
-
-const Content = styled.div` display: flex; flex-direction: column; gap: 24px; padding: 24px; max-height: 85vh; overflow: hidden; `;
-
-const WizardHeader = styled.div` display: flex; flex-direction: column; gap: 8px; `;
-
-const Instructions = styled.p` margin: 0; font-size: 13px; color: ${({ theme }) => theme.textSecondary}; line-height: 1.5; `;
-
-const FormSection = styled.div` display: flex; flex-direction: column; gap: 20px; flex: 1; overflow: hidden; `;
-
-const TableContainer = styled.div` border-radius: 16px; border: 1px solid ${({ theme }) => theme.border}; overflow-y: auto; max-height: 400px; `;
-
-const Table = styled.table`
-  width: 100%; border-collapse: collapse; font-size: 12px;
-  thead { position: sticky; top: 0; z-index: 10; background: ${({ theme }) => theme.cardBg}; }
-  th { padding: 12px; text-align: left; font-weight: 800; text-transform: uppercase; color: ${({ theme }) => theme.textSecondary}; border-bottom: 2px solid ${({ theme }) => theme.border}; }
-  td { padding: 12px; border-bottom: 1px solid ${({ theme }) => theme.border}20; color: ${({ theme }) => theme.text}; vertical-align: middle; }
-  tr:hover { background: ${({ theme }) => theme.bg2}08; }
-  input[type="number"] { width: 80px; padding: 8px; border-radius: 8px; border: 1px solid ${({ theme }) => theme.border}; background: ${({ theme }) => theme.inputBg}; color: ${({ theme }) => theme.text}; font-weight: 700; text-align: center; }
-  input[type="checkbox"] { width: 18px; height: 18px; cursor: pointer; accent-color: ${({ theme }) => theme.primary}; }
-  .text-right { text-align: right; }
-  .stock-info { font-size: 10px; font-weight: 800; color: ${({ theme }) => theme.textSecondary}; opacity: 0.7; }
-`;
-
-const ReasonArea = styled.div`
-  display: flex; flex-direction: column; gap: 8px;
-  label { font-size: 11px; font-weight: 800; text-transform: uppercase; color: ${({ theme }) => theme.textSecondary}; }
-  textarea { padding: 12px; border-radius: 12px; border: 1px solid ${({ theme }) => theme.border}; background: ${({ theme }) => theme.inputBg}; color: ${({ theme }) => theme.text}; font-size: 14px; min-height: 80px; resize: none; &:focus { outline: none; border-color: ${({ theme }) => theme.primary}; } }
-`;
+import { FaUndo, FaTimes, FaCheckCircle, FaExclamationTriangle, FaBox, FaArrowRight, FaCubes } from "react-icons/fa";
+import { Button } from "../../index";
 
 export function ReturnProcessModal({ isOpen, onClose, inventoryData, onProcess }) {
     const [selectedItems, setSelectedItems] = useState({}); // { index: true/false }
@@ -92,96 +63,128 @@ export function ReturnProcessModal({ isOpen, onClose, inventoryData, onProcess }
     };
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} width="950px">
-            <Content>
-                <WizardHeader>
-                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                        <h2 style={{ margin: 0, fontSize: '20px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '12px' }}>
-                            <FaUndo color="#f59e0b" /> Procesar Devolución (Carga #{inventoryData.loadId})
-                        </h2>
-                        <Button variant="ghost" icon={<FaTimes />} onClick={onClose} />
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[2000] p-4 animate-in fade-in duration-300">
+            <div className="bg-white w-full max-w-[1000px] max-h-[95vh] rounded-[32px] border border-slate-100 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+                {/* Header */}
+                <div className="px-8 py-7 flex items-center justify-between border-b border-slate-50 bg-white/80 backdrop-blur-md">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-amber-500 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-amber-500/20">
+                            <FaUndo className="text-xl" />
+                        </div>
+                        <div className="flex flex-col">
+                            <h3 className="text-xl font-black text-slate-900 leading-tight">Procesar Devolución</h3>
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Carga Operativa:</span>
+                                <span className="text-[10px] font-black bg-amber-50 text-amber-600 px-2 py-0.5 rounded-md">#{inventoryData.loadId}</span>
+                            </div>
+                        </div>
                     </div>
-                    <Instructions>
-                        Configure los productos a retornar validando el stock disponible en inventario.
-                    </Instructions>
-                </WizardHeader>
+                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+                        <FaTimes />
+                    </button>
+                </div>
 
-                <FormSection>
-                    <TableContainer>
-                        <Table>
-                            <thead>
-                                <tr>
-                                    <th></th>
-                                    <th>Ítem</th>
-                                    <th className="text-right">En Carga</th>
-                                    <th className="text-right">Devuelto</th>
-                                    <th className="text-right">Stock Disp.</th>
-                                    <th className="text-right">Max. Ret.</th>
-                                    <th className="text-right">A Retornar</th>
-                                </tr>
-                            </thead>
-                            <tbody>
-                                {inventoryData.productsWithInventory.map((p, idx) => {
-                                    const isDisabled = p.maxReturnableQuantity <= 0;
-                                    return (
-                                        <tr key={idx} style={{ opacity: isDisabled ? 0.5 : 1 }}>
-                                            <td>
-                                                <input
-                                                    type="checkbox"
-                                                    disabled={isDisabled || processing}
-                                                    checked={!!selectedItems[idx]}
-                                                    onChange={() => handleToggle(idx)}
-                                                />
-                                            </td>
-                                            <td>
-                                                <div style={{ fontWeight: 800 }}>{p.code}</div>
-                                                <div className="stock-info">{p.description || "N/A"}</div>
-                                            </td>
-                                            <td className="text-right">{p.quantity}</td>
-                                            <td className="text-right" style={{ color: '#ef4444' }}>{p.returnedQuantity || 0}</td>
-                                            <td className="text-right" style={{ color: '#10b981' }}>{p.availableInInventory}</td>
-                                            <td className="text-right"><strong>{p.maxReturnableQuantity}</strong></td>
-                                            <td className="text-right">
-                                                <input
-                                                    type="number"
-                                                    disabled={!selectedItems[idx] || processing}
-                                                    value={quantities[idx]}
-                                                    max={p.maxReturnableQuantity}
-                                                    onChange={(e) => handleQtyChange(idx, e.target.value, p.maxReturnableQuantity)}
-                                                />
-                                            </td>
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto p-8 space-y-10">
+                    <div className="bg-amber-50/50 border border-amber-100 text-amber-800 px-6 py-4 rounded-[20px] text-sm flex gap-4 items-start">
+                        <FaExclamationTriangle className="mt-1 shrink-0 text-amber-500" />
+                        <span className="font-medium leading-relaxed">
+                            Seleccione los productos que retornarán al inventario central. El sistema validará automáticamente las existencias y actualizará el estatus de la carga.
+                        </span>
+                    </div>
+
+                    {/* Table Section */}
+                    <div className="space-y-6">
+                        <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3 border-l-4 border-amber-500 pl-4">
+                            <FaCubes className="text-amber-500" /> Inventario Retornable
+                        </h4>
+                        
+                        <div className="rounded-[28px] border border-slate-100 overflow-hidden shadow-sm">
+                            <div className="overflow-x-auto overflow-y-auto max-h-[400px]">
+                                <table className="w-full border-collapse">
+                                    <thead className="sticky top-0 bg-slate-50 z-10">
+                                        <tr>
+                                            <th className="px-6 py-4 text-left border-b border-slate-100"></th>
+                                            <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Ítem / Descripción</th>
+                                            <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Carga</th>
+                                            <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Devuelto</th>
+                                            <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Stock Disp.</th>
+                                            <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Máx Retorno</th>
+                                            <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Cantidad</th>
                                         </tr>
-                                    );
-                                })}
-                            </tbody>
-                        </Table>
-                    </TableContainer>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-50">
+                                        {inventoryData.productsWithInventory.map((p, idx) => {
+                                            const isDisabled = p.maxReturnableQuantity <= 0;
+                                            const isSelected = !!selectedItems[idx];
+                                            return (
+                                                <tr key={idx} className={`transition-all group ${isDisabled ? "opacity-30 grayscale" : "hover:bg-slate-50/50"}`}>
+                                                    <td className="px-6 py-4">
+                                                        <input
+                                                            type="checkbox"
+                                                            disabled={isDisabled || processing}
+                                                            checked={isSelected}
+                                                            onChange={() => handleToggle(idx)}
+                                                            className="w-5 h-5 rounded-lg border-slate-200 text-amber-500 focus:ring-amber-400 cursor-pointer disabled:cursor-not-allowed"
+                                                        />
+                                                    </td>
+                                                    <td className="px-6 py-4">
+                                                        <div className="text-sm font-black text-slate-900 leading-none mb-1 group-hover:text-amber-600 transition-colors">{p.code}</div>
+                                                        <div className="text-[10px] font-bold text-slate-400 truncate max-w-[200px]">{p.description || "N/A"}</div>
+                                                    </td>
+                                                    <td className="px-6 py-4 text-right text-xs font-bold text-slate-600">{p.quantity}</td>
+                                                    <td className="px-6 py-4 text-right text-xs font-black text-red-500">{p.returnedQuantity || 0}</td>
+                                                    <td className="px-6 py-4 text-right text-xs font-black text-emerald-600">{p.availableInInventory}</td>
+                                                    <td className="px-6 py-4 text-right text-xs font-black text-slate-900">{p.maxReturnableQuantity}</td>
+                                                    <td className="px-6 py-4 text-right">
+                                                        <input
+                                                            type="number"
+                                                            disabled={!isSelected || processing}
+                                                            value={quantities[idx]}
+                                                            max={p.maxReturnableQuantity}
+                                                            onChange={(e) => handleQtyChange(idx, e.target.value, p.maxReturnableQuantity)}
+                                                            className="w-20 px-3 py-2 bg-white border border-slate-200 rounded-xl text-center text-sm font-black text-slate-900 focus:outline-none focus:border-amber-500 focus:ring-4 focus:ring-amber-500/10 transition-all disabled:opacity-30"
+                                                        />
+                                                    </td>
+                                                </tr>
+                                            );
+                                        })}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
+                    </div>
 
-                    <ReasonArea>
-                        <label>Motivo de la Devolución <span>*</span></label>
+                    {/* Reason Section */}
+                    <div className="space-y-4">
+                        <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-1 flex items-center justify-between">
+                            <span>Motivo de la Devolución <span className="text-amber-500">*</span></span>
+                            <span className="text-[9px] font-bold opacity-50">Campo Obligatorio</span>
+                        </label>
                         <textarea
-                            placeholder="Especifique el motivo técnico o logístico de este retorno..."
+                            placeholder="Especifique el motivo técnico o logístico de este retorno para fines de auditoría..."
                             value={reason}
                             onChange={(e) => setReason(e.target.value)}
                             disabled={processing}
+                            className="w-full p-6 bg-slate-50/50 border border-slate-100 rounded-[24px] text-sm font-bold text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white transition-all resize-none min-h-[120px]"
                         />
-                    </ReasonArea>
-                </FormSection>
+                    </div>
+                </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', gap: '12px', paddingBottom: '12px' }}>
-                    <Button variant="ghost" onClick={onClose} disabled={processing}>Cancelar</Button>
+                {/* Footer */}
+                <div className="px-8 py-6 border-t border-slate-50 flex justify-end gap-3 bg-white/80 backdrop-blur-md">
+                    <Button variant="ghost" onClick={onClose} disabled={processing} className="font-bold">Cancelar Proceso</Button>
                     <Button
                         variant="primary"
-                        icon={<FaCheckCircle />}
                         onClick={onConfirm}
                         loading={processing}
                         disabled={!hasSelections || !reason.trim() || processing}
-                        color="#f59e0b"
+                        className="px-10 py-3 shadow-lg shadow-amber-500/20 font-black text-xs uppercase tracking-widest bg-amber-500 hover:bg-amber-600 border-none"
                     >
-                        Confirmar Retorno
+                        Confirmar Retorno de Mercancía
                     </Button>
                 </div>
-            </Content>
-        </Modal>
+            </div>
+        </div>
     );
 }

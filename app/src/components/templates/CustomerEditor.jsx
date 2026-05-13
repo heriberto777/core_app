@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import styled from "styled-components";
 import { FaSave, FaTimes, FaDatabase, FaExclamationTriangle } from "react-icons/fa";
 import Swal from "sweetalert2";
 
@@ -8,14 +7,14 @@ import {
   useCustomerEditor,
   CustomerFormGroups,
   SourceDataViewerModal,
-  Button
+  Button,
+  LoadingSpinner
 } from "../../index";
 
 export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
   const { accessToken } = useAuth();
   const [isSourceModalOpen, setIsSourceModalOpen] = useState(false);
 
-  // Hook de lógica avanzada (mapeo, grupos, transformaciones)
   const {
     editedCustomer,
     originalSourceData,
@@ -72,53 +71,57 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
 
   if (loading) {
     return (
-      <CenteredArea>
-        <Spinner />
-        <p>Configurando entorno de edición técnica...</p>
-      </CenteredArea>
+      <div className="flex flex-col items-center justify-center p-15 gap-5 text-center">
+        <LoadingSpinner />
+        <p className="text-slate-500 font-semibold">Configurando entorno de edición técnica...</p>
+      </div>
     );
   }
 
   if (error) {
     return (
-      <CenteredArea $error>
-        <FaExclamationTriangle size={40} color="#ef4444" />
-        <p>Error de inicialización: {error}</p>
+      <div className="flex flex-col items-center justify-center p-15 gap-5 text-center">
+        <FaExclamationTriangle size={40} className="text-red-500" />
+        <p className="text-red-500 font-bold">Error de inicialización: {error}</p>
         <Button variant="primary" onClick={onCancel}>Cerrar Editor</Button>
-      </CenteredArea>
+      </div>
     );
   }
 
   return (
-    <Container>
-      <HeaderRow>
-        <TitleGroup>
-          <Title>Edición de {mapping?.entityType === "customers" ? "Cliente" : "Documento"}</Title>
-          <Badge>Mapping: {mapping?.name || mappingId}</Badge>
-        </TitleGroup>
+    <div className="flex flex-col gap-6 p-5 bg-white dark:bg-slate-900 rounded-3xl shadow-sm">
+      <div className="flex justify-between items-center gap-5 flex-wrap md:flex-nowrap">
+        <div className="flex flex-col gap-1">
+          <h3 className="m-0 text-2xl font-extrabold text-slate-800 dark:text-white">
+            Edición de {mapping?.entityType === "customers" ? "Cliente" : "Documento"}
+          </h3>
+          <span className="text-[11px] font-extrabold text-blue-600 bg-blue-600/10 px-2 py-0.5 rounded-lg self-start">
+            Mapping: {mapping?.name || mappingId}
+          </span>
+        </div>
 
-        <Actions>
+        <div className="flex gap-3">
           <Button variant="ghost" icon={<FaDatabase />} onClick={handleUpdateFromSource} loading={fieldLoading}>Sincronizar Origen</Button>
           <Button variant="outline" icon={<FaTimes />} onClick={onCancel} disabled={isSaving}>Cancelar</Button>
           <Button variant="primary" icon={<FaSave />} onClick={onConfirmSave} loading={isSaving}>Guardar Cambios</Button>
-        </Actions>
-      </HeaderRow>
+        </div>
+      </div>
 
       {originalSourceData && (
-        <AuditBar>
-          <span>Los datos del formulario están vinculados a un registro fuente en la base de datos.</span>
+        <div className="bg-blue-500/10 border border-dashed border-blue-500/30 px-5 py-3 rounded-2xl flex justify-between items-center flex-wrap gap-2.5">
+          <span className="text-[13px] font-semibold text-slate-500">Los datos del formulario están vinculados a un registro fuente en la base de datos.</span>
           <Button
             variant="ghost"
             size="small"
             onClick={() => setIsSourceModalOpen(true)}
-            style={{ padding: '4px 12px' }}
+            className="py-1 px-3"
           >
             Abrir Inspector de Fuente
           </Button>
-        </AuditBar>
+        </div>
       )}
 
-      <ContentArea>
+      <div className="flex-1">
         <CustomerFormGroups
           groups={fieldGroups}
           customerData={editedCustomer}
@@ -127,55 +130,15 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
           onChange={handleChange}
           onRefreshField={handleRefreshField}
         />
-      </ContentArea>
+      </div>
 
       <SourceDataViewerModal
         isOpen={isSourceModalOpen}
         onClose={() => setIsSourceModalOpen(false)}
         data={originalSourceData}
       />
-    </Container>
+    </div>
   );
 }
-
-// --- Styled Components Premium ---
-
-const Container = styled.div`
-  display: flex; flex-direction: column; gap: 24px; padding: 20px;
-  background: ${({ theme }) => theme.bg}; border-radius: 32px;
-`;
-
-const HeaderRow = styled.div`
-  display: flex; justify-content: space-between; align-items: center; gap: 20px;
-  @media (max-width: 900px) { flex-direction: column; align-items: flex-start; }
-`;
-
-const TitleGroup = styled.div` display: flex; flex-direction: column; gap: 4px; `;
-const Title = styled.h3` margin: 0; font-size: 24px; font-weight: 800; color: ${({ theme }) => theme.title}; `;
-const Badge = styled.span` font-size: 11px; font-weight: 800; color: ${({ theme }) => theme.primary}; background: ${({ theme }) => theme.primary}15; padding: 2px 8px; border-radius: 8px; align-self: flex-start; `;
-
-const Actions = styled.div` display: flex; gap: 12px; `;
-
-const AuditBar = styled.div`
-  background: ${({ theme }) => theme.primary}08; border: 1px dashed ${({ theme }) => theme.primary}30;
-  padding: 12px 20px; border-radius: 16px; display: flex; justify-content: space-between; align-items: center;
-  span { font-size: 13px; font-weight: 600; color: ${({ theme }) => theme.textSecondary}; }
-  @media (max-width: 600px) { flex-direction: column; gap: 10px; text-align: center; }
-`;
-
-const ContentArea = styled.div` flex: 1; `;
-
-const CenteredArea = styled.div`
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 60px; gap: 20px; text-align: center;
-  p { font-weight: 700; color: ${({ theme, $error }) => $error ? '#ef4444' : theme.textSecondary}; }
-`;
-
-const Spinner = styled.div`
-  width: 40px; height: 40px; border: 4px solid ${({ theme }) => theme.primary}20;
-  border-top-color: ${({ theme }) => theme.primary}; border-radius: 50%;
-  animation: spin 1s linear infinite;
-  @keyframes spin { to { transform: rotate(360deg); } }
-`;
 
 export default CustomerEditor;

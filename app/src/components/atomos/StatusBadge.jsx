@@ -1,111 +1,67 @@
-// src/components/atomos/StatusBadge.jsx
 import React from "react";
-import styled from "styled-components";
 
-const Badge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 12px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  white-space: nowrap;
-
-  ${({ variant, theme }) => {
-    const variants = {
-      success: `
-        background: ${theme.success}20;
-        color: ${theme.success};
-        border: 1px solid ${theme.success}40;
-      `,
-      warning: `
-        background: ${theme.warning}20;
-        color: ${theme.warning};
-        border: 1px solid ${theme.warning}40;
-      `,
-      danger: `
-        background: ${theme.danger}20;
-        color: ${theme.danger};
-        border: 1px solid ${theme.danger}40;
-      `,
-      info: `
-        background: ${theme.info}20;
-        color: ${theme.info};
-        border: 1px solid ${theme.info}40;
-      `,
-      secondary: `
-        background: ${theme.secondary}20;
-        color: ${theme.secondary};
-        border: 1px solid ${theme.secondary}40;
-      `,
-      primary: `
-        background: ${theme.primary}20;
-        color: ${theme.primary};
-        border: 1px solid ${theme.primary}40;
-      `,
-    };
-    return variants[variant] || variants.secondary;
-  }}
-
-  .icon {
-    font-size: 10px;
-  }
-`;
-
+/**
+ * Corporate StatusBadge (Tailwind Edition)
+ * Etiquetas de estado estilizadas para un look corporativo moderno.
+ */
 export const StatusBadge = ({
   children,
   status,
   variant,
   icon,
   tooltip,
-  className,
+  className = "",
   ...props
 }) => {
-  // Auto-determinar variant basado en status común
   const getVariantFromStatus = (status) => {
     const statusVariants = {
       COMPLETED: "success",
       SUCCESS: "success",
       ACTIVE: "success",
       APPROVED: "success",
-
       PENDING: "warning",
       PROCESSING: "warning",
       IN_PROGRESS: "warning",
       WAITING: "warning",
-
       ERROR: "danger",
       FAILED: "danger",
       CANCELLED: "danger",
       REJECTED: "danger",
-
       INFO: "info",
       NEW: "info",
       DRAFT: "info",
-
       INACTIVE: "secondary",
       DISABLED: "secondary",
       PAUSED: "secondary",
     };
-
     return statusVariants[status?.toUpperCase()] || "secondary";
   };
 
   const finalVariant = variant || getVariantFromStatus(status);
   const displayText = children || status;
 
+  const variants = {
+    success: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    warning: "bg-amber-50 text-amber-700 border-amber-200",
+    danger: "bg-red-50 text-red-700 border-red-200",
+    info: "bg-sky-50 text-sky-700 border-sky-200",
+    primary: "bg-primary-50 text-primary-700 border-primary-200",
+    secondary: "bg-slate-50 text-slate-600 border-slate-200",
+  };
+
   return (
-    <Badge
-      variant={finalVariant}
-      className={className}
+    <span
+      className={`
+        inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border 
+        text-[10px] font-bold uppercase tracking-wider whitespace-nowrap transition-all duration-200
+        ${variants[finalVariant] || variants.secondary}
+        ${className}
+      `}
       title={tooltip}
       {...props}
     >
-      {icon && <span className="icon">{icon}</span>}
+      {icon && <span className="text-[10px]">{icon}</span>}
       {displayText}
-    </Badge>
+    </span>
   );
 };

@@ -123,8 +123,14 @@ export function AuthProvider({ children }) {
         console.error("❌ Error en loginWithToken:", error);
         setError(error.message);
 
-        // ⚠️ SOLO HACER LOGOUT SI ES UN LOGIN NUEVO, NO EN INICIALIZACIÓN
-        if (isFromLogin) {
+        // ⭐ SILENT LOGOUT ⭐
+        // Si hay un error al validar el token (ej: 401, 500, o token expirado)
+        // y NO es un intento de login nuevo (es decir, viene de la persistencia de sesión)
+        // entonces limpiamos los tokens para evitar bucles de error.
+        if (!isFromLogin) {
+          console.warn("🧹 Limpiando sesión debido a error de validación persistente...");
+          logout();
+        } else {
           logout();
         }
 
@@ -219,7 +225,10 @@ export function AuthProvider({ children }) {
       }
     } catch (error) {
       console.error("❌ Error renovando token:", error);
-      // ⚠️ NO LLAMAR LOGOUT AUTOMÁTICAMENTE - Dejar que el usuario decida
+      // ⭐ SILENT LOGOUT ⭐
+      // Si la renovación falla (ej: refresh token expirado), limpiamos la sesión
+      console.warn("🧹 Limpiando sesión debido a fallo en renovación de token...");
+      logout();
       return false;
     }
   }, [isValidTokenFormat, loginWithToken]);

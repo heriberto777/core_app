@@ -290,6 +290,9 @@ const TransferMappingSchema = new Schema({
   foreignKeyDependencies: [ForeignKeyDependencySchema],
   promotionConfig: PromotionConfigSchema,
   workflowConfig: WorkflowConfigSchema,
+  // === CONFIGURACIÓN DE JERARQUÍA DE FLUJO ===
+  isWorkflowChild: { type: Boolean, default: false }, // Indica si es un proceso hijo en una cadena
+  allowDirectExecution: { type: Boolean, default: true }, // Si se permite ejecutar manualmente sin el padre
 });
 
 // Pre-save hook para actualizar fecha

@@ -1,5 +1,4 @@
-import React, { useState, useCallback } from "react";
-import styled from "styled-components";
+import React, { useState } from "react";
 import { FaArrowLeft, FaInfoCircle, FaSync, FaExclamationTriangle } from "react-icons/fa";
 import Swal from "sweetalert2";
 
@@ -26,7 +25,6 @@ export function DocumentsVisualization() {
   const canDeleteMapping = hasPermission("mappings", "delete") || isAdmin;
   const canExecuteMapping = hasPermission("mappings", "execute") || hasPermission("documents", "create") || isAdmin;
 
-  // Hook de lógica centralizada
   const {
     activeView, setActiveView,
     activeMappingName,
@@ -50,7 +48,6 @@ export function DocumentsVisualization() {
     actionStates
   } = useDocumentsVisualization(accessToken);
 
-  // Estados locales para modales
   const [editingMappingId, setEditingMappingId] = useState(null);
   const [showConfigInfo, setShowConfigInfo] = useState(false);
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
@@ -60,8 +57,6 @@ export function DocumentsVisualization() {
   const [isResultsOpen, setIsResultsOpen] = useState(false);
   const [showEntityEditor, setShowEntityEditor] = useState(false);
   const [selectedEntity, setSelectedEntity] = useState(null);
-
-  // --- Handlers de UI ---
 
   const handleEditMapping = (mappingId) => {
     setEditingMappingId(mappingId);
@@ -80,7 +75,6 @@ export function DocumentsVisualization() {
   const handleViewDetails = async (doc) => {
     try {
       setSelectedDoc(doc);
-      // Obtener el ID del primer campo
       const id = doc[Object.keys(doc)[0]];
       const details = await getDocumentDetails(id);
       setDocDetailsData(details);
@@ -132,7 +126,13 @@ export function DocumentsVisualization() {
     }
   };
 
-  // --- Renderizado Condicional ---
+  const ConfigSummary = ({ config }) => (
+    <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 dark:bg-slate-800/10 rounded-xl text-sm border-l-4 border-blue-500">
+      <div><strong>Origen:</strong> {config.sourceServer} ({config.sourceDatabase})</div>
+      <div><strong>Destino:</strong> {config.targetServer} ({config.targetDatabase})</div>
+      <div><strong>Transferencia:</strong> {config.transferType}</div>
+    </div>
+  );
 
   const renderContent = () => {
     switch (activeView) {
@@ -159,19 +159,19 @@ export function DocumentsVisualization() {
 
       case "documents":
         return (
-          <DocumentsContainer>
-            <HeaderActions>
+          <div className="flex flex-col gap-6 max-w-6xl mx-auto w-full">
+            <div className="flex items-center gap-4 p-4 bg-white/50 dark:bg-slate-800/50 backdrop-blur-lg rounded-2xl border border-gray-200 dark:border-slate-700">
               <Button variant="secondary" onClick={handleReturnToList}>
                 <FaArrowLeft /> Configuración
               </Button>
-              <h3 style={{ margin: 0, flex: 1, textAlign: 'center' }}>
+              <h3 className="m-0 flex-1 text-center">
                 {activeMappingName}
-                <small style={{ display: 'block', fontSize: '11px', opacity: 0.6 }}>Entidad: {entityType}</small>
+                <small className="block text-xs opacity-60">Entidad: {entityType}</small>
               </h3>
               <Button variant="ghost" onClick={() => setShowConfigInfo(!showConfigInfo)}>
                 <FaInfoCircle /> {showConfigInfo ? "Cerrar" : "Info"}
               </Button>
-            </HeaderActions>
+            </div>
 
             {showConfigInfo && <ConfigSummary config={activeConfig} />}
 
@@ -182,13 +182,15 @@ export function DocumentsVisualization() {
               isRefreshing={documentsRefreshing}
             />
 
-            <MainTableWrapper>
+            <div className="relative min-h-[400px]">
               {documentsLoading && !documentsRefreshing ? (
-                <LoadingState>Cargando documentos...</LoadingState>
+                <div className="py-24 text-center font-semibold text-blue-500">Cargando documentos...</div>
               ) : documentsError ? (
-                <ErrorState><FaExclamationTriangle /> {documentsError}</ErrorState>
+                <div className="py-24 text-center text-red-600 flex items-center justify-center gap-2">
+                  <FaExclamationTriangle /> {documentsError}
+                </div>
               ) : filteredDocuments.length === 0 ? (
-                <EmptyState>No se encontraron resultados con los filtros actuales.</EmptyState>
+                <div className="py-24 text-center opacity-60">No se encontraron resultados con los filtros actuales.</div>
               ) : (
                 <DocumentsDataTable
                   documents={filteredDocuments}
@@ -203,16 +205,16 @@ export function DocumentsVisualization() {
                   actionStates={actionStates}
                 />
               )}
-            </MainTableWrapper>
+            </div>
 
             {selectedDocuments.length > 0 && canExecuteMapping && (
-              <BatchActionButton>
-                <Button variant="primary" onClick={() => handleProcess()} size="large" style={{ width: '100%', padding: '16px' }}>
+              <div className="sticky bottom-5 z-40 animate-slideUp">
+                <Button variant="primary" onClick={() => handleProcess()} size="large" className="w-full py-4">
                   Procesar {selectedDocuments.length} seleccionados
                 </Button>
-              </BatchActionButton>
+              </div>
             )}
-          </DocumentsContainer>
+          </div>
         );
       default:
         return null;
@@ -220,17 +222,16 @@ export function DocumentsVisualization() {
   };
 
   return (
-    <PageLayout>
-      <TitleBar>
-        <h2>Centro de Gestión de Datos</h2>
-        <p>Visualización y procesamiento masivo de documentos entre servidores</p>
-      </TitleBar>
+    <div className="flex flex-col gap-5 p-5 min-h-screen bg-gray-50 dark:bg-slate-900">
+      <div className="text-center mb-5">
+        <h2 className="m-0 text-3xl font-extrabold text-gray-900 dark:text-white">Centro de Gestión de Datos</h2>
+        <p className="mt-1 text-gray-500 dark:text-gray-400 text-sm">Visualización y procesamiento masivo de documentos entre servidores</p>
+      </div>
 
       <section className="main">
         {renderContent()}
       </section>
 
-      {/* Modales */}
       <DocumentDetailsModal
         isOpen={isDetailsOpen}
         onClose={() => setIsDetailsOpen(false)}
@@ -245,78 +246,19 @@ export function DocumentsVisualization() {
       />
 
       {showEntityEditor && selectedEntity && (
-        <EditorOverlay>
-          <EditorContainer>
+        <div className="fixed inset-0 bg-black/50 flex items-center justify-center z-[1500]">
+          <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl w-[90%] max-w-3xl">
             <CustomerEditor
               customer={selectedEntity}
               mappingId={activeConfig?._id}
               onSave={handleSaveEntity}
               onCancel={() => setShowEntityEditor(false)}
             />
-          </EditorContainer>
-        </EditorOverlay>
+          </div>
+        </div>
       )}
-    </PageLayout>
+    </div>
   );
 }
-
-// --- Styled Components Premium ---
-
-const PageLayout = styled.div`
-  display: flex; flex-direction: column; gap: 20px; padding: 20px; min-height: 100vh;
-  background: ${({ theme }) => theme.bg};
-`;
-
-const TitleBar = styled.div`
-  text-align: center; margin-bottom: 20px;
-  h2 { margin: 0; font-size: 28px; font-weight: 800; color: ${({ theme }) => theme.title}; }
-  p { margin: 5px 0 0; color: ${({ theme }) => theme.textSecondary}; font-size: 15px; }
-`;
-
-const DocumentsContainer = styled.div`
-  display: flex; flex-direction: column; gap: 24px; max-width: 1200px; margin: 0 auto; width: 100%;
-`;
-
-const HeaderActions = styled.div`
-  display: flex; align-items: center; gap: 16px; 
-  padding: 16px; background: ${({ theme }) => theme.cardBg}80; 
-  backdrop-filter: blur(10px); border-radius: 16px; border: 1px solid ${({ theme }) => theme.border};
-`;
-
-const MainTableWrapper = styled.div`
-  position: relative; min-height: 400px;
-`;
-
-const BatchActionButton = styled.div`
-  position: sticky; bottom: 20px; z-index: 100;
-  animation: slideUp 0.3s ease-out;
-`;
-
-const LoadingState = styled.div` padding: 100px; text-align: center; font-weight: 600; color: ${({ theme }) => theme.primary}; `;
-const ErrorState = styled.div` padding: 100px; text-align: center; color: #dc3545; display: flex; align-items: center; justify-content: center; gap: 10px; `;
-const EmptyState = styled.div` padding: 100px; text-align: center; opacity: 0.6; `;
-
-const EditorOverlay = styled.div`
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1500;
-`;
-
-const EditorContainer = styled.div`
-  background: ${({ theme }) => theme.cardBg}; padding: 24px; border-radius: 20px; width: 90%; max-width: 800px;
-`;
-
-const ConfigSummary = ({ config }) => (
-  <ConfigPanel>
-    <div><strong>Origen:</strong> {config.sourceServer} ({config.sourceDatabase})</div>
-    <div><strong>Destino:</strong> {config.targetServer} ({config.targetDatabase})</div>
-    <div><strong>Transferencia:</strong> {config.transferType}</div>
-  </ConfigPanel>
-);
-
-const ConfigPanel = styled.div`
-  display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
-  padding: 16px; background: ${({ theme }) => theme.bg2}20; border-radius: 12px; font-size: 13px;
-  border-left: 4px solid ${({ theme }) => theme.primary};
-`;
 
 export default DocumentsVisualization;

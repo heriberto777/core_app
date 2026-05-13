@@ -1,265 +1,15 @@
 import React, { useState, useEffect } from "react";
-import styled from "styled-components";
-import { FaUser, FaEnvelope, FaShieldAlt, FaPhone, FaLock, FaUserShield } from "react-icons/fa";
-import { Button } from "../index";
+import { FaUser, FaEnvelope, FaShieldAlt, FaPhone, FaLock, FaUserShield, FaTimes } from "react-icons/fa";
+import { Button, Input } from "../index";
 
-const Overlay = styled.div`
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.4);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 20px;
-`;
-
-const Modal = styled.div`
-  background: white;
-  width: 100%;
-  max-width: 700px;
-  border-radius: 24px;
-  overflow: hidden;
-  box-shadow: 0 25px 50px -12px rgba(0, 0, 0, 0.25);
-  display: flex;
-  flex-direction: column;
-  max-height: 90vh;
-`;
-
-const Header = styled.div`
-  background: #f8fafc;
-  padding: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid #e2e8f0;
-
-  h2 {
-    font-size: 20px;
-    font-weight: 900;
-    color: #1e293b;
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-`;
-
-const Form = styled.form`
-  padding: 24px;
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-  overflow-y: auto;
-  flex: 1;
-
-  @media (max-width: 600px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const FormGroup = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  grid-column: ${props => props.fullWidth ? "1 / -1" : "auto"};
-`;
-
-const Label = styled.label`
-  font-size: 11px;
-  font-weight: 800;
-  color: #94a3b8;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-`;
-
-const InputWrapper = styled.div`
-  position: relative;
-  
-  svg {
-    position: absolute;
-    left: 14px;
-    top: 50%;
-    transform: translateY(-50%);
-    color: #94a3b8;
-  }
-`;
-
-const Input = styled.input`
-  width: 100%;
-  padding: 12px 12px 12px 42px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  font-size: 14px;
-  transition: all 0.2s;
-
-  &:focus {
-    outline: none;
-    border-color: #3b82f6;
-    box-shadow: 0 0 0 4px rgba(59, 130, 246, 0.1);
-  }
-`;
-
-const Select = styled.select`
-  width: 100%;
-  padding: 12px 24px;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  background: white;
-  min-height: 120px;
-`;
-
-const CheckboxLabel = styled.label`
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 16px;
-  background: #f8fafc;
-  border-radius: 12px;
-  cursor: pointer;
-  grid-column: 1 / -1;
-
-  span {
-    font-weight: 700;
-    color: #1e293b;
-    font-size: 14px;
-  }
-
-  input {
-    width: 20px;
-    height: 20px;
-    accent-color: #3b82f6;
-  }
-`;
-
-const Footer = styled.div`
-  padding: 24px;
-  background: #f8fafc;
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-`;
-
-const SectionTitle = styled.h3`
-  grid-column: 1 / -1;
-  font-size: 14px;
-  font-weight: 800;
-  color: #1e293b;
-  margin: 20px 0 10px 0;
-  padding-bottom: 8px;
-  border-bottom: 1px solid #e2e8f0;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-`;
-
-const ResourceCard = styled.div`
-  grid-column: 1 / -1;
-  background: white;
-  border: 1px solid #e2e8f0;
-  border-radius: 12px;
-  padding: 16px;
-  margin-bottom: 12px;
-`;
-
-const ResourceHeader = styled.div`
-  margin-bottom: 12px;
-  
-  h4 {
-    margin: 0;
-    font-size: 14px;
-    font-weight: 700;
-    color: #1e293b;
-  }
-  
-  p {
-    margin: 4px 0 0 0;
-    font-size: 12px;
-    color: #64748b;
-  }
-`;
-
-const ActionsGrid = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-`;
-
-const PermissionCheck = styled.label`
-  display: flex;
-  align-items: center;
-  gap: 6px;
-  padding: 6px 12px;
-  background: ${props => props.checked ? '#dbeafe' : '#f1f5f9'};
-  border: 1px solid ${props => props.checked ? '#3b82f6' : '#e2e8f0'};
-  border-radius: 8px;
-  cursor: pointer;
-  font-size: 12px;
-  font-weight: 600;
-  color: ${props => props.checked ? '#1e40af' : '#64748b'};
-  transition: all 0.2s;
-  
-  &:hover {
-    background: ${props => props.checked ? '#bfdbfe' : '#e2e8f0'};
-  }
-  
-  input {
-    display: none;
-  }
-`;
-
-const InfoText = styled.p`
-  grid-column: 1 / -1;
-  font-size: 12px;
-  color: #64748b;
-  margin: 0;
-  padding: 8px 12px;
-  background: #f8fafc;
-  border-radius: 8px;
-`;
-
-const TabsContainer = styled.div`
-  display: flex;
-  gap: 8px;
-  margin-bottom: 16px;
-  border-bottom: 1px solid #e2e8f0;
-  padding-bottom: 8px;
-  overflow-x: auto;
-`;
-
-const Tab = styled.button`
-  padding: 8px 16px;
-  border: none;
-  background: ${props => props.$active ? '#3b82f6' : 'transparent'};
-  color: ${props => props.$active ? 'white' : '#64748b'};
-  border-radius: 8px 8px 0 0;
-  font-weight: 600;
-  font-size: 13px;
-  cursor: pointer;
-  transition: all 0.2s;
-  white-space: nowrap;
-  
-  &:hover {
-    background: ${props => props.$active ? '#3b82f6' : '#f1f5f9'};
-    color: ${props => props.$active ? 'white' : '#1e293b'};
-  }
-`;
-
-const TabContent = styled.div`
-  max-height: 400px;
-  overflow-y: auto;
-`;
-
+/**
+ * UserFormModal (Tailwind Edition)
+ * Modal corporativo para configuración de identidades y permisos.
+ */
 export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, roles = [], resources = [], actions = [] }) => {
     const [formData, setFormData] = useState({
-        name: "",
-        lastname: "",
-        email: "",
-        telefono: "",
-        password: "",
-        roles: [],
-        permissions: [],
-        isAdmin: false
+        name: "", lastname: "", email: "", telefono: "",
+        password: "", roles: [], permissions: [], isAdmin: false
     });
 
     const [loading, setLoading] = useState(false);
@@ -270,29 +20,22 @@ export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, rol
     const handleTogglePermission = (resourceId, action) => {
         const currentPermissions = [...(formData.permissions || [])];
         const resourceIdx = currentPermissions.findIndex(p => p.resource === resourceId);
-        
-        // Extract a primitive string value from action in case it's an object
         const actionValue = typeof action === 'string' ? action : (action.name || action.value || action._id);
 
         if (resourceIdx > -1) {
-            // Find if the actionValue is already in the array
             const actionIdx = currentPermissions[resourceIdx].actions.findIndex(a => {
                 const aValue = typeof a === 'string' ? a : (a.name || a.value || a._id);
                 return aValue === actionValue;
             });
-            
             if (actionIdx > -1) {
                 currentPermissions[resourceIdx].actions.splice(actionIdx, 1);
-                if (currentPermissions[resourceIdx].actions.length === 0) {
-                    currentPermissions.splice(resourceIdx, 1);
-                }
+                if (currentPermissions[resourceIdx].actions.length === 0) currentPermissions.splice(resourceIdx, 1);
             } else {
                 currentPermissions[resourceIdx].actions.push(actionValue);
             }
         } else {
             currentPermissions.push({ resource: resourceId, actions: [actionValue] });
         }
-        
         setFormData({ ...formData, permissions: currentPermissions });
     };
 
@@ -301,23 +44,15 @@ export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, rol
             const rolesArray = Array.isArray(initialData.roles) 
                 ? initialData.roles.map(r => typeof r === 'object' ? r._id : r)
                 : [];
-            
             const rolesFromRolesInfo = (initialData.rolesInfo || []).map(r => r._id || r);
-            
             const finalRoles = rolesArray.length > 0 ? rolesArray : rolesFromRolesInfo;
-            
-            const userPermissions = initialData.permissions;
-            const permissionsArray = Array.isArray(userPermissions) ? userPermissions : [];
+            const permissionsArray = Array.isArray(initialData.permissions) ? initialData.permissions : [];
             
             setFormData({
-                name: initialData.name || "",
-                lastname: initialData.lastname || "",
-                email: initialData.email || "",
-                telefono: initialData.telefono || "",
-                roles: finalRoles,
-                permissions: permissionsArray,
-                isAdmin: initialData.isAdmin || false,
-                password: ""
+                name: initialData.name || "", lastname: initialData.lastname || "",
+                email: initialData.email || "", telefono: initialData.telefono || "",
+                roles: finalRoles, permissions: permissionsArray,
+                isAdmin: initialData.isAdmin || false, password: ""
             });
         } else {
             setFormData({
@@ -334,233 +69,162 @@ export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, rol
         setLoading(true);
         try {
             const dataToSave = { ...formData };
-            if (newPassword && newPassword.length >= 6) {
-                dataToSave.newPassword = newPassword;
-            }
+            if (newPassword && newPassword.length >= 6) dataToSave.newPassword = newPassword;
             await onSave(dataToSave);
             setShowPasswordChange(false);
             setNewPassword("");
-        } catch (e) {
-            console.error(e);
         } finally {
             setLoading(false);
         }
     };
 
     return (
-        <Overlay>
-            <Modal style={{ maxWidth: '700px' }}>
-                <Header>
-                    <h2><FaUser /> {initialData ? "Editar Usuario" : "Nuevo Usuario"}</h2>
-                    <Button variant="ghost" onClick={onClose}>✕</Button>
-                </Header>
+        <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn" onClick={onClose}>
+            <div className="bg-white w-full max-w-3xl max-h-[95vh] rounded-[32px] shadow-premium flex flex-col overflow-hidden animate-slideUp" onClick={e => e.stopPropagation()}>
+                {/* HEADER */}
+                <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
+                    <h3 className="text-xl font-extrabold text-slate-800 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-primary-100 text-primary-600 flex items-center justify-center">
+                        <FaShieldAlt size={18} />
+                      </div>
+                      {initialData ? "Configurar Identidad" : "Nueva Identidad"}
+                    </h3>
+                    <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all">
+                        <FaTimes />
+                    </button>
+                </div>
 
-                <TabsContainer>
-                    <Tab $active={activeTab === 'info'} onClick={() => setActiveTab('info')}>
-                        Información
-                    </Tab>
-                    <Tab $active={activeTab === 'roles'} onClick={() => setActiveTab('roles')}>
-                        Roles
-                    </Tab>
-                    {resources.length > 0 && actions.length > 0 && (
-                        <Tab $active={activeTab === 'permissions'} onClick={() => setActiveTab('permissions')}>
-                            Permisos
-                        </Tab>
+                {/* TABS */}
+                <div className="px-8 bg-slate-50/50 flex border-b border-slate-100">
+                    <button 
+                      onClick={() => setActiveTab('info')}
+                      className={`px-6 py-4 text-sm font-bold border-b-2 transition-all ${activeTab === 'info' ? 'border-primary-500 text-primary-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                    >Información</button>
+                    <button 
+                      onClick={() => setActiveTab('roles')}
+                      className={`px-6 py-4 text-sm font-bold border-b-2 transition-all ${activeTab === 'roles' ? 'border-primary-500 text-primary-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                    >Roles</button>
+                    {resources.length > 0 && (
+                      <button 
+                        onClick={() => setActiveTab('permissions')}
+                        className={`px-6 py-4 text-sm font-bold border-b-2 transition-all ${activeTab === 'permissions' ? 'border-primary-500 text-primary-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                      >Privilegios</button>
                     )}
-                </TabsContainer>
+                </div>
 
-                <Form onSubmit={handleSubmit} id="user-form" style={{ display: activeTab === 'info' ? 'grid' : 'none' }}>
-                    <FormGroup>
-                        <Label>Nombre</Label>
-                        <InputWrapper>
-                            <FaUser />
-                            <Input
-                                required
-                                value={formData.name}
-                                onChange={e => setFormData({ ...formData, name: e.target.value })}
-                                placeholder="Nombre"
-                            />
-                        </InputWrapper>
-                    </FormGroup>
+                {/* BODY */}
+                <div className="p-8 overflow-y-auto custom-scrollbar flex-1">
+                    <form onSubmit={handleSubmit} id="user-form">
+                        {activeTab === 'info' && (
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-fadeIn">
+                                <Input label="Nombre" name="name" value={formData.name} onChange={e => setFormData({ ...formData, name: e.target.value })} placeholder="Ej: Juan" required />
+                                <Input label="Apellido" name="lastname" value={formData.lastname} onChange={e => setFormData({ ...formData, lastname: e.target.value })} placeholder="Ej: Pérez" required />
+                                <Input label="Email Corporativo" type="email" name="email" value={formData.email} onChange={e => setFormData({ ...formData, email: e.target.value })} placeholder="correo@empresa.com" required />
+                                <Input label="Teléfono de Contacto" name="telefono" value={formData.telefono} onChange={e => setFormData({ ...formData, telefono: e.target.value })} placeholder="999 999 999" />
+                                
+                                {!initialData && (
+                                    <div className="md:col-span-2">
+                                        <Input label="Contraseña de Acceso" type="password" name="password" value={formData.password} onChange={e => setFormData({ ...formData, password: e.target.value })} placeholder="••••••••" required />
+                                    </div>
+                                )}
 
-                    <FormGroup>
-                        <Label>Apellido</Label>
-                        <InputWrapper>
-                            <FaUser />
-                            <Input
-                                required
-                                value={formData.lastname}
-                                onChange={e => setFormData({ ...formData, lastname: e.target.value })}
-                                placeholder="Apellido"
-                            />
-                        </InputWrapper>
-                    </FormGroup>
+                                <div className="md:col-span-2 p-5 bg-amber-50 rounded-2xl border border-amber-100 flex items-center gap-4">
+                                    <input 
+                                        type="checkbox" 
+                                        checked={formData.isAdmin} 
+                                        onChange={e => setFormData({ ...formData, isAdmin: e.target.checked })}
+                                        className="w-6 h-6 rounded-lg text-amber-600 border-amber-200 focus:ring-amber-500"
+                                    />
+                                    <div>
+                                        <div className="text-sm font-extrabold text-amber-900 flex items-center gap-2">
+                                          <FaUserShield className="text-amber-500" /> Administrador de Sistema
+                                        </div>
+                                        <div className="text-xs font-medium text-amber-700/70">Otorga acceso total a todas las funciones del ERP.</div>
+                                    </div>
+                                </div>
 
-                    <FormGroup>
-                        <Label>Email</Label>
-                        <InputWrapper>
-                            <FaEnvelope />
-                            <Input
-                                required
-                                type="email"
-                                value={formData.email}
-                                onChange={e => setFormData({ ...formData, email: e.target.value })}
-                                placeholder="correo@ejemplo.com"
-                            />
-                        </InputWrapper>
-                    </FormGroup>
+                                {initialData && (
+                                    <div className="md:col-span-2 pt-2">
+                                        {!showPasswordChange ? (
+                                            <Button variant="secondary" onClick={() => setShowPasswordChange(true)}>
+                                                <FaLock /> Cambiar Contraseña
+                                            </Button>
+                                        ) : (
+                                            <div className="space-y-4 animate-fadeIn bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                                                <Input label="Nueva Contraseña" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
+                                                <Button variant="ghost" size="sm" onClick={() => { setShowPasswordChange(false); setNewPassword(""); }}>Cancelar Cambio</Button>
+                                            </div>
+                                        )}
+                                    </div>
+                                )}
+                            </div>
+                        )}
 
-                    <FormGroup>
-                        <Label>Teléfono</Label>
-                        <InputWrapper>
-                            <FaPhone />
-                            <Input
-                                value={formData.telefono}
-                                onChange={e => setFormData({ ...formData, telefono: e.target.value })}
-                                placeholder="999 999 999"
-                            />
-                        </InputWrapper>
-                    </FormGroup>
+                        {activeTab === 'roles' && (
+                            <div className="space-y-6 animate-fadeIn">
+                                <div className="flex flex-col gap-1.5 w-full">
+                                    <label className="text-[13px] font-semibold text-slate-500 ml-1">Asignar Roles</label>
+                                    <p className="text-[10px] text-slate-400 mb-2 ml-1 uppercase tracking-widest font-bold">(Ctrl+Click para selección múltiple)</p>
+                                    <select 
+                                      multiple 
+                                      value={formData.roles}
+                                      onChange={e => setFormData({ ...formData, roles: Array.from(e.target.selectedOptions, o => o.value) })}
+                                      className="w-full py-2.5 px-4 text-sm rounded-2xl border border-slate-200 bg-white focus:border-primary-500 outline-none min-h-[200px] custom-scrollbar"
+                                    >
+                                        {roles.map(role => (
+                                            <option key={role._id} value={role._id} className="py-2 px-3 hover:bg-slate-50 rounded-lg cursor-pointer">
+                                                {role.displayName}
+                                            </option>
+                                        ))}
+                                    </select>
+                                </div>
+                            </div>
+                        )}
 
-                    {!initialData && (
-                        <FormGroup fullWidth>
-                            <Label>Contraseña</Label>
-                            <InputWrapper>
-                                <FaLock />
-                                <Input
-                                    required
-                                    type="password"
-                                    value={formData.password}
-                                    onChange={e => setFormData({ ...formData, password: e.target.value })}
-                                    placeholder="••••••••"
-                                />
-                            </InputWrapper>
-                        </FormGroup>
-                    )}
-
-                    <CheckboxLabel>
-                        <input
-                            type="checkbox"
-                            checked={formData.isAdmin}
-                            onChange={e => setFormData({ ...formData, isAdmin: e.target.checked })}
-                        />
-                        <FaUserShield color="#f39c12" />
-                        <span>Administrador del sistema (Acceso total)</span>
-                    </CheckboxLabel>
-
-                    {initialData && !showPasswordChange && (
-                        <FormGroup fullWidth>
-                            <Button 
-                                variant="secondary" 
-                                onClick={() => setShowPasswordChange(true)}
-                                style={{ alignSelf: 'flex-start' }}
-                            >
-                                <FaLock /> Cambiar Contraseña
-                            </Button>
-                        </FormGroup>
-                    )}
-
-                    {showPasswordChange && (
-                        <FormGroup fullWidth>
-                            <Label>Nueva Contraseña</Label>
-                            <InputWrapper>
-                                <FaLock />
-                                <Input
-                                    type="password"
-                                    value={newPassword}
-                                    onChange={e => setNewPassword(e.target.value)}
-                                    placeholder="Nueva contraseña (mín. 6 caracteres)"
-                                />
-                            </InputWrapper>
-                            <Button 
-                                variant="ghost" 
-                                onClick={() => {
-                                    setShowPasswordChange(false);
-                                    setNewPassword("");
-                                }}
-                                style={{ alignSelf: 'flex-start', marginTop: '8px', fontSize: '12px' }}
-                            >
-                                Cancelar
-                            </Button>
-                        </FormGroup>
-                    )}
-                </Form>
-
-                {activeTab === 'roles' && (
-                    <TabContent style={{ padding: '0 24px' }}>
-                        <FormGroup fullWidth>
-                            <Label>Asignar Roles (Ctrl+Click para selección múltiple)</Label>
-                            <Select
-                                multiple
-                                value={formData.roles}
-                                onChange={e => {
-                                    const values = Array.from(e.target.selectedOptions, option => option.value);
-                                    setFormData({ ...formData, roles: values });
-                                }}
-                            >
-                                {roles.map(role => (
-                                    <option key={role._id || role.name} value={role._id || role.name}>
-                                        {role.displayName || role.name}
-                                    </option>
+                        {activeTab === 'permissions' && (
+                            <div className="space-y-6 animate-fadeIn">
+                                <div className="p-4 bg-primary-50 rounded-2xl border border-primary-100 text-xs font-bold text-primary-700">
+                                    Los permisos asignados aquí se sumarán a los que el usuario ya posea por sus roles.
+                                </div>
+                                {resources.map(res => (
+                                    <div key={res._id} className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm space-y-4">
+                                        <div className="flex flex-col">
+                                            <h4 className="text-sm font-extrabold text-slate-800">{res.displayName}</h4>
+                                            <p className="text-[11px] text-slate-400 font-medium">{res.description}</p>
+                                        </div>
+                                        <div className="flex flex-wrap gap-2">
+                                            {actions.map(act => {
+                                                const val = typeof act === 'string' ? act : act._id;
+                                                const lab = typeof act === 'string' ? act : act.displayName;
+                                                const isChecked = (formData.permissions || []).find(p => p.resource === res._id)?.actions?.includes(val);
+                                                return (
+                                                    <label key={val} className={`
+                                                        px-3 py-1.5 rounded-xl text-[11px] font-extrabold uppercase tracking-tight cursor-pointer transition-all border
+                                                        ${isChecked 
+                                                          ? 'bg-primary-500 border-primary-500 text-white shadow-md' 
+                                                          : 'bg-slate-50 border-slate-100 text-slate-400 hover:bg-slate-100'}
+                                                    `}>
+                                                        <input type="checkbox" className="hidden" checked={isChecked || false} onChange={() => handleTogglePermission(res._id, val)} />
+                                                        {lab}
+                                                    </label>
+                                                );
+                                            })}
+                                        </div>
+                                    </div>
                                 ))}
-                            </Select>
-                        </FormGroup>
-                    </TabContent>
-                )}
+                            </div>
+                        )}
+                    </form>
+                </div>
 
-                {activeTab === 'permissions' && resources.length > 0 && actions.length > 0 && (
-                    <TabContent style={{ padding: '0 24px' }}>
-                        <InfoText style={{ marginBottom: '16px' }}>
-                            Asigne permisos específicos directamente a este usuario. Los permisos de rol se combinan con estos.
-                        </InfoText>
-
-                        {resources.map(resource => (
-                            <ResourceCard key={resource._id || resource.name || Math.random()}>
-                                <ResourceHeader>
-                                    <h4>{String(resource.displayName || resource.name || 'Unknown')}</h4>
-                                    <p>{String(resource.description || '')}</p>
-                                </ResourceHeader>
-                                <ActionsGrid>
-                                    {actions.map(action => {
-                                        const actionValue = typeof action === 'string' ? action : (action.name || action.value || action._id);
-                                        const actionLabel = typeof action === 'string' ? action : (action.displayName || action.label || action.name);
-                                        
-                                        const perm = (formData.permissions || []).find(p => p.resource === (resource._id || resource.name));
-                                        
-                                        const isChecked = perm?.actions?.some(a => {
-                                            const aValue = typeof a === 'string' ? a : (a.name || a.value || a._id);
-                                            return aValue === actionValue;
-                                        });
-
-                                        return (
-                                            <PermissionCheck key={String(actionValue)} checked={isChecked}>
-                                                <input
-                                                    type="checkbox"
-                                                    checked={isChecked || false}
-                                                    onChange={() => handleTogglePermission(resource._id || resource.name, actionValue)}
-                                                />
-                                                {String(actionLabel)}
-                                            </PermissionCheck>
-                                        );
-                                    })}
-                                </ActionsGrid>
-                            </ResourceCard>
-                        ))}
-                    </TabContent>
-                )}
-
-                <Footer>
-                    <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-                    <Button
-                        variant="primary"
-                        type="submit"
-                        form="user-form"
-                        loading={loading}
-                    >
-                        {initialData ? "Actualizar Perfil" : "Crear Usuario"}
+                {/* FOOTER */}
+                <div className="px-8 py-6 bg-slate-50/50 border-t border-slate-100 flex justify-end gap-3">
+                    <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+                    <Button variant="primary" type="submit" form="user-form" loading={loading}>
+                        {initialData ? "Actualizar Perfil" : "Crear Identidad"}
                     </Button>
-                </Footer>
-            </Modal>
-        </Overlay>
+                </div>
+            </div>
+        </div>
     );
 };

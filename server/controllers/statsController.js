@@ -1,5 +1,5 @@
 const TransferTask = require("../models/transferTaskModel");
-const TaskExecution = require("../models/taskExecutionModel");
+const Log = require("../models/loggerModel");
 const ServerMetric = require("../models/serverMetricModel");
 const logger = require("../services/logger");
 
@@ -30,9 +30,12 @@ const getTransferStats = async (req, res) => {
     const { timeRange = "7d", taskId } = req.query;
     const startDate = getStartDateFromRange(timeRange);
 
-    const baseFilter = { date: { $gte: startDate } };
+    const baseFilter = { 
+      timestamp: { $gte: startDate },
+      operationType: "TRANSFER"
+    };
     if (taskId && taskId !== "all") {
-      baseFilter.taskId = taskId;
+      baseFilter.taskId = taskId.toString();
     }
 
     logger.info(`Generando estadísticas para el rango: ${timeRange}${taskId ? ` (Tarea: ${taskId})` : ""} por ${req.user?._id}`);
@@ -65,16 +68,20 @@ const getTransferStats = async (req, res) => {
  */
 async function getTransfersByDay(startDate, taskId) {
   try {
-    const matchStage = { date: { $gte: startDate } };
-    if (taskId && taskId !== "all") matchStage.taskId = taskId;
+    const matchStage = { 
+      timestamp: { $gte: startDate },
+      operationType: "TRANSFER",
+      "metadata.status": { $exists: true }
+    };
+    if (taskId && taskId !== "all") matchStage.taskId = taskId.toString();
 
-    const result = await TaskExecution.aggregate([
+    const result = await Log.aggregate([
       { $match: matchStage },
       {
         $group: {
           _id: {
-            date: { $dateToString: { format: "%Y-%m-%d", date: "$date" } },
-            status: "$status",
+            date: { $dateToString: { format: "%Y-%m-%d", date: "$timestamp" } },
+            status: "$metadata.status",
           },
           count: { $sum: 1 },
         },
@@ -108,8 +115,8 @@ async function getTransfersByDay(startDate, taskId) {
 
 async function calculateSuccessRate(baseFilter) {
   try {
-    const completedCount = await TaskExecution.countDocuments({ ...baseFilter, status: "completed" });
-    const failedCount = await TaskExecution.countDocuments({ ...baseFilter, status: { $in: ["failed", "cancelled"] } });
+    const completedCount = await Log.countDocuments({ ...baseFilter, "metadata.status": "completed" });
+    const failedCount = await Log.countDocuments({ ...baseFilter, "metadata.status": { $in: ["failed", "cancelled"] } });
     const total = completedCount + failedCount;
 
     if (total === 0) return [{ name: "Exitosas", value: 0 }, { name: "Fallidas", value: 0 }];
@@ -131,12 +138,14 @@ async function getTaskPerformance(startDate, taskId) {
     const taskPerformance = [];
 
     for (const task of tasks) {
-      const executedCount = await TaskExecution.countDocuments({ taskId: task._id, date: { $gte: startDate } });
-      const successCount = await TaskExecution.countDocuments({ taskId: task._id, status: "completed", date: { $gte: startDate } });
+      const taskFilter = { taskId: task._id.toString(), timestamp: { $gte: startDate }, operationType: "TRANSFER" };
+      
+      const executedCount = await Log.countDocuments(taskFilter);
+      const successCount = await Log.countDocuments({ ...taskFilter, "metadata.status": "completed" });
 
-      const avgTimeResult = await TaskExecution.aggregate([
-        { $match: { taskId: task._id, date: { $gte: startDate }, executionTime: { $exists: true, $ne: null } } },
-        { $group: { _id: null, avgTime: { $avg: "$executionTime" } } },
+      const avgTimeResult = await Log.aggregate([
+        { $match: { ...taskFilter, durationMs: { $exists: true, $ne: null } } },
+        { $group: { _id: null, avgTime: { $avg: "$durationMs" } } },
       ]);
 
       const avgTime = avgTimeResult.length > 0 ? Math.round(avgTimeResult[0].avgTime / 1000) : 0;

@@ -1,5 +1,4 @@
 import React, { useState, useEffect } from "react";
-import styled from "styled-components";
 import {
   useAuth,
   StatCard,
@@ -28,7 +27,7 @@ export function ConsecutiveDashboard() {
 
   useEffect(() => {
     loadDashboard();
-    const interval = setInterval(loadDashboard, 10000); // Actualizar cada 10 segundos para no saturar
+    const interval = setInterval(loadDashboard, 10000);
     return () => clearInterval(interval);
   }, []);
 
@@ -75,18 +74,26 @@ export function ConsecutiveDashboard() {
   }
 
   return (
-    <DashboardWrapper>
-      <HeaderSection>
-        <TitleGroup>
-          <h2>Dashboard de Consecutivos</h2>
-          <p>Monitoreo en tiempo real de numeración y reservas</p>
-        </TitleGroup>
-        <RefreshButton onClick={loadDashboard} $isRefreshing={refreshing}>
-          <FaClock /> {refreshing ? "Actualizando..." : "Actualizar"}
-        </RefreshButton>
-      </HeaderSection>
+    <div className="p-6 bg-white dark:bg-slate-900 min-h-full">
+      <div className="flex justify-between items-start mb-8">
+        <div>
+          <h2 className="m-0 text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-500 bg-clip-text text-transparent">
+            Dashboard de Consecutivos
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">Monitoreo en tiempo real de numeración y reservas</p>
+        </div>
+        <button
+          onClick={loadDashboard}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold transition-all shadow-md hover:-translate-y-0.5 hover:shadow-lg hover:brightness-110 ${
+            refreshing ? 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' : 'bg-blue-600 text-white'
+          }`}
+        >
+          <FaClock className={refreshing ? "animate-spin" : ""} />
+          {refreshing ? "Actualizando..." : "Actualizar"}
+        </button>
+      </div>
 
-      <MetricsGrid>
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-6 mb-10">
         {dashboardData.map((consecutive) => {
           const health = getHealthStatus(consecutive);
 
@@ -99,49 +106,47 @@ export function ConsecutiveDashboard() {
               icon={<FaChartLine />}
               onClick={() => loadConsecutiveMetrics(consecutive.id)}
               footer={
-                <CardFooterContent>
+                <div className="flex justify-between items-center w-full">
                   <StatusBadge status={health.status}>{health.label}</StatusBadge>
-                  <div className="mini-stats">
-                    <span><FaLayerGroup /> {consecutive.activeReservations}</span>
+                  <div className="flex gap-3 text-[13px] text-slate-500">
+                    <span className="flex items-center gap-1"><FaLayerGroup /> {consecutive.activeReservations}</span>
                     {consecutive.expiredReservations > 0 && (
-                      <span className="danger"><FaExclamationTriangle /> {consecutive.expiredReservations}</span>
+                      <span className="flex items-center gap-1 text-red-500"><FaExclamationTriangle /> {consecutive.expiredReservations}</span>
                     )}
                   </div>
-                </CardFooterContent>
+                </div>
               }
             />
           );
         })}
-      </MetricsGrid>
+      </div>
 
       {selectedConsecutive && (
-        <DetailPanel>
-          <DetailHeader>
-            <div className="title-area">
+        <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700 shadow-lg backdrop-blur-sm">
+          <div className="flex justify-between items-center mb-6">
+            <div className="flex items-center gap-3 text-blue-600">
               <FaHistory />
-              <h3>Detalle: {selectedConsecutive.consecutiveName}</h3>
+              <h3 className="m-0 text-slate-800 dark:text-white">Detalle: {selectedConsecutive.consecutiveName}</h3>
             </div>
-            <TimeRangeSelector>
-              <select
-                value={selectedTimeRange}
-                onChange={(e) => {
-                  setSelectedTimeRange(e.target.value);
-                  loadConsecutiveMetrics(selectedConsecutive.consecutiveId);
-                }}
-              >
-                <option value="1h">Última hora</option>
-                <option value="24h">Últimas 24 horas</option>
-                <option value="7d">Últimos 7 días</option>
-                <option value="30d">Últimos 30 días</option>
-              </select>
-            </TimeRangeSelector>
-          </DetailHeader>
+            <select
+              className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium cursor-pointer outline-none focus:border-blue-500"
+              value={selectedTimeRange}
+              onChange={(e) => {
+                setSelectedTimeRange(e.target.value);
+                loadConsecutiveMetrics(selectedConsecutive.consecutiveId);
+              }}
+            >
+              <option value="1h">Última hora</option>
+              <option value="24h">Últimas 24 horas</option>
+              <option value="7d">Últimos 7 días</option>
+              <option value="30d">Últimos 30 días</option>
+            </select>
+          </div>
 
-          <DetailGrid>
+          <div className="grid grid-cols-3 gap-4 mb-8 max-md:grid-cols-1">
             <StatCard
               title="Incrementos"
               value={selectedConsecutive.metrics.totalIncrements}
-              color={({ theme }) => theme.success}
               icon={<FaCheckCircle />}
             />
             <StatCard
@@ -150,224 +155,30 @@ export function ConsecutiveDashboard() {
               icon={<FaClock />}
             />
             <StatCard
-              title="Rango de Valores"
-              value={`${selectedConsecutive.metrics.valueRange.min} - ${selectedConsecutive.metrics.valueRange.max}`}
-              subtitle="Mínimo / Máximo"
-              icon={<FaChartLine />}
+              title=" Reservas Activas"
+              value={selectedConsecutive.metrics.activeReservations}
+              icon={<FaLayerGroup />}
             />
-          </DetailGrid>
+          </div>
 
-          {selectedConsecutive.metrics.bySegment && (
-            <SegmentsArea>
-              <h4>Distribución por Segmento</h4>
-              <SegmentsGrid>
-                {Object.entries(selectedConsecutive.metrics.bySegment).map(([segment, data]) => (
-                  <SegmentCard key={segment}>
-                    <div className="segment-info">
-                      <span className="name">{segment}</span>
-                      <span className="value">{data.currentValue}</span>
-                    </div>
-                    <div className="segment-meta">
-                      {data.incrementCount} incrementos
-                    </div>
-                  </SegmentCard>
-                ))}
-              </SegmentsGrid>
-            </SegmentsArea>
-          )}
-        </DetailPanel>
+          <div>
+            <h4 className="m-0 mb-4 text-sm text-slate-500 uppercase tracking-wider">Segmentos de Reservas</h4>
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2">
+              {selectedConsecutive.metrics.reservationSegments?.map((segment, idx) => (
+                <div key={idx} className="p-3 bg-white dark:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-semibold text-sm">{segment.segmentName}</span>
+                    <span className="font-bold text-blue-600">{segment.count}</span>
+                  </div>
+                  <div className="text-[11px] text-slate-500">{segment.percentage}% del total</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
-    </DashboardWrapper>
+    </div>
   );
 }
 
-// Estilos Premium con Glassmorphism
-const DashboardWrapper = styled.div`
-  padding: ${({ theme }) => theme.spacing.lg};
-  background: ${({ theme }) => theme.bg};
-  min-height: 100%;
-`;
-
-const HeaderSection = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: ${({ theme }) => theme.spacing.xl};
-`;
-
-const TitleGroup = styled.div`
-  h2 {
-    margin: 0;
-    font-size: ${({ theme }) => theme.fontxl};
-    font-weight: 700;
-    background: linear-gradient(135deg, ${({ theme }) => theme.primary}, ${({ theme }) => theme.info});
-    -webkit-background-clip: text;
-    -webkit-text-fill-color: transparent;
-  }
-  p {
-    margin: 4px 0 0;
-    color: ${({ theme }) => theme.textSecondary};
-    font-size: ${({ theme }) => theme.fontsm};
-  }
-`;
-
-const RefreshButton = styled.button`
-  background: ${({ theme, $isRefreshing }) => $isRefreshing ? theme.bg2 : theme.primary};
-  color: ${({ theme, $isRefreshing }) => $isRefreshing ? theme.text : "white"};
-  border: none;
-  padding: 10px 20px;
-  border-radius: ${({ theme }) => theme.borderRadius};
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-weight: 600;
-  transition: all 0.3s ease;
-  box-shadow: ${({ theme }) => theme.shadows.soft};
-
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: ${({ theme }) => theme.shadows.medium};
-    filter: brightness(1.1);
-  }
-
-  svg {
-    animation: ${({ $isRefreshing }) => $isRefreshing ? "spin 2s linear infinite" : "none"};
-  }
-
-  @keyframes spin {
-    100% { transform: rotate(360deg); }
-  }
-`;
-
-const MetricsGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(300px, 1fr));
-  gap: ${({ theme }) => theme.spacing.lg};
-  margin-bottom: ${({ theme }) => theme.spacing.xxl};
-`;
-
-const CardFooterContent = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-
-  .mini-stats {
-    display: flex;
-    gap: 12px;
-    font-size: 13px;
-    color: ${({ theme }) => theme.textSecondary};
-
-    span {
-      display: flex;
-      align-items: center;
-      gap: 4px;
-    }
-
-    .danger {
-      color: ${({ theme }) => theme.danger};
-    }
-  }
-`;
-
-const DetailPanel = styled.div`
-  background: ${({ theme }) => theme.bg2};
-  border-radius: ${({ theme }) => theme.spacing.md};
-  padding: ${({ theme }) => theme.spacing.xl};
-  border: 1px solid ${({ theme }) => theme.border};
-  box-shadow: ${({ theme }) => theme.shadows.premium};
-  backdrop-filter: blur(10px);
-`;
-
-const DetailHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: ${({ theme }) => theme.spacing.lg};
-
-  .title-area {
-    display: flex;
-    align-items: center;
-    gap: 12px;
-    color: ${({ theme }) => theme.primary};
-
-    h3 {
-      margin: 0;
-      color: ${({ theme }) => theme.text};
-    }
-  }
-`;
-
-const TimeRangeSelector = styled.div`
-  select {
-    padding: 8px 16px;
-    border-radius: 8px;
-    border: 1px solid ${({ theme }) => theme.border};
-    background: ${({ theme }) => theme.cardBg};
-    color: ${({ theme }) => theme.text};
-    font-weight: 500;
-    outline: none;
-    cursor: pointer;
-
-    &:focus {
-      border-color: ${({ theme }) => theme.primary};
-    }
-  }
-`;
-
-const DetailGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(3, 1fr);
-  gap: ${({ theme }) => theme.spacing.md};
-  margin-bottom: ${({ theme }) => theme.spacing.xl};
-
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const SegmentsArea = styled.div`
-  h4 {
-    margin: 0 0 ${({ theme }) => theme.spacing.md} 0;
-    color: ${({ theme }) => theme.textSecondary};
-    font-size: ${({ theme }) => theme.fontsm};
-    text-transform: uppercase;
-    letter-spacing: 1px;
-  }
-`;
-
-const SegmentsGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(200px, 1fr));
-  gap: ${({ theme }) => theme.spacing.sm};
-`;
-
-const SegmentCard = styled.div`
-  padding: 12px;
-  background: ${({ theme }) => theme.cardBg};
-  border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.border};
-
-  .segment-info {
-    display: flex;
-    justify-content: space-between;
-    align-items: center;
-    margin-bottom: 4px;
-
-    .name {
-      font-weight: 600;
-      font-size: 14px;
-    }
-
-    .value {
-      color: ${({ theme }) => theme.primary};
-      font-weight: 700;
-    }
-  }
-
-  .segment-meta {
-    font-size: 11px;
-    color: ${({ theme }) => theme.textSecondary};
-  }
-`;
+export default ConsecutiveDashboard;

@@ -1,8 +1,7 @@
 import React, { useState, useMemo } from "react";
-import styled from "styled-components";
 import {
     FaArrowLeft, FaSync, FaExclamationTriangle,
-    FaShoppingCart, FaUsers, FaFileInvoiceDollar, FaBox, FaRocket, FaExchangeAlt
+    FaShoppingCart, FaUsers, FaFileInvoiceDollar, FaBox, FaRocket, FaExchangeAlt, FaLink
 } from "react-icons/fa";
 import Swal from "sweetalert2";
 
@@ -92,7 +91,11 @@ export function UniversalDocumentManager() {
     const [isResultsOpen, setIsResultsOpen] = useState(false);
 
     const activeMappings = useMemo(() =>
-        mappings.filter(m => m.active),
+        mappings.filter(m => {
+            const isActive = m.active !== false;
+            const isRestrictedChild = m.isWorkflowChild === true && m.allowDirectExecution === false;
+            return isActive && !isRestrictedChild;
+        }),
         [mappings]);
 
     const handleViewDetails = async (doc) => {
@@ -125,17 +128,34 @@ export function UniversalDocumentManager() {
 
         try {
             if (specificId) {
-                // Sincronizamos la selección para que el hook lo maneje
                 setSelectedDocuments([specificId]);
                 await executeProcessing([specificId]);
-                // No abrimos el modal aquí, el ProcessingStatusModal lo hará al terminar
             } else {
                 await executeProcessing();
-                // No abrimos el modal aquí, el ProcessingStatusModal lo hará al terminar
             }
         } catch (error) {
             Swal.fire("Error", error.message || "Error operativo", "error");
         }
+    };
+
+    const handleSelectMappingInternal = (mapping) => {
+        if (mapping.isWorkflowChild && !mapping.allowDirectExecution) {
+            Swal.fire({
+                title: 'Proceso Restringido',
+                html: `Este es un <strong>proceso hijo</strong> configurado para ejecutarse solo desde su proceso padre.<br/><br/>¿Desea continuar de todos modos?`,
+                icon: 'warning',
+                showCancelButton: true,
+                confirmButtonText: 'Sí, abrir',
+                cancelButtonText: 'Cancelar',
+                confirmButtonColor: '#f39c12'
+            }).then((result) => {
+                if (result.isConfirmed) {
+                    handleSelectMapping(mapping._id);
+                }
+            });
+            return;
+        }
+        handleSelectMapping(mapping._id);
     };
 
     const handleEditEntity = (doc) => {
@@ -150,58 +170,86 @@ export function UniversalDocumentManager() {
     };
 
     const renderLauncher = () => (
-        <LauncherContainer>
-            <LauncherHeader>
-                <h2>Centro de Operaciones Universales</h2>
-                <p>Selecciona un proceso de negocio para gestionar sus documentos pendientes</p>
-            </LauncherHeader>
+        <div className="max-w-6xl mx-auto">
+            <div className="text-center mb-12">
+                <h2 className="text-3xl font-extrabold text-gray-900 dark:text-white mb-2">Centro de Operaciones Universales</h2>
+                <p className="text-base text-gray-500 dark:text-gray-400 opacity-80">Selecciona un proceso de negocio para gestionar sus documentos pendientes</p>
+            </div>
 
             {mappingsLoading ? (
-                <LoadingGrid>
-                    {[1, 2, 3].map(i => <SkeletonCard key={i} />)}
-                </LoadingGrid>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {[1, 2, 3].map(i => <div key={i} className="h-64 rounded-3xl bg-white dark:bg-slate-800 opacity-50" />)}
+                </div>
             ) : activeMappings.length === 0 ? (
-                <EmptyLauncher>
-                    <FaExclamationTriangle size={40} />
+                <div className="text-center py-24 opacity-50 text-gray-500 dark:text-gray-400">
+                    <FaExclamationTriangle size={40} className="mx-auto mb-4" />
                     <h3>No hay procesos configurados</h3>
                     <p>Contacta con el administrador para habilitar mapeos de datos.</p>
-                </EmptyLauncher>
+                </div>
             ) : (
-                <CardsGrid>
-                    {activeMappings.map((mapping) => (
-                        <OperationalCard
-                            key={mapping._id}
-                            onClick={() => handleSelectMapping(mapping._id)}
-                        >
-                            <CardIcon>{getProcessIcon(mapping.name)}</CardIcon>
-                            <CardContent>
-                                <h3>{mapping.name}</h3>
-                                <p>{mapping.description || "Gestión y transferencia de documentos"}</p>
-                                <ProcessType>{mapping.transferType}</ProcessType>
-                            </CardContent>
-                            <CardFooter>
-                                <span>Iniciar Gestión</span>
-                                <FaRocket />
-                            </CardFooter>
-                        </OperationalCard>
-                    ))}
-                </CardsGrid>
+                <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+                    {activeMappings.map((mapping) => {
+                        const isParent = mapping.workflowConfig?.enabled && mapping.workflowConfig?.nextMappings?.length > 0;
+                        const isChild = mapping.isWorkflowChild;
+
+                        return (
+                            <div
+                                key={mapping._id}
+                                onClick={() => handleSelectMappingInternal(mapping)}
+                                className="relative bg-white dark:bg-slate-800 rounded-3xl p-8 border border-gray-200 dark:border-slate-700 flex flex-col gap-5 cursor-pointer transition-all duration-300 hover:-translate-y-3 hover:border-blue-500 dark:hover:border-blue-400 hover:shadow-2xl overflow-hidden group"
+                            >
+                                <div className="absolute bottom-0 left-0 w-full h-1 bg-blue-500 -translate-x-full group-hover:translate-x-0 transition-transform duration-400" />
+
+                                <div className="w-16 h-16 rounded-2xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-3xl">
+                                    {getProcessIcon(mapping.name)}
+                                </div>
+
+                                <div className="absolute top-4 right-4 flex gap-2 z-10">
+                                    {isParent && (
+                                        <span className="bg-gradient-to-r from-emerald-500 to-emerald-600 text-white text-xs font-extrabold px-3 py-1 rounded-full shadow-lg border border-white/20">
+                                            ✨ PROCESO PADRE
+                                        </span>
+                                    )}
+                                    {isChild && <span className="bg-orange-500 text-white text-xs font-bold px-3 py-1 rounded-full">HIJO</span>}
+                                </div>
+
+                                <div className="flex-1">
+                                    <h3 className="m-0 text-2xl font-bold text-gray-900 dark:text-white">{mapping.name}</h3>
+                                    {isParent && (
+                                        <div className="text-emerald-600 dark:text-emerald-400 font-extrabold text-xs mb-3 flex items-center gap-1">
+                                            <FaLink /> DISPARA FLUJO AUTOMÁTICO
+                                        </div>
+                                    )}
+                                    <p className="my-2 text-sm text-gray-500 dark:text-gray-400 leading-relaxed">{mapping.description || "Gestión y transferencia de documentos"}</p>
+                                    <span className="inline-block mt-4 text-xs font-bold uppercase tracking-wider px-3 py-1 bg-blue-500/10 text-blue-500 rounded-lg">
+                                        {mapping.transferType}
+                                    </span>
+                                </div>
+
+                                <div className="flex items-center justify-between pt-5 border-t border-gray-200/40 text-sm font-bold text-blue-500">
+                                    <span>Iniciar Gestión</span>
+                                    <FaRocket />
+                                </div>
+                            </div>
+                        );
+                    })}
+                </div>
             )}
-        </LauncherContainer>
+        </div>
     );
 
     const renderManager = () => (
-        <ManagerContainer>
-            <ManagerHeader>
+        <div className="flex flex-col gap-6">
+            <div className="flex items-center justify-between p-5 bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-lg">
                 <Button variant="secondary" onClick={handleReturnToList}>
                     <FaArrowLeft /> Volver al Lanzador
                 </Button>
-                <HeaderTitle>
+                <h3 className="m-0 flex flex-col items-center gap-1 text-2xl font-extrabold text-gray-900 dark:text-white">
                     {activeMappingName}
-                    <Badge>{entityType.toUpperCase()}</Badge>
-                </HeaderTitle>
-                <div style={{ width: '150px' }} />
-            </ManagerHeader>
+                    <span className="text-xs px-3 py-1 rounded-full bg-blue-500 text-white">{entityType.toUpperCase()}</span>
+                </h3>
+                <div className="w-36" />
+            </div>
 
             <DocumentsFilterPanel
                 search={search} setSearch={setSearch}
@@ -210,17 +258,17 @@ export function UniversalDocumentManager() {
                 isRefreshing={documentsRefreshing}
             />
 
-            <TableWrapper>
+            <div className="min-h-[500px] relative">
                 {documentsLoading && !documentsRefreshing ? (
-                    <LoadingState>
-                        <FaSync className="spinning" /> Cargando datos operacionales...
-                    </LoadingState>
+                    <div className="py-48 text-center text-blue-500 font-bold">
+                        <FaSync className="spinning inline-block mr-2" /> Cargando datos operacionales...
+                    </div>
                 ) : documentsError ? (
-                    <ErrorState>
-                        <FaExclamationTriangle /> {documentsError}
-                    </ErrorState>
+                    <div className="py-48 text-center text-red-500">
+                        <FaExclamationTriangle className="inline-block mr-2" /> {documentsError}
+                    </div>
                 ) : filteredDocuments.length === 0 ? (
-                    <EmptyState>Excelente! No hay documentos pendientes por procesar.</EmptyState>
+                    <div className="py-48 text-center italic opacity-60">Excelente! No hay documentos pendientes por procesar.</div>
                 ) : (
                     <DocumentsDataTable
                         documents={filteredDocuments}
@@ -235,16 +283,19 @@ export function UniversalDocumentManager() {
                         actionStates={actionStates}
                     />
                 )}
-            </TableWrapper>
+            </div>
 
             {selectedDocuments.length > 0 && (
-                <FloatingActions>
-                    <ProcessButton onClick={() => handleProcess()} loading={isProcessing}>
+                <div className="fixed bottom-10 left-1/2 -translate-x-1/2 w-[90%] max-w-2xl z-50">
+                    <button
+                        onClick={() => handleProcess()}
+                        className="w-full py-5 rounded-2xl border-none bg-blue-500 text-white text-lg font-extrabold shadow-xl hover:scale-105 hover:brightness-110 active:scale-95 transition-all"
+                    >
                         EJECUTAR PROCESAMIENTO ({selectedDocuments.length})
-                    </ProcessButton>
-                </FloatingActions>
+                    </button>
+                </div>
             )}
-        </ManagerContainer>
+        </div>
     );
 
     const renderContent = () => {
@@ -252,21 +303,21 @@ export function UniversalDocumentManager() {
 
         if (isEditOpen && editingDoc) {
             return (
-                <ManagerContainer>
-                    <ManagerHeader>
+                <div className="flex flex-col gap-6">
+                    <div className="flex items-center justify-between p-5 bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-lg">
                         <Button variant="secondary" onClick={() => setIsEditOpen(false)}>
                             <FaArrowLeft /> Volver a la Lista
                         </Button>
-                        <HeaderTitle>Editando Documento técnico</HeaderTitle>
-                        <div style={{ width: '150px' }} />
-                    </ManagerHeader>
+                        <h3 className="m-0 text-2xl font-extrabold text-gray-900 dark:text-white">Editando Documento técnico</h3>
+                        <div className="w-36" />
+                    </div>
                     <CustomerEditor
                         customer={editingDoc}
                         mappingId={activeMappingId}
                         onSave={handleSaveEdit}
                         onCancel={() => setIsEditOpen(false)}
                     />
-                </ManagerContainer>
+                </div>
             );
         }
 
@@ -274,7 +325,7 @@ export function UniversalDocumentManager() {
     };
 
     return (
-        <MainWrapper>
+        <div className="p-8 bg-gray-50 dark:bg-slate-900 min-h-screen animate-fadeIn">
             {renderContent()}
 
             <DocumentDetailsModal
@@ -301,146 +352,8 @@ export function UniversalDocumentManager() {
                 onClose={() => setIsResultsOpen(false)}
                 results={processingResults}
             />
-        </MainWrapper>
+        </div>
     );
 }
-
-// --- Styled Components Premium ---
-
-const MainWrapper = styled.div`
-    padding: 30px;
-    background: ${({ theme }) => theme.bg};
-    min-height: 100vh;
-    animation: fadeIn 0.5s ease-out;
-    @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
-`;
-
-const LauncherContainer = styled.div`
-    max-width: 1200px;
-    margin: 0 auto;
-`;
-
-const LauncherHeader = styled.div`
-    text-align: center;
-    margin-bottom: 50px;
-    h2 { font-size: 32px; font-weight: 800; color: ${({ theme }) => theme.title}; margin-bottom: 10px; }
-    p { font-size: 16px; color: ${({ theme }) => theme.textSecondary}; opacity: 0.8; }
-`;
-
-const CardsGrid = styled.div`
-    display: grid;
-    grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-    gap: 30px;
-`;
-
-const OperationalCard = styled.div`
-    background: ${({ theme }) => theme.cardBg};
-    border-radius: 24px;
-    padding: 30px;
-    border: 1px solid ${({ theme }) => theme.border};
-    display: flex;
-    flex-direction: column;
-    gap: 20px;
-    cursor: pointer;
-    transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    position: relative;
-    overflow: hidden;
-    box-shadow: ${({ theme }) => theme.shadows.soft};
-
-    &:hover {
-        transform: translateY(-10px);
-        border-color: ${({ theme }) => theme.primary};
-        box-shadow: 0 20px 40px rgba(0,0,0,0.1);
-        
-        &::after { transform: translateX(0); }
-    }
-
-    &::after {
-        content: '';
-        position: absolute;
-        bottom: 0; left: 0; width: 100%; height: 4px;
-        background: ${({ theme }) => theme.primary};
-        transform: translateX(-100%);
-        transition: transform 0.4s ease;
-    }
-`;
-
-const CardIcon = styled.div`
-    width: 60px; height: 60px;
-    border-radius: 16px;
-    background: ${({ theme }) => theme.primary}15;
-    color: ${({ theme }) => theme.primary};
-    display: flex; align-items: center; justify-content: center;
-    font-size: 28px;
-`;
-
-const CardContent = styled.div`
-    flex: 1;
-    h3 { margin: 0; font-size: 22px; font-weight: 700; color: ${({ theme }) => theme.title}; }
-    p { margin: 8px 0 0; font-size: 14px; color: ${({ theme }) => theme.textSecondary}; line-height: 1.5; }
-`;
-
-const ProcessType = styled.span`
-    display: inline-block;
-    margin-top: 15px;
-    font-size: 11px;
-    font-weight: 700;
-    text-transform: uppercase;
-    letter-spacing: 1px;
-    padding: 4px 10px;
-    background: ${({ theme }) => theme.primary}10;
-    color: ${({ theme }) => theme.primary};
-    border-radius: 6px;
-`;
-
-const CardFooter = styled.div`
-    display: flex; align-items: center; justify-content: space-between;
-    padding-top: 20px; border-top: 1px solid ${({ theme }) => theme.border}40;
-    font-size: 14px; font-weight: 700; color: ${({ theme }) => theme.primary};
-`;
-
-const ManagerContainer = styled.div`
-    display: flex; flex-direction: column; gap: 24px;
-`;
-
-const ManagerHeader = styled.div`
-    display: flex; align-items: center; justify-content: space-between;
-    padding: 20px; background: ${({ theme }) => theme.cardBg}; border-radius: 20px;
-    border: 1px solid ${({ theme }) => theme.border}; box-shadow: ${({ theme }) => theme.shadows.premium};
-`;
-
-const HeaderTitle = styled.h3`
-    margin: 0; display: flex; flex-direction: column; align-items: center; gap: 4px;
-    font-size: 24px; font-weight: 800; color: ${({ theme }) => theme.title};
-`;
-
-const Badge = styled.span`
-    font-size: 10px; padding: 2px 10px; border-radius: 30px;
-    background: ${({ theme }) => theme.primary}; color: white;
-`;
-
-const TableWrapper = styled.div` min-height: 500px; position: relative; `;
-
-const FloatingActions = styled.div`
-    position: fixed; bottom: 40px; left: 50%; transform: translateX(-50%);
-    width: 90%; max-width: 600px; z-index: 1000;
-`;
-
-const ProcessButton = styled(Button)`
-    width: 100%; padding: 20px; border-radius: 20px; border: none;
-    background: ${({ theme }) => theme.primary}; color: white;
-    font-size: 18px; font-weight: 800; cursor: pointer;
-    box-shadow: 0 15px 35px ${({ theme }) => theme.primary}50;
-    transition: all 0.3s ease;
-    &:hover { transform: scale(1.02); filter: brightness(1.1); }
-    &:active { transform: scale(0.98); }
-`;
-
-const LoadingGrid = styled.div` display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 30px; `;
-const SkeletonCard = styled.div` height: 250px; border-radius: 24px; background: ${({ theme }) => theme.cardBg}; opacity: 0.5; `;
-const EmptyLauncher = styled.div` text-align: center; padding: 100px; opacity: 0.5; color: ${({ theme }) => theme.textSecondary}; `;
-const LoadingState = styled.div` padding: 200px; text-align: center; color: ${({ theme }) => theme.primary}; font-weight: 700; `;
-const ErrorState = styled.div` padding: 200px; text-align: center; color: #ff4757; `;
-const EmptyState = styled.div` padding: 200px; text-align: center; font-style: italic; opacity: 0.6; `;
 
 export default UniversalDocumentManager;

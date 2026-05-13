@@ -1,34 +1,44 @@
 import React from "react";
-import styled from "styled-components";
 import { FaEye, FaPlay, FaCheckSquare, FaSquare } from "react-icons/fa";
 import { StatusBadge, Button } from "../../index";
 
-const TableWrapper = styled.div`
-  background: ${({ theme }) => theme.cardBg}; border-radius: 20px;
-  border: 1px solid ${({ theme }) => theme.border}; overflow: hidden;
-  box-shadow: ${({ theme }) => theme.shadows.medium};
-`;
+// Migrado desde styled-components a Tailwind classes
 
-const Scrollable = styled.div`
-  overflow-x: auto; max-height: 600px; overflow-y: auto;
-  &::-webkit-scrollbar { width: 8px; height: 8px; }
-  &::-webkit-scrollbar-track { background: transparent; }
-  &::-webkit-scrollbar-thumb { background: ${({ theme }) => theme.border}; border-radius: 10px; }
-`;
+const TableWrapper = ({ children, className = "" }) => (
+  <div className={`bg-white rounded-2xl border border-slate-200 shadow-soft overflow-hidden ${className}`}>
+    {children}
+  </div>
+);
 
-const Table = styled.table`
-  width: 100%; border-collapse: collapse; font-size: 13px;
-  thead { position: sticky; top: 0; z-index: 10; background: ${({ theme }) => theme.bg2}; }
-  th { padding: 16px 20px; text-align: left; font-weight: 800; text-transform: uppercase; font-size: 11px; letter-spacing: 1px; color: ${({ theme }) => theme.textSecondary}; border-bottom: 1px solid ${({ theme }) => theme.border}; }
-  td { padding: 14px 20px; border-bottom: 1px solid ${({ theme }) => theme.border}40; color: ${({ theme }) => theme.text}; }
-  tr:hover { background: ${({ theme }) => theme.bg2}10; }
-  tr:last-child td { border-bottom: none; }
-`;
+const Scrollable = ({ children, className = "" }) => (
+  <div className={`overflow-x-auto max-h-[600px] ${className}`}>
+    {children}
+  </div>
+);
 
-const CheckboxCell = styled.td` width: 50px; text-align: center; cursor: pointer; `;
-const ActionsCell = styled.td` width: 120px; text-align: right; `;
+const Table = ({ children, className = "" }) => (
+  <table className={`w-full border-collapse ${className}`}>
+    {children}
+  </table>
+);
 
-const ActionGrid = styled.div` display: flex; gap: 8px; justify-content: flex-end; `;
+const CheckboxCell = ({ children, className = "" }) => (
+  <td className={`w-[50px] text-center cursor-pointer ${className}`}>
+    {children}
+  </td>
+);
+
+const ActionsCell = ({ children, className = "" }) => (
+  <td className={`w-[120px] text-right ${className}`}>
+    {children}
+  </td>
+);
+
+const ActionGrid = ({ children, className = "" }) => (
+  <div className={`flex gap-2 justify-end ${className}`}>
+    {children}
+  </div>
+);
 
 export function OrdersDataTable({
     data,
@@ -48,26 +58,28 @@ export function OrdersDataTable({
         <TableWrapper>
             <Scrollable>
                 <Table>
-                    <thead>
+                    <thead className="table-header">
                         <tr>
-                            <th>
-                                <div onClick={onSelectAll} style={{ cursor: 'pointer', display: 'flex', alignItems: 'center', justifyContent: 'center' }}>
-                                    {isAllSelected ? <FaCheckSquare color="var(--primary)" size={18} /> : <FaSquare color="#ddd" size={18} />}
+                            <th className="w-[50px] text-center">
+                                <div onClick={onSelectAll} className="cursor-pointer flex items-center justify-center">
+                                    {isAllSelected ? <FaCheckSquare className="text-primary-500" size={18} /> : <FaSquare className="text-slate-300" size={18} />}
                                 </div>
                             </th>
-                            {columns.map(col => <th key={col}>{col}</th>)}
-                            <th style={{ textAlign: 'right' }}>Acciones</th>
+                            {columns.map(col => <th key={col} className="font-bold text-[11px] text-slate-500 tracking-wider uppercase">
+                                {col}
+                            </th>)}
+                            <th className="text-right text-[11px] text-slate-500 font-bold uppercase tracking-wider">Acciones</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-slate-200">
                         {data.map((row, idx) => {
                             const rowId = row[idField];
                             const isSelected = selectedIds.includes(rowId);
 
                             return (
-                                <tr key={rowId || idx}>
+                                <tr key={rowId || idx} className="table-row-hover">
                                     <CheckboxCell onClick={() => onSelect(rowId)}>
-                                        {isSelected ? <FaCheckSquare color="var(--primary)" size={16} /> : <FaSquare color="#eee" size={16} />}
+                                        {isSelected ? <FaCheckSquare className="text-primary-500" size={16} /> : <FaSquare className="text-slate-300" size={16} />}
                                     </CheckboxCell>
 
                                     {columns.map(col => {
@@ -75,7 +87,7 @@ export function OrdersDataTable({
                                         const isStatus = col.toLowerCase().includes('estado') || col.toLowerCase().includes('status');
 
                                         return (
-                                            <td key={col}>
+                                            <td key={col} className="text-sm">
                                                 {isStatus ? (
                                                     <StatusBadge status={value}>{value}</StatusBadge>
                                                 ) : (
@@ -90,7 +102,7 @@ export function OrdersDataTable({
                                             <Button variant="ghost" size="small" onClick={() => onViewDetails(row)} title="Ver Detalle">
                                                 <FaEye />
                                             </Button>
-                                            <Button variant="ghost" size="small" onClick={() => onProcess(rowId)} title="Procesar Unitario" style={{ color: '#28a745' }}>
+                                            <Button variant="ghost" size="small" onClick={() => onProcess(rowId)} title="Procesar Unitario" className="text-emerald-500">
                                                 <FaPlay />
                                             </Button>
                                         </ActionGrid>

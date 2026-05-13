@@ -1,5 +1,4 @@
 import React, { useState } from "react";
-import styled from "styled-components";
 import { FaArrowLeft, FaExclamationTriangle, FaChartLine, FaBoxOpen, FaChevronLeft, FaChevronRight } from "react-icons/fa";
 import { useNavigate, useParams } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
@@ -19,19 +18,17 @@ import {
 export function LoadsResumen() {
   const { accessToken } = useAuth();
   const { hasPermission, isAdmin } = usePermissions();
-  
+
   const canProcessReturn = hasPermission("loads", "update") || hasPermission("loads", "manage") || isAdmin;
 
   const navigate = useNavigate();
   const { loadId: paramLoadId } = useParams();
 
-  // Modales State
   const [isDetailsOpen, setIsDetailsOpen] = useState(false);
   const [isReturnOpen, setIsReturnOpen] = useState(false);
   const [selectedSummary, setSelectedSummary] = useState(null);
   const [inventorySnapshot, setInventorySnapshot] = useState(null);
 
-  // Hook de orquestación (Auditoría + Devoluciones)
   const {
     summaries,
     loading,
@@ -85,30 +82,35 @@ export function LoadsResumen() {
       });
     } catch (err) {
       Swal.fire({ title: "Error en Proceso", text: err.message, icon: "error" });
-      throw err; // Re-throw for modal to handle loading state
+      throw err;
     }
   };
 
   return (
-    <Container>
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col">
       <Helmet>
         <title>Audit Summary - Core ERP</title>
       </Helmet>
 
-      <MainArea>
-        <TopBar>
-          <TitleSection>
-            <BackButton onClick={() => navigate("/loads")}>
+      <div className="flex-1 p-5 lg:p-10 max-w-7xl mx-auto w-full flex flex-col gap-8">
+        <div className="flex flex-col lg:flex-row justify-between items-end gap-5">
+          <div className="flex flex-col gap-2">
+            <button
+              onClick={() => navigate("/loads")}
+              className="bg-none border-none text-blue-500 text-xs font-extrabold flex items-center gap-2 cursor-pointer uppercase hover:opacity-80 transition-opacity p-0"
+            >
               <FaArrowLeft /> Volver a Cargas
-            </BackButton>
-            <PageTitle><FaChartLine color="var(--primary)" /> Auditoría de Traspasos</PageTitle>
-            <PageSubtitle>Centro de gestión de sumarios de carga y procesos de retorno técnico.</PageSubtitle>
-          </TitleSection>
+            </button>
+            <h2 className="m-0 text-3xl font-extrabold text-gray-900 dark:text-white flex items-center gap-3">
+              <FaChartLine color="var(--primary)" /> Auditoría de Traspasos
+            </h2>
+            <p className="m-0 text-sm font-semibold text-gray-500 dark:text-gray-400">Centro de gestión de sumarios de carga y procesos de retorno técnico.</p>
+          </div>
 
-          <Toolbar>
+          <div className="flex gap-3">
             <Button variant="ghost" icon={<FaBoxOpen />} onClick={clearFilters}>Limpiar Filtros</Button>
-          </Toolbar>
-        </TopBar>
+          </div>
+        </div>
 
         <SummaryFilterPanel
           filters={filters}
@@ -119,13 +121,13 @@ export function LoadsResumen() {
         />
 
         {error ? (
-          <CenteredArea $error>
-            <FaExclamationTriangle size={40} />
-            <p>{error}</p>
+          <div className="flex flex-col items-center justify-center py-20 gap-5 text-center">
+            <FaExclamationTriangle size={40} className="text-red-500" />
+            <p className="font-bold text-red-500">{error}</p>
             <Button variant="primary" onClick={refetch}>Reintentar Consulta</Button>
-          </CenteredArea>
+          </div>
         ) : (
-          <ResultsArea>
+          <div className="flex flex-col gap-5">
             <SummaryDataTable
               summaries={summaries}
               onView={handleViewDetails}
@@ -133,22 +135,30 @@ export function LoadsResumen() {
               refreshing={refreshing}
             />
 
-            <PaginationBar>
-              <PaginationInfo>
+            <div className="flex justify-between items-center p-5 bg-white dark:bg-slate-800 rounded-2xl border border-gray-200/40 dark:border-slate-700/40">
+              <div className="text-xs text-gray-500 dark:text-gray-400">
                 Página <strong>{pagination.currentPage}</strong> de <strong>{pagination.totalPages}</strong>
-              </PaginationInfo>
-              <PaginationActions>
-                <NavButton disabled={pagination.currentPage === 1} onClick={() => pagination.handlePageChange(pagination.currentPage - 1)}>
+              </div>
+              <div className="flex gap-3">
+                <button
+                  disabled={pagination.currentPage === 1}
+                  onClick={() => pagination.handlePageChange(pagination.currentPage - 1)}
+                  className="flex items-center gap-2 px-5 py-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/10 text-xs font-extrabold cursor-pointer transition-all hover:bg-blue-500 hover:text-white hover:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-50 disabled:hover:text-inherit disabled:hover:border-inherit"
+                >
                   <FaChevronLeft /> Anterior
-                </NavButton>
-                <NavButton disabled={pagination.currentPage === pagination.totalPages} onClick={() => pagination.handlePageChange(pagination.currentPage + 1)}>
+                </button>
+                <button
+                  disabled={pagination.currentPage === pagination.totalPages}
+                  onClick={() => pagination.handlePageChange(pagination.currentPage + 1)}
+                  className="flex items-center gap-2 px-5 py-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/10 text-xs font-extrabold cursor-pointer transition-all hover:bg-blue-500 hover:text-white hover:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-50 disabled:hover:text-inherit disabled:hover:border-inherit"
+                >
                   Siguiente <FaChevronRight />
-                </NavButton>
-              </PaginationActions>
-            </PaginationBar>
-          </ResultsArea>
+                </button>
+              </div>
+            </div>
+          </div>
         )}
-      </MainArea>
+      </div>
 
       <SummaryDetailsModal
         isOpen={isDetailsOpen}
@@ -162,65 +172,8 @@ export function LoadsResumen() {
         inventoryData={inventorySnapshot}
         onProcess={onProcessReturn}
       />
-    </Container>
+    </div>
   );
 }
-
-// --- Styled Components Premium ---
-
-const Container = styled.div`
-  min-height: 100vh; background: ${({ theme }) => theme.bg};
-  display: flex; flex-direction: column;
-`;
-
-const HeaderSection = styled.header` padding: 0 20px; `;
-
-const MainArea = styled.main`
-  flex: 1; padding: 20px 40px; max-width: 1400px; margin: 0 auto; width: 100%;
-  display: flex; flex-direction: column; gap: 32px;
-  @media (max-width: 768px) { padding: 15px; }
-`;
-
-const TopBar = styled.div`
-  display: flex; justify-content: space-between; align-items: flex-end;
-  @media (max-width: 900px) { flex-direction: column; align-items: flex-start; gap: 20px; }
-`;
-
-const TitleSection = styled.div` display: flex; flex-direction: column; gap: 8px; `;
-const BackButton = styled.button`
-  background: none; border: none; color: ${({ theme }) => theme.primary}; 
-  font-size: 13px; font-weight: 800; display: flex; align-items: center; gap: 8px;
-  cursor: pointer; text-transform: uppercase; padding: 0;
-  &:hover { opacity: 0.8; }
-`;
-const PageTitle = styled.h2` margin: 0; font-size: 28px; font-weight: 800; color: ${({ theme }) => theme.title}; display: flex; align-items: center; gap: 12px; `;
-const PageSubtitle = styled.p` margin: 0; font-size: 14px; font-weight: 600; color: ${({ theme }) => theme.textSecondary}; `;
-
-const Toolbar = styled.div` display: flex; gap: 12px; `;
-
-const ResultsArea = styled.div` display: flex; flex-direction: column; gap: 20px; `;
-
-const CenteredArea = styled.div`
-  display: flex; flex-direction: column; align-items: center; justify-content: center;
-  padding: 80px; gap: 20px; text-align: center;
-  p { font-weight: 700; color: ${({ theme, $error }) => $error ? '#ef4444' : theme.textSecondary}; }
-`;
-
-const PaginationBar = styled.div`
-  display: flex; justify-content: space-between; align-items: center; padding: 20px;
-  background: ${({ theme }) => theme.cardBg}; border-radius: 20px; border: 1px solid ${({ theme }) => theme.border}40;
-`;
-
-const PaginationInfo = styled.div` font-size: 13px; color: ${({ theme }) => theme.textSecondary}; `;
-
-const PaginationActions = styled.div` display: flex; gap: 12px; `;
-
-const NavButton = styled.button`
-  display: flex; align-items: center; gap: 8px; padding: 10px 20px; border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.border}; background: ${({ theme }) => theme.bg2}10;
-  color: ${({ theme }) => theme.text}; font-size: 13px; font-weight: 800; cursor: pointer; transition: all 0.2s;
-  &:hover:not(:disabled) { background: ${({ theme }) => theme.primary}; color: white; border-color: ${({ theme }) => theme.primary}; }
-  &:disabled { opacity: 0.4; cursor: not-allowed; }
-`;
 
 export default LoadsResumen;

@@ -1,77 +1,89 @@
-import React, { useState } from "react";
-import styled from "styled-components";
-import { useAuth, usePermissions, useAuditLogs, AuditFiltersPanel, AuditDataTable } from "../../index";
-import { Container } from "../index";
+import React, { useEffect, useState } from "react";
+import { useLocation } from "react-router-dom";
+import { useAuth, usePermissions, useAuditLogs, AuditFiltersPanel, AuditDataTable, LogDetailModal } from "../../index";
 
-const AuditLayout = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-  width: 100%;
-  max-width: 1400px;
-  margin: 0 auto;
-`;
-
-const WelcomeSection = styled.div`
-  margin-bottom: 20px;
-  
-  h1 {
-    font-size: 28px;
-    font-weight: 900;
-    margin-bottom: 8px;
-    color: inherit;
-  }
-  
-  p {
-    opacity: 0.7;
-    font-size: 16px;
-  }
-`;
-
+/**
+ * AuditCenter (Tailwind Edition)
+ * Centro de control para auditoría de sistema y transferencias.
+ */
 export function AuditCenter() {
     const { accessToken } = useAuth();
     const { hasPermission, isAdmin } = usePermissions();
+    const location = useLocation();
+    const [selectedLog, setSelectedLog] = useState(null);
 
-    const canExportAudit = hasPermission("history", "update") || isAdmin;
+    // Extraer parámetros de la URL
+    const searchParams = new URLSearchParams(location.search);
+    const initialSearch = searchParams.get("search") || "";
+    const initialType = searchParams.get("type") || "system";
 
     const {
         logs,
         meta,
+        stats,
         loading,
         logType,
         filters,
-        pagination,
+        autoRefresh,
+        autoRefreshInterval,
         actions
-    } = useAuditLogs(accessToken);
+    } = useAuditLogs(accessToken, initialType);
+
+    // Efecto para aplicar búsqueda inicial desde URL
+    useEffect(() => {
+        if (initialSearch) {
+            actions.updateFilters({ search: initialSearch });
+        }
+        if (initialType && initialType !== logType) {
+            actions.setLogType(initialType);
+        }
+    }, [initialSearch, initialType]);
 
     return (
-        <Container>
-            <main style={{ padding: '40px 20px' }}>
-                <AuditLayout>
-                    <WelcomeSection>
-                        <h1>Central de Auditoría</h1>
-                        <p>Supervisión integral de eventos del sistema y transferencias logísticas.</p>
-                    </WelcomeSection>
+        <div className="flex flex-col gap-8 w-full max-w-[1440px] mx-auto p-6 lg:p-10 animate-fadeIn">
+            {/* WELCOME SECTION */}
+            <header className="mb-2">
+                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Central de Auditoría</h1>
+                <p className="text-slate-500 mt-2 font-medium">Supervisión integral de eventos del sistema y transferencias logísticas.</p>
+            </header>
 
-                    <AuditFiltersPanel
-                        logType={logType}
-                        setLogType={actions.setLogType}
-                        filters={filters}
-                        onFilterChange={actions.updateFilters}
-                        onRefresh={actions.refreshLogs}
-                        onExport={actions.exportCSV}
-                        loading={loading}
-                    />
+            {/* FILTERS PANEL */}
+            <div className="z-20">
+              <AuditFiltersPanel
+                  logType={logType}
+                  setLogType={actions.setLogType}
+                  filters={filters}
+                  onFilterChange={actions.updateFilters}
+                  onRefresh={actions.refreshLogs}
+                  onExport={actions.exportCSV}
+                  onToggleAutoRefresh={actions.toggleAutoRefresh}
+                  onSetRefreshInterval={actions.setRefreshInterval}
+                  loading={loading}
+                  autoRefresh={autoRefresh}
+                  autoRefreshInterval={autoRefreshInterval}
+                  stats={stats}
+              />
+            </div>
 
-                    <AuditDataTable
-                        data={logs}
-                        type={logType}
-                        pagination={meta}
-                        onPageChange={actions.changePage}
-                        loading={loading}
-                    />
-                </AuditLayout>
-            </main>
-        </Container>
+            {/* DATA TABLE */}
+            <div className="bg-white rounded-[32px] border border-slate-200 shadow-soft overflow-hidden min-h-[500px]">
+              <AuditDataTable
+                  data={logs}
+                  type={logType}
+                  pagination={meta}
+                  onPageChange={actions.changePage}
+                  onViewDetail={setSelectedLog}
+                  loading={loading}
+              />
+            </div>
+
+            {/* MODAL DETALLE */}
+            {selectedLog && (
+                <LogDetailModal 
+                    log={selectedLog} 
+                    onClose={() => setSelectedLog(null)} 
+                />
+            )}
+        </div>
     );
 }

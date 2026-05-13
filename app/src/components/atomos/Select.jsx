@@ -1,91 +1,40 @@
 import React from "react";
-import styled from "styled-components";
 import { FaChevronDown } from "react-icons/fa";
 
-export const Select = ({ label, error, children, ...props }) => {
-    return (
-        <SelectWrapper>
-            {label && <Label>{label}</Label>}
-            <InputRelative>
-                <StyledSelect error={!!error} {...props}>
-                    {children}
-                </StyledSelect>
-                <IconWrapper>
-                    <FaChevronDown size={12} />
-                </IconWrapper>
-            </InputRelative>
-            {error && <ErrorText>{error}</ErrorText>}
-        </SelectWrapper>
-    );
+/**
+ * Corporate Select Component (Tailwind Edition)
+ */
+export const Select = ({ label, error, children, className = "", ...props }) => {
+  return (
+    <div className={`flex flex-col gap-1.5 w-full mb-3 ${className}`}>
+      {label && (
+        <label className="text-[13px] font-semibold text-slate-500 ml-1">
+          {label}
+        </label>
+      )}
+      <div className="relative w-full">
+        <select
+          className={`
+            w-full py-3 px-4 pr-10 text-sm rounded-xl border transition-all duration-200 outline-none appearance-none cursor-pointer
+            ${error 
+              ? 'border-red-300 bg-red-50/30 focus:border-red-500 focus:ring-4 focus:ring-red-500/10' 
+              : 'border-slate-200 bg-white hover:border-slate-300 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 focus:bg-white'}
+            text-slate-900
+            disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-slate-50
+          `}
+          {...props}
+        >
+          {children}
+        </select>
+        <div className="absolute right-4 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 flex items-center justify-center">
+          <FaChevronDown size={12} />
+        </div>
+      </div>
+      {error && (
+        <span className="text-xs font-medium text-red-500 ml-1">
+          {error}
+        </span>
+      )}
+    </div>
+  );
 };
-
-const SelectWrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: ${({ theme }) => theme.spacing?.xs || "4px"};
-  width: 100%;
-  margin-bottom: ${({ theme }) => theme.spacing?.sm || "12px"};
-`;
-
-const Label = styled.label`
-  font-size: 13px;
-  font-weight: 600;
-  color: ${({ theme }) => theme.textSecondary || "#666"};
-  margin-left: 4px;
-`;
-
-const InputRelative = styled.div`
-  position: relative;
-  width: 100%;
-`;
-
-const StyledSelect = styled.select`
-  width: 100%;
-  padding: 12px 42px 12px 16px;
-  border-radius: 12px;
-  background: ${({ theme }) => theme.bg2 || "rgba(255, 255, 255, 0.05)"};
-  border: 1px solid ${({ theme, error }) => (error ? theme.danger : theme.border || "#ddd")};
-  color: ${({ theme }) => theme.text || "#fff"};
-  font-size: 14px;
-  appearance: none;
-  cursor: pointer;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(8px);
-
-  &:focus {
-    outline: none;
-    border-color: ${({ theme }) => theme.primary || "#4facfe"};
-    background: ${({ theme }) => theme.bg || "rgba(255, 255, 255, 0.08)"};
-    box-shadow: 0 0 0 4px ${({ theme }) => (theme.primary ? theme.primary + "20" : "rgba(79, 172, 254, 0.1)")};
-  }
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-
-  option {
-    background: ${({ theme }) => theme.cardBg || "#2c2c2e"};
-    color: ${({ theme }) => theme.text || "#fff"};
-    padding: 10px;
-  }
-`;
-
-const IconWrapper = styled.div`
-  position: absolute;
-  right: 16px;
-  top: 50%;
-  transform: translateY(-50%);
-  pointer-events: none;
-  color: ${({ theme }) => theme.textSecondary || "#999"};
-  display: flex;
-  align-items: center;
-  justify-content: center;
-`;
-
-const ErrorText = styled.span`
-  color: ${({ theme }) => theme.danger || "#ff4d4d"};
-  font-size: 12px;
-  margin-left: 4px;
-  font-weight: 500;
-`;

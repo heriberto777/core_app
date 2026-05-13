@@ -1,9 +1,8 @@
 import React, { useState } from "react";
-import styled from "styled-components";
 import { Helmet } from "react-helmet-async";
 import { useNavigate } from "react-router-dom";
 import {
-  FaPlay, FaSync, FaList, FaTable, FaHistory, FaTruckLoading, FaSearch
+  FaPlay, FaSync, FaList, FaTable, FaHistory, FaTruckLoading
 } from "react-icons/fa";
 import {
   useLoadsTasks,
@@ -16,66 +15,6 @@ import {
   TaskMetricsPanel
 } from "../../index";
 
-// === ESTILOS ( Glassmorphism & Atomic Vibe ) ===
-const Container = styled.div`
-  display: flex; flex-direction: column; gap: ${({ theme }) => theme.spacing.lg};
-  animation: fadeIn 0.4s ease-out;
-`;
-
-const ActionsBar = styled.div`
-  display: flex; flex-wrap: wrap; gap: ${({ theme }) => theme.spacing.md};
-  align-items: center; justify-content: space-between;
-  background: ${({ theme }) => theme.cardBg};
-  padding: ${({ theme }) => theme.spacing.md};
-  border-radius: 12px; border: 1px solid ${({ theme }) => theme.border};
-  backdrop-filter: blur(10px);
-`;
-
-const Grid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(320px, 1fr));
-  gap: ${({ theme }) => theme.spacing.lg};
-`;
-
-const Card = styled.div`
-  background: ${({ theme, $active }) => $active ? theme.cardBg : `${theme.bg2}80`};
-  border-radius: 16px;
-  border: 1px solid ${({ theme, $status }) =>
-    $status === 'running' ? theme.primary : theme.border};
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  overflow: hidden; position: relative;
-  box-shadow: ${({ theme }) => theme.shadows.premium};
-
-  &:hover {
-    transform: translateY(-4px);
-    box-shadow: 0 12px 24px rgba(0,0,0,0.15);
-    border-color: ${({ theme }) => theme.primary}80;
-  }
-`;
-
-const CardHeader = styled.div`
-  padding: 16px; border-bottom: 1px solid ${({ theme }) => theme.border};
-  display: flex; justify-content: space-between; align-items: center;
-  background: ${({ theme }) => theme.bg2}40;
-`;
-
-const CardBody = styled.div`
-  padding: 16px; display: flex; flex-direction: column; gap: 12px;
-`;
-
-const CardFooter = styled.div`
-  padding: 12px 16px; background: ${({ theme }) => theme.bg2}20;
-  border-top: 1px solid ${({ theme }) => theme.border};
-  display: flex; justify-content: flex-end; gap: 8px;
-`;
-
-const EmptyState = styled.div`
-  text-align: center; padding: 60px; color: ${({ theme }) => theme.textSecondary};
-  background: ${({ theme }) => theme.cardBg}; border-radius: 12px;
-  border: 1px dashed ${({ theme }) => theme.border};
-`;
-
-// === COMPONENTE PRINCIPAL ===
 export function LoadsTasks() {
   const navigate = useNavigate();
   const {
@@ -94,7 +33,7 @@ export function LoadsTasks() {
   };
 
   return (
-    <Container>
+    <div className="flex flex-col gap-6 animate-fadeIn">
       <Helmet>
         <title>Cargas ERP - Core ERP</title>
       </Helmet>
@@ -106,8 +45,8 @@ export function LoadsTasks() {
 
       <TaskMetricsPanel tasks={allTasks} />
 
-      <ActionsBar>
-        <div style={{ flex: 1, minWidth: '250px' }}>
+      <div className="flex flex-wrap gap-4 items-center justify-between bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 backdrop-blur-sm">
+        <div className="flex-1 min-w-[250px]">
           <FilterInput
             placeholder="Buscar tarea de carga..."
             value={search}
@@ -115,7 +54,7 @@ export function LoadsTasks() {
           />
         </div>
 
-        <div style={{ display: 'flex', gap: '10px', alignItems: 'center' }}>
+        <div className="flex gap-2.5 items-center">
           <Button variant="primary" onClick={fetchTasks} disabled={refreshing}>
             <FaSync className={refreshing ? "spinning" : ""} /> {refreshing ? "Sincronizando..." : "Refrescar"}
           </Button>
@@ -123,84 +62,89 @@ export function LoadsTasks() {
             <FaHistory /> Histótico
           </Button>
 
-          <div style={{ display: 'flex', background: '#eee', borderRadius: '8px', padding: '2px' }}>
-            <Button variant={viewMode === "cards" ? "primary" : "ghost"} onClick={() => setViewMode("cards")} style={{ padding: '6px 12px' }}>
+          <div className="flex bg-slate-100 dark:bg-slate-700 rounded-lg p-0.5">
+            <Button variant={viewMode === "cards" ? "primary" : "ghost"} onClick={() => setViewMode("cards")} className="px-3 py-1.5">
               <FaList />
             </Button>
-            <Button variant={viewMode === "table" ? "primary" : "ghost"} onClick={() => setViewMode("table")} style={{ padding: '6px 12px' }}>
+            <Button variant={viewMode === "table" ? "primary" : "ghost"} onClick={() => setViewMode("table")} className="px-3 py-1.5">
               <FaTable />
             </Button>
           </div>
         </div>
-      </ActionsBar>
+      </div>
 
-      <div style={{ position: "relative", minHeight: '300px' }}>
+      <div className="relative min-h-[300px]">
         {refreshing && <LoadingUI overlay message="Actualizando tareas de carga..." />}
         {loading && !refreshing && <LoadingUI message="Cargando configuración de procesos..." />}
-        {error && <p style={{ color: 'red', textAlign: 'center' }}>Error: {error}</p>}
+        {error && <p className="text-red-500 text-center">Error: {error}</p>}
 
         {!loading && tasks.length === 0 && (
-          <EmptyState>
-            <FaTruckLoading size={40} style={{ opacity: 0.3, marginBottom: '15px' }} />
+          <div className="text-center p-15 text-slate-500 bg-white dark:bg-slate-800 rounded-xl border border-dashed border-slate-300 dark:border-slate-600">
+            <FaTruckLoading size={40} className="opacity-30 mb-4 mx-auto" />
             <p>No hay tareas de carga disponibles (batchesSSE).</p>
-            <Button variant="primary" onClick={() => setSearch("")} style={{ marginTop: '10px' }}>Limpiar Filtros</Button>
-          </EmptyState>
+            <Button variant="primary" onClick={() => setSearch("")} className="mt-2.5">Limpiar Filtros</Button>
+          </div>
         )}
 
         {viewMode === "cards" ? (
-          <Grid>
+          <div className="grid grid-cols-[repeat(auto-fill,minmax(320px,1fr))] gap-6">
             {tasks.map(task => (
-              <Card key={task._id} $active={task.active} $status={task.status}>
-                <CardHeader>
-                  <strong style={{ fontSize: '15px' }}>{task.name}</strong>
+              <div 
+                key={task._id} 
+                className={`bg-white dark:bg-slate-800 rounded-2xl border transition-all duration-300 overflow-hidden relative shadow-md hover:-translate-y-1 hover:border-blue-500/50 hover:shadow-lg ${
+                  task.status === 'running' ? 'border-blue-500' : 'border-slate-200 dark:border-slate-700'
+                } ${task.active ? '' : 'opacity-75'}`}
+              >
+                <div className="p-4 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-700/50">
+                  <strong className="text-[15px]">{task.name}</strong>
                   <StatusBadge status={task.status || (task.active ? "active" : "inactive")} />
-                </CardHeader>
-                <CardBody>
-                  <div style={{ display: 'flex', justifyContent: 'space-between', fontSize: '12px' }}>
-                    <span style={{ color: '#666' }}>ID: {task._id.substring(18)}</span>
-                    <span style={{ fontWeight: 600 }}>{task.executionMode}</span>
+                </div>
+                <div className="p-4 flex flex-col gap-3">
+                  <div className="flex justify-between text-[12px]">
+                    <span className="text-slate-500">ID: {task._id.substring(18)}</span>
+                    <span className="font-semibold">{task.executionMode}</span>
                   </div>
-                  <div style={{ fontSize: '12px', background: '#f8f9fa', padding: '10px', borderRadius: '8px', minHeight: '60px' }}>
-                    <span style={{ color: '#666' }}>SQL Preview:</span><br />
+                  <div className="text-[12px] bg-slate-100 dark:bg-slate-700 p-2.5 rounded-lg min-h-[60px]">
+                    <span className="text-slate-500">SQL Preview:</span><br />
                     {task.query.substring(0, 100)}...
                   </div>
                   {task.status === "running" && (
-                    <StatusBadge status="running" style={{ width: '100%', justifyContent: 'center' }}>
+                    <StatusBadge status="running" className="w-full justify-center">
                       En ejecución: {task.progress}%
                     </StatusBadge>
                   )}
-                </CardBody>
-                <CardFooter>
+                </div>
+                <div className="p-3 pr-4 bg-slate-50/20 dark:bg-slate-700/20 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2">
                   <Button
                     variant="primary"
-                    style={{ width: '100%' }}
+                    className="w-full"
                     onClick={() => handleStartProcess(task)}
                     disabled={!task.active || task.status === "running"}
                   >
                     <FaPlay /> Iniciar Proceso de Carga
                   </Button>
-                </CardFooter>
-              </Card>
+                </div>
+              </div>
             ))}
-          </Grid>
+          </div>
         ) : (
-          <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eee', overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="bg-white rounded-xl border border-slate-200 overflow-hidden">
+            <table className="w-full border-collapse">
               <thead>
-                <tr style={{ background: '#f8f9fa', textAlign: 'left', borderBottom: '1px solid #eee' }}>
-                  <th style={{ padding: '15px' }}>Nombre de la Tarea</th>
-                  <th style={{ padding: '15px' }}>Estado</th>
-                  <th style={{ padding: '15px' }}>Modo</th>
-                  <th style={{ padding: '15px' }}>Acciones</th>
+                <tr className="bg-slate-50 text-left border-b border-slate-200">
+                  <th className="p-4">Nombre de la Tarea</th>
+                  <th className="p-4">Estado</th>
+                  <th className="p-4">Modo</th>
+                  <th className="p-4">Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {tasks.map(task => (
-                  <tr key={task._id} style={{ borderBottom: '1px solid #eee' }}>
-                    <td style={{ padding: '15px' }}><strong>{task.name}</strong></td>
-                    <td style={{ padding: '15px' }}><StatusBadge status={task.status || (task.active ? "active" : "inactive")} /></td>
-                    <td style={{ padding: '15px' }}>{task.executionMode}</td>
-                    <td style={{ padding: '15px' }}>
+                  <tr key={task._id} className="border-b border-slate-100">
+                    <td className="p-4"><strong>{task.name}</strong></td>
+                    <td className="p-4"><StatusBadge status={task.status || (task.active ? "active" : "inactive")} /></td>
+                    <td className="p-4">{task.executionMode}</td>
+                    <td className="p-4">
                       <Button variant="ghost" onClick={() => handleStartProcess(task)} disabled={!task.active}>
                         <FaPlay /> Iniciar
                       </Button>
@@ -225,6 +169,8 @@ export function LoadsTasks() {
         insertLoadsDetail={insertLoadsDetail}
         executeTraspaso={executeTraspaso}
       />
-    </Container>
+    </div>
   );
 }
+
+export default LoadsTasks;

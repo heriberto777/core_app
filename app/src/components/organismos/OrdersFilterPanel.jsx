@@ -1,57 +1,8 @@
 import React from "react";
-import styled from "styled-components";
-import { FaFilter, FaSync, FaCalendarAlt, FaWarehouse } from "react-icons/fa";
+import { FaFilter, FaSync, FaCalendarAlt, FaWarehouse, FaCheckSquare, FaSquare } from "react-icons/fa";
 import { Button } from "../../index";
 
-const FilterPanel = styled.div`
-  background: ${({ theme }) => theme.cardBg}80;
-  backdrop-filter: blur(12px); border-radius: 20px;
-  border: 1px solid ${({ theme }) => theme.border};
-  padding: 20px; display: flex; flex-direction: column; gap: 20px;
-  box-shadow: ${({ theme }) => theme.shadows.medium};
-`;
-
-const FilterGrid = styled.div`
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px; align-items: flex-end;
-`;
-
-const FormGroup = styled.div`
-  display: flex; flex-direction: column; gap: 6px;
-`;
-
-const Label = styled.label`
-  font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
-  color: ${({ theme }) => theme.textSecondary}; display: flex; align-items: center; gap: 6px;
-`;
-
-const Input = styled.input`
-  padding: 10px 14px; border-radius: 10px; border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.inputBg}; color: ${({ theme }) => theme.text}; font-size: 13px;
-  transition: all 0.2s;
-  &:focus { border-color: ${({ theme }) => theme.primary}; box-shadow: 0 0 0 3px ${({ theme }) => theme.primary}20; outline: none; }
-`;
-
-const Select = styled.select`
-  padding: 10px 14px; border-radius: 10px; border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.inputBg}; color: ${({ theme }) => theme.text}; font-size: 13px;
-  cursor: pointer;
-`;
-
-const CheckboxContainer = styled.label`
-  display: flex; align-items: center; gap: 10px; cursor: pointer; padding: 10px;
-  border-radius: 12px; transition: background 0.2s;
-  &:hover { background: ${({ theme }) => theme.bg2}20; }
-  span { font-size: 13px; font-weight: 600; }
-`;
-
-const ActionRow = styled.div`
-  display: flex; justify-content: flex-end; gap: 12px; padding-top: 10px;
-  border-top: 1px solid ${({ theme }) => theme.border}40;
-`;
-
 export function OrdersFilterPanel({ filters, setFilters, onRefresh }) {
-    // Reactividad: el hook useOrdersVisualization ya observa 'filters', 
-    // pero si onRefresh realiza lógica adicional, la mantenemos.
     const handleChange = (e) => {
         const { name, value, type, checked } = e.target;
         setFilters(prev => ({
@@ -71,50 +22,92 @@ export function OrdersFilterPanel({ filters, setFilters, onRefresh }) {
     };
 
     return (
-        <FilterPanel>
-            <FilterGrid>
-                <FormGroup>
-                    <Label><FaCalendarAlt /> Desde</Label>
-                    <Input type="date" name="dateFrom" value={filters.dateFrom} onChange={handleChange} />
-                </FormGroup>
+        <div className="bg-white/50 backdrop-blur-xl border border-slate-200 rounded-[32px] p-8 flex flex-col gap-8 shadow-sm animate-in fade-in slide-in-from-top-4 duration-500">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6 items-end">
+                <div className="flex flex-col gap-2">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-1 flex items-center gap-2">
+                        <FaCalendarAlt className="text-blue-500 text-[9px]" /> Desde
+                    </label>
+                    <input 
+                        type="date" 
+                        name="dateFrom" 
+                        className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-white/80 font-bold transition-all shadow-sm"
+                        value={filters.dateFrom} 
+                        onChange={handleChange} 
+                    />
+                </div>
 
-                <FormGroup>
-                    <Label><FaCalendarAlt /> Hasta</Label>
-                    <Input type="date" name="dateTo" value={filters.dateTo} onChange={handleChange} />
-                </FormGroup>
+                <div className="flex flex-col gap-2">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-1 flex items-center gap-2">
+                        <FaCalendarAlt className="text-blue-500 text-[9px]" /> Hasta
+                    </label>
+                    <input 
+                        type="date" 
+                        name="dateTo" 
+                        className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-white/80 font-bold transition-all shadow-sm"
+                        value={filters.dateTo} 
+                        onChange={handleChange} 
+                    />
+                </div>
 
-                <FormGroup>
-                    <Label><FaWarehouse /> Bodega / Almacén</Label>
-                    <Select name="warehouse" value={filters.warehouse} onChange={handleChange}>
+                <div className="flex flex-col gap-2">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-1 flex items-center gap-2">
+                        <FaWarehouse className="text-blue-500 text-[9px]" /> Bodega / Almacén
+                    </label>
+                    <select 
+                        name="warehouse" 
+                        className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-white/80 font-bold transition-all appearance-none shadow-sm"
+                        value={filters.warehouse} 
+                        onChange={handleChange}
+                    >
                         <option value="all">Todas las bodegas</option>
                         <option value="01">Almacén Central</option>
                         <option value="02">Punto de Venta</option>
-                        {/* Estos valores deberían venir de una API en el futuro, por ahora mantenemos consistencia con la lógica actual */}
-                    </Select>
-                </FormGroup>
+                    </select>
+                </div>
 
-                <FormGroup>
-                    <Label><FaFilter /> Estado del Documento</Label>
-                    <Select name="status" value={filters.status} onChange={handleChange}>
+                <div className="flex flex-col gap-2">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-1 flex items-center gap-2">
+                        <FaFilter className="text-blue-500 text-[9px]" /> Estado
+                    </label>
+                    <select 
+                        name="status" 
+                        className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-white/80 font-bold transition-all appearance-none shadow-sm"
+                        value={filters.status} 
+                        onChange={handleChange}
+                    >
                         <option value="all">Todos los estados</option>
                         <option value="P">Pendientes (P)</option>
                         <option value="F">Facturados (F)</option>
                         <option value="A">Anulados (A)</option>
-                    </Select>
-                </FormGroup>
+                    </select>
+                </div>
 
-                <FormGroup>
-                    <CheckboxContainer>
-                        <input type="checkbox" name="showProcessed" checked={filters.showProcessed} onChange={handleChange} />
-                        <span>Incluir Procesados</span>
-                    </CheckboxContainer>
-                </FormGroup>
-            </FilterGrid>
+                <div className="pb-1">
+                    <label className={`flex items-center gap-3 px-5 py-3 rounded-2xl cursor-pointer transition-all border shadow-sm ${
+                        filters.showProcessed ? "bg-blue-600 border-blue-600 text-white shadow-blue-600/20" : "bg-white/80 border-slate-200 text-slate-500 hover:bg-slate-50"
+                    }`}>
+                        <input 
+                            type="checkbox" 
+                            name="showProcessed" 
+                            className="sr-only"
+                            checked={filters.showProcessed} 
+                            onChange={handleChange} 
+                        />
+                        {filters.showProcessed ? <FaCheckSquare className="text-sm" /> : <FaSquare className="text-sm text-slate-300" />}
+                        <span className="text-xs font-black uppercase tracking-wider">Procesados</span>
+                    </label>
+                </div>
+            </div>
 
-            <ActionRow>
-                <Button variant="ghost" onClick={handleReset}><FaSync /> Limpiar Filtros</Button>
-                <Button variant="primary" onClick={onRefresh}><FaSync /> Actualizar Datos</Button>
-            </ActionRow>
-        </FilterPanel>
+            <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
+                <Button variant="ghost" onClick={handleReset} className="font-bold">
+                    <FaSync className="mr-2 text-xs" /> Limpiar Filtros
+                </Button>
+                <Button variant="primary" onClick={onRefresh} className="px-10 shadow-lg shadow-blue-600/20">
+                    <FaSync className="mr-2 text-xs" /> Actualizar Datos
+                </Button>
+            </div>
+        </div>
     );
 }

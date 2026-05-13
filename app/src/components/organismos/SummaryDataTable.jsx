@@ -1,117 +1,114 @@
 import React from "react";
-import styled from "styled-components";
 import { FaEye, FaUndo, FaCheckCircle, FaExclamationCircle, FaInfoCircle } from "react-icons/fa";
 import { Button } from "../../index";
-
-const Container = styled.div`
-  width: 100%; border-radius: 24px; border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.cardBg}; overflow: hidden;
-  box-shadow: ${({ theme }) => theme.shadows.medium};
-`;
-
-const TableWrapper = styled.div` overflow-x: auto; `;
-
-const Table = styled.table`
-  width: 100%; border-collapse: collapse; font-size: 13px;
-  th { padding: 16px; text-align: left; font-weight: 800; text-transform: uppercase; font-size: 11px; letter-spacing: 1px; color: ${({ theme }) => theme.textSecondary}; border-bottom: 2px solid ${({ theme }) => theme.border}; background: ${({ theme }) => theme.bg2}10; }
-  td { padding: 16px; border-bottom: 1px solid ${({ theme }) => theme.border}40; color: ${({ theme }) => theme.text}; vertical-align: middle; }
-  tr:hover { background: ${({ theme }) => theme.bg2}10; }
-  tr:last-child td { border-bottom: none; }
-`;
-
-const StatusBadge = styled.span`
-  padding: 6px 12px; border-radius: 12px; font-size: 10px; font-weight: 800; text-transform: uppercase;
-  display: inline-flex; align-items: center; gap: 6px;
-  background: ${({ $color }) => $color}15; color: ${({ $color }) => $color}; border: 1px solid ${({ $color }) => $color}30;
-`;
-
-const Actions = styled.div` display: flex; gap: 8px; `;
-
-const Metric = styled.div`
-  display: flex; flex-direction: column; gap: 2px;
-  small { font-size: 10px; font-weight: 800; color: ${({ theme }) => theme.textSecondary}; opacity: 0.6; }
-  strong { font-size: 14px; color: ${({ theme }) => theme.text}; font-family: monospace; }
-`;
 
 export function SummaryDataTable({ summaries, onView, onReturn, refreshing }) {
     const getStatusConfig = (status) => {
         switch (status) {
-            case "completed": return { label: "Completado", color: "#10b981", icon: <FaCheckCircle /> };
-            case "partial_return": return { label: "Dev. Parcial", color: "#f59e0b", icon: <FaInfoCircle /> };
-            case "full_return": return { label: "Dev. Total", color: "#ef4444", icon: <FaExclamationCircle /> };
-            default: return { label: status, color: "#64748b", icon: <FaInfoCircle /> };
+            case "completed": return { label: "Completado", bgColor: "bg-emerald-50", textColor: "text-emerald-600", borderColor: "border-emerald-100", icon: <FaCheckCircle /> };
+            case "partial_return": return { label: "Dev. Parcial", bgColor: "bg-amber-50", textColor: "text-amber-600", borderColor: "border-amber-100", icon: <FaInfoCircle /> };
+            case "full_return": return { label: "Dev. Total", bgColor: "bg-red-50", textColor: "text-red-600", borderColor: "border-red-100", icon: <FaExclamationCircle /> };
+            default: return { label: status, bgColor: "bg-slate-50", textColor: "text-slate-600", borderColor: "border-slate-100", icon: <FaInfoCircle /> };
         }
     };
 
     return (
-        <Container style={{ opacity: refreshing ? 0.7 : 1, transition: 'opacity 0.2s' }}>
-            <TableWrapper>
-                <Table>
+        <div className={`w-full border border-slate-200 bg-white rounded-[32px] overflow-hidden shadow-sm transition-all duration-300 ${refreshing ? "opacity-60 grayscale blur-[1px]" : "opacity-100"}`}>
+            <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
                     <thead>
-                        <tr>
-                            <th>ID Carga</th>
-                            <th>Documento</th>
-                            <th>Ruta / Vendedor</th>
-                            <th>Fecha</th>
-                            <th>Estado</th>
-                            <th>Productos (Ítems)</th>
-                            <th>Totales (Original / Dev)</th>
-                            <th>Acciones</th>
+                        <tr className="bg-slate-50/50">
+                            <th className="px-8 py-5 text-left text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">ID Carga</th>
+                            <th className="px-8 py-5 text-left text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">Documento</th>
+                            <th className="px-8 py-5 text-left text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">Ruta / Vendedor</th>
+                            <th className="px-8 py-5 text-left text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">Fecha</th>
+                            <th className="px-8 py-5 text-left text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">Estado</th>
+                            <th className="px-8 py-5 text-left text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">Totales</th>
+                            <th className="px-8 py-5 text-right text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] border-b border-slate-100">Acciones</th>
                         </tr>
                     </thead>
-                    <tbody>
+                    <tbody className="divide-y divide-slate-50">
                         {summaries.length > 0 ? summaries.map(summary => {
                             const status = getStatusConfig(summary.status);
                             const returnedQty = summary.products?.reduce((sum, p) => sum + (p.returnedQuantity || 0), 0) || 0;
 
                             return (
-                                <tr key={summary._id}>
-                                    <td><strong>#{summary.loadId}</strong></td>
-                                    <td><code style={{ fontSize: '12px' }}>{summary.documentId || "N/A"}</code></td>
-                                    <td>{summary.route}</td>
-                                    <td>{new Date(summary.date).toLocaleDateString()}</td>
-                                    <td>
-                                        <StatusBadge $color={status.color}>{status.icon} {status.label}</StatusBadge>
+                                <tr key={summary._id} className="hover:bg-slate-50/50 transition-all group">
+                                    <td className="px-8 py-5">
+                                        <div className="flex flex-col">
+                                            <span className="text-sm font-black text-slate-900 group-hover:text-blue-600 transition-colors">#{summary.loadId}</span>
+                                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">ID Registro</span>
+                                        </div>
                                     </td>
-                                    <td>
-                                        <Metric>
-                                            <small>Cant. Ítems</small>
-                                            <strong>{summary.totalProducts}</strong>
-                                        </Metric>
+                                    <td className="px-8 py-5">
+                                        <code className="bg-slate-100 px-3 py-1 rounded-lg text-xs font-black text-slate-600 border border-slate-200">
+                                            {summary.documentId || "N/A"}
+                                        </code>
                                     </td>
-                                    <td>
-                                        <Metric>
-                                            <small>Unid: {summary.totalQuantity}</small>
-                                            <strong style={{ color: returnedQty > 0 ? "#ef4444" : "inherit" }}>Dev: {returnedQty}</strong>
-                                        </Metric>
+                                    <td className="px-8 py-5">
+                                        <span className="text-sm font-bold text-slate-700">{summary.route}</span>
                                     </td>
-                                    <td>
-                                        <Actions>
-                                            <Button variant="ghost" size="small" icon={<FaEye />} onClick={() => onView(summary._id)} title="Ver detalles técnicos" />
+                                    <td className="px-8 py-5">
+                                        <span className="text-sm font-medium text-slate-500">{new Date(summary.date).toLocaleDateString()}</span>
+                                    </td>
+                                    <td className="px-8 py-5">
+                                        <div className={`inline-flex items-center gap-2 px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-wider border ${status.bgColor} ${status.textColor} ${status.borderColor}`}>
+                                            <span className="text-xs">{status.icon}</span>
+                                            {status.label}
+                                        </div>
+                                    </td>
+                                    <td className="px-8 py-5">
+                                        <div className="flex flex-col gap-1">
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase">Unid:</span>
+                                                <span className="text-sm font-black text-slate-900">{summary.totalQuantity}</span>
+                                            </div>
+                                            <div className="flex items-center gap-2">
+                                                <span className="text-[9px] font-black text-slate-400 uppercase">Dev:</span>
+                                                <span className={`text-sm font-black ${returnedQty > 0 ? "text-red-500" : "text-slate-400 opacity-40"}`}>{returnedQty}</span>
+                                            </div>
+                                        </div>
+                                    </td>
+                                    <td className="px-8 py-5">
+                                        <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
+                                            <Button 
+                                                variant="ghost" 
+                                                className="w-10 h-10 p-0 flex items-center justify-center rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all"
+                                                onClick={() => onView(summary._id)}
+                                                title="Ver detalles técnicos"
+                                            >
+                                                <FaEye />
+                                            </Button>
                                             {summary.status !== "full_return" && (
                                                 <Button
                                                     variant="ghost"
-                                                    size="small"
-                                                    icon={<FaUndo />}
+                                                    className="w-10 h-10 p-0 flex items-center justify-center rounded-xl hover:bg-amber-50 text-amber-600 transition-all"
                                                     onClick={() => onReturn(summary._id)}
                                                     title="Procesar devolución"
-                                                    color="#f59e0b"
-                                                />
+                                                >
+                                                    <FaUndo />
+                                                </Button>
                                             )}
-                                        </Actions>
+                                        </div>
                                     </td>
                                 </tr>
                             );
                         }) : (
                             <tr>
-                                <td colSpan={8} style={{ textAlign: 'center', padding: '60px', opacity: 0.5, fontStyle: 'italic' }}>
-                                    No se han encontrado registros de carga para los criterios seleccionados.
+                                <td colSpan={7} className="px-8 py-24 text-center">
+                                    <div className="flex flex-col items-center gap-4 text-slate-400">
+                                        <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center">
+                                            <FaInfoCircle className="text-2xl opacity-20" />
+                                        </div>
+                                        <span className="font-bold text-sm uppercase tracking-widest opacity-60">No se han encontrado registros</span>
+                                        <p className="text-xs max-w-[250px] mx-auto leading-relaxed">Intenta ajustar los criterios de búsqueda o los filtros de fecha.</p>
+                                    </div>
                                 </td>
                             </tr>
                         )}
                     </tbody>
-                </Table>
-            </TableWrapper>
-        </Container>
+                </table>
+            </div>
+        </div>
     );
 }

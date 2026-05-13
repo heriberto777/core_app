@@ -1,14 +1,13 @@
 import React from "react";
-import styled from "styled-components";
 import { FaGift, FaPercentage, FaTag, FaArrowRight } from "react-icons/fa";
 
-const PromotionIndicator = ({
+export function PromotionIndicator({
   promotionType,
   isBonus = false,
   isTrigger = false,
   bonusLineRef = null,
   size = "small",
-}) => {
+}) {
   if (!promotionType || promotionType === "NONE") {
     return null;
   }
@@ -31,30 +30,17 @@ const PromotionIndicator = ({
     return "Promoción aplicada";
   };
 
+  const sizeClasses = size === "large" ? "w-8 h-8 text-[0.9rem]" : "w-5 h-5 text-[0.7rem]";
+
   return (
-    <IndicatorContainer size={size} color={getColor()} title={getTooltip()}>
+    <div 
+      className={`inline-flex items-center justify-center rounded-full text-white cursor-help ml-2 hover:opacity-80 hover:scale-110 transition-all ${sizeClasses}`}
+      style={{ backgroundColor: getColor() }}
+      title={getTooltip()}
+    >
       {getIcon()}
-    </IndicatorContainer>
+    </div>
   );
-};
+}
 
 export default PromotionIndicator;
-
-const IndicatorContainer = styled.div`
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  width: ${({ size }) => (size === "large" ? "32px" : "20px")};
-  height: ${({ size }) => (size === "large" ? "32px" : "20px")};
-  border-radius: 50%;
-  background-color: ${({ color }) => color};
-  color: white;
-  font-size: ${({ size }) => (size === "large" ? "0.9rem" : "0.7rem")};
-  cursor: help;
-  margin-left: 0.5rem;
-
-  &:hover {
-    opacity: 0.8;
-    transform: scale(1.1);
-  }
-`;

@@ -12,7 +12,6 @@ const TaskTracker = require("./TaskTracker");
 const RetryService = require("./RetryService");
 const MemoryManager = require("./MemoryManager");
 const Telemetry = require("./Telemetry");
-const TaskExecution = require("../models/taskExecutionModel");
 const LinkedTasksService = require("./LinkedTasksService");
 
 /**
@@ -512,10 +511,13 @@ class TransferService {
     const { signal } = abortController;
     const skipPostUpdate = options?.skipPostUpdate === true;
 
+    const transactionId = `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
     TaskTracker.registerTask(taskId, abortController, {
       type: "transfer",
       metadata: {
         taskId,
+        transactionId,
         startTime: Date.now(),
       },
     });
@@ -538,7 +540,7 @@ class TransferService {
             );
           }
 
-          return await this.executeTransfer(taskId, signal, { skipPostUpdate });
+          return await this.executeTransfer(taskId, signal, { skipPostUpdate, transactionId });
         } catch (error) {
           lastError = error;
 
@@ -617,7 +619,7 @@ class TransferService {
    */
   async executeTransfer(taskId, signal, options = {}) {
     const skipPostUpdate = options?.skipPostUpdate === true;
-    let executionId = null;
+    const transactionId = options?.transactionId || `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const startTime = Date.now();
 
     try {
@@ -635,18 +637,18 @@ class TransferService {
       // Emitir primer checkpoint SSE
       sendProgress(taskId, 0, "running");
 
-      // Crear registro de ejecución
-      const taskExecution = new TaskExecution({
-        taskId: taskId,
-        taskName: taskInfo.name,
-        date: new Date(),
-        status: "running",
+      // 4. Registrar inicio en logs (Sustituye a TaskExecution)
+      logger.info(`📝 Iniciando transferencia: ${taskInfo.name}`, {
+        operationType: "TRANSFER",
+        entityType: "TAREA",
+        taskId: taskId.toString(),
+        mappingName: taskInfo.name,
+        transactionId,
+        metadata: {
+          transferType: taskInfo.transferType,
+          status: "running"
+        }
       });
-
-      await taskExecution.save();
-      executionId = taskExecution._id;
-
-      logger.info(`Creado registro de ejecución con ID: ${executionId}`);
 
       const transferDirection =
         taskInfo.transferType === "down"
@@ -672,13 +674,16 @@ class TransferService {
           progress: 100,
         });
 
-        if (executionId) {
-          await TaskExecution.findByIdAndUpdate(executionId, {
-            status: "completed",
-            executionTime: Date.now() - startTime,
-            totalRecords: 0,
-          });
-        }
+        logger.info(`✅ Transferencia finalizada (sin datos): ${taskInfo.name}`, {
+          operationType: "TRANSFER",
+          entityType: "TAREA",
+          taskId: taskId.toString(),
+          mappingName: taskInfo.name,
+          transactionId,
+          durationMs: Date.now() - startTime,
+          affectedRecords: 0,
+          metadata: { status: "completed", totalRecords: 0 }
+        });
 
         sendProgress(taskId, 100);
         TaskTracker.completeTask(taskId, "completed");
@@ -686,7 +691,7 @@ class TransferService {
           success: true,
           message: "No hay datos para transferir",
           rows: 0,
-          executionId,
+          transactionId,
         };
       }
 
@@ -731,23 +736,23 @@ class TransferService {
         },
       });
 
-      if (executionId) {
-        await TaskExecution.findByIdAndUpdate(executionId, {
+      // 6. Registrar finalización en logs (Sustituye a TaskExecution)
+      logger.info(`✅ Transferencia completada con éxito: ${taskInfo.name}`, {
+        operationType: "TRANSFER",
+        entityType: "TAREA",
+        taskId: taskId.toString(),
+        mappingName: taskInfo.name,
+        transactionId,
+        durationMs: executionTime,
+        affectedRecords: (result.inserted || 0) + (result.updated || 0),
+        metadata: {
           status: "completed",
-          executionTime,
           totalRecords: data.length,
-          successfulRecords: (result.inserted || 0) + (result.updated || 0),
-          failedRecords:
-            data.length - ((result.inserted || 0) + (result.updated || 0)),
-          details: {
-            inserted: result.inserted || 0,
-            updated: result.updated || 0,
-            duplicates: result.duplicates || 0,
-            initialCount: result.initialCount || 0,
-            finalCount: result.finalCount || 0,
-          },
-        });
-      }
+          inserted: result.inserted || 0,
+          updated: result.updated || 0,
+          duplicates: result.duplicates || 0,
+        }
+      });
 
       sendProgress(taskId, 100);
       TaskTracker.completeTask(taskId, "completed");
@@ -765,7 +770,7 @@ class TransferService {
         initialCount: result.initialCount,
         finalCount: result.finalCount,
         affectedRecords: result.affectedRecords || [],  // Agregado para LinkedTasks
-        executionId,
+        transactionId,
       };
     } catch (error) {
       if (this.isCancellationError(error) || signal?.aborted) {
@@ -776,20 +781,21 @@ class TransferService {
           progress: -1,
         });
 
-        if (executionId) {
-          await TaskExecution.findByIdAndUpdate(executionId, {
-            status: "cancelled",
-            executionTime: Date.now() - startTime,
-            errorMessage: "Transferencia cancelada por el usuario",
-          });
-        }
+        logger.info(`⏹️ Transferencia cancelada: ${taskId}`, {
+          operationType: "TRANSFER",
+          entityType: "TAREA",
+          taskId: taskId.toString(),
+          transactionId,
+          durationMs: Date.now() - startTime,
+          metadata: { status: "cancelled" }
+        });
 
         sendProgress(taskId, -1);
 
         return {
           success: false,
           message: "Transferencia cancelada por el usuario",
-          executionId,
+          transactionId,
         };
       }
 
@@ -807,14 +813,16 @@ class TransferService {
         },
       });
 
-      if (executionId) {
-        await TaskExecution.findByIdAndUpdate(executionId, {
-          status: "failed",
-          executionTime: Date.now() - startTime,
-          errorMessage: error.message || "Error desconocido",
-          errorDetails: error.stack,
-        });
-      }
+      logger.error(`❌ Error en transferencia ${taskInfo?.name || taskId}: ${error.message}`, {
+        operationType: "TRANSFER",
+        entityType: "TAREA",
+        taskId: taskId.toString(),
+        mappingName: taskInfo?.name,
+        transactionId,
+        durationMs: Date.now() - startTime,
+        stack: error.stack,
+        metadata: { status: "failed", error: error.message }
+      });
 
       sendProgress(taskId, -1);
       TaskTracker.completeTask(taskId, "failed");
@@ -823,7 +831,7 @@ class TransferService {
         success: false,
         message: error.message || "Error durante la transferencia",
         errorDetail: error.stack,
-        executionId,
+        transactionId,
       };
     }
   }

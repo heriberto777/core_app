@@ -1,27 +1,6 @@
 import React from "react";
-import styled from "styled-components";
-import { FaDatabase, FaTimes, FaSearch } from "react-icons/fa";
-import { Modal, Button } from "../../index";
-
-const Content = styled.div`
-  display: flex; flex-direction: column; gap: 20px; overflow: hidden; max-height: 70vh;
-`;
-
-const TableContainer = styled.div`
-  overflow-y: auto; border-radius: 16px; border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.bg2}10;
-`;
-
-const Table = styled.table`
-  width: 100%; border-collapse: collapse; font-size: 13px;
-  thead { position: sticky; top: 0; z-index: 10; background: ${({ theme }) => theme.cardBg}; }
-  th { padding: 12px 16px; text-align: left; font-weight: 800; text-transform: uppercase; font-size: 11px; color: ${({ theme }) => theme.textSecondary}; border-bottom: 2px solid ${({ theme }) => theme.border}; }
-  td { padding: 12px 16px; border-bottom: 1px solid ${({ theme }) => theme.border}20; color: ${({ theme }) => theme.text}; font-family: monospace; }
-  tr:hover { background: ${({ theme }) => theme.bg2}20; }
-  tr:last-child td { border-bottom: none; }
-`;
-
-const Empty = styled.div` padding: 40px; text-align: center; opacity: 0.5; font-style: italic; `;
+import { FaDatabase, FaTimes, FaSearch, FaTerminal } from "react-icons/fa";
+import { Button } from "../../index";
 
 export function SourceDataViewerModal({ isOpen, onClose, data }) {
     if (!isOpen) return null;
@@ -29,41 +8,72 @@ export function SourceDataViewerModal({ isOpen, onClose, data }) {
     const dataEntries = data ? Object.entries(data) : [];
 
     return (
-        <Modal isOpen={isOpen} onClose={onClose} width="800px">
-            <div style={{ padding: '24px' }}>
-                <h2 style={{ margin: '0 0 24px 0', fontSize: '20px', fontWeight: 800, display: 'flex', alignItems: 'center', gap: '12px' }}>
-                    <FaDatabase color="var(--primary)" /> Inspección de Datos Fuente (DB)
-                </h2>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[2000] p-4 animate-in fade-in duration-300">
+            <div className="bg-white w-full max-w-[800px] max-h-[85vh] rounded-[32px] border border-slate-100 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+                {/* Header */}
+                <div className="px-8 py-7 bg-white/80 backdrop-blur-md border-b border-slate-50 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-slate-900/20">
+                            <FaTerminal className="text-xl" />
+                        </div>
+                        <div className="flex flex-col">
+                            <h3 className="text-xl font-black text-slate-900 leading-tight">Inspector de Datos Fuente</h3>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Vista Cruda de Base de Datos</span>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+                        <FaTimes />
+                    </button>
+                </div>
 
-                <Content>
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto p-8">
                     {dataEntries.length > 0 ? (
-                        <TableContainer>
-                            <Table>
-                                <thead>
-                                    <tr>
-                                        <th>Columna Origen</th>
-                                        <th>Valor Actual en Tabla</th>
-                                    </tr>
-                                </thead>
-                                <tbody>
-                                    {dataEntries.map(([key, val]) => (
-                                        <tr key={key}>
-                                            <td style={{ fontWeight: 800, color: 'var(--primary)' }}>{key}</td>
-                                            <td>{val !== null && val !== undefined ? String(val) : <em>N/A (Null)</em>}</td>
+                        <div className="rounded-[28px] border border-slate-100 overflow-hidden shadow-sm bg-slate-50/50">
+                            <div className="overflow-x-auto">
+                                <table className="w-full border-collapse">
+                                    <thead className="bg-slate-100/50">
+                                        <tr>
+                                            <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-200/50">Columna Origen</th>
+                                            <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-200/50">Valor en Tabla</th>
                                         </tr>
-                                    ))}
-                                </tbody>
-                            </Table>
-                        </TableContainer>
+                                    </thead>
+                                    <tbody className="divide-y divide-slate-100/50">
+                                        {dataEntries.map(([key, val]) => (
+                                            <tr key={key} className="hover:bg-white transition-colors group">
+                                                <td className="px-6 py-4">
+                                                    <span className="text-xs font-black text-blue-600 uppercase tracking-wider">{key}</span>
+                                                </td>
+                                                <td className="px-6 py-4">
+                                                    <code className="text-sm font-bold text-slate-700 bg-white px-3 py-1 rounded-lg border border-slate-100 shadow-sm">
+                                                        {val !== null && val !== undefined ? String(val) : <em className="text-slate-300 font-normal">N/A (Null)</em>}
+                                                    </code>
+                                                </td>
+                                            </tr>
+                                        ))}
+                                    </tbody>
+                                </table>
+                            </div>
+                        </div>
                     ) : (
-                        <Empty>No hay datos de origen cargados para este registro.</Empty>
+                        <div className="flex flex-col items-center justify-center py-24 text-center opacity-30 gap-4">
+                            <FaDatabase className="text-5xl" />
+                            <p className="text-sm font-black uppercase tracking-[0.2em]">No hay datos de origen para este registro</p>
+                        </div>
                     )}
-                </Content>
+                </div>
 
-                <div style={{ display: 'flex', justifyContent: 'flex-end', marginTop: '24px' }}>
-                    <Button variant="secondary" onClick={onClose} icon={<FaTimes />}>Cerrar Inspector</Button>
+                {/* Footer */}
+                <div className="px-8 py-6 border-t border-slate-50 flex justify-end gap-3 bg-white/80 backdrop-blur-md">
+                    <Button 
+                        variant="secondary" 
+                        onClick={onClose}
+                        className="px-8 py-3 rounded-2xl font-black text-[10px] uppercase tracking-widest border-slate-200"
+                    >
+                        Cerrar Inspector
+                    </Button>
                 </div>
             </div>
-        </Modal>
+        </div>
     );
 }

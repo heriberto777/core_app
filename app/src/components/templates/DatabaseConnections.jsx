@@ -1,80 +1,20 @@
 import React, { useState } from "react";
-import styled from "styled-components";
 import {
-  Header,
   useAuth,
   useDBConnections,
   DBConnectionModal,
   Button,
-  StatusBadge
+  StatusBadge,
+  LoadingUI
 } from "../../index";
-import { Container } from "../index";
-import { FaPlus, FaDatabase, FaServer, FaPlug, FaTrash } from "react-icons/fa";
+import { FaPlus, FaDatabase, FaServer, FaPlug, FaTrash, FaEdit } from "react-icons/fa";
 import Swal from "sweetalert2";
 
-const Grid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(280px, 1fr));
-  gap: 20px;
-  margin-top: 24px;
-  width: 100%;
-`;
-
-const ConnectionCard = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  backdrop-filter: blur(10px);
-  border: 1px solid ${({ theme }) => theme.border};
-  border-radius: 24px;
-  padding: 24px;
-  box-shadow: ${({ theme }) => theme.shadows.soft};
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
-  transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-  color: ${({ theme }) => theme.text};
-
-  &:hover {
-    transform: translateY(-8px);
-    box-shadow: ${({ theme }) => theme.shadows.medium};
-    border-color: ${({ theme }) => theme.primary}50;
-  }
-`;
-
-const CardHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-`;
-
-const DBIcon = styled.div`
-  width: 52px;
-  height: 52px;
-  border-radius: 16px;
-  background: ${({ theme }) => theme.primary}15;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: ${({ theme }) => theme.primary};
-  font-size: 22px;
-  box-shadow: 0 4px 12px ${({ theme }) => theme.primary}10;
-`;
-
-const Info = styled.div`
-  h3 {
-    font-size: 1.1rem;
-    font-weight: 800;
-    margin-bottom: 6px;
-    color: ${({ theme }) => theme.titleColor};
-  }
-  p {
-    font-size: 13px;
-    color: ${({ theme }) => theme.textSecondary};
-    opacity: 0.8;
-  }
-`;
-
+/**
+ * DatabaseConnections (Tailwind Edition)
+ * Gestión de la infraestructura de datos con diseño corporativo suave.
+ */
 export function DatabaseConnections() {
-  const [openstate, setOpenState] = useState(false);
   const [modalOpen, setModalOpen] = useState(false);
   const [selectedConnection, setSelectedConnection] = useState(null);
 
@@ -98,7 +38,7 @@ export function DatabaseConnections() {
   const handleDelete = async (serverName) => {
     const result = await Swal.fire({
       title: '¿Eliminar conexión?',
-      text: "Esta acción no se puede deshacer.",
+      text: "Esta acción no se puede deshacer y puede afectar los mapeos activos.",
       icon: 'warning',
       showCancelButton: true,
       confirmButtonColor: '#ef4444',
@@ -128,49 +68,86 @@ export function DatabaseConnections() {
   };
 
   return (
-    <div style={{ animation: 'fadeIn 0.4s ease-out' }}>
-      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px', flexWrap: 'wrap', gap: '16px' }}>
-        <div style={{ flex: '1 1 300px' }}>
-          <h1 style={{ fontSize: '22px', fontWeight: 900, marginBottom: '4px', color: 'inherit' }}>Conexiones a Bases de Datos</h1>
-          <p style={{ opacity: 0.7, color: 'inherit', fontSize: '14px' }}>Gestión de la infraestructura de datos del sistema.</p>
+    <div className="flex flex-col gap-8 w-full max-w-[1440px] mx-auto p-6 lg:p-10 animate-fadeIn">
+      {/* HEADER */}
+      <header className="flex flex-col md:flex-row justify-between items-start gap-6">
+        <div>
+          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Infraestructura de Datos</h1>
+          <p className="text-slate-500 mt-2 font-medium">Gestión de conexiones y servidores de bases de datos del ecosistema.</p>
         </div>
         <Button variant="primary" onClick={handleAdd}>
           <FaPlus /> Nueva Conexión
         </Button>
-      </div>
+      </header>
 
+      {/* CONTENT */}
       {loading ? (
-        <div style={{ textAlign: 'center', padding: '100px', opacity: 0.7 }}>Cargando infraestructura...</div>
+        <LoadingUI message="Escaneando infraestructura de datos..." />
       ) : (
-        <Grid>
+        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-6">
           {connections.map((conn) => (
-            <ConnectionCard key={conn.serverName}>
-              <CardHeader>
-                <DBIcon>
+            <div 
+              key={conn.serverName} 
+              className="bg-white rounded-[32px] p-6 border border-slate-100 shadow-soft hover:shadow-lg transition-all duration-300 group hover:-translate-y-1 flex flex-col gap-6"
+            >
+              {/* CARD HEADER */}
+              <div className="flex justify-between items-start">
+                <div className="w-14 h-14 rounded-2xl bg-primary-100 text-primary-600 flex items-center justify-center text-2xl shadow-inner transition-transform group-hover:scale-110 duration-300">
                   <FaDatabase />
-                </DBIcon>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <Button variant="ghost" size="small" onClick={() => handleEdit(conn)}>Editar</Button>
-                  <Button variant="ghost" size="small" onClick={() => handleDelete(conn.serverName)} color="#ef4444">
-                    <FaTrash />
-                  </Button>
                 </div>
-              </CardHeader>
-              <Info>
-                <h3>{conn.serverName}</h3>
-                <p style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
-                  <FaServer size={12} /> {conn.host}
-                </p>
-                <p style={{ display: 'flex', alignItems: 'center', gap: '6px', marginTop: '4px' }}>
-                  <FaPlug size={12} /> Puerto: {conn.port}
-                </p>
-              </Info>
-              <div style={{ marginTop: 'auto', paddingTop: '16px', borderTop: `1px solid ${props => props.theme?.border || '#ddd'}40` }}>
-                <StatusBadge variant="info">{conn.type?.toUpperCase() || 'MSSQL'}</StatusBadge>
+                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <button 
+                    onClick={() => handleEdit(conn)}
+                    className="p-2.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all"
+                  >
+                    <FaEdit size={16} />
+                  </button>
+                  <button 
+                    onClick={() => handleDelete(conn.serverName)}
+                    className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                  >
+                    <FaTrash size={16} />
+                  </button>
+                </div>
               </div>
-            </ConnectionCard>
+
+              {/* INFO */}
+              <div className="space-y-3">
+                <h3 className="text-lg font-extrabold text-slate-800 tracking-tight truncate" title={conn.serverName}>
+                  {conn.serverName}
+                </h3>
+                <div className="space-y-2">
+                  <div className="flex items-center gap-3 text-xs font-bold text-slate-400">
+                    <FaServer className="text-slate-300" />
+                    <span className="truncate" title={conn.host}>{conn.host}</span>
+                  </div>
+                  <div className="flex items-center gap-3 text-xs font-bold text-slate-400">
+                    <FaPlug className="text-slate-300" />
+                    <span>Puerto: {conn.port}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* FOOTER */}
+              <div className="mt-auto pt-5 border-t border-slate-50 flex items-center justify-between">
+                <StatusBadge status="ACTIVE">{conn.type?.toUpperCase() || 'MSSQL'}</StatusBadge>
+                <div className="text-[10px] font-bold text-slate-300 uppercase tracking-widest">Servidor Activo</div>
+              </div>
+            </div>
           ))}
-        </Grid>
+
+          {/* EMPTY STATE OR ADD CARD */}
+          {connections.length === 0 && (
+            <div className="md:col-span-2 lg:col-span-3 xl:col-span-4 p-20 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-[40px] bg-slate-50/50">
+               <FaDatabase className="text-slate-200 mb-6" size={64} />
+               <p className="text-xl font-extrabold text-slate-400">No hay servidores configurados</p>
+               <p className="text-sm text-slate-400 mt-2">Comienza agregando tu primera conexión a base de datos.</p>
+               <Button variant="primary" onClick={handleAdd} className="mt-8">
+                  <FaPlus /> Configurar Servidor
+               </Button>
+            </div>
+          )}
+        </div>
       )}
 
       <DBConnectionModal

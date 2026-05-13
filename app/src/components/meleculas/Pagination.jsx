@@ -1,6 +1,4 @@
-
 import React from "react";
-import styled from "styled-components";
 import {
   FaChevronLeft,
   FaChevronRight,
@@ -8,124 +6,9 @@ import {
   FaAngleDoubleRight,
 } from "react-icons/fa";
 
-const PaginationContainer = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 16px;
-  padding: 16px 0;
-
-  @media (max-width: 640px) {
-    flex-direction: column;
-    gap: 12px;
-  }
-`;
-
-const PaginationInfo = styled.div`
-  font-size: 14px;
-  color: #6b7280;
-
-  .highlight {
-    font-weight: 600;
-    color: #374151;
-  }
-`;
-
-const PaginationControls = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-`;
-
-const PageButton = styled.button`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 32px;
-  height: 32px;
-  padding: 0 8px;
-  border: 1px solid #d1d5db;
-  background: white;
-  color: #374151;
-  font-size: 14px;
-  font-weight: 500;
-  border-radius: 6px;
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover:not(:disabled) {
-    background: #f9fafb;
-    border-color: #9ca3af;
-  }
-
-  &:focus {
-    outline: none;
-    box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-  }
-
-  &:disabled {
-    background: #f9fafb;
-    color: #d1d5db;
-    cursor: not-allowed;
-    border-color: #e5e7eb;
-  }
-
-  ${({ active }) =>
-    active &&
-    `
-    background: #3b82f6;
-    color: white;
-    border-color: #3b82f6;
-
-    &:hover {
-      background: #2563eb;
-      border-color: #2563eb;
-    }
-  `}
-
-  ${({ variant }) =>
-    variant === "nav" &&
-    `
-    min-width: 36px;
-    height: 36px;
-  `}
-`;
-
-const Ellipsis = styled.span`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  min-width: 32px;
-  height: 32px;
-  color: #9ca3af;
-  font-size: 14px;
-  font-weight: 500;
-`;
-
-const PageSizeSelector = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  font-size: 14px;
-  color: #6b7280;
-
-  select {
-    padding: 4px 8px;
-    border: 1px solid #d1d5db;
-    border-radius: 4px;
-    background: white;
-    color: #374151;
-    font-size: 14px;
-    cursor: pointer;
-
-    &:focus {
-      outline: none;
-      border-color: #3b82f6;
-      box-shadow: 0 0 0 3px rgba(59, 130, 246, 0.1);
-    }
-  }
-`;
-
+/**
+ * Corporate Pagination Component (Tailwind Edition)
+ */
 export const Pagination = ({
   currentPage = 1,
   totalPages = 1,
@@ -141,17 +24,15 @@ export const Pagination = ({
   maxVisible = 5,
   pageSizeOptions = [10, 20, 50, 100],
   disabled = false,
+  className = "",
 }) => {
-  // No mostrar paginación si no hay suficientes páginas
   if (totalPages <= 1 && !showInfo && !showPageSize) {
     return null;
   }
 
-  // Calcular rango de registros
   const startRecord = totalRecords > 0 ? (currentPage - 1) * pageSize + 1 : 0;
   const endRecord = Math.min(currentPage * pageSize, totalRecords);
 
-  // Generar números de página visibles
   const getVisiblePages = () => {
     if (totalPages <= maxVisible) {
       return Array.from({ length: totalPages }, (_, i) => i + 1);
@@ -167,7 +48,6 @@ export const Pagination = ({
 
     const pages = [];
 
-    // Agregar primera página y ellipsis si es necesario
     if (start > 1) {
       pages.push(1);
       if (start > 2) {
@@ -175,12 +55,10 @@ export const Pagination = ({
       }
     }
 
-    // Agregar páginas del rango
     for (let i = start; i <= end; i++) {
       pages.push(i);
     }
 
-    // Agregar ellipsis y última página si es necesario
     if (end < totalPages) {
       if (end < totalPages - 1) {
         pages.push("...");
@@ -205,27 +83,48 @@ export const Pagination = ({
     }
   };
 
+  const PageButton = ({ active, variant, children, ...props }) => (
+    <button
+      className={`
+        flex items-center justify-center min-w-[32px] h-8 px-2 border rounded-md text-sm font-medium cursor-pointer transition-all duration-200
+        ${active 
+          ? 'bg-primary-600 text-white border-primary-600 hover:bg-primary-700 hover:border-primary-700' 
+          : 'bg-white text-slate-700 border-slate-200 hover:bg-slate-50 hover:border-slate-300 focus:ring-2 focus:ring-primary-500/20'}
+        ${variant === 'nav' ? 'min-w-9 h-9' : ''}
+        ${disabled ? 'bg-slate-50 text-slate-300 cursor-not-allowed border-slate-200' : ''}
+      `}
+      {...props}
+    >
+      {children}
+    </button>
+  );
+
+  const Ellipsis = () => (
+    <span className="flex items-center justify-center min-w-8 h-8 text-slate-400 text-sm font-medium">
+      ...
+    </span>
+  );
+
   return (
-    <PaginationContainer>
-      {/* Información de registros */}
+    <div className={`flex items-center justify-between gap-4 py-4 ${className}`}>
       {showInfo && (
-        <PaginationInfo>
-          Mostrando <span className="highlight">{startRecord}</span> a{" "}
-          <span className="highlight">{endRecord}</span> de{" "}
-          <span className="highlight">{totalRecords.toLocaleString()}</span>{" "}
+        <div className="text-sm text-slate-500">
+          Mostrando <span className="font-semibold text-slate-700">{startRecord}</span> a{" "}
+          <span className="font-semibold text-slate-700">{endRecord}</span> de{" "}
+          <span className="font-semibold text-slate-700">{totalRecords.toLocaleString()}</span>{" "}
           registros
-        </PaginationInfo>
+        </div>
       )}
 
-      <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-        {/* Selector de tamaño de página */}
+      <div className="flex items-center gap-4">
         {showPageSize && onPageSizeChange && (
-          <PageSizeSelector>
+          <div className="flex items-center gap-2 text-sm text-slate-500">
             <span>Mostrar:</span>
             <select
               value={pageSize}
               onChange={(e) => handlePageSizeChange(e.target.value)}
               disabled={disabled}
+              className="px-2 py-1 border border-slate-200 rounded bg-white text-slate-700 text-sm cursor-pointer focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
             >
               {pageSizeOptions.map((option) => (
                 <option key={option} value={option}>
@@ -233,13 +132,11 @@ export const Pagination = ({
                 </option>
               ))}
             </select>
-          </PageSizeSelector>
+          </div>
         )}
 
-        {/* Controles de paginación */}
         {totalPages > 1 && (
-          <PaginationControls>
-            {/* Primera página */}
+          <div className="flex items-center gap-2">
             {showFirstLast && (
               <PageButton
                 variant="nav"
@@ -247,11 +144,10 @@ export const Pagination = ({
                 disabled={currentPage === 1 || disabled}
                 title="Primera página"
               >
-                <FaAngleDoubleLeft />
+                <FaAngleDoubleLeft size={12} />
               </PageButton>
             )}
 
-            {/* Página anterior */}
             {showPrevNext && (
               <PageButton
                 variant="nav"
@@ -259,15 +155,14 @@ export const Pagination = ({
                 disabled={currentPage === 1 || disabled}
                 title="Página anterior"
               >
-                <FaChevronLeft />
+                <FaChevronLeft size={12} />
               </PageButton>
             )}
 
-            {/* Números de página */}
             {showPageNumbers &&
               visiblePages.map((page, index) =>
                 page === "..." ? (
-                  <Ellipsis key={`ellipsis-${index}`}>...</Ellipsis>
+                  <Ellipsis key={`ellipsis-${index}`} />
                 ) : (
                   <PageButton
                     key={page}
@@ -281,7 +176,6 @@ export const Pagination = ({
                 )
               )}
 
-            {/* Página siguiente */}
             {showPrevNext && (
               <PageButton
                 variant="nav"
@@ -289,11 +183,10 @@ export const Pagination = ({
                 disabled={currentPage === totalPages || disabled}
                 title="Página siguiente"
               >
-                <FaChevronRight />
+                <FaChevronRight size={12} />
               </PageButton>
             )}
 
-            {/* Última página */}
             {showFirstLast && (
               <PageButton
                 variant="nav"
@@ -301,12 +194,12 @@ export const Pagination = ({
                 disabled={currentPage === totalPages || disabled}
                 title="Última página"
               >
-                <FaAngleDoubleRight />
+                <FaAngleDoubleRight size={12} />
               </PageButton>
             )}
-          </PaginationControls>
+          </div>
         )}
       </div>
-    </PaginationContainer>
+    </div>
   );
 };

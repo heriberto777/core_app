@@ -29,8 +29,21 @@ export class User {
       console.log("📡 Respuesta status:", response.status);
       console.log("📡 Respuesta ok:", response.ok);
 
-      const result = await response.json();
-      console.log("📥 Respuesta completa:", result);
+      // ⭐ MANEJO ROBUSTO DE RESPUESTA ⭐
+      let result;
+      const contentType = response.headers.get("content-type");
+
+      try {
+        if (contentType && contentType.includes("application/json")) {
+          result = await response.json();
+        } else {
+          const text = await response.text();
+          throw new Error(`Respuesta del servidor no es JSON (${response.status}): ${text.substring(0, 100)}...`);
+        }
+      } catch (parseError) {
+        console.error("❌ Error al parsear respuesta de getMe:", parseError);
+        throw new Error(`Error en la respuesta del servidor (${response.status}): ${parseError.message}`);
+      }
 
       if (response.status !== 200) {
         console.error("❌ Error en getMe:", result);

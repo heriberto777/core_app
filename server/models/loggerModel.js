@@ -18,7 +18,6 @@ const LogSchema = new Schema(
     timestamp: {
       type: Date,
       default: Date.now,
-      index: true,
     },
     source: {
       type: String,
@@ -98,6 +97,19 @@ const LogSchema = new Schema(
     transactionId: String,
     loadId: String,
     taskId: String,
+    // === CAMPOS DE MAPPING (nuevos) ===
+    mappingId: { type: String, index: true },
+    mappingName: String,
+    fieldName: String,
+    failedValue: Schema.Types.Mixed,
+    tableSource: String,
+    tableTarget: String,
+    documentId: String,
+    stepName: String,
+    originalStack: {
+      type: String,
+      maxlength: 10000,
+    },
   },
   {
     timestamps: true,
@@ -109,6 +121,9 @@ const LogSchema = new Schema(
 LogSchema.index({ level: 1, timestamp: -1 });
 LogSchema.index({ source: 1, timestamp: -1 });
 LogSchema.index({ timestamp: -1, level: 1 });
+LogSchema.index({ level: 1, mappingId: 1, timestamp: -1 });
+LogSchema.index({ mappingId: 1, timestamp: -1 });
+LogSchema.index({ transactionId: 1, timestamp: -1 });
 
 // TTL para logs antiguos (opcional - 30 días)
 LogSchema.index({ timestamp: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
@@ -142,6 +157,15 @@ LogSchema.statics.createLog = async function (level, message, options = {}) {
       transactionId: options.transactionId,
       loadId: options.loadId,
       taskId: options.taskId,
+      mappingId: options.mappingId,
+      mappingName: options.mappingName,
+      fieldName: options.fieldName,
+      failedValue: options.failedValue,
+      tableSource: options.tableSource,
+      tableTarget: options.tableTarget,
+      documentId: options.documentId,
+      stepName: options.stepName,
+      originalStack: options.originalStack,
     };
 
     // Limpiar campos undefined
@@ -192,6 +216,15 @@ LogSchema.statics.createBulkLogs = async function (logs) {
       transactionId: log.transactionId,
       loadId: log.loadId,
       taskId: log.taskId,
+      mappingId: log.mappingId,
+      mappingName: log.mappingName,
+      fieldName: log.fieldName,
+      failedValue: log.failedValue,
+      tableSource: log.tableSource,
+      tableTarget: log.tableTarget,
+      documentId: log.documentId,
+      stepName: log.stepName,
+      originalStack: log.originalStack,
     }));
 
     return await this.insertMany(cleanLogs, { ordered: false });

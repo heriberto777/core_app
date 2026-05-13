@@ -1,4 +1,3 @@
-import styled from "styled-components";
 import {
   useAuth,
   BotonCircular,
@@ -10,21 +9,9 @@ import { useNavigate } from "react-router-dom";
 import { memo, useCallback } from "react";
 import { FaUser } from "react-icons/fa";
 
-// 🔹 Función para obtener el Avatar según el rol
-const getAvatarByRole = (role) => {
-  const avatars = {
-    almacen: v.imgDogUser,
-    facturacion: v.imgFacturacion,
-    admin: v.imgHackerUser,
-    ventas: v.imgVentas,
-    contabilidad: v.imgContabilidad,
-    despacho: v.imgDespacho,
-    devolucion: v.imgDespacho,
-  };
-
-  return avatars[role] || v.imgUsuarios;
-};
-
+/**
+ * Corporate DataUser (Tailwind Edition)
+ */
 export const DataUser = memo(({ stateConfig }) => {
   const { user, logout } = useAuth();
   const navigate = useNavigate();
@@ -35,112 +22,63 @@ export const DataUser = memo(({ stateConfig }) => {
         logout();
         navigate("/");
       } else if (action === "perfil") {
-        // ✅ Agregar navegación al perfil
         navigate("/perfil");
-        stateConfig.setOpenState(false); // Cerrar el menú
+        stateConfig.setOpenState(false);
       }
     },
     [logout, navigate, stateConfig]
   );
 
   return (
-    <Container onClick={stateConfig?.setOpenState}>
-      <div className="imgContainer">
+    <div 
+      onClick={() => stateConfig?.setOpenState(!stateConfig?.openstate)}
+      className="relative flex items-center gap-3 p-1.5 pr-4 rounded-full bg-white border border-slate-200 shadow-soft hover:bg-slate-50 transition-all cursor-pointer group"
+    >
+      {/* AVATAR CONTAINER */}
+      <div className="w-10 h-10 rounded-full overflow-hidden bg-primary-100 flex items-center justify-center border-2 border-white shadow-sm ring-1 ring-slate-100 group-hover:ring-primary-100 transition-all">
         {user.avatar ? (
-          <img src={`${ENV.BASE_PATH}/${user.avatar}`} alt="Avatar" />
+          <img src={`${ENV.BASE_PATH}/${user.avatar}`} alt="Avatar" className="w-full h-full object-cover" />
         ) : (
-          <FaUser />
+          <FaUser className="text-primary-600" size={18} />
         )}
       </div>
 
+      {/* ADMIN CORONA */}
       {user?.role?.includes("admin") && (
-        <BotonCircular
-          icono={<v.iconocorona />}
-          width="15px"
-          height="15px"
-          bgcolor="#f7cf4d"
-          textColor="#f15309"
-          fontsize="11px"
-          translateX="-50px"
-          translateY="-12px"
-        />
+        <div className="absolute -top-1 -left-1">
+          <BotonCircular
+            icono={<v.iconocorona />}
+            width="16px"
+            height="16px"
+            bgcolor="#f7cf4d"
+            textColor="#f15309"
+            fontsize="10px"
+          />
+        </div>
       )}
 
-      <span className="nombre">
-        {user?.name} {user?.lastname}
-      </span>
+      {/* NAME */}
+      <div className="flex flex-col min-w-0">
+        <span className="text-sm font-bold text-slate-700 truncate max-w-[120px] md:max-w-[150px]">
+          {user?.name} {user?.lastname}
+        </span>
+        <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
+          {user?.role?.includes("admin") ? "Administrador" : "Usuario"}
+        </span>
+      </div>
 
+      {/* DROPDOWN */}
       {stateConfig?.openstate && (
-        <ListaMenuDesplegable
-          data={DesplegableUser}
-          top="55px"
-          funcion={handleAction}
-        />
+        <div className="absolute top-[calc(100%+8px)] right-0 z-50 animate-slideUp">
+          <ListaMenuDesplegable
+            data={DesplegableUser}
+            top="0"
+            funcion={handleAction}
+          />
+        </div>
       )}
-    </Container>
+    </div>
   );
 });
 
-const Container = styled.div`
-  position: relative;
-  top: 0;
-  right: 0;
-  width: 200px;
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 8px;
-  border-radius: 50px;
-  margin: 15px;
-  background-color: ${({ theme }) => theme.bg};
-  cursor: pointer;
-
-  .imgContainer {
-    height: 40px;
-    width: 40px;
-    min-height: 40px;
-    min-width: 40px;
-    border-radius: 50%;
-    overflow: hidden;
-    margin-right: 22px;
-    display: flex;
-    justify-content: center;
-    align-items: center;
-
-    img {
-      width: 100%;
-      object-fit: cover;
-    }
-
-    svg {
-      width: 100%;
-    }
-  }
-
-  &:hover {
-    background-color: ${({ theme }) => theme.bg3};
-  }
-
-  .nombre {
-    width: 100%;
-    font-weight: 500;
-    overflow: hidden;
-    white-space: nowrap;
-    text-overflow: ellipsis;
-    word-wrap: break-word;
-  }
-
-  @media (max-width: 480px) {
-    width: 160px; /* Reducir ancho en móviles muy pequeños */
-    margin: 10px;
-
-    .nombre {
-      font-size: 0.85rem; /* Texto más pequeño */
-      max-width: 80px; /* Limitar ancho del texto */
-    }
-
-    .imgContainer {
-      margin-right: 10px; /* Menos espacio entre imagen y texto */
-    }
-  }
-`;
+export default DataUser;

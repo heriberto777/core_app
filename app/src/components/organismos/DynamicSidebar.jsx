@@ -1,7 +1,6 @@
 // components/Navigation/DynamicSidebar.jsx
 import React from "react";
 import { NavLink } from "react-router-dom";
-import styled from "styled-components";
 import { usePermissions } from "../../index";
 import {
   FaUsers,
@@ -50,149 +49,64 @@ export function DynamicSidebar() {
 
   if (Object.keys(routesByCategory).length === 0) {
     return (
-      <EmptyNavigation>
-        <p>No tienes acceso a ninguna sección del sistema</p>
-      </EmptyNavigation>
+      <div className="p-8 text-center flex flex-col items-center gap-4 opacity-50 italic">
+        <FaShieldAlt className="text-3xl" />
+        <p className="text-xs font-black uppercase tracking-widest leading-relaxed">No tienes acceso a ninguna sección del sistema</p>
+      </div>
     );
   }
 
   return (
-    <NavigationContainer>
+    <nav className="flex flex-col p-6 h-full space-y-8 animate-in fade-in duration-700">
       {Object.entries(routesByCategory).map(([category, routes]) => (
-        <CategorySection key={category}>
-          <CategoryHeader
+        <div key={category} className="space-y-3">
+          <div
             onClick={() => toggleCategory(category)}
-            isExpanded={expandedCategories.has(category)}
+            className="flex items-center justify-between px-3 py-2 cursor-pointer rounded-xl hover:bg-slate-50 transition-all group select-none"
           >
-            <CategoryTitle>{category}</CategoryTitle>
-            <CategoryIcon>
+            <h3 className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] group-hover:text-slate-600 transition-colors">
+              {category}
+            </h3>
+            <div className="text-[10px] text-slate-300 group-hover:text-slate-500 transition-colors">
               {expandedCategories.has(category) ? (
                 <FaChevronDown />
               ) : (
                 <FaChevronRight />
               )}
-            </CategoryIcon>
-          </CategoryHeader>
+            </div>
+          </div>
 
-          {expandedCategories.has(category) && (
-            <RoutesList>
+          <div className={`overflow-hidden transition-all duration-500 ease-in-out ${
+            expandedCategories.has(category) ? "max-h-[500px] opacity-100" : "max-h-0 opacity-0"
+          }`}>
+            <div className="space-y-1 pl-2">
               {routes.map((route) => {
                 const IconComponent = iconMap[route.icon] || FaTachometerAlt;
 
                 return (
-                  <NavItem key={route.path} to={route.path}>
-                    <RouteIcon>
-                      <IconComponent />
-                    </RouteIcon>
-                    <RouteName>{route.name}</RouteName>
-                  </NavItem>
+                  <NavLink 
+                    key={route.path} 
+                    to={route.path}
+                    className={({ isActive }) => `
+                      flex items-center gap-3 p-3 rounded-2xl no-underline transition-all duration-300 group
+                      ${isActive 
+                        ? "bg-indigo-600 text-white shadow-xl shadow-indigo-600/20" 
+                        : "text-slate-500 hover:bg-slate-50 hover:text-indigo-600 hover:translate-x-1"}
+                    `}
+                  >
+                    <div className="text-lg min-w-[20px] flex items-center justify-center">
+                      <IconComponent className="transition-transform group-hover:scale-110 duration-300" />
+                    </div>
+                    <span className="font-black text-[11px] uppercase tracking-wider">{route.name}</span>
+                  </NavLink>
                 );
               })}
-            </RoutesList>
-          )}
-        </CategorySection>
+            </div>
+          </div>
+        </div>
       ))}
-    </NavigationContainer>
+    </nav>
   );
 }
-
-// ⭐ STYLED COMPONENTS ⭐
-const NavigationContainer = styled.nav`
-  display: flex;
-  flex-direction: column;
-  padding: 16px;
-  height: 100%;
-`;
-
-const EmptyNavigation = styled.div`
-  padding: 20px;
-  text-align: center;
-  color: #6b7280;
-  font-style: italic;
-
-  p {
-    margin: 0;
-    font-size: 14px;
-  }
-`;
-
-const CategorySection = styled.div`
-  margin-bottom: 16px;
-
-  &:last-child {
-    margin-bottom: 0;
-  }
-`;
-
-const CategoryHeader = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  padding: 8px 12px;
-  cursor: pointer;
-  border-radius: 6px;
-  transition: background-color 0.2s;
-
-  &:hover {
-    background: #f3f4f6;
-  }
-`;
-
-const CategoryTitle = styled.h3`
-  color: #374151;
-  font-size: 14px;
-  font-weight: 600;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-  margin: 0;
-`;
-
-const CategoryIcon = styled.div`
-  color: #9ca3af;
-  font-size: 12px;
-`;
-
-const RoutesList = styled.div`
-  margin-top: 8px;
-  margin-left: 8px;
-  border-left: 2px solid #e5e7eb;
-  padding-left: 8px;
-`;
-
-const NavItem = styled(NavLink)`
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  padding: 10px 12px;
-  border-radius: 8px;
-  text-decoration: none;
-  color: #6b7280;
-  transition: all 0.2s ease;
-  margin-bottom: 4px;
-
-  &:hover {
-    background: #f3f4f6;
-    color: #3b82f6;
-    transform: translateX(4px);
-  }
-
-  &.active {
-    background: linear-gradient(135deg, #3b82f6, #1d4ed8);
-    color: white;
-    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
-  }
-`;
-
-const RouteIcon = styled.div`
-  display: flex;
-  align-items: center;
-  font-size: 16px;
-  min-width: 16px;
-`;
-
-const RouteName = styled.span`
-  font-weight: 500;
-  font-size: 14px;
-`;
 
 export default DynamicSidebar;

@@ -1,73 +1,6 @@
 import React, { useState } from "react";
-import styled from "styled-components";
-import { FaTimes, FaFileAlt, FaTable } from "react-icons/fa";
+import { FaTimes, FaFileAlt, FaTable, FaHashtag, FaInfoCircle, FaSearch } from "react-icons/fa";
 import { Button, StatusBadge } from "../../index";
-
-const ModalOverlay = styled.div`
-  position: fixed; top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.7); backdrop-filter: blur(5px);
-  display: flex; align-items: center; justify-content: center; z-index: 2000;
-`;
-
-const ModalContent = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  width: 95%; max-width: 900px; height: 90vh;
-  border-radius: 24px; border: 1px solid ${({ theme }) => theme.border};
-  box-shadow: ${({ theme }) => theme.shadows.premium};
-  display: flex; flex-direction: column; overflow: hidden;
-  animation: slideUp 0.3s ease-out;
-`;
-
-const Header = styled.div`
-  padding: 24px; border-bottom: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.bg2}20;
-  display: flex; justify-content: space-between; align-items: center;
-`;
-
-const Body = styled.div`
-  flex: 1; overflow-y: auto; padding: 24px; display: flex; flex-direction: column; gap: 32px;
-`;
-
-const Section = styled.div`
-  display: flex; flex-direction: column; gap: 16px;
-`;
-
-const SectionTitle = styled.h4`
-  margin: 0; font-size: 16px; color: ${({ theme }) => theme.primary};
-  display: flex; align-items: center; gap: 10px;
-  text-transform: uppercase; letter-spacing: 1px;
-`;
-
-const HeaderGrid = styled.div`
-  display: grid; grid-template-columns: repeat(auto-fill, minmax(200px, 1fr)); gap: 16px;
-  padding: 20px; background: ${({ theme }) => theme.bg2}10; border-radius: 16px;
-  border: 1px solid ${({ theme }) => theme.border};
-`;
-
-const InfoItem = styled.div`
-  display: flex; flex-direction: column; gap: 4px;
-`;
-
-const InfoLabel = styled.div`
-  font-size: 11px; font-weight: 700; color: ${({ theme }) => theme.textSecondary}; text-transform: uppercase;
-`;
-
-const InfoValue = styled.div`
-  font-size: 14px; font-weight: 600; color: ${({ theme }) => theme.text};
-`;
-
-const TableContainer = styled.div`
-  overflow-x: auto; border-radius: 12px; border: 1px solid ${({ theme }) => theme.border};
-`;
-
-const StyledTable = styled.table`
-  width: 100%; border-collapse: collapse; font-size: 13px;
-  thead { background: ${({ theme }) => theme.bg2}40; }
-  th { padding: 12px 16px; text-align: left; color: ${({ theme }) => theme.textSecondary}; border-bottom: 2px solid ${({ theme }) => theme.border}; }
-  td { padding: 12px 16px; border-bottom: 1px solid ${({ theme }) => theme.border}; }
-  tr:last-child td { border-bottom: none; }
-  tr:hover { background: ${({ theme }) => theme.bg2}20; }
-`;
 
 export function DocumentDetailsModal({ isOpen, onClose, document, details }) {
     if (!isOpen || !document) return null;
@@ -76,33 +9,49 @@ export function DocumentDetailsModal({ isOpen, onClose, document, details }) {
     const detailTables = details?.details ? Object.keys(details.details) : [];
 
     return (
-        <ModalOverlay onClick={onClose}>
-            <ModalContent onClick={e => e.stopPropagation()}>
-                <Header>
-                    <div style={{ display: 'flex', flexDirection: 'column' }}>
-                        <h3 style={{ margin: 0 }}>Detalles del Documento</h3>
-                        <span style={{ fontSize: '13px', opacity: 0.7 }}>ID Interno: {Object.values(document)[0]}</span>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[2000] p-4 animate-in fade-in duration-300">
+            <div className="bg-white w-full max-w-[1100px] h-[90vh] rounded-[32px] border border-slate-100 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+                {/* Header */}
+                <div className="px-8 py-7 bg-white/80 backdrop-blur-md border-b border-slate-50 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-600/20">
+                            <FaSearch className="text-xl" />
+                        </div>
+                        <div className="flex flex-col">
+                            <h3 className="text-xl font-black text-slate-900 leading-tight">Explorador de Documento</h3>
+                            <div className="flex items-center gap-2 mt-1">
+                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ID Interno:</span>
+                                <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-md">{Object.values(document)[0]}</span>
+                            </div>
+                        </div>
                     </div>
-                    <Button variant="ghost" onClick={onClose} style={{ padding: '8px' }}><FaTimes /></Button>
-                </Header>
+                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+                        <FaTimes />
+                    </button>
+                </div>
 
-                <Body>
-                    <Section>
-                        <SectionTitle><FaFileAlt /> Información de Encabezado</SectionTitle>
-                        <HeaderGrid>
+                {/* Body */}
+                <div className="flex-1 overflow-y-auto p-8 space-y-12">
+                    {/* Header Info Section */}
+                    <div className="space-y-6">
+                        <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3 border-l-4 border-indigo-600 pl-4">
+                            <FaInfoCircle className="text-indigo-500" /> Atributos de Encabezado
+                        </h4>
+                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 p-8 bg-slate-50/50 rounded-[28px] border border-slate-100">
                             {Object.entries(document).map(([key, value]) => (
-                                <InfoItem key={key}>
-                                    <InfoLabel>{key}</InfoLabel>
-                                    <InfoValue>
+                                <div key={key} className="flex flex-col gap-1 group">
+                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-indigo-500 transition-colors">{key.replace(/_/g, ' ')}</span>
+                                    <div className="text-sm font-black text-slate-900 truncate">
                                         {typeof value === 'boolean'
                                             ? <StatusBadge status={value ? 'active' : 'inactive'}>{value ? 'SÍ' : 'NO'}</StatusBadge>
-                                            : value !== null && value !== undefined ? String(value) : "N/A"}
-                                    </InfoValue>
-                                </InfoItem>
+                                            : value !== null && value !== undefined ? String(value) : <span className="text-slate-200 italic">nulo</span>}
+                                    </div>
+                                </div>
                             ))}
-                        </HeaderGrid>
-                    </Section>
+                        </div>
+                    </div>
 
+                    {/* Detail Tables */}
                     {detailTables.map(tableName => {
                         const tableData = details.details[tableName];
                         if (!tableData || tableData.length === 0) return null;
@@ -111,40 +60,59 @@ export function DocumentDetailsModal({ isOpen, onClose, document, details }) {
                         const columns = Object.keys(tableData[0]).filter(k => !k.startsWith('_'));
 
                         return (
-                            <Section key={tableName}>
-                                <SectionTitle><FaTable /> Tabla: {tableName}</SectionTitle>
-                                <TableContainer>
-                                    <StyledTable>
-                                        <thead>
-                                            <tr>
-                                                {columns.map(col => <th key={col}>{col}</th>)}
-                                            </tr>
-                                        </thead>
-                                        <tbody>
-                                            {tableData.map((row, idx) => (
-                                                <tr key={idx}>
+                            <div key={tableName} className="space-y-6">
+                                <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3 border-l-4 border-indigo-600 pl-4">
+                                    <FaTable className="text-indigo-500" /> Partidas: {tableName}
+                                </h4>
+                                <div className="rounded-[28px] border border-slate-100 overflow-hidden shadow-sm bg-white">
+                                    <div className="overflow-x-auto">
+                                        <table className="w-full border-collapse">
+                                            <thead className="bg-slate-50/50">
+                                                <tr>
                                                     {columns.map(col => (
-                                                        <td key={col}>{row[col] !== null && row[col] !== undefined ? String(row[col]) : "N/A"}</td>
+                                                        <th key={col} className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100 whitespace-nowrap">
+                                                            {col.replace(/_/g, ' ')}
+                                                        </th>
                                                     ))}
                                                 </tr>
-                                            ))}
-                                        </tbody>
-                                    </StyledTable>
-                                </TableContainer>
-                            </Section>
+                                            </thead>
+                                            <tbody className="divide-y divide-slate-50">
+                                                {tableData.map((row, idx) => (
+                                                    <tr key={idx} className="hover:bg-slate-50/30 transition-colors group">
+                                                        {columns.map(col => (
+                                                            <td key={col} className="px-6 py-4 text-xs font-bold text-slate-600 group-hover:text-slate-900 transition-colors whitespace-nowrap">
+                                                                {row[col] !== null && row[col] !== undefined ? String(row[col]) : <span className="text-slate-200">...</span>}
+                                                            </td>
+                                                        ))}
+                                                    </tr>
+                                                ))}
+                                            </tbody>
+                                        </table>
+                                    </div>
+                                </div>
+                            </div>
                         );
                     })}
 
                     {detailTables.length === 0 && (
-                        <div style={{ textAlign: 'center', opacity: 0.5, padding: '40px' }}>
-                            <p>No se encontraron registros asociados a este documento.</p>
+                        <div className="flex flex-col items-center justify-center py-20 text-center opacity-30 gap-4">
+                            <FaFileAlt className="text-5xl" />
+                            <p className="text-sm font-black uppercase tracking-[0.2em]">No se encontraron registros asociados</p>
                         </div>
                     )}
-                </Body>
-                <div style={{ padding: '20px', borderTop: '1px solid #eee', display: 'flex', justifyContent: 'flex-end' }}>
-                    <Button variant="primary" onClick={onClose}>Cerrar</Button>
                 </div>
-            </ModalContent>
-        </ModalOverlay>
+
+                {/* Footer */}
+                <div className="px-8 py-6 border-t border-slate-50 flex justify-end gap-3 bg-white/80 backdrop-blur-md">
+                    <Button 
+                        variant="primary" 
+                        onClick={onClose}
+                        className="px-12 py-3 shadow-lg shadow-indigo-600/20 font-black text-xs uppercase tracking-widest bg-indigo-600 hover:bg-indigo-700 border-none"
+                    >
+                        Cerrar Auditoría
+                    </Button>
+                </div>
+            </div>
+        </div>
     );
 }

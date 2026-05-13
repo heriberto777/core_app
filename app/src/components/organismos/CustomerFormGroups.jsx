@@ -1,24 +1,5 @@
 import React from "react";
-import styled from "styled-components";
 import { CustomerField } from "../../index";
-
-const Container = styled.div` display: flex; flex-direction: column; gap: 32px; `;
-
-const GroupCard = styled.div`
-  background: ${({ theme }) => theme.cardBg}; border-radius: 24px; border: 1px solid ${({ theme }) => theme.border};
-  padding: 24px; box-shadow: ${({ theme }) => theme.shadows.medium};
-  display: flex; flex-direction: column; gap: 20px;
-`;
-
-const GroupTitle = styled.h4`
-  margin: 0; font-size: 15px; font-weight: 800; color: ${({ theme }) => theme.primary};
-  display: flex; align-items: center; gap: 10px; text-transform: uppercase; letter-spacing: 1px;
-  &::after { content: ''; flex: 1; height: 1px; background: ${({ theme }) => theme.border}40; }
-`;
-
-const FieldsGrid = styled.div`
-  display: flex; flex-wrap: wrap; gap: 20px;
-`;
 
 export function CustomerFormGroups({
     groups,
@@ -29,11 +10,17 @@ export function CustomerFormGroups({
     onRefreshField
 }) {
     return (
-        <Container>
+        <div className="flex flex-col gap-10 animate-in fade-in slide-in-from-bottom-4 duration-700">
             {groups.map((group, idx) => (
-                <GroupCard key={idx}>
-                    <GroupTitle>{group.title}</GroupTitle>
-                    <FieldsGrid>
+                <div key={idx} className="bg-white rounded-[32px] p-8 border border-slate-100 shadow-sm flex flex-col gap-8 hover:shadow-md transition-shadow duration-300">
+                    <div className="flex items-center gap-4">
+                        <h4 className="text-[11px] font-black text-indigo-600 uppercase tracking-[0.2em] whitespace-nowrap">
+                            {group.title}
+                        </h4>
+                        <div className="h-px bg-slate-100 flex-1" />
+                    </div>
+                    
+                    <div className="flex flex-wrap gap-6">
                         {group.fields.map(fieldName => (
                             <CustomerField
                                 key={fieldName}
@@ -45,9 +32,9 @@ export function CustomerFormGroups({
                                 onRefresh={onRefreshField}
                             />
                         ))}
-                    </FieldsGrid>
-                </GroupCard>
+                    </div>
+                </div>
             ))}
-        </Container>
+        </div>
     );
 }

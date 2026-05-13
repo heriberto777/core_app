@@ -1,169 +1,128 @@
 import React from "react";
-import styled from "styled-components";
 import { FaSync, FaInfoCircle } from "react-icons/fa";
 
-const FieldGroup = styled.div`
-  display: flex; flex-direction: column; gap: 8px; flex: 1 1 250px; min-width: 250px;
-  @media (max-width: 600px) { min-width: 100%; }
-`;
-
-const LabelRow = styled.div` display: flex; align-items: center; justify-content: space-between; `;
-
-const Label = styled.label`
-  font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
-  color: ${({ theme }) => theme.textSecondary}; display: flex; align-items: center; gap: 6px;
-  span { color: #ef4444; }
-`;
-
-const InputWrapper = styled.div` display: flex; gap: 8px; align-items: stretch; `;
-
-const StyledInput = styled.input`
-  flex: 1; padding: 12px 16px; border-radius: 12px; border: 1px solid ${({ theme, $readOnly }) => $readOnly ? theme.border + '40' : theme.border};
-  background: ${({ theme, $readOnly }) => $readOnly ? theme.bg2 + '20' : theme.inputBg};
-  color: ${({ theme, $readOnly }) => $readOnly ? theme.textSecondary : theme.text};
-  font-size: 14px; font-weight: 600; transition: all 0.2s;
-  &:focus { border-color: ${({ theme }) => theme.primary}; box-shadow: 0 0 0 3px ${({ theme }) => theme.primary}20; outline: none; }
-  &::placeholder { color: ${({ theme }) => theme.textSecondary + '60'}; }
-`;
-
-const StyledTextArea = styled.textarea`
-  flex: 1; padding: 12px 16px; border-radius: 12px; border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.inputBg}; color: ${({ theme }) => theme.text};
-  font-size: 14px; font-weight: 600; min-height: 80px; resize: vertical; transition: all 0.2s;
-  &:focus { outline: none; border-color: ${({ theme }) => theme.primary}; }
-`;
-
-const StyledSelect = styled.select`
-  flex: 1; padding: 12px 16px; border-radius: 12px; border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.inputBg}; color: ${({ theme }) => theme.text};
-  font-size: 14px; font-weight: 600; cursor: pointer;
-`;
-
-const CheckboxContainer = styled.label`
-  display: flex; align-items: center; gap: 12px; padding: 12px 16px; cursor: pointer;
-  background: ${({ theme }) => theme.bg2}10; border-radius: 12px; border: 1px solid ${({ theme }) => theme.border}40;
-  span { font-size: 14px; font-weight: 700; }
-  input { width: 18px; height: 18px; accent-color: ${({ theme }) => theme.primary}; }
-`;
-
-const MetaInfo = styled.div`
-  display: flex; flex-direction: column; gap: 2px;
-`;
-
-const SourceInfo = styled.div`
-  font-size: 10px; font-weight: 800; color: ${({ theme }) => theme.textSecondary}; opacity: 0.6;
-  display: flex; align-items: center; gap: 4px;
-`;
-
-const RefreshBtn = styled.button`
-  width: 44px; display: flex; align-items: center; justify-content: center;
-  background: ${({ theme }) => theme.primary}; color: white; border: none; border-radius: 12px;
-  cursor: pointer; transition: all 0.2s;
-  &:hover:not(:disabled) { transform: scale(1.05); filter: brightness(1.1); }
-  &:disabled { opacity: 0.5; cursor: not-allowed; }
-  svg { animation: ${({ $loading }) => $loading ? "spin 1s linear infinite" : "none"}; }
-  @keyframes spin { from { transform: rotate(0deg); } to { transform: rotate(360deg); } }
-`;
-
+/**
+ * Corporate CustomerField (Tailwind Edition)
+ */
 export function CustomerField({
     fieldName,
     value,
     meta,
     loading,
     onChange,
-    onRefresh
+    onRefresh,
+    className = ""
 }) {
     const isReadOnly = meta.isEditable === false && !meta.dynamicQuery;
     const displayName = meta.displayName || fieldName;
     const type = meta.fieldType || "text";
 
+    const baseInputClasses = `
+        flex-1 px-4 py-3 rounded-xl border text-sm font-semibold transition-all duration-200
+        ${isReadOnly 
+            ? "bg-slate-50/50 border-slate-200/40 text-slate-500" 
+            : "border-slate-200 bg-white text-slate-800 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 outline-none"}
+        placeholder:text-slate-400/60
+    `;
+
     const renderInput = () => {
         if (type === "boolean" || typeof value === "boolean") {
             return (
-                <CheckboxContainer>
+                <label className="flex items-center gap-3 px-4 py-3 cursor-pointer bg-slate-50/50 rounded-xl border border-slate-200/40">
                     <input
                         type="checkbox"
                         name={fieldName}
                         checked={Boolean(value)}
                         onChange={onChange}
                         disabled={loading || isReadOnly}
+                        className="w-4.5 h-4.5 accent-primary-500"
                     />
-                    <span>{displayName}</span>
-                </CheckboxContainer>
+                    <span className="text-sm font-bold">{displayName}</span>
+                </label>
             );
         }
 
         if (type === "textarea") {
             return (
-                <StyledTextArea
+                <textarea
                     name={fieldName}
                     value={value || ""}
                     onChange={onChange}
                     disabled={loading || isReadOnly}
                     readOnly={isReadOnly}
+                    className={`${baseInputClasses} min-h-20 resize-y`}
                 />
             );
         }
 
         if (type === "select") {
             return (
-                <StyledSelect
+                <select
                     name={fieldName}
                     value={value || ""}
                     onChange={onChange}
                     disabled={loading || isReadOnly}
+                    className={baseInputClasses}
                 >
                     <option value="">-- Seleccione --</option>
                     {meta.options?.map((opt, i) => <option key={i} value={opt.value}>{opt.label}</option>)}
-                </StyledSelect>
+                </select>
             );
         }
 
         return (
-            <StyledInput
+            <input
                 type={type === "number" ? "number" : type === "date" ? "date" : "text"}
                 name={fieldName}
                 value={value || ""}
                 onChange={onChange}
                 disabled={loading || isReadOnly}
                 readOnly={isReadOnly}
-                $readOnly={isReadOnly}
                 placeholder={displayName}
+                className={baseInputClasses}
             />
         );
     };
 
     return (
-        <FieldGroup>
-            <LabelRow>
-                <Label>
+        <div className={`flex flex-col gap-2 flex-1 basis-[250px] min-w-[250px] ${className}`}>
+            <div className="flex items-center justify-between">
+                <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
                     {displayName}
-                    {meta.isRequired && <span>*</span>}
-                </Label>
-            </LabelRow>
+                    {meta.isRequired && <span className="text-red-500">*</span>}
+                </label>
+            </div>
 
-            <InputWrapper>
+            <div className="flex gap-2 items-stretch">
                 {renderInput()}
                 {meta.dynamicQuery && (
-                    <RefreshBtn
+                    <button
                         onClick={() => onRefresh(fieldName)}
                         disabled={loading}
-                        $loading={loading}
                         title="Sincronizar valor dinámico"
+                        className={`
+                            w-11 flex items-center justify-center bg-primary-500 text-white border-none rounded-xl cursor-pointer
+                            transition-all duration-200 hover:scale-105 hover:brightness-110
+                            ${loading ? "opacity-50 cursor-not-allowed" : ""}
+                        `}
                     >
-                        <FaSync />
-                    </RefreshBtn>
+                        <FaSync className={loading ? "animate-spin" : ""} />
+                    </button>
                 )}
-            </InputWrapper>
+            </div>
 
-            <MetaInfo>
+            <div className="flex flex-col gap-0.5">
                 {meta.originalField && (
-                    <SourceInfo><FaInfoCircle size={10} /> Mapeado de: <strong>{meta.originalField}</strong></SourceInfo>
+                    <div className="text-[10px] font-extrabold text-slate-400/60 flex items-center gap-1">
+                        <FaInfoCircle size={10} /> Mapeado de: <strong>{meta.originalField}</strong>
+                    </div>
                 )}
                 {meta.queryType === "sequence" && meta.currentValue !== undefined && (
-                    <SourceInfo>Val. Actual Seq: {meta.currentValue}</SourceInfo>
+                    <div className="text-[10px] font-extrabold text-slate-400/60">
+                        Val. Actual Seq: {meta.currentValue}
+                    </div>
                 )}
-            </MetaInfo>
-        </FieldGroup>
+            </div>
+        </div>
     );
 }

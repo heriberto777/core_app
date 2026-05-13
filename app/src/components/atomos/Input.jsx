@@ -1,88 +1,40 @@
 import React from "react";
-import styled from "styled-components";
 
-export const Input = ({ label, error, icon: Icon, ...props }) => {
+/**
+ * Corporate Input Component (Tailwind Edition)
+ */
+export const Input = ({ label, error, icon: Icon, className = "", ...props }) => {
   return (
-    <InputWrapper>
-      {label && <Label>{label}</Label>}
-      <InputRelative>
+    <div className={`flex flex-col gap-1.5 w-full mb-3 ${className}`}>
+      {label && (
+        <label className="text-[13px] font-semibold text-slate-500 ml-1">
+          {label}
+        </label>
+      )}
+      <div className="relative w-full group">
         {Icon && (
-          <IconWrapper>
+          <div className="absolute left-3.5 top-1/2 -translate-y-1/2 flex items-center justify-center text-slate-400 pointer-events-none z-10 transition-colors group-focus-within:text-primary-500">
             <Icon size={18} />
-          </IconWrapper>
+          </div>
         )}
-        <StyledInput error={!!error} hasIcon={!!Icon} {...props} />
-      </InputRelative>
-      {error && <ErrorText>{error}</ErrorText>}
-    </InputWrapper>
+        <input
+          className={`
+            w-full py-2.5 px-4 text-sm rounded-xl border transition-all duration-200 outline-none
+            ${Icon ? 'pl-11' : 'pl-4'}
+            ${error 
+              ? 'border-red-300 bg-red-50/30 focus:border-red-500 focus:ring-4 focus:ring-red-500/10' 
+              : 'border-slate-200 bg-white hover:border-slate-300 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 focus:bg-white'}
+            text-slate-900 placeholder:text-slate-400
+            disabled:opacity-60 disabled:cursor-not-allowed disabled:bg-slate-50
+          `}
+          {...props}
+        />
+      </div>
+      {error && (
+        <span className="text-xs font-medium text-red-500 ml-1 animate-fadeIn">
+          {error}
+        </span>
+      )}
+    </div>
   );
 };
-
-const InputWrapper = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: ${({ theme }) => theme.spacing.xs || "4px"};
-  width: 100%;
-  margin-bottom: ${({ theme }) => theme.spacing.sm || "12px"};
-`;
-
-const Label = styled.label`
-  font-size: 13px;
-  font-weight: 600;
-  color: ${({ theme }) => theme.textSecondary || "#666"};
-  margin-left: 4px;
-`;
-
-const InputRelative = styled.div`
-  position: relative;
-  width: 100%;
-`;
-
-const IconWrapper = styled.div`
-  position: absolute;
-  left: 14px;
-  top: 50%;
-  transform: translateY(-50%);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  color: ${({ theme }) => theme.textSecondary || "#94a3b8"};
-  pointer-events: none;
-  z-index: 2;
-`;
-
-const StyledInput = styled.input`
-  width: 100%;
-  padding: 12px ${({ hasIcon }) => (hasIcon ? "12px 12px 42px" : "16px")};
-  padding-left: ${({ hasIcon }) => (hasIcon ? "42px" : "16px")};
-  border-radius: 12px;
-  background: ${({ theme }) => theme.bg2};
-  border: 1px solid ${({ theme, error }) => (error ? theme.danger : theme.border)};
-  color: ${({ theme }) => theme.text};
-  font-size: 15px;
-  transition: all 0.3s ease;
-  backdrop-filter: blur(8px);
-
-  &::placeholder {
-    color: ${({ theme }) => theme.textSecondary};
-  }
-
-  &:focus {
-    outline: none;
-    border-color: ${({ theme }) => theme.primary || "#4facfe"};
-    background: ${({ theme }) => theme.bg || "rgba(255, 255, 255, 0.08)"};
-    box-shadow: 0 0 0 4px ${({ theme }) => (theme.primary ? theme.primary + "20" : "rgba(79, 172, 254, 0.1)")};
-  }
-
-  &:disabled {
-    opacity: 0.6;
-    cursor: not-allowed;
-  }
-`;
-
-const ErrorText = styled.span`
-  color: ${({ theme }) => theme.danger || "#ff4d4d"};
-  font-size: 12px;
-  margin-left: 4px;
-  font-weight: 500;
-`;

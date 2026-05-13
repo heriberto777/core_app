@@ -1,39 +1,6 @@
 import React from "react";
-import styled from "styled-components";
 import { FaSearch, FaTruck, FaCalendarAlt, FaFilter, FaSync } from "react-icons/fa";
 import { Button } from "../../index";
-
-const Container = styled.div`
-  background: ${({ theme }) => theme.cardBg}; border-radius: 24px; border: 1px solid ${({ theme }) => theme.border};
-  padding: 24px; box-shadow: ${({ theme }) => theme.shadows.medium};
-  display: flex; flex-direction: column; gap: 20px;
-`;
-
-const FilterGrid = styled.div`
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(200px, 1fr)); gap: 16px;
-`;
-
-const FormGroup = styled.div` display: flex; flex-direction: column; gap: 8px; `;
-
-const Label = styled.label`
-  font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: 0.5px;
-  color: ${({ theme }) => theme.textSecondary}; display: flex; align-items: center; gap: 6px;
-`;
-
-const Input = styled.input`
-  padding: 12px 16px; border-radius: 12px; border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.inputBg}; color: ${({ theme }) => theme.text};
-  font-size: 14px; font-weight: 600; transition: all 0.2s;
-  &:focus { border-color: ${({ theme }) => theme.primary}; box-shadow: 0 0 0 3px ${({ theme }) => theme.primary}20; outline: none; }
-`;
-
-const Select = styled.select`
-  padding: 12px 16px; border-radius: 12px; border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.inputBg}; color: ${({ theme }) => theme.text};
-  font-size: 14px; font-weight: 600; cursor: pointer;
-`;
-
-const Actions = styled.div` display: flex; justify-content: flex-end; gap: 12px; margin-top: 8px; `;
 
 export function SummaryFilterPanel({ filters, onUpdate, onClear, onSearch, loading }) {
     const handleChange = (e) => {
@@ -42,43 +9,91 @@ export function SummaryFilterPanel({ filters, onUpdate, onClear, onSearch, loadi
     };
 
     return (
-        <Container>
-            <FilterGrid>
-                <FormGroup>
-                    <Label><FaTruck /> Carga #</Label>
-                    <Input name="loadId" value={filters.loadId} onChange={handleChange} placeholder="Ej: 00123" />
-                </FormGroup>
+        <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-sm flex flex-col gap-8 animate-in fade-in slide-in-from-top-4 duration-500">
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
+                <div className="flex flex-col gap-2">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-1 flex items-center gap-2">
+                        <FaTruck className="text-blue-500 text-[9px]" /> Carga #
+                    </label>
+                    <input 
+                        name="loadId" 
+                        className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50/50 font-bold transition-all placeholder:text-slate-300"
+                        value={filters.loadId} 
+                        onChange={handleChange} 
+                        placeholder="Ej: 00123" 
+                    />
+                </div>
 
-                <FormGroup>
-                    <Label><FaTruck /> Ruta / Vendedor</Label>
-                    <Input name="route" value={filters.route} onChange={handleChange} placeholder="Ej: R01" />
-                </FormGroup>
+                <div className="flex flex-col gap-2">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-1 flex items-center gap-2">
+                        <FaTruck className="text-blue-500 text-[9px]" /> Ruta / Vendedor
+                    </label>
+                    <input 
+                        name="route" 
+                        className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50/50 font-bold transition-all placeholder:text-slate-300"
+                        value={filters.route} 
+                        onChange={handleChange} 
+                        placeholder="Ej: R01" 
+                    />
+                </div>
 
-                <FormGroup>
-                    <Label><FaCalendarAlt /> Desde</Label>
-                    <Input type="date" name="dateFrom" value={filters.dateFrom} onChange={handleChange} />
-                </FormGroup>
+                <div className="flex flex-col gap-2">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-1 flex items-center gap-2">
+                        <FaCalendarAlt className="text-blue-500 text-[9px]" /> Desde
+                    </label>
+                    <input 
+                        type="date" 
+                        name="dateFrom" 
+                        className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50/50 font-bold transition-all"
+                        value={filters.dateFrom} 
+                        onChange={handleChange} 
+                    />
+                </div>
 
-                <FormGroup>
-                    <Label><FaCalendarAlt /> Hasta</Label>
-                    <Input type="date" name="dateTo" value={filters.dateTo} onChange={handleChange} />
-                </FormGroup>
+                <div className="flex flex-col gap-2">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-1 flex items-center gap-2">
+                        <FaCalendarAlt className="text-blue-500 text-[9px]" /> Hasta
+                    </label>
+                    <input 
+                        type="date" 
+                        name="dateTo" 
+                        className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50/50 font-bold transition-all"
+                        value={filters.dateTo} 
+                        onChange={handleChange} 
+                    />
+                </div>
 
-                <FormGroup>
-                    <Label><FaFilter /> Estado</Label>
-                    <Select name="status" value={filters.status} onChange={handleChange}>
+                <div className="flex flex-col gap-2">
+                    <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-1 flex items-center gap-2">
+                        <FaFilter className="text-blue-500 text-[9px]" /> Estado
+                    </label>
+                    <select 
+                        name="status" 
+                        className="w-full px-4 py-3 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50/50 font-bold transition-all appearance-none"
+                        value={filters.status} 
+                        onChange={handleChange}
+                    >
                         <option value="">Todos los estados</option>
                         <option value="completed">Completado</option>
                         <option value="partial_return">Devolución Parcial</option>
                         <option value="full_return">Devolución Total</option>
-                    </Select>
-                </FormGroup>
-            </FilterGrid>
+                    </select>
+                </div>
+            </div>
 
-            <Actions>
-                <Button variant="ghost" onClick={onClear} disabled={loading}>Limpiar</Button>
-                <Button variant="primary" icon={<FaSearch />} onClick={onSearch} loading={loading}>Aplicar Filtros</Button>
-            </Actions>
-        </Container>
+            <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
+                <Button variant="ghost" onClick={onClear} disabled={loading} className="font-bold">
+                    <FaSync className="mr-2 text-xs" /> Limpiar
+                </Button>
+                <Button 
+                    variant="primary" 
+                    onClick={onSearch} 
+                    loading={loading}
+                    className="px-10 shadow-lg shadow-blue-600/20"
+                >
+                    <FaSearch className="mr-2 text-xs" /> Aplicar Filtros
+                </Button>
+            </div>
+        </div>
     );
 }

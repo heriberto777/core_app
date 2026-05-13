@@ -1,127 +1,114 @@
 import React from "react";
-import styled from "styled-components";
 import {
     FaEdit, FaTrash, FaToggleOn, FaToggleOff,
-    FaStar, FaVial, FaServer, FaEnvelope, FaLock, FaUnlock
+    FaStar, FaEnvelope, FaLock, FaUnlock
 } from "react-icons/fa";
 import { Button } from "../../index";
 
-const Container = styled.div`
-  width: 100%; border-radius: 24px; border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.cardBg}; overflow: hidden;
-  box-shadow: ${({ theme }) => theme.shadows.medium};
-`;
+/**
+ * Corporate EmailConfigTable (Tailwind Edition)
+ */
+export function EmailConfigTable({
+    configs,
+    onEdit,
+    onDelete,
+    onToggle,
+    onSetDefault,
+    onTest,
+    className = ""
+}) {
+    if (!configs || configs.length === 0) {
+        return (
+            <div className="w-full rounded-3xl border border-slate-200 bg-white p-8 text-center text-slate-500">
+                No hay configuraciones de email registradas
+            </div>
+        );
+    }
 
-const TableWrapper = styled.div` overflow-x: auto; `;
-
-const Table = styled.table`
-  width: 100%; border-collapse: collapse; font-size: 13px;
-  th { padding: 16px; text-align: left; font-weight: 800; text-transform: uppercase; font-size: 11px; letter-spacing: 1px; color: ${({ theme }) => theme.textSecondary}; border-bottom: 2px solid ${({ theme }) => theme.border}; background: ${({ theme }) => theme.bg2}10; }
-  td { padding: 16px; border-bottom: 1px solid ${({ theme }) => theme.border}40; color: ${({ theme }) => theme.text}; vertical-align: middle; }
-  tr:hover { background: ${({ theme }) => theme.bg2}10; }
-  tr:last-child td { border-bottom: none; }
-  tr.disabled { opacity: 0.6; }
-`;
-
-const ConfigName = styled.div`
-  display: flex; align-items: center; gap: 8px; font-weight: 800;
-  svg { color: #f59e0b; }
-`;
-
-const InfoItem = styled.div`
-  display: flex; align-items: center; gap: 8px; font-size: 12px; color: ${({ theme }) => theme.textSecondary};
-  svg { opacity: 0.5; }
-`;
-
-const Badge = styled.span`
-  padding: 4px 8px; border-radius: 8px; font-size: 10px; font-weight: 800; text-transform: uppercase;
-  background: ${({ $bg }) => $bg}15; color: ${({ $bg }) => $bg}; border: 1px solid ${({ $bg }) => $bg}30;
-`;
-
-const StatusChip = styled.div`
-  display: flex; align-items: center; gap: 6px; font-size: 11px; font-weight: 700;
-  color: ${({ $active }) => $active ? "#10b981" : "#ef4444"};
-`;
-
-const Actions = styled.div` display: flex; gap: 8px; `;
-
-export function EmailConfigTable({ configs, onEdit, onDelete, onToggle, onSetDefault, onTest }) {
     return (
-        <Container>
-            <TableWrapper>
-                <Table>
+        <div className={`w-full rounded-3xl border border-slate-200 bg-white overflow-hidden shadow-md ${className}`}>
+            <div className="overflow-x-auto">
+                <table className="w-full border-collapse text-xs">
                     <thead>
                         <tr>
-                            <th>Nombre de Configuración</th>
-                            <th>Host & Puerto</th>
-                            <th>Cuenta/Usuario</th>
-                            <th>Seguridad</th>
-                            <th>Estado</th>
-                            <th>Acciones</th>
+                            <th className="p-4 text-left font-extrabold text-slate-500 uppercase tracking-wider border-b-2 border-slate-200 bg-slate-50/10">Nombre</th>
+                            <th className="p-4 text-left font-extrabold text-slate-500 uppercase tracking-wider border-b-2 border-slate-200 bg-slate-50/10">Host & Puerto</th>
+                            <th className="p-4 text-left font-extrabold text-slate-500 uppercase tracking-wider border-b-2 border-slate-200 bg-slate-50/10">Usuario</th>
+                            <th className="p-4 text-left font-extrabold text-slate-500 uppercase tracking-wider border-b-2 border-slate-200 bg-slate-50/10">Seguridad</th>
+                            <th className="p-4 text-left font-extrabold text-slate-500 uppercase tracking-wider border-b-2 border-slate-200 bg-slate-50/10">Estado</th>
+                            <th className="p-4 text-right font-extrabold text-slate-500 uppercase tracking-wider border-b-2 border-slate-200 bg-slate-50/10">Acciones</th>
                         </tr>
                     </thead>
                     <tbody>
-                        {configs.length > 0 ? configs.map(config => (
-                            <tr key={config._id} className={!config.isActive ? "disabled" : ""}>
-                                <td>
-                                    <ConfigName>
-                                        {config.isDefault && <FaStar title="Predeterminada" />}
+                        {configs.map((config, idx) => (
+                            <tr key={config.id || idx} className="hover:bg-slate-50/10 border-b border-slate-100/40">
+                                <td className="p-4">
+                                    <div className="flex items-center gap-2 font-extrabold text-slate-800">
+                                        <FaEnvelope className="text-amber-500" />
                                         {config.name}
-                                    </ConfigName>
-                                </td>
-                                <td>
-                                    <div style={{ display: 'flex', flexDirection: 'column', gap: '4px' }}>
-                                        <InfoItem><FaServer /> {config.host}</InfoItem>
-                                        <div style={{ display: 'flex', gap: '4px' }}>
-                                            <Badge $bg="#64748b">Port: {config.port}</Badge>
-                                            {config.isDefault && <Badge $bg="#f59e0b">Default</Badge>}
-                                        </div>
+                                        {config.isDefault && (
+                                            <span className="px-2 py-0.5 rounded-full text-[10px] font-bold bg-amber-500/15 text-amber-600 border border-amber-500/30">
+                                                Por defecto
+                                            </span>
+                                        )}
                                     </div>
                                 </td>
-                                <td>
-                                    <InfoItem><FaEnvelope /> {config.auth?.user}</InfoItem>
+                                <td className="p-4">
+                                    <div className="flex items-center gap-2 text-slate-500">
+                                        <span>{config.host}:{config.port}</span>
+                                    </div>
                                 </td>
-                                <td>
-                                    {config.secure ?
-                                        <Badge $bg="#10b981"><FaLock size={10} /> SSL/TLS</Badge> :
-                                        <Badge $bg="#ef4444"><FaUnlock size={10} /> No Seguro</Badge>
-                                    }
+                                <td className="p-4 text-slate-600">
+                                    {config.username}
                                 </td>
-                                <td>
-                                    <StatusChip $active={config.isActive}>
-                                        {config.isActive ? <FaToggleOn size={18} /> : <FaToggleOff size={18} />}
-                                        {config.isActive ? "ACTIVA" : "INACTIVA"}
-                                    </StatusChip>
-                                </td>
-                                <td>
-                                    <Actions>
-                                        <Button variant="ghost" size="small" onClick={() => onEdit(config)} icon={<FaEdit />} title="Editar" />
-                                        <Button variant="ghost" size="small" onClick={() => onTest(config)} icon={<FaVial />} title="Enviar Prueba" color="#17a2b8" />
-                                        {!config.isDefault && (
-                                            <Button variant="ghost" size="small" onClick={() => onSetDefault(config)} icon={<FaStar />} title="Hacer Predeterminada" color="#f59e0b" />
+                                <td className="p-4">
+                                    <div className="flex items-center gap-2">
+                                        {config.secure ? (
+                                            <span className="flex items-center gap-1 text-emerald-600 text-xs font-semibold">
+                                                <FaLock /> SSL/TLS
+                                            </span>
+                                        ) : (
+                                            <span className="flex items-center gap-1 text-slate-400 text-xs font-semibold">
+                                                <FaUnlock /> Ninguna
+                                            </span>
                                         )}
-                                        <Button
-                                            variant="ghost"
-                                            size="small"
-                                            onClick={() => onToggle(config)}
-                                            icon={config.isActive ? <FaToggleOn /> : <FaToggleOff />}
-                                            title={config.isActive ? "Desactivar" : "Activar"}
-                                            color={config.isActive ? "#f97316" : "#10b981"}
-                                        />
-                                        <Button variant="ghost" size="small" onClick={() => onDelete(config)} icon={<FaTrash />} title="Eliminar" color="#ef4444" />
-                                    </Actions>
+                                    </div>
+                                </td>
+                                <td className="p-4">
+                                    <div className={`flex items-center gap-1.5 text-xs font-bold ${config.active ? "text-emerald-600" : "text-red-500"}`}>
+                                        {config.active ? <FaToggleOn /> : <FaToggleOff />}
+                                        {config.active ? "Activo" : "Inactivo"}
+                                    </div>
+                                </td>
+                                <td className="p-4">
+                                    <div className="flex gap-2 justify-end">
+                                        {onSetDefault && (
+                                            <Button variant="ghost" size="small" onClick={() => onSetDefault(config.id)} title="Establecer por defecto">
+                                                <FaStar />
+                                            </Button>
+                                        )}
+                                        {onTest && (
+                                            <Button variant="ghost" size="small" onClick={() => onTest(config.id)} title="Probar configuración">
+                                                <FaEnvelope />
+                                            </Button>
+                                        )}
+                                        {onEdit && (
+                                            <Button variant="ghost" size="small" onClick={() => onEdit(config)} title="Editar">
+                                                <FaEdit />
+                                            </Button>
+                                        )}
+                                        {onDelete && (
+                                            <Button variant="ghost" size="small" onClick={() => onDelete(config.id)} title="Eliminar" className="text-red-500 hover:text-red-700">
+                                                <FaTrash />
+                                            </Button>
+                                        )}
+                                    </div>
                                 </td>
                             </tr>
-                        )) : (
-                            <tr>
-                                <td colSpan={6} style={{ textAlign: 'center', padding: '60px', opacity: 0.5, fontStyle: 'italic' }}>
-                                    No se han encontrado configuraciones de email.
-                                </td>
-                            </tr>
-                        )}
+                        ))}
                     </tbody>
-                </Table>
-            </TableWrapper>
-        </Container>
+                </table>
+            </div>
+        </div>
     );
 }

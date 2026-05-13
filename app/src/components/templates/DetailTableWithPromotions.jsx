@@ -1,14 +1,12 @@
 import React, { useState, useEffect } from "react";
-import styled from "styled-components";
 import PromotionIndicator from "./PromotionIndicator";
-import { FaEye, FaEyeSlash } from "react-icons/fa";
+import { FaEye, FaEyeSlash, FaGift } from "react-icons/fa";
 
 const DetailTableWithPromotions = ({ data = [], mapping = {}, documentId }) => {
   const [showPromotionColumns, setShowPromotionColumns] = useState(true);
   const [processedData, setProcessedData] = useState([]);
 
   useEffect(() => {
-    // Procesar datos para mostrar información de promociones
     const processed = data.map((item) => ({
       ...item,
       _isPromotion: item._IS_BONUS_LINE || item._IS_TRIGGER_LINE,
@@ -22,7 +20,6 @@ const DetailTableWithPromotions = ({ data = [], mapping = {}, documentId }) => {
   const promotionConfig = mapping.promotionConfig || {};
   const isPromotionEnabled = promotionConfig.enabled;
 
-  // Columnas básicas
   const basicColumns = [
     { key: "NUM_LN", label: "Línea", width: "80px" },
     { key: "COD_ART", label: "Código", width: "120px" },
@@ -32,7 +29,6 @@ const DetailTableWithPromotions = ({ data = [], mapping = {}, documentId }) => {
     { key: "TOTAL", label: "Total", width: "100px" },
   ];
 
-  // Columnas de promociones
   const promotionColumns = [
     { key: "PEDIDO_LINEA_BONIF", label: "Ref. Bonif.", width: "80px" },
     { key: "CANTIDAD_PEDIDA", label: "Cant. Pedida", width: "100px" },
@@ -45,70 +41,82 @@ const DetailTableWithPromotions = ({ data = [], mapping = {}, documentId }) => {
       ? [...basicColumns, ...promotionColumns]
       : basicColumns;
 
-  const getRowStyle = (item) => {
-    if (!isPromotionEnabled) return {};
+  const getRowClasses = (item) => {
+    if (!isPromotionEnabled) return "";
 
     if (item._IS_BONUS_LINE) {
-      return { backgroundColor: "#e8f5e8", borderLeft: "4px solid #2ecc71" };
+      return "bg-green-50 dark:bg-green-900/20 border-l-4 border-l-green-500";
     }
     if (item._IS_TRIGGER_LINE) {
-      return { backgroundColor: "#e8f4f8", borderLeft: "4px solid #3498db" };
+      return "bg-blue-50 dark:bg-blue-900/20 border-l-4 border-l-blue-500";
     }
-    return {};
+    return "";
   };
 
   return (
-    <TableContainer>
-      <TableHeader>
-        <TableTitle>
+    <div className="bg-white dark:bg-slate-800 rounded-lg shadow-sm overflow-hidden">
+      <div className="flex justify-between items-center p-4 bg-slate-50 dark:bg-slate-700/50 border-b border-slate-200 dark:border-slate-700">
+        <h3 className="flex items-center gap-2 m-0 text-lg font-semibold text-slate-900 dark:text-white">
           Detalles del Documento {documentId}
           {isPromotionEnabled && (
-            <PromotionBadge>
+            <span className="flex items-center gap-1 bg-green-500 text-white px-2 py-1 rounded-full text-sm font-medium">
               <FaGift /> Promociones Activas
-            </PromotionBadge>
+            </span>
           )}
-        </TableTitle>
+        </h3>
 
         {isPromotionEnabled && (
-          <TableControls>
-            <ControlButton
+          <div className="flex gap-2">
+            <button
               onClick={() => setShowPromotionColumns(!showPromotionColumns)}
-              active={showPromotionColumns}
+              className={`flex items-center gap-2 px-4 py-2 border rounded text-sm cursor-pointer transition-opacity ${
+                showPromotionColumns
+                  ? "bg-blue-500 border-blue-500 text-white"
+                  : "bg-white dark:bg-slate-800 border-slate-300 dark:border-slate-600 text-slate-700 dark:text-slate-300"
+              }`}
             >
               {showPromotionColumns ? <FaEyeSlash /> : <FaEye />}
               {showPromotionColumns ? "Ocultar" : "Mostrar"} Columnas de
               Promoción
-            </ControlButton>
-          </TableControls>
+            </button>
+          </div>
         )}
-      </TableHeader>
+      </div>
 
-      <TableWrapper>
-        <Table>
+      <div className="overflow-x-auto max-h-[600px] overflow-y-auto">
+        <table className="w-full border-collapse text-sm">
           <thead>
             <tr>
               {allColumns.map((col) => (
-                <Th key={col.key} width={col.width}>
+                <th
+                  key={col.key}
+                  className="p-3 text-left bg-slate-100 dark:bg-slate-700 border-b border-slate-200 dark:border-slate-700 font-semibold text-slate-600 dark:text-slate-400 sticky top-0 z-10"
+                  style={{ width: col.width }}
+                >
                   {col.label}
-                </Th>
+                </th>
               ))}
-              {isPromotionEnabled && <Th width="60px">Promo</Th>}
+              {isPromotionEnabled && (
+                <th className="p-3 text-left bg-slate-100 dark:bg-slate-700 border-b border-slate-200 dark:border-slate-700 font-semibold text-slate-600 dark:text-slate-400 sticky top-0 z-10" style={{ width: "60px" }}>
+                  Promo
+                </th>
+              )}
             </tr>
           </thead>
           <tbody>
             {processedData.map((item, index) => (
-              <Tr key={index} style={getRowStyle(item)}>
+              <tr key={index} className={`hover:bg-slate-50 dark:hover:bg-slate-700/50 ${getRowClasses(item)}`}>
                 {allColumns.map((col) => (
-                  <Td key={col.key}>
+                  <td key={col.key} className="p-3 border-b border-slate-100 dark:border-slate-700 text-slate-700 dark:text-slate-300">
                     {col.key === "PEDIDO_LINEA_BONIF" && item[col.key] ? (
-                      <ReferenceLink>→ Línea {item[col.key]}</ReferenceLink>
+                      <span className="text-blue-500 font-medium cursor-pointer hover:underline">→ Línea {item[col.key]}</span>
                     ) : (
                       item[col.key] || "-"
                     )}
-                  </Td>
+                  </td>
                 ))}
                 {isPromotionEnabled && (
-                  <Td>
+                  <td className="p-3 border-b border-slate-100 dark:border-slate-700">
                     <PromotionIndicator
                       promotionType={item._promotionType}
                       isBonus={item._IS_BONUS_LINE}
@@ -116,169 +124,34 @@ const DetailTableWithPromotions = ({ data = [], mapping = {}, documentId }) => {
                       bonusLineRef={item.PEDIDO_LINEA_BONIF}
                       size="small"
                     />
-                  </Td>
+                  </td>
                 )}
-              </Tr>
+              </tr>
             ))}
           </tbody>
-        </Table>
-      </TableWrapper>
+        </table>
+      </div>
 
       {isPromotionEnabled && (
-        <TableFooter>
-          <Legend>
-            <LegendItem>
-              <LegendColor color="#2ecc71" />
+        <div className="p-4 bg-slate-50 dark:bg-slate-700/50 border-t border-slate-200 dark:border-slate-700">
+          <div className="flex gap-4 flex-wrap">
+            <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+              <div className="w-4 h-4 rounded bg-green-500"></div>
               Línea de Bonificación
-            </LegendItem>
-            <LegendItem>
-              <LegendColor color="#3498db" />
+            </div>
+            <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+              <div className="w-4 h-4 rounded bg-blue-500"></div>
               Línea que Dispara Promoción
-            </LegendItem>
-            <LegendItem>
-              <LegendColor color="#f39c12" />
+            </div>
+            <div className="flex items-center gap-2 text-sm text-slate-600 dark:text-slate-400">
+              <div className="w-4 h-4 rounded bg-amber-500"></div>
               Promoción Aplicada
-            </LegendItem>
-          </Legend>
-        </TableFooter>
+            </div>
+          </div>
+        </div>
       )}
-    </TableContainer>
+    </div>
   );
 };
 
 export default DetailTableWithPromotions;
-
-// Estilos
-const TableContainer = styled.div`
-  background-color: ${({ theme }) => theme?.cardBg || "#ffffff"};
-  border-radius: 8px;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-  overflow: hidden;
-`;
-
-const TableHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 1rem;
-  background-color: ${({ theme }) => theme?.background || "#f8f9fa"};
-  border-bottom: 1px solid ${({ theme }) => theme?.border || "#eee"};
-`;
-
-const TableTitle = styled.h3`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  margin: 0;
-  font-size: 1.1rem;
-  color: ${({ theme }) => theme?.text || "#333"};
-`;
-
-const PromotionBadge = styled.span`
-  display: flex;
-  align-items: center;
-  gap: 0.25rem;
-  background-color: #2ecc71;
-  color: white;
-  padding: 0.25rem 0.5rem;
-  border-radius: 12px;
-  font-size: 0.8rem;
-  font-weight: 500;
-`;
-
-const TableControls = styled.div`
-  display: flex;
-  gap: 0.5rem;
-`;
-
-const ControlButton = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  padding: 0.5rem 1rem;
-  border: 1px solid ${({ theme }) => theme?.border || "#ccc"};
-  border-radius: 4px;
-  background-color: ${({ active, theme }) =>
-    active ? theme?.primary || "#0275d8" : "white"};
-  color: ${({ active }) => (active ? "white" : "#333")};
-  cursor: pointer;
-  font-size: 0.9rem;
-
-  &:hover {
-    opacity: 0.8;
-  }
-`;
-
-const TableWrapper = styled.div`
-  overflow-x: auto;
-  max-height: 600px;
-  overflow-y: auto;
-`;
-
-const Table = styled.table`
-  width: 100%;
-  border-collapse: collapse;
-  font-size: 0.9rem;
-`;
-
-const Th = styled.th`
-  padding: 0.75rem;
-  text-align: left;
-  background-color: ${({ theme }) => theme?.background || "#f8f9fa"};
-  border-bottom: 1px solid ${({ theme }) => theme?.border || "#eee"};
-  font-weight: 600;
-  color: ${({ theme }) => theme?.textSecondary || "#555"};
-  width: ${({ width }) => width || "auto"};
-  position: sticky;
-  top: 0;
-  z-index: 10;
-`;
-
-const Tr = styled.tr`
-  &:hover {
-    background-color: ${({ theme }) => theme?.hoverBg || "#f8f9fa"};
-  }
-`;
-
-const Td = styled.td`
-  padding: 0.75rem;
-  border-bottom: 1px solid ${({ theme }) => theme?.border || "#eee"};
-  color: ${({ theme }) => theme?.text || "#333"};
-`;
-
-const ReferenceLink = styled.span`
-  color: #3498db;
-  font-weight: 500;
-  cursor: pointer;
-
-  &:hover {
-    text-decoration: underline;
-  }
-`;
-
-const TableFooter = styled.div`
-  padding: 1rem;
-  background-color: ${({ theme }) => theme?.background || "#f8f9fa"};
-  border-top: 1px solid ${({ theme }) => theme?.border || "#eee"};
-`;
-
-const Legend = styled.div`
-  display: flex;
-  gap: 1rem;
-  flex-wrap: wrap;
-`;
-
-const LegendItem = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 0.5rem;
-  font-size: 0.8rem;
-  color: ${({ theme }) => theme?.textSecondary || "#555"};
-`;
-
-const LegendColor = styled.div`
-  width: 16px;
-  height: 16px;
-  border-radius: 2px;
-  background-color: ${({ color }) => color};
-`;

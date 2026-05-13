@@ -1,25 +1,18 @@
-import styled from "styled-components";
+// Layouts base - Migrado a Tailwind
 
-// Layouts base
-export const Container = styled.div`
-  width: 100%;
-  margin: 0;
-  padding: 0 24px;
-  animation: fadeIn 0.4s ease-out;
+// Container
+export const Container = ({ children, className = "" }) => (
+  <div className={`w-full mx-6 lg:mx-8 ${className}`}>
+    {children}
+  </div>
+);
 
-  @keyframes fadeIn {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-
-  @media (max-width: 768px) {
-    padding: 0 10px;
-  }
-`;
-
-export const Section = styled.section`
-  margin-bottom: 40px;
-`;
+// Section
+export const Section = ({ children, className = "" }) => (
+  <section className={`mb-10 ${className}`}>
+    {children}
+  </section>
+);
 
 // Reaprovechar los exportadores para componentes comunes que se buscan en ../index
 // Átomos

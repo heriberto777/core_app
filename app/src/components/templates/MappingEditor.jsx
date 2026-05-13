@@ -1,8 +1,7 @@
 import React, { useState } from "react";
-import styled from "styled-components";
 import { Helmet } from "react-helmet-async";
 import {
-  FaSave, FaTimes, FaPlus, FaEdit, FaTrash, FaTable, FaLink, FaFileAlt, FaCogs, FaChevronDown, FaChevronUp, FaExpand, FaCompress, FaArrowRight
+  FaSave, FaTimes, FaPlus, FaEdit, FaTrash, FaTable, FaLink, FaFileAlt, FaCogs, FaChevronDown, FaChevronUp, FaArrowRight
 } from "react-icons/fa";
 import {
   useAuth,
@@ -20,80 +19,15 @@ import {
   LoadingUI,
   ContentHeader,
   WorkflowConfigSection,
+  Input,
 } from "../../index";
 
 const INITIAL_FIELDS_SHOWN = 8;
 
-// === ESTILOS ( Glassmorphism & Atomic Design ) ===
-const Container = styled.div`
-  display: flex; flex-direction: column; gap: ${({ theme }) => theme.spacing.lg};
-  animation: fadeIn 0.4s ease-out;
-`;
-
-const ActionsBar = styled.div`
-  display: flex; gap: ${({ theme }) => theme.spacing.md};
-  justify-content: flex-end; align-items: center;
-  background: ${({ theme }) => theme.cardBg};
-  padding: ${({ theme }) => theme.spacing.md};
-  border-radius: 12px; border: 1px solid ${({ theme }) => theme.border};
-  backdrop-filter: blur(10px);
-`;
-
-const TabsContainer = styled.div`
-  display: flex; gap: 8px; border-bottom: 1px solid ${({ theme }) => theme.border};
-  padding: 0 10px; overflow-x: auto;
-`;
-
-const Tab = styled.button`
-  padding: 12px 20px; border: none; background: transparent;
-  color: ${({ $active, theme }) => $active ? theme.primary : theme.textSecondary};
-  font-weight: ${({ $active }) => $active ? '600' : '400'};
-  border-bottom: 2px solid ${({ $active, theme }) => $active ? theme.primary : 'transparent'};
-  cursor: pointer; transition: all 0.2s; white-space: nowrap;
-  display: flex; align-items: center; gap: 8px;
-
-  &:hover { color: ${({ theme }) => theme.primary}; background: ${({ theme }) => theme.bg2}40; }
-`;
-
-const ContentCard = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  border-radius: 16px; border: 1px solid ${({ theme }) => theme.border};
-  padding: 24px; box-shadow: ${({ theme }) => theme.shadows.premium};
-  min-height: 400px;
-`;
-
-const FormGrid = styled.div`
-  display: grid; grid-template-columns: repeat(auto-fit, minmax(300px, 1fr)); gap: 24px;
-`;
-
-const FormGroup = styled.div`
-  display: flex; flex-direction: column; gap: 8px;
-`;
-
-const Label = styled.label`
-  font-size: 14px; font-weight: 600; color: ${({ theme }) => theme.textSecondary};
-`;
-
-const Input = styled.input`
-  padding: 10px 14px; border-radius: 10px; border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.inputBg}; color: ${({ theme }) => theme.text};
-  font-size: 14px;
-`;
-
-const Select = styled.select`
-  padding: 10px 14px; border-radius: 10px; border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.inputBg}; color: ${({ theme }) => theme.text};
-`;
-
-const ListCard = styled.div`
-  background: ${({ theme }) => theme.bg2}20; border-radius: 12px;
-  border: 1px solid ${({ theme }) => theme.border}; padding: 16px;
-  display: flex; justify-content: space-between; align-items: center;
-  margin-bottom: 12px; transition: all 0.2s;
-
-  &:hover { border-color: ${({ theme }) => theme.primary}; background: ${({ theme }) => theme.bg2}40; }
-`;
-
+/**
+ * MappingEditor (Tailwind Edition)
+ * Re-diseño corporativo ligero y moderno.
+ */
 export function MappingEditor({ mappingId, onSave, onCancel }) {
   const { accessToken } = useAuth();
   const { consecutives } = useConsecutiveManager(accessToken);
@@ -108,19 +42,13 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
     addValueMapping, removeValueMapping
   } = useMappingEditor(mappingId, accessToken, onSave, onCancel);
 
-  // Estados para Modales
   const [modalState, setModalState] = useState({ type: null, isOpen: false, data: null, extraInfo: null });
 
   const toggleTableExpansion = (tIdx) => {
-    setExpandedTables(prev => ({
-      ...prev,
-      [tIdx]: !prev[tIdx]
-    }));
+    setExpandedTables(prev => ({ ...prev, [tIdx]: !prev[tIdx] }));
   };
 
-  const isTableExpanded = (tIdx) => {
-    return expandedTables[tIdx] === true;
-  };
+  const isTableExpanded = (tIdx) => expandedTables[tIdx] === true;
 
   const openModal = (type, data = null, extraInfo = null) =>
     setModalState({ type, isOpen: true, data, extraInfo });
@@ -129,8 +57,16 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
 
   if (loading) return <LoadingUI message="Cargando configuración de mapeo..." />;
 
+  const tabs = [
+    { id: "general", label: "General", icon: <FaCogs /> },
+    { id: "documentTypes", label: "Tipos Docto", icon: <FaFileAlt /> },
+    { id: "dependencies", label: "Dependencias", icon: <FaLink /> },
+    { id: "tables", label: "Tablas y Campos", icon: <FaTable /> },
+    { id: "workflow", label: "Flujo / Workflow", icon: <FaArrowRight /> },
+  ];
+
   return (
-    <Container>
+    <div className="flex flex-col gap-6 animate-fadeIn">
       <Helmet><title>Editor de Mapeo - Core ERP</title></Helmet>
 
       <ContentHeader
@@ -138,106 +74,93 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         description="Configure la relación entre servidores y el flujo de datos entre entidades del sistema."
       />
 
-      <ActionsBar>
+      {/* BARRA DE ACCIONES */}
+      <div className="flex gap-4 justify-end items-center bg-white p-4 rounded-xl border border-slate-200 shadow-soft backdrop-blur-md">
         <Button variant="secondary" onClick={onCancel}>Cancelar</Button>
         <Button variant="primary" onClick={handleSave} loading={saving}>
           <FaSave /> {saving ? "Guardando..." : "Guardar Configuración"}
         </Button>
-      </ActionsBar>
+      </div>
 
-      <TabsContainer>
-        <Tab $active={activeTab === "general"} onClick={() => setActiveTab("general")}><FaCogs /> General</Tab>
-        <Tab $active={activeTab === "documentTypes"} onClick={() => setActiveTab("documentTypes")}><FaFileAlt /> Tipos Docto</Tab>
-        <Tab $active={activeTab === "dependencies"} onClick={() => setActiveTab("dependencies")}><FaLink /> Dependencias FK</Tab>
-        <Tab $active={activeTab === "tables"} onClick={() => setActiveTab("tables")}><FaTable /> Tablas y Campos</Tab>
-        <Tab $active={activeTab === "workflow"} onClick={() => setActiveTab("workflow")}><FaArrowRight /> Flujo de Trabajo</Tab>
-      </TabsContainer>
+      {/* TABS NAVEGACIÓN */}
+      <div className="flex gap-1 border-b border-slate-200 px-2 overflow-x-auto bg-white/50 rounded-t-xl">
+        {tabs.map(tab => (
+          <button
+            key={tab.id}
+            onClick={() => setActiveTab(tab.id)}
+            className={`
+              flex items-center gap-2 px-6 py-4 text-sm font-semibold transition-all border-b-2
+              ${activeTab === tab.id 
+                ? "text-primary-600 border-primary-600 bg-primary-50/50" 
+                : "text-slate-500 border-transparent hover:text-slate-700 hover:bg-slate-50"}
+            `}
+          >
+            {tab.icon} {tab.label}
+          </button>
+        ))}
+      </div>
 
-      <ContentCard>
+      {/* CONTENIDO PRINCIPAL */}
+      <div className="bg-white rounded-b-xl border border-t-0 border-slate-200 p-8 shadow-soft min-h-[500px]">
         {activeTab === "general" && (
-          <div style={{ display: 'flex', flexDirection: 'column', gap: '32px' }}>
-            <FormGrid>
-              <FormGroup>
-                <Label>Nombre de la Configuración</Label>
-                <Input name="name" value={mapping.name} onChange={handleChange} placeholder="Ej: Pedidos Catelli" />
-              </FormGroup>
-              <FormGroup>
-                <Label>Tipo de Entidad</Label>
-                <Select name="entityType" value={mapping.entityType} onChange={handleChange}>
+          <div className="flex flex-col gap-8 max-w-5xl">
+            <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
+              <Input 
+                label="Nombre de la Configuración" 
+                name="name" 
+                value={mapping.name} 
+                onChange={handleChange} 
+                placeholder="Ej: Pedidos Catelli" 
+              />
+              <div className="flex flex-col gap-1.5 w-full mb-3">
+                <label className="text-[13px] font-semibold text-slate-500 ml-1">Tipo de Entidad</label>
+                <select 
+                  name="entityType" 
+                  value={mapping.entityType} 
+                  onChange={handleChange}
+                  className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 bg-white hover:border-slate-300 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all"
+                >
                   <option value="orders">Pedidos</option>
                   <option value="invoices">Facturas</option>
                   <option value="customers">Clientes</option>
-                </Select>
-              </FormGroup>
-              <FormGroup style={{ justifyContent: 'center' }}>
-                <Label style={{ display: 'flex', alignItems: 'center', gap: '10px', cursor: 'pointer', marginTop: '10px' }}>
-                  <Input
-                    type="checkbox"
-                    name="active"
-                    checked={mapping.active}
-                    onChange={handleChange}
-                    style={{ width: '20px', height: '20px' }}
-                  />
-                  <strong>Configuración Activa</strong>
-                </Label>
-              </FormGroup>
-            </FormGrid>
+                </select>
+              </div>
+              <div className="flex items-center gap-3 pt-6">
+                <input
+                  type="checkbox"
+                  id="active-check"
+                  name="active"
+                  checked={mapping.active}
+                  onChange={handleChange}
+                  className="w-5 h-5 rounded-lg border-slate-300 text-primary-600 focus:ring-primary-500 transition-all cursor-pointer"
+                />
+                <label htmlFor="active-check" className="text-sm font-bold text-slate-700 cursor-pointer">
+                  Configuración Activa
+                </label>
+              </div>
+            </div>
 
-            <FormGrid>
-              <FormGroup>
-                <Label>Servidor Origen</Label>
-                <Select name="sourceServer" value={mapping.sourceServer} onChange={handleChange}>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6 p-6 bg-slate-50/50 rounded-2xl border border-slate-100">
+              <div className="flex flex-col gap-1.5 w-full">
+                <label className="text-[13px] font-semibold text-slate-500 ml-1">Servidor Origen</label>
+                <select name="sourceServer" value={mapping.sourceServer} onChange={handleChange} className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 bg-white focus:border-primary-500 outline-none">
                   <option value="server1">Server 1</option>
                   <option value="server2">Server 2</option>
-                </Select>
-              </FormGroup>
-              <FormGroup>
-                <Label>Servidor Destino</Label>
-                <Select name="targetServer" value={mapping.targetServer} onChange={handleChange}>
+                </select>
+              </div>
+              <div className="flex flex-col gap-1.5 w-full">
+                <label className="text-[13px] font-semibold text-slate-500 ml-1">Servidor Destino</label>
+                <select name="targetServer" value={mapping.targetServer} onChange={handleChange} className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 bg-white focus:border-primary-500 outline-none">
                   <option value="server1">Server 1</option>
                   <option value="server2">Server 2</option>
-                </Select>
-              </FormGroup>
-            </FormGrid>
+                </select>
+              </div>
+            </div>
 
-            <FormGrid>
-              <FormGroup>
-                <Label>Campo Marcado</Label>
-                <Input name="markProcessedField" value={mapping.markProcessedField || ""} onChange={handleChange} placeholder="Ej: IS_PROCESSED" />
-              </FormGroup>
-              <FormGroup>
-                <Label>Valor Marcado</Label>
-                <Input name="markProcessedValue" value={mapping.markProcessedValue || ""} onChange={handleChange} placeholder="Ej: 1" />
-              </FormGroup>
-            </FormGrid>
-
-            <FormGrid>
-              <FormGroup>
-                <Label style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                  <input 
-                    type="checkbox" 
-                    name="markProcessedConfig.includeTimestamp"
-                    checked={mapping.markProcessedConfig?.includeTimestamp || false}
-                    onChange={handleChange} 
-                  />
-                  Incluir Fecha de Procesamiento
-                </Label>
-                <small style={{ color: '#666', fontSize: '11px' }}>
-                  Agregar fecha/hora cuando se marca el documento
-                </small>
-              </FormGroup>
-              {mapping.markProcessedConfig?.includeTimestamp && (
-                <FormGroup>
-                  <Label>Campo de Fecha</Label>
-                  <Input 
-                    name="markProcessedConfig.timestampField" 
-                    value={mapping.markProcessedConfig?.timestampField || ""} 
-                    onChange={handleChange}
-                    placeholder="Ej: LAST_PROCESSED_DATE" 
-                  />
-                </FormGroup>
-              )}
-            </FormGrid>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
+              <Input label="Campo Marcado" name="markProcessedField" value={mapping.markProcessedField || ""} onChange={handleChange} placeholder="Ej: IS_PROCESSED" />
+              <Input label="Valor Marcado" name="markProcessedValue" value={mapping.markProcessedValue || ""} onChange={handleChange} placeholder="Ej: 1" />
+            </div>
 
             <ConsecutiveConfigSection mapping={mapping} handleChange={handleChange} />
             <PromotionConfigSection mapping={mapping} handleChange={handleChange} />
@@ -245,68 +168,67 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         )}
 
         {activeTab === "documentTypes" && (
-          <div>
-            <div style={{ marginBottom: '20px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0 }}>Reglas de Negocio</h3>
-                <Button variant="primary" onClick={() => openModal('docRule')}><FaPlus /> Añadir Regla</Button>
+          <div className="space-y-6">
+            <div className="flex justify-between items-center pb-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Reglas de Negocio</h3>
+                <p className="text-sm text-slate-500 mt-1">Defina condiciones basadas en campos de origen para segmentar lógicas específicas.</p>
               </div>
-              <p style={{ margin: '8px 0 0', opacity: 0.7, fontSize: '14px' }}>
-                Defina condiciones basadas en campos de origen para segmentar o aplicar lógicas específicas a diferentes tipos de documentos.
-              </p>
+              <Button variant="primary" onClick={() => openModal('docRule')}><FaPlus /> Añadir Regla</Button>
             </div>
-            {mapping.documentTypeRules.map((rule, idx) => (
-              <ListCard key={idx}>
-                <div>
-                  <strong>{rule.name}</strong>
-                  <div style={{ fontSize: '12px', color: '#666' }}>{rule.sourceField}: {rule.sourceValues.join(', ')}</div>
+            <div className="grid grid-cols-1 gap-3">
+              {mapping.documentTypeRules.map((rule, idx) => (
+                <div key={idx} className="flex justify-between items-center p-4 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-200 transition-all group">
+                  <div>
+                    <div className="font-bold text-slate-800">{rule.name}</div>
+                    <div className="text-xs text-slate-500 font-medium">{rule.sourceField}: <span className="text-primary-600">{rule.sourceValues.join(', ')}</span></div>
+                  </div>
+                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button variant="ghost" className="bg-white p-2" onClick={() => openModal('docRule', rule, idx)}><FaEdit /></Button>
+                    <Button variant="ghost" className="bg-white p-2 text-red-500 hover:bg-red-50" onClick={() => removeDocumentTypeRule(idx)}><FaTrash /></Button>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <Button variant="ghost" onClick={() => openModal('docRule', rule, idx)}><FaEdit /></Button>
-                  <Button variant="ghost" $danger onClick={() => removeDocumentTypeRule(idx)}><FaTrash /></Button>
-                </div>
-              </ListCard>
-            ))}
+              ))}
+            </div>
           </div>
         )}
 
         {activeTab === "dependencies" && (
-          <div>
-            <div style={{ marginBottom: '20px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0 }}>Integridad Referencial (FK)</h3>
-                <Button variant="primary" onClick={() => openModal('dependency')}><FaPlus /> Añadir Dependencia</Button>
+          <div className="space-y-6">
+            <div className="flex justify-between items-center pb-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Integridad Referencial (FK)</h3>
+                <p className="text-sm text-slate-500 mt-1">Configure las dependencias de claves foráneas para asegurar integridad.</p>
               </div>
-              <p style={{ margin: '8px 0 0', opacity: 0.7, fontSize: '14px' }}>
-                Configure las dependencias de claves foráneas. El sistema asegurará que los registros relacionados existan en el destino antes de procesar el registro principal.
-              </p>
+              <Button variant="primary" onClick={() => openModal('dependency')}><FaPlus /> Añadir Dependencia</Button>
             </div>
-            {mapping.foreignKeyDependencies.map((dep, idx) => (
-              <ListCard key={idx}>
-                <div>
-                  <strong>{dep.fieldName} → {dep.dependentTable}</strong>
-                  <div style={{ fontSize: '12px', color: '#666' }}>Orden: {dep.executionOrder} | {dep.insertIfNotExists ? "Auto-Insertar" : "Validar"}</div>
+            <div className="grid grid-cols-1 gap-3">
+              {mapping.foreignKeyDependencies.map((dep, idx) => (
+                <div key={idx} className="flex justify-between items-center p-4 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-200 transition-all group">
+                  <div>
+                    <div className="font-bold text-slate-800">{dep.fieldName} <span className="text-slate-400 mx-2">→</span> {dep.dependentTable}</div>
+                    <div className="text-xs text-slate-500 font-medium">Orden: {dep.executionOrder} | {dep.insertIfNotExists ? "Auto-Insertar" : "Validar"}</div>
+                  </div>
+                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button variant="ghost" className="bg-white p-2" onClick={() => openModal('dependency', dep, idx)}><FaEdit /></Button>
+                    <Button variant="ghost" className="bg-white p-2 text-red-500 hover:bg-red-50" onClick={() => removeForeignKeyDependency(idx)}><FaTrash /></Button>
+                  </div>
                 </div>
-                <div style={{ display: 'flex', gap: '8px' }}>
-                  <Button variant="ghost" onClick={() => openModal('dependency', dep, idx)}><FaEdit /></Button>
-                  <Button variant="ghost" $danger onClick={() => removeForeignKeyDependency(idx)}><FaTrash /></Button>
-                </div>
-              </ListCard>
-            ))}
+              ))}
+            </div>
           </div>
         )}
 
         {activeTab === "tables" && (
-          <div>
-            <div style={{ marginBottom: '20px' }}>
-              <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center' }}>
-                <h3 style={{ margin: 0 }}>Estructura de Tablas</h3>
-                <Button variant="primary" onClick={() => openModal('table')}><FaPlus /> Añadir Tabla</Button>
+          <div className="space-y-8">
+            <div className="flex justify-between items-center pb-4 border-b border-slate-100">
+              <div>
+                <h3 className="text-xl font-bold text-slate-800">Estructura de Tablas</h3>
+                <p className="text-sm text-slate-500 mt-1">Mapee las tablas de origen con sus correspondientes en el destino.</p>
               </div>
-              <p style={{ margin: '8px 0 0', opacity: 0.7, fontSize: '14px' }}>
-                Mapee las tablas de origen con sus correspondientes en el destino y defina la transformación campo por campo.
-              </p>
+              <Button variant="primary" onClick={() => openModal('table')}><FaPlus /> Añadir Tabla</Button>
             </div>
+            
             {mapping.tableConfigs.map((table, tIdx) => {
               const totalFields = table.fieldMappings?.length || 0;
               const isExpanded = isTableExpanded(tIdx);
@@ -314,83 +236,88 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
               const hiddenFields = totalFields - fieldsToShow;
               
               return (
-              <div key={tIdx} style={{ marginBottom: '32px', border: '1px solid #eee', borderRadius: '16px', padding: '20px' }}>
-                <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '20px' }}>
-                  <div>
-                    <h4 style={{ margin: 0 }}>{table.name} {table.isDetailTable && <StatusBadge status="info">Detalle</StatusBadge>}</h4>
-                    <span style={{ fontSize: '12px', color: '#666' }}>
-                      {table.sourceTable || 'Padre'} → {table.targetTable} 
-                      <span style={{ marginLeft: '8px', color: '#999' }}>({totalFields} campos)</span>
-                    </span>
-                  </div>
-                  <div style={{ display: 'flex', gap: '8px' }}>
-                    <Button variant="ghost" onClick={() => openModal('field', null, { tIdx })}><FaPlus /> Campo</Button>
-                    <Button variant="ghost" onClick={() => openModal('table', table, tIdx)}><FaEdit /></Button>
-                    <Button variant="ghost" $danger onClick={() => removeTable(tIdx)}><FaTrash /></Button>
-                  </div>
-                </div>
-
-                <div style={{ overflowX: 'auto' }}>
-                  <table style={{ width: '100%', borderCollapse: 'collapse', fontSize: '13px' }}>
-                    <thead>
-                      <tr style={{ background: '#f8f9fa', textAlign: 'left', borderBottom: '1px solid #eee' }}>
-                        <th style={{ padding: '12px' }}>Origen</th>
-                        <th style={{ padding: '12px' }}>Destino</th>
-                        <th style={{ padding: '12px' }}>Tipo</th>
-                        <th style={{ padding: '12px' }}>Lookup</th>
-                        <th style={{ padding: '12px' }}>Consecutivo</th>
-                        <th style={{ padding: '12px' }}>Mapeos</th>
-                        <th style={{ padding: '12px' }}>Acciones</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {table.fieldMappings?.slice(0, fieldsToShow).map((field, fIdx) => (
-                        <tr key={fIdx} style={{ borderBottom: '1px solid #eee' }}>
-                          <td style={{ padding: '12px' }}>{field.sourceField || <span style={{ opacity: 0.5 }}>-</span>}</td>
-                          <td style={{ padding: '12px' }}><strong>{field.targetField}</strong> {field.isRequired && <span style={{ color: 'red' }}>*</span>}</td>
-                          <td style={{ padding: '12px' }}>{field.fieldType}</td>
-                          <td style={{ padding: '12px' }}>{field.lookupFromTarget ? <StatusBadge status="active">Sí</StatusBadge> : '-'}</td>
-                          <td style={{ padding: '12px' }}>
-                            {field.isConsecutive
-                              ? <StatusBadge status="warning">🔢 Secuencia</StatusBadge>
-                              : <span style={{ opacity: 0.4 }}>-</span>}
-                          </td>
-                          <td style={{ padding: '12px' }}>
-                            <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                              <span>{field.valueMappings?.length || 0}</span>
-                              <Button variant="ghost" style={{ padding: '4px' }} onClick={() => openModal('value', null, { tIdx, fIdx })}><FaPlus /></Button>
-                            </div>
-                          </td>
-                          <td style={{ padding: '12px' }}>
-                            <div style={{ display: 'flex', gap: '4px' }}>
-                              <Button variant="ghost" style={{ padding: '4px' }} onClick={() => openModal('field', field, { tIdx, fIdx })}><FaEdit /></Button>
-                              <Button variant="ghost" $danger style={{ padding: '4px' }} onClick={() => removeFieldMapping(tIdx, fIdx)}><FaTrash /></Button>
-                            </div>
-                          </td>
-                        </tr>
-                      ))}
-                    </tbody>
-                  </table>
-                  
-                  {totalFields > INITIAL_FIELDS_SHOWN && (
-                    <div style={{ 
-                      display: 'flex', 
-                      justifyContent: 'center', 
-                      alignItems: 'center', 
-                      padding: '12px',
-                      marginTop: '8px',
-                      background: '#f8f9fa',
-                      borderRadius: '8px',
-                      cursor: 'pointer'
-                    }} onClick={() => toggleTableExpansion(tIdx)}>
-                      <Button variant="ghost" style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                        {isExpanded ? <><FaChevronUp /> Mostrar menos</> : <><FaChevronDown /> Mostrar {hiddenFields} campos más</>}
-                      </Button>
+                <div key={tIdx} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
+                  {/* TABLA HEADER */}
+                  <div className="p-5 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
+                    <div className="flex items-center gap-4">
+                      <div className="w-10 h-10 rounded-xl bg-primary-100 text-primary-600 flex items-center justify-center">
+                        <FaTable size={20} />
+                      </div>
+                      <div>
+                        <h4 className="text-lg font-bold text-slate-800 flex items-center gap-2">
+                          {table.name} 
+                          {table.isDetailTable && <span className="px-2 py-0.5 bg-sky-100 text-sky-700 text-[10px] font-bold uppercase rounded-full">Detalle</span>}
+                        </h4>
+                        <div className="text-xs text-slate-500 font-medium">
+                          {table.sourceTable || 'Padre'} <span className="text-slate-300 mx-1">→</span> {table.targetTable} 
+                          <span className="ml-3 text-primary-500">({totalFields} campos)</span>
+                        </div>
+                      </div>
                     </div>
+                    <div className="flex gap-2">
+                      <Button variant="ghost" size="sm" className="bg-white" onClick={() => openModal('field', null, { tIdx })}><FaPlus /> Campo</Button>
+                      <Button variant="ghost" size="sm" className="bg-white" onClick={() => openModal('table', table, tIdx)}><FaEdit /></Button>
+                      <Button variant="ghost" size="sm" className="bg-white text-red-500 hover:bg-red-50" onClick={() => removeTable(tIdx)}><FaTrash /></Button>
+                    </div>
+                  </div>
+
+                  {/* TABLA FIELDS */}
+                  <div className="overflow-x-auto">
+                    <table className="w-full text-left text-sm">
+                      <thead>
+                        <tr className="bg-slate-50 text-slate-400 font-bold border-b border-slate-100">
+                          <th className="px-6 py-3 font-bold uppercase text-[10px] tracking-wider">Origen</th>
+                          <th className="px-6 py-3 font-bold uppercase text-[10px] tracking-wider">Destino</th>
+                          <th className="px-6 py-3 font-bold uppercase text-[10px] tracking-wider">Tipo</th>
+                          <th className="px-6 py-3 font-bold uppercase text-[10px] tracking-wider">Config</th>
+                          <th className="px-6 py-3 font-bold uppercase text-[10px] tracking-wider text-right">Acciones</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-50">
+                        {table.fieldMappings?.slice(0, fieldsToShow).map((field, fIdx) => (
+                          <tr key={fIdx} className="hover:bg-slate-50/50 transition-colors">
+                            <td className="px-6 py-3 text-slate-500 italic">{field.sourceField || "-"}</td>
+                            <td className="px-6 py-3">
+                              <span className="font-bold text-slate-700">{field.targetField}</span>
+                              {field.isRequired && <span className="text-red-500 ml-1">*</span>}
+                            </td>
+                            <td className="px-6 py-3"><span className="px-2 py-0.5 bg-slate-100 text-slate-600 rounded text-[11px] font-medium">{field.fieldType}</span></td>
+                            <td className="px-6 py-3">
+                              <div className="flex gap-2">
+                                {field.lookupFromTarget && <span className="px-2 py-0.5 bg-indigo-50 text-indigo-600 rounded text-[10px] font-bold uppercase">Lookup</span>}
+                                {field.isConsecutive && <span className="px-2 py-0.5 bg-amber-50 text-amber-600 rounded text-[10px] font-bold uppercase"># Seq</span>}
+                              </div>
+                            </td>
+                            <td className="px-6 py-3 text-right">
+                              <div className="flex gap-1 justify-end">
+                                <button className="p-1.5 text-slate-400 hover:text-primary-500 hover:bg-primary-50 rounded-lg transition-all" title="Mapeos de valor" onClick={() => openModal('value', null, { tIdx, fIdx })}>
+                                  <span className="text-[10px] font-bold mr-1">{field.valueMappings?.length || 0}</span><FaPlus size={10} />
+                                </button>
+                                <button className="p-1.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all" onClick={() => openModal('field', field, { tIdx, fIdx })}>
+                                  <FaEdit size={14} />
+                                </button>
+                                <button className="p-1.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" onClick={() => removeFieldMapping(tIdx, fIdx)}>
+                                  <FaTrash size={14} />
+                                </button>
+                              </div>
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+
+                  {totalFields > INITIAL_FIELDS_SHOWN && (
+                    <button 
+                      onClick={() => toggleTableExpansion(tIdx)}
+                      className="w-full py-3 bg-slate-50/50 text-slate-500 text-xs font-bold hover:bg-slate-100 transition-all flex justify-center items-center gap-2 border-t border-slate-100"
+                    >
+                      {isExpanded ? <><FaChevronUp /> Mostrar menos</> : <><FaChevronDown /> Mostrar {hiddenFields} campos más</>}
+                    </button>
                   )}
                 </div>
-              </div>
-            )})}
+              );
+            })}
           </div>
         )}
 
@@ -401,9 +328,9 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
             accessToken={accessToken} 
           />
         )}
-      </ContentCard>
+      </div>
 
-      {/* RENDER DE MODALES */}
+      {/* MODALES */}
       <TableConfigModal
         isOpen={modalState.isOpen && modalState.type === 'table'}
         initialData={modalState.data}
@@ -438,6 +365,6 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
         onClose={closeModal}
         onSave={(data) => addValueMapping(modalState.extraInfo.tIdx, modalState.extraInfo.fIdx, data)}
       />
-    </Container>
+    </div>
   );
 }

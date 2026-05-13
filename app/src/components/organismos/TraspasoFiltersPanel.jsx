@@ -1,132 +1,14 @@
-import React, { useState, useEffect } from "react";
-import styled from "styled-components";
-import { FaSearch, FaRedo, FaFilter, FaChevronDown, FaChevronUp } from "react-icons/fa";
+import React, { useState } from "react";
+import { FaSearch, FaRedo, FaFilter, FaChevronDown, FaChevronUp, FaCalendarAlt } from "react-icons/fa";
 import { Button } from "../index";
-
-const GlassCard = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  backdrop-filter: blur(10px);
-  border: 1px solid ${({ theme }) => theme.border};
-  border-radius: 20px;
-  overflow: hidden;
-  margin-bottom: 24px;
-  box-shadow: ${({ theme }) => theme.shadows.soft};
-`;
-
-const Header = styled.div`
-  padding: 16px 24px;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  cursor: pointer;
-  border-bottom: ${props => props.expanded ? `1px solid ${props.theme.border}40` : "none"};
-  background: ${({ theme }) => theme.bg2}20;
-`;
-
-const Title = styled.h3`
-  margin: 0;
-  font-size: 15px;
-  font-weight: 700;
-  color: ${({ theme }) => theme.titleColor};
-  display: flex;
-  align-items: center;
-  gap: 10px;
-`;
-
-const Content = styled.div`
-  padding: 24px;
-  display: ${props => props.expanded ? "block" : "none"};
-`;
-
-const Grid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(220px, 1fr));
-  gap: 20px;
-  margin-bottom: 24px;
-`;
-
-const Field = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-`;
-
-const Label = styled.label`
-  font-size: 13px;
-  font-weight: 700;
-  color: ${({ theme }) => theme.textSecondary};
-  opacity: 0.9;
-`;
-
-const Input = styled.input`
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.inputBg};
-  color: ${({ theme }) => theme.text};
-  font-size: 14px;
-  transition: all 0.2s;
-
-  &:focus {
-    outline: none;
-    border-color: ${({ theme }) => theme.primary};
-    box-shadow: 0 0 0 3px ${({ theme }) => theme.primary}20;
-  }
-`;
-
-const Select = styled.select`
-  padding: 10px 14px;
-  border-radius: 10px;
-  border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.inputBg};
-  color: ${({ theme }) => theme.text};
-  font-size: 14px;
-`;
-
-const Actions = styled.div`
-  display: flex;
-  justify-content: flex-end;
-  gap: 12px;
-  padding-top: 20px;
-  border-top: 1px solid ${({ theme }) => theme.border}40;
-`;
-
-const QuickFilters = styled.div`
-  display: flex;
-  gap: 8px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-`;
-
-const Badge = styled.button`
-  padding: 8px 16px;
-  border-radius: 10px;
-  font-size: 12px;
-  font-weight: 700;
-  border: 1px solid ${props => props.active ? props.theme.primary : props.theme.border};
-  background: ${props => props.active ? props.theme.primary : props.theme.bg2}40;
-  color: ${props => props.active ? "white" : props.theme.textSecondary};
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    background: ${props => props.active ? props.theme.primaryDark : props.theme.bg2};
-    color: ${props => props.active ? "white" : props.theme.primary};
-  }
-`;
 
 export const TraspasoFiltersPanel = ({ filters, onFiltersChange, onReset, onSearch, loading, metadata }) => {
   const [isExpanded, setIsExpanded] = useState(true);
-  // No necesitamos estado local si queremos reactividad pura, 
-  // pero mantendremos el patrón de 'apply' para evitar peticiones excesivas
-  // si el usuario así lo prefiere. Sin embargo, para solucionar el bug reportado,
-  // dispararemos el cambio inmediatamente.
 
   const handleChange = (e) => {
     const { name, value } = e.target;
     const newFilters = { ...filters, [name]: value };
     onFiltersChange(newFilters);
-    // disparar búsqueda automática al cambiar ciertos filtros (loadId podría necesitar debounce)
     if (name !== "loadId") {
       onSearch();
     }
@@ -141,61 +23,125 @@ export const TraspasoFiltersPanel = ({ filters, onFiltersChange, onReset, onSear
   };
 
   return (
-    <GlassCard>
-      <Header expanded={isExpanded} onClick={() => setIsExpanded(!isExpanded)}>
-        <Title><FaFilter /> Filtros de Auditoría</Title>
-        {isExpanded ? <FaChevronUp /> : <FaChevronDown />}
-      </Header>
+    <div className={`bg-white/70 backdrop-blur-md border border-slate-200 rounded-[32px] overflow-hidden mb-8 shadow-sm transition-all duration-500 animate-in fade-in slide-in-from-top-4 ${isExpanded ? "ring-1 ring-slate-100" : ""}`}>
+      {/* Header */}
+      <div 
+        className={`px-8 py-5 flex justify-between items-center cursor-pointer transition-colors ${isExpanded ? "bg-slate-50/80 border-b border-slate-100" : "bg-white hover:bg-slate-50"}`}
+        onClick={() => setIsExpanded(!isExpanded)}
+      >
+        <div className="flex items-center gap-4">
+          <div className={`w-8 h-8 rounded-lg flex items-center justify-center transition-colors ${isExpanded ? "bg-blue-600 text-white shadow-lg shadow-blue-600/20" : "bg-slate-100 text-slate-400"}`}>
+            <FaFilter className="text-xs" />
+          </div>
+          <h3 className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900">
+            Filtros de Auditoría
+          </h3>
+        </div>
+        <div className="text-slate-400">
+          {isExpanded ? <FaChevronUp className="text-xs" /> : <FaChevronDown className="text-xs" />}
+        </div>
+      </div>
 
-      <Content expanded={isExpanded}>
-        <QuickFilters>
-          <Badge active={false} onClick={() => setPeriod(0)}>Hoy</Badge>
-          <Badge active={false} onClick={() => setPeriod(7)}>Última Semana</Badge>
-          <Badge active={false} onClick={() => setPeriod(30)}>Último Mes</Badge>
-        </QuickFilters>
+      {/* Content */}
+      {isExpanded && (
+        <div className="p-8 animate-in slide-in-from-top-2 duration-300">
+          <div className="flex flex-col gap-8">
+            {/* Quick Filters */}
+            <div className="flex flex-col gap-4">
+              <span className="text-[10px] font-black uppercase tracking-widest text-slate-400 flex items-center gap-2">
+                <FaCalendarAlt className="text-[10px]" /> Periodos Rápidos
+              </span>
+              <div className="flex gap-3 flex-wrap">
+                {[
+                  { label: "Hoy", days: 0 },
+                  { label: "Última Semana", days: 7 },
+                  { label: "Último Mes", days: 30 }
+                ].map((p) => (
+                  <button
+                    key={p.label}
+                    onClick={() => setPeriod(p.days)}
+                    className="px-5 py-2.5 rounded-xl text-[10px] font-black uppercase tracking-wider transition-all border border-slate-100 bg-white text-slate-500 hover:border-blue-500 hover:text-blue-600 hover:shadow-lg hover:shadow-blue-500/10 active:scale-95"
+                  >
+                    {p.label}
+                  </button>
+                ))}
+              </div>
+            </div>
 
-        <Grid>
-          <Field>
-            <Label>Load ID / Documento</Label>
-            <Input
-              name="loadId"
-              placeholder="Ej: 20240310..."
-              value={filters.loadId || ""}
-              onChange={handleChange}
-            />
-          </Field>
+            {/* Grid Filters */}
+            <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-1">Load ID / Documento</label>
+                <input
+                  name="loadId"
+                  className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50/50 font-bold transition-all placeholder:text-slate-300"
+                  placeholder="Ej: 20240310..."
+                  value={filters.loadId || ""}
+                  onChange={handleChange}
+                />
+              </div>
 
-          <Field>
-            <Label>Estado</Label>
-            <Select name="status" value={filters.status || "all"} onChange={handleChange}>
-              <option value="all">Todos</option>
-              <option value="completed">Completados</option>
-              <option value="pending">Pendientes</option>
-              <option value="processing">Procesando</option>
-              <option value="failed">Fallidos</option>
-            </Select>
-          </Field>
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-1">Estado</label>
+                <select 
+                  name="status" 
+                  className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50/50 font-bold transition-all appearance-none"
+                  value={filters.status || "all"} 
+                  onChange={handleChange}
+                >
+                  <option value="all">Todos los registros</option>
+                  <option value="completed">Completados</option>
+                  <option value="pending">Pendientes</option>
+                  <option value="processing">Procesando</option>
+                  <option value="failed">Fallidos</option>
+                </select>
+              </div>
 
-          <Field>
-            <Label>Desde</Label>
-            <Input type="date" name="dateFrom" value={filters.dateFrom || ""} onChange={handleChange} />
-          </Field>
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-1">Desde</label>
+                <input 
+                  type="date" 
+                  name="dateFrom" 
+                  className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50/50 font-bold transition-all"
+                  value={filters.dateFrom || ""} 
+                  onChange={handleChange} 
+                />
+              </div>
 
-          <Field>
-            <Label>Hasta</Label>
-            <Input type="date" name="dateTo" value={filters.dateTo || ""} onChange={handleChange} />
-          </Field>
-        </Grid>
+              <div className="flex flex-col gap-2">
+                <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-1">Hasta</label>
+                <input 
+                  type="date" 
+                  name="dateTo" 
+                  className="w-full px-4 py-3.5 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50/50 font-bold transition-all"
+                  value={filters.dateTo || ""} 
+                  onChange={handleChange} 
+                />
+              </div>
+            </div>
 
-        <Actions>
-          <Button variant="outline" onClick={onReset} disabled={loading}>
-            <FaRedo /> Limpiar
-          </Button>
-          <Button variant="primary" onClick={onSearch} loading={loading}>
-            <FaSearch /> Filtrar Traspasos
-          </Button>
-        </Actions>
-      </Content>
-    </GlassCard>
+            {/* Actions */}
+            <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
+              <Button 
+                variant="ghost" 
+                onClick={onReset} 
+                disabled={loading}
+                className="px-6 font-bold"
+              >
+                <FaRedo className="mr-2 text-xs" /> Limpiar Filtros
+              </Button>
+              <Button 
+                variant="primary" 
+                onClick={onSearch} 
+                loading={loading}
+                className="px-10 shadow-lg shadow-blue-600/20"
+              >
+                <FaSearch className="mr-2 text-xs" /> Buscar Traspasos
+              </Button>
+            </div>
+          </div>
+        </div>
+      )}
+    </div>
   );
 };

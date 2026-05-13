@@ -1,73 +1,6 @@
 import React, { useState, useEffect } from "react";
-import styled from "styled-components";
-import { FaDatabase, FaServer, FaUser, FaLock, FaNetworkWired, FaCheckCircle, FaTimesCircle, FaTrash, FaShieldAlt } from "react-icons/fa";
+import { FaDatabase, FaServer, FaUser, FaLock, FaNetworkWired, FaCheckCircle, FaTimesCircle, FaShieldAlt, FaTimes } from "react-icons/fa";
 import { Button, Input, Select } from "../index";
-
-const Overlay = styled.div`
-  position: fixed;
-  inset: 0;
-  background: rgba(15, 23, 42, 0.4);
-  backdrop-filter: blur(8px);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  padding: 20px;
-`;
-
-const Modal = styled.div`
-  background: ${({ theme }) => theme.cardBg || "white"};
-  width: 100%;
-  max-width: 600px;
-  border-radius: 24px;
-  overflow: hidden;
-  box-shadow: ${({ theme }) => theme.shadows.premium};
-  border: 1px solid ${({ theme }) => theme.border};
-`;
-
-const Header = styled.div`
-  background: ${({ theme }) => theme.bg2 || "#f8fafc"};
-  padding: 24px;
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  border-bottom: 1px solid ${({ theme }) => theme.border || "#e2e8f0"};
-
-  h2 {
-    font-size: 20px;
-    font-weight: 900;
-    color: ${({ theme }) => theme.titleColor || "#1e293b"};
-    display: flex;
-    align-items: center;
-    gap: 12px;
-  }
-`;
-
-const Form = styled.form`
-  padding: 24px;
-`;
-
-const FormGroup = styled.div`
-  margin-bottom: 20px;
-`;
-
-const Label = styled.label`
-  display: block;
-  font-size: 11px;
-  font-weight: 800;
-  color: #94a3b8;
-  text-transform: uppercase;
-  margin-bottom: 8px;
-`;
-
-const Footer = styled.div`
-  padding: 24px;
-  background: ${({ theme }) => theme.bg2 || "#f8fafc"};
-  display: flex;
-  justify-content: space-between;
-  gap: 12px;
-  border-top: 1px solid ${({ theme }) => theme.border || "#e2e8f0"};
-`;
 
 export const DBConnectionModal = ({ isOpen, onClose, onSave, onTest, initialData = null }) => {
     const [formData, setFormData] = useState({
@@ -77,7 +10,7 @@ export const DBConnectionModal = ({ isOpen, onClose, onSave, onTest, initialData
         password: "",
         database: "",
         port: "1433",
-        encrypt: true,
+        mssqlEncrypt: true,
         trustServerCertificate: true,
         connectTimeout: 30000,
         type: "mssql"
@@ -91,7 +24,7 @@ export const DBConnectionModal = ({ isOpen, onClose, onSave, onTest, initialData
         if (initialData) setFormData(initialData);
         else setFormData({
             serverName: "", host: "", user: "", password: "", database: "",
-            port: "1433", encrypt: true, trustServerCertificate: true,
+            port: "1433", mssqlEncrypt: true, trustServerCertificate: true,
             connectTimeout: 30000, type: "mssql"
         });
         setTestResult(null);
@@ -122,105 +55,129 @@ export const DBConnectionModal = ({ isOpen, onClose, onSave, onTest, initialData
     };
 
     return (
-        <Overlay>
-            <Modal>
-                <Header>
-                    <h2><FaDatabase /> {initialData ? "Editar Conexión" : "Nueva Conexión"}</h2>
-                    <Button variant="ghost" onClick={onClose}>✕</Button>
-                </Header>
+        <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[1000] p-4 animate-in fade-in duration-300">
+            <div className="bg-white w-full max-w-[650px] rounded-[32px] overflow-hidden shadow-2xl border border-slate-100 flex flex-col animate-in zoom-in-95 duration-300">
+                {/* Header */}
+                <div className="px-8 py-7 bg-white/80 backdrop-blur-md border-b border-slate-50 flex items-center justify-between">
+                    <div className="flex items-center gap-4">
+                        <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-slate-900/20">
+                            <FaDatabase className="text-xl" />
+                        </div>
+                        <div className="flex flex-col">
+                            <h2 className="text-xl font-black text-slate-900 leading-tight">Configuración de Nodo</h2>
+                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Sincronización de Base de Datos</span>
+                        </div>
+                    </div>
+                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+                        <FaTimes />
+                    </button>
+                </div>
 
-                <Form>
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                {/* Body */}
+                <div className="p-8 space-y-8 flex-1 overflow-y-auto">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <Input
-                            label="Nombre Identificador"
+                            label="NOMBRE IDENTIFICADOR"
                             icon={FaDatabase}
-                            placeholder="Ej: Produccion_Z"
+                            placeholder="Ej: Produccion_Central"
                             value={formData.serverName}
                             onChange={e => setFormData({ ...formData, serverName: e.target.value })}
                             disabled={initialData}
+                            className="rounded-2xl border-slate-200 font-bold"
                         />
 
                         <Select
-                            label="Tipo de BD"
+                            label="MOTOR DE BASE DE DATOS"
                             icon={FaShieldAlt}
                             value={formData.type}
                             onChange={e => setFormData({ ...formData, type: e.target.value })}
+                            className="rounded-2xl border-slate-200 font-bold appearance-none bg-white"
                         >
-                            <option value="mssql">SQL Server</option>
-                            <option value="mysql">MySQL</option>
+                            <option value="mssql">SQL Server (Mando)</option>
+                            <option value="mysql">MySQL / MariaDB</option>
                             <option value="postgres">PostgreSQL</option>
                         </Select>
                     </div>
 
                     <Input
-                        label="Host / IP del Servidor"
+                        label="HOST / IP DEL SERVIDOR"
                         icon={FaServer}
-                        placeholder="192.168.1.100"
+                        placeholder="ej: 192.168.1.100"
                         value={formData.host}
                         onChange={e => setFormData({ ...formData, host: e.target.value })}
+                        className="rounded-2xl border-slate-200 font-bold"
                     />
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1.5fr', gap: '16px' }}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <Input
-                            label="Puerto"
+                            label="PUERTO DE RED"
                             icon={FaNetworkWired}
                             value={formData.port}
                             onChange={e => setFormData({ ...formData, port: e.target.value })}
+                            className="rounded-2xl border-slate-200 font-bold"
                         />
                         <Input
-                            label="Base de Datos"
+                            label="INSTANCIA / CATÁLOGO"
                             icon={FaDatabase}
                             value={formData.database}
                             onChange={e => setFormData({ ...formData, database: e.target.value })}
+                            className="rounded-2xl border-slate-200 font-bold"
                         />
                     </div>
 
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '16px' }}>
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <Input
-                            label="Usuario"
+                            label="USUARIO DE ACCESO"
                             icon={FaUser}
                             value={formData.user}
                             onChange={e => setFormData({ ...formData, user: e.target.value })}
+                            className="rounded-2xl border-slate-200 font-bold"
                         />
                         <Input
-                            label="Contraseña"
+                            label="CLAVE DE SEGURIDAD"
                             icon={FaLock}
                             type="password"
                             value={formData.password}
                             onChange={e => setFormData({ ...formData, password: e.target.value })}
+                            className="rounded-2xl border-slate-200 font-bold"
                         />
                     </div>
 
                     {testResult && (
-                        <div style={{
-                            padding: '12px',
-                            borderRadius: '12px',
-                            background: testResult.success ? '#ecfdf5' : '#fef2f2',
-                            color: testResult.success ? '#065f46' : '#991b1b',
-                            fontSize: '13px',
-                            marginBottom: '16px',
-                            display: 'flex',
-                            alignItems: 'center',
-                            gap: '8px'
-                        }}>
-                            {testResult.success ? <FaCheckCircle /> : <FaTimesCircle />}
-                            {testResult.message}
+                        <div className={`p-5 rounded-2xl border flex items-center gap-4 animate-in slide-in-from-top-4 duration-300 ${
+                            testResult.success ? "bg-emerald-50 border-emerald-100 text-emerald-800" : "bg-red-50 border-red-100 text-red-800"
+                        }`}>
+                            <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-white ${testResult.success ? "bg-emerald-500" : "bg-red-500"}`}>
+                                {testResult.success ? <FaCheckCircle /> : <FaTimesCircle />}
+                            </div>
+                            <span className="text-sm font-bold">{testResult.message}</span>
                         </div>
                     )}
-                </Form>
+                </div>
 
-                <Footer>
-                    <Button variant="outline" onClick={handleTest} loading={testing}>
-                        Probar Conexión
+                {/* Footer */}
+                <div className="px-8 py-6 bg-slate-50/50 backdrop-blur-md border-t border-slate-100 flex justify-between gap-3">
+                    <Button 
+                        variant="outline" 
+                        onClick={handleTest} 
+                        loading={testing}
+                        className="px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] border-slate-200 hover:bg-white transition-all"
+                    >
+                        Validar Conectividad
                     </Button>
-                    <div style={{ display: 'flex', gap: '8px' }}>
-                        <Button variant="ghost" onClick={onClose}>Cancelar</Button>
-                        <Button variant="primary" onClick={handleSave} loading={saving}>
-                            Guardar Configuración
+                    <div className="flex gap-3">
+                        <Button variant="ghost" onClick={onClose} className="font-bold">Cancelar</Button>
+                        <Button 
+                            variant="primary" 
+                            onClick={handleSave} 
+                            loading={saving}
+                            className="px-10 py-3 shadow-lg shadow-slate-900/20 font-black text-[10px] uppercase tracking-[0.2em] bg-slate-900 hover:bg-black border-none"
+                        >
+                            Guardar Nodo
                         </Button>
                     </div>
-                </Footer>
-            </Modal>
-        </Overlay>
+                </div>
+            </div>
+        </div>
     );
 };

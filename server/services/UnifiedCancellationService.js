@@ -163,7 +163,6 @@ class UnifiedCancellationService {
   updateTaskInDatabaseAsync(taskId, updates) {
     // Cargar módulos solo cuando sea necesario para evitar dependencias circulares
     const TransferTask = require("../models/transferTaskModel");
-    const TaskExecution = require("../models/taskExecutionModel");
 
     // Verificar si es un ID válido de MongoDB
     const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(taskId);
@@ -213,20 +212,17 @@ class UnifiedCancellationService {
           { new: true }
         );
 
-        // Si hay registro de ejecución, actualizarlo también
-        if (updates.metadata?.executionId) {
-          await TaskExecution.findByIdAndUpdate(
-            updates.metadata.executionId,
-            {
+        // Registro centralizado de la acción de cancelación/finalización en logs
+        if (updates.status === "cancelled" || updates.status === "failed") {
+          logger.info(`⏹️ Estado de tarea ${taskId} actualizado a ${updates.status}`, {
+            operationType: "SYSTEM",
+            entityType: "TAREA",
+            taskId: taskId.toString(),
+            metadata: { 
               status: updates.status,
-              endTime: updates.endTime ? new Date(updates.endTime) : undefined,
-              executionTime: updates.endTime
-                ? updates.endTime - updates.startTime
-                : undefined,
-              errorMessage: updates.cancelReason || updates.result?.error || "",
-            },
-            { new: true }
-          );
+              reason: updates.cancelReason || updates.result?.message
+            }
+          });
         }
       })
       .catch((error) => {

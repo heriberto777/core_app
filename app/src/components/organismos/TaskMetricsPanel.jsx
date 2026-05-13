@@ -1,17 +1,10 @@
 import React from "react";
-import styled from "styled-components";
 import { FaChartLine, FaCheckCircle, FaExclamationCircle, FaPlay } from "react-icons/fa";
-import { StatCard, Button } from "../../index";
 
-const MetricsContainer = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: ${({ theme }) => theme.spacing.md};
-  margin-bottom: ${({ theme }) => theme.spacing.lg};
-  width: 100%;
-`;
-
-export const TaskMetricsPanel = ({ tasks = [] }) => {
+/**
+ * Corporate TaskMetricsPanel (Tailwind Edition)
+ */
+export const TaskMetricsPanel = ({ tasks = [], className = "" }) => {
     const stats = React.useMemo(() => {
         return tasks.reduce((acc, task) => {
             acc.total++;
@@ -23,8 +16,26 @@ export const TaskMetricsPanel = ({ tasks = [] }) => {
         }, { total: 0, running: 0, completed: 0, error: 0, active: 0 });
     }, [tasks]);
 
+    const StatCard = ({ title, value, icon, color, description, trend }) => (
+        <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col gap-2">
+            <div className="flex items-center gap-2">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-lg" style={{ backgroundColor: `${color}20`, color }}>
+                    {icon}
+                </div>
+                <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">{title}</span>
+            </div>
+            <div className="text-2xl font-extrabold text-slate-800">{value}</div>
+            {description && <div className="text-xs text-slate-500">{description}</div>}
+            {trend && (
+                <div className={`text-xs font-semibold ${trend.isPositive ? 'text-emerald-600' : 'text-red-500'}`}>
+                    {trend.value}
+                </div>
+            )}
+        </div>
+    );
+
     return (
-        <MetricsContainer>
+        <div className={`grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4 mb-6 w-full ${className}`}>
             <StatCard
                 title="Total Tareas"
                 value={stats.total}
@@ -53,6 +64,6 @@ export const TaskMetricsPanel = ({ tasks = [] }) => {
                 color="#C62828"
                 trend={{ value: "Revisar logs", isPositive: false }}
             />
-        </MetricsContainer>
+        </div>
     );
 };
