@@ -33,9 +33,9 @@ export const StatCard = ({
                 </h3>
             </div>
             
-            <div 
+            <div
               className="text-2xl font-extrabold text-slate-800 tracking-tight"
-              style={color ? { color } : {}}
+              style={{ color: color }}
             >
               {value}
             </div>

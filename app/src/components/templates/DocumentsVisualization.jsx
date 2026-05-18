@@ -75,7 +75,23 @@ export function DocumentsVisualization() {
   const handleViewDetails = async (doc) => {
     try {
       setSelectedDoc(doc);
-      const id = doc[Object.keys(doc)[0]];
+      
+      let idField = Object.keys(doc)[0];
+      if (activeConfig?.tableConfigs && activeConfig.tableConfigs.length > 0) {
+          const mainTable = activeConfig.tableConfigs[0];
+          if (mainTable.primaryKey) {
+              if (doc[mainTable.primaryKey] !== undefined) {
+                  idField = mainTable.primaryKey;
+              } else {
+                  const pkMap = mainTable.fieldMappings?.find(fm => fm.sourceField === mainTable.primaryKey);
+                  if (pkMap && doc[pkMap.targetField] !== undefined) {
+                      idField = pkMap.targetField;
+                  }
+              }
+          }
+      }
+      
+      const id = doc[idField];
       const details = await getDocumentDetails(id);
       setDocDetailsData(details);
       setIsDetailsOpen(true);
@@ -237,6 +253,7 @@ export function DocumentsVisualization() {
         onClose={() => setIsDetailsOpen(false)}
         document={selectedDoc}
         details={docDetailsData}
+        config={activeConfig}
       />
 
       <ProcessingResultsModal

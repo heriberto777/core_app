@@ -49,26 +49,6 @@ const Spinner = ({ size = "medium", color = "#28a745" }) => {
           }}
         ></div>
       </div>
-
-      {/* Estilos para las animaciones */}
-      <style jsx>{`
-        @keyframes spin {
-          0% {
-            transform: rotate(0deg);
-          }
-          100% {
-            transform: rotate(360deg);
-          }
-        }
-        @keyframes spin-reverse {
-          0% {
-            transform: rotate(0deg);
-          }
-          100% {
-            transform: rotate(-360deg);
-          }
-        }
-      `}</style>
     </div>
   );
 };

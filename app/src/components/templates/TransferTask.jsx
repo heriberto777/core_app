@@ -34,9 +34,9 @@ function ModalOverlay({ children, onClick }) {
 
 function ModalContent({ children, onClick, style }) {
   return (
-    <div 
+    <div
       className="bg-white w-[90%] max-w-[800px] max-h-[90vh] rounded-xl overflow-hidden flex flex-col shadow-2xl"
-      style={style}
+      style={{ ...style, display: 'flex', flexDirection: 'column', height: '100%' }}
       onClick={e => e.stopPropagation()}
     >
       {children}
@@ -46,9 +46,9 @@ function ModalContent({ children, onClick, style }) {
 
 function ModalHeader({ children, style }) {
   return (
-    <div 
+    <div
       className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50"
-      style={style}
+      style={{ ...style, display: 'flex', alignItems: 'center' }}
     >
       {children}
     </div>
@@ -57,7 +57,7 @@ function ModalHeader({ children, style }) {
 
 function ModalBody({ children, style }) {
   return (
-    <div className="p-5 overflow-y-auto" style={style}>
+    <div className="p-5 overflow-y-auto" style={{ ...style, display: 'block' }}>
       {children}
     </div>
   );
@@ -374,24 +374,24 @@ export function TransferTasks() {
             ))}
           </div>
         ) : (
-          <div style={{ background: 'white', borderRadius: '12px', border: '1px solid #eee', overflow: 'hidden' }}>
-            <table style={{ width: '100%', borderCollapse: 'collapse' }}>
+          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+            <table className="w-full border-collapse">
               <thead>
-                <tr style={{ background: '#f8f9fa', borderBottom: '1px solid #eee', textAlign: 'left' }}>
-                  <th style={{ padding: '12px' }}>Tarea</th>
-                  <th style={{ padding: '12px' }}>Estado</th>
-                  <th style={{ padding: '12px' }}>Tipo</th>
-                  <th style={{ padding: '12px' }}>Acciones</th>
+                <tr className="bg-slate-100 text-left">
+                  <th className="px-3 py-2 border-b border-slate-200">Tarea</th>
+                  <th className="px-3 py-2 border-b border-slate-200">Estado</th>
+                  <th className="px-3 py-2 border-b border-slate-200">Tipo</th>
+                  <th className="px-3 py-2 border-b border-slate-200">Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {tasks.map(task => (
-                  <tr key={task._id} style={{ borderBottom: '1px solid #eee' }}>
-                    <td style={{ padding: '12px' }}><strong>{task.name}</strong></td>
-                    <td style={{ padding: '12px' }}><StatusBadge status={task.status || (task.active ? "active" : "inactive")} /></td>
-                    <td style={{ padding: '12px', textTransform: 'capitalize' }}>{task.type}</td>
-                    <td style={{ padding: '12px' }}>
-                      <div style={{ display: 'flex', gap: '5px' }}>
+                  <tr key={task._id} className="border-b border-slate-200">
+                    <td className="px-3 py-2"><strong>{task.name}</strong></td>
+                    <td className="px-3 py-2"><StatusBadge status={task.status || (task.active ? "active" : "inactive")} /></td>
+                    <td className="px-3 py-2 capitalize">{task.type}</td>
+                    <td className="px-3 py-2">
+                      <div className="flex gap-2">
                         <Button variant="ghost" onClick={() => handleEdit(task)}><FaEdit /></Button>
                         <Button variant="primary" loading={actionStates[task._id] === 'executing'} onClick={() => executeTask(task._id)} disabled={task.status === "running"}><FaPlay /></Button>
                       </div>
@@ -416,10 +416,10 @@ export function TransferTasks() {
         <ModalOverlay onClick={() => setShowGroupsManager(false)}>
           <ModalContent onClick={e => e.stopPropagation()}>
             <ModalHeader>
-              <h3 style={{ margin: 0 }}>🔗 Grupos de Vinculación</h3>
-              <Button variant="ghost" onClick={() => setShowGroupsManager(false)}>✕</Button>
+              <h3 className="text-lg font-semibold mb-2">🔗 Grupos de Vinculación</h3>
+              <Button variant="ghost" className="ml-2" onClick={() => setShowGroupsManager(false)}>✕</Button>
             </ModalHeader>
-            <div style={{ padding: '20px' }}>
+            <div className="p-5">
               <LinkedGroupsManager accessToken={accessToken} onGroupDeleted={fetchTasks} onClose={() => setShowGroupsManager(false)} />
             </div>
           </ModalContent>
@@ -428,48 +428,43 @@ export function TransferTasks() {
 
       {linkedTasksModal.open && (
         <ModalOverlay onClick={() => setLinkedTasksModal({ open: false, task: null, linkedTasks: [] })}>
-          <ModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
+          <ModalContent onClick={e => e.stopPropagation()} className="max-w-[600px]">
             <ModalHeader>
-              <h3 style={{ margin: 0 }}>
-                <FaLink style={{ marginRight: '8px' }} />
+              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                <FaLink className="text-blue-500" />
                 Tareas Vinculadas
               </h3>
-              <Button variant="ghost" onClick={() => setLinkedTasksModal({ open: false, task: null, linkedTasks: [] })}>
+              <Button variant="ghost" className="ml-2" onClick={() => setLinkedTasksModal({ open: false, task: null, linkedTasks: [] })}>
                 <FaTimes />
               </Button>
             </ModalHeader>
-            <ModalBody style={{ padding: '20px', maxHeight: '60vh', overflowY: 'auto' }}>
+            <ModalBody>
               {linkedTasksModal.task?.linkedGroup ? (
-                <div style={{ marginBottom: '16px', padding: '12px', background: '#e0f2fe', borderRadius: '8px' }}>
+                <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
                   <strong>Grupo:</strong> {linkedTasksModal.task.linkedGroup}
                 </div>
               ) : null}
-              
+
               {linkedTasksModal.linkedTasks.length > 0 ? (
-                <div style={{ display: 'flex', flexDirection: 'column', gap: '12px' }}>
+                <div className="flex flex-col gap-3">
                   {linkedTasksModal.linkedTasks.map((task, index) => (
-                    <div key={task.id || task._id} style={{ 
-                      padding: '12px', 
-                      border: '1px solid #e2e8f0', 
-                      borderRadius: '8px',
-                      background: '#f8fafc'
-                    }}>
-                      <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '8px' }}>
+                    <div key={task.id || task._id} className="p-3 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                      <div className="flex justify-between items-center mb-2">
                         <strong>{task.name}</strong>
                         <StatusBadge status={task.status} />
                       </div>
-                      <div style={{ fontSize: '12px', color: '#64748b', display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '8px' }}>
+                      <div className="text-xs text-slate-600 dark:text-slate-400 grid grid-cols-2 gap-2">
                         <div><strong>Tipo:</strong> {task.type}</div>
                         {task.order !== undefined && <div><strong>Orden:</strong> {task.order}</div>}
-                        {task.isCoordinator && <div style={{ color: '#f59e0b', fontWeight: 'bold' }}>Coordinador</div>}
+                        {task.isCoordinator && <div className="text-amber-600 font-bold">Coordinador</div>}
                       </div>
                     </div>
                   ))}
                 </div>
               ) : (
-                <p style={{ textAlign: 'center', color: '#999' }}>
-                  {linkedTasksModal.task?.linkedGroup 
-                    ? 'No hay tareas en este grupo' 
+                <p className="text-center text-slate-400">
+                  {linkedTasksModal.task?.linkedGroup
+                    ? 'No hay tareas en este grupo'
                     : 'No hay tareas vinculadas'}
                 </p>
               )}
@@ -483,54 +478,54 @@ export function TransferTasks() {
         <ModalOverlay onClick={() => setHistoryModal({ open: false, taskId: null, data: [], loading: false, filter: 'all' })}>
           <ModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '900px', maxHeight: '85vh' }}>
             <ModalHeader>
-              <h3 style={{ margin: 0 }}>
-                <FaHistory style={{ marginRight: '8px' }} />
+              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                <FaHistory className="text-slate-600 dark:text-slate-400" />
                 Historial de Ejecuciones
               </h3>
-              <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
-                <Button 
-                  variant="outline" 
-                  size="small" 
+              <div className="flex gap-2 items-center">
+                <Button
+                  variant="outline"
+                  size="small"
                   onClick={() => navigate(`/history?search=${tasks.find(t => t._id === historyModal.taskId)?.name || ''}`)}
                   title="Ver en Bitácora Central"
-                  style={{ height: '32px', padding: '0 12px' }}
+                  className="h-8 px-3"
                 >
-                  <FaEye /> Ver en Bitácora
+                  <FaEye className="mr-1.5" /> Ver en Bitácora
                 </Button>
                 <Button variant="ghost" onClick={() => setHistoryModal({ open: false, taskId: null, data: [], loading: false, filter: 'all' })}>
                   <FaTimes />
                 </Button>
               </div>
             </ModalHeader>
-            <ModalBody style={{ padding: '20px', overflowY: 'auto' }}>
+            <ModalBody>
               {/* Filtros */}
-              <div style={{ marginBottom: '15px', display: 'flex', gap: '8px', flexWrap: 'wrap' }}>
-                <FilterButton 
-                  active={historyModal.filter === 'all'} 
+              <div className="mb-4 flex gap-2 flex-wrap">
+                <FilterButton
+                  active={historyModal.filter === 'all'}
                   onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'all' }))}
                 >
                   Todos
                 </FilterButton>
-                <FilterButton 
-                  active={historyModal.filter === 'completed'} 
+                <FilterButton
+                  active={historyModal.filter === 'completed'}
                   onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'completed' }))}
                 >
                   Exitosos
                 </FilterButton>
-                <FilterButton 
-                  active={historyModal.filter === 'failed'} 
+                <FilterButton
+                  active={historyModal.filter === 'failed'}
                   onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'failed' }))}
                 >
                   Errores
                 </FilterButton>
-                <FilterButton 
-                  active={historyModal.filter === 'running'} 
+                <FilterButton
+                  active={historyModal.filter === 'running'}
                   onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'running' }))}
                 >
                   En Proceso
                 </FilterButton>
-                <FilterButton 
-                  active={historyModal.filter === 'cancelled'} 
+                <FilterButton
+                  active={historyModal.filter === 'cancelled'}
                   onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'cancelled' }))}
                 >
                   Cancelados
@@ -538,7 +533,7 @@ export function TransferTasks() {
               </div>
 
               {historyModal.loading ? (
-                <div style={{ textAlign: 'center', padding: '40px' }}>Cargando historial...</div>
+                <div className="text-center py-10">Cargando historial...</div>
               ) : (
                 (() => {
                   const dataArray = Array.isArray(historyModal.data) ? historyModal.data : [];
@@ -549,46 +544,46 @@ export function TransferTasks() {
 
                   if (filteredData.length === 0) {
                     return (
-                      <div style={{ textAlign: 'center', padding: '40px', color: '#999' }}>
+                      <div className="text-center py-10 text-slate-400">
                         No hay historial de ejecuciones para esta tarea
                       </div>
                     );
                   }
 
                   return (
-                    <div style={{ overflowX: 'auto' }}>
-                      <table style={{ width: '100%', borderCollapse: 'collapse', minWidth: '700px' }}>
+                    <div className="overflow-x-auto">
+                      <table className="w-full border-collapse min-w-[700px]">
                         <thead>
-                          <tr style={{ background: '#f8f9fa' }}>
-                            <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #dee2e6', fontSize: '12px' }}>Fecha</th>
-                            <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #dee2e6', fontSize: '12px' }}>Estado</th>
-                            <th style={{ padding: '10px', textAlign: 'center', borderBottom: '2px solid #dee2e6', fontSize: '12px' }}>Insertados</th>
-                            <th style={{ padding: '10px', textAlign: 'center', borderBottom: '2px solid #dee2e6', fontSize: '12px' }}>Actualizados</th>
-                            <th style={{ padding: '10px', textAlign: 'center', borderBottom: '2px solid #dee2e6', fontSize: '12px' }}>Duplicados</th>
-                            <th style={{ padding: '10px', textAlign: 'left', borderBottom: '2px solid #dee2e6', fontSize: '12px' }}>Mensaje</th>
-                            <th style={{ padding: '10px', textAlign: 'center', borderBottom: '2px solid #dee2e6', fontSize: '12px' }}>Acción</th>
+                          <tr className="bg-slate-100 dark:bg-slate-800">
+                            <th className="px-3 py-2 text-left text-xs border-b-2 border-slate-300 dark:border-slate-600">Fecha</th>
+                            <th className="px-3 text-left text-xs border-b-2 border-slate-300 dark:border-slate-600">Estado</th>
+                            <th className="px-3 text-center text-xs border-b-2 border-slate-300 dark:border-slate-600">Insertados</th>
+                            <th className="px-3 text-center text-xs border-b-2 border-slate-300 dark:border-slate-600">Actualizados</th>
+                            <th className="px-3 text-center text-xs border-b-2 border-slate-300 dark:border-slate-600">Duplicados</th>
+                            <th className="px-3 text-left text-xs border-b-2 border-slate-300 dark:border-slate-600">Mensaje</th>
+                            <th className="px-3 text-center text-xs border-b-2 border-slate-300 dark:border-slate-600">Acción</th>
                           </tr>
                         </thead>
                         <tbody>
                           {filteredData.map((exec, idx) => (
-                            <tr key={idx} style={{ borderBottom: '1px solid #eee' }}>
-                              <td style={{ padding: '8px', fontSize: '12px' }}>
+                            <tr key={idx} className="border-b border-slate-200 dark:border-slate-700">
+                              <td className="px-3 py-2 text-xs">
                                 {exec.date ? new Date(exec.date).toLocaleString() : '-'}
                               </td>
-                              <td style={{ padding: '8px' }}>
+                              <td className="px-3">
                                 <StatusBadge status={exec.status}>{exec.status}</StatusBadge>
                               </td>
-                              <td style={{ padding: '8px', textAlign: 'center', fontSize: '12px' }}>{exec.inserted || exec.successfulRecords || 0}</td>
-                              <td style={{ padding: '8px', textAlign: 'center', fontSize: '12px' }}>{exec.updated || 0}</td>
-                              <td style={{ padding: '8px', textAlign: 'center', fontSize: '12px' }}>{exec.duplicates || 0}</td>
-                              <td style={{ padding: '8px', fontSize: '12px', maxWidth: '200px', overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>
+                              <td className="px-3 text-center text-xs">{exec.inserted || exec.successfulRecords || 0}</td>
+                              <td className="px-3 text-center text-xs">{exec.updated || 0}</td>
+                              <td className="px-3 text-center text-xs">{exec.duplicates || 0}</td>
+                              <td className="px-3 py-2 text-xs max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap">
                                 {exec.message || exec.error || '-'}
                               </td>
-                              <td style={{ padding: '8px', textAlign: 'center' }}>
+                              <td className="px-3 text-center">
                                 {(exec.status === 'failed' || exec.errorDetails || exec.errorDetail) && (
-                                  <Button 
-                                    variant="ghost" 
-                                    style={{ padding: '4px 8px', fontSize: '11px', color: '#dc3545' }}
+                                  <Button
+                                    variant="ghost"
+                                    className="px-2 py-1 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
                                     onClick={() => handleViewError(
                                       `Error en Ejecución`,
                                       exec.message || 'Error en la transferencia',
@@ -604,7 +599,7 @@ export function TransferTasks() {
                           ))}
                         </tbody>
                       </table>
-                      <div style={{ marginTop: '10px', fontSize: '11px', color: '#666' }}>
+                      <div className="mt-2 text-xs text-slate-500">
                         Mostrando {filteredData.length} de {dataArray.length} registros
                       </div>
                     </div>
@@ -620,34 +615,24 @@ export function TransferTasks() {
       {errorModal.open && (
         <ModalOverlay onClick={() => setErrorModal({ open: false, title: '', message: '', details: '' })}>
           <ModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
-            <ModalHeader style={{ background: '#dc3545', color: 'white' }}>
-              <h3 style={{ margin: 0, display: 'flex', alignItems: 'center', gap: '8px' }}>
-                <FaExclamationTriangle /> {errorModal.title}
+            <ModalHeader className="bg-red-500 text-white">
+              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
+                <FaExclamationTriangle className="text-white" /> {errorModal.title}
               </h3>
-              <Button variant="ghost" style={{ color: 'white' }} onClick={() => setErrorModal({ open: false, title: '', message: '', details: '' })}>
+              <Button variant="ghost" className="text-white" onClick={() => setErrorModal({ open: false, title: '', message: '', details: '' })}>
                 <FaTimes />
               </Button>
             </ModalHeader>
-            <ModalBody style={{ padding: '20px' }}>
-              <div style={{ marginBottom: '15px' }}>
-                <strong style={{ display: 'block', marginBottom: '5px' }}>Mensaje:</strong>
-                <div style={{ padding: '10px', background: '#f8f9fa', borderRadius: '4px', borderLeft: '3px solid #dc3545' }}>
+            <ModalBody>
+              <div className="mb-4">
+                <strong className="block mb-2">Mensaje:</strong>
+                <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-lg border-l-4 border-red-500">
                   {errorModal.message}
                 </div>
               </div>
               <div>
-                <strong style={{ display: 'block', marginBottom: '5px' }}>Detalles del Error:</strong>
-                <pre style={{ 
-                  padding: '12px', 
-                  background: '#1e1e1e', 
-                  color: '#ff6b6b', 
-                  borderRadius: '4px', 
-                  overflow: 'auto',
-                  maxHeight: '250px',
-                  fontSize: '12px',
-                  fontFamily: 'monospace',
-                  margin: 0
-                }}>
+                <strong className="block mb-2">Detalles del Error:</strong>
+                <pre className="p-3 bg-black text-red-400 rounded-lg overflow-auto max-h-[250px] font-mono text-xs">
                   {errorModal.details || 'Sin detalles adicionales'}
                 </pre>
               </div>

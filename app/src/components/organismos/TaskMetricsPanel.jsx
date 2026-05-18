@@ -19,7 +19,7 @@ export const TaskMetricsPanel = ({ tasks = [], className = "" }) => {
     const StatCard = ({ title, value, icon, color, description, trend }) => (
         <div className="bg-white border border-slate-200 rounded-xl p-4 shadow-sm flex flex-col gap-2">
             <div className="flex items-center gap-2">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-lg" style={{ backgroundColor: `${color}20`, color }}>
+                <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-lg bg-${color === "#1565C0" ? "blue" : color === "#F57C00" ? "amber" : color === "#2E7D32" ? "green" : "red"}-100 text-${color === "#1565C0" ? "blue" : color === "#F57C00" ? "amber" : color === "#2E7D32" ? "green" : "red"}-600`}>
                     {icon}
                 </div>
                 <span className="text-xs font-bold text-slate-500 uppercase tracking-wide">{title}</span>

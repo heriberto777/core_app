@@ -33,9 +33,8 @@ export function PromotionIndicator({
   const sizeClasses = size === "large" ? "w-8 h-8 text-[0.9rem]" : "w-5 h-5 text-[0.7rem]";
 
   return (
-    <div 
-      className={`inline-flex items-center justify-center rounded-full text-white cursor-help ml-2 hover:opacity-80 hover:scale-110 transition-all ${sizeClasses}`}
-      style={{ backgroundColor: getColor() }}
+    <div
+      className={`inline-flex items-center justify-center rounded-full text-white cursor-help ml-2 hover:opacity-80 hover:scale-110 transition-all ${sizeClasses} bg-[${isBonus ? "#2ecc71" : isTrigger ? "#3498db" : "#f39c12"}]`}
       title={getTooltip()}
     >
       {getIcon()}

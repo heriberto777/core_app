@@ -24,8 +24,8 @@ export const LoadingUI = ({ message = "Cargando...", fullPage = false }) => {
  * Corporate Skeleton Loader
  */
 export const Skeleton = ({ width = "100%", height = "20px", className = "" }) => (
-  <div 
+  <div
     className={`bg-slate-200 rounded-lg animate-pulse ${className}`}
-    style={{ width, height }}
+    style={{ width: width, height: height }}
   />
 );

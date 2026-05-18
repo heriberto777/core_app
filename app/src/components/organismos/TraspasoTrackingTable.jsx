@@ -110,12 +110,11 @@ export const TraspasoTrackingTable = ({
                       {t.success_percentage}% <span className="text-slate-400 font-bold">({t.lines_successful}/{t.total_products})</span>
                     </div>
                     <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50">
-                      <div 
+                      <div
                         className={`h-full transition-all duration-1000 ${
                           t.success_percentage >= 90 ? "bg-emerald-500" : t.success_percentage >= 50 ? "bg-amber-500" : "bg-red-500"
                         }`}
-                        style={{ width: `${t.success_percentage}%` }}
-                      />
+                    />
                     </div>
                   </div>
                 </td>

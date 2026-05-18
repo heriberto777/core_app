@@ -35,7 +35,7 @@ export function CustomerField({
                         checked={Boolean(value)}
                         onChange={onChange}
                         disabled={loading || isReadOnly}
-                        className="w-4.5 h-4.5 accent-primary-500"
+                        className="w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 transition-all cursor-pointer"
                     />
                     <span className="text-sm font-bold">{displayName}</span>
                 </label>

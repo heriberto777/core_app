@@ -1,5 +1,4 @@
 import React from "react";
-import styled from "styled-components";
 import { useNavigate } from "react-router-dom";
 import { usePermissions } from "../../index";
 import {
@@ -70,104 +69,57 @@ const UnauthorizedPage = () => {
   );
 };
 
-const Container = styled.div`
-  min-height: 100vh;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  background-color: ${({ theme }) => theme.bg};
-  padding: 20px;
-`;
+const Container = () => (
+  <div className="min-h-screen flex items-center justify-center bg-white dark:bg-slate-900 p-4">
+</div>
+);
 
-const Content = styled.div`
-  text-align: center;
-  max-width: 500px;
-  width: 100%;
-`;
+const Content = () => (
+  <div className="text-center max-w-[500px] w-full">
+</div>
+);
 
-const IconContainer = styled.div`
-  font-size: 4rem;
-  color: ${({ theme }) => theme.error || "#dc3545"};
-  margin-bottom: 20px;
-`;
+const IconContainer = () => (
+  <div className="text-6xl text-red-600 dark:text-red-500 mb-4">
+</div>
+);
 
-const Title = styled.h1`
-  font-size: 2rem;
-  color: ${({ theme }) => theme.error || "#dc3545"};
-  margin-bottom: 15px;
-`;
+const Title = () => (
+  <h1 className="text-3xl text-red-600 dark:text-red-500 mb-3">
+</h1>
+);
 
-const Message = styled.p`
-  font-size: 1.1rem;
-  color: ${({ theme }) => theme.text};
-  margin-bottom: 25px;
-  line-height: 1.5;
-`;
+const Message = () => (
+  <p className="text-lg text-slate-900 dark:text-slate-100 mb-5 leading-relaxed">
+</p>
+);
 
-const UserInfo = styled.div`
-  background-color: ${({ theme }) => theme.cardBg};
-  border: 1px solid ${({ theme }) => theme.border};
-  border-radius: 8px;
-  padding: 20px;
-  margin-bottom: 25px;
-  text-align: left;
-`;
+const UserInfo = () => (
+  <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4 mb-5 text-left">
+</div>
+);
 
-const InfoItem = styled.div`
-  margin-bottom: 8px;
-  color: ${({ theme }) => theme.text};
+const InfoItem = () => (
+  <div className="mb-2 text-sm last:mb-0 text-slate-900 dark:text-slate-100">
+</div>
+);
 
-  &:last-child {
-    margin-bottom: 0;
-  }
+const ButtonContainer = () => (
+  <div className="flex gap-3 justify-center mb-5 flex-wrap">
+</div>
+);
 
-  strong {
-    color: ${({ theme }) => theme.title};
-  }
-`;
+const ActionButton = () => (
+  <button className="flex items-center gap-2 px-4 py-2 border-0 rounded-md text-sm font-medium cursor-pointer transition-all bg-indigo-600 hover:bg-indigo-700 text-white transform hover:translate-y-[-2px]">
+</button>
+);
 
-const ButtonContainer = styled.div`
-  display: flex;
-  gap: 15px;
-  justify-content: center;
-  margin-bottom: 25px;
-  flex-wrap: wrap;
-`;
-
-const ActionButton = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  padding: 12px 20px;
-  border: none;
-  border-radius: 6px;
-  font-size: 14px;
-  font-weight: 500;
-  cursor: pointer;
-  transition: all 0.3s ease;
-
-  background-color: ${({ $primary, theme }) =>
-    $primary ? theme.primary : theme.secondary};
-  color: white;
-
-  &:hover {
-    background-color: ${({ $primary, theme }) =>
-      $primary ? theme.primaryHover : theme.secondaryHover};
-    transform: translateY(-2px);
-  }
-`;
-
-const HelpText = styled.div`
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  gap: 8px;
-  font-size: 14px;
-  color: ${({ theme }) => theme.textSecondary};
-
-  svg {
-    color: ${({ theme }) => theme.warning || "#ffc107"};
-  }
-`;
+const HelpText = () => (
+  <div className="flex items-center justify-center gap-2 text-sm text-slate-500 dark:text-slate-400">
+    <span className="text-yellow-500 dark:text-yellow-600">
+</span>
+    Si crees que esto es un error, contacta con tu administrador del sistema.
+  </div>
+);
 
 export default UnauthorizedPage;
