@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from "react";
-import { FaPlus, FaTrash, FaLink, FaArrowRight, FaCogs, FaProjectDiagram, FaInfoCircle, FaExclamationTriangle } from "react-icons/fa";
-import { Button } from "../../index";
+import { FaPlus, FaTrash, FaLink, FaArrowRight, FaCogs, FaProjectDiagram, FaInfoCircle, FaExclamationTriangle, FaCheck, FaLock, FaUnlock } from "react-icons/fa";
+import { Button, Input, Select } from "../../index";
 import { MappingApi } from "../../api/index";
 
 const api = new MappingApi();
@@ -16,7 +16,7 @@ const WorkflowConfigSection = ({ mapping = {}, handleChange, accessToken }) => {
       try {
         setLoading(true);
         const response = await api.getMappings(accessToken);
-        setAllMappings(response.filter(m => m._id !== mapping._id)); // Evitar circularidad simple
+        setAllMappings(response.filter(m => m._id !== mapping._id));
       } catch (error) {
         console.error("Error fetching mappings for workflow:", error);
       } finally {
@@ -30,9 +30,8 @@ const WorkflowConfigSection = ({ mapping = {}, handleChange, accessToken }) => {
     handleChange({
       target: {
         name: "workflowConfig.enabled",
-        value: e.target.checked,
-        checked: e.target.checked,
-        type: "checkbox"
+        type: "custom",
+        value: e.target.checked
       }
     });
   };
@@ -41,309 +40,234 @@ const WorkflowConfigSection = ({ mapping = {}, handleChange, accessToken }) => {
     handleChange({
       target: {
         name: "workflowConfig.stopWorkflowOnError",
-        value: e.target.checked,
-        checked: e.target.checked,
-        type: "checkbox"
+        type: "custom",
+        value: e.target.checked
       }
     });
   };
 
-  const addNextMapping = () => {
-    const nextMappings = [...(workflowConfig.nextMappings || [])];
-    nextMappings.push({
-      mappingId: "",
-      linkField: "",
-      description: "",
-      autoExecute: true,
-      executionOrder: nextMappings.length
-    });
-    
-    handleChange({
-      target: {
-        name: "workflowConfig.nextMappings",
-        value: nextMappings,
-        type: "custom"
+  const addNextMapping = async () => {
+    const result = await import("sweetalert2").then(m => m.Swal.fire({
+      title: "Añadir Siguiente Mapeo",
+      html: `
+        <div class="workflow-form-container">
+          <div class="workflow-form-group">
+            <label class="workflow-form-label">Nombre del Mapeo Siguiente</label>
+            <input id="nextMappingName" class="workflow-form-input" placeholder="Ej: Procesamiento de Pagos">
+          </div>
+          <div class="workflow-form-group">
+            <label class="workflow-form-label">Tipo de Entidad</label>
+            <select id="nextEntityType" class="workflow-form-select">
+              <option value="orders">Pedidos</option>
+              <option value="invoices">Facturas</option>
+              <option value="customers">Clientes</option>
+            </select>
+          </div>
+          <div class="workflow-form-group">
+            <label class="workflow-form-checkbox">
+              <input id="stopOnError" type="checkbox" checked> Detener flujo si hay error
+            </label>
+          </div>
+        </div>
+      `,
+      focusConfirm: false,
+      showCancelButton: true,
+      confirmButtonText: "Añadir",
+      cancelButtonText: "Cancelar",
+      preConfirm: () => {
+        const name = document.getElementById("nextMappingName").value;
+        const entityType = document.getElementById("nextEntityType").value;
+        const stopOnError = document.getElementById("stopOnError").checked;
+
+        if (!name) {
+          Swal.showValidationMessage("El nombre es requerido");
+          return false;
+        }
+
+        return {
+          name,
+          entityType,
+          stopOnError
+        };
       }
-    });
+    }));
+
+    if (formValues) {
+      const nextMappings = [...(workflowConfig.nextMappings || [])];
+      nextMappings.push(formValues);
+      handleChange({
+        target: {
+          name: "workflowConfig",
+          type: "custom",
+          value: { ...workflowConfig, nextMappings }
+        }
+      });
+    }
   };
 
-  const removeNextMapping = (index) => {
-    const nextMappings = [...(workflowConfig.nextMappings || [])];
-    nextMappings.splice(index, 1);
-    
-    handleChange({
-      target: {
-        name: "workflowConfig.nextMappings",
-        value: nextMappings,
-        type: "custom"
-      }
-    });
+  const removeNextMapping = async (index) => {
+    const result = await import("sweetalert2").then(m => m.Swal.fire({
+      title: "¿Eliminar?",
+      text: `¿Está seguro que desea eliminar el siguiente mapeo "${workflowConfig.nextMappings[index]?.name}"?`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#ef4444",
+      cancelButtonColor: "#6b7280",
+      confirmButtonText: "Sí, eliminar",
+      cancelButtonText: "Cancelar"
+    }));
+
+    if (result.isConfirmed) {
+      const nextMappings = workflowConfig.nextMappings.filter((_, i) => i !== index);
+      handleChange({
+        target: {
+          name: "workflowConfig",
+          type: "custom",
+          value: { ...workflowConfig, nextMappings }
+        }
+      });
+    }
   };
 
   const updateNextMapping = (index, field, value) => {
     const nextMappings = [...(workflowConfig.nextMappings || [])];
     nextMappings[index] = { ...nextMappings[index], [field]: value };
-    
+
     handleChange({
       target: {
         name: "workflowConfig.nextMappings",
-        value: nextMappings,
-        type: "custom"
+        type: "custom",
+        value: nextMappings
       }
     });
   };
 
   return (
-    <div className="bg-slate-50/50 border border-slate-200 rounded-[32px] p-8 mt-8 flex flex-col gap-10 animate-in fade-in duration-500">
-      {/* Header */}
-      <div className="flex flex-col gap-2 border-b border-slate-100 pb-6">
-        <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
-          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-600/20">
-            <FaLink />
-          </div>
-          Flujo de Trabajo (Workflow)
-        </h3>
-        <p className="text-sm text-slate-500 font-medium ml-13">
-          Configure la jerarquía de este proceso y los pasos automáticos que se disparan después de completar la transferencia.
-        </p>
+    <div className="bg-gradient-to-br from-emerald-50/50 via-white to-teal-50/50 border-2 border-emerald-200 rounded-3xl p-8 mb-8 shadow-lg animate-fadeIn">
+      {/* HEADER */}
+      <div className="flex items-center gap-4 mb-8">
+        <div className="w-14 h-14 bg-gradient-to-br from-emerald-500 to-teal-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-emerald-500/30">
+          <FaArrowRight className="text-2xl" />
+        </div>
+        <div className="flex flex-col">
+          <h3 className="text-2xl font-black text-slate-900 leading-tight">
+            Flujo de Trabajo
+          </h3>
+          <p className="text-sm text-slate-500 font-medium mt-1">
+            Configure la secuencia de mapeos que debe ejecutarse después de este proceso
+          </p>
+        </div>
       </div>
 
-      {/* 1. JERARQUÍA DEL PROCESO */}
-      <div className="p-8 bg-white border border-slate-200 rounded-[24px] shadow-sm flex flex-col gap-6 group hover:border-blue-200 transition-colors">
-        <div className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-600 flex items-center gap-3">
-          <FaProjectDiagram /> 1. Jerarquía de este Proceso
+      {/* ENABLE TOGGLE */}
+      <label className="flex items-center gap-4 px-8 py-5 rounded-2xl cursor-pointer transition-all border-2 mb-8 group">
+        <div className={`w-12 h-6 rounded-full p-1 transition-colors relative ${workflowConfig.enabled ? "bg-emerald-500" : "bg-slate-300"}`}>
+          <div className={`w-4 h-4 bg-white rounded-full transition-transform transform ${workflowConfig.enabled ? "translate-x-6" : "translate-x-0"}`} />
         </div>
-        
-        <div className="flex gap-8 flex-wrap">
-          <label className={`flex items-center gap-3 px-6 py-4 rounded-2xl cursor-pointer transition-all border font-bold text-sm ${
-            mapping.isWorkflowChild ? "bg-blue-600 border-blue-600 text-white shadow-lg shadow-blue-600/20" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-          }`}>
-            <input 
-              type="checkbox" 
-              className="sr-only"
-              name="isWorkflowChild"
-              checked={mapping.isWorkflowChild || false} 
-              onChange={handleChange} 
-            />
-            {mapping.isWorkflowChild ? "ES PROCESO HIJO" : "NO ES HIJO"}
-          </label>
+        <input
+          type="checkbox"
+          className="sr-only"
+          id="workflow-enabled"
+          checked={workflowConfig.enabled}
+          onChange={handleToggleWorkflow}
+        />
+        <div className="flex flex-col">
+          <span className={`text-sm font-black uppercase tracking-wider ${workflowConfig.enabled ? "text-emerald-700" : "text-slate-500"}`}>
+            Activar Flujo
+          </span>
+          <span className="text-xs font-bold text-slate-400">
+            {workflowConfig.enabled ? "Flujo activo y ejecutable" : "Flujo desactivado"}
+          </span>
+        </div>
+      </label>
 
-          {mapping.isWorkflowChild && (
-            <label className={`flex items-center gap-3 px-6 py-4 rounded-2xl cursor-pointer transition-all border font-bold text-sm animate-in zoom-in-95 duration-200 ${
-              mapping.allowDirectExecution !== false ? "bg-emerald-600 border-emerald-600 text-white shadow-lg shadow-emerald-600/20" : "bg-slate-50 border-slate-200 text-slate-600 hover:bg-slate-100"
-            }`}>
-              <input 
-                type="checkbox" 
-                className="sr-only"
-                name="allowDirectExecution"
-                checked={mapping.allowDirectExecution !== false} 
-                onChange={handleChange} 
-              />
-              {mapping.allowDirectExecution !== false ? "EJECUCIÓN DIRECTA PERMITIDA" : "BLOQUEADO EN GESTOR"}
-            </label>
-          )}
+      {/* NEXT MAPPINGS LIST */}
+      <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-500">
+        <div className="flex justify-between items-center pb-4 border-b border-emerald-100">
+          <div>
+            <h4 className="text-lg font-bold text-slate-800">Siguientes Mapeos</h4>
+            <p className="text-sm text-slate-500 font-medium mt-1">
+              {workflowConfig.nextMappings?.length || 0} mapeos configurados
+            </p>
+          </div>
+          <Button variant="primary" onClick={addNextMapping} className="flex items-center gap-2">
+            <FaPlus /> Añadir Siguiente
+          </Button>
         </div>
 
-        {!mapping.allowDirectExecution && mapping.isWorkflowChild && (
-          <div className="p-4 bg-red-50 border-l-4 border-red-500 rounded-r-xl flex gap-3 items-start animate-in slide-in-from-left-2 duration-300">
-            <FaExclamationTriangle className="text-red-500 mt-0.5" />
-            <div className="text-xs text-red-800 leading-relaxed font-medium">
-              <strong className="block font-black mb-1 text-[10px] uppercase">Modo Restringido</strong>
-              Este proceso NO aparecerá en el Gestor Universal. Solo se ejecutará como parte de un flujo encadenado.
-            </div>
+        {workflowConfig.nextMappings?.length > 0 ? (
+          <div className="grid grid-cols-1 gap-3">
+            {workflowConfig.nextMappings.map((nextMapping, idx) => (
+              <div key={idx} className="flex justify-between items-center p-5 bg-gradient-to-r from-emerald-50/80 to-teal-50/80 hover:from-emerald-50/100 hover:to-teal-50/100 border border-emerald-100 rounded-2xl transition-all group">
+                <div className="flex items-center gap-4">
+                  <div className="flex items-center justify-center w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl font-black text-sm">
+                    #{idx + 1}
+                  </div>
+                  <div>
+                    <div className="font-bold text-slate-800 text-lg">{nextMapping.name}</div>
+                    <div className="text-xs text-slate-500 font-medium">
+                      {nextMapping.entityType === "orders" && "Pedidos"}
+                      {nextMapping.entityType === "invoices" && "Facturas"}
+                      {nextMapping.entityType === "customers" && "Clientes"}
+                    </div>
+                  </div>
+                </div>
+                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <Button variant="ghost" className="bg-white p-2" onClick={() => {}}>
+                    <FaEdit />
+                  </Button>
+                  <Button variant="ghost" className="bg-white p-2 text-red-500 hover:bg-red-50" onClick={() => removeNextMapping(idx)}>
+                    <FaTrash />
+                  </Button>
+                </div>
+              </div>
+            ))}
+          </div>
+        ) : (
+          <div className="text-center py-12 bg-white/60 backdrop-blur-sm rounded-2xl border-2 border-dashed border-emerald-200">
+            <FaArrowRight className="text-4xl text-emerald-300 mx-auto mb-4" />
+            <p className="text-slate-500 font-medium">No hay mapeos siguientes configurados</p>
+            <p className="text-xs text-slate-400 mt-1">Configure el flujo para definir qué proceso sigue</p>
           </div>
         )}
       </div>
 
-      {/* 2. CONFIGURACIÓN DE SEGUIDORES */}
-      <div className="flex flex-col gap-6">
-        <div className="text-[11px] font-black uppercase tracking-[0.2em] text-blue-600 flex items-center gap-3 ml-1">
-          <FaArrowRight /> 2. Configuración de Seguidores
-        </div>
-
-        <div className="flex gap-8 px-4 py-6 bg-slate-50/80 rounded-2xl border border-slate-100">
-          <label className="flex items-center gap-3 cursor-pointer group">
-            <input 
-              type="checkbox" 
-              className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-              checked={workflowConfig.enabled} 
-              onChange={handleToggleWorkflow} 
-            />
-            <span className="text-sm font-bold text-slate-600 group-hover:text-slate-900 transition-colors">Habilitar Encadenamiento (PADRE)</span>
-          </label>
-
-          <label className="flex items-center gap-3 cursor-pointer group">
-            <input 
-              type="checkbox" 
-              className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500 cursor-pointer"
-              checked={workflowConfig.stopWorkflowOnError} 
-              onChange={handleToggleStopOnError} 
-            />
-            <span className="text-sm font-bold text-slate-600 group-hover:text-slate-900 transition-colors">Detener workflow en error</span>
-          </label>
-        </div>
-
-        {workflowConfig.enabled && (
-          <div className="flex flex-col gap-6 animate-in slide-in-from-top-4 duration-500">
-            <div className="flex justify-between items-center px-2">
-              <h4 className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400">Procesos Seguidores Activos</h4>
-              <Button variant="primary" onClick={addNextMapping} className="px-5 py-2 text-[10px] font-black uppercase shadow-lg shadow-blue-600/20">
-                <FaPlus className="mr-2" /> Añadir Paso
-              </Button>
+      {/* STOP ON ERROR CONFIG */}
+      <div className="mt-8 p-6 bg-white/80 backdrop-blur-sm border border-emerald-100 rounded-2xl shadow-sm">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-4">
+            <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
+              <FaExclamation />
             </div>
-
-            <div className="flex flex-col gap-4">
-              {(workflowConfig.nextMappings || []).map((step, idx) => (
-                <div key={idx} className="p-8 bg-white border border-slate-200 rounded-[24px] shadow-sm flex flex-col gap-8 group hover:border-blue-500 transition-all duration-300">
-                  <div className="flex justify-between items-center border-b border-slate-50 pb-4">
-                    <div className="text-[10px] font-black text-blue-600 uppercase tracking-widest bg-blue-50 px-3 py-1 rounded-lg">Paso {idx + 1}</div>
-                    <Button variant="ghost" onClick={() => removeNextMapping(idx)} className="text-red-400 hover:text-red-600 hover:bg-red-50 p-2 h-auto">
-                      <FaTrash />
-                    </Button>
-                  </div>
-                  
-                  <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
-                    <div className="flex flex-col gap-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Mapping a Disparar</label>
-                      <select 
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 font-bold appearance-none transition-all"
-                        value={step.mappingId} 
-                        onChange={(e) => updateNextMapping(idx, 'mappingId', e.target.value)}
-                      >
-                        <option value="">Seleccione un proceso...</option>
-                        {allMappings.map(m => (
-                          <option key={m._id} value={m._id}>{m.name}</option>
-                        ))}
-                      </select>
-                    </div>
-
-                    <div className="flex flex-col gap-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Campo de Enlace (Link Field)</label>
-                      <input 
-                        type="text" 
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 font-bold transition-all placeholder:text-slate-300"
-                        placeholder="Ej: NUM_FACT" 
-                        value={step.linkField} 
-                        onChange={(e) => updateNextMapping(idx, 'linkField', e.target.value)}
-                      />
-                      <small className="text-[9px] text-slate-400 font-medium px-1">Nombre de la columna en el hijo que referencia al padre.</small>
-                    </div>
-
-                    <div className="flex flex-col gap-4">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Configuración del Destino</label>
-                      <div className="flex flex-col gap-3">
-                        <label className="flex items-center gap-2 cursor-pointer group/label">
-                          <input 
-                            type="checkbox"
-                            className="w-4 h-4 rounded border-slate-300 text-orange-500 focus:ring-orange-500 cursor-pointer"
-                            checked={allMappings.find(m => m._id === step.mappingId)?.isWorkflowChild || false}
-                            onChange={async (e) => {
-                              const checked = e.target.checked;
-                              const targetId = step.mappingId;
-                              try {
-                                const target = allMappings.find(m => m._id === targetId);
-                                await api.updateMapping(accessToken, targetId, { ...target, isWorkflowChild: checked });
-                                setAllMappings(prev => prev.map(m => m._id === targetId ? { ...m, isWorkflowChild: checked } : m));
-                              } catch (err) { console.error("Error al actualizar hijo:", err); }
-                            }}
-                          />
-                          <span className="text-[11px] font-bold text-orange-600 uppercase tracking-wide">Definir como HIJO</span>
-                        </label>
-                        
-                        {allMappings.find(m => m._id === step.mappingId)?.isWorkflowChild && (
-                          <label className="flex items-center gap-2 cursor-pointer group/label animate-in slide-in-from-top-1 duration-200">
-                            <input 
-                              type="checkbox"
-                              className="w-4 h-4 rounded border-slate-300 text-red-500 focus:ring-red-500 cursor-pointer"
-                              checked={allMappings.find(m => m._id === step.mappingId)?.allowDirectExecution === false}
-                              onChange={async (e) => {
-                                const checked = e.target.checked;
-                                const targetId = step.mappingId;
-                                try {
-                                  const target = allMappings.find(m => m._id === targetId);
-                                  await api.updateMapping(accessToken, targetId, { ...target, allowDirectExecution: !checked });
-                                  setAllMappings(prev => prev.map(m => m._id === targetId ? { ...m, allowDirectExecution: !checked } : m));
-                                } catch (err) { console.error("Error al actualizar restricción:", err); }
-                              }}
-                            />
-                            <span className="text-[11px] font-bold text-red-600 uppercase tracking-wide">Ocultar de Gestor</span>
-                          </label>
-                        )}
-                      </div>
-                    </div>
-
-                    <div className="flex flex-col gap-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Campo Origen (Padre)</label>
-                      <input 
-                        type="text" 
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 font-bold transition-all"
-                        placeholder="Ej: NCF (Vacío para PK)" 
-                        value={step.parentLinkField || ""} 
-                        onChange={(e) => updateNextMapping(idx, 'parentLinkField', e.target.value)}
-                      />
-                    </div>
-
-                    <div className="flex flex-col gap-2">
-                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Descripción del Paso</label>
-                      <input 
-                        type="text" 
-                        className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 font-bold transition-all"
-                        placeholder="Ej: Generar Recibos" 
-                        value={step.description} 
-                        onChange={(e) => updateNextMapping(idx, 'description', e.target.value)}
-                      />
-                    </div>
-
-                    <div className="flex flex-col gap-2 pt-6">
-                      <label className="flex items-center gap-3 cursor-pointer group">
-                        <input 
-                          type="checkbox" 
-                          className="w-5 h-5 rounded border-slate-300 text-emerald-600 focus:ring-emerald-500 cursor-pointer"
-                          checked={step.autoExecute} 
-                          onChange={(e) => updateNextMapping(idx, 'autoExecute', e.target.checked)}
-                        />
-                        <span className="text-sm font-bold text-slate-600 group-hover:text-emerald-600 transition-colors">Ejecución Automática</span>
-                      </label>
-                    </div>
-                  </div>
-                  
-                  <div className="mt-4 pt-6 border-t border-slate-50 flex items-center gap-4 text-[10px] font-black uppercase text-blue-600 tracking-widest">
-                    <div className="flex items-center gap-2">
-                      <FaArrowRight className="text-xs" /> 
-                      {allMappings.find(m => m._id === step.mappingId)?.name || "..."}
-                    </div>
-                    
-                    <div className="flex gap-2 ml-auto">
-                      {allMappings.find(m => m._id === step.mappingId)?.isWorkflowChild && (
-                        <span className="bg-orange-100 text-orange-600 px-2 py-0.5 rounded-md">HIJO</span>
-                      )}
-                      {!allMappings.find(m => m._id === step.mappingId)?.allowDirectExecution && (
-                        <span className="bg-red-100 text-red-600 px-2 py-0.5 rounded-md flex items-center gap-1">
-                          <FaExclamationTriangle size={8} /> SOLO WORKFLOW
-                        </span>
-                      )}
-                    </div>
-                  </div>
-                </div>
-              ))}
-
-              {(!workflowConfig.nextMappings || workflowConfig.nextMappings.length === 0) && (
-                <div className="p-16 bg-white border-2 border-dashed border-slate-100 rounded-[32px] flex flex-col items-center gap-4 text-center">
-                  <div className="w-16 h-16 bg-slate-50 rounded-full flex items-center justify-center">
-                    <FaCogs className="text-2xl text-slate-200" />
-                  </div>
-                  <div className="flex flex-col gap-1">
-                    <span className="text-sm font-black text-slate-400 uppercase tracking-widest">Sin pasos seguidores</span>
-                    <p className="text-xs text-slate-300 max-w-[200px]">Añada un proceso para iniciar la cadena de ejecución automática.</p>
-                  </div>
-                </div>
-              )}
+            <div>
+              <h4 className="font-bold text-slate-800">Detener Flujo si hay Error</h4>
+              <p className="text-sm text-slate-500 font-medium">
+                Si este mapeo falla, detener todos los mapeos siguientes
+              </p>
             </div>
           </div>
-        )}
+          <label className="flex items-center gap-3 cursor-pointer">
+            <input
+              type="checkbox"
+              name="workflowConfig.stopWorkflowOnError"
+              checked={workflowConfig.stopWorkflowOnError !== false}
+              onChange={(e) => handleChange({
+                target: {
+                  name: "workflowConfig",
+                  type: "custom",
+                  value: { ...workflowConfig, stopWorkflowOnError: e.target.checked }
+                }
+              })}
+              className="w-5 h-5 rounded-lg border-slate-300 text-emerald-600 focus:ring-emerald-500"
+            />
+            <span className="text-sm font-bold text-slate-700 group-hover:text-slate-900 transition-colors">
+              Activar
+            </span>
+          </label>
+        </div>
       </div>
     </div>
   );
-};
+}
 
 export default WorkflowConfigSection;
