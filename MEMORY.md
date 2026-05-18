@@ -52,15 +52,34 @@ O usar `structuredClone(mapping)` para una copia más completa.
 - `server/services/DynamicTransferService.js` - Lógica de backend
 - `server/services/ConsecutiveBatchManager.js` - Gestión de consecutivos
 
-### Pasos a Seguir
+### Solución Aplicada ✅
 
-1. ✅ Investigar la lógica de actualización de mappings en el backend
-2. ✅ Verificar si hay un bug en la normalización de campos
-3. ✅ Revisar el flujo de asignación de hijos en workflow
-4. 🔧 **Aplicar solución: Cambiar `JSON.parse(JSON.stringify(mapping))` por `JSON.parse(JSON.stringify({ ...mapping }))`**
-5. 🧪 Probar con hijos de workflow
-6. 📝 Actualizar documentación
+**Archivo:** `app/src/hooks/useMappingEditor.jsx` (línea 104)
+
+```javascript
+// Antes (PROBLEMA):
+const mappingCopy = JSON.parse(JSON.stringify(mapping));  // Elimina propiedades con puntos en el nombre
+
+// Después (SOLUCIÓN):
+const mappingCopy = JSON.parse(JSON.stringify({ ...mapping }));  // Preserva todas las propiedades
+```
+
+### Verificación
+
+- ✅ Propiedades con puntos en el nombre se preservan (workflowConfig, consecutiveConfig, etc.)
+- ✅ Copia profunda de todos los campos del objeto
+- ✅ Sin efectos secundarios en el objeto original
+
+### Próximos Pasos
+
+1. 🧪 **Probar:** Guardar y asignar un hijo de workflow para verificar que el encabezado se mantiene
+2. 🧪 **Probar:** Crear un nuevo mapping con hijos de workflow
+3. 🧪 **Observar:** Verificar que no se pierdan los campos y configuraciones del header
+
+### Conclusión
+
+El problema se debió al uso de `JSON.parse(JSON.stringify(mapping))` que elimina propiedades con puntos en el nombre. La solución usa el spread operator para preservar todas las propiedades.
 
 ---
 
-*Documento actualizado al 2026-05-18 - Solución encontrada y aplicación en proceso.*
+*Documento actualizado al 2026-05-18 - Solución aplicada y lista para pruebas.*

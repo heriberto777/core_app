@@ -13,13 +13,7 @@ export function TaskFormModal({
     className = ""
 }) {
     const [activeTab, setActiveTab] = useState("general");
-    const [formData, setFormData] = useState({
-        name: task?.name || "",
-        description: task?.description || "",
-        schedule: task?.schedule || "",
-        sourceDb: task?.sourceDb || "",
-        targetDb: task?.targetDb || "",
-    });
+    const [formData, setFormData] = useState({ ...task });
 
     if (!isOpen) return null;
 

@@ -166,35 +166,24 @@ const upsertTransferTaskController = async (req, res) => {
       return res.status(400).json({ success: false, message: "Una tarea coordinadora debe tener 'viewKey' y 'tableKey' definidos." });
     }
 
-    const taskData = {
-      name,
-      type: type || "both",
-      active: active !== undefined ? Boolean(active) : true,
-      query,
-      parameters: parameters || [],
-      transferType: transferType || "",
-      validationRules: validationRules || { requiredFields: [], existenceCheck: { table: "", key: "" } },
-      executionMode: executionMode || "normal",
-      postUpdateQuery: postUpdateQuery || null,
-      postUpdateMapping: postUpdateMapping || { viewKey: null, tableKey: null },
-      clearBeforeInsert: Boolean(clearBeforeInsert || false),
-      fieldMapping: fieldMapping || { sourceTable: "", targetTable: "", sourceFields: [], targetFields: [], defaultValues: [] },
-      nextTasks: nextTasks || [],
-      targetTable: targetTable || null,
-      linkedTasks: cleanLinkedTasks,
-      linkedGroup: cleanLinkedGroup,
-      executeLinkedTasks: cleanExecuteLinkedTasks,
-      linkedExecutionOrder: Number(linkedExecutionOrder || 0),
-      coordinationConfig: coordinationConfig || {
-        waitForLinkedTasks: !!cleanLinkedGroup,
-        maxWaitTime: 300000,
-        postUpdateStrategy: cleanLinkedGroup ? "coordinated" : "individual",
-      },
-      linkingMetadata: {
-        isCoordinator: Boolean(isCoordinator),
-        lastGroupExecution: linkingMetadata?.lastGroupExecution || null,
-        lastGroupExecutionId: linkingMetadata?.lastGroupExecutionId || null,
-      },
+    // Usar spread operator para preservar todos los campos del objeto
+    const taskData = { ...sanitizedBody };
+
+    // Normalización de campos específicos
+    if (taskData.type === undefined) taskData.type = "both";
+    if (taskData.active === undefined) taskData.active = true;
+    if (taskData.executionMode === undefined) taskData.executionMode = "normal";
+    if (taskData.postUpdateMapping === undefined) taskData.postUpdateMapping = { viewKey: null, tableKey: null };
+    if (taskData.fieldMapping === undefined) taskData.fieldMapping = { sourceTable: "", targetTable: "", sourceFields: [], targetFields: [], defaultValues: [] };
+    if (taskData.coordinationConfig === undefined) taskData.coordinationConfig = {
+      waitForLinkedTasks: !!cleanLinkedGroup,
+      maxWaitTime: 300000,
+      postUpdateStrategy: cleanLinkedGroup ? "coordinated" : "individual",
+    };
+    if (taskData.linkingMetadata === undefined) taskData.linkingMetadata = {
+      isCoordinator: Boolean(isCoordinator),
+      lastGroupExecution: null,
+      lastGroupExecutionId: null,
     };
 
     if (_id) taskData._id = _id;
