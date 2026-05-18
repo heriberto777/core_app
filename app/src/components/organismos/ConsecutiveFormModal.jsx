@@ -59,7 +59,53 @@ export function ConsecutiveFormModal({ isOpen, onClose, onSave, consecutive = nu
     };
 
     const handleSubmit = () => {
-        if (!formData.name) return alert("El nombre es obligatorio");
+        if (!formData.name) {
+            Swal.fire({ icon: "warning", title: "Error", text: "El nombre es obligatorio" });
+            return;
+        }
+
+        // Validar campos obligatorios básicos
+        if (!formData.description) {
+            Swal.fire({ icon: "warning", title: "Error", text: "La descripción es obligatoria" });
+            return;
+        }
+
+        // Validar SQL Sync si está habilitado
+        if (formData.sqlSync.enabled) {
+            if (!formData.sqlSync.tableName) {
+                Swal.fire({ icon: "warning", title: "Error", text: "El nombre de tabla es obligatorio en SQL Sync" });
+                return;
+            }
+
+            if (!formData.sqlSync.keyField) {
+                Swal.fire({ icon: "warning", title: "Error", text: "El campo de clave es obligatorio en SQL Sync" });
+                return;
+            }
+
+            if (!formData.sqlSync.keyValue) {
+                Swal.fire({ icon: "warning", title: "Error", text: "El valor de clave es obligatorio en SQL Sync" });
+                return;
+            }
+
+            if (!formData.sqlSync.valueField) {
+                Swal.fire({ icon: "warning", title: "Error", text: "El campo de valor es obligatorio en SQL Sync" });
+                return;
+            }
+
+            // Validar formato del nombre de tabla (debería ser schema.table)
+            const tableName = formData.sqlSync.tableName;
+            if (!tableName.includes(".")) {
+                Swal.fire({ icon: "warning", title: "Error", text: "El nombre de tabla debe tener formato 'schema.tabla'" });
+                return;
+            }
+        }
+
+        // Validar Pattern si está habilitado
+        if (formData.pattern && !formData.pattern.includes("{")) {
+            Swal.fire({ icon: "warning", title: "Error", text: "El patrón debe incluir al menos un placeholder (ej: {PREFIX}{YEAR}-{VALUE})" });
+            return;
+        }
+
         onSave(formData);
     };
 

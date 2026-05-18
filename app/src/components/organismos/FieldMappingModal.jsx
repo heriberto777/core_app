@@ -126,9 +126,36 @@ export function FieldMappingModal({ isOpen, onClose, onSave, initialData, consec
 
     const handleSubmit = async () => {
         if (!formData.targetField) return;
+
+        // Validación de Lookup
+        if (formData.lookupFromTarget && !formData.lookupQuery) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Error',
+                text: 'La consulta SQL es obligatoria para Lookup',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+
+        // Validar que el SQL tenga @parametro
+        if (formData.lookupFromTarget && !formData.lookupQuery.includes('@')) {
+            Swal.fire({
+                icon: 'warning',
+                title: 'Error',
+                text: 'La consulta SQL debe contener al menos un @parametro',
+                confirmButtonText: 'OK'
+            });
+            return;
+        }
+
         setLoading(true);
         try {
-            const dataToSave = { ...formData, fieldType: formData.valueType };
+            const dataToSave = {
+                ...formData,
+                fieldType: formData.valueType,
+                transform: JSON.parse(JSON.stringify(formData.transform)) || {}
+            };
             await onSave(dataToSave);
             onClose();
         } finally {
