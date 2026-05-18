@@ -105,7 +105,32 @@ export function usePromotionConfig(mapping = {}, handleChange) {
                     return false;
                 }
 
-                return { name, type, description, priority, enabled, isOneTime, conditions: {}, actions: {} };
+                return {
+                    name,
+                    type,
+                    description,
+                    priority,
+                    enabled,
+                    isOneTime,
+                    conditions: {
+                        detectFields: {
+                            bonusField: promotionConfig.detectFields?.bonusField || "ART_BON",
+                            referenceField: promotionConfig.detectFields?.referenceField || "COD_ART_RFR",
+                            discountField: promotionConfig.detectFields?.discountField || "MON_DSC"
+                        },
+                            targetFields: {
+                                bonusLineRef: promotionConfig.targetFields?.bonusLineRef || "PEDIDO_LINEA_BONIF",
+                                orderedQuantity: promotionConfig.targetFields?.orderedQuantity || "CANTIDAD_PEDIDA",
+                                bonusQuantity: promotionConfig.targetFields?.bonusQuantity || "CANTIDAD_BONIF"
+                            }
+                    },
+                    actions: {
+                        bonusField: promotionConfig.detectFields?.bonusField || "ART_BON",
+                        bonusFieldValue: promotionConfig.detectFields?.discountField || "MON_DSC",
+                        targetField: promotionConfig.targetFields?.bonusLineRef || "PEDIDO_LINEA_BONIF",
+                        targetFieldValue: promotionConfig.targetFields?.orderedQuantity || "CANTIDAD_PEDIDA"
+                    }
+                };
             },
         });
 

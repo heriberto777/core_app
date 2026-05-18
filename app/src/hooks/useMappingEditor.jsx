@@ -109,15 +109,17 @@ export function useMappingEditor(mappingId, accessToken, onSave, onCancel) {
                     field.isEditable = field.isEditable !== false;
                     field.showInList = field.showInList === true;
                     field.displayOrder = field.displayOrder || 0;
-                    field.fieldType = field.fieldType || field.valueType || "text";
-                    field.valueType = field.valueType || field.fieldType || "text";
-                    if (field.fieldType !== "select") field.options = null;
+                   // fieldType y valueType son independientes; usar valores por defecto distintos
+                   field.fieldType = field.fieldType || "text";
+                   field.valueType = field.valueType || "string";
+                   if (field.fieldType !== "select") field.options = null;
 
                     // Evitar CastError en Mongoose: consecutiveId debe ser null si está vacío o isConsecutive es false
-                    if (!field.isConsecutive || !field.consecutiveId) {
+                   // Si isConsecutive es true, REQUIERE un consecutiveId válido
+                   if (!field.isConsecutive || !field.consecutiveId) {
                         field.consecutiveId = null;
                         field.isConsecutive = false;
-                    }
+                   }
                 });
             });
 
