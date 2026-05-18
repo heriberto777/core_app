@@ -2,7 +2,7 @@ import React, { useState } from "react";
 import { FaTimes, FaFileAlt, FaTable, FaHashtag, FaInfoCircle, FaSearch } from "react-icons/fa";
 import { Button, StatusBadge } from "../../index";
 
-export function DocumentDetailsModal({ isOpen, onClose, document, details }) {
+export function DocumentDetailsModal({ isOpen, onClose, document, details, config }) {
     if (!isOpen || !document) return null;
 
     // Extraer todas las tablas de detalle
@@ -33,23 +33,82 @@ export function DocumentDetailsModal({ isOpen, onClose, document, details }) {
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto p-8 space-y-12">
                     {/* Header Info Section */}
-                    <div className="space-y-6">
-                        <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3 border-l-4 border-indigo-600 pl-4">
-                            <FaInfoCircle className="text-indigo-500" /> Atributos de Encabezado
-                        </h4>
-                        <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 p-8 bg-slate-50/50 rounded-[28px] border border-slate-100">
-                            {Object.entries(document).map(([key, value]) => (
-                                <div key={key} className="flex flex-col gap-1 group">
-                                    <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-indigo-500 transition-colors">{key.replace(/_/g, ' ')}</span>
-                                    <div className="text-sm font-black text-slate-900 truncate">
-                                        {typeof value === 'boolean'
-                                            ? <StatusBadge status={value ? 'active' : 'inactive'}>{value ? 'SÍ' : 'NO'}</StatusBadge>
-                                            : value !== null && value !== undefined ? String(value) : <span className="text-slate-200 italic">nulo</span>}
-                                    </div>
+                    {(() => {
+                        let groups = { "General": [] };
+                        
+                        let allMappings = [];
+                        if (config?.tableConfigs) {
+                            config.tableConfigs.forEach(table => {
+                                if (table.fieldMappings) {
+                                    allMappings.push(...table.fieldMappings);
+                                }
+                            });
+                        }
+                        
+                        if (allMappings.length > 0) {
+                            const sortedMappings = [...allMappings].sort((a, b) => (a.displayOrder || 0) - (b.displayOrder || 0));
+                            
+                            sortedMappings.forEach(m => {
+                                const dataKey = m.targetField || m.sourceField;
+                                
+                                let displayVal = undefined;
+                                if (m.sourceField && document[m.sourceField] !== undefined) {
+                                    displayVal = document[m.sourceField];
+                                } else if (m.targetField && document[m.targetField] !== undefined) {
+                                    displayVal = document[m.targetField];
+                                } else if (document[dataKey] !== undefined) {
+                                    displayVal = document[dataKey];
+                                }
+
+                                // Mostramos el campo si existe en el documento y si no está marcado explícitamente para ocultar
+                                if (displayVal !== undefined) {
+                                    const groupName = m.fieldGroup || "General";
+                                    if (!groups[groupName]) groups[groupName] = [];
+                                    
+                                    groups[groupName].push({
+                                        key: dataKey,
+                                        label: m.displayName || m.targetField,
+                                        value: displayVal
+                                    });
+                                }
+                            });
+
+                            // Si no hay campos que coincidan con mappings, fallback
+                            if (Object.values(groups).every(g => g.length === 0)) {
+                                Object.entries(document).forEach(([key, value]) => {
+                                    if (!key.startsWith('_')) {
+                                        groups["General"].push({ key, label: key, value });
+                                    }
+                                });
+                            }
+                        } else {
+                            Object.entries(document).forEach(([key, value]) => {
+                                if (!key.startsWith('_')) {
+                                    groups["General"].push({ key, label: key, value });
+                                }
+                            });
+                        }
+
+                        return Object.entries(groups).filter(([_, fields]) => fields.length > 0).map(([groupName, fields]) => (
+                            <div key={groupName} className="space-y-6">
+                                <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3 border-l-4 border-indigo-600 pl-4">
+                                    <FaInfoCircle className="text-indigo-500" /> Atributos: {groupName}
+                                </h4>
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 p-8 bg-slate-50/50 rounded-[28px] border border-slate-100">
+                                    {fields.map((field) => (
+                                        <div key={field.key} className="flex flex-col gap-1 group">
+                                            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-indigo-500 transition-colors">{field.label.replace(/_/g, ' ')}</span>
+                                            <div className="text-sm font-black text-slate-900 truncate">
+                                                {typeof field.value === 'boolean'
+                                                    ? <StatusBadge status={field.value ? 'active' : 'inactive'}>{field.value ? 'SÍ' : 'NO'}</StatusBadge>
+                                                    : field.value !== null && field.value !== undefined ? String(field.value) : <span className="text-slate-200 italic">nulo</span>}
+                                            </div>
+                                        </div>
+                                    ))}
                                 </div>
-                            ))}
-                        </div>
-                    </div>
+                            </div>
+                        ));
+                    })()}
 
                     {/* Detail Tables */}
                     {detailTables.map(tableName => {

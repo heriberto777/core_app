@@ -42,7 +42,7 @@ export function LoadsButton({
         ${variantClasses[variant] || variantClasses.primary}
         ${className}
       `}
-      style={{ minWidth }}
+      style={{ minWidth: minWidth }}
       {...props}
     >
       {loading && <FaSpinner className="animate-spin" />}

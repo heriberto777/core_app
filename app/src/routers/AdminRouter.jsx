@@ -23,18 +23,9 @@ import { UniversalDocumentManager } from "../components/templates/UniversalDocum
 // ⭐ COMPONENTE DE LOADING MEJORADO ⭐
 const AuthLoader = () => (
   <div
-    style={{
-      display: "flex",
-      flexDirection: "column",
-      justifyContent: "center",
-      alignItems: "center",
-      height: "100vh",
-      gap: "1rem",
-      fontSize: "18px",
-      color: "#666",
-    }}
+    className="flex flex-col items-center justify-center min-h-screen gap-4 text-slate-600"
   >
-    <div style={{ fontSize: "2rem" }}>🔄</div>
+    <div className="text-6xl">🔄</div>
     <div>Cargando aplicación...</div>
   </div>
 );

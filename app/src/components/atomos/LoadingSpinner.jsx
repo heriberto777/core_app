@@ -38,7 +38,7 @@ export const LoadingSpinner = ({
               <div
                 key={i}
                 className={`${sizeConfig.dot} rounded-full ${spinnerColor} animate-pulse`}
-                style={{ animationDelay: `${i * 0.16}s` }}
+                style={{ animationDelay: `${i * 0.16}s`, ...style }}
               />
             ))}
           </div>
@@ -51,7 +51,7 @@ export const LoadingSpinner = ({
               <div
                 key={i}
                 className={`${sizeConfig.bar} ${spinnerColor} rounded-t animate-wave`}
-                style={{ height: `${height * 100}%`, animationDelay: `${i * 0.1}s` }}
+                style={{ height: `${height * 100}%`, animationDelay: `${i * 0.1}s`, ...style }}
               />
             ))}
           </div>
@@ -64,7 +64,7 @@ export const LoadingSpinner = ({
               <div
                 key={i}
                 className={`${sizeConfig.circle} rounded-full ${spinnerColor} animate-bounce`}
-                style={{ animationDelay: `${i * 0.16}s` }}
+                style={{ animationDelay: `${i * 0.16}s`, ...style }}
               />
             ))}
           </div>

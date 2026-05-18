@@ -1,129 +1,105 @@
 import React, { useState } from "react";
-import styled from "styled-components";
 import { FaTimes, FaChevronDown, FaChevronRight } from "react-icons/fa";
 import { StatusBadge } from "../index";
 
-const Overlay = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  z-index: 1000;
-  backdrop-filter: blur(4px);
-`;
+const Overlay = (props) => (
+  <div
+    {...props}
+    className="fixed inset-0 flex items-center justify-center z-1000 bg-black/70 backdrop-blur-sm"
+    onClick={props.onClick}
+  />
+);
 
-const Content = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  width: 90%;
-  max-width: 800px;
-  max-height: 90vh;
-  border-radius: ${({ theme }) => theme.spacing.md};
-  box-shadow: ${({ theme }) => theme.shadows.premium};
-  display: flex;
-  flex-direction: column;
-  overflow: hidden;
-  border: 1px solid ${({ theme }) => theme.border};
-`;
+const Content = (props) => (
+  <div
+    {...props}
+    className="w-[90vw] max-w-4xl max-h-[90vh] rounded-lg shadow-xl flex flex-col overflow-hidden border border-slate-700 bg-white dark:bg-slate-800"
+  />
+);
 
-const Header = styled.div`
-  padding: ${({ theme }) => theme.spacing.md};
-  border-bottom: 1px solid ${({ theme }) => theme.border};
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  background: ${({ theme }) => theme.bg2};
-`;
+const Header = (props) => (
+  <div
+    {...props}
+    className="px-4 py-3 border-b border-slate-700 flex justify-between items-center bg-slate-100 dark:bg-slate-900"
+  />
+);
 
-const Title = styled.h3`
-  margin: 0;
-  font-size: 18px;
-  color: ${({ theme }) => theme.text};
-`;
+const Title = (props) => (
+  <h3
+    {...props}
+    className="m-0 text-lg text-slate-900 dark:text-slate-100"
+  />
+);
 
-const CloseButton = styled.button`
-  background: none;
-  border: none;
-  font-size: 20px;
-  cursor: pointer;
-  color: ${({ theme }) => theme.textSecondary};
-  &:hover { color: ${({ theme }) => theme.danger}; }
-`;
+const CloseButton = (props) => (
+  <button
+    {...props}
+    className="bg-transparent border-none text-slate-500 dark:text-slate-400 text-xl hover:text-red-600 dark:hover:text-red-500 transition-colors"
+  />
+);
 
-const Body = styled.div`
-  padding: ${({ theme }) => theme.spacing.lg};
-  overflow-y: auto;
-  display: flex;
-  flex-direction: column;
-  gap: ${({ theme }) => theme.spacing.md};
-`;
+const Body = (props) => (
+  <div
+    {...props}
+    className="px-6 py-4 overflow-y-auto flex flex-col gap-4"
+  />
+);
 
-const DetailRow = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-`;
+const DetailRow = (props) => (
+  <div
+    {...props}
+    className="flex flex-col gap-1"
+  />
+);
 
-const Label = styled.span`
-  font-size: 12px;
-  font-weight: 700;
-  color: ${({ theme }) => theme.textSecondary};
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-`;
+const Label = (props) => (
+  <span
+    {...props}
+    className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide"
+  />
+);
 
-const Value = styled.div`
-  font-size: 14px;
-  color: ${({ theme }) => theme.text};
-  line-height: 1.5;
-`;
+const Value = (props) => (
+  <div
+    {...props}
+    className="text-sm text-slate-900 dark:text-slate-100 leading-relaxed"
+  />
+);
 
-const CodeBlock = styled.pre`
-  background: ${({ theme }) => theme.bg2};
-  padding: 12px;
-  border-radius: 8px;
-  font-family: 'Fira Code', 'Roboto Mono', monospace;
-  font-size: 12px;
-  overflow-x: auto;
-  border: 1px solid ${({ theme }) => theme.border};
-  color: ${({ theme }) => theme.text};
-`;
+const CodeBlock = (props) => (
+  <pre
+    {...props}
+    className="bg-slate-100 dark:bg-slate-900 p-3 rounded-lg font-mono text-xs overflow-x-auto border border-slate-700 text-slate-900 dark:text-slate-100"
+  />
+);
 
-const CollapsibleSectionWrapper = styled.div`
-  border: 1px solid ${({ theme }) => theme.border};
-  border-radius: 8px;
-  overflow: hidden;
-`;
+const CollapsibleSectionWrapper = (props) => (
+  <div
+    {...props}
+    className="border border-slate-700 rounded-lg overflow-hidden"
+  />
+);
 
-const CollapsibleHeader = styled.div`
-  background: ${({ theme }) => theme.bg2};
-  padding: 12px 16px;
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  cursor: pointer;
-  user-select: none;
-  transition: background 0.2s;
-  &:hover {
-    background: ${({ theme }) => theme.hover};
-  }
-`;
+const CollapsibleHeader = (props) => (
+  <div
+    {...props}
+    className="bg-slate-100 dark:bg-slate-900 px-3 py-3 flex items-center gap-2 cursor-pointer select-none transition-colors hover:bg-slate-200 dark:hover:bg-slate-800"
+  />
+);
 
-const CollapsibleTitle = styled.span`
-  font-size: 13px;
-  font-weight: 600;
-  color: ${({ theme }) => theme.text};
-  flex: 1;
-`;
+const CollapsibleTitle = (props) => (
+  <span
+    {...props}
+    className="text-xs font-semibold text-slate-900 dark:text-slate-100 flex-1"
+  />
+);
 
-const CollapsibleContent = styled.div`
-  padding: ${({ theme }) => theme.spacing.md};
-  border-top: 1px solid ${({ theme }) => theme.border};
-`;
+const CollapsibleContent = (props) => (
+  <div
+    {...props}
+    className="p-3 border-t border-slate-700"
+  />
+);
 
 const CollapsibleSection = ({ title, children, defaultOpen = false }) => {
   const [isOpen, setIsOpen] = useState(defaultOpen);
@@ -150,7 +126,7 @@ export const LogDetailModal = ({ log, onClose }) => {
                 </Header>
                 <Body>
                     {/* Sección 1: Información básica */}
-                    <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px' }}>
+                    <div className="grid grid-cols-3 gap-4">
                         <DetailRow>
                             <Label>Nivel</Label>
                             <StatusBadge status={log.level}>{log.level}</StatusBadge>
@@ -167,17 +143,17 @@ export const LogDetailModal = ({ log, onClose }) => {
 
                     {/* Sección 2: Información operacional */}
                     {(log.operationType || log.entityType) && (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr 1fr', gap: '15px' }}>
+                        <div className="grid grid-cols-4 gap-4">
                             {log.operationType && (
                                 <DetailRow>
                                     <Label>Tipo de Operación</Label>
-                                    <Value style={{ color: '#3b82f6', fontWeight: 600 }}>{log.operationType}</Value>
+                                    <Value className="text-blue-600 dark:text-blue-500 font-semibold">{log.operationType}</Value>
                                 </DetailRow>
                             )}
                             {log.entityType && (
                                 <DetailRow>
                                     <Label>Tipo de Entidad</Label>
-                                    <Value style={{ color: '#22c55e', fontWeight: 600 }}>{log.entityType}</Value>
+                                    <Value className="text-green-600 dark:text-green-500 font-semibold">{log.entityType}</Value>
                                 </DetailRow>
                             )}
                             {log.entityId && (
@@ -189,7 +165,7 @@ export const LogDetailModal = ({ log, onClose }) => {
                             {log.affectedRecords > 0 && (
                                 <DetailRow>
                                     <Label>Registros Afectados</Label>
-                                    <Value style={{ fontWeight: 600 }}>{log.affectedRecords}</Value>
+                                    <Value className="font-semibold">{log.affectedRecords}</Value>
                                 </DetailRow>
                             )}
                         </div>
@@ -199,10 +175,10 @@ export const LogDetailModal = ({ log, onClose }) => {
                     {(log.durationMs > 0 || log.durationMs !== undefined) && (
                         <DetailRow>
                             <Label>Duración</Label>
-                            <Value style={{ 
-                                color: log.durationMs < 1000 ? '#22c55e' : log.durationMs < 5000 ? '#eab308' : '#ef4444',
-                                fontWeight: 600 
-                            }}>
+                            <Value className={`font-semibold ${
+                                log.durationMs < 1000 ? 'text-green-600 dark:text-green-500' :
+                                log.durationMs < 5000 ? 'text-yellow-500' : 'text-red-600 dark:text-red-500'
+                            }`}>
                                 {log.durationMs} ms
                                 {log.durationMs < 1000 && " ✅"}
                                 {log.durationMs >= 1000 && log.durationMs < 5000 && " ⚠️"}
@@ -214,31 +190,30 @@ export const LogDetailModal = ({ log, onClose }) => {
                     {/* Sección 4: Mensaje */}
                     <DetailRow>
                         <Label>Mensaje</Label>
-                        <Value style={{ fontWeight: 500, fontSize: '15px' }}>{log.message}</Value>
+                        <Value className="font-medium text-base">{log.message}</Value>
                     </DetailRow>
 
                     {/* Sección 5: Contexto HTTP */}
                     {(log.httpMethod || log.httpPath) && (
-                        <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr 1fr', gap: '15px' }}>
+                        <div className="grid grid-cols-3 gap-4">
                             {log.httpMethod && (
                                 <DetailRow>
                                     <Label>Método HTTP</Label>
-                                    <Value style={{ fontWeight: 600, color: '#8b5cf6' }}>{log.httpMethod}</Value>
+                                    <Value className="font-semibold text-violet-600 dark:text-violet-500">{log.httpMethod}</Value>
                                 </DetailRow>
                             )}
                             {log.httpPath && (
                                 <DetailRow>
                                     <Label>Ruta HTTP</Label>
-                                    <Value style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.httpPath}</Value>
+                                    <Value className="font-mono text-xs">{log.httpPath}</Value>
                                 </DetailRow>
                             )}
                             {log.httpStatusCode && (
                                 <DetailRow>
                                     <Label>Status Code</Label>
-                                    <Value style={{ 
-                                        fontWeight: 600,
-                                        color: log.httpStatusCode < 400 ? '#22c55e' : '#ef4444'
-                                    }}>
+                                    <Value className={`font-semibold ${
+                                        log.httpStatusCode < 400 ? 'text-green-600 dark:text-green-500' : 'text-red-600 dark:text-red-500'
+                                    }`}>
                                         {log.httpStatusCode}
                                     </Value>
                                 </DetailRow>
@@ -250,7 +225,7 @@ export const LogDetailModal = ({ log, onClose }) => {
                     {(log.errorCode || log.error) && (
                         <DetailRow>
                             <Label>Código de Error</Label>
-                            <Value style={{ color: '#ef4444', fontWeight: 600 }}>{log.errorCode || log.error}</Value>
+                            <Value className="text-red-600 dark:text-red-500 font-semibold">{log.errorCode || log.error}</Value>
                         </DetailRow>
                     )}
 
@@ -265,53 +240,53 @@ export const LogDetailModal = ({ log, onClose }) => {
                     {/* Sección 8: Context Details - Collapsible */}
                     {(log.mappingId || log.mappingName || log.fieldName || log.tableSource || log.tableTarget || log.stepName) && (
                         <CollapsibleSection title="Detalles del Mapping" defaultOpen={true}>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '12px' }}>
+                            <div className="grid grid-cols-2 gap-3">
                                 {log.mappingId && (
                                     <DetailRow>
                                         <Label>Mapping ID</Label>
-                                        <Value style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.mappingId}</Value>
+                                        <Value className="font-mono text-xs">{log.mappingId}</Value>
                                     </DetailRow>
                                 )}
                                 {log.mappingName && (
                                     <DetailRow>
                                         <Label>Mapping</Label>
-                                        <Value style={{ fontWeight: 600, color: '#3b82f6' }}>{log.mappingName}</Value>
+                                        <Value className="font-semibold text-blue-600 dark:text-blue-500">{log.mappingName}</Value>
                                     </DetailRow>
                                 )}
                                 {log.fieldName && (
                                     <DetailRow>
                                         <Label>Campo</Label>
-                                        <Value style={{ fontWeight: 500 }}>{log.fieldName}</Value>
+                                        <Value className="font-medium">{log.fieldName}</Value>
                                     </DetailRow>
                                 )}
                                 {log.stepName && (
                                     <DetailRow>
                                         <Label>Paso</Label>
-                                        <Value style={{ color: '#f59e0b' }}>{log.stepName}</Value>
+                                        <Value className="text-amber-600 dark:text-amber-500">{log.stepName}</Value>
                                     </DetailRow>
                                 )}
                                 {log.tableSource && (
                                     <DetailRow>
                                         <Label>Tabla Origen</Label>
-                                        <Value style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.tableSource}</Value>
+                                        <Value className="font-mono text-xs">{log.tableSource}</Value>
                                     </DetailRow>
                                 )}
                                 {log.tableTarget && (
                                     <DetailRow>
                                         <Label>Tabla Destino</Label>
-                                        <Value style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.tableTarget}</Value>
+                                        <Value className="font-mono text-xs">{log.tableTarget}</Value>
                                     </DetailRow>
                                 )}
                                 {log.documentId && (
                                     <DetailRow>
                                         <Label>Document ID</Label>
-                                        <Value style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.documentId}</Value>
+                                        <Value className="font-mono text-xs">{log.documentId}</Value>
                                     </DetailRow>
                                 )}
                                 {log.transactionId && (
                                     <DetailRow>
                                         <Label>Transaction ID</Label>
-                                        <Value style={{ fontFamily: 'monospace', fontSize: '12px' }}>{log.transactionId}</Value>
+                                        <Value className="font-mono text-xs">{log.transactionId}</Value>
                                     </DetailRow>
                                 )}
                             </div>
@@ -322,7 +297,7 @@ export const LogDetailModal = ({ log, onClose }) => {
                     {(log.failedValue !== undefined && log.failedValue !== null) && (
                         <CollapsibleSection title="Valor que Causó el Error" defaultOpen={true}>
                             <DetailRow>
-                                <CodeBlock style={{ color: '#f59e0b' }}>
+                                <CodeBlock className="text-amber-600 dark:text-amber-500">
                                     {typeof log.failedValue === "object"
                                         ? JSON.stringify(log.failedValue, null, 2)
                                         : String(log.failedValue)}
@@ -360,7 +335,7 @@ export const LogDetailModal = ({ log, onClose }) => {
                     {log.originalStack && (
                         <CollapsibleSection title="Stack Trace Original" defaultOpen={false}>
                             <DetailRow>
-                                <CodeBlock style={{ color: '#ef4444' }}>
+                                <CodeBlock className="text-red-600 dark:text-red-500">
                                     {log.originalStack}
                                 </CodeBlock>
                             </DetailRow>

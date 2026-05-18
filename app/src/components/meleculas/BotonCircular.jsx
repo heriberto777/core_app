@@ -18,9 +18,8 @@ export function BotonCircular({
 }) {
   return (
     <div
-      className={`rounded-full flex items-center justify-center absolute ${className}`}
+      className={`rounded-full flex items-center justify-center absolute bg-${bgcolor === "transparent" ? "" : bgcolor} ${className}`}
       style={{
-        backgroundColor: bgcolor,
         minWidth: width,
         minHeight: height,
         transform: `translate(${translateX}, ${translateY})`,
@@ -28,13 +27,7 @@ export function BotonCircular({
       }}
       {...props}
     >
-      <span
-        style={{
-          fontSize: fontsize,
-          textAlign: "center",
-          color: textColor,
-        }}
-      >
+      <span className="text-center text-[{fontsize || '12px'}] text-[{textColor || 'currentColor'}]">
         {icono}
       </span>
     </div>

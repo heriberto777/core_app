@@ -51,8 +51,8 @@ export function ProcessingStatusModal({ isOpen, taskId, accessToken, mappingName
                 <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full blur-3xl -mr-16 -mt-16 opacity-50" />
                 
                 <div className="flex items-center gap-6 relative z-10">
-                    <div className="w-16 h-16 bg-blue-600 rounded-[22px] flex items-center justify-center text-white shadow-xl shadow-blue-600/20">
-                        <FaSync className="text-2xl animate-spin" style={{ animationDuration: '3s' }} />
+                    <div className="w-16 h-16 bg-blue-600 rounded-[22px] flex items-center justify-center text-white shadow-xl shadow-blue-600/20 animate-spin">
+                        <FaSync className="text-2xl" />
                     </div>
                     <div className="flex flex-col">
                         <h3 className="text-xl font-black text-slate-900 leading-tight">Procesamiento en Curso</h3>

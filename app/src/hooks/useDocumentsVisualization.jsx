@@ -142,13 +142,26 @@ export function useDocumentsVisualization(accessToken) {
             setSelectedDocuments([]);
             setSelectAll(false);
         } else {
-            const idField = filteredDocuments.length > 0 ? Object.keys(filteredDocuments[0])[0] : null;
-            if (idField) {
+            if (filteredDocuments.length > 0) {
+                let idField = Object.keys(filteredDocuments[0])[0];
+                if (activeConfig?.tableConfigs && activeConfig.tableConfigs.length > 0) {
+                    const mainTable = activeConfig.tableConfigs[0];
+                    if (mainTable.primaryKey) {
+                        if (filteredDocuments[0][mainTable.primaryKey] !== undefined) {
+                            idField = mainTable.primaryKey;
+                        } else {
+                            const pkMap = mainTable.fieldMappings?.find(fm => fm.sourceField === mainTable.primaryKey);
+                            if (pkMap && filteredDocuments[0][pkMap.targetField] !== undefined) {
+                                idField = pkMap.targetField;
+                            }
+                        }
+                    }
+                }
                 setSelectedDocuments(filteredDocuments.map(doc => doc[idField]));
                 setSelectAll(true);
             }
         }
-    }, [filteredDocuments, selectAll, selectedDocuments.length]);
+    }, [filteredDocuments, selectAll, selectedDocuments.length, activeConfig]);
 
     // Processing Logic
     const executeProcessing = async (overrideIds = null) => {

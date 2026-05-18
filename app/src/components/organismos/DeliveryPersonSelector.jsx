@@ -1,7 +1,7 @@
 // app/src/components/organismos/DeliveryPersonSelector.jsx - TAILWIND EDITION
-import { useState } from "react";
+import { useState, useMemo } from "react";
 import { LoadsButton } from "../../index";
-import { FaTruck, FaWarehouse, FaTimes, FaUser, FaCheckCircle, FaCircle, FaInfoCircle } from "react-icons/fa";
+import { FaTruck, FaWarehouse, FaTimes, FaUser, FaCheckCircle, FaCircle, FaInfoCircle, FaSearch } from "react-icons/fa";
 
 export function DeliveryPersonSelector({
   isOpen,
@@ -12,6 +12,28 @@ export function DeliveryPersonSelector({
   loading = false
 }) {
   const [selectedVendedor, setSelectedVendedor] = useState(null);
+  const [searchQuery, setSearchQuery] = useState("");
+
+  // Filtrar solo repartidores (isVendedor = 'Re') y aplicar búsqueda
+  const filteredDeliveryPersons = useMemo(() => {
+    const onlyDelivery = deliveryPersons.filter(
+      (person) => person.isVendedor === "Re"
+    );
+
+    if (!searchQuery.trim()) return onlyDelivery;
+
+    const normalizedQuery = searchQuery.toLowerCase().trim();
+    return onlyDelivery.filter((person) => {
+      const personName = (person.name || person.NOMBRE || "").toLowerCase();
+      const personCode = (person.code || person.VENDEDOR || person.id || "").toString().toLowerCase();
+      const personWarehouse = (person.assignedWarehouse || person.BODEGA_ASIGNADA || "").toLowerCase();
+      return (
+        personName.includes(normalizedQuery) ||
+        personCode.includes(normalizedQuery) ||
+        personWarehouse.includes(normalizedQuery)
+      );
+    });
+  }, [deliveryPersons, searchQuery]);
 
   if (!isOpen) return null;
 
@@ -25,9 +47,16 @@ export function DeliveryPersonSelector({
     0
   );
 
+
   const handleSelect = () => {
     if (!selectedVendedor) return;
     onSelect(selectedVendedor.code || selectedVendedor.VENDEDOR);
+  };
+
+  const handleClose = () => {
+    setSearchQuery("");
+    setSelectedVendedor(null);
+    onClose();
   };
 
   const formatCurrency = (amount) => {
@@ -49,10 +78,10 @@ export function DeliveryPersonSelector({
             </div>
             <div className="flex flex-col">
               <h3 className="text-xl font-black text-slate-900 leading-tight">Asignación Logística</h3>
-              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Selección de Repartidor / Vendedor</span>
+              <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest mt-1">Selección de Repartidor</span>
             </div>
           </div>
-          <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+          <button onClick={handleClose} className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
             <FaTimes />
           </button>
         </div>
@@ -78,21 +107,53 @@ export function DeliveryPersonSelector({
               </div>
             </div>
           </div>
+
+          {/* Buscador de Repartidor */}
+          <div className="mt-6 relative">
+            <FaSearch className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-300 text-sm" />
+            <input
+              type="text"
+              placeholder="Buscar repartidor por nombre, código o bodega..."
+              value={searchQuery}
+              onChange={(e) => setSearchQuery(e.target.value)}
+              className="w-full pl-12 pr-5 py-4 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold text-slate-800 placeholder:text-slate-300 placeholder:font-medium focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+            />
+            {searchQuery && (
+              <button
+                onClick={() => setSearchQuery("")}
+                className="absolute right-4 top-1/2 -translate-y-1/2 w-7 h-7 flex items-center justify-center rounded-lg hover:bg-slate-200 text-slate-400 transition-colors"
+              >
+                <FaTimes className="text-xs" />
+              </button>
+            )}
+          </div>
+
+          {/* Contador de resultados */}
+          <div className="mt-3 mb-2 px-1">
+            <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
+              {filteredDeliveryPersons.length} repartidor{filteredDeliveryPersons.length !== 1 ? "es" : ""} disponible{filteredDeliveryPersons.length !== 1 ? "s" : ""}
+              {searchQuery && ` · "${searchQuery}"`}
+            </span>
+          </div>
         </div>
 
         {/* Body (Scrollable) */}
-        <div className="flex-1 overflow-y-auto p-8 custom-scrollbar">
-          {deliveryPersons.length === 0 ? (
+        <div className="flex-1 overflow-y-auto p-8 pt-4 custom-scrollbar">
+          {filteredDeliveryPersons.length === 0 ? (
             <div className="py-20 text-center flex flex-col items-center gap-6 opacity-30">
               <FaUser className="text-6xl" />
               <div className="space-y-1">
-                <p className="text-sm font-black uppercase tracking-widest">Sin repartidores disponibles</p>
-                <p className="text-[10px] font-bold uppercase tracking-widest">Contacte al administrador del sistema</p>
+                <p className="text-sm font-black uppercase tracking-widest">
+                  {searchQuery ? "Sin resultados para esta búsqueda" : "Sin repartidores disponibles"}
+                </p>
+                <p className="text-[10px] font-bold uppercase tracking-widest">
+                  {searchQuery ? "Intente con otro término" : "Contacte al administrador del sistema"}
+                </p>
               </div>
             </div>
           ) : (
             <div className="grid grid-cols-1 gap-4">
-              {deliveryPersons.map((vendedor) => {
+              {filteredDeliveryPersons.map((vendedor) => {
                 const vendedorId = vendedor.code || vendedor.VENDEDOR || vendedor.id;
                 const isSelected = (selectedVendedor?.code || selectedVendedor?.VENDEDOR || selectedVendedor?.id) === vendedorId;
 
@@ -154,7 +215,7 @@ export function DeliveryPersonSelector({
           )}
 
           <div className="flex justify-end gap-3">
-            <LoadsButton variant="ghost" onClick={onClose} className="font-bold">Cancelar</LoadsButton>
+            <LoadsButton variant="ghost" onClick={handleClose} className="font-bold">Cancelar</LoadsButton>
             <LoadsButton
               variant="primary"
               onClick={handleSelect}

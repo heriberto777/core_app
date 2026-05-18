@@ -97,7 +97,7 @@ const DetailTableWithPromotions = ({ data = [], mapping = {}, documentId }) => {
                 </th>
               ))}
               {isPromotionEnabled && (
-                <th className="p-3 text-left bg-slate-100 dark:bg-slate-700 border-b border-slate-200 dark:border-slate-700 font-semibold text-slate-600 dark:text-slate-400 sticky top-0 z-10" style={{ width: "60px" }}>
+                <th className="p-3 text-left bg-slate-100 dark:bg-slate-700 border-b border-slate-200 dark:border-slate-700 font-semibold text-slate-600 dark:text-slate-400 sticky top-0 z-10" style={{ width: "60px", ...style }}>
                   Promo
                 </th>
               )}

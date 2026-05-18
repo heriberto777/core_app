@@ -4,9 +4,8 @@ import { FaLock, FaBan } from "react-icons/fa";
 
 function LockedContainer({ children, minHeight }) {
   return (
-    <div 
-      className="flex flex-col items-center justify-center p-5 bg-slate-800/40 rounded-lg border border-dashed border-slate-600 text-slate-400"
-      style={{ minHeight: minHeight || '100px' }}
+    <div
+       className={`flex flex-col items-center justify-center p-5 bg-slate-800/40 rounded-lg border border-dashed border-slate-600 text-slate-400 min-h-[${minHeight || 100}px]`}
     >
       {children}
     </div>

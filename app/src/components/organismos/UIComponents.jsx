@@ -272,7 +272,6 @@ export const Badge = ({ children, variant = "primary", size = "md", textColor = 
         ${sizes[size] || sizes.md}
         ${className}
       `}
-      style={{ color: textColor }}
       {...props}
     >
       {children}

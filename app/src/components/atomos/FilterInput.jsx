@@ -93,7 +93,7 @@ export const FilterInput = ({
               <div
                 onClick={() => !disabled && setIsSelectOpen(!isSelectOpen)}
                 className={`${baseInputClasses} cursor-pointer ${disabled ? "cursor-not-allowed" : ""}`}
-                style={style}
+                style={{ ...style }}
               >
                 {selectedOption?.label || placeholder || "Seleccionar..."}
               </div>
@@ -139,7 +139,7 @@ export const FilterInput = ({
               disabled={disabled}
               required={required}
               className={baseInputClasses}
-              style={style}
+              style={{ ...style }}
               {...props}
             >
               {placeholder && <option value="">{placeholder}</option>}
@@ -164,7 +164,7 @@ export const FilterInput = ({
             disabled={disabled}
             required={required}
             className={baseInputClasses}
-            style={style}
+            style={{ ...style }}
             {...props}
           />
         );
@@ -180,7 +180,7 @@ export const FilterInput = ({
               disabled={disabled}
               required={required}
               className={`${baseInputClasses} ${(icon || showSearchIcon) ? "pr-9" : ""}`}
-              style={style}
+              style={{ ...style }}
               {...props}
             />
             {(icon || showSearchIcon) && (
