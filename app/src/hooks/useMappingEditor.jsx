@@ -101,7 +101,8 @@ export function useMappingEditor(mappingId, accessToken, onSave, onCancel) {
 
         setSaving(true);
         try {
-            const mappingCopy = JSON.parse(JSON.stringify(mapping));
+            // Usar spread operator para preservar propiedades con puntos en el nombre
+            const mappingCopy = JSON.parse(JSON.stringify({ ...mapping }));
 
             // Normalización de campos
             mappingCopy.tableConfigs.forEach(table => {
