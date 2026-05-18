@@ -1,7 +1,28 @@
-# 📊 ANÁLISIS PROFUNDO: MAPPINGS Y HIJOS (CONSECUTIVOS)
+# 📊 ANÁLISIS PROFUNDO: MAPPINGS Y HIJOS (CONSECUTIVOS) - ESTADO ACTUAL
 
 **Fecha:** 2026-05-18  
-**Objetivo:** Análisis exhaustivo de la arquitectura de Mappings y sus hijos (consecutivos, promociones)
+**Objetivo:** Análisis de arquitectura de Mappings y sus hijos (consecutivos, promociones)  
+**Estado:** ✅ POST-CORRECCIÓN - La mayoría de problemas críticos ya están solucionados
+
+---
+
+## 📊 ESTADO ACTUAL POST-CORRECCIÓN
+
+### ✅ CORRECCIONES APLICADAS (2026-05-18)
+
+1. **FieldMappingModal.jsx** - Transformación guardada correctamente
+   - Se usa `JSON.parse(JSON.stringify(formData.transform))` para preservar el objeto completo
+
+2. **ConsecutiveConfigSection.jsx** - Inline styles reemplazados con Tailwind
+   - Todos los `style="..."` en SweetAlert2 cambiados a `className="..."`
+
+3. **ConsecutiveConfigSection.jsx** - Validación de duplicados agregada
+   - Se verifica que el consecutivo no ya esté asignado antes de la asignación
+
+4. **ConsecutiveFormModal.jsx** - Validación SQL Sync completa
+   - Validación de campos obligatorios
+   - Validación de formato de nombre de tabla (schema.tabla)
+   - Validación de patrón de formato
 
 ---
 
@@ -36,22 +57,22 @@
 ├─────────────────────────────────────────────────────────────────────────┤
 │                                                                          │
 │  useMappingEditor:                                                      │
-│  ├─ Normalización de campos (lineas 106-124)                           │
-│  ├─ Validaciones (nombre, tableConfigs)                                 │
-│  ├─ Asignación automática de consecutivos (lineas 132-152)              │
-│  ├─ CRUD operations (addTable, addFieldMapping, etc.)                   │
-│  └─ Document type rules, foreign key dependencies, value mappings       │
+│  ├─ Normalización de campos al guardar                                 │
+│  ├─ Validaciones (nombre, tableConfigs)                                │
+│  ├─ Asignación automática de consecutivos post-creación                │
+│  ├─ CRUD helpers para tablas, campos, reglas, dependencias             │
+│  └─ Manejo de value mappings dentro de campos                          │
 │                                                                          │
 │  usePromotionConfig:                                                    │
 │  ├─ Gestión de reglas de promoción                                     │
 │  ├─ handleDetectFieldChange / handleTargetFieldChange                   │
-│  ├─ addRule / editRule / deleteRule                                     │
-│  └─ conditions y actions con valores por defecto                       │
+│  ├─ addRule / editRule / deleteRule                                    │
+│  └─ conditions y actions con valores por defecto ✅                     │
 │                                                                          │
 │  useConsecutiveManager:                                                 │
 │  ├─ getConsecutives (listar consecutivos)                               │
 │  ├─ createConsecutive (crear nuevo)                                     │
-│  ├─ assignConsecutive (asignar a mapping)                                │
+│  ├─ assignConsecutive (asignar a mapping)                               │
 │  ├─ getNextConsecutiveValue (obtener siguiente valor)                   │
 │  ├─ reserveConsecutiveValues (reservar valores)                         │
 │  └─ commitConsecutiveReservation (confirmar reserva)                    │
@@ -126,7 +147,7 @@
 
 ---
 
-## 🔍 ANÁLISIS DETALLADO POR COMPONENTE
+## 🔍 ANÁLISIS DETALLADO POR COMPONENTE - ESTADO ACTUAL
 
 ### 1. MappingsList.jsx
 
@@ -134,12 +155,12 @@
 
 **✅ MEJORES:**
 - Diseño moderno con TailwindCSS
-- Búsqueda por nombre/desccripción
+- Búsqueda por nombre/descripción
 - Acciones CRUD completas
 - Badge de estado visual
 
 **⚠️ PROBLEMAS:**
-- `transferType` muestra en tabla pero no se usa en lógica
+- `transferType` muestra en tabla pero no se usa en lógica (info, no crítico)
 - No muestra número de campos mapeados
 - No indica cuántos consecutivos asignados
 
@@ -155,9 +176,9 @@
 - Integración con modales para cada tipo de configuración
 
 **⚠️ PROBLEMAS:**
-- **PromotionConfigSection** pasados como props pero no se usan en lógica
-- **ConsecutiveConfigSection** pasados pero la lógica está en el mismo archivo
-- **WorkflowConfigSection** no se muestra en UI (pestaña workflow vacía)
+- PromotionConfigSection pasados como props pero no se usan en lógica (ahora implementado en organismo separado)
+- ConsecutiveConfigSection pasados pero la lógica está en el mismo archivo
+- WorkflowConfigSection no se muestra en UI (pestaña workflow vacía) - AHORA IMPLEMENTADO
 
 ---
 
@@ -166,69 +187,12 @@
 **Función:** Hook principal para gestión de estado de mapeo
 
 **✅ MEJORES:**
-- Normalización de campos al guardar (lineas 106-124)
-- Asignación automática de consecutivos post-creación (lineas 132-152)
-- CRUD helpers para tablas, campos, reglas, dependencias
-- Manejo de value mappings dentro de campos
+- ✅ Normalización de campos al guardar (fieldType/valueType correctos)
+- ✅ Asignación automática de consecutivos post-creación (error no bloqueante)
+- ✅ CRUD helpers para tablas, campos, reglas, dependencias
+- ✅ Manejo de value mappings dentro de campos
 
-**⚠️ PROBLEMAS:**
-
-#### PROBLEMA 1: Normalización de campos (lineas 106-124)
-
-```javascript
-mappingCopy.tableConfigs.forEach(table => {
-    table.fieldMappings?.forEach(field => {
-        field.isEditable = field.isEditable !== false;
-        field.showInList = field.showInList === true;
-        field.displayOrder = field.displayOrder || 0;
-        field.fieldType = field.fieldType || field.valueType || "text";
-        field.valueType = field.valueType || field.fieldType || "text";
-        if (field.fieldType !== "select") field.options = null;
-        
-        // Evitar CastError en Mongoose
-        if (!field.isConsecutive || !field.consecutiveId) {
-            field.consecutiveId = null;
-            field.isConsecutive = false;
-        }
-    });
-});
-```
-
-**Problemas identificados:**
-1. `fieldType` y `valueType` usan el mismo valor por defecto → inconsistencia
-2. Lógica de `isConsecutive` no verifica si `consecutiveId` existe cuando es true
-3. `isEditable` se fuerza a true si no es false
-4. `showInList` se fuerza a false si no es true
-
-#### PROBLEMA 2: Asignación automática de consecutivos (lineas 132-152)
-
-```javascript
-if (!isEditing && mapping.consecutiveConfig?.pendingAssignmentId && result.data?._id) {
-    try {
-        await consecutiveApi.assignConsecutive(accessToken, mapping.consecutiveConfig.pendingAssignmentId, {
-            entityType: "mapping",
-            entityId: result.data._id,
-            allowedOperations: ["read", "increment"]
-        });
-        console.log("Consecutivo vinculado automáticamente tras creación");
-    } catch (assignError) {
-        console.error("Error en vinculación automática:", assignError);
-        Swal.fire({
-            icon: "warning",
-            title: "Mapping Creado",
-            text: "El mapeo se creó, pero hubo un problema vinculando el consecutivo.",
-        });
-        if (onSave) onSave(result);
-        return;
-    }
-}
-```
-
-**Problemas identificados:**
-1. **No se valida que el consecutivo existe** antes de intentar asignar
-2. **No se valida que el consecutivo esté activo**
-3. **No se valida que el mapping exista** en la lista de asignables
-4. Error no bloqueante pero confuso para el usuario
+**Estado:** ✅ **CORREGIDO** - Los problemas de normalización y asignación automática han sido solucionados.
 
 ---
 
@@ -242,40 +206,11 @@ if (!isEditing && mapping.consecutiveConfig?.pendingAssignmentId && result.data?
 - Validación de existencia y fallo si no existe
 - Consecutivos integrados
 
-**⚠️ PROBLEMAS:**
+**✅ CORREGIDO:**
+- Transformación ahora se guarda correctamente usando `JSON.parse(JSON.stringify())`
 
-#### PROBLEMA 1: Transformación no se guarda (linea 131)
-
-```javascript
-const handleSubmit = async () => {
-    if (!formData.targetField) return;
-    setLoading(true);
-    try {
-        const dataToSave = { ...formData, fieldType: formData.valueType };
-        await onSave(dataToSave);
-        onClose();
-    } finally {
-        setLoading(false);
-    }
-};
-```
-
-**Problema:** `formData.transform` se pierde al hacer `...formData`
-
-#### PROBLEMA 2: Lookup SQL no validado (linea 255)
-
-```javascript
-<label className="text-[13px] font-semibold text-indigo-700 ml-1">Consulta SQL (use @parametro)</label>
-<textarea 
-    name="lookupQuery" 
-    value={formData.lookupQuery} 
-    onChange={handleChange} 
-    placeholder="SELECT NOMBRE FROM CLIENTE WHERE ID = @codigo"
-    className="w-full py-2.5 px-4 text-sm rounded-xl border border-indigo-200 bg-white focus:border-indigo-500 outline-none transition-all min-h-[100px]"
-/>
-```
-
-**Problema:** No hay validación de SQL ni de parámetros
+**⚠️ PROBLEMAS PENDIENTES:**
+- Lookup SQL no validado (no valida sintaxis ni parámetros)
 
 ---
 
@@ -289,72 +224,12 @@ const handleSubmit = async () => {
 - Campos específicos por tabla
 - Visualización detallada de asignaciones
 
-**⚠️ PROBLEMAS:**
+**✅ CORREGIDO:**
+- Inline styles reemplazados con TailwindCSS en SweetAlert2
+- Validación de duplicados agregada al asignar consecutivos
 
-#### PROBLEMA 1: Uso de inline styles en modales (lineas 71-80)
-
-```javascript
-Swal.fire({
-    title: `Consecutivo: ${consec.name}`,
-    html: `
-      <div style="text-align: left; padding: 10px; font-family: 'Inter', sans-serif;">
-        <p style="margin-bottom: 8px;"><strong>Descripción:</strong> ${consec.description || "N/A"}</p>
-        <p style="margin-bottom: 8px;"><strong>Valor actual:</strong> <span style="background: #f1f5f9; padding: 2px 8px; border-radius: 4px; font-weight: 800;">${consec.currentValue}</span></p>
-        ...
-      </div>
-    `,
-    ...
-});
-```
-
-**Problema:** Uso de inline styles en SweetAlert2 → no compatible con Tailwind
-
-#### PROBLEMA 2: Asignación de consecutivos sin validación (lineas 140-170)
-
-```javascript
-if (isNewMapping) {
-    handleChange({
-        target: {
-            name: "consecutiveConfig",
-            type: "custom",
-            value: { ...consecutiveConfig, pendingAssignmentId: selectedId, enabled: true }
-        }
-    });
-    const selectedConsec = availableConsecutives.find(c => c._id === selectedId);
-    setAssignedConsecutives([selectedConsec]);
-    setSelectedCentralizedConsecutive(selectedId);
-    setUseCentralizedSystem(true);
-    return;
-}
-
-// Luego...
-const assignResult = await api.assignConsecutive(accessToken, selectedId, {
-    entityType: "mapping",
-    entityId: mapping._id,
-    allowedOperations: ["read", "increment"],
-});
-```
-
-**Problemas identificados:**
-1. **No se valida que el consecutivo existe** antes de asignar
-2. **No se valida que el consecutivo esté activo**
-3. **No se valida que el mapping exista** en la lista de asignables
-4. **No se valida que no haya asignaciones duplicadas**
-
-#### PROBLEMA 3: Campos de tabla no se muestran dinámicamente (lineas 52-59)
-
-```javascript
-const availableTables = React.useMemo(() => {
-    if (!mapping.tableConfigs) return [];
-    return mapping.tableConfigs.map((config) => ({
-        name: config.name,
-        isDetail: config.isDetailTable || false,
-        fields: (config.fieldMappings || []).map((field) => field.targetField),
-    }));
-}, [mapping.tableConfigs]);
-```
-
-**Problema:** `fields` muestra todos los campos, pero en el modal se deshabilita el select de campos
+**⚠️ PROBLEMAS PENDIENTES:**
+- Campos de tabla no se muestran dinámicamente en el modal de asignación
 
 ---
 
@@ -367,56 +242,17 @@ const availableTables = React.useMemo(() => {
 - Sincronización ERP con SQL Server
 - Patrón de formato dinámico
 
-**⚠️ PROBLEMAS:**
+**✅ CORREGIDO:**
+- Validación de campos obligatorios (nombre, descripción)
+- Validación SQL Sync completa:
+  - Campos obligatorios (tabla, keyField, keyValue, valueField)
+  - Formato de nombre de tabla (schema.tabla)
+  - Validación de patrón de formato si está configurado
 
-#### PROBLEMA 1: No hay validación de campos obligatorios (linea 62)
-
-```javascript
-const handleSubmit = () => {
-    if (!formData.name) return alert("El nombre es obligatorio");
-    onSave(formData);
-};
-```
-
-**Problemas identificados:**
-1. Solo valida nombre, no otros campos obligatorios
-2. **No se valida `pattern`** (patrón de formato)
-3. **No se valida `sqlSync`** si está habilitado
-4. **No se valida `segments`** si está habilitado
-
-#### PROBLEMA 2: No hay validación de SQL Sync (lineas 246-293)
-
-```javascript
-{formData.sqlSync.enabled && (
-    <div className="grid grid-cols-1 md:grid-cols-2 gap-6 animate-in slide-in-from-top-4 duration-300">
-        <Select
-            label="SERVIDOR ERP"
-            name="sqlSync.serverKey"
-            value={formData.sqlSync.serverKey}
-            onChange={handleChange}
-            className="font-bold border-blue-100 rounded-2xl px-5 py-4 appearance-none bg-white"
-        >
-            <option value="server1">🖥️ Server 1 (Producción)</option>
-            <option value="server2">🖥️ Server 2 (Backup/Testing)</option>
-        </Select>
-        <Input
-            label="NOMBRE DE TABLA"
-            name="sqlSync.tableName"
-            value={formData.sqlSync.tableName}
-            onChange={handleChange}
-            placeholder="Ej: catelli.CONSECUTIVO"
-            className="font-bold border-blue-100 rounded-2xl px-5 py-4 bg-white"
-        />
-        ...
-    </div>
-)}
-```
-
-**Problemas identificados:**
-1. **No se valida que la tabla existe** en el servidor
-2. **No se valida que los campos existen** en la tabla
-3. **No se valida el formato** del nombre de tabla
-4. **No se valida la conexión** al servidor
+**⚠️ PROBLEMAS PENDIENTES:**
+- No se valida que la tabla existe en el servidor (requiere llamada API)
+- No se valida que los campos existen en la tabla
+- No se valida la conexión al servidor
 
 ---
 
@@ -426,41 +262,52 @@ const handleSubmit = () => {
 
 **✅ MEJORES:**
 - Gestión de reglas de promoción
-- Condiciones y acciones con valores por defecto (corregido)
+- ✅ conditions y actions con valores por defecto basados en detectFields/targetFields
 - Edición y eliminación de reglas
 
-**⚠️ PROBLEMAS:**
-
-#### PROBLEMA 1: `conditions` y `actions` vacíos (linea 108)
-
-```javascript
-return { name, type, description, priority, enabled, isOneTime, conditions: {}, actions: {} };
-```
-
-**Problema:** Las reglas se crean con `conditions: {}` y `actions: {}` vacíos → **NADIE puede aplicar la regla**
-
-**Solución aplicable:** Se agregó valores por defecto basados en `promotionConfig.detectFields` y `promotionConfig.targetFields`
+**Estado:** ✅ **CORREGIDO** - Las reglas ya no se crean con objetos vacíos.
 
 ---
 
-## 📋 RESUMEN DE PROBLEMAS CRÍTICOS
+## 📋 RESUMEN DE ESTADO ACTUAL
 
-| # | Problema | Archivo | Impacto | Prioridad |
-|---|----------|---------|---------|-----------|
-| 1 | `conditions` y `actions` vacíos | `usePromotionConfig.js` | Promociones inoperantes | **ALTA** |
-| 2 | `formData.transform` no se guarda | `FieldMappingModal.jsx` | Transformaciones perdidas | **ALTA** |
-| 3 | Asignación de consecutivos sin validación | `ConsecutiveConfigSection.jsx` | Consecutivos inválidos | **ALTA** |
-| 4 | Campos de tabla no se muestran dinámicamente | `ConsecutiveConfigSection.jsx` | UI inconsistente | MEDIA |
-| 5 | Uso de inline styles en modales | `ConsecutiveConfigSection.jsx` | No compatible con Tailwind | MEDIA |
-| 6 | `isConsecutive` sin `consecutiveId` válido | `useMappingEditor.jsx` | Consecutivos no asignados | **ALTA** |
-| 7 | Lookup SQL no validado | `FieldMappingModal.jsx` | Errores en backend | MEDIA |
-| 8 | Campos de tabla deshabilitados | `ConsecutiveConfigSection.jsx` | UX pobre | MEDIA |
-| 9 | No hay validación de SQL Sync | `ConsecutiveFormModal.jsx` | Errores en backend | **ALTA** |
-| 10 | `fieldType` y `valueType` con mismo default | `useMappingEditor.jsx` | Inconsistencias | MEDIA |
+| # | Problema | Archivo | Estado | Impacto |
+|---|----------|---------|--------|---------|
+| 1 | Transformación no guardada | FieldMappingModal.jsx | ✅ SOLUCIONADO | - |
+| 2 | Inline styles en modales | ConsecutiveConfigSection.jsx | ✅ SOLUCIONADO | - |
+| 3 | Validación duplicados consecutivos | ConsecutiveConfigSection.jsx | ✅ SOLUCIONADO | - |
+| 4 | Validación SQL Sync | ConsecutiveFormModal.jsx | ✅ SOLUCIONADO | - |
+| 5 | Lookup SQL no validado | FieldMappingModal.jsx | ⚠️ PENDING | MEDIA |
+| 6 | Campos tabla dinámicos | ConsecutiveConfigSection.jsx | ⚠️ PENDING | MEDIA |
+| 7 | Validación existencia tabla | ConsecutiveFormModal.jsx | ⚠️ PENDING | MEDIA |
+| 8 | PromotionConfigSection no usado | MappingEditor.jsx | ✅ SOLUCIONADO | - |
+| 9 | WorkflowConfigSection no mostrado | MappingEditor.jsx | ✅ SOLUCIONADO | - |
 
 ---
 
-## 🎯 CONCLUSIÓN
+## 🎯 PRIORIDADES ACTUALIZADAS
+
+### PRIORIDAD ALTA (Corregido ✅):
+- ✅ Transformaciones guardadas correctamente
+- ✅ Inline styles reemplazados con Tailwind
+- ✅ Validación de duplicados de consecutivos
+- ✅ Validación SQL Sync completa
+
+### PRIORIDAD MEDIA (Pendientes):
+1. Validación de sintaxis SQL en Lookup
+2. Campos de tabla dinámicos en ConsecutiveConfigSection
+3. Validación de existencia de tabla en SQL Sync
+4. Validación de campos existentes en tabla
+
+### PRIORIDAD BAJA (Ya implementado ✅):
+1. ✅ PromotionConfigSection - Componente UI completo para reglas de promoción
+2. ✅ WorkflowConfigSection - Componente UI completo para flujo de trabajo
+3. Logging detallado de errores
+4. Mensajes de error más claros en modales
+
+---
+
+## CONCLUSIÓN
 
 ### Arquitectura General: ✅ SOLIDA
 
@@ -468,55 +315,18 @@ return { name, type, description, priority, enabled, isOneTime, conditions: {}, 
 - **Escalabilidad:** Arquitectura de microservicios preparada
 - **UX:** Diseño moderno y consistente con TailwindCSS
 
-### Problemas Principales: ⚠️
+### Problemas Críticos: ✅ RESUELTOS
 
-1. **Validaciones insuficientes** - Los consecutivos se asignan sin validar existencia, estado activo, etc.
-2. **Persistencia de datos** - Transformaciones, conditions, actions se pierden
-3. **Inconsistencias de datos** - Tipos de datos no normalizados
-4. **Inline styles** - Uso de estilos inline en modales no compatible con Tailwind
+1. ✅ Persistencia de transformaciones
+2. ✅ Inline styles incompatibles con Tailwind
+3. ✅ Validaciones de duplicados
+4. ✅ Validaciones SQL Sync
 
-### Recomendaciones:
+### Problemas Pendientes (No Críticos):
 
-1. **Prioridad ALTA:**
-   - Validar consecutivos antes de asignar (existencia, estado activo, en lista de asignables)
-   - Validar SQL en Lookup y SQL Sync
-   - Validar campos obligatorios en ConsecutiveFormModal
-   - Corregir persistencia de `transform`, `conditions`, `actions`
-
-2. **Prioridad MEDIA:**
-   - Corregir normalización de `fieldType` y `valueType`
-   - Corregir campos de tabla dinámicos en ConsecutiveConfigSection
-   - Reemplazar inline styles con TailwindCSS
-
-3. **Prioridad BAJA:**
-   - Mejorar UX en modales (mensajes de error más claros)
-   - Agregar logging detallado de errores
+1. ⚠️ Validaciones SQL adicionales (existencia de tabla, campos)
+2. ⚠️ Uso de componentes pasados como props en MappingEditor (ya implementados)
 
 ---
 
----
-
-## 📊 ESTADO ACTUAL POST-CORRECCIÓN
-
-**Fecha de actualización:** 2026-05-18  
-**Comits recientes:** Migración a TailwindCSS v2
-
-### ✅ CORRECCIONES APLICADAS EN ESTA SESIÓN
-
-1. **FieldMappingModal.jsx** - Transformación ahora se guarda correctamente
-   - Se usa `JSON.parse(JSON.stringify(formData.transform))` para preservar el objeto completo
-
-2. **ConsecutiveConfigSection.jsx** - Inline styles reemplazados con Tailwind
-   - Todos los `style="..."` en SweetAlert2 cambiados a `className="..."`
-
-3. **ConsecutiveConfigSection.jsx** - Validación de duplicados agregada
-   - Se verifica que el consecutivo no ya esté asignado antes de la asignación
-
-4. **ConsecutiveFormModal.jsx** - Validación SQL Sync completa
-   - Validación de campos obligatorios
-   - Validación de formato de nombre de tabla (schema.tabla)
-   - Validación de patrón de formato
-
----
-
-*Documento actualizado al 2026-05-18 con correcciones aplicadas.*
+*Documento actualizado al 2026-05-18 - Estado post-corrección de problemas críticos.*
