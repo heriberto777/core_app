@@ -202,20 +202,6 @@ export function TaskFormModal({
                             </div>
 
                             <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Transferencia</label>
-                                <Select
-                                    value={formData.transferType || ""}
-                                    onChange={e => handleChange("transferType", e.target.value)}
-                                    className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800"
-                                >
-                                    <option value="">-- Seleccionar --</option>
-                                    <option value="up">↑ Up (Server2 → Server1)</option>
-                                    <option value="down">↓ Down (Server1 → Server2)</option>
-                                    <option value="internal">⇄ Internal</option>
-                                </Select>
-                            </div>
-
-                            <div className="flex flex-col gap-1.5">
                                 <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Clear Before Insert</label>
                                 <label className="flex items-center gap-3 cursor-pointer">
                                     <input
@@ -263,9 +249,10 @@ export function TaskFormModal({
                                 <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Next Tasks</label>
                                 <div className="flex flex-col gap-2">
                                     <Button variant="ghost" size="sm" onClick={() => {
+                                        const newTask = allTasks.find(t => t._id !== task?._id);
                                         setFormData(prev => ({
                                             ...prev,
-                                            nextTasks: [...(prev.nextTasks || []), allTasks.find(t => t._id === formData.nextTasks?.lastTaskId || allTasks[0]?._id)]
+                                            nextTasks: [...(prev.nextTasks || []), newTask]
                                         }));
                                     }} className="w-full justify-between">
                                         <span>+ Añadir Tarea Siguiente</span>
@@ -457,14 +444,17 @@ export function TaskFormModal({
                                 <h4 className="font-bold text-slate-700 mb-3">Siguientes Mapeos</h4>
                                 <div className="flex flex-col gap-2">
                                     <Button variant="ghost" size="sm" onClick={() => {
-                                        const nextMapping = allTasks.find(t => t._id !== task?._id);
-                                        setFormData(prev => ({
-                                            ...prev,
-                                            workflowConfig: {
-                                                ...formData.workflowConfig,
-                                                nextMappings: [...(formData.workflowConfig?.nextMappings || []), nextMapping]
-                                            }
-                                        }));
+                                        const filteredTasks = allTasks.filter(t => t._id !== task?._id);
+                                        const nextMapping = filteredTasks[0];
+                                        if (nextMapping) {
+                                            setFormData(prev => ({
+                                                ...prev,
+                                                workflowConfig: {
+                                                    ...formData.workflowConfig,
+                                                    nextMappings: [...(formData.workflowConfig?.nextMappings || []), nextMapping]
+                                                }
+                                            }));
+                                        }
                                     }} className="w-full justify-between">
                                         <span>+ Añadir Siguiente Mapeo</span>
                                         <span className="text-xs text-slate-400">Selecciona una tarea para ejecutar después</span>
