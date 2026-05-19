@@ -174,4 +174,4 @@ El controlador debe validar y normalizar todos los campos antes de guardar.
 
 ---
 
-*Documento actualizado al 2026-05-18 - Solución identificada y lista para implementación.*
+*Documento actualizado al 2026-05-19 - Solución implementada y lista para pruebas.*

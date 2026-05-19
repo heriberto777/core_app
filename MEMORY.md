@@ -82,4 +82,45 @@ El problema se debió al uso de `JSON.parse(JSON.stringify(mapping))` que elimin
 
 ---
 
-*Documento actualizado al 2026-05-18 - Solución aplicada y lista para pruebas.*
+## INVESTIGACIÓN: Problema de Edición de Tareas
+
+**Fecha:** 2026-05-19  
+**Estado:** ✅ RESUELTO
+
+### Descripción del Problema
+
+Cuando se edita una tarea (task), las propiedades o opciones no se cargan correctamente.
+
+### Causa Raíz Identificada
+
+1. **Frontend:** `TaskFormModal.jsx` solo carga 5 campos básicos (name, description, schedule, sourceDb, targetDb) en lugar del objeto completo
+2. **Backend:** `transferTaskController.js` usa destructuración que omite campos desconocidos
+
+### Solución Aplicada
+
+**Archivo:** `app/src/components/organismos/TaskFormModal.jsx`
+
+- Reescrito completamente para cargar todos los campos del modelo TransferTask
+- Tabs: General, Base de Datos, Mapeo, Flujo, Ejecución
+- Campos cargados: name, description, type, active, query, parameters, transferType, executionMode, sourceServer, targetServer, clearBeforeInsert, targetTable, fieldMapping, nextTasks, linkedTasks, linkedGroup, linkedExecutionOrder, postUpdateQuery, postUpdateMapping, workflowConfig, etc.
+
+**Archivo:** `server/controllers/transferTaskController.js`
+
+- Cambiado de destructuración a `{...sanitizedBody}` para preservar todos los campos
+- Agregada normalización de campos específicos después del spread
+
+### Verificación
+
+- ✅ Todos los campos se cargan correctamente al editar
+- ✅ Las tabs funcionan correctamente
+- ✅ El nombre de la tarea se muestra correctamente
+- ✅ Todas las opciones y configuraciones se preservan
+
+### Archivos Modificados
+
+- `app/src/components/organismos/TaskFormModal.jsx` - Reescrito completamente
+- `server/controllers/transferTaskController.js` - Usar spread operator
+
+---
+
+*Documento actualizado al 2026-05-19 - Todos los problemas resueltos.*
