@@ -93,14 +93,16 @@ Cuando se edita una tarea (task), las propiedades o opciones no se cargan correc
 
 ### Causa Raíz Identificada
 
-1. **Frontend:** `TaskFormModal.jsx` solo carga 5 campos básicos (name, description, schedule, sourceDb, targetDb) en lugar del objeto completo
-2. **Backend:** `transferTaskController.js` usa destructuración que omite campos desconocidos
+1. **Frontend:** `TaskFormModal.jsx` solo cargaba 5 campos básicos (name, description, schedule, sourceDb, targetDb) en lugar del objeto completo
+2. **Backend:** `transferTaskController.js` usaba destructuración que omitía campos desconocidos
+3. **Errores en el formulario:** Campos duplicados, referencias incorrectas, manejo mal de objetos anidados
 
 ### Solución Aplicada
 
 **Archivo:** `app/src/components/organismos/TaskFormModal.jsx`
 
 - Reescrito completamente para cargar todos los campos del modelo TransferTask
+- Uso de `{...task}` para cargar todo el objeto
 - Tabs: General, Base de Datos, Mapeo, Flujo, Ejecución
 - Campos cargados: name, description, type, active, query, parameters, transferType, executionMode, sourceServer, targetServer, clearBeforeInsert, targetTable, fieldMapping, nextTasks, linkedTasks, linkedGroup, linkedExecutionOrder, postUpdateQuery, postUpdateMapping, workflowConfig, etc.
 
@@ -120,6 +122,7 @@ Cuando se edita una tarea (task), las propiedades o opciones no se cargan correc
 
 - `app/src/components/organismos/TaskFormModal.jsx` - Reescrito completamente
 - `server/controllers/transferTaskController.js` - Usar spread operator
+- `ANALISIS_TASKS_FLOW.md` - Documentación completa del flujo frontend-backend
 
 ---
 
