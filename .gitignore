@@ -28,3 +28,4 @@ app/build/ #no carga modules
 app/dist/ #no carga modules
 
 server/logs/*.log
+logs/*.log
