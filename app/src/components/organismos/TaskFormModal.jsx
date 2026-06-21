@@ -1,533 +1,462 @@
-import React, { useState } from "react";
-import { FaTimes, FaSave, FaDatabase, FaLink, FaList, FaQuestionCircle, FaPlay, FaCogs, FaSync, FaClock, FaTrash, FaUsers, FaLink as FaLinkIcon } from "react-icons/fa";
-import { Button, Input, Select, StatusBadge } from "../../index";
+import React, { useState, useEffect } from "react";
+import styled from "styled-components";
+import { FaTimes, FaSave, FaDatabase, FaLink, FaList, FaVial, FaQuestionCircle } from "react-icons/fa";
 
-/**
- * Corporate TaskFormModal (Tailwind Edition)
- * Formulario completo para crear/editar tareas de transferencia
- */
-export function TaskFormModal({
-    isOpen,
-    onClose,
-    onSave,
-    task = null,
-    loading = false,
-    allTasks = [],
-    accessToken
-}) {
+const Overlay = styled.div`
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0, 0, 0, 0.7);
+  display: flex; align-items: center; justify-content: center;
+  z-index: 1000; backdrop-filter: blur(4px);
+`;
+
+const ModalContent = styled.div`
+  background: ${({ theme }) => theme.cardBg};
+  width: 95%; max-width: 900px;
+  max-height: 90vh;
+  border-radius: 12px;
+  display: flex; flex-direction: column;
+  box-shadow: ${({ theme }) => theme.shadows.premium};
+  border: 1px solid ${({ theme }) => theme.border};
+  overflow: hidden;
+`;
+
+const Header = styled.div`
+  padding: 15px 20px;
+  background: ${({ theme }) => theme.bg2};
+  border-bottom: 1px solid ${({ theme }) => theme.border};
+  display: flex; justify-content: space-between; align-items: center;
+`;
+
+const TabContainer = styled.div`
+  display: flex;
+  background: ${({ theme }) => theme.bg2};
+  border-bottom: 1px solid ${({ theme }) => theme.border};
+`;
+
+const Tab = styled.button`
+  flex: 1;
+  padding: 12px;
+  border: none; background: none;
+  color: ${({ active, theme }) => active ? theme.primary : theme.textSecondary};
+  font-weight: 600; font-size: 13px;
+  cursor: pointer;
+  border-bottom: 2px solid ${({ active, theme }) => active ? theme.primary : "transparent"};
+  transition: all 0.2s;
+  &:hover { background: ${({ theme }) => theme.border}30; }
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+`;
+
+const Body = styled.div`
+  padding: 20px;
+  overflow-y: auto;
+  flex: 1;
+  display: flex; flex-direction: column; gap: 15px;
+`;
+
+const FormGroup = styled.div`
+  display: flex; flex-direction: column; gap: 6px;
+`;
+
+const Label = styled.label`
+  font-size: 13px; font-weight: 700; color: ${({ theme }) => theme.textSecondary};
+  text-transform: uppercase; letter-spacing: 0.5px;
+  display: flex; align-items: center; gap: 8px;
+`;
+
+const HelpIcon = styled.span`
+  color: ${({ theme }) => theme.primary};
+  cursor: help;
+  position: relative;
+
+  &:hover .tooltip {
+    display: block;
+  }
+`;
+
+const Tooltip = styled.div`
+  display: none;
+  position: absolute;
+  bottom: 100%;
+  left: 50%;
+  transform: translateX(-50%);
+  background: ${({ theme }) => theme.bg4};
+  color: ${({ theme }) => theme.text};
+  padding: 10px 14px;
+  border-radius: 8px;
+  font-size: 12px;
+  font-weight: 400;
+  width: 280px;
+  z-index: 100;
+  box-shadow: ${({ theme }) => theme.shadows.medium};
+  text-transform: none;
+  letter-spacing: normal;
+  line-height: 1.4;
+
+  &::after {
+    content: '';
+    position: absolute;
+    top: 100%;
+    left: 50%;
+    transform: translateX(-50%);
+    border: 6px solid transparent;
+    border-top-color: ${({ theme }) => theme.bg4};
+  }
+`;
+
+const Input = styled.input`
+  padding: 10px; border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.border};
+  background: ${({ theme }) => theme.bg2};
+  color: ${({ theme }) => theme.text};
+  font-size: 14px;
+  &:focus { border-color: ${({ theme }) => theme.primary}; outline: none; }
+`;
+
+const Select = styled.select`
+  padding: 10px; border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.border};
+  background: ${({ theme }) => theme.bg2};
+  color: ${({ theme }) => theme.text};
+  font-size: 14px;
+`;
+
+const TextArea = styled.textarea`
+  padding: 10px; border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.border};
+  background: ${({ theme }) => theme.bg2};
+  color: ${({ theme }) => theme.text};
+  font-family: 'Fira Code', monospace; font-size: 13px;
+  min-height: 120px; resize: vertical;
+`;
+
+const Footer = styled.div`
+  padding: 15px 20px;
+  border-top: 1px solid ${({ theme }) => theme.border};
+  display: flex; justify-content: flex-end; gap: 12px;
+`;
+
+const CheckboxGroup = styled.div`
+  display: flex; gap: 20px; margin-top: 10px;
+  flex-wrap: wrap;
+`;
+
+const CheckboxLabel = styled.label`
+  display: flex; align-items: center; gap: 8px; cursor: pointer;
+  padding: 8px 12px;
+  background: ${({ theme }) => theme.bg2};
+  border-radius: 8px;
+  border: 1px solid ${({ theme }) => theme.border};
+  font-size: 14px;
+
+  &:hover {
+    border-color: ${({ theme }) => theme.primary};
+  }
+`;
+
+const SectionTitle = styled.h4`
+  margin: 10px 0 5px 0;
+  font-size: 12px;
+  color: ${({ theme }) => theme.primary};
+  text-transform: uppercase;
+  letter-spacing: 1px;
+`;
+
+import { Button } from "../../index";
+
+const FIELD_HELP = {
+  name: "Identificador único de la tarea. Debe ser un nombre descriptivo sin espacios ni caracteres especiales.",
+  type: "Define cómo se ejecuta la tarea: Manual (solo clic), Automática (cron), o Ambas.",
+  transferType: "Dirección de la transferencia de datos entre servidores.",
+  active: "Si está desmarcado, la tarea no podrá ejecutarse ni manualmente ni automáticamente.",
+  clearBeforeInsert: "Elimina todos los registros de la tabla destino antes de insertar los nuevos. Útil para sincronizaciones completas.",
+  query: "Consulta SQL que se ejecutará en el servidor origen para obtener los datos a transferir.",
+  parameters: "Condiciones para filtrar los datos en formato JSON. Ej: [{\"field\": \"status\", \"operator\": \"=\", \"value\": \"A\"}]",
+  linkedGroup: "Nombre del grupo de tareas que se ejecutarán de forma coordinada. Todas las tareas con el mismo grupo se ejecutan juntas.",
+  linkedExecutionOrder: "Orden de ejecución dentro del grupo. Las tareas se ejecutan en orden ascendente (0, 1, 2...).",
+  linkedTasks: "Selecciona otras tareas que se ejecutarán automáticamente después de completar esta tarea.",
+  requiredFields: "Lista de campos que deben tener valor. Si están vacíos, la transferencia fallará.",
+  postUpdateQuery: "SQL que se ejecutará después de transferir los datos. Útil para actualizar estados o limpiar tablas. NO incluir WHERE, se agregará automáticamente con los registros afectados.",
+  targetTable: "Tabla destino para transferencias internas (Server1 → Server1).",
+  executionMode: "Normal: ejecuta todo de una vez. Batches: procesa en lotes para grandes volúmenes de datos.",
+  existenceCheck: "Tabla y campo clave para verificar existencia de registros y construir el WHERE del SQL Post-Ejecución.",
+
+};
+
+const FieldHelp = ({ field }) => (
+  <HelpIcon className="tooltip">
+    <FaQuestionCircle size={12} />
+    <Tooltip className="tooltip">{FIELD_HELP[field]}</Tooltip>
+  </HelpIcon>
+);
+
+export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) => {
     const [activeTab, setActiveTab] = useState("general");
-    const [formData, setFormData] = useState({ ...task });
+    const [loading, setLoading] = useState(false);
+    const [formData, setFormData] = useState({
+        name: "", type: "manual", transferType: "general", executionMode: "normal",
+        active: true, clearBeforeInsert: false, query: "", parameters: "[]",
+        linkedGroup: "", linkedExecutionOrder: 0, executeLinkedTasks: false,
+        linkedTasks: [], postUpdateQuery: "",
+        validationRules: { requiredFields: [], existenceCheck: { table: "", key: "" } },
+        postUpdateMapping: { viewKey: null, tableKey: null }
+    });
+
+    useEffect(() => {
+        if (task) {
+            setFormData({
+                ...task,
+                parameters: JSON.stringify(task.parameters || [], null, 2),
+                linkedGroup: task.linkedGroup || "",
+                linkedExecutionOrder: task.linkedExecutionOrder || 0,
+                linkedTasks: task.linkedTasks || [],
+                postUpdateQuery: task.postUpdateQuery || "",
+                validationRules: task.validationRules || { requiredFields: [], existenceCheck: { table: "", key: "" } },
+                postUpdateMapping: task.postUpdateMapping || { viewKey: null, tableKey: null }
+            });
+        } else {
+            setFormData({
+                name: "", type: "manual", transferType: "general", executionMode: "normal",
+                active: true, clearBeforeInsert: false, query: "", parameters: "[]",
+                linkedGroup: "", linkedExecutionOrder: 0, executeLinkedTasks: false,
+                linkedTasks: [], postUpdateQuery: "",
+                validationRules: { requiredFields: [], existenceCheck: { table: "", key: "" } },
+                postUpdateMapping: { viewKey: null, tableKey: null }
+            });
+        }
+    }, [task, isOpen]);
+
+    const handleChange = (e) => {
+        const { name, value, type, checked } = e.target;
+        if (type === "checkbox") {
+            setFormData(prev => ({ ...prev, [name]: checked }));
+        } else {
+            setFormData(prev => ({ ...prev, [name]: value }));
+        }
+    };
+
+    const handleValidationChange = (field, value) => {
+        setFormData(prev => ({
+            ...prev,
+            validationRules: { ...prev.validationRules, [field]: value }
+        }));
+    };
+
+    const handleSave = async () => {
+        try {
+            const finalData = {
+                ...formData,
+                parameters: JSON.parse(formData.parameters),
+                linkedExecutionOrder: parseInt(formData.linkedExecutionOrder),
+                executeLinkedTasks: formData.linkedGroup !== ""
+            };
+            setLoading(true);
+            await onSave(finalData);
+        } catch (e) {
+            alert("Error: " + e.message);
+        } finally {
+            setLoading(false);
+        }
+    };
 
     if (!isOpen) return null;
 
-    const tabs = [
-        { id: "general", label: "General", icon: <FaList /> },
-        { id: "database", label: "Base de Datos", icon: <FaDatabase /> },
-        { id: "mapping", label: "Mapeo", icon: <FaLink /> },
-        { id: "workflow", label: "Flujo", icon: <FaLinkIcon /> },
-        { id: "execution", label: "Ejecución", icon: <FaPlay /> },
-    ];
-
-    const handleChange = (field, value) => {
-        setFormData(prev => ({ ...prev, [field]: value }));
-    };
-
-    const handleSave = () => {
-        onSave?.(formData);
-    };
-
-    const getTaskOptions = () => {
-        // Filtrar tareas que no sean la actual (evitar circularidad)
-        return allTasks.filter(t => t._id !== task?._id);
-    };
-
-    const nextTasksOptions = getTaskOptions().map(t => (
-        <option key={t._id} value={t._id}>{t.name}</option>
-    ));
-
     return (
-        <div className="fixed inset-0 bg-black/70 flex items-center justify-center z-[1000] backdrop-blur-sm" onClick={onClose}>
-            <div
-                className="bg-white w-[95%] max-w-[1000px] max-h-[95vh] rounded-xl flex flex-col shadow-premium border border-slate-200 overflow-hidden"
-                onClick={e => e.stopPropagation()}
-            >
-                {/* HEADER */}
-                <div className="px-5 py-4 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
-                    <h2 className="text-lg font-bold text-slate-800 m-0">
-                        {task ? "Editar Tarea" : "Nueva Tarea"}
-                    </h2>
-                    <button onClick={onClose} className="bg-transparent border-none text-slate-400 cursor-pointer hover:text-slate-600">
-                        <FaTimes />
-                    </button>
-                </div>
+        <Overlay onClick={onClose}>
+            <ModalContent onClick={e => e.stopPropagation()}>
+                <Header>
+                    <h3 style={{ margin: 0 }}>
+                        {task ? "Editar Tarea de Transferencia" : "Nueva Tarea de Transferencia"}
+                    </h3>
+                    <FaTimes style={{ cursor: 'pointer' }} onClick={onClose} />
+                </Header>
 
-                {/* TABS */}
-                <div className="flex bg-slate-50 border-b border-slate-200 overflow-x-auto">
-                    {tabs.map(tab => (
-                        <button
-                            key={tab.id}
-                            onClick={() => setActiveTab(tab.id)}
-                            className={`
-                                flex-1 px-4 py-3 border-none bg-none text-sm font-semibold cursor-pointer border-b-2 transition-all duration-200 flex items-center justify-center gap-2
-                                ${activeTab === tab.id
-                                    ? "text-primary-500 border-primary-500"
-                                    : "text-slate-500 border-transparent hover:bg-slate-100"}
-                            `}
-                        >
-                            {tab.icon}
-                            {tab.label}
-                        </button>
-                    ))}
-                </div>
+                <TabContainer>
+                    <Tab active={activeTab === "general"} onClick={() => setActiveTab("general")}>
+                        <FaList /> General
+                    </Tab>
+                    <Tab active={activeTab === "query"} onClick={() => setActiveTab("query")}>
+                        <FaDatabase /> SQL & Params
+                    </Tab>
+                    <Tab active={activeTab === "linking"} onClick={() => setActiveTab("linking")}>
+                        <FaLink /> Vinculación
+                    </Tab>
+                    <Tab active={activeTab === "advanced"} onClick={() => setActiveTab("advanced")}>
+                        <FaVial /> Avanzado
+                    </Tab>
+                </TabContainer>
 
-                {/* BODY */}
-                <div className="p-5 overflow-y-auto flex-1 flex flex-col gap-6">
-                    {/* GENERAL TAB */}
+                <Body>
                     {activeTab === "general" && (
-                        <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-2">
-                                    Nombre de la Tarea
-                                    <FaQuestionCircle className="text-primary-500 cursor-help text-xs" />
-                                </label>
-                                <input
-                                    type="text"
-                                    value={formData.name || ""}
-                                    onChange={e => handleChange("name", e.target.value)}
-                                    placeholder="Nombre identificador de la tarea"
-                                    className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
-                                />
-                            </div>
+                        <>
+                            <FormGroup>
+                                <Label>Nombre de la Tarea <FieldHelp field="name" /></Label>
+                                <Input name="name" value={formData.name} onChange={handleChange} placeholder="Ej: Importar Pedidos Pendientes" />
+                            </FormGroup>
 
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Descripción</label>
-                                <textarea
-                                    value={formData.description || ""}
-                                    onChange={e => handleChange("description", e.target.value)}
-                                    placeholder="Descripción opcional de la tarea"
-                                    rows={3}
-                                    className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 resize-y"
-                                />
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Tipo de Tarea</label>
-                                    <Select
-                                        value={formData.type || "both"}
-                                        onChange={e => handleChange("type", e.target.value)}
-                                        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800"
-                                    >
-                                        <option value="manual">Manuales</option>
-                                        <option value="auto">Automáticas</option>
-                                        <option value="both">Ambas</option>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                                <FormGroup>
+                                    <Label>Tipo de Ejecución <FieldHelp field="type" /></Label>
+                                    <Select name="type" value={formData.type} onChange={handleChange}>
+                                        <option value="manual">Manual - Solo se ejecuta con botón</option>
+                                        <option value="auto">Automática - Solo con programador (cron)</option>
+                                        <option value="both">Ambas - Manual y Automática</option>
                                     </Select>
-                                </div>
-
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Transfer Type</label>
-                                    <Select
-                                        value={formData.transferType || "general"}
-                                        onChange={e => handleChange("transferType", e.target.value)}
-                                        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800"
-                                    >
-                                        <option value="up">↑ Up (Server2 → Server1)</option>
-                                        <option value="down">↓ Down (Server1 → Server2)</option>
-                                        <option value="internal">⇄ Internal</option>
-                                        <option value="general">○ General</option>
+                                </FormGroup>
+                                <FormGroup>
+                                    <Label>Tipo de Transferencia <FieldHelp field="transferType" /></Label>
+                                    <Select name="transferType" value={formData.transferType} onChange={handleChange}>
+                                        <option value="general">General - Transferencia estándar</option>
+                                        <option value="up">↑ Transfer Up (Server1 → Server2)</option>
+                                        <option value="down">↓ Transfer Down (Server2 → Server1)</option>
+                                        <option value="internal">⇄ Interno (Server1 → Server1)</option>
                                     </Select>
-                                </div>
+                                </FormGroup>
                             </div>
 
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Ejecución</label>
-                                    <Select
-                                        value={formData.executionMode || "normal"}
-                                        onChange={e => handleChange("executionMode", e.target.value)}
-                                        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800"
-                                    >
-                                        <option value="normal">Normal</option>
-                                        <option value="batchesSSE">Batches SSE</option>
-                                    </Select>
-                                </div>
+                            <CheckboxGroup>
+                                <CheckboxLabel>
+                                    <input type="checkbox" name="active" checked={formData.active} onChange={handleChange} />
+                                    <span>Tarea Activa</span>
+                                    <FieldHelp field="active" />
+                                </CheckboxLabel>
+                                <CheckboxLabel>
+                                    <input type="checkbox" name="clearBeforeInsert" checked={formData.clearBeforeInsert} onChange={handleChange} />
+                                    <span>Borrar antes de insertar</span>
+                                    <FieldHelp field="clearBeforeInsert" />
+                                </CheckboxLabel>
+                            </CheckboxGroup>
 
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Cron (Programación)</label>
-                                    <input
-                                        type="text"
-                                        value={formData.schedule || ""}
-                                        onChange={e => handleChange("schedule", e.target.value)}
-                                        placeholder="0 * * * *"
-                                        className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="grid grid-cols-2 gap-4">
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Base de Datos Origen</label>
-                                    <Select
-                                        value={formData.sourceServer || "server2"}
-                                        onChange={e => handleChange("sourceServer", e.target.value)}
-                                        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800"
-                                    >
-                                        <option value="server2">Server 2 (ERP)</option>
-                                        <option value="server1">Server 1 (Warehouse)</option>
-                                    </Select>
-                                </div>
-
-                                <div className="flex flex-col gap-1.5">
-                                    <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Base de Datos Destino</label>
-                                    <Select
-                                        value={formData.targetServer || "server1"}
-                                        onChange={e => handleChange("targetServer", e.target.value)}
-                                        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800"
-                                    >
-                                        <option value="server1">Server 1 (Warehouse)</option>
-                                        <option value="server2">Server 2 (ERP)</option>
-                                    </Select>
-                                </div>
-                            </div>
-
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">SQL Query</label>
-                                <textarea
-                                    value={formData.query || ""}
-                                    onChange={e => handleChange("query", e.target.value)}
-                                    placeholder="SELECT * FROM tabla WHERE ..."
-                                    rows={4}
-                                    className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 font-mono focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 resize-y"
-                                />
-                            </div>
-
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Clear Before Insert</label>
-                                <label className="flex items-center gap-3 cursor-pointer">
-                                    <input
-                                        type="checkbox"
-                                        checked={formData.clearBeforeInsert || false}
-                                        onChange={e => handleChange("clearBeforeInsert", e.target.checked)}
-                                        className="w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500"
-                                    />
-                                    <span className="text-sm font-bold text-slate-600">Borrar registros antes de insertar</span>
-                                </label>
-                            </div>
-
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Target Table (Internal)</label>
-                                <input
-                                    type="text"
-                                    value={formData.targetTable || ""}
-                                    onChange={e => handleChange("targetTable", e.target.value)}
-                                    placeholder="Tabla destino para transferencias internas"
-                                    className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
-                                />
-                            </div>
-
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Field Mapping</label>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <input
-                                        type="text"
-                                        value={formData.fieldMapping?.sourceTable || ""}
-                                        onChange={e => handleChange("fieldMapping", { ...formData.fieldMapping, sourceTable: e.target.value })}
-                                        placeholder="Tabla origen"
-                                        className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800"
-                                    />
-                                    <input
-                                        type="text"
-                                        value={formData.fieldMapping?.targetTable || ""}
-                                        onChange={e => handleChange("fieldMapping", { ...formData.fieldMapping, targetTable: e.target.value })}
-                                        placeholder="Tabla destino"
-                                        className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800"
-                                    />
-                                </div>
-                            </div>
-
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Next Tasks</label>
-                                <div className="flex flex-col gap-2">
-                                    <Button variant="ghost" size="sm" onClick={() => {
-                                        const newTask = allTasks.find(t => t._id !== task?._id);
-                                        setFormData(prev => ({
-                                            ...prev,
-                                            nextTasks: [...(prev.nextTasks || []), newTask]
-                                        }));
-                                    }} className="w-full justify-between">
-                                        <span>+ Añadir Tarea Siguiente</span>
-                                        <span className="text-xs text-slate-400">Selecciona una tarea para ejecutar después</span>
-                                    </Button>
-                                    {formData.nextTasks && formData.nextTasks.length > 0 && (
-                                        <div className="flex flex-col gap-1">
-                                            <label className="text-xs font-bold text-slate-500">Tareas Siguientes:</label>
-                                            {formData.nextTasks.map((taskId, idx) => {
-                                                const task = allTasks.find(t => t._id === taskId);
-                                                return task ? (
-                                                    <div key={idx} className="flex justify-between items-center p-2 bg-slate-50 rounded-lg">
-                                                        <span className="text-sm font-medium">{task.name}</span>
-                                                        <Button variant="ghost" size="sm" onClick={() => {
-                                                            const newTasks = formData.nextTasks.filter((_, i) => i !== idx);
-                                                            setFormData(prev => ({ ...prev, nextTasks: newTasks }));
-                                                        }} className="text-red-500">
-                                                            <FaTrash />
-                                                        </Button>
-                                                    </div>
-                                                ) : null;
-                                            })}
-                                        </div>
-                                    )}
-                                </div>
-                            </div>
-
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Linked Tasks</label>
-                                <div className="flex flex-col gap-2">
-                                    <input
-                                        type="text"
-                                        value={formData.linkedGroup || ""}
-                                        onChange={e => handleChange("linkedGroup", e.target.value)}
-                                        placeholder="Nombre del grupo de tareas vinculadas"
-                                        className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800"
-                                    />
-                                    <p className="text-xs text-slate-400">Las tareas vinculadas se ejecutarán juntas automáticamente</p>
-                                </div>
-                            </div>
-
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Linked Execution Order</label>
-                                <input
-                                    type="number"
-                                    value={formData.linkedExecutionOrder || 0}
-                                    onChange={e => handleChange("linkedExecutionOrder", parseInt(e.target.value) || 0)}
-                                    placeholder="0"
-                                    className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800"
-                                />
-                            </div>
-
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Post-Update Query</label>
-                                <textarea
-                                    value={formData.postUpdateQuery || ""}
-                                    onChange={e => handleChange("postUpdateQuery", e.target.value)}
-                                    placeholder="SELECT * FROM tabla WHERE ..."
-                                    rows={3}
-                                    className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 font-mono focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 resize-y"
-                                />
-                            </div>
-
-                            <div className="flex flex-col gap-1.5">
-                                <label className="text-xs font-extrabold text-slate-500 uppercase tracking-wider">Post-Update Mapping</label>
-                                <div className="grid grid-cols-2 gap-3">
-                                    <input
-                                        type="text"
-                                        value={formData.postUpdateMapping?.viewKey || ""}
-                                        onChange={e => handleChange("postUpdateMapping", { ...formData.postUpdateMapping, viewKey: e.target.value })}
-                                        placeholder="viewKey"
-                                        className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800"
-                                    />
-                                    <input
-                                        type="text"
-                                        value={formData.postUpdateMapping?.tableKey || ""}
-                                        onChange={e => handleChange("postUpdateMapping", { ...formData.postUpdateMapping, tableKey: e.target.value })}
-                                        placeholder="tableKey"
-                                        className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800"
-                                    />
-                                </div>
-                            </div>
-                        </div>
+                            <SectionTitle>Tabla Destino (Solo para Transferencias Internas)</SectionTitle>
+                            <FormGroup>
+                                <Label>Nombre de Tabla <FieldHelp field="targetTable" /></Label>
+                                <Input name="targetTable" value={formData.targetTable || ""} onChange={handleChange} placeholder="Ej: IMPLT_Orders" />
+                            </FormGroup>
+                        </>
                     )}
 
-                    {/* DATABASE TAB */}
-                    {activeTab === "database" && (
-                        <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-                            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                                <h4 className="font-bold text-slate-700 mb-3">Configuración de Conexión</h4>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="flex flex-col gap-1.5">
-                                        <label className="text-xs font-bold text-slate-500">Server Origen</label>
-                                        <Select
-                                            value={formData.sourceServer || "server2"}
-                                            onChange={e => handleChange("sourceServer", e.target.value)}
-                                            className="w-full"
-                                        >
-                                            <option value="server2">Server 2 (ERP)</option>
-                                            <option value="server1">Server 1 (Warehouse)</option>
-                                        </Select>
-                                    </div>
-                                    <div className="flex flex-col gap-1.5">
-                                        <label className="text-xs font-bold text-slate-500">Server Destino</label>
-                                        <Select
-                                            value={formData.targetServer || "server1"}
-                                            onChange={e => handleChange("targetServer", e.target.value)}
-                                            className="w-full"
-                                        >
-                                            <option value="server1">Server 1 (Warehouse)</option>
-                                            <option value="server2">Server 2 (ERP)</option>
-                                        </Select>
-                                    </div>
-                                </div>
+                    {activeTab === "query" && (
+                        <>
+                            <FormGroup>
+                                <Label>Consulta SQL Principal <FieldHelp field="query" /></Label>
+                                <TextArea name="query" value={formData.query} onChange={handleChange}
+                                    placeholder="SELECT NUM_PED, COD_CLI, FECHA_PED, ... FROM PEDIDO WHERE ESTADO = 'A'" />
+                            </FormGroup>
+                            <FormGroup>
+                                <Label>Parámetros de Filtrado (JSON) <FieldHelp field="parameters" /></Label>
+                                <TextArea name="parameters" value={formData.parameters} onChange={handleChange}
+                                    placeholder='[{"field": "ESTADO", "operator": "=", "value": "A"}, {"field": "FECHA_PED", "operator": ">=", "value": "2024-01-01"}]' />
+                            </FormGroup>
+                            <div style={{ background: '#e3f2fd', padding: '12px', borderRadius: '8px', fontSize: '12px', color: '#1565c0' }}>
+                                <strong>Operadores disponibles:</strong> =, !=, &gt;, &lt;, &ge;, &le;, LIKE, IN, NOT IN
                             </div>
-
-                            <div className="p-4 bg-emerald-50/50 rounded-lg border border-emerald-200">
-                                <h4 className="font-bold text-emerald-700 mb-3">Estado de Conexión</h4>
-                                <StatusBadge status={formData.active ? "active" : "inactive"} />
-                                <p className="text-sm text-emerald-600 mt-2">
-                                    {formData.active ? "Conexiones activas y listas para usar" : "Conexiones desactivadas"}
-                                </p>
-                            </div>
-                        </div>
+                        </>
                     )}
 
-                    {/* MAPPING TAB */}
-                    {activeTab === "mapping" && (
-                        <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-                            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                                <h4 className="font-bold text-slate-700 mb-3">Campo Marcado</h4>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <input
-                                        type="text"
-                                        value={formData.markProcessedField || ""}
-                                        onChange={e => handleChange("markProcessedField", e.target.value)}
-                                        placeholder="Ej: IS_PROCESSED"
-                                        className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800"
-                                    />
-                                    <input
-                                        type="number"
-                                        value={formData.markProcessedValue || ""}
-                                        onChange={e => handleChange("markProcessedValue", parseInt(e.target.value) || 0)}
-                                        placeholder="Ej: 1"
-                                        className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800"
-                                    />
-                                </div>
-                            </div>
+                    {activeTab === "linking" && (
+                        <>
+                            <SectionTitle>Grupo de Tareas Vinculadas</SectionTitle>
+                            <FormGroup>
+                                <Label>Nombre del Grupo <FieldHelp field="linkedGroup" /></Label>
+                                <Input name="linkedGroup" value={formData.linkedGroup} onChange={handleChange}
+                                    placeholder="Ej: Sincronizacion_Diaria_Completa" />
+                                <small style={{ color: '#888', fontSize: '11px' }}>
+                                    Las tareas con el mismo nombre de grupo se ejecutarán de forma coordinada
+                                </small>
+                            </FormGroup>
+                            <FormGroup>
+                                <Label>Orden de Ejecución <FieldHelp field="linkedExecutionOrder" /></Label>
+                                <Input type="number" name="linkedExecutionOrder" value={formData.linkedExecutionOrder} onChange={handleChange}
+                                    min="0" placeholder="0" />
+                                <small style={{ color: '#888', fontSize: '11px' }}>
+                                    Las tareas se ejecutan en orden ascendente (0 → 1 → 2...)
+                                </small>
+                            </FormGroup>
 
-                            <div className="p-4 bg-blue-50/50 rounded-lg border border-blue-200">
-                                <h4 className="font-bold text-blue-700 mb-3">Validaciones</h4>
-                                <div className="flex flex-col gap-2">
-                                    <label className="flex items-center gap-3 cursor-pointer">
-                                        <input type="checkbox" checked={formData.validationRules?.existenceCheck?.enabled || false} onChange={e => handleChange("validationRules", { ...formData.validationRules, existenceCheck: { ...formData.validationRules.existenceCheck, enabled: e.target.checked } })} />
-                                        <span className="text-sm font-bold text-slate-600">Validar existencia de registros</span>
-                                    </label>
-                                </div>
-                            </div>
-                        </div>
+                            <SectionTitle>Vinculación Directa (Alternativa al Grupo)</SectionTitle>
+                            <FormGroup>
+                                <Label>Seleccionar Tareas Vinculadas <FieldHelp field="linkedTasks" /></Label>
+                                <Select multiple style={{ height: '120px' }}
+                                    value={formData.linkedTasks}
+                                    onChange={(e) => {
+                                        const values = Array.from(e.target.selectedOptions, option => option.value);
+                                        setFormData(prev => ({ ...prev, linkedTasks: values }));
+                                    }}
+                                >
+                                    {allTasks.filter(t => t._id !== task?._id).map(t => (
+                                        <option key={t._id} value={t._id}>{t.name}</option>
+                                    ))}
+                                </Select>
+                                <small style={{ color: '#888', fontSize: '11px' }}>
+                                    Estas tareas se ejecutarán automáticamente después de completar la actual
+                                </small>
+                            </FormGroup>
+                        </>
                     )}
 
-                    {/* WORKFLOW TAB */}
-                    {activeTab === "workflow" && (
-                        <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-                            <div className="p-4 bg-purple-50/50 rounded-lg border border-purple-200">
-                                <h4 className="font-bold text-purple-700 mb-3">Workflow Configuration</h4>
-                                <div className="flex flex-col gap-2">
-                                    <label className="flex items-center gap-3 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={formData.workflowConfig?.enabled !== false}
-                                            onChange={e => handleChange("workflowConfig", { ...formData.workflowConfig, enabled: e.target.checked })}
-                                        />
-                                        <span className="text-sm font-bold text-slate-600">Habilitar Encadenamiento (PADRE)</span>
-                                    </label>
+                    {activeTab === "advanced" && (
+                        <>
+                            <SectionTitle>Validación de Datos</SectionTitle>
+                            <FormGroup>
+                                <Label>Campos Obligatorios <FieldHelp field="requiredFields" /></Label>
+                                <Input value={formData.validationRules.requiredFields.join(', ')}
+                                    onChange={(e) => handleValidationChange('requiredFields', e.target.value.split(',').map(s => s.trim()).filter(s => s))}
+                                    placeholder="CAMPO1, CAMPO2, CAMPO3" />
+                                <small style={{ color: '#888', fontSize: '11px' }}>
+                                    Lista de campos que no pueden estar vacíos. Separados por coma.
+                                </small>
+                            </FormGroup>
 
-                                    <label className="flex items-center gap-3 cursor-pointer">
-                                        <input
-                                            type="checkbox"
-                                            checked={formData.workflowConfig?.stopWorkflowOnError !== false}
-                                            onChange={e => handleChange("workflowConfig", { ...formData.workflowConfig, stopWorkflowOnError: e.target.checked })}
-                                        />
-                                        <span className="text-sm font-bold text-slate-600">Detener workflow en error</span>
-                                    </label>
-                                </div>
+                            <SectionTitle>Verificación de Existencia</SectionTitle>
+                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                                <FormGroup>
+                                    <Label>Tabla <FieldHelp field="existenceCheck" /></Label>
+                                    <Input
+                                        value={formData.validationRules.existenceCheck?.table || ''}
+                                        onChange={(e) => handleValidationChange('existenceCheck', { ...formData.validationRules.existenceCheck, table: e.target.value })}
+                                        placeholder="CATELLI.CLIENTE" />
+                                </FormGroup>
+                                <FormGroup>
+                                    <Label>Campo Clave <FieldHelp field="existenceCheck" /></Label>
+                                    <Input
+                                        value={formData.validationRules.existenceCheck?.key || ''}
+                                        onChange={(e) => handleValidationChange('existenceCheck', { ...formData.validationRules.existenceCheck, key: e.target.value })}
+                                        placeholder="Code_ofClient" />
+                                </FormGroup>
                             </div>
+                            <small style={{ color: '#888', fontSize: '11px', marginBottom: '15px', display: 'block' }}>
+                                Tabla y campo PK para verificar existencia y construir el WHERE del SQL Post-Ejecución automáticamente.
+                            </small>
 
-                            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                                <h4 className="font-bold text-slate-700 mb-3">Siguientes Mapeos</h4>
-                                <div className="flex flex-col gap-2">
-                                    <Button variant="ghost" size="sm" onClick={() => {
-                                        const filteredTasks = allTasks.filter(t => t._id !== task?._id);
-                                        const nextMapping = filteredTasks[0];
-                                        if (nextMapping) {
-                                            setFormData(prev => ({
-                                                ...prev,
-                                                workflowConfig: {
-                                                    ...formData.workflowConfig,
-                                                    nextMappings: [...(formData.workflowConfig?.nextMappings || []), nextMapping]
-                                                }
-                                            }));
-                                        }
-                                    }} className="w-full justify-between">
-                                        <span>+ Añadir Siguiente Mapeo</span>
-                                        <span className="text-xs text-slate-400">Selecciona una tarea para ejecutar después</span>
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
+                            <SectionTitle>Consulta Post-Transferencia</SectionTitle>
+                            <FormGroup>
+                                <Label>SQL Post-Ejecución <FieldHelp field="postUpdateQuery" /></Label>
+                                <TextArea name="postUpdateQuery" value={formData.postUpdateQuery} onChange={handleChange}
+                                    placeholder="UPDATE CATELLI.CLIENTE SET U_TRANSFER_STATUS = 'Normal'" />
+                                <small style={{ color: '#888', fontSize: '11px' }}>
+                                    NO incluir WHERE. Se agregará automáticamente usando el Campo Clave de verificación de existencia.
+                                </small>
+                            </FormGroup>
+
+                            <SectionTitle>Modo de Ejecución</SectionTitle>
+                            <FormGroup>
+                                <Label>Modo de Proceso <FieldHelp field="executionMode" /></Label>
+                                <Select name="executionMode" value={formData.executionMode} onChange={handleChange}>
+                                    <option value="normal">Normal - Todo en una sola ejecución</option>
+                                    <option value="batchesSSE">Batches (SSE) - En lotes con progreso en tiempo real</option>
+                                </Select>
+                            </FormGroup>
+                        </>
                     )}
+                </Body>
 
-                    {/* EXECUTION TAB */}
-                    {activeTab === "execution" && (
-                        <div className="space-y-4 animate-in fade-in slide-in-from-right-4 duration-300">
-                            <div className="p-4 bg-orange-50/50 rounded-lg border border-orange-200">
-                                <h4 className="font-bold text-orange-700 mb-3">Estado de Ejecución</h4>
-                                <div className="grid grid-cols-2 gap-4">
-                                    <div className="flex flex-col gap-1.5">
-                                        <label className="text-xs font-bold text-slate-500">Ejecuciones</label>
-                                        <input
-                                            type="number"
-                                            value={formData.executionCount || 0}
-                                            onChange={e => handleChange("executionCount", parseInt(e.target.value) || 0)}
-                                            className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800"
-                                        />
-                                    </div>
-                                    <div className="flex flex-col gap-1.5">
-                                        <label className="text-xs font-bold text-slate-500">Progreso Actual</label>
-                                        <input
-                                            type="number"
-                                            value={formData.progress || 0}
-                                            onChange={e => handleChange("progress", parseInt(e.target.value) || 0)}
-                                            className="px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800"
-                                        />
-                                    </div>
-                                </div>
-                            </div>
-
-                            <div className="p-4 bg-slate-50 rounded-lg border border-slate-200">
-                                <h4 className="font-bold text-slate-700 mb-3">Historial de Ejecución</h4>
-                                <div className="flex flex-col gap-2">
-                                    <Button variant="ghost" size="sm" onClick={() => {
-                                        const task = allTasks.find(t => t._id === task?._id);
-                                        if (task) {
-                                            handleChange("lastExecutionDate", task.lastExecutionDate);
-                                            handleChange("lastExecutionResult", task.lastExecutionResult);
-                                        }
-                                    }} className="w-full justify-between">
-                                        <span>Ver Última Ejecución</span>
-                                        <span className="text-xs text-slate-400">Cargar datos de la última ejecución</span>
-                                    </Button>
-                                </div>
-                            </div>
-                        </div>
-                    )}
-                </div>
-
-                {/* FOOTER */}
-                <div className="px-5 py-4 bg-slate-50 border-t border-slate-200 flex justify-end gap-3">
-                    <button
-                        onClick={onClose}
-                        className="px-4 py-2 border border-slate-200 rounded-lg text-sm font-semibold text-slate-600 bg-white hover:bg-slate-50 cursor-pointer transition-colors"
-                    >
-                        Cancelar
-                    </button>
-                    <button
-                        onClick={handleSave}
-                        disabled={loading}
-                        className="px-4 py-2 border-none rounded-lg text-sm font-semibold text-white bg-primary-600 hover:bg-primary-700 cursor-pointer transition-colors flex items-center gap-2 disabled:opacity-50"
-                    >
-                        <FaSave />
-                        {loading ? "Guardando..." : "Guardar Tarea"}
-                    </button>
-                </div>
-            </div>
-        </div>
+                <Footer>
+                    <Button onClick={onClose}>Cancelar</Button>
+                    <Button variant="primary" onClick={handleSave} loading={loading}>
+                        <FaSave /> {task ? "Actualizar Tarea" : "Crear Tarea"}
+                    </Button>
+                </Footer>
+            </ModalContent>
+        </Overlay>
     );
-}
+};
