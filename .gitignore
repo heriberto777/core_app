@@ -23,7 +23,7 @@ server/logs/combined.log
 server/logs/error.log
 
 app/node_modules/ #no carga modules
-#app/core_app/node_modules/ #no carga modules
+app/core_app/node_modules/ #no carga modules
 app/build/ #no carga modules
 app/dist/ #no carga modules
 
