@@ -1,7 +1,5 @@
-// services/dynamicQueryService.js - VERSIÓN MEJORADA
-const TransferTask = require("../models/transferTaks");
-const ConnectionService = require("./ConnectionCentralService");
-const { SqlService } = require("./SqlService");
+const TransferTask = require("../models/transferTaskModel");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 const logger = require("./logger");
 const MemoryManager = require("./MemoryManager");
 const Telemetry = require("./Telemetry");
@@ -15,8 +13,27 @@ const {
 } = require("../utils/validateQuery");
 const { sendProgress } = require("./progressSse");
 
+/**
+ * Sanitiza parámetros para evitar inyección SQL
+ */
+function sanitizeParams(params) {
+  if (!params || typeof params !== 'object') return {};
+
+  const sanitized = {};
+  for (const [key, value] of Object.entries(params)) {
+    if (value === null || value === undefined) {
+      sanitized[key] = null;
+    } else if (typeof value === 'string') {
+      sanitized[key] = value.trim();
+    } else {
+      sanitized[key] = value;
+    }
+  }
+  return sanitized;
+}
+
 // Servicio de reintentos específico para consultas dinámicas
-const queryRetryService = new RetryService.RetryService({
+const queryRetryService = new RetryService({
   maxRetries: 3,
   initialDelay: 2000,
   maxDelay: 15000,
@@ -30,64 +47,85 @@ const queryRetryService = new RetryService.RetryService({
     "state",
     "LoggedIn state",
     "Final state",
+    "AggregateError",
   ],
 });
 
 /**
- * Ejecuta una consulta SELECT usando la definición de la tarea almacenada en MongoDB,
- * sobrescribiendo sus parámetros con overrideParams (si se proporcionan).
- * Versión mejorada con capacidad de reutilizar conexiones, reportar progreso y manejar cancelaciones.
- *
- * @param {String} taskName - Nombre de la tarea en la colección TransferTask.
- * @param {Object} overrideParams - Objeto con los valores que sobrescriben los parámetros guardados.
- * @param {String|Object} serverKeyOrConnection - Nombre del servidor o conexión existente.
- * @param {AbortSignal} signal - Señal para cancelación opcional.
- * @returns {Promise<Array>} - El recordset obtenido tras ejecutar el query.
+ * NUEVO: Asegurar conexión válida usando el método centralizado
+ * @param {string|Object} serverKeyOrConnection - Servidor o conexión existente
+ * @param {string} taskName - Nombre de la tarea para logging
+ * @returns {Promise<Object>} - { connection, needsRelease }
  */
+async function _ensureValidConnectionForQuery(serverKeyOrConnection, taskName) {
+  if (
+    typeof serverKeyOrConnection === "object" &&
+    serverKeyOrConnection !== null &&
+    typeof serverKeyOrConnection.execSql === "function"
+  ) {
+    // Es una conexión existente, validarla usando el método centralizado
+    logger.debug(`Validando conexión existente para tarea '${taskName}'`);
 
+    try {
+      const validatedConnection =
+        await DatabaseServiceAdapter._ensureValidConnection(
+          serverKeyOrConnection,
+          `dynamic_query_${taskName}`
+        );
+
+      return {
+        connection: validatedConnection,
+        needsRelease: false, // No debemos liberar conexiones que no creamos
+      };
+    } catch (error) {
+      logger.warn(
+        `Conexión existente no válida para '${taskName}', obteniendo nueva: ${error.message}`
+      );
+      // Si la validación falla, obtener nueva conexión
+      const newConnection = await DatabaseServiceAdapter.getConnection("server1");
+      return {
+        connection: newConnection,
+        needsRelease: true,
+      };
+    }
+  } else {
+    // Es un serverKey, obtener nueva conexión
+    const serverKey =
+      typeof serverKeyOrConnection === "string"
+        ? serverKeyOrConnection
+        : "server1";
+    logger.debug(
+      `Obteniendo nueva conexión para '${taskName}' desde ${serverKey}`
+    );
+
+    const connection = await DatabaseServiceAdapter.getConnection(serverKey);
+    return {
+      connection,
+      needsRelease: true,
+    };
+  }
+}
+
+/**
+ * Ejecuta una consulta SELECT usando la definición de la tarea almacenada en MongoDB
+ * VERSIÓN MEJORADA con nueva lógica de conexión centralizada
+ */
 async function executeDynamicSelect(
   taskName,
   overrideParams = {},
   serverKeyOrConnection,
   signal = null
 ) {
-  let connection = null;
-  let serverKey = "server1";
-  let ownConnection = true; // Si creamos la conexión nosotros, debemos cerrarla
+  let connectionInfo = null;
   let task = null;
 
   // Crear AbortController si no se proporcionó signal
   const localAbortController = !signal ? new AbortController() : null;
   signal = signal || localAbortController.signal;
 
-  try {
-    // Determinar si recibimos una conexión o un nombre de servidor
-    if (
-      typeof serverKeyOrConnection === "object" &&
-      serverKeyOrConnection !== null &&
-      typeof serverKeyOrConnection.execSql === "function"
-    ) {
-      // Es una conexión existente
-      connection = serverKeyOrConnection;
-      ownConnection = false; // No debemos cerrar esta conexión, la gestiona quien la pasó
-      serverKey = connection._poolOrigin || "server1"; // Intentamos obtener el origen
-      logger.debug(
-        `Usando conexión existente para tarea '${taskName}' (origen: ${serverKey})`
-      );
-    } else if (typeof serverKeyOrConnection === "string") {
-      // Es un nombre de servidor
-      serverKey = serverKeyOrConnection;
-      logger.debug(
-        `Se usará nueva conexión a ${serverKey} para tarea '${taskName}'`
-      );
-    } else {
-      // Valor por defecto
-      serverKey = "server1";
-      logger.debug(
-        `Se usará conexión por defecto a ${serverKey} para tarea '${taskName}'`
-      );
-    }
 
+
+  try {
     // Registrar uso de memoria inicial
     MemoryManager.logMemoryUsage(`DynamicQuery-${taskName}-start`);
 
@@ -113,10 +151,9 @@ async function executeDynamicSelect(
     // 3) Registrar la tarea en el TaskTracker
     TaskTracker.registerTask(
       task._id,
-      localAbortController || { abort: () => {} },
+      localAbortController || { abort: () => { } },
       {
         type: "dynamicQuery",
-        serverKey,
         taskName,
       }
     );
@@ -135,34 +172,23 @@ async function executeDynamicSelect(
       throw new Error("Tarea cancelada por el usuario");
     }
 
-    // 6) Obtener conexión solo si no recibimos una
-    if (ownConnection) {
-      logger.info(
-        `🔌 Estableciendo conexión a ${serverKey} para tarea '${taskName}'...`
-      );
-      sendProgress(task._id, 10);
+    // 6) NUEVO: Obtener conexión válida usando el método centralizado
+    logger.info(`🔌 Asegurando conexión válida para tarea '${taskName}'...`);
+    sendProgress(task._id, 10);
 
-      const connectionResult = await ConnectionService.enhancedRobustConnect(
-        serverKey
-      );
+    connectionInfo = await _ensureValidConnectionForQuery(
+      serverKeyOrConnection,
+      taskName
+    );
+    const { connection, needsRelease } = connectionInfo;
 
-      if (!connectionResult.success) {
-        throw new Error(
-          `No se pudo establecer conexión a ${serverKey}: ${
-            connectionResult.error?.message || "Error desconocido"
-          }`
-        );
-      }
-
-      connection = connectionResult.connection;
-      logger.info(
-        `✅ Conexión establecida correctamente para tarea '${taskName}'`
+    if (!connection) {
+      throw new Error(
+        `No se pudo establecer conexión válida para '${taskName}'`
       );
-    } else {
-      logger.info(`✅ Usando conexión existente para tarea '${taskName}'`);
     }
 
-    // Informar del progreso después de obtener conexión
+    logger.info(`✅ Conexión válida establecida para tarea '${taskName}'`);
     sendProgress(task._id, 20);
 
     // 7) Construir la consulta final usando los parámetros
@@ -227,8 +253,8 @@ async function executeDynamicSelect(
             fieldValue === null
               ? null
               : typeof fieldValue === "number"
-              ? fieldValue
-              : String(fieldValue);
+                ? fieldValue
+                : String(fieldValue);
           params[param.field] = safeValue;
           conditions.push(`${param.field} ${param.operator} @${param.field}`);
         }
@@ -243,10 +269,9 @@ async function executeDynamicSelect(
     // Informar progreso después de construir consulta
     sendProgress(task._id, 30);
 
-    logger.info(`🔄 Ejecutando query dinámico SELECT para '${taskName}'`);
+    logger.info(`📄 Ejecutando query dinámico SELECT para '${taskName}'`);
     logger.debug(
-      `Query: ${finalQuery.substring(0, 500)}${
-        finalQuery.length > 500 ? "..." : ""
+      `Query: ${finalQuery.substring(0, 500)}${finalQuery.length > 500 ? "..." : ""
       }`
     );
 
@@ -255,41 +280,38 @@ async function executeDynamicSelect(
       throw new Error("Tarea cancelada por el usuario");
     }
 
-    // 9) Ejecutar la consulta con reintentos automáticos
+    // 9) Ejecutar la consulta con reintentos automáticos usando nueva lógica
     let result;
     try {
       // Usar RetryService para ejecutar con reintentos
       result = await queryRetryService.execute(
         async (attempt) => {
-          // Si es un reintento, verificar conexión y reconectar si es necesario
-          if (attempt > 0 && ownConnection) {
+          // Si es un reintento, re-validar la conexión
+          if (attempt > 0) {
             try {
-              await SqlService.query(connection, "SELECT 1 AS test");
-              sendProgress(task._id, 35 + attempt * 5); // Incrementar progreso con cada reintento
-            } catch (connError) {
-              logger.warn(
-                `Conexión perdida para tarea '${taskName}', reconectando...`
-              );
-
-              // Liberar la conexión actual
-              try {
-                await ConnectionService.releaseConnection(connection);
-              } catch (e) {}
-
-              // Obtener nueva conexión
-              const reconnectResult =
-                await ConnectionService.enhancedRobustConnect(serverKey);
-
-              if (!reconnectResult.success) {
-                throw new Error(
-                  `No se pudo restablecer conexión: ${
-                    reconnectResult.error?.message || "Error desconocido"
-                  }`
+              // Usar el método centralizado para validar la conexión
+              const revalidatedConnection =
+                await DatabaseServiceAdapter._ensureValidConnection(
+                  connection,
+                  `dynamic_query_retry_${taskName}_${attempt}`
                 );
+
+              // Actualizar la referencia si se obtuvo una nueva conexión
+              if (revalidatedConnection !== connection) {
+                logger.info(
+                  `Conexión renovada en intento ${attempt + 1
+                  } para tarea '${taskName}'`
+                );
+                connectionInfo.connection = revalidatedConnection;
               }
 
-              connection = reconnectResult.connection;
-              logger.info(`✅ Reconexión exitosa para tarea '${taskName}'`);
+              sendProgress(task._id, 35 + attempt * 5);
+            } catch (connError) {
+              logger.warn(
+                `Error validando conexión en intento ${attempt + 1
+                } para '${taskName}': ${connError.message}`
+              );
+              throw connError;
             }
           }
 
@@ -297,12 +319,11 @@ async function executeDynamicSelect(
           sendProgress(task._id, 40);
 
           // Usar SqlService para ejecutar la consulta con parámetros sanitizados
-          const sanitizedParams = SqlService.sanitizeParams(params);
-          const queryResult = await SqlService.query(
-            connection,
+          const sanitizedParams = sanitizeParams(params);
+          const queryResult = await DatabaseServiceAdapter.query(
+            connectionInfo.connection,
             finalQuery,
-            sanitizedParams,
-            serverKey
+            sanitizedParams
           );
 
           // Actualizar progreso después de obtener resultados
@@ -317,7 +338,7 @@ async function executeDynamicSelect(
       );
 
       // Registro para telemetría
-      Telemetry.trackQuery(serverKey);
+      Telemetry.trackQuery("server1");
     } catch (error) {
       // Verificar si el error es por cancelación
       if (signal.aborted || error.message?.includes("cancelada")) {
@@ -334,12 +355,8 @@ async function executeDynamicSelect(
           },
         });
 
-        // Informar de la cancelación
         sendProgress(task._id, -1);
-
-        // Marcar como cancelada en el TaskTracker
         TaskTracker.completeTask(task._id, "cancelled");
-
         throw new Error("Transferencia cancelada por el usuario");
       }
 
@@ -370,12 +387,8 @@ async function executeDynamicSelect(
         },
       });
 
-      // Informar del error
       sendProgress(task._id, -1);
-
-      // Marcar como fallida en el TaskTracker
       TaskTracker.completeTask(task._id, "failed");
-
       throw error;
     }
 
@@ -395,10 +408,7 @@ async function executeDynamicSelect(
       },
     });
 
-    // Informar del 100% de progreso
     sendProgress(task._id, 100);
-
-    // Completar tarea en el TaskTracker
     TaskTracker.completeTask(task._id, "completed");
 
     // 11) Finalizar medición y actualizar métricas
@@ -413,7 +423,7 @@ async function executeDynamicSelect(
     return result.recordset;
   } catch (error) {
     // Registrar error en telemetría
-    Telemetry.trackQuery(serverKey, true);
+    Telemetry.trackQuery("server1", true);
 
     logger.error(
       `❌ Error en executeDynamicSelect para tarea "${taskName}":`,
@@ -441,22 +451,24 @@ async function executeDynamicSelect(
     // Registrar uso de memoria final
     MemoryManager.logMemoryUsage(`DynamicQuery-${taskName}-end`);
 
-    // Cerrar la conexión SOLO si nosotros la creamos
-    if (ownConnection) {
+    // NUEVO: Cerrar la conexión SOLO si nosotros la creamos usando la nueva lógica
+    if (
+      connectionInfo &&
+      connectionInfo.needsRelease &&
+      connectionInfo.connection
+    ) {
       try {
-        if (connection) {
-          await ConnectionService.releaseConnection(connection);
-          logger.debug(
-            `✅ Conexión cerrada correctamente para consulta '${taskName}'`
-          );
-        }
+        await DatabaseServiceAdapter.releaseConnection(connectionInfo.connection);
+        logger.debug(
+          `✅ Conexión cerrada correctamente para consulta '${taskName}'`
+        );
       } catch (closeError) {
         logger.error(
           `❌ Error al cerrar conexión para consulta '${taskName}':`,
           closeError
         );
       }
-    } else {
+    } else if (connectionInfo && !connectionInfo.needsRelease) {
       logger.debug(
         `La conexión para '${taskName}' será gestionada por quien la proporcionó`
       );
@@ -465,21 +477,15 @@ async function executeDynamicSelect(
 }
 
 /**
- * Ejecuta una consulta no destructiva (que puede incluir MERGE o INSERT),
- * pero valida que no contenga comandos peligrosos (DROP, TRUNCATE, etc.).
- * Versión mejorada con gestión de conexiones, reintentos, telemetría y monitoreo.
- *
- * @param {String} taskName - Nombre de la tarea.
- * @param {Object} overrideParams - Parámetros para sobrescribir.
- * @param {String} serverKey - Conexión a utilizar.
- * @returns {Object} - { rowsAffected, recordset }
+ * Ejecuta una consulta no destructiva con nueva lógica de conexión
+ * VERSIÓN MEJORADA con _ensureValidConnection
  */
 async function executeNonDestructiveQuery(
   taskName,
   overrideParams = {},
   serverKey = "server1"
 ) {
-  let connection = null;
+  let connectionInfo = null;
   let task = null;
 
   // Crear AbortController para permitir cancelación
@@ -505,8 +511,7 @@ async function executeNonDestructiveQuery(
       throw new Error(`La tarea "${taskName}" está inactiva (active=false).`);
     }
 
-    // 2) Validar que la query no contenga comandos destructivos,
-    //    permitiendo MERGE/INSERT si se requiere.
+    // 2) Validar que la query no contenga comandos destructivos
     logger.debug(`Validando query no destructiva de la tarea '${taskName}'...`);
     validateNonDestructiveQuery(task.query);
 
@@ -528,27 +533,19 @@ async function executeNonDestructiveQuery(
       throw new Error("Tarea cancelada por el usuario");
     }
 
-    // 6) Obtener conexión con conexión robusta
+    // 6) NUEVO: Obtener conexión válida usando método centralizado
     logger.info(
-      `🔌 Estableciendo conexión a ${serverKey} para tarea no destructiva '${taskName}'...`
+      `🔌 Estableciendo conexión válida para tarea no destructiva '${taskName}'...`
     );
 
-    const connectionResult = await ConnectionService.enhancedRobustConnect(
-      serverKey
-    );
+    connectionInfo = await _ensureValidConnectionForQuery(serverKey, taskName);
+    const { connection } = connectionInfo;
 
-    if (!connectionResult.success) {
+    if (!connection) {
       throw new Error(
-        `No se pudo establecer conexión a ${serverKey}: ${
-          connectionResult.error?.message || "Error desconocido"
-        }`
+        `No se pudo establecer conexión válida para ${serverKey}`
       );
     }
-
-    connection = connectionResult.connection;
-    logger.info(
-      `✅ Conexión establecida correctamente para tarea no destructiva '${taskName}'`
-    );
 
     // 7) Construir la consulta final usando los parámetros
     let finalQuery = task.query.trim();
@@ -574,7 +571,6 @@ async function executeNonDestructiveQuery(
           if (fieldValue.from === undefined || fieldValue.to === undefined)
             continue;
 
-          // Convertir a string para tedious
           const fromValue =
             fieldValue.from === null ? null : String(fieldValue.from);
           const toValue = fieldValue.to === null ? null : String(fieldValue.to);
@@ -587,13 +583,10 @@ async function executeNonDestructiveQuery(
         } else if (param.operator === "IN") {
           const arr = Array.isArray(fieldValue) ? fieldValue : [fieldValue];
           if (arr.length === 0) {
-            // Si el array está vacío, forzamos la condición para que la query retorne 0 filas.
             conditions.push("1=0");
           } else {
-            // Convertir a string para tedious
             const placeholders = arr.map((v, i) => {
               const pName = `${param.field}_in_${i}`;
-              // Asegurar valores string para tedious
               const safeValue = v === null ? null : String(v);
               params[pName] = safeValue;
               return `@${pName}`;
@@ -601,18 +594,16 @@ async function executeNonDestructiveQuery(
             conditions.push(`${param.field} IN (${placeholders.join(", ")})`);
           }
         } else if (param.operator === "LIKE") {
-          // Asegurar valores string para LIKE
           const safeValue = fieldValue === null ? null : String(fieldValue);
           params[param.field] = safeValue;
           conditions.push(`${param.field} LIKE @${param.field}`);
         } else {
-          // Convertir a string para compatibilidad con tedious si no es número
           const safeValue =
             fieldValue === null
               ? null
               : typeof fieldValue === "number"
-              ? fieldValue
-              : String(fieldValue);
+                ? fieldValue
+                : String(fieldValue);
           params[param.field] = safeValue;
           conditions.push(`${param.field} ${param.operator} @${param.field}`);
         }
@@ -627,10 +618,9 @@ async function executeNonDestructiveQuery(
       }
     }
 
-    logger.info(`🔄 Ejecutando query no-destructivo para '${taskName}'`);
+    logger.info(`📄 Ejecutando query no-destructivo para '${taskName}'`);
     logger.debug(
-      `Query: ${finalQuery.substring(0, 500)}${
-        finalQuery.length > 500 ? "..." : ""
+      `Query: ${finalQuery.substring(0, 500)}${finalQuery.length > 500 ? "..." : ""
       }`
     );
 
@@ -639,52 +629,42 @@ async function executeNonDestructiveQuery(
       throw new Error("Tarea cancelada por el usuario");
     }
 
-    // 9) Ejecutar la consulta con reintentos automáticos
+    // 9) Ejecutar la consulta con reintentos automáticos usando nueva lógica
     let result;
     try {
-      // Usar RetryService para ejecutar con reintentos
       result = await queryRetryService.execute(
         async (attempt) => {
-          // Si es un reintento, verificar conexión y reconectar si es necesario
+          // Si es un reintento, re-validar conexión
           if (attempt > 0) {
             try {
-              await SqlService.query(connection, "SELECT 1 AS test");
+              const revalidatedConnection =
+                await DatabaseServiceAdapter._ensureValidConnection(
+                  connection,
+                  `nondestructive_query_retry_${taskName}_${attempt}`
+                );
+
+              if (revalidatedConnection !== connection) {
+                logger.info(
+                  `Conexión renovada en intento ${attempt + 1
+                  } para tarea no destructiva '${taskName}'`
+                );
+                connectionInfo.connection = revalidatedConnection;
+              }
             } catch (connError) {
               logger.warn(
-                `Conexión perdida para tarea no destructiva '${taskName}', reconectando...`
+                `Error validando conexión en intento ${attempt + 1}: ${connError.message
+                }`
               );
-
-              // Liberar la conexión actual
-              try {
-                await ConnectionService.releaseConnection(connection);
-              } catch (e) {}
-
-              // Obtener nueva conexión
-              const reconnectResult =
-                await ConnectionService.enhancedRobustConnect(serverKey);
-
-              if (!reconnectResult.success) {
-                throw new Error(
-                  `No se pudo restablecer conexión: ${
-                    reconnectResult.error?.message || "Error desconocido"
-                  }`
-                );
-              }
-
-              connection = reconnectResult.connection;
-              logger.info(
-                `✅ Reconexión exitosa para tarea no destructiva '${taskName}'`
-              );
+              throw connError;
             }
           }
 
           // Usar SqlService para ejecutar la consulta con parámetros sanitizados
-          const sanitizedParams = SqlService.sanitizeParams(params);
-          return await SqlService.query(
-            connection,
+          const sanitizedParams = sanitizeParams(params);
+          return await DatabaseServiceAdapter.query(
+            connectionInfo.connection,
             finalQuery,
-            sanitizedParams,
-            serverKey
+            sanitizedParams
           );
         },
         {
@@ -696,7 +676,7 @@ async function executeNonDestructiveQuery(
       // Registro para telemetría
       Telemetry.trackQuery(serverKey);
     } catch (error) {
-      // Verificar si el error es por cancelación
+      // Manejo de errores similar al método anterior
       if (signal.aborted || error.message?.includes("cancelada")) {
         logger.info(`Tarea ${taskName} cancelada por el usuario`);
         await TransferTask.findByIdAndUpdate(task._id, {
@@ -709,13 +689,10 @@ async function executeNonDestructiveQuery(
           },
         });
 
-        // Marcar como cancelada en el TaskTracker
         TaskTracker.completeTask(task._id, "cancelled");
-
         throw new Error("Transferencia cancelada por el usuario");
       }
 
-      // Log detallado para errores de validación de parámetros
       if (error.code === "EPARAM") {
         logger.error(
           `Error de validación de parámetros en query no destructiva "${taskName}". Detalles:`,
@@ -745,9 +722,7 @@ async function executeNonDestructiveQuery(
         },
       });
 
-      // Marcar como fallida en el TaskTracker
       TaskTracker.completeTask(task._id, "failed");
-
       throw error;
     }
 
@@ -765,7 +740,6 @@ async function executeNonDestructiveQuery(
       },
     });
 
-    // Completar tarea en el TaskTracker
     TaskTracker.completeTask(task._id, "completed");
 
     // 11) Finalizar medición y actualizar métricas
@@ -773,8 +747,7 @@ async function executeNonDestructiveQuery(
     Telemetry.updateAverage("avgQueryTime", queryTime);
 
     logger.info(
-      `✅ Consulta no destructiva para '${taskName}' completada en ${queryTime}ms con ${
-        result.rowsAffected || 0
+      `✅ Consulta no destructiva para '${taskName}' completada en ${queryTime}ms con ${result.rowsAffected || 0
       } filas afectadas`
     );
 
@@ -798,30 +771,30 @@ async function executeNonDestructiveQuery(
     // Registrar uso de memoria final
     MemoryManager.logMemoryUsage(`NonDestructiveQuery-${taskName}-end`);
 
-    // Cerrar la conexión en el bloque finally para garantizar que se cierre incluso si hay errores
-    try {
-      if (connection) {
-        await ConnectionService.releaseConnection(connection);
+    // NUEVO: Cerrar la conexión usando nueva lógica
+    if (
+      connectionInfo &&
+      connectionInfo.needsRelease &&
+      connectionInfo.connection
+    ) {
+      try {
+        await DatabaseServiceAdapter.releaseConnection(connectionInfo.connection);
         logger.debug(
           `✅ Conexión cerrada correctamente para consulta no destructiva '${taskName}'`
         );
+      } catch (closeError) {
+        logger.error(
+          `❌ Error al cerrar conexión para consulta no destructiva '${taskName}':`,
+          closeError
+        );
       }
-    } catch (closeError) {
-      logger.error(
-        `❌ Error al cerrar conexión para consulta no destructiva '${taskName}':`,
-        closeError
-      );
     }
   }
 }
 
 /**
  * Ejecuta una consulta dinámica con manejo de timeout para evitar bloqueos eternos
- * @param {String} taskName - Nombre de la tarea
- * @param {Object} overrideParams - Parámetros para sobrescribir
- * @param {String} serverKey - Servidor a utilizar
- * @param {Number} timeoutMs - Timeout en milisegundos (por defecto 5 minutos)
- * @returns {Promise} - Resultado de la consulta con timeout
+ * VERSIÓN MEJORADA con nueva lógica de conexión
  */
 async function executeDynamicSelectWithTimeout(
   taskName,

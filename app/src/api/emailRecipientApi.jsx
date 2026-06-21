@@ -1,4 +1,4 @@
-import { ENV } from "../index";
+import { ENV } from "../utils/index";
 
 export class EmailRecipientApi {
   baseApi = ENV.BASE_API;
@@ -20,7 +20,7 @@ export class EmailRecipientApi {
 
       if (response.status !== 200) throw result;
 
-      return result;
+      return result.data || result;
     } catch (error) {
       console.log(error);
       throw error;
@@ -57,14 +57,13 @@ export class EmailRecipientApi {
             throw new Error("💥 Error interno en el servidor.");
           default:
             throw new Error(
-              `❌ Error desconocido (${response.status}): ${
-                result.message || "Sin detalles"
+              `❌ Error desconocido (${response.status}): ${result.message || "Sin detalles"
               }`
             );
         }
       }
 
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error al crear destinatario:", error.message);
       throw error;
@@ -98,20 +97,19 @@ export class EmailRecipientApi {
           case 400:
             throw new Error(
               result.message ||
-                "Datos inválidos para actualizar el destinatario."
+              "Datos inválidos para actualizar el destinatario."
             );
           case 500:
             throw new Error("💥 Error interno en el servidor.");
           default:
             throw new Error(
-              `❌ Error desconocido (${response.status}): ${
-                result.message || "Sin detalles"
+              `❌ Error desconocido (${response.status}): ${result.message || "Sin detalles"
               }`
             );
         }
       }
 
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error al actualizar destinatario:", error.message);
       throw error;
@@ -151,8 +149,7 @@ export class EmailRecipientApi {
             throw new Error("💥 Error interno en el servidor.");
           default:
             throw new Error(
-              `❌ Error desconocido (${response.status}): ${
-                result.message || "Sin detalles"
+              `❌ Error desconocido (${response.status}): ${result.message || "Sin detalles"
               }`
             );
         }
@@ -192,14 +189,13 @@ export class EmailRecipientApi {
             throw new Error("💥 Error interno en el servidor.");
           default:
             throw new Error(
-              `❌ Error desconocido (${response.status}): ${
-                result.message || "Sin detalles"
+              `❌ Error desconocido (${response.status}): ${result.message || "Sin detalles"
               }`
             );
         }
       }
 
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error(
         "❌ Error al cambiar estado del destinatario:",
@@ -229,8 +225,7 @@ export class EmailRecipientApi {
 
       if (!response.ok) {
         throw new Error(
-          `❌ Error al inicializar destinatarios por defecto: ${
-            result.message || "Sin detalles"
+          `❌ Error al inicializar destinatarios por defecto: ${result.message || "Sin detalles"
           }`
         );
       }

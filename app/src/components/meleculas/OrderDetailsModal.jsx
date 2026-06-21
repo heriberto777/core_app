@@ -1,235 +1,134 @@
-import styled from "styled-components";
 import { useState } from "react";
 import { LoadsButton, StatusBadge } from "../../index";
 import { FaTimes, FaTrash, FaEdit } from "react-icons/fa";
 
-const ModalOverlay = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 1000;
-  padding: 20px;
+const ModalOverlay = (props) => (
+  <div
+    {...props}
+    className="fixed inset-0 flex items-center justify-center z-1000 p-4 md:p-0"
+    onClick={props.onClick}
+  />
+);
 
-  @media (max-width: 768px) {
-    padding: 10px;
-  }
-`;
+const ModalContent = (props) => (
+  <div
+    {...props}
+    className="bg-white dark:bg-slate-800 rounded-xl w-full max-w-4xl max-h-[90vh] overflow-hidden flex flex-col"
+  />
+);
 
-const ModalContent = styled.div`
-  background: ${props => props.theme.cardBg || 'white'};
-  border-radius: 12px;
-  width: 100%;
-  max-width: 800px;
-  max-height: 90vh;
-  overflow: hidden;
-  display: flex;
-  flex-direction: column;
+const ModalHeader = (props) => (
+  <div
+    {...props}
+    className="px-4 py-3 border-b border-slate-200 dark:border-slate-700 flex justify-between items-center"
+  />
+);
 
-  @media (max-width: 768px) {
-    max-width: 100%;
-    max-height: 95vh;
-  }
-`;
+const ModalTitle = (props) => (
+  <h3
+    {...props}
+    className="m-0 text-lg font-semibold text-slate-900 dark:text-slate-100 text-[18px]"
+  />
+);
 
-const ModalHeader = styled.div`
-  padding: 20px;
-  border-bottom: 1px solid ${props => props.theme.border || '#e5e7eb'};
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
+const CloseButton = (props) => (
+  <button
+    {...props}
+    className="bg-transparent border-none text-slate-500 dark:text-slate-400 text-xl p-1 rounded hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+  />
+);
 
-  @media (max-width: 768px) {
-    padding: 16px;
-  }
-`;
+const ModalBody = (props) => (
+  <div
+    {...props}
+    className="px-4 py-3 overflow-y-auto flex-1"
+  />
+);
 
-const ModalTitle = styled.h3`
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: ${props => props.theme.text || '#111827'};
+const OrderInfo = (props) => (
+  <div
+    {...props}
+    className="grid grid-cols-2 md:grid-cols-3 gap-4 mb-4 p-4 bg-white dark:bg-slate-800 rounded-lg"
+  />
+);
 
-  @media (max-width: 768px) {
-    font-size: 16px;
-  }
-`;
+const InfoField = (props) => (
+  <div
+    {...props}
+    className="flex flex-col gap-1"
+  />
+);
 
-const CloseButton = styled.button`
-  background: none;
-  border: none;
-  font-size: 20px;
-  cursor: pointer;
-  color: ${props => props.theme.textSecondary || '#6b7280'};
-  padding: 4px;
-  border-radius: 4px;
-  transition: color 0.2s ease;
+const InfoLabel = (props) => (
+  <span
+    {...props}
+    className="text-xs font-medium text-slate-500 dark:text-slate-400 uppercase tracking-wide"
+  />
+);
 
-  &:hover {
-    color: ${props => props.theme.text || '#111827'};
-  }
-`;
+const InfoValue = (props) => (
+  <span
+    {...props}
+    className="text-sm font-semibold text-slate-900 dark:text-slate-100 text-[14px]"
+  />
+);
 
-const ModalBody = styled.div`
-  padding: 20px;
-  overflow-y: auto;
-  flex: 1;
+const LinesSection = (props) => (
+  <div
+    {...props}
+    className="mt-6 md:mt-4"
+  />
+);
 
-  @media (max-width: 768px) {
-    padding: 16px;
-  }
-`;
+const SectionTitle = (props) => (
+  <h4
+    {...props}
+    className="m-0 mb-4 text-base font-semibold text-slate-900 dark:text-slate-100 text-[16px]"
+  />
+);
 
-const OrderInfo = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
-  padding: 16px;
-  background: ${props => props.theme.cardBg || '#f9fafb'};
-  border-radius: 8px;
+const LinesTable = (props) => (
+  <div
+    {...props}
+    className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden"
+  />
+);
 
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-    gap: 12px;
-    margin-bottom: 20px;
-    padding: 12px;
-  }
-`;
+const TableHeader = (props) => (
+  <div
+    {...props}
+    className="grid grid-cols-auto-1fr-80px-100px-120px-80px bg-slate-100 dark:bg-slate-800 px-3 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide"
+  />
+);
 
-const InfoField = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 4px;
-`;
+const TableRow = (props) => (
+  <div
+    {...props}
+    className="grid grid-cols-auto-1fr-80px-100px-120px-80px border-t border-slate-200 dark:border-slate-700 align-center transition-colors bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700"
+  />
+);
 
-const InfoLabel = styled.span`
-  font-size: 12px;
-  font-weight: 500;
-  color: ${props => props.theme.textSecondary || '#6b7280'};
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-`;
+const TableCell = (props) => (
+  <span
+    {...props}
+    className="text-sm text-slate-900 dark:text-slate-100 text-[13px]"
+  />
+);
 
-const InfoValue = styled.span`
-  font-size: 14px;
-  font-weight: 600;
-  color: ${props => props.theme.text || '#111827'};
+const LineCheckbox = (props) => (
+  <input
+    {...props}
+    type="checkbox"
+    className="w-4 h-4 cursor-pointer"
+  />
+);
 
-  @media (max-width: 768px) {
-    font-size: 13px;
-  }
-`;
-
-const LinesSection = styled.div`
-  margin-top: 24px;
-
-  @media (max-width: 768px) {
-    margin-top: 20px;
-  }
-`;
-
-const SectionTitle = styled.h4`
-  margin: 0 0 16px 0;
-  font-size: 16px;
-  font-weight: 600;
-  color: ${props => props.theme.text || '#111827'};
-
-  @media (max-width: 768px) {
-    font-size: 15px;
-    margin-bottom: 12px;
-  }
-`;
-
-const LinesTable = styled.div`
-  border: 1px solid ${props => props.theme.border || '#e5e7eb'};
-  border-radius: 8px;
-  overflow: hidden;
-`;
-
-const TableHeader = styled.div`
-  display: grid;
-  grid-template-columns: auto 1fr 80px 100px 120px 80px;
-  background: ${props => props.theme.cardHeaderBg || '#f9fafb'};
-  padding: 12px;
-  font-size: 12px;
-  font-weight: 600;
-  color: ${props => props.theme.textSecondary || '#6b7280'};
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-
-  @media (max-width: 768px) {
-    grid-template-columns: auto 1fr 60px 80px;
-    padding: 10px 8px;
-    font-size: 11px;
-
-    & > span:nth-child(5),
-    & > span:nth-child(6) {
-      display: none;
-    }
-  }
-`;
-
-const TableRow = styled.div`
-  display: grid;
-  grid-template-columns: auto 1fr 80px 100px 120px 80px;
-  padding: 12px;
-  border-top: 1px solid ${props => props.theme.border || '#e5e7eb'};
-  align-items: center;
-  transition: background-color 0.2s ease;
-
-  &:hover {
-    background: ${props => props.theme.cardBg || '#f9fafb'};
-  }
-
-  ${props => props.selected && `
-    background: ${props.theme.primary || '#3b82f6'}10;
-  `}
-
-  @media (max-width: 768px) {
-    grid-template-columns: auto 1fr 60px 80px;
-    padding: 10px 8px;
-
-    & > span:nth-child(5),
-    & > span:nth-child(6) {
-      display: none;
-    }
-  }
-`;
-
-const TableCell = styled.span`
-  font-size: 13px;
-  color: ${props => props.theme.text || '#111827'};
-
-  @media (max-width: 768px) {
-    font-size: 12px;
-  }
-`;
-
-const LineCheckbox = styled.input`
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-`;
-
-const ModalFooter = styled.div`
-  padding: 20px;
-  border-top: 1px solid ${props => props.theme.border || '#e5e7eb'};
-  display: flex;
-  gap: 12px;
-  justify-content: flex-end;
-
-  @media (max-width: 768px) {
-    padding: 16px;
-    gap: 8px;
-    flex-direction: column;
-  }
-`;
+const ModalFooter = (props) => (
+  <div
+    {...props}
+    className="px-4 py-3 border-t border-slate-200 dark:border-slate-700 flex gap-3 justify-end"
+  />
+);
 
 export function OrderDetailsModal({
   isOpen,
@@ -335,7 +234,7 @@ export function OrderDetailsModal({
           </OrderInfo>
 
           <LinesSection>
-            <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '16px' }}>
+            <div className="flex justify-between items-center mb-4">
               <SectionTitle>
                 Líneas del Pedido ({orderDetails.length})
               </SectionTitle>

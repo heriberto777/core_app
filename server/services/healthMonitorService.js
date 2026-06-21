@@ -1,8 +1,7 @@
-// services/healthMonitorService.js
 const logger = require("./logger");
-const ConnectionService = require("./ConnectionCentralService");
 const MongoDbService = require("./mongoDbService");
 const ConnectionDiagnostic = require("./connectionDiagnostic");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
 // Configuración del monitor de salud
 const HEALTH_CONFIG = {
@@ -120,7 +119,7 @@ async function checkSystemHealth() {
     // 2. Verificar estado de los pools
     let poolStatus = {};
     try {
-      poolStatus = ConnectionService.getConnectionStats();
+      poolStatus = DatabaseServiceAdapter.getConnectionStats();
     } catch (error) {
       logger.warn("Error al obtener estado de pools:", error);
       poolStatus = {};
@@ -133,8 +132,8 @@ async function checkSystemHealth() {
 
       let initialized = false;
       try {
-        await ConnectionService.initPool("server1");
-        await ConnectionService.initPool("server2");
+        await DatabaseServiceAdapter.initPool("server1");
+        await DatabaseServiceAdapter.initPool("server2");
         initialized = true;
       } catch (initError) {
         logger.error("Error al inicializar pools:", initError);
@@ -160,8 +159,17 @@ async function checkSystemHealth() {
       }
     }
 
-    // 3. Verificar conexiones a SQL Server
+    // 3. Verificar conexiones a SQL Server y latencia
     const healthCheck = await ConnectionDiagnostic.checkConnectionHealth();
+
+    // Registrar latencias en telemetría para análisis
+    const Telemetry = require("./Telemetry");
+    if (healthCheck.server1?.responseTime) {
+      Telemetry.updateAverage("avgQueryTime", healthCheck.server1.responseTime);
+    }
+    if (healthCheck.server2?.responseTime) {
+      Telemetry.updateAverage("avgQueryTime", healthCheck.server2.responseTime);
+    }
 
     const allOk =
       healthCheck.mongodb?.connected &&
@@ -173,6 +181,9 @@ async function checkSystemHealth() {
       logger.warn(JSON.stringify(healthCheck, null, 2));
 
       HEALTH_CONFIG.errorCounters.connection++;
+
+      // Registrar error en telemetría
+      Telemetry.trackDBConnection("errors");
 
       if (
         HEALTH_CONFIG.errorCounters.connection >=
@@ -222,8 +233,7 @@ async function attemptDatabaseRecovery() {
   }
 
   logger.info(
-    `Iniciando intento de recuperación #${
-      HEALTH_CONFIG.recoveryAttemptCount + 1
+    `Iniciando intento de recuperación #${HEALTH_CONFIG.recoveryAttemptCount + 1
     }...`
   );
   HEALTH_CONFIG.recoveryAttemptCount++;
@@ -243,7 +253,7 @@ async function attemptDatabaseRecovery() {
 
     // 2. Reiniciar pools de conexión
     try {
-      await ConnectionService.closePools();
+      await DatabaseServiceAdapter.closePools();
       logger.info("Pools cerrados correctamente");
     } catch (closeError) {
       logger.error("Error al cerrar pools:", closeError);
@@ -251,8 +261,8 @@ async function attemptDatabaseRecovery() {
 
     let poolsInitialized = false;
     try {
-      await ConnectionService.initPool("server1");
-      await ConnectionService.initPool("server2");
+      await DatabaseServiceAdapter.initPool("server1");
+      await DatabaseServiceAdapter.initPool("server2");
       poolsInitialized = true;
     } catch (initError) {
       logger.error("Error al inicializar pools:", initError);
@@ -316,8 +326,7 @@ async function attemptConnectionRecovery() {
   }
 
   logger.info(
-    `Iniciando intento de recuperación de conexiones #${
-      HEALTH_CONFIG.recoveryAttemptCount + 1
+    `Iniciando intento de recuperación de conexiones #${HEALTH_CONFIG.recoveryAttemptCount + 1
     }...`
   );
   HEALTH_CONFIG.recoveryAttemptCount++;
@@ -326,7 +335,7 @@ async function attemptConnectionRecovery() {
   try {
     // 1. Cerrar pools existentes
     try {
-      await ConnectionService.closePools();
+      await DatabaseServiceAdapter.closePools();
       logger.info("Pools cerrados correctamente");
     } catch (closeError) {
       logger.error("Error al cerrar pools:", closeError);
@@ -338,8 +347,8 @@ async function attemptConnectionRecovery() {
     // 3. Reinicializar pools
     let poolsInitialized = false;
     try {
-      await ConnectionService.initPool("server1");
-      await ConnectionService.initPool("server2");
+      await DatabaseServiceAdapter.initPool("server1");
+      await DatabaseServiceAdapter.initPool("server2");
       poolsInitialized = true;
     } catch (initError) {
       logger.error("Error al inicializar pools:", initError);
@@ -426,7 +435,7 @@ async function performFullDiagnostic() {
     // 4. Verificar estado de pools
     let poolStatus = {};
     try {
-      poolStatus = ConnectionService.getConnectionStats();
+      poolStatus = DatabaseServiceAdapter.getConnectionStats();
     } catch (poolError) {
       logger.warn("Error al obtener estado de pools:", poolError);
       poolStatus = { error: poolError.message };

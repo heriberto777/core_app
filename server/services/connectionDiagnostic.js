@@ -382,7 +382,7 @@ class ConnectionDiagnostic {
         },
       },
       options: {
-        encrypt: isIpAddress ? false : dbConfig.options?.encrypt || false,
+        encrypt: isIpAddress ? false : dbConfig.options?.mssqlEncrypt || false,
         trustServerCertificate: true,
         enableArithAbort: true,
         database: dbConfig.database,

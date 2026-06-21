@@ -1,14 +1,21 @@
 import React, { useState, useEffect } from "react";
-import styled from "styled-components";
-import { TransferApi, useAuth } from "../../index";
+import {
+  useAuth,
+  StatCard,
+  StatusBadge,
+  LoadingUI
+} from "../../index";
+import { ConsecutiveApi } from "../../api/index";
 import {
   FaChartLine,
   FaClock,
   FaCheckCircle,
   FaExclamationTriangle,
+  FaHistory,
+  FaLayerGroup
 } from "react-icons/fa";
 
-const api = new TransferApi();
+const api = new ConsecutiveApi();
 
 export function ConsecutiveDashboard() {
   const { accessToken } = useAuth();
@@ -16,23 +23,26 @@ export function ConsecutiveDashboard() {
   const [loading, setLoading] = useState(true);
   const [selectedConsecutive, setSelectedConsecutive] = useState(null);
   const [selectedTimeRange, setSelectedTimeRange] = useState("24h");
+  const [refreshing, setRefreshing] = useState(false);
 
   useEffect(() => {
     loadDashboard();
-    const interval = setInterval(loadDashboard, 5000); // Actualizar cada 5 segundos
+    const interval = setInterval(loadDashboard, 10000);
     return () => clearInterval(interval);
   }, []);
 
   const loadDashboard = async () => {
     try {
-      const response = await api.get("/consecutives/dashboard", accessToken);
-      if (response.success) {
-        setDashboardData(response.data);
+      if (!refreshing) setRefreshing(true);
+      const response = await api.getConsecutiveDashboard(accessToken);
+      if (response) {
+        setDashboardData(response);
       }
     } catch (error) {
       console.error("Error al cargar dashboard:", error);
     } finally {
       setLoading(false);
+      setRefreshing(false);
     }
   };
 
@@ -43,8 +53,8 @@ export function ConsecutiveDashboard() {
         consecutiveId,
         selectedTimeRange
       );
-      if (response.success) {
-        setSelectedConsecutive(response.data);
+      if (response) {
+        setSelectedConsecutive(response);
       }
     } catch (error) {
       console.error("Error al cargar métricas:", error);
@@ -53,362 +63,122 @@ export function ConsecutiveDashboard() {
 
   const getHealthStatus = (consecutive) => {
     if (consecutive.expiredReservations > 5)
-      return { status: "warning", color: "#ffc107" };
+      return { status: "WARNING", label: "Crítico" };
     if (consecutive.activeReservations > 10)
-      return { status: "caution", color: "#17a2b8" };
-    return { status: "good", color: "#28a745" };
+      return { status: "INFO", label: "Carga Alta" };
+    return { status: "SUCCESS", label: "Estable" };
   };
 
   if (loading) {
-    return <LoadingContainer>Cargando dashboard...</LoadingContainer>;
+    return <LoadingUI message="Cargando panel de control..." fullPage />;
   }
 
   return (
-    <DashboardContainer>
-      <Header>
-        <h2>Dashboard de Consecutivos</h2>
-        <RefreshButton onClick={loadDashboard}>
-          <FaClock />
-        </RefreshButton>
-      </Header>
+    <div className="p-6 bg-white dark:bg-slate-900 min-h-full">
+      <div className="flex justify-between items-start mb-8">
+        <div>
+          <h2 className="m-0 text-2xl font-bold bg-gradient-to-r from-blue-600 to-indigo-500 bg-clip-text text-transparent">
+            Dashboard de Consecutivos
+          </h2>
+          <p className="mt-1 text-sm text-slate-500">Monitoreo en tiempo real de numeración y reservas</p>
+        </div>
+        <button
+          onClick={loadDashboard}
+          className={`flex items-center gap-2 px-5 py-2.5 rounded-lg font-semibold transition-all shadow-md hover:-translate-y-0.5 hover:shadow-lg hover:brightness-110 ${
+            refreshing ? 'bg-slate-200 dark:bg-slate-700 text-slate-600 dark:text-slate-300' : 'bg-blue-600 text-white'
+          }`}
+        >
+          <FaClock className={refreshing ? "animate-spin" : ""} />
+          {refreshing ? "Actualizando..." : "Actualizar"}
+        </button>
+      </div>
 
-      <CardsGrid>
+      <div className="grid grid-cols-[repeat(auto-fill,minmax(300px,1fr))] gap-6 mb-10">
         {dashboardData.map((consecutive) => {
           const health = getHealthStatus(consecutive);
 
           return (
-            <ConsecutiveCard
+            <StatCard
               key={consecutive.id}
+              title={consecutive.name}
+              value={consecutive.currentValue}
+              subtitle="Valor Actual"
+              icon={<FaChartLine />}
               onClick={() => loadConsecutiveMetrics(consecutive.id)}
-            >
-              <CardHeader>
-                <CardTitle>{consecutive.name}</CardTitle>
-                <HealthIndicator $color={health.color} />
-              </CardHeader>
-
-              <CardBody>
-                <MetricItem>
-                  <MetricLabel>Valor Actual:</MetricLabel>
-                  <MetricValue>{consecutive.currentValue}</MetricValue>
-                </MetricItem>
-
-                <MetricItem>
-                  <MetricLabel>Reservas Activas:</MetricLabel>
-                  <MetricValue style={{ color: "#17a2b8" }}>
-                    {consecutive.activeReservations}
-                  </MetricValue>
-                </MetricItem>
-
-                <MetricItem>
-                  <MetricLabel>Incrementos (24h):</MetricLabel>
-                  <MetricValue style={{ color: "#28a745" }}>
-                    {consecutive.totalIncrements}
-                  </MetricValue>
-                </MetricItem>
-
-                {consecutive.expiredReservations > 0 && (
-                  <MetricItem>
-                    <MetricLabel>Reservas Expiradas:</MetricLabel>
-                    <MetricValue style={{ color: "#dc3545" }}>
-                      <FaExclamationTriangle />{" "}
-                      {consecutive.expiredReservations}
-                    </MetricValue>
-                  </MetricItem>
-                )}
-              </CardBody>
-            </ConsecutiveCard>
+              footer={
+                <div className="flex justify-between items-center w-full">
+                  <StatusBadge status={health.status}>{health.label}</StatusBadge>
+                  <div className="flex gap-3 text-[13px] text-slate-500">
+                    <span className="flex items-center gap-1"><FaLayerGroup /> {consecutive.activeReservations}</span>
+                    {consecutive.expiredReservations > 0 && (
+                      <span className="flex items-center gap-1 text-red-500"><FaExclamationTriangle /> {consecutive.expiredReservations}</span>
+                    )}
+                  </div>
+                </div>
+              }
+            />
           );
         })}
-      </CardsGrid>
+      </div>
 
       {selectedConsecutive && (
-        <DetailSection>
-          <DetailHeader>
-            <h3>{selectedConsecutive.consecutiveName}</h3>
-            <TimeRangeSelector>
-              <select
-                value={selectedTimeRange}
-                onChange={(e) => {
-                  setSelectedTimeRange(e.target.value);
-                  loadConsecutiveMetrics(selectedConsecutive.consecutiveId);
-                }}
-              >
-                <option value="1h">1 hora</option>
-                <option value="24h">24 horas</option>
-                <option value="7d">7 días</option>
-                <option value="30d">30 días</option>
-              </select>
-            </TimeRangeSelector>
-          </DetailHeader>
+        <div className="bg-slate-50 dark:bg-slate-800 rounded-xl p-6 border border-slate-200 dark:border-slate-700 shadow-lg backdrop-blur-sm">
+          <div className="flex justify-between items-center mb-6">
+            <div className="flex items-center gap-3 text-blue-600">
+              <FaHistory />
+              <h3 className="m-0 text-slate-800 dark:text-white">Detalle: {selectedConsecutive.consecutiveName}</h3>
+            </div>
+            <select
+              className="px-4 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-700 dark:text-slate-200 font-medium cursor-pointer outline-none focus:border-blue-500"
+              value={selectedTimeRange}
+              onChange={(e) => {
+                setSelectedTimeRange(e.target.value);
+                loadConsecutiveMetrics(selectedConsecutive.consecutiveId);
+              }}
+            >
+              <option value="1h">Última hora</option>
+              <option value="24h">Últimas 24 horas</option>
+              <option value="7d">Últimos 7 días</option>
+              <option value="30d">Últimos 30 días</option>
+            </select>
+          </div>
 
-          <MetricsGrid>
-            <MetricCard>
-              <MetricCardTitle>Resumen</MetricCardTitle>
-              <MetricsList>
-                <li>Valor actual: {selectedConsecutive.currentValue}</li>
-                <li>
-                  Incrementos: {selectedConsecutive.metrics.totalIncrements}
-                </li>
-                <li>Reinicios: {selectedConsecutive.metrics.totalResets}</li>
-                <li>
-                  Promedio de duración de reserva:{" "}
-                  {Math.round(
-                    selectedConsecutive.metrics.averageReservationDuration
-                  )}
-                  s
-                </li>
-              </MetricsList>
-            </MetricCard>
+          <div className="grid grid-cols-3 gap-4 mb-8 max-md:grid-cols-1">
+            <StatCard
+              title="Incrementos"
+              value={selectedConsecutive.metrics.totalIncrements}
+              icon={<FaCheckCircle />}
+            />
+            <StatCard
+              title="Promedio Reserva"
+              value={`${Math.round(selectedConsecutive.metrics.averageReservationDuration)}s`}
+              icon={<FaClock />}
+            />
+            <StatCard
+              title=" Reservas Activas"
+              value={selectedConsecutive.metrics.activeReservations}
+              icon={<FaLayerGroup />}
+            />
+          </div>
 
-            <MetricCard>
-              <MetricCardTitle>Rango de Valores</MetricCardTitle>
-              <RangeDisplay>
-                <RangeItem>
-                  <RangeLabel>Mínimo:</RangeLabel>
-                  <RangeValue>
-                    {selectedConsecutive.metrics.valueRange.min}
-                  </RangeValue>
-                </RangeItem>
-                <RangeItem>
-                  <RangeLabel>Actual:</RangeLabel>
-                  <RangeValue style={{ fontWeight: "bold" }}>
-                    {selectedConsecutive.metrics.valueRange.current}
-                  </RangeValue>
-                </RangeItem>
-                <RangeItem>
-                  <RangeLabel>Máximo:</RangeLabel>
-                  <RangeValue>
-                    {selectedConsecutive.metrics.valueRange.max}
-                  </RangeValue>
-                </RangeItem>
-              </RangeDisplay>
-            </MetricCard>
-
-            {selectedConsecutive.metrics.bySegment && (
-              <MetricCard>
-                <MetricCardTitle>Por Segmento</MetricCardTitle>
-                <SegmentsList>
-                  {Object.entries(selectedConsecutive.metrics.bySegment).map(
-                    ([segment, data]) => (
-                      <SegmentItem key={segment}>
-                        <SegmentName>{segment}</SegmentName>
-                        <SegmentValue>{data.currentValue}</SegmentValue>
-                        <SegmentInfo>
-                          {data.incrementCount} incrementos
-                          {data.lastUsed && (
-                            <span>
-                              {" "}
-                              - Último uso:{" "}
-                              {new Date(data.lastUsed).toLocaleString()}
-                            </span>
-                          )}
-                        </SegmentInfo>
-                      </SegmentItem>
-                    )
-                  )}
-                </SegmentsList>
-              </MetricCard>
-            )}
-          </MetricsGrid>
-        </DetailSection>
+          <div>
+            <h4 className="m-0 mb-4 text-sm text-slate-500 uppercase tracking-wider">Segmentos de Reservas</h4>
+            <div className="grid grid-cols-[repeat(auto-fill,minmax(200px,1fr))] gap-2">
+              {selectedConsecutive.metrics.reservationSegments?.map((segment, idx) => (
+                <div key={idx} className="p-3 bg-white dark:bg-slate-700 rounded-lg border border-slate-200 dark:border-slate-600">
+                  <div className="flex justify-between items-center mb-1">
+                    <span className="font-semibold text-sm">{segment.segmentName}</span>
+                    <span className="font-bold text-blue-600">{segment.count}</span>
+                  </div>
+                  <div className="text-[11px] text-slate-500">{segment.percentage}% del total</div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
       )}
-    </DashboardContainer>
+    </div>
   );
 }
 
-// Estilos para el dashboard
-const DashboardContainer = styled.div`
-  padding: 20px;
-`;
-
-const Header = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-`;
-
-const RefreshButton = styled.button`
-  background: none;
-  border: 1px solid #ccc;
-  border-radius: 4px;
-  padding: 8px 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 5px;
-
-  &:hover {
-    background-color: #f5f5f5;
-  }
-`;
-
-const CardsGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(250px, 1fr));
-  gap: 20px;
-  margin-bottom: 30px;
-`;
-
-const ConsecutiveCard = styled.div`
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  cursor: pointer;
-  transition: all 0.2s;
-
-  &:hover {
-    transform: translateY(-2px);
-    box-shadow: 0 4px 8px rgba(0, 0, 0, 0.15);
-  }
-`;
-
-const CardHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 15px;
-  border-bottom: 1px solid #eee;
-`;
-
-const CardTitle = styled.h3`
-  margin: 0;
-  font-size: 16px;
-`;
-
-const HealthIndicator = styled.div`
-  width: 12px;
-  height: 12px;
-  border-radius: 50%;
-  background-color: ${(props) => props.$color};
-`;
-
-const CardBody = styled.div`
-  padding: 15px;
-`;
-
-const MetricItem = styled.div`
-  display: flex;
-  justify-content: space-between;
-  margin-bottom: 8px;
-`;
-
-const MetricLabel = styled.span`
-  color: #666;
-`;
-
-const MetricValue = styled.span`
-  font-weight: 500;
-`;
-
-const DetailSection = styled.div`
-  background: white;
-  border-radius: 8px;
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-  padding: 20px;
-`;
-
-const DetailHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-`;
-
-const TimeRangeSelector = styled.div`
-  select {
-    padding: 8px;
-    border-radius: 4px;
-    border: 1px solid #ccc;
-  }
-`;
-
-const MetricsGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(300px, 1fr));
-  gap: 20px;
-`;
-
-const MetricCard = styled.div`
-  border: 1px solid #eee;
-  border-radius: 6px;
-  padding: 15px;
-  background: #f9f9f9;
-`;
-
-const MetricCardTitle = styled.h4`
-  margin: 0 0 10px 0;
-  color: #333;
-`;
-
-const MetricsList = styled.ul`
-  list-style: none;
-  padding: 0;
-  margin: 0;
-
-  li {
-    padding: 5px 0;
-    color: #666;
-  }
-`;
-
-const RangeDisplay = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 10px 0;
-`;
-
-const RangeItem = styled.div`
-  text-align: center;
-`;
-
-const RangeLabel = styled.div`
-  font-size: 12px;
-  color: #666;
-  margin-bottom: 4px;
-`;
-
-const RangeValue = styled.div`
-  font-size: 16px;
-  font-weight: 500;
-`;
-
-const SegmentsList = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 10px;
-`;
-
-const SegmentItem = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  padding: 8px;
-  background: white;
-  border-radius: 4px;
-  border: 1px solid #eee;
-`;
-
-const SegmentName = styled.div`
-  font-weight: 500;
-`;
-
-const SegmentValue = styled.div`
-  color: #007bff;
-  font-weight: 500;
-`;
-
-const SegmentInfo = styled.div`
-  font-size: 12px;
-  color: #666;
-`;
-
-const LoadingContainer = styled.div`
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 200px;
-  font-size: 16px;
-  color: #666;
-`;
+export default ConsecutiveDashboard;

@@ -1,23 +1,21 @@
-// Header.jsx (Optimizado)
-import { useEffect, useRef, useState, useContext } from "react";
-import styled from "styled-components";
-import { DataUser, v, AdminLayout } from "../../index";
-import { Device } from "../../styles/breakpoints";
+import { useEffect, useRef, useContext } from "react";
+import { DataUser } from "../../index";
+import { v } from "../../styles/index";
 import { FaBars, FaTimes } from "react-icons/fa";
 import { LayoutContext } from "../../layouts/AdminLayout/AdminLayout";
 
+/**
+ * Corporate Header (Tailwind Edition)
+ */
 export function Header({ stateConfig, sidebarConfig }) {
   const headerRef = useRef(null);
-  const layoutContext = useContext(LayoutContext); // Usar el contexto si está disponible
+  const layoutContext = useContext(LayoutContext);
 
-  // Usar el contexto si está disponible, de lo contrario usar las props
-  const toggleSidebar =
-    layoutContext?.toggleSidebar || sidebarConfig?.toggleSidebar;
+  const toggleSidebar = layoutContext?.toggleSidebar || sidebarConfig?.toggleSidebar;
   const isOpen = layoutContext?.sidebarOpen || sidebarConfig?.isOpen;
 
   useEffect(() => {
     const handleClickOutside = (event) => {
-      // Solo cerrar si el menú está abierto
       if (
         stateConfig.openstate &&
         headerRef.current &&
@@ -26,94 +24,37 @@ export function Header({ stateConfig, sidebarConfig }) {
         stateConfig.setOpenState(false);
       }
     };
-
     document.addEventListener("click", handleClickOutside);
-
-    return () => {
-      document.removeEventListener("click", handleClickOutside);
-    };
+    return () => document.removeEventListener("click", handleClickOutside);
   }, [stateConfig?.openstate]);
 
   return (
-    <HeaderContainer ref={headerRef}>
-      <LogoSection>
-        {/* Botón de toggle para la barra lateral */}
-        <SidebarToggle onClick={toggleSidebar}>
-          {isOpen ? <FaTimes /> : <FaBars />}
-        </SidebarToggle>
+    <div ref={headerRef} className="flex justify-between items-center w-full h-full px-6">
+      <div className="flex items-center gap-6">
+        {/* SIDEBAR TOGGLE */}
+        <button 
+          onClick={toggleSidebar}
+          className="p-2.5 rounded-xl text-primary-600 hover:bg-primary-50 transition-all sidebar-toggle shadow-sm active:scale-95"
+        >
+          {isOpen ? <FaTimes size={20} /> : <FaBars size={20} />}
+        </button>
 
-        {/* Logo */}
-        <LogoContainer>
-          <img src={v.logoLetra} alt="Logo" />
-        </LogoContainer>
-      </LogoSection>
+        {/* LOGO */}
+        <div className="flex items-center h-[50px]">
+          <img 
+            src={v.logoLetra} 
+            alt="Logo" 
+            className="h-8 md:h-10 object-contain transition-transform duration-300 hover:scale-105"
+          />
+        </div>
+      </div>
 
-      <UserSection onClick={(e) => e.stopPropagation()}>
+      {/* USER SECTION */}
+      <div className="flex items-center" onClick={(e) => e.stopPropagation()}>
         <DataUser stateConfig={stateConfig} />
-      </UserSection>
-    </HeaderContainer>
+      </div>
+    </div>
   );
 }
-
-const HeaderContainer = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  width: 100%;
-  height: 100%;
-  padding: 0 20px;
-  background-color: ${({ theme }) => theme.headerBg || theme.bg};
-  box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
-`;
-
-const LogoSection = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 15px;
-`;
-
-const LogoContainer = styled.div`
-  height: 50px;
-  display: flex;
-  align-items: center;
-
-  img {
-    height: 30px;
-    object-fit: contain;
-    transition: transform 0.3s ease;
-  }
-
-  @media ${Device.tablet} {
-    img {
-      transform: scale(1.2);
-    }
-  }
-`;
-
-const SidebarToggle = styled.button`
-  background: none;
-  border: none;
-  color: ${({ theme }) => theme.primary || "#007bff"};
-  font-size: 20px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  padding: 8px;
-  border-radius: 4px;
-
-  &:hover {
-    background-color: rgba(0, 0, 0, 0.05);
-  }
-
-  @media (max-width: 768px) {
-    font-size: 22px;
-  }
-`;
-
-const UserSection = styled.div`
-  display: flex;
-  align-items: center;
-`;
 
 export default Header;

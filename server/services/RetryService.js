@@ -156,9 +156,9 @@ class RetryService {
 }
 
 // Exportar instance default para uso general
-module.exports = new RetryService({
+module.exports = RetryService;
+
+// Exportar instancia default como propiedad
+module.exports.defaultInstance = new RetryService({
   logPrefix: "[Retry] ",
 });
-
-// Exportar también la clase para permitir instancias personalizadas
-module.exports.RetryService = RetryService;

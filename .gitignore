@@ -3,7 +3,7 @@ node_modules/       # Excluye la carpeta de dependencias
 npm-debug.log*      # Excluye los logs de npm
 yarn-debug.log*     # Excluye los logs de Yarn
 yarn-error.log*     # Excluye los errores de Yarn
-#.env                # Excluye archivos de variables de entorno
+.env                # Excluye archivos de variables de entorno
 .DS_Store           # Excluye archivos del sistema macOS
 *.log               # Excluye cualquier archivo de logs
 

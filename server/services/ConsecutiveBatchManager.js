@@ -1,5 +1,7 @@
 const logger = require("./logger");
-const ConnectionService = require("./ConnectionCentralService");
+// const ConnectionService = require("./ConnectionCentralService"); // REMOVED
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
+
 const { SqlService } = require("./SqlService");
 const TaskTracker = require("./TaskTracker");
 const { sendProgress } = require("./progressSse");
@@ -64,7 +66,7 @@ class ConsecutiveBatchManager {
       });
 
       // Obtener conexión al servidor
-      const connectionResult = await ConnectionService.enhancedRobustConnect(
+      const connectionResult = await DatabaseServiceAdapter.getConnection(
         config.serverKey
       );
       if (!connectionResult.success) {
@@ -145,7 +147,7 @@ class ConsecutiveBatchManager {
       } finally {
         // Liberar conexión
         try {
-          await ConnectionService.releaseConnection(connection);
+          await DatabaseServiceAdapter.releaseConnection(connection);
         } catch (e) {
           logger.warn(`Error al liberar conexión: ${e.message}`);
         }
@@ -339,7 +341,7 @@ class ConsecutiveBatchManager {
             `Reconectando por error de conexión en lote ${batchNumber}`
           );
 
-          const reconnectResult = await ConnectionService.enhancedRobustConnect(
+          const reconnectResult = await DatabaseServiceAdapter.getConnection(
             config.serverKey
           );
           if (reconnectResult.success) {
@@ -392,11 +394,11 @@ class ConsecutiveBatchManager {
    */
   async validateConnection(connection, serverKey) {
     try {
-      await SqlService.query(connection, "SELECT 1 AS test");
+      await DatabaseServiceAdapter.query(connection, "SELECT 1 AS test");
     } catch (connError) {
       logger.warn(`Conexión perdida, reconectando a ${serverKey}...`);
 
-      const reconnectResult = await ConnectionService.enhancedRobustConnect(
+      const reconnectResult = await DatabaseServiceAdapter.getConnection(
         serverKey
       );
       if (!reconnectResult.success) {
@@ -417,7 +419,7 @@ class ConsecutiveBatchManager {
    */
   async getTableCount(connection, tableName) {
     try {
-      const result = await SqlService.query(
+      const result = await DatabaseServiceAdapter.query(
         connection,
         `SELECT COUNT(*) AS total FROM ${tableName} WITH (NOLOCK)`
       );

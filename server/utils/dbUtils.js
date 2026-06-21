@@ -1,80 +1,47 @@
-// utils/dbUtils.js
-const ConnectionManager = require("../services/ConnectionCentralService");
+// server/utils/dbUtils.js - MEJORADO CON MEJOR MANEJO DE ERRORES
+
+// // const ConnectionCentralService = require(...); // REMOVED
+// REMOVED - using DatabaseServiceAdapter
+
 const logger = require("../services/logger");
+const DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");
 
-/**
- * Ejecuta una operación con una conexión a base de datos, asegurando que
- * la conexión sea adquirida y liberada correctamente
- *
- * @param {string} serverKey - Servidor al que conectarse (server1, server2)
- * @param {Function} operation - Función a ejecutar con la conexión (debe recibir connection como parámetro)
- * @returns {Promise<any>} - El resultado de la operación
- */
-async function withConnection(serverKey, operation) {
+async function withConnection(serverKey, callback) {
   let connection = null;
+  const startTime = Date.now();
+
   try {
-    logger.debug(`Intentando conectar a ${serverKey}...`);
-    connection = await ConnectionManager.getConnection(serverKey);
+    await DatabaseServiceAdapter.initialize();
 
-    if (!connection) {
-      throw new Error(
-        `No se pudo establecer una conexión válida con ${serverKey}`
-      );
-    }
+    logger.debug(`Solicitando conexión para ${serverKey}...`);
+    connection = await DatabaseServiceAdapter.getConnection(serverKey);
 
-    logger.info(`Conexión establecida correctamente a ${serverKey}`);
+    const acquireTime = Date.now() - startTime;
+    logger.debug(`Conexión obtenida para ${serverKey} en ${acquireTime}ms`);
 
-    // Ejecutar la operación pasando la conexión
-    return await operation(connection);
+    const result = await callback(connection);
+    return result;
   } catch (error) {
-    // Capturar y propagar cualquier error
-    logger.error(`Error en operación con conexión a ${serverKey}:`, error);
+    const errorTime = Date.now() - startTime;
+    logger.error(
+      `Error en withConnection para ${serverKey} (${errorTime}ms):`,
+      {
+        message: error.message,
+        code: error.code,
+        state: error.state,
+      }
+    );
     throw error;
   } finally {
-    // Garantizar que siempre se libera la conexión
     if (connection) {
       try {
-        await ConnectionManager.releaseConnection(connection);
-        logger.debug(`Conexión a ${serverKey} liberada correctamente`);
-      } catch (closeError) {
-        logger.error(`Error al cerrar conexión a ${serverKey}:`, closeError);
+        await DatabaseServiceAdapter.releaseConnection(connection);
+        logger.debug(`Conexión liberada correctamente`);
+      } catch (releaseError) {
+        logger.warn(`Error liberando conexión: ${releaseError.message}`);
       }
     }
   }
 }
 
-/**
- * Ejecuta una operación dentro de una transacción
- * @param {Connection} connection - Conexión a la base de datos
- * @param {Function} operation - Función que recibe la conexión
- * @returns {Promise<any>} - Resultado de la operación
- */
-async function withTransaction(connection, operation) {
-  try {
-    // Iniciar transacción - Asumiendo que existe este método en SqlService
-    const SqlService = require("../services/SqlService").SqlService;
-    await SqlService.query(connection, "BEGIN TRANSACTION");
-
-    // Ejecutar la operación
-    const result = await operation(connection);
-
-    // Commit si todo sale bien
-    await SqlService.query(connection, "COMMIT TRANSACTION");
-
-    return result;
-  } catch (error) {
-    // Rollback en caso de error
-    try {
-      await SqlService.query(connection, "ROLLBACK TRANSACTION");
-    } catch (rollbackError) {
-      logger.error("Error durante el rollback:", rollbackError);
-    }
-
-    throw error;
-  }
-}
-
-module.exports = {
-  withConnection,
-  withTransaction,
-};
+module.exports = { withConnection };

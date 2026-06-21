@@ -1,235 +1,11 @@
-import styled from "styled-components";
-import { useState, useMemo } from "react";
-import { OrderCard, LoadsButton, StatusBadge} from "../../index";
-import { FaList, FaTh, FaTable, FaTruck } from "react-icons/fa";
+import React, { useState, useMemo } from "react";
+import { FaThLarge, FaTable, FaTruck, FaTrash, FaEye } from "react-icons/fa";
+import { OrderCard, StatusBadge } from "../../index";
 
-const Container = styled.div`
-  width: 100%;
-`;
-
-const Header = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-  gap: 12px;
-
-  @media (max-width: 768px) {
-    margin-bottom: 16px;
-    gap: 8px;
-  }
-`;
-
-const Title = styled.h3`
-  margin: 0;
-  font-size: 18px;
-  font-weight: 600;
-  color: ${props => props.theme.text || '#111827'};
-
-  @media (max-width: 768px) {
-    font-size: 16px;
-    width: 100%;
-  }
-`;
-
-const Controls = styled.div`
-  display: flex;
-  gap: 12px;
-  align-items: center;
-  flex-wrap: wrap;
-
-  @media (max-width: 768px) {
-    gap: 8px;
-    width: 100%;
-    justify-content: space-between;
-  }
-`;
-
-const ViewModeButtons = styled.div`
-  display: flex;
-  border: 1px solid ${props => props.theme.border || '#e5e7eb'};
-  border-radius: 6px;
-  overflow: hidden;
-`;
-
-const ViewModeButton = styled.button`
-  padding: 8px 12px;
-  border: none;
-  background: ${props => props.active ? (props.theme.primary || '#3b82f6') : 'transparent'};
-  color: ${props => props.active ? 'white' : (props.theme.textSecondary || '#6b7280')};
-  cursor: pointer;
-  transition: all 0.2s ease;
-  font-size: 14px;
-
-  &:hover {
-    background: ${props => props.active ? (props.theme.primary || '#3b82f6') : (props.theme.cardBg || '#f9fafb')};
-  }
-
-  @media (max-width: 768px) {
-    padding: 6px 10px;
-    font-size: 13px;
-  }
-`;
-
-const SelectionInfo = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  color: ${props => props.theme.textSecondary || '#6b7280'};
-  font-size: 14px;
-
-  @media (max-width: 768px) {
-    font-size: 13px;
-    gap: 8px;
-  }
-`;
-
-const SelectAllButton = styled.button`
-  background: none;
-  border: none;
-  color: ${props => props.theme.primary || '#3b82f6'};
-  cursor: pointer;
-  text-decoration: underline;
-  font-size: 14px;
-
-  &:hover {
-    opacity: 0.8;
-  }
-
-  @media (max-width: 768px) {
-    font-size: 13px;
-  }
-`;
-
-const BulkActions = styled.div`
-  display: flex;
-  gap: 12px;
-  margin-bottom: 20px;
-  flex-wrap: wrap;
-
-  @media (max-width: 768px) {
-    gap: 8px;
-    margin-bottom: 16px;
-  }
-`;
-
-const OrdersGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fill, minmax(350px, 1fr));
-  gap: 20px;
-
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-    gap: 16px;
-  }
-
-  @media (max-width: 480px) {
-    grid-template-columns: 1fr;
-    gap: 12px;
-  }
-`;
-
-const OrdersTable = styled.div`
-  border: 1px solid ${(props) => props.theme.border || "#e5e7eb"};
-  border-radius: 8px;
-  overflow: hidden;
-  background: ${(props) => props.theme.cardBg || "white"};
-`;
-
-const TableHeader = styled.div`
-  display: grid;
-  grid-template-columns: auto 120px 1fr 120px 100px 120px 180px;
-  background: ${(props) => props.theme.cardHeaderBg || "#f9fafb"};
-  padding: 12px;
-  font-size: 12px;
-  font-weight: 600;
-  color: ${(props) => props.theme.textSecondary || "#6b7280"};
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
-
-  @media (max-width: 768px) {
-    grid-template-columns: auto 100px 1fr 80px 120px;
-    padding: 10px 8px;
-    font-size: 11px;
-
-    & > span:nth-child(6),
-    & > span:nth-child(7) {
-      display: none;
-    }
-  }
-`;
-
-const TableRow = styled.div`
-  display: grid;
-  grid-template-columns: auto 120px 1fr 120px 100px 120px 180px;
-  padding: 12px;
-  border-top: 1px solid ${(props) => props.theme.border || "#e5e7eb"};
-  align-items: center;
-  transition: background-color 0.2s ease;
-
-  &:hover {
-    background: ${(props) => props.theme.cardBg || "#f9fafb"};
-  }
-
-  ${(props) =>
-    props.selected &&
-    `
-    background: ${props.theme.primary || "#3b82f6"}10;
-  `}
-
-  @media (max-width: 768px) {
-    grid-template-columns: auto 100px 1fr 80px 120px;
-    padding: 10px 8px;
-
-    & > *:nth-child(6),
-    & > *:nth-child(7) {
-      display: none;
-    }
-  }
-`;
-
-const TableCell = styled.div`
-  font-size: 13px;
-  color: ${(props) => props.theme.text || "#111827"};
-  display: flex;
-  align-items: center;
-  gap: 8px;
-
-  @media (max-width: 768px) {
-    font-size: 12px;
-    gap: 6px;
-  }
-`;
-
-const Checkbox = styled.input`
-  width: 16px;
-  height: 16px;
-  cursor: pointer;
-`;
-
-const EmptyState = styled.div`
-  text-align: center;
-  padding: 60px 20px;
-  color: ${(props) => props.theme.textSecondary || "#6b7280"};
-
-  @media (max-width: 768px) {
-    padding: 40px 16px;
-  }
-`;
-
-const LoadingState = styled.div`
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  padding: 60px 20px;
-  color: ${(props) => props.theme.textSecondary || "#6b7280"};
-
-  @media (max-width: 768px) {
-    padding: 40px 16px;
-  }
-`;
-
+/**
+ * OrdersList (Tailwind Edition)
+ * Listado versátil de pedidos (Cards/Table) con gestión de selección masiva.
+ */
 export function OrdersList({
   orders = [],
   selectedOrders = [],
@@ -242,6 +18,7 @@ export function OrdersList({
   onBulkLoad,
   onBulkCancel,
   loading = false,
+  isProcessing = false,
   viewMode = "cards",
 }) {
   const [currentViewMode, setCurrentViewMode] = useState(viewMode);
@@ -262,93 +39,68 @@ export function OrdersList({
     }).format(amount || 0);
   };
 
-  const formatDate = (date) => {
-    return new Date(date).toLocaleDateString("es-DO", {
-      day: "2-digit",
-      month: "2-digit",
-      year: "numeric",
-    });
-  };
-
-  const pendingOrders = useMemo(() => {
-    return orders.filter((order) => order.transferStatus === "pending");
-  }, [orders]);
-
   if (loading) {
     return (
-      <Container>
-        <LoadingState>
-          <div>Cargando pedidos...</div>
-        </LoadingState>
-      </Container>
+      <div className="p-32 flex flex-col items-center justify-center text-center gap-6">
+        <div className="w-16 h-16 border-4 border-slate-100 border-t-primary-500 rounded-full animate-spin" />
+        <p className="text-lg font-extrabold text-slate-800 uppercase tracking-widest">Sincronizando bitácora...</p>
+      </div>
     );
   }
 
   if (orders.length === 0) {
     return (
-      <Container>
-        <EmptyState>
-          <div>No se encontraron pedidos con los filtros aplicados</div>
-        </EmptyState>
-      </Container>
+      <div className="p-32 flex flex-col items-center justify-center text-center gap-6">
+        <div className="w-20 h-20 bg-slate-50 rounded-full flex items-center justify-center text-slate-200">
+          <FaTable size={40} />
+        </div>
+        <div>
+          <p className="text-xl font-black text-slate-800">No se encontraron registros</p>
+          <p className="text-sm text-slate-400 mt-2">Prueba ajustando los filtros o refrescando la base de datos.</p>
+        </div>
+      </div>
     );
   }
 
   return (
-    <Container>
-      <Header>
-        <Title>Pedidos Encontrados ({orders.length})</Title>
-        <Controls>
-          <ViewModeButtons>
-            <ViewModeButton
-              active={currentViewMode === "cards"}
+    <div className="flex flex-col gap-6 w-full animate-fadeIn">
+      {/* TOOLBAR */}
+      <div className="flex flex-col md:flex-row justify-between items-start md:items-center gap-4 px-4">
+        <h3 className="text-lg font-black text-slate-900 tracking-tight flex items-center gap-2">
+          Pedidos Identificados <span className="text-primary-500 bg-primary-50 px-2 py-0.5 rounded-lg text-xs">{orders.length}</span>
+        </h3>
+        
+        <div className="flex items-center gap-4 w-full md:w-auto">
+          <div className="flex items-center gap-3 text-xs font-extrabold text-slate-400 uppercase tracking-widest border-r border-slate-100 pr-4">
+            <span className={selectedOrders.length > 0 ? "text-primary-600" : ""}>{selectedOrders.length} seleccionados</span>
+            <button 
+              onClick={handleSelectAll}
+              className="text-primary-500 hover:underline active:opacity-70 transition-all"
+            >
+              {selectedOrders.length === orders.length ? "Deseleccionar" : "Seleccionar Todo"}
+            </button>
+          </div>
+
+          <div className="flex bg-slate-50 p-1 rounded-xl border border-slate-100">
+            <button
               onClick={() => setCurrentViewMode("cards")}
+              className={`p-2 rounded-lg transition-all ${currentViewMode === "cards" ? "bg-white shadow-sm text-primary-600" : "text-slate-400 hover:text-slate-600"}`}
             >
-              <FaTh />
-            </ViewModeButton>
-            <ViewModeButton
-              active={currentViewMode === "table"}
+              <FaThLarge size={14} />
+            </button>
+            <button
               onClick={() => setCurrentViewMode("table")}
+              className={`p-2 rounded-lg transition-all ${currentViewMode === "table" ? "bg-white shadow-sm text-primary-600" : "text-slate-400 hover:text-slate-600"}`}
             >
-              <FaTable />
-            </ViewModeButton>
-          </ViewModeButtons>
+              <FaTable size={14} />
+            </button>
+          </div>
+        </div>
+      </div>
 
-          <SelectionInfo>
-            <span>{selectedOrders.length} seleccionados</span>
-            <SelectAllButton onClick={handleSelectAll}>
-              {selectedOrders.length === orders.length && orders.length > 0
-                ? "Deseleccionar todos"
-                : "Seleccionar todos"}
-            </SelectAllButton>
-          </SelectionInfo>
-        </Controls>
-      </Header>
-
-      {selectedOrders.length > 0 && (
-        <BulkActions>
-          <LoadsButton
-            variant="primary"
-            onClick={() => onBulkLoad(selectedOrders)}
-            disabled={selectedOrders.some((id) => {
-              const order = orders.find((o) => o.pedido === id);
-              return order?.transferStatus !== "pending";
-            })}
-          >
-            <FaTruck /> Cargar Seleccionados ({selectedOrders.length})
-          </LoadsButton>
-
-          <LoadsButton
-            variant="danger"
-            onClick={() => onBulkCancel(selectedOrders)}
-          >
-            Cancelar Seleccionados ({selectedOrders.length})
-          </LoadsButton>
-        </BulkActions>
-      )}
-
+      {/* CONTENT AREA */}
       {currentViewMode === "cards" ? (
-        <OrdersGrid>
+        <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 2xl:grid-cols-4 gap-6 p-4">
           {orders.map((order) => (
             <OrderCard
               key={order.pedido}
@@ -361,77 +113,92 @@ export function OrdersList({
               onLoad={onLoad}
             />
           ))}
-        </OrdersGrid>
+        </div>
       ) : (
-        <OrdersTable>
-          <TableHeader>
-            <span>
-              <Checkbox
-                type="checkbox"
-                checked={
-                  selectedOrders.length === orders.length && orders.length > 0
-                }
-                onChange={handleSelectAll}
-              />
-            </span>
-            <span>Pedido</span>
-            <span>Cliente</span>
-            <span>Vendedor</span>
-            <span>Estado</span>
-            <span>Total</span>
-            <span>Acciones</span>
-          </TableHeader>
-
-          {orders.map((order) => (
-            <TableRow
-              key={order.pedido}
-              selected={selectedOrders.includes(order.pedido)}
-            >
-              <TableCell>
-                <Checkbox
-                  type="checkbox"
-                  checked={selectedOrders.includes(order.pedido)}
-                  onChange={() => onOrderSelect(order.pedido)}
-                />
-              </TableCell>
-              <TableCell>#{order.pedido}</TableCell>
-              <TableCell>{order.cliente}</TableCell>
-              <TableCell>{order.nombreVendedor}</TableCell>
-              <TableCell>
-                <StatusBadge status={order.transferStatus}>
-                  {order.transferStatus === "pending"
-                    ? "Pendiente"
-                    : order.transferStatus === "processing"
-                    ? "Procesando"
-                    : order.transferStatus === "completed"
-                    ? "Completado"
-                    : order.transferStatus}
-                </StatusBadge>
-              </TableCell>
-              <TableCell>{formatCurrency(order.totalPedido)}</TableCell>
-              <TableCell>
-                <div style={{ display: "flex", gap: "4px", flexWrap: "wrap" }}>
-                  <LoadsButton
-                    variant="primary"
-                    size="small"
-                    onClick={() => onLoad(order.pedido)}
-                    disabled={order.transferStatus !== "pending"}
-                  >
-                    Cargar
-                  </LoadsButton>
-                  <LoadsButton
-                    variant="secondary"
-                    size="small"
-                    onClick={() => onView(order.pedido)}
-                  >
-                    Ver
-                  </LoadsButton>
-                </div>
-              </TableCell>
-            </TableRow>
-          ))}
-        </OrdersTable>
+        <div className="overflow-x-auto">
+          <table className="w-full text-left border-collapse">
+            <thead>
+              <tr className="bg-slate-50/50 border-b border-slate-100">
+                <th className="px-6 py-5 w-10">
+                  <input
+                    type="checkbox"
+                    className="w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 transition-all"
+                    checked={selectedOrders.length === orders.length && orders.length > 0}
+                    onChange={handleSelectAll}
+                  />
+                </th>
+                <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Pedido</th>
+                <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Cliente / Comprador</th>
+                <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Responsable</th>
+                <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Estado Logístico</th>
+                <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Total</th>
+                <th className="px-6 py-5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-widest">Acciones</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-50">
+              {orders.map((order) => (
+                <tr 
+                  key={order.pedido} 
+                  className={`hover:bg-slate-50/40 transition-colors group ${selectedOrders.includes(order.pedido) ? "bg-primary-50/20" : ""}`}
+                >
+                  <td className="px-6 py-4">
+                    <input
+                      type="checkbox"
+                      className="w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 transition-all"
+                      checked={selectedOrders.includes(order.pedido)}
+                      onChange={() => onOrderSelect(order.pedido)}
+                    />
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="font-extrabold text-slate-800 tracking-tight">#{order.pedido}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-sm font-bold text-slate-700 truncate max-w-[250px]">{order.cliente}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-[11px] font-bold text-slate-400 uppercase tracking-tighter">{order.nombreVendedor}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <StatusBadge status={order.transferStatus === "pending" ? "INACTIVE" : order.transferStatus === "completed" ? "ACTIVE" : "PENDING"}>
+                      {order.transferStatus === "pending" ? "Pendiente" : order.transferStatus === "completed" ? "Completado" : "En Proceso"}
+                    </StatusBadge>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="text-sm font-black text-slate-900 font-mono tracking-tighter">{formatCurrency(order.totalPedido)}</div>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                      <button 
+                        onClick={() => onLoad(order.pedido)}
+                        disabled={order.transferStatus !== "pending"}
+                        className="p-2 text-primary-500 hover:bg-primary-50 rounded-xl transition-all disabled:opacity-30 disabled:hover:bg-transparent"
+                        title="Cargar para despacho"
+                      >
+                        <FaTruck size={14} />
+                      </button>
+                      <button 
+                        onClick={() => onView(order.pedido)}
+                        className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-xl transition-all"
+                        title="Ver detalles"
+                      >
+                        <FaEye size={14} />
+                      </button>
+                      <button 
+                        onClick={() => onCancel(order.pedido)}
+                        disabled={order.transferStatus === "completed" || order.transferStatus === "cancelled"}
+                        className="p-2 text-red-400 hover:bg-red-50 hover:text-red-600 rounded-xl transition-all disabled:opacity-30 disabled:hover:bg-transparent"
+                        title="Anular pedido"
+                      >
+                        <FaTrash size={14} />
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
       )}
-    </Container>
+    </div>
   );
 }

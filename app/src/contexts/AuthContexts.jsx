@@ -6,17 +6,22 @@ import React, {
   useCallback,
   useRef,
 } from "react";
-import { User, AuthApi } from "../index";
+import { User, AuthApi } from "../api/index";
 
 export const AuthContext = createContext();
-const userController = new User();
-const authController = new AuthApi();
+
+// Fix #11 — Las instancias se crean dentro del componente con useRef
+// para respetar el lifecycle de React y evitar singletons a nivel de módulo.
 
 export function AuthProvider({ children }) {
   const [user, setUser] = useState(null);
   const [accessToken, setAccessToken] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
+
+  // Fix #11 — instancias dentro del componente usando useRef para evitar recreaciones en cada render
+  const authController = useRef(new AuthApi()).current;
+  const userController = useRef(new User()).current;
 
   // Refs para evitar llamadas múltiples
   const isInitializing = useRef(false);
@@ -60,15 +65,16 @@ export function AuthProvider({ children }) {
         const userResponse = await userController.getMe(token);
         console.log("📥 Respuesta de getMe recibida:", !!userResponse);
 
-        if (userResponse.data && userResponse.data._id) {
-          delete userResponse.data.password;
+        if (userResponse && (userResponse._id || userResponse.id)) {
+          const userDataRaw = userResponse.data || userResponse;
+          delete userDataRaw.password;
 
           let userData = {
-            ...userResponse.data,
+            ...userDataRaw,
             roles: [],
             permissions: [],
             consolidatedPermissions: [],
-            isAdmin: userResponse.data.isAdmin || false,
+            isAdmin: userDataRaw.isAdmin || false,
           };
 
           // ⭐ CARGAR PERMISOS SIN FALLAR SI HAY ERROR ⭐
@@ -76,16 +82,17 @@ export function AuthProvider({ children }) {
             const permissionsResponse = await userController.getUserPermissions(
               token
             );
-            console.log("🔑 Permisos cargados:", permissionsResponse?.success);
+            console.log("🔑 Permisos cargados:", !!permissionsResponse);
 
-            if (permissionsResponse?.success) {
+            if (permissionsResponse) {
+              const permsData = permissionsResponse.data || permissionsResponse;
               userData = {
                 ...userData,
-                roles: permissionsResponse.data.roles || [],
-                permissions: permissionsResponse.data.permissions || [],
+                roles: permsData.roles || [],
+                permissions: permsData.permissions || [],
                 consolidatedPermissions:
-                  permissionsResponse.data.consolidatedPermissions || [],
-                isAdmin: permissionsResponse.data.isAdmin || userData.isAdmin,
+                  permsData.consolidatedPermissions || [],
+                isAdmin: permsData.isAdmin || userData.isAdmin,
               };
             }
           } catch (permError) {
@@ -108,7 +115,7 @@ export function AuthProvider({ children }) {
             isAdmin: userData.isAdmin,
           });
 
-          return { success: true, user: userData };
+          return { ok: true, user: userData };
         } else {
           throw new Error("Respuesta de usuario inválida");
         }
@@ -116,12 +123,18 @@ export function AuthProvider({ children }) {
         console.error("❌ Error en loginWithToken:", error);
         setError(error.message);
 
-        // ⚠️ SOLO HACER LOGOUT SI ES UN LOGIN NUEVO, NO EN INICIALIZACIÓN
-        if (isFromLogin) {
+        // ⭐ SILENT LOGOUT ⭐
+        // Si hay un error al validar el token (ej: 401, 500, o token expirado)
+        // y NO es un intento de login nuevo (es decir, viene de la persistencia de sesión)
+        // entonces limpiamos los tokens para evitar bucles de error.
+        if (!isFromLogin) {
+          console.warn("🧹 Limpiando sesión debido a error de validación persistente...");
+          logout();
+        } else {
           logout();
         }
 
-        return { success: false, error: error.message };
+        return { ok: false, error: error.message };
       } finally {
         setLoading(false);
       }
@@ -140,18 +153,19 @@ export function AuthProvider({ children }) {
         const response = await authController.login(formData);
         console.log("📥 Respuesta de authController.login:", response);
 
-        if (response.state && response.accessToken) {
+        if (response && (response.accessToken || response.data?.accessToken)) {
           console.log("✅ Credenciales válidas, procesando tokens...");
+          const resData = response.data || response;
 
-          if (response.refreshToken) {
-            authController.setRefreshToken(response.refreshToken);
+          if (resData.refreshToken) {
+            authController.setRefreshToken(resData.refreshToken);
           }
 
-          const result = await loginWithToken(response.accessToken, true);
+          const result = await loginWithToken(resData.accessToken, true);
 
-          if (result.success) {
+          if (result && result.ok) {
             console.log("✅ Login completado exitosamente");
-            return { success: true, user: result.user };
+            return { ok: true, user: result.user };
           } else {
             console.error("❌ Error en loginWithToken:", result.error);
             throw new Error(
@@ -194,14 +208,15 @@ export function AuthProvider({ children }) {
         refreshTokenValue
       );
 
-      if (response.state && response.accessToken) {
-        const result = await loginWithToken(response.accessToken, false);
+      if (response && (response.accessToken || response.data?.accessToken)) {
+        const resData = response.data || response;
+        const result = await loginWithToken(resData.accessToken, false);
 
-        if (response.refreshToken) {
-          authController.setRefreshToken(response.refreshToken);
+        if (resData.refreshToken) {
+          authController.setRefreshToken(resData.refreshToken);
         }
 
-        return result.success;
+        return !!result;
       } else {
         console.warn(
           "⚠️ No se pudo renovar el token - no haciendo logout automático"
@@ -210,7 +225,10 @@ export function AuthProvider({ children }) {
       }
     } catch (error) {
       console.error("❌ Error renovando token:", error);
-      // ⚠️ NO LLAMAR LOGOUT AUTOMÁTICAMENTE - Dejar que el usuario decida
+      // ⭐ SILENT LOGOUT ⭐
+      // Si la renovación falla (ej: refresh token expirado), limpiamos la sesión
+      console.warn("🧹 Limpiando sesión debido a fallo en renovación de token...");
+      logout();
       return false;
     }
   }, [isValidTokenFormat, loginWithToken]);
@@ -227,18 +245,18 @@ export function AuthProvider({ children }) {
         accessToken
       );
 
-      if (permissionsResponse?.success) {
+      if (permissionsResponse) {
+        const permsData = permissionsResponse.data || permissionsResponse;
         setUser((prevUser) => ({
           ...prevUser,
-          roles: permissionsResponse.data.roles || [],
-          permissions: permissionsResponse.data.permissions || [],
+          roles: permsData.roles || [],
+          permissions: permsData.permissions || [],
           consolidatedPermissions:
-            permissionsResponse.data.consolidatedPermissions || [],
+            permsData.consolidatedPermissions || [],
           isAdmin:
-            permissionsResponse.data.isAdmin || prevUser.isAdmin || false,
+            permsData.isAdmin || prevUser.isAdmin || false,
         }));
 
-        console.log("🔄 Permisos recargados exitosamente");
         return true;
       }
       return false;
@@ -249,10 +267,10 @@ export function AuthProvider({ children }) {
     }
   }, [accessToken, user]);
 
-  // ⭐ INICIALIZACIÓN MEJORADA (SOLO UNA VEZ) ⭐
+  // Fix #3 — initializeAuth usa await consistente para eliminar la race condition
+  // donde hasInitialized.current se marcaba true antes de que loginWithToken terminara.
   useEffect(() => {
     if (hasInitialized.current || isInitializing.current) {
-      console.log("🔍 Inicialización ya ejecutada o en proceso, saltando...");
       return;
     }
 
@@ -260,64 +278,25 @@ export function AuthProvider({ children }) {
       isInitializing.current = true;
 
       try {
-        console.log("🚀 Inicializando autenticación...");
-
         const storedAccessToken = authController.getAccessToken();
         const storedRefreshToken = authController.getRefreshToken();
 
         if (storedAccessToken && isValidTokenFormat(storedAccessToken)) {
-          console.log(
-            "🔍 Token de acceso encontrado en localStorage, verificando..."
-          );
+          const result = await loginWithToken(storedAccessToken, false);
 
-          // ⚠️ NO usar await aquí para evitar bloqueos
-          loginWithToken(storedAccessToken, false).then((result) => {
-            if (!result.success) {
-              console.log("🔄 Token de acceso inválido, intentando refresh...");
-              if (
-                storedRefreshToken &&
-                isValidTokenFormat(storedRefreshToken)
-              ) {
-                refreshToken().then((refreshSuccess) => {
-                  if (!refreshSuccess) {
-                    console.log(
-                      "❌ Refresh también falló - usuario debe hacer login manual"
-                    );
-                    setLoading(false);
-                  }
-                });
-              } else {
-                setLoading(false);
-              }
-            }
-          });
-        } else if (
-          storedRefreshToken &&
-          isValidTokenFormat(storedRefreshToken)
-        ) {
-          console.log(
-            "🔄 Solo refresh token disponible, intentando renovar..."
-          );
-
-          refreshToken().then((success) => {
-            if (!success) {
-              console.log(
-                "❌ No se pudo renovar - usuario debe hacer login manual"
-              );
-            }
-            setLoading(false);
-          });
-        } else {
-          console.log("❌ No hay tokens válidos disponibles");
-          setLoading(false);
+          if ((!result || !result.ok) && storedRefreshToken && isValidTokenFormat(storedRefreshToken)) {
+            await refreshToken();
+          }
+        } else if (storedRefreshToken && isValidTokenFormat(storedRefreshToken)) {
+          await refreshToken();
         }
-
-        hasInitialized.current = true;
       } catch (error) {
         console.error("❌ Error inicializando autenticación:", error);
-        setLoading(false);
       } finally {
+        // Fix #3 — hasInitialized se marca DESPUÉS de que todo el proceso async termina
+        hasInitialized.current = true;
         isInitializing.current = false;
+        setLoading(false);
       }
     };
 

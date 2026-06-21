@@ -1,47 +1,67 @@
-import styled from "styled-components";
+import React from "react";
 
-const Badge = styled.span`
-  display: inline-flex;
-  align-items: center;
-  padding: 4px 8px;
-  border-radius: 12px;
-  font-size: 11px;
-  font-weight: 500;
-  text-transform: uppercase;
-  letter-spacing: 0.5px;
+/**
+ * Corporate StatusBadge (Tailwind Edition)
+ * Etiquetas de estado estilizadas para un look corporativo moderno.
+ */
+export const StatusBadge = ({
+  children,
+  status,
+  variant,
+  icon,
+  tooltip,
+  className = "",
+  ...props
+}) => {
+  const getVariantFromStatus = (status) => {
+    const statusVariants = {
+      COMPLETED: "success",
+      SUCCESS: "success",
+      ACTIVE: "success",
+      APPROVED: "success",
+      PENDING: "warning",
+      PROCESSING: "warning",
+      IN_PROGRESS: "warning",
+      WAITING: "warning",
+      ERROR: "danger",
+      FAILED: "danger",
+      CANCELLED: "danger",
+      REJECTED: "danger",
+      INFO: "info",
+      NEW: "info",
+      DRAFT: "info",
+      INACTIVE: "secondary",
+      DISABLED: "secondary",
+      PAUSED: "secondary",
+    };
+    return statusVariants[status?.toUpperCase()] || "secondary";
+  };
 
-  background-color: ${props => {
-    switch (props.status) {
-      case 'pending': return '#fef3c7';
-      case 'processing': return '#dbeafe';
-      case 'completed': return '#dcfce7';
-      case 'error': return '#fee2e2';
-      case 'cancelled': return '#f3f4f6';
-      default: return '#f3f4f6';
-    }
-  }};
+  const finalVariant = variant || getVariantFromStatus(status);
+  const displayText = children || status;
 
-  color: ${props => {
-    switch (props.status) {
-      case 'pending': return '#92400e';
-      case 'processing': return '#1e40af';
-      case 'completed': return '#166534';
-      case 'error': return '#dc2626';
-      case 'cancelled': return '#6b7280';
-      default: return '#6b7280';
-    }
-  }};
+  const variants = {
+    success: "bg-emerald-50 text-emerald-700 border-emerald-200",
+    warning: "bg-amber-50 text-amber-700 border-amber-200",
+    danger: "bg-red-50 text-red-700 border-red-200",
+    info: "bg-sky-50 text-sky-700 border-sky-200",
+    primary: "bg-primary-50 text-primary-700 border-primary-200",
+    secondary: "bg-slate-50 text-slate-600 border-slate-200",
+  };
 
-  @media (max-width: 768px) {
-    font-size: 10px;
-    padding: 2px 6px;
-  }
-`;
-
-export function StatusBadge({ status, children }) {
   return (
-    <Badge status={status}>
-      {children || status}
-    </Badge>
+    <span
+      className={`
+        inline-flex items-center gap-1.5 px-2.5 py-0.5 rounded-full border 
+        text-[10px] font-bold uppercase tracking-wider whitespace-nowrap transition-all duration-200
+        ${variants[finalVariant] || variants.secondary}
+        ${className}
+      `}
+      title={tooltip}
+      {...props}
+    >
+      {icon && <span className="text-[10px]">{icon}</span>}
+      {displayText}
+    </span>
   );
-}
+};

@@ -1,167 +1,9 @@
-import styled from "styled-components";
-import { useState, useRef, useEffect } from "react";
-import { FaChevronDown, FaTimes, FaCheck } from "react-icons/fa";
+import { useState, useRef, useEffect, useMemo } from "react";
+import { FaChevronDown, FaTimes, FaCheck, FaSearch } from "react-icons/fa";
 
-const SelectContainer = styled.div`
-  position: relative;
-  width: 100%;
-`;
-
-const Label = styled.label`
-  font-size: 12px;
-  font-weight: 500;
-  color: ${(props) => props.theme.textSecondary || "#6b7280"};
-  display: block;
-  margin-bottom: 4px;
-`;
-
-const SelectButton = styled.button`
-  width: 100%;
-  padding: 8px 12px;
-  border: 1px solid ${(props) => props.theme.border || "#d1d5db"};
-  border-radius: 6px;
-  background: ${(props) => props.theme.inputBg || "white"};
-  color: ${(props) => props.theme.text || "#111827"};
-  font-size: 14px;
-  text-align: left;
-  cursor: pointer;
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  transition: border-color 0.2s ease;
-
-  &:focus {
-    outline: none;
-    border-color: ${(props) => props.theme.primary || "#3b82f6"};
-    box-shadow: 0 0 0 3px ${(props) => props.theme.primary || "#3b82f6"}20;
-  }
-
-  @media (max-width: 768px) {
-    padding: 6px 10px;
-    font-size: 13px;
-  }
-`;
-
-const SelectText = styled.span`
-  flex: 1;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-  color: ${(props) =>
-    props.hasSelection
-      ? props.theme.text || "#111827"
-      : props.theme.textTertiary || "#9ca3af"};
-`;
-
-const ChevronIcon = styled(FaChevronDown)`
-  transition: transform 0.2s ease;
-  transform: ${(props) => (props.isOpen ? "rotate(180deg)" : "rotate(0deg)")};
-  color: ${(props) => props.theme.textSecondary || "#6b7280"};
-`;
-
-const Dropdown = styled.div`
-  position: absolute;
-  top: 100%;
-  left: 0;
-  right: 0;
-  z-index: 1000;
-  background: ${(props) => props.theme.cardBg || "white"};
-  border: 1px solid ${(props) => props.theme.border || "#e5e7eb"};
-  border-radius: 6px;
-  box-shadow: 0 4px 12px rgba(0, 0, 0, 0.1);
-  max-height: 200px;
-  overflow-y: auto;
-  display: ${(props) => (props.isOpen ? "block" : "none")};
-  margin-top: 2px;
-`;
-
-const Option = styled.div`
-  padding: 8px 12px;
-  cursor: pointer;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  transition: background-color 0.2s ease;
-
-  &:hover {
-    background: ${(props) => props.theme.cardHeaderBg || "#f9fafb"};
-  }
-
-  @media (max-width: 768px) {
-    padding: 6px 10px;
-  }
-`;
-
-const CheckIcon = styled(FaCheck)`
-  color: ${(props) => props.theme.primary || "#3b82f6"};
-  font-size: 12px;
-  opacity: ${(props) => (props.visible ? 1 : 0)};
-`;
-
-const OptionText = styled.span`
-  flex: 1;
-  font-size: 14px;
-  color: ${(props) => props.theme.text || "#111827"};
-
-  @media (max-width: 768px) {
-    font-size: 13px;
-  }
-`;
-
-const SelectedCount = styled.div`
-  background: ${(props) => props.theme.primary || "#3b82f6"};
-  color: white;
-  border-radius: 12px;
-  padding: 2px 6px;
-  font-size: 11px;
-  font-weight: 500;
-  margin-left: 4px;
-`;
-
-const SelectedTags = styled.div`
-  display: flex;
-  flex-wrap: wrap;
-  gap: 4px;
-  margin-top: 4px;
-`;
-
-const Tag = styled.div`
-  background: ${(props) => props.theme.primary || "#3b82f6"}10;
-  color: ${(props) => props.theme.primary || "#3b82f6"};
-  border: 1px solid ${(props) => props.theme.primary || "#3b82f6"}30;
-  border-radius: 4px;
-  padding: 2px 6px;
-  font-size: 11px;
-  display: flex;
-  align-items: center;
-  gap: 4px;
-  max-width: 150px;
-
-  @media (max-width: 768px) {
-    max-width: 120px;
-  }
-`;
-
-const TagText = styled.span`
-  overflow: hidden;
-  text-overflow: ellipsis;
-  white-space: nowrap;
-`;
-
-const TagRemove = styled.button`
-  background: none;
-  border: none;
-  color: ${(props) => props.theme.primary || "#3b82f6"};
-  cursor: pointer;
-  padding: 0;
-  display: flex;
-  align-items: center;
-
-  &:hover {
-    opacity: 0.7;
-  }
-`;
-
+/**
+ * Corporate MultiSelectInput (Tailwind Edition)
+ */
 export function MultiSelectInput({
   label,
   value = [],
@@ -170,15 +12,31 @@ export function MultiSelectInput({
   placeholder = "Seleccionar...",
   showTags = true,
   maxTagsShown = 3,
+  searchThreshold = 5,
+  className = "",
   ...props
 }) {
   const [isOpen, setIsOpen] = useState(false);
+  const [search, setSearch] = useState("");
   const selectRef = useRef(null);
+  const searchInputRef = useRef(null);
+
+  const filteredOptions = useMemo(() => {
+    if (!search.trim()) return options;
+    const searchLower = search.toLowerCase();
+    return options.filter(opt => 
+      opt.label?.toLowerCase().includes(searchLower) || 
+      String(opt.value).toLowerCase().includes(searchLower)
+    );
+  }, [options, search]);
+
+  const showSearch = options.length > searchThreshold;
 
   useEffect(() => {
     const handleClickOutside = (event) => {
       if (selectRef.current && !selectRef.current.contains(event.target)) {
         setIsOpen(false);
+        setSearch("");
       }
     };
 
@@ -186,15 +44,23 @@ export function MultiSelectInput({
     return () => document.removeEventListener("mousedown", handleClickOutside);
   }, []);
 
+  useEffect(() => {
+    if (isOpen && showSearch && searchInputRef.current) {
+      searchInputRef.current.focus();
+    }
+  }, [isOpen, showSearch]);
+
   const handleToggle = () => {
     setIsOpen(!isOpen);
+    if (!isOpen) {
+      setSearch("");
+    }
   };
 
   const handleOptionClick = (optionValue) => {
     const newValue = value.includes(optionValue)
       ? value.filter((v) => v !== optionValue)
       : [...value, optionValue];
-
     onChange?.(newValue);
   };
 
@@ -220,48 +86,96 @@ export function MultiSelectInput({
   };
 
   return (
-    <SelectContainer ref={selectRef}>
-      {label && <Label>{label}</Label>}
+    <div ref={selectRef} className={`relative w-full ${className}`}>
+      {label && (
+        <label className="text-xs font-medium text-slate-500 block mb-1">
+          {label}
+        </label>
+      )}
 
-      <SelectButton onClick={handleToggle} type="button" {...props}>
-        <SelectText hasSelection={value.length > 0}>
+      <button
+        type="button"
+        onClick={handleToggle}
+        className={`
+          w-full px-3 py-2 border rounded-md bg-white text-left cursor-pointer flex justify-between items-center
+          transition-colors duration-200
+          ${isOpen ? "border-primary-500 ring-2 ring-primary-500/20" : "border-slate-300 hover:border-slate-400"}
+        `}
+        {...props}
+      >
+        <span className={`flex-1 overflow-hidden text-ellipsis whitespace-nowrap ${value.length > 0 ? "text-slate-800" : "text-slate-400"}`}>
           {getDisplayText()}
-          {value.length > 1 && <SelectedCount>{value.length}</SelectedCount>}
-        </SelectText>
-        <ChevronIcon isOpen={isOpen} />
-      </SelectButton>
+          {value.length > 1 && (
+            <span className="ml-1.5 bg-primary-500 text-white rounded-full px-1.5 py-0.5 text-[11px] font-medium">
+              {value.length}
+            </span>
+          )}
+        </span>
+        <FaChevronDown className={`text-slate-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+      </button>
 
       {showTags && value.length > 0 && (
-        <SelectedTags>
+        <div className="flex flex-wrap gap-1 mt-1">
           {getSelectedOptions()
             .slice(0, maxTagsShown)
             .map((option) => (
-              <Tag key={option.value}>
-                <TagText>{option.label}</TagText>
-                <TagRemove onClick={(e) => handleRemoveTag(option.value, e)}>
+              <div
+                key={option.value}
+                className="flex items-center gap-1 bg-primary-50 text-primary-600 border border-primary-200/30 rounded px-1.5 py-0.5 text-[11px] max-w-[150px]"
+              >
+                <span className="overflow-hidden text-ellipsis whitespace-nowrap">{option.label}</span>
+                <button
+                  onClick={(e) => handleRemoveTag(option.value, e)}
+                  className="text-primary-500 hover:opacity-70 p-0 bg-transparent border-none cursor-pointer"
+                >
                   <FaTimes size={8} />
-                </TagRemove>
-              </Tag>
+                </button>
+              </div>
             ))}
           {value.length > maxTagsShown && (
-            <Tag>
-              <TagText>+{value.length - maxTagsShown} más</TagText>
-            </Tag>
+            <div className="flex items-center gap-1 bg-primary-50 text-primary-600 border border-primary-200/30 rounded px-1.5 py-0.5 text-[11px]">
+              <span>+{value.length - maxTagsShown} más</span>
+            </div>
           )}
-        </SelectedTags>
+        </div>
       )}
 
-      <Dropdown isOpen={isOpen}>
-        {options.map((option) => (
-          <Option
-            key={option.value}
-            onClick={() => handleOptionClick(option.value)}
-          >
-            <CheckIcon visible={value.includes(option.value)} />
-            <OptionText>{option.label}</OptionText>
-          </Option>
-        ))}
-      </Dropdown>
-    </SelectContainer>
+      {isOpen && (
+        <div className="absolute top-full left-0 right-0 z-[1000] bg-white border border-slate-200 rounded-md shadow-lg mt-0.5 max-h-[250px] overflow-y-auto">
+          {showSearch && (
+            <div className="sticky top-0 bg-white p-2 border-b border-slate-200">
+              <div className="relative">
+                <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
+                <input
+                  ref={searchInputRef}
+                  type="text"
+                  placeholder="Buscar..."
+                  value={search}
+                  onChange={(e) => setSearch(e.target.value)}
+                  onClick={(e) => e.stopPropagation()}
+                  className="w-full pl-7 pr-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:border-primary-500"
+                />
+              </div>
+            </div>
+          )}
+          {filteredOptions.length > 0 ? (
+            filteredOptions.map((option) => (
+              <div
+                key={option.value}
+                onClick={() => handleOptionClick(option.value)}
+                className="px-3 py-2 cursor-pointer flex items-center gap-2 hover:bg-slate-50 transition-colors"
+              >
+                <FaCheck className={`text-primary-500 text-xs ${value.includes(option.value) ? "opacity-100" : "opacity-0"}`} />
+                <span className="flex-1 text-sm text-slate-800">{option.label}</span>
+              </div>
+            ))
+          ) : (
+            <div className="px-3 py-4 text-center text-slate-400 text-sm">
+              Sin resultados
+            </div>
+          )}
+        </div>
+      )}
+    </div>
   );
 }

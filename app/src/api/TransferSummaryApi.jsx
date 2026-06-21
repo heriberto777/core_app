@@ -1,5 +1,4 @@
-// TransferSummaryApi.js
-import { ENV } from "../index";
+import { ENV } from "../utils/index";
 
 export class TransferSummaryApi {
   baseApi = ENV.BASE_API;
@@ -21,9 +20,8 @@ export class TransferSummaryApi {
       if (filters.status) queryParams.append("status", filters.status);
 
       const queryString = queryParams.toString();
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.SUMMARIES}/get/${
-        queryString ? `?${queryString}` : ""
-      }`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.SUMMARIES}/get/${queryString ? `?${queryString}` : ""
+        }`;
 
       const params = {
         headers: {
@@ -61,7 +59,7 @@ export class TransferSummaryApi {
 
       if (response.status !== 200) throw result;
 
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error(
         `Error fetching transfer summary by ID ${summaryId}:`,
@@ -89,7 +87,7 @@ export class TransferSummaryApi {
 
       if (response.status !== 200) throw result;
 
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error(
         `Error fetching transfer summary by loadId ${loadId}:`,
@@ -117,7 +115,7 @@ export class TransferSummaryApi {
 
       if (response.status !== 200) throw result;
 
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error(`Error checking inventory for returns:`, error);
       throw error;
@@ -145,7 +143,7 @@ export class TransferSummaryApi {
 
       if (response.status !== 200) throw result;
 
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error(`Error processing transfer return:`, error);
       throw error;

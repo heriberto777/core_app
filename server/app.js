@@ -2,6 +2,7 @@ require("dotenv").config();
 const express = require("express");
 const cors = require("cors");
 const path = require("path");
+const fs = require("fs");
 const app = express();
 const errorHandler = require("./middlewares/errorHandler");
 const logRequests = require("./middlewares/loggerMiddleware");
@@ -29,29 +30,39 @@ try {
 
 // Middleware de CORS mejorado
 
+// Fix #13 — Orígenes CORS desde variable de entorno para evitar valores hardcodeados.
+// En .env: CORS_ALLOWED_ORIGINS=http://localhost:3000,http://localhost:5173,...
+// Si la variable no existe, usa el listado por defecto como fallback.
+const DEFAULT_CORS_ORIGINS = [
+  "http://localhost:5173",
+  "http://localhost:5174",
+  "http://localhost:5175",
+  "http://localhost:5176",
+  "http://localhost:5177",
+  "http://localhost:5178",
+  "http://localhost:5179",
+  "http://localhost:5180",
+  "https://localhost:3000",
+  "https://catelli.ddns.net",
+  "https://catelli.ddns.net:3979",
+  "http://catelli.ddns.net",
+  "http://catelli.ddns.net:3979",
+  "https://catelli.ddns.net:8085",
+];
+
+const allowedOrigins = process.env.CORS_ALLOWED_ORIGINS
+  ? process.env.CORS_ALLOWED_ORIGINS.split(",").map((o) => o.trim())
+  : DEFAULT_CORS_ORIGINS;
+
 const corsOptions = {
   origin: function (origin, callback) {
-    // Lista de orígenes permitidos
-    const allowedOrigins = [
-      "http://localhost:3000",
-      "http://localhost:3001",
-      "http://localhost:5173",
-      "https://localhost:3000",
-      "https://catelli.ddns.net",
-      "https://catelli.ddns.net:3979",
-      "http://catelli.ddns.net",
-      "http://catelli.ddns.net:3979",
-      "https://catelli.ddns.net:8085",
-    ];
-
     // Permitir peticiones sin origin (Postman, apps móviles, etc.)
     if (!origin) return callback(null, true);
 
-    // Verificar si el origin está en la lista permitida
-    if (allowedOrigins.indexOf(origin) !== -1) {
+    if (allowedOrigins.includes(origin)) {
       callback(null, true);
     } else {
-      console.log("CORS blocked origin:", origin);
+      logger.error(`🚩 CORS BLOQUEADO: Origen "${origin}" no está en la lista blanca.`);
       callback(new Error("No permitido por política CORS"));
     }
   },
@@ -96,26 +107,20 @@ app.use(express.json({ limit: MAX_REQUEST_SIZE }));
 app.use(express.urlencoded({ limit: MAX_REQUEST_SIZE, extended: true }));
 
 // ⭐ AÑADIR ESTAS LÍNEAS PARA SERVIR ARCHIVOS ESTÁTICOS ⭐
-// Servir archivos estáticos desde la carpeta uploads
-app.use("/uploads", express.static(path.join(__dirname, "uploads")));
-console.log(
-  "📁 Sirviendo archivos estáticos desde:",
-  path.join(__dirname, "uploads")
-);
+// Servir archivos estáticos desde la carpeta uploads - Usar truco de string para evitar que NCC lo incluya
+const _u = "up"; const _lo = "loads";
+const uploadBaseDir = path.join(process.cwd(), _u + _lo);
+app.use("/uploads", express.static(uploadBaseDir));
+console.log("📁 Sirviendo archivos estáticos desde:", uploadBaseDir);
 
-// Crear directorio de uploads si no existe
-const fs = require("fs");
-const uploadDirs = [
-  path.join(__dirname, "uploads"),
-  path.join(__dirname, "uploads/avatar"),
-];
-
-uploadDirs.forEach((dir) => {
-  if (!fs.existsSync(dir)) {
-    fs.mkdirSync(dir, { recursive: true });
-    console.log(`📁 Directorio creado: ${dir}`);
-  }
-});
+// Crear directorios de uploads si no existen
+if (!fs.existsSync(uploadBaseDir)) {
+  fs.mkdirSync(uploadBaseDir, { recursive: true });
+}
+const avatarDir = path.join(uploadBaseDir, "avatar");
+if (!fs.existsSync(avatarDir)) {
+  fs.mkdirSync(avatarDir, { recursive: true });
+}
 
 // Middleware para manejar errores de parsing JSON
 app.use((err, req, res, next) => {
@@ -136,6 +141,8 @@ app.use(`/api/${API_VERSION}/modules`, require("./routes/moduleRoutes"));
 app.use(`/api/${API_VERSION}/task`, require("./routes/transferTaskRoutes"));
 app.use(`/api/${API_VERSION}/users`, require("./routes/userRoutes"));
 app.use(`/api/${API_VERSION}/config`, require("./routes/dbRoutes"));
+app.use(`/api/${API_VERSION}/scheduler`, require("./routes/schedulerRoutes"));
+app.use(`/api/${API_VERSION}/cache`, require("./routes/cacheRoutes"));
 
 app.use(
   `/api/${API_VERSION}/email-recipients`,
@@ -175,6 +182,8 @@ app.use(
   require("./routes/emailConfigRoutes")
 );
 app.use(`/api/${API_VERSION}/loads`, require("./routes/loadsRoutes"));
+app.use(`/api/${API_VERSION}/telemetry`, require("./routes/telemetryRoutes"));
+app.use(`/api/${API_VERSION}/customers`, require("./routes/customerRoutes"));
 //Comentario
 // Ruta para health check mejorada
 app.get("/health", async (req, res) => {
@@ -194,7 +203,7 @@ app.get("/health", async (req, res) => {
     res.json({
       status:
         health.mongodb?.connected &&
-        (health.server1?.connected || health.server2?.connected)
+          (health.server1?.connected || health.server2?.connected)
           ? "UP"
           : "DEGRADED",
       timestamp: new Date().toISOString(),

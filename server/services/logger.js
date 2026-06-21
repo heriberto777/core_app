@@ -5,11 +5,127 @@ const path = require("path");
 const fs = require("fs");
 const MongoDBTransport = require("./mongoDBTransport");
 
-// Crear directorio de logs
-const logDir = "logs";
+// Crear directorio de logs - Usar truco de string para evitar que NCC lo incluya en el bundle
+const _l = "lo"; const _g = "gs";
+const logDir = path.join(process.cwd(), _l + _g);
 if (!fs.existsSync(logDir)) {
-  fs.mkdirSync(logDir);
+  fs.mkdirSync(logDir, { recursive: true });
 }
+
+// ============================================
+// FORMATO LIMPIO PARA CONSOLA
+// ============================================
+
+// Función para colorear niveles (definida primero)
+function getLevelColor(level) {
+  const colors = {
+    error: "\x1b[31merror\x1b[0m",
+    warn: "\x1b[33mwarn\x1b[0m",
+    info: "\x1b[36minfo\x1b[0m",
+    debug: "\x1b[90mdebug\x1b[0m",
+    verbose: "\x1b[90mverbose\x1b[0m",
+  };
+  return colors[level] || level;
+}
+
+const consoleFormat = printf(
+  ({ level, message, timestamp, source, ...rest }) => {
+    const time = timestamp ? timestamp.split("T")[1].split(".")[0] : "";
+    const sourceTag = source ? `[${source}] ` : "";
+    const levelStr = getLevelColor(level);
+    
+    // Simplificar mensajes muy largos
+    let cleanMessage = message;
+    if (message && message.length > 150) {
+      // Truncar mensajes largos de queries
+      if (message.includes("Query:")) {
+        const match = message.match(/Query:\s*(.+)/);
+        if (match) {
+          cleanMessage = `Query: ${match[1].substring(0, 100)}...`;
+        }
+      } else if (message.includes("Parametros:")) {
+        cleanMessage = message.substring(0, 150) + "...";
+      }
+    }
+
+    return `${time} ${levelStr}: ${sourceTag}${cleanMessage}`;
+  }
+);
+
+// Función para filtrar mensajes ruido en consola
+const shouldLogToConsole = (info) => {
+  const msg = info.message || "";
+  const level = info.level;
+  const source = info.source || "";
+
+  // Siempre mostrar errores
+  if (level === "error") return true;
+
+  // No mostrar queries SQL completas
+  if (msg.includes("Query: UPDATE") || 
+      msg.includes("Query: INSERT") || 
+      msg.includes("Query: SELECT") ||
+      msg.includes("Parametros:") ||
+      msg.includes("Parámetros:")) {
+    return false;
+  }
+
+  // No mostrar mensajes muy frecuentes de transferencia
+  if (msg.includes("Obtenidos ") && msg.includes(" registros desde")) {
+    return false;
+  }
+  if (msg.includes("MUESTRA DE LOS PRIMEROS")) {
+    return false;
+  }
+  if (msg.includes("Aplicando mapeo de campos")) {
+    return false;
+  }
+  if (msg.includes("Post-update lote")) {
+    return false;
+  }
+  if (msg.includes("Lote ") && msg.includes(" procesando")) {
+    return false;
+  }
+  if (msg.includes("Intentando consulta de diagnóstico")) {
+    return false;
+  }
+
+  // Filtrar mensajes HTTP (Morgan) - solo mostrar errores y rutas importantes
+  if (source === "http" || msg.includes("HTTP/")) {
+    // Mostrar solo errores HTTP (5xx) y rutas importantes
+    if (msg.includes(" 5") || msg.includes(" 4") || 
+        msg.includes("/api/v1/task/ejecutar") ||
+        msg.includes("/api/v1/task/execute") ||
+        msg.includes("/api/v1/linked-groups")) {
+      return true;
+    }
+    // Ocultar polling y health checks
+    if (msg.includes("/api/v1/task/accion") || 
+        msg.includes("/health") ||
+        msg.includes("/api/v1/health")) {
+      return false;
+    }
+    // Ocultar otros requests HTTP
+    return false;
+  }
+
+  // No mostrar health checks
+  if (msg.includes("/health") || msg.includes("/api/v1/health")) {
+    return false;
+  }
+
+  // No mostrar metadata adicional en consola (solo archivos)
+  if (msg.includes("🔍 Additional:") || msg.includes("📊 Metadata:")) {
+    return false;
+  }
+
+  // Mostrar solo info y warn
+  if (level === "debug" || level === "verbose") {
+    return false;
+  }
+
+  return true;
+};
 
 // Formato DETALLADO para transacciones
 const transactionFormat = printf(
@@ -109,15 +225,49 @@ const createMongoTransport = () => {
 // Configurar TODOS los transportes
 const configureTransports = () => {
   const transportsList = [
-    // Consola con formato detallado
+    // Consola con formato LIMPIO (nivel info, filtrado)
     new transports.Console({
-      format: combine(colorize(), timestamp(), transactionFormat),
-      level: "debug", // TODO en consola
+      format: combine(colorize(), timestamp(), consoleFormat),
+      level: "info",
+      log: (info, callback) => {
+        // Verificar nivel (solo info, warn, error)
+        const levelPriority = { error: 0, warn: 1, info: 2, debug: 3, verbose: 4 };
+        const minLevel = levelPriority["info"];
+        const msgLevel = levelPriority[info.level] ?? 99;
+        
+        if (msgLevel > minLevel) {
+          return callback();
+        }
+        
+        if (shouldLogToConsole(info)) {
+          // Usar el formato personalizado
+          const time = info.timestamp ? info.timestamp.split("T")[1].split(".")[0] : "";
+          const sourceTag = info.source ? `[${info.source}] ` : "";
+          const levelStr = info.level.toUpperCase().padEnd(7);
+          
+          // Formato limpio sin metadata
+          let output = `${time} ${levelStr}: ${sourceTag}${info.message}`;
+          
+          // Agregar stack trace para errores
+          if (info.level === "error" && info.stack) {
+            output += `\n  Stack: ${info.stack.substring(0, 200)}`;
+          }
+          
+          if (info.level === "error") {
+            console.error(output);
+          } else if (info.level === "warn") {
+            console.warn(output);
+          } else {
+            console.log(output);
+          }
+        }
+        callback();
+      }
     }),
 
     // Archivo combinado con TODO
     new transports.File({
-      filename: path.join(logDir, "combined.log"),
+      filename: path.join(logDir, ["comb", "ined.log"].join("")),
       maxsize: 50485760, // 50MB
       maxFiles: 20,
       level: "debug", // TODO en archivo
@@ -126,7 +276,7 @@ const configureTransports = () => {
 
     // Archivo solo de errores
     new transports.File({
-      filename: path.join(logDir, "error.log"),
+      filename: path.join(logDir, ["err", "or.log"].join("")),
       level: "error",
       maxsize: 20485760, // 20MB
       maxFiles: 10,
@@ -135,7 +285,7 @@ const configureTransports = () => {
 
     // Archivo de transacciones detalladas
     new transports.File({
-      filename: path.join(logDir, "transactions.log"),
+      filename: path.join(logDir, ["transa", "ctions.log"].join("")),
       level: "debug",
       maxsize: 100485760, // 100MB
       maxFiles: 50,
@@ -154,8 +304,10 @@ const configureTransports = () => {
 };
 
 // Crear logger con configuración COMPLETA
+// El nivel por defecto es "debug" para capturar todo en archivos
+// La consola usa "info" a través del transporte individual
 const logger = createLogger({
-  level: "debug", // Nivel más bajo para capturar TODO
+  level: "debug",
   format: combine(timestamp(), transactionFormat),
   transports: configureTransports(),
   exitOnError: false,
@@ -403,18 +555,70 @@ const gracefulShutdown = () => {
   }
 
   logger.system.info("✅ Logger cerrado correctamente");
-  logger.close();
+  if (typeof logger.close === "function") logger.close();
 };
 
-process.on("SIGINT", gracefulShutdown);
-process.on("SIGTERM", gracefulShutdown);
+// El cierre del logger debe ser orquestado por el proceso principal (index.js/AppBootstrap)
+// para evitar condiciones de carrera durante el shutdown.
+logger.closeLogger = gracefulShutdown;
 
-// Log de inicio del sistema
-logger.system.info("🚀 Sistema de logging inicializado", {
-  level: "debug",
-  transports: logger.transports.length,
-  mongoEnabled: logger.transports.some((t) => t.name === "mongodb"),
-  timestamp: new Date().toISOString(),
-});
+// Función de diagnóstico del logger
+logger.getDiagnostics = () => {
+  const diagnostics = {
+    status: "active",
+    transports: [],
+    mongodb: {
+      connected: false,
+      errorCount: 0,
+      lastError: null,
+      bufferSize: 0,
+      isInCooldown: false,
+    },
+    config: {
+      level: logger.level,
+      defaultMeta: logger.defaultMeta,
+    },
+    environment: {
+      nodeVersion: process.version,
+      pid: process.pid,
+      env: process.env.NODE_ENV,
+    }
+  };
+
+  if (logger.transports) {
+    logger.transports.forEach((transport) => {
+      const transportInfo = {
+        name: transport.name,
+        level: transport.level,
+        silent: transport.silent || false,
+      };
+      
+      if (transport.name === "mongodb") {
+        transportInfo.status = transport.isReady ? "ready" : (transport.isShuttingDown ? "shutting_down" : "connecting");
+        transportInfo.errorCount = transport.errorCount || 0;
+        transportInfo.lastError = transport.lastError || null;
+        transportInfo.bufferSize = transport.logBuffer?.length || 0;
+        transportInfo.pendingBatch = transport.pendingBatch?.length || 0;
+        transportInfo.reconnectAttempts = transport.reconnectAttempts || 0;
+        transportInfo.isInCooldown = transport.isInCooldown ? transport.isInCooldown() : false;
+        
+        // Intentar verificar conexión a MongoDB
+        try {
+          const mongoose = require("mongoose");
+          transportInfo.mongooseConnectionState = mongoose.connection.readyState;
+          transportInfo.mongooseHost = mongoose.connection.host;
+        } catch (e) {
+          transportInfo.mongooseError = e.message;
+        }
+        
+        diagnostics.mongodb = transportInfo;
+      }
+      
+      diagnostics.transports.push(transportInfo);
+    });
+  }
+
+  return diagnostics;
+};
 
 module.exports = logger;

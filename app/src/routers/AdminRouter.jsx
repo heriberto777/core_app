@@ -1,40 +1,31 @@
 import React from "react";
 import { Routes, Route, Navigate } from "react-router-dom";
-import {
-  AdminLayout,
-  Auth,
-  useAuth,
-  usePermissions,
-  Dashboard,
-  TransferTasks,
-  LoadsManagement,
-  LoadsResumen,
-  Statistics,
-  DocumentsVisualization,
-  TransferHistoryLogs,
-  UserManagement,
-  RoleManagement,
-  ConfigurationPage,
-  UserProfile,
-  ModuleManager,
-  LogsPage,
-} from "../index";
+import { AdminLayout } from "../layouts/AdminLayout/AdminLayout";
+import { Auth } from "../pages/admin/Auth/Auth";
+import { useAuth } from "../hooks/useAuth";
+import { usePermissions } from "../hooks/usePermissions";
+import { Dashboard } from "../components/templates/Dashboard";
+import { TransferTasks } from "../components/templates/TransferTask";
+import { LoadsManagement } from "../components/templates/LoadsManagement";
+import { LoadsResumen } from "../components/templates/LoadsResumen";
+import { LoadsTasks } from "../components/templates/LoadsTasks";
+import { Statistics } from "../components/templates/Statistics";
+import { DocumentsVisualization } from "../components/templates/DocumentsVisualization";
+import { ModuleManager } from "../components/templates/ModuleManager";
+import { AuditCenter } from "../components/templates/AuditCenter";
+import { TraspasoManagement } from "../components/templates/TraspasoManagement";
+import { UserManagement } from "../components/templates/UserManagement";
+import { RoleManagement } from "../components/templates/RoleManagement";
+import { ConfigurationPage } from "../components/templates/ConfigurationPage";
+import { UserProfile } from "../components/organismos/UserProfile";
+import { UniversalDocumentManager } from "../components/templates/UniversalDocumentManager";
 
 // ⭐ COMPONENTE DE LOADING MEJORADO ⭐
 const AuthLoader = () => (
   <div
-    style={{
-      display: "flex",
-      flexDirection: "column",
-      justifyContent: "center",
-      alignItems: "center",
-      height: "100vh",
-      gap: "1rem",
-      fontSize: "18px",
-      color: "#666",
-    }}
+    className="flex flex-col items-center justify-center min-h-screen gap-4 text-slate-600"
   >
-    <div style={{ fontSize: "2rem" }}>🔄</div>
+    <div className="text-6xl">🔄</div>
     <div>Cargando aplicación...</div>
   </div>
 );
@@ -145,12 +136,36 @@ export function AdminRouter() {
       />
 
       <Route
-        path="/loads"
+        path="/universal-manager"
+        element={
+          <ProtectedRoute resource="documents" action="read">
+            <LayoutWrapper
+              component={UniversalDocumentManager}
+              title="Gestión de Documentos"
+            />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/loads/cargas"
         element={
           <ProtectedRoute resource="loads" action="read">
             <LayoutWrapper
               component={LoadsManagement}
               title="Cargas de Datos"
+            />
+          </ProtectedRoute>
+        }
+      />
+
+      <Route
+        path="/loads/transfers"
+        element={
+          <ProtectedRoute resource="loads" action="read">
+            <LayoutWrapper
+              component={TraspasoManagement}
+              title="Gestión de Traspasos"
             />
           </ProtectedRoute>
         }
@@ -194,22 +209,13 @@ export function AdminRouter() {
       />
 
       <Route
-        path="/historys"
+        path="/history"
         element={
           <ProtectedRoute resource="history" action="read">
             <LayoutWrapper
-              component={TransferHistoryLogs}
-              title="Historial de Transferencias"
+              component={AuditCenter}
+              title="Bitácora Centralizada"
             />
-          </ProtectedRoute>
-        }
-      />
-
-      <Route
-        path="/logs"
-        element={
-          <ProtectedRoute resource="logs" action="read">
-            <LayoutWrapper component={LogsPage} title="Logs" />
           </ProtectedRoute>
         }
       />
@@ -258,6 +264,7 @@ export function AdminRouter() {
             <LayoutWrapper
               component={ConfigurationPage}
               title="Configuraciones"
+              subtitle="Panel central para la gestión técnica y operativa del ecosistema logístico"
             />
           </ProtectedRoute>
         }

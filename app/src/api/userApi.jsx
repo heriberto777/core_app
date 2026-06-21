@@ -1,4 +1,4 @@
-import { ENV } from "../index";
+import { ENV } from "../utils/index";
 
 export class User {
   baseApi = ENV.BASE_API;
@@ -29,8 +29,21 @@ export class User {
       console.log("📡 Respuesta status:", response.status);
       console.log("📡 Respuesta ok:", response.ok);
 
-      const result = await response.json();
-      console.log("📥 Respuesta completa:", result);
+      // ⭐ MANEJO ROBUSTO DE RESPUESTA ⭐
+      let result;
+      const contentType = response.headers.get("content-type");
+
+      try {
+        if (contentType && contentType.includes("application/json")) {
+          result = await response.json();
+        } else {
+          const text = await response.text();
+          throw new Error(`Respuesta del servidor no es JSON (${response.status}): ${text.substring(0, 100)}...`);
+        }
+      } catch (parseError) {
+        console.error("❌ Error al parsear respuesta de getMe:", parseError);
+        throw new Error(`Error en la respuesta del servidor (${response.status}): ${parseError.message}`);
+      }
 
       if (response.status !== 200) {
         console.error("❌ Error en getMe:", result);
@@ -38,7 +51,7 @@ export class User {
       }
 
       console.log("✅ getMe exitoso:", result);
-      return result;
+      return result.data || result;
     } catch (error) {
       console.log(error);
       throw error;
@@ -60,7 +73,7 @@ export class User {
       const result = await response.json();
 
       if (response.status != 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.log(error);
     }
@@ -85,7 +98,7 @@ export class User {
       console.log(result);
 
       if (response.status != 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.log(error);
     }
@@ -126,8 +139,7 @@ export class User {
       const response = await fetch(url, params);
       const result = await response.json();
 
-      if (response.status != 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       return error;
     }
@@ -178,11 +190,7 @@ export class User {
       const response = await fetch(url, params);
       const result = await response.json();
 
-      if (response.status !== 200 && response.status !== 201) {
-        throw result;
-      }
-
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error en updateUser:", error);
       return error;
@@ -205,11 +213,7 @@ export class User {
       const response = await fetch(url, params);
       const result = await response.json();
 
-      if (response.status !== 200) {
-        throw result;
-      }
-
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error en deleteUser:", error);
       return error;
@@ -233,9 +237,7 @@ export class User {
       const response = await fetch(url, params);
       const result = await response.json();
 
-      if (response.status !== 200) throw result;
-
-      return result;
+      return result.data || result;
     } catch (error) {
       return error;
     }
@@ -264,7 +266,7 @@ export class User {
       console.log("📥 Respuesta getUsersWithRoles:", response.status, result);
 
       if (response.status != 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error en getUsersWithRoles:", error);
       return error;
@@ -318,7 +320,7 @@ export class User {
       const result = await response.json();
 
       if (response.status !== 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error obteniendo permisos:", error);
       return error;
@@ -343,7 +345,7 @@ export class User {
       const result = await response.json();
 
       if (response.status !== 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error obteniendo usuario por ID:", error);
       throw error;
@@ -383,7 +385,7 @@ export class User {
       const result = await response.json();
 
       if (response.status !== 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error en búsqueda avanzada:", error);
       throw error;
@@ -408,7 +410,7 @@ export class User {
       const result = await response.json();
 
       if (response.status !== 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error obteniendo estadísticas de usuarios:", error);
       throw error;
@@ -488,8 +490,8 @@ export class User {
       const response = await this.searchUsers(accessToken, searchOptions);
 
       // Filtrar usuarios que no tengan roles asignados
-      if (response.success) {
-        const usersWithoutRoles = response.data.filter(
+      if (response) {
+        const usersWithoutRoles = (response.users || response).filter(
           (user) => !user.roles || user.roles.length === 0
         );
 
@@ -517,7 +519,7 @@ export class User {
       });
 
       const userResponse = await this.getUserById(accessToken, userId);
-      if (!userResponse.success) {
+      if (!userResponse) {
         throw new Error("Usuario no encontrado");
       }
 
@@ -644,7 +646,7 @@ export class User {
       const result = await response.json();
 
       if (response.status !== 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error obteniendo permisos consolidados:", error);
       throw error;
@@ -685,6 +687,31 @@ export class User {
       return data;
     } catch (error) {
       console.error("❌ Error en validateRoleSystem:", error);
+      throw error;
+    }
+  }
+
+  async changePassword(accessToken, userId, currentPassword, newPassword) {
+    try {
+      console.log("🔐 Cambiando contraseña para usuario:", userId);
+
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.USERS}/user/password/${userId}`;
+      const params = {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ currentPassword, newPassword }),
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result;
+    } catch (error) {
+      console.error("❌ Error cambiando contraseña:", error);
       throw error;
     }
   }

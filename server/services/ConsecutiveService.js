@@ -1,6 +1,7 @@
 const Consecutive = require("../models/consecutiveModel");
 const logger = require("./logger");
 const mongoose = require("mongoose");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 
 class ConsecutiveService {
   /**
@@ -118,6 +119,11 @@ class ConsecutiveService {
 
       await consecutive.commitReservations(values, reservationId);
 
+      // ✅ Sincronización con SQL Server (ERP)
+      if (consecutive.sqlSync && consecutive.sqlSync.enabled) {
+        await this.syncToSql(consecutive, values);
+      }
+
       logger.info(
         `Confirmada reserva ${reservationId} para consecutivo ${consecutive.name}`
       );
@@ -125,6 +131,50 @@ class ConsecutiveService {
     } catch (error) {
       logger.error(`Error al confirmar reserva: ${error.message}`);
       throw error;
+    }
+  }
+
+  /**
+   * Sincroniza el valor del consecutivo con la tabla del ERP
+   * @param {Object} consecutive - Modelo del consecutivo
+   * @param {Array} values - Valores confirmados
+   */
+  static async syncToSql(consecutive, values) {
+    if (!values || values.length === 0) return;
+
+    const { serverKey, tableName, keyField, keyValue, valueField } =
+      consecutive.sqlSync;
+
+    if (!serverKey || !tableName || !keyField || !keyValue || !valueField) {
+      logger.warn(
+        `Configuración sqlSync incompleta para ${consecutive.name}. Saltando sincronización.`
+      );
+      return;
+    }
+
+    try {
+      const lastValue = values[values.length - 1];
+      const finalValue = lastValue.formatted || String(lastValue.numeric);
+
+      logger.info(
+        `🔄 Sincronizando consecutivo ${consecutive.name} con ERP (${tableName})...`
+      );
+
+      const query = `UPDATE ${tableName} SET ${valueField} = @val WHERE ${keyField} = @key`;
+      
+      await DatabaseServiceAdapter.query(serverKey, query, {
+        val: finalValue,
+        key: keyValue,
+      });
+
+      logger.info(
+        `✅ ERP actualizado: ${tableName}.${valueField} = ${finalValue} (ID: ${keyValue})`
+      );
+    } catch (error) {
+      logger.error(
+        `❌ Error al sincronizar con ERP para ${consecutive.name}: ${error.message}`
+      );
+      // No lanzamos el error para no romper el flujo principal si el ERP falla
     }
   }
 
@@ -481,6 +531,10 @@ class ConsecutiveService {
    */
   static async assignConsecutive(id, assignment, user = {}) {
     try {
+      if (!assignment || !assignment.entityId || !assignment.entityType) {
+        throw new Error("Datos de asignación incompletos: entityId y entityType son obligatorios");
+      }
+
       const consecutive = await this.getConsecutiveById(id);
 
       // Verificar si ya existe esta asignación

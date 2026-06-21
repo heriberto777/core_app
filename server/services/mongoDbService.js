@@ -47,6 +47,13 @@ class MongoDbService {
         writeConcern: { w: 1, j: false },
       };
 
+      // Limpiar listeners previos para evitar MaxListenersExceededWarning
+      mongoose.connection.removeAllListeners("connected");
+      mongoose.connection.removeAllListeners("error");
+      mongoose.connection.removeAllListeners("disconnected");
+      mongoose.connection.removeAllListeners("reconnected");
+      mongoose.connection.removeAllListeners("close");
+
       // Event listeners mejorados
       mongoose.connection.on("connected", () => {
         console.log("✅ MongoDB conectado exitosamente");

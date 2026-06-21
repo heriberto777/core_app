@@ -1,4 +1,4 @@
-import { ENV } from "../utils/constants";
+import { ENV } from "../utils/index";
 
 export class DBConfigApi {
   baseApi = ENV.BASE_API;
@@ -21,7 +21,7 @@ export class DBConfigApi {
         throw result;
       }
 
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error al obtener configuraciones DB:", error);
       throw error;
@@ -46,7 +46,7 @@ export class DBConfigApi {
       if (response.status !== 200) {
         throw result;
       }
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error al crear configuración DB:", error);
       throw error;

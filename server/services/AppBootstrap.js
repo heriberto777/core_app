@@ -1,68 +1,100 @@
-// services/AppBootstrap.js - Versión refactorizada
-const logger = require("./logger");
 const MongoDbService = require("./mongoDbService");
-const HealthMonitor = require("./healthMonitorService");
-const Telemetry = require("./Telemetry");
-const UnifiedCancellationService = require("./UnifiedCancellationService");
+const logger = require("./logger");
+const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
+
 
 /**
- * Clase encargada de inicializar los servicios principales de la aplicación
+ * Servicio para inicialización y cierre ordenado de la aplicación
  */
 class AppBootstrap {
   constructor() {
     this.initialized = false;
     this.state = {
       mongodb: false,
+      connectionService: false,
       healthMonitor: false,
-      telemetry: false,
-      cancellationService: false,
-      cronService: false,
+      cronJobs: false,
     };
   }
 
   /**
-   * Método para compatibilidad con el código existente
+   * Inicializa todos los servicios de la aplicación
    */
   async initialize() {
-    try {
-      const result = await this.init();
-      return { success: result };
-    } catch (error) {
-      logger.error("Error en initialize():", error);
-      return { success: false, error: error.message };
-    }
-  }
-
-  /**
-   * Inicializa todos los servicios necesarios para la aplicación
-   */
-  async init() {
     if (this.initialized) {
-      logger.warn("AppBootstrap: La aplicación ya ha sido inicializada");
-      return true;
+      logger.info("ℹ️ AppBootstrap ya está inicializado, saltando...");
+      return { success: true, message: "Ya inicializado" };
     }
 
     try {
+      this.initialized = true;
       logger.info("🚀 Iniciando servicios de la aplicación...");
 
-      // 1. Inicializar servicio de cancelación primero
-      await this.initializeCancellationService();
+      // ✅ 1. INICIALIZAR MONGODB (CAPA BASE)
+      try {
+        logger.info("📊 Asegurando conexión a MongoDB...");
+        await MongoDbService.connect();
 
-      // 2. Conectar a MongoDB
-      await this.initializeMongoDB();
+        if (MongoDbService.isConnected()) {
+          this.state.mongodb = true;
+          logger.info("✅ MongoDB habilitado");
+        } else {
+          throw new Error("MongoDB no está disponible");
+        }
+      } catch (error) {
+        logger.error("❌ Fallo crítico en base de datos (MongoDB):", error);
+        this.state.mongodb = false;
+        throw error;
+      }
 
-      // 3. Iniciar telemetría
-      await this.initializeTelemetry();
+      // ✅ 2. INICIALIZAR SERVICIO DE CONEXIONES SQL
+      try {
+        logger.info("🔌 Inicializando pool de conexiones SQL...");
+        await DatabaseServiceAdapter.initialize();
+        this.state.connectionService = true;
+        logger.info("✅ Servicio de conexiones SQL listo");
+      } catch (error) {
+        logger.error("❌ Error inicializando pools SQL:", error);
+        this.state.connectionService = false;
+        throw error;
+      }
 
-      // 4. Iniciar monitor de salud
-      await this.initializeHealthMonitor();
+      // 3. Inicializar monitor de salud (opcional)
+      try {
+        const healthMonitorService = require("./healthMonitorService");
+        if (
+          healthMonitorService &&
+          typeof healthMonitorService.start === "function"
+        ) {
+          await healthMonitorService.start();
+          this.state.healthMonitor = true;
+          logger.info("✅ Monitor de salud inicializado");
+        }
+      } catch (error) {
+        logger.warn("⚠️ Monitor de salud no pudo iniciarse:", error.message);
+        this.state.healthMonitor = false;
+        // No fallar por esto
+      }
 
-      // 5. Iniciar cron service
-      await this.initializeCronService();
+      // 4. Inicializar trabajos cron (opcional)
+      try {
+        const cronService = require("./cronService");
+        if (cronService && typeof cronService.initializeJobs === "function") {
+          await cronService.initializeJobs();
+          this.state.cronJobs = true;
+          logger.info("✅ Trabajos cron inicializados");
+        }
+      } catch (error) {
+        logger.warn("⚠️ Trabajos cron no pudieron iniciarse:", error.message);
+        this.state.cronJobs = false;
+        // No fallar por esto
+      }
 
-      this.initialized = true;
+      const successCount = Object.values(this.state).filter(Boolean).length;
+      const totalServices = Object.keys(this.state).length;
+
       logger.info(
-        "✅ Todos los servicios han sido inicializados correctamente"
+        `🎉 Aplicación inicializada exitosamente (${successCount}/${totalServices} servicios)`
       );
 
       return true;
@@ -71,299 +103,73 @@ class AppBootstrap {
         "❌ Error durante la inicialización de la aplicación:",
         error
       );
-      return false;
-    }
-  }
 
-  /**
-   * Inicializa el servicio de cancelación
-   */
-  async initializeCancellationService() {
-    try {
-      UnifiedCancellationService.initialize();
-      this.state.cancellationService = true;
-      logger.info("✅ Servicio de cancelación inicializado");
-    } catch (error) {
-      logger.error("Error al inicializar servicio de cancelación:", error);
-    }
-  }
-
-  /**
-   * Inicializa la conexión a MongoDB
-   */
-  async initializeMongoDB() {
-    try {
-      logger.info("📊 Conectando a MongoDB...");
-
-      // ⚠️ AGREGAR TIMEOUT DE 5 SEGUNDOS
-      const mongoConnected = await Promise.race([
-        MongoDbService.connect(),
-        new Promise((_, reject) =>
-          setTimeout(
-            () => reject(new Error("MongoDB connection timeout")),
-            5000
-          )
-        ),
-      ]);
-
-      if (!mongoConnected) {
-        logger.error(
-          "❌ Error al conectar a MongoDB. La aplicación puede no funcionar correctamente."
-        );
-        process.env.DISABLE_MONGO_LOGS = "true";
-        logger.info(
-          "⚠️ Se ha desactivado el registro en MongoDB debido a error de conexión"
-        );
-        this.state.mongodb = false;
-        return;
-      }
-
-      this.state.mongodb = true;
-      logger.info("✅ Conexión a MongoDB establecida correctamente");
-
-      // Verificar modelo de logs con timeout también
-      await Promise.race([
-        this.verifyLogModel(),
-        new Promise((_, reject) =>
-          setTimeout(
-            () => reject(new Error("Log model verification timeout")),
-            3000
-          )
-        ),
-      ]);
-    } catch (error) {
-      logger.error("Error en inicialización de MongoDB:", error);
-      logger.info("⚠️ Continuando sin MongoDB...");
-      this.state.mongodb = false;
-      process.env.DISABLE_MONGO_LOGS = "true";
-    }
-  }
-
-  /**
-   * Verifica el modelo de logs en MongoDB
-   */
-  async verifyLogModel() {
-    try {
-      const Log = require("../models/loggerModel");
-
-      // Crear log de prueba con timeout
-      const testLog = new Log({
-        level: "info",
-        message: "🧪 Test de conexión a MongoDB para logs",
-        source: "system",
-        timestamp: new Date(),
+      // Intentar limpiar servicios que sí se inicializaron
+      await this.shutdown().catch((shutdownError) => {
+        logger.error("Error durante cleanup después de fallo:", shutdownError);
       });
 
-      await Promise.race([
-        testLog.save(),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Timeout al verificar logs")), 5000)
-        ),
-      ]);
-
-      logger.info("✅ Sistema de logs en MongoDB verificado correctamente");
-
-      // Registrar log de inicio si todo está bien
-      await Log.createLog("info", "🚀 Aplicación iniciada", {
-        source: "system",
-        metadata: {
-          version: process.env.npm_package_version || "unknown",
-          environment: process.env.NODE_ENV || "development",
-        },
-      });
-    } catch (logError) {
-      logger.error(
-        "❌ Error al verificar el sistema de logs en MongoDB:",
-        logError
-      );
-      logger.warn(
-        "⚠️ El registro en MongoDB puede no estar funcionando correctamente"
-      );
+      throw error;
     }
   }
 
   /**
-   * Inicializa el monitor de salud
-   */
-  async initializeHealthMonitor() {
-    try {
-      logger.info("🔍 Iniciando monitor de salud del sistema...");
-      const healthStarted = HealthMonitor.startHealthMonitor();
-
-      if (healthStarted) {
-        this.state.healthMonitor = true;
-        logger.info("✅ Monitor de salud iniciado correctamente");
-      } else {
-        logger.warn("⚠️ No se pudo iniciar el monitor de salud");
-      }
-    } catch (healthError) {
-      logger.error("❌ Error al iniciar monitor de salud:", healthError);
-    }
-  }
-
-  /**
-   * Inicializa la telemetría
-   */
-  async initializeTelemetry() {
-    try {
-      logger.info("📈 Inicializando telemetría...");
-      Telemetry.resetHourly();
-      this.state.telemetry = true;
-      logger.info("✅ Telemetría inicializada correctamente");
-    } catch (telemetryError) {
-      logger.error("❌ Error al inicializar telemetría:", telemetryError);
-    }
-  }
-
-  /**
- * Inicializa el servicio de cron
- */
-async initializeCronService() {
-  try {
-    // ⚠️ SOLO INICIALIZAR CRON SI MONGODB ESTÁ CONECTADO
-    if (!this.state.mongodb) {
-      logger.info("⚠️ Saltando inicialización de cron service (MongoDB no disponible)");
-      return {
-        success: true,
-        message: "Cron service omitido - MongoDB no disponible",
-      };
-    }
-
-    const Config = require("../models/configModel");
-    const cronService = require("../services/cronService");
-
-    // ⚠️ AGREGAR TIMEOUT DE 3 SEGUNDOS
-    const savedConfig = await Promise.race([
-      Config.findOne(),
-      new Promise((_, reject) =>
-        setTimeout(() => reject(new Error("Config findOne timeout")), 3000)
-      )
-    ]);
-
-    if (savedConfig) {
-      cronService.setSchedulerEnabled(savedConfig.enabled, savedConfig.hour);
-      logger.info(
-        `Servicio de tareas programadas inicializado: ${
-          savedConfig.enabled ? "habilitado" : "deshabilitado"
-        } a las ${savedConfig.hour}`
-      );
-    } else {
-      // Crear configuración por defecto con timeout
-      const defaultConfig = new Config({
-        hour: "02:00",
-        enabled: false,
-        lastModified: new Date(),
-      });
-
-      await Promise.race([
-        defaultConfig.save(),
-        new Promise((_, reject) =>
-          setTimeout(() => reject(new Error("Config save timeout")), 3000)
-        )
-      ]);
-
-      logger.info("Configuración inicial del planificador creada como deshabilitada");
-      cronService.setSchedulerEnabled(false, "02:00");
-    }
-
-    return {
-      success: true,
-      message: "Servicio cron inicializado correctamente",
-    };
-  } catch (error) {
-    logger.error(`Error al inicializar servicio cron: ${error.message}`);
-    logger.info("⚠️ Continuando sin cron service...");
-    return {
-      success: false,
-      message: `Error al inicializar servicio cron: ${error.message}`,
-    };
-  }
-}
-
-  /**
-   * Detiene todos los servicios de la aplicación de manera ordenada
+   * Cierra todos los servicios de forma ordenada
    */
   async shutdown() {
-    logger.info("🛑 Iniciando cierre ordenado de la aplicación...");
-    let shutdownSuccess = true;
-
     try {
-      // 1. Detener servicios que generan nuevas operaciones primero
-      if (this.state.cancellationService) {
+      logger.info("📴 Iniciando cierre ordenado de servicios...");
+      let shutdownSuccess = true;
+
+      // 1. Detener trabajos cron primero
+      if (this.state.cronJobs) {
         try {
-          UnifiedCancellationService.shutdown();
-          logger.info("✅ Servicio de cancelación detenido");
+          logger.info("⏹️ Deteniendo trabajos cron...");
+          const cronService = require("./cronService");
+          if (cronService && typeof cronService.stopAllJobs === "function") {
+            await cronService.stopAllJobs();
+          }
+          logger.info("✅ Trabajos cron detenidos correctamente");
         } catch (error) {
-          logger.warn(
-            `⚠️ Error al detener servicio de cancelación: ${error.message}`
-          );
+          logger.warn(`⚠️ Error al detener trabajos cron: ${error.message}`);
           shutdownSuccess = false;
         }
       }
 
+      // 2. Detener monitor de salud
       if (this.state.healthMonitor) {
         try {
-          HealthMonitor.stopHealthMonitor();
-          logger.info("✅ Monitor de salud detenido");
+          logger.info("📊 Deteniendo monitor de salud...");
+          const healthMonitorService = require("./healthMonitorService");
+
+          if (
+            healthMonitorService &&
+            typeof healthMonitorService.stop === "function"
+          ) {
+            await healthMonitorService.stop();
+          }
+          logger.info("✅ Monitor de salud detenido correctamente");
         } catch (error) {
           logger.warn(`⚠️ Error al detener monitor de salud: ${error.message}`);
           shutdownSuccess = false;
         }
       }
 
-      // 2. Registrar log de cierre ANTES de cerrar MongoDB
-      if (this.state.mongodb && MongoDbService.isConnected()) {
+      // ✅ 3. CERRAR CONNECTIONCENTRALSERVICE
+      if (this.state.connectionService) {
         try {
-          const Log = require("../models/loggerModel");
-
-          // TIMEOUT CORTO para log de cierre
-          await Promise.race([
-            Log.createLog("info", "🛑 Cierre ordenado de la aplicación", {
-              source: "system",
-            }),
-            new Promise((_, reject) =>
-              setTimeout(() => reject(new Error("Timeout log cierre")), 2000)
-            ),
-          ]);
-
-          logger.info("✅ Log de cierre registrado");
-        } catch (logCloseError) {
+          logger.info("🔌 Cerrando servicio de conexiones...");
+          await DatabaseServiceAdapter.shutdown();
+          logger.info("✅ Servicio de conexiones cerrado correctamente");
+        } catch (error) {
           logger.warn(
-            `⚠️ Error al registrar log de cierre: ${logCloseError.message}`
+            `⚠️ Error al cerrar ConnectionCentralService: ${error.message}`
           );
+          shutdownSuccess = false;
         }
       }
 
-      // 3. CERRAR LOGGER TRANSPORT ANTES DE MONGODB
-      try {
-        // Acceder al transport de MongoDB del logger
-        const winston = require("winston");
-        if (logger.transports) {
-          for (const transport of logger.transports) {
-            if (
-              transport.name === "mongodb" &&
-              typeof transport.close === "function"
-            ) {
-              transport.close();
-              logger.info("✅ MongoDB Transport cerrado");
-              break;
-            }
-          }
-        }
-      } catch (transportError) {
-        logger.warn(`⚠️ Error cerrando transport: ${transportError.message}`);
-      }
-
-      // 4. Cerrar pools de conexión ANTES de MongoDB
-      try {
-        const ConnectionService = require("./ConnectionCentralService");
-        await ConnectionService.closePools();
-        logger.info("✅ Pools de conexión cerrados");
-      } catch (poolError) {
-        logger.warn(`⚠️ Error cerrando pools: ${poolError.message}`);
-      }
-
-      // 5. Desconectar MongoDB al final
+      // 4. Desconectar MongoDB al final
       if (this.state.mongodb) {
         try {
           logger.info("📊 Cerrando conexión a MongoDB...");
@@ -374,6 +180,15 @@ async initializeCronService() {
           shutdownSuccess = false;
         }
       }
+
+      // Reset del estado
+      this.state = {
+        mongodb: false,
+        connectionService: false,
+        healthMonitor: false,
+        cronJobs: false,
+      };
+      this.initialized = false;
 
       logger.info(
         shutdownSuccess
@@ -394,26 +209,52 @@ async initializeCronService() {
   getState() {
     return {
       initialized: this.initialized,
-      services: this.state,
+      services: { ...this.state },
     };
+  }
+
+  /**
+   * Verifica si todos los servicios críticos están funcionando
+   */
+  isHealthy() {
+    return this.state.mongodb && this.state.connectionService;
+  }
+
+  /**
+   * Reinicia un servicio específico
+   */
+  async restartService(serviceName) {
+    try {
+      logger.info(`🔄 Reiniciando servicio: ${serviceName}`);
+
+      switch (serviceName) {
+        case "connectionService":
+          await DatabaseServiceAdapter.shutdown();
+          await DatabaseServiceAdapter.initialize();
+          this.state.connectionService = true;
+          break;
+
+        case "mongodb":
+          await MongoDbService.disconnect();
+          await MongoDbService.connect();
+          this.state.mongodb = MongoDbService.isConnected();
+          break;
+
+        default:
+          throw new Error(`Servicio desconocido: ${serviceName}`);
+      }
+
+      logger.info(`✅ Servicio ${serviceName} reiniciado correctamente`);
+      return true;
+    } catch (error) {
+      logger.error(`❌ Error reiniciando servicio ${serviceName}:`, error);
+      return false;
+    }
   }
 }
 
 // Crear instancia singleton
 const instance = new AppBootstrap();
-
-// Configurar manejadores para cierre ordenado
-process.on("SIGTERM", async () => {
-  logger.info("Señal SIGTERM recibida, iniciando cierre ordenado...");
-  await instance.shutdown();
-  process.exit(0);
-});
-
-process.on("SIGINT", async () => {
-  logger.info("Señal SIGINT recibida, iniciando cierre ordenado...");
-  await instance.shutdown();
-  process.exit(0);
-});
 
 // Exportar instancia singleton
 module.exports = instance;

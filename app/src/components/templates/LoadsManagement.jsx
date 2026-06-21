@@ -1,737 +1,260 @@
-import styled from "styled-components";
-import { useState, useEffect, useCallback, useMemo } from "react";
-import {
-  Header,
-  useAuth,
-  useFetchData,
-  usePermissions,
-  DeliveryPersonSelector,
-  OrderDetailsModal,
-  OrdersList,
-  FiltersPanel,
-  LoadsButton,
-  StatusBadge,
-  LoadsApi,
-} from "../../index";
-
-import {
-  FaPlus,
-  FaHistory,
-  FaSync,
-  FaTruck,
-  FaExclamationTriangle,
-  FaCheckCircle,
-  FaSearch,
-} from "react-icons/fa";
-import Swal from "sweetalert2";
+import React, { useEffect } from "react";
 import { Helmet } from "react-helmet-async";
+import {
+  FaSync,
+  FaHistory,
+  FaTruck,
+  FaTimes,
+  FaCheckCircle
+} from "react-icons/fa";
+import {
+  useAuth,
+  useLoadsManagement,
+  usePermissions,
+  useNotification,
+  Button,
+  LoadsStatsGrid,
+  FiltersPanel,
+  OrdersList,
+  OrderDetailsModal,
+  DeliveryPersonSelector,
+  LoadingUI
+} from "../../index";
+import Swal from "sweetalert2";
 
-const loadsApi = new LoadsApi();
-
-const Container = styled.div`
-  min-height: 100vh;
-  padding: 20px;
-  background-color: ${props => props.theme.bg};
-  color: ${props => props.theme.text};
-
-  @media (max-width: 768px) {
-    padding: 15px;
-  }
-
-  @media (max-width: 480px) {
-    padding: 10px;
-  }
-`;
-
-const PageHeader = styled.div`
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  margin-bottom: 24px;
-  gap: 16px;
-
-  @media (max-width: 768px) {
-    flex-direction: column;
-    gap: 12px;
-    margin-bottom: 20px;
-  }
-`;
-
-const HeaderInfo = styled.div`
-  flex: 1;
-`;
-
-const PageTitle = styled.h1`
-  margin: 0 0 8px 0;
-  font-size: 28px;
-  font-weight: 700;
-  color: ${props => props.theme.text};
-
-  @media (max-width: 768px) {
-    font-size: 24px;
-    margin-bottom: 6px;
-  }
-
-  @media (max-width: 480px) {
-    font-size: 22px;
-  }
-`;
-
-const PageDescription = styled.p`
-  margin: 0;
-  font-size: 16px;
-  color: ${props => props.theme.textSecondary};
-  line-height: 1.5;
-
-  @media (max-width: 768px) {
-    font-size: 15px;
-  }
-
-  @media (max-width: 480px) {
-    font-size: 14px;
-  }
-`;
-
-const HeaderActions = styled.div`
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-
-  @media (max-width: 768px) {
-    width: 100%;
-    justify-content: stretch;
-
-    & > * {
-      flex: 1;
-    }
-  }
-
-  @media (max-width: 480px) {
-    flex-direction: column;
-    gap: 8px;
-  }
-`;
-
-const StatsGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-  margin-bottom: 24px;
-
-  @media (max-width: 768px) {
-    grid-template-columns: repeat(auto-fit, minmax(160px, 1fr));
-    gap: 12px;
-    margin-bottom: 20px;
-  }
-
-  @media (max-width: 480px) {
-    grid-template-columns: 1fr 1fr;
-    gap: 10px;
-  }
-`;
-
-const StatCard = styled.div`
-  background: ${props => props.theme.cardBg};
-  border: 1px solid ${props => props.theme.border};
-  border-radius: 8px;
-  padding: 20px;
-  text-align: center;
-  transition: transform 0.2s ease;
-
-  &:hover {
-    transform: translateY(-2px);
-  }
-
-  @media (max-width: 768px) {
-    padding: 16px;
-  }
-
-  @media (max-width: 480px) {
-    padding: 12px;
-  }
-`;
-
-const StatValue = styled.div`
-  font-size: 24px;
-  font-weight: 700;
-  color: ${props => props.color || props.theme.primary};
-  margin-bottom: 4px;
-
-  @media (max-width: 768px) {
-    font-size: 20px;
-  }
-
-  @media (max-width: 480px) {
-    font-size: 18px;
-  }
-`;
-
-const StatLabel = styled.div`
-  font-size: 14px;
-  color: ${props => props.theme.textSecondary};
-  font-weight: 500;
-
-  @media (max-width: 768px) {
-    font-size: 13px;
-  }
-
-  @media (max-width: 480px) {
-    font-size: 12px;
-  }
-`;
-
-const ContentArea = styled.div`
-  display: flex;
-  flex-direction: column;
-  gap: 20px;
-
-  @media (max-width: 768px) {
-    gap: 16px;
-  }
-`;
-
-const LoadingOverlay = styled.div`
-  position: fixed;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background: rgba(0, 0, 0, 0.5);
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  z-index: 999;
-  color: white;
-  font-size: 16px;
-`;
-
-const NoDataMessage = styled.div`
-  text-align: center;
-  padding: 60px 20px;
-  color: ${(props) => props.theme.textSecondary};
-  background: ${(props) => props.theme.cardBg};
-  border-radius: 8px;
-  border: 1px solid ${(props) => props.theme.border};
-
-  h3 {
-    margin: 0 0 12px 0;
-    color: ${(props) => props.theme.text};
-  }
-
-  p {
-    margin: 0 0 20px 0;
-    line-height: 1.5;
-  }
-`;
-
+/**
+ * LoadsManagement (Tailwind Edition)
+ * Orquestación logística de despacho con diseño corporativo premium.
+ */
 export function LoadsManagement() {
-  const { accessToken, user } = useAuth();
-  const { hasPermission } = usePermissions();
-
-  // Estados principales
-  const[selectedOrders, setSelectedOrders] = useState([]);
-  const [search, setSearch] = useState("");
-  const [showDetailsModal, setShowDetailsModal] = useState(false);
-  const [showDeliverySelector, setShowDeliverySelector] = useState(false);
-  const [selectedOrderForDetails, setSelectedOrderForDetails] = useState(null);
-  const [orderDetails, setOrderDetails] = useState([]);
-  const [processing, setProcessing] = useState(false);
-  const [hasSearched, setHasSearched] = useState(false);
-
-  // Estados para filtros
-  const [filters, setFilters] = useState({
-    dateFrom: new Date(new Date().setDate(new Date().getDate() - 30))
-      .toISOString()
-      .split("T")[0],
-    dateTo: new Date().toISOString().split("T")[0],
-    seller: "all",
-    transferStatus: "all",
-    includeLoaded: false,
-  });
-
-  // Verificar permisos
-  const canRead = hasPermission('loads', 'read');
-  const canCreate = hasPermission('loads', 'create');
-  const canUpdate = hasPermission('loads', 'update');
-  const canManage = hasPermission('loads', 'manage');
-
-  // Callbacks para fetch
-   const fetchOrdersCallback = useCallback(async () => {
-     if (!canRead) return { data: [], totalRecords: 0 };
-     return await loadsApi.getPendingOrders(accessToken, filters);
-   }, [accessToken, filters, canRead]);
-
- const fetchSellersCallback = useCallback(async () => {
-   if (!canRead) return { data: [] };
-   return await loadsApi.getSellers(accessToken);
- }, [accessToken, canRead]);
-
- const fetchDeliveryPersonsCallback = useCallback(async () => {
-   if (!canRead) return { data: [] };
-   return await loadsApi.getDeliveryPersons(accessToken);
- }, [accessToken, canRead]);
-
-  // Fetch de datos
+  const { accessToken } = useAuth();
+  const { showSuccess, showError } = useNotification();
   const {
-    data: ordersResponse,
-    loading: ordersLoading,
-    error: ordersError,
-    refetch: fetchOrders,
-  } = useFetchData(
-    fetchOrdersCallback,
-    [], // Sin dependencias para evitar auto-trigger
-    {
-      autoRefresh: false, // Sin auto-refresh
-      manual: true, // Solo manual
-      enableCache: false, // Sin cache para datos frescos
-      initialData: { data: [], totalRecords: 0 },
-    }
-  );
+    orders,
+    stats,
+    loading,
+    refreshing,
+    isProcessing,
+    error,
+    filters,
+    search,
+    selectedOrders,
+    metadata,
+    actions
+  } = useLoadsManagement(accessToken);
 
-  const { data: sellersResponse, loading: sellersLoading } = useFetchData(
-    fetchSellersCallback,
-    [accessToken],
-    {
-      enableCache: true,
-      cacheTime: 600000, // 10 minutos
-      initialData: { data: [] },
-    }
-  );
+  const { hasPermission, isAdmin } = usePermissions();
+  const canProcessLoad = hasPermission("loads", "create") || hasPermission("loads", "manage") || isAdmin;
 
-  const {
-    data: deliveryPersonsResponse,
-    loading: deliveryPersonsLoading,
-    refetch: fetchDeliveryPersons,
-  } = useFetchData(fetchDeliveryPersonsCallback, [accessToken], {
-    enableCache: true,
-    cacheTime: 600000, // 10 minutos
-    initialData: { data: [] },
+  const [modals, setModals] = React.useState({
+    details: false,
+    delivery: false
   });
+  const [selectedOrderDetails, setSelectedOrderDetails] = React.useState(null);
 
-  // Datos procesados
-  const orders = ordersResponse?.data || [];
-  const sellers = sellersResponse?.data || [];
-  const deliveryPersons = deliveryPersonsResponse?.data || [];
-
-  // Filtrar órdenes por búsqueda
-   const filteredOrders = useMemo(() => {
-     if (!search.trim()) return orders;
-
-     const searchLower = search.toLowerCase();
-     return orders.filter(
-       (order) =>
-         order.pedido.toString().includes(searchLower) ||
-         order.cliente.toLowerCase().includes(searchLower) ||
-         order.nombreVendedor.toLowerCase().includes(searchLower)
-     );
-   }, [orders, search]);
-
-  // Estadísticas
-  const stats = useMemo(() => {
-    const pending = filteredOrders.filter(o => o.transferStatus === 'pending').length;
-    const processing = filteredOrders.filter(o => o.transferStatus === 'processing').length;
-    const completed = filteredOrders.filter(o => o.transferStatus === 'completed').length;
-    const totalAmount = filteredOrders.reduce((sum, o) => sum + (o.totalPedido || 0), 0);
-
-    return { pending, processing, completed, totalAmount, total: filteredOrders.length };
-  }, [filteredOrders]);
-
-  // Manejadores de eventos
-  const handleOrderSelect = (orderId) => {
-    setSelectedOrders(prev =>
-      prev.includes(orderId)
-        ? prev.filter(id => id !== orderId)
-        : [...prev, orderId]
-    );
-  };
-
-  const handleSelectAll = (orderIds) => {
-    setSelectedOrders(orderIds);
-  };
-
-  const handleFiltersChange = (newFilters) => {
-    setFilters(newFilters);
-    setSelectedOrders([]); // Limpiar selección al cambiar filtros
-  };
-
-  const handleReset = () => {
-    setFilters({
-      dateFrom: new Date(new Date().setDate(new Date().getDate() - 30))
-        .toISOString()
-        .split("T")[0],
-      dateTo: new Date().toISOString().split("T")[0],
-      seller: "all",
-      transferStatus: "all",
-      includeLoaded: false,
-    });
-    setSearch("");
-    setSelectedOrders([]);
-    setHasSearched(false);
-  };
-
-
-  const handleSearch = useCallback(async () => {
-    setHasSearched(true);
-    await fetchOrders();
-  }, [fetchOrders]);
-
-   const handleViewOrder = async (orderId) => {
-     try {
-       setSelectedOrderForDetails(orderId);
-       setOrderDetails([]);
-       setShowDetailsModal(true);
-
-       const response = await loadsApi.getOrderDetails(accessToken, orderId);
-       if (response.success) {
-         setOrderDetails(response.data);
-       }
-     } catch (error) {
-       console.error("Error al cargar detalles:", error);
-       Swal.fire({
-         icon: "error",
-         title: "Error",
-         text: "No se pudieron cargar los detalles del pedido",
-       });
-     }
-   };
-
-  const handleEditOrder = (orderId) => {
-    handleViewOrder(orderId);
-  };
-
-  const handleCancelOrder = async (orderId) => {
-    const result = await Swal.fire({
-      title: "¿Cancelar pedido?",
-      text: `¿Estás seguro de que deseas cancelar el pedido #${orderId}?`,
-      icon: "warning",
-      showCancelButton: true,
-      confirmButtonColor: "#ef4444",
-      cancelButtonColor: "#6b7280",
-      confirmButtonText: "Sí, cancelar",
-      cancelButtonText: "No",
-    });
-
-    if (result.isConfirmed) {
-      try {
-        setProcessing(true);
-        await loadsApi.cancelOrders(
-          accessToken,
-          [orderId],
-          "Cancelado manualmente"
-        );
-
-        Swal.fire({
-          icon: "success",
-          title: "Pedido cancelado",
-          text: "El pedido ha sido cancelado correctamente",
-          timer: 2000,
-        });
-
-        fetchOrders();
-        setSelectedOrders((prev) => prev.filter((id) => id !== orderId));
-      } catch (error) {
-        console.error("Error al cancelar pedido:", error);
-        Swal.fire({
-          icon: "error",
-          title: "Error",
-          text: error.message || "No se pudo cancelar el pedido",
-        });
-      } finally {
-        setProcessing(false);
-      }
+  // Carga inicial
+  useEffect(() => {
+    if (accessToken) {
+      actions.fetchOrders();
+      actions.fetchMetadata();
     }
+  }, [accessToken]);
+
+  // Manejo de errores
+  useEffect(() => {
+    if (error) showError(error);
+  }, [error]);
+
+  const handleSearch = () => actions.fetchOrders();
+
+  const handleBulkLoad = () => {
+    if (selectedOrders.length === 0) return;
+    setModals(prev => ({ ...prev, delivery: true }));
   };
 
-  const handleLoadOrder = (orderId) => {
-    setSelectedOrders([orderId]);
-    setShowDeliverySelector(true);
-  };
-
-  const handleBulkLoad = (orderIds) => {
-    setSelectedOrders(orderIds);
-    setShowDeliverySelector(true);
-  };
-
-  const handleBulkCancel = async (orderIds) => {
-    const result = await Swal.fire({
-      title: '¿Cancelar pedidos?',
-      text: `¿Estás seguro de que deseas cancelar ${orderIds.length} pedidos seleccionados?`,
-      icon: 'warning',
-      showCancelButton: true,
-      confirmButtonColor: '#ef4444',
-      cancelButtonColor: '#6b7280',
-      confirmButtonText: 'Sí, cancelar todos',
-      cancelButtonText: 'No'
-    });
-
-    if (result.isConfirmed) {
-      try {
-        setProcessing(true);
-        await loadsApi.cancelOrders(accessToken, orderIds, 'Cancelación masiva');
-
-        Swal.fire({
-          icon: 'success',
-          title: 'Pedidos cancelados',
-          text: `${orderIds.length} pedidos han sido cancelados correctamente`,
-          timer: 2000
-        });
-
-        fetchOrders();
-        setSelectedOrders([]);
-      } catch (error) {
-        console.error('Error al cancelar pedidos:', error);
-        Swal.fire({
-          icon: 'error',
-          title: 'Error',
-          text: error.message || 'No se pudieron cancelar los pedidos'
-        });
-      } finally {
-        setProcessing(false);
-      }
-    }
-  };
-
-  const handleDeliveryPersonSelect = async (deliveryPersonCode) => {
+  const handleDeliverySelect = async (code) => {
     try {
-      setProcessing(true);
-      setShowDeliverySelector(false);
+      setModals(prev => ({ ...prev, delivery: false }));
 
-      const response = await loadsApi.processOrderLoad(
-        accessToken,
-        selectedOrders,
-        deliveryPersonCode
-      );
-
-      if (response.success) {
-        Swal.fire({
-          icon: "success",
-          title: "¡Carga procesada!",
-          html: `
-            <div style="text-align: left; margin: 16px 0;">
-              <p><strong>Load ID:</strong> ${response.data.loadId}</p>
-              <p><strong>Repartidor:</strong> ${response.data.deliveryPerson}</p>
-              <p><strong>Bodega:</strong> ${response.data.warehouse}</p>
-              <p><strong>Pedidos procesados:</strong> ${response.data.totalOrders}</p>
-            </div>
-          `,
-          confirmButtonText: "Entendido",
-        });
-
-        fetchOrders();
-        setSelectedOrders([]);
-      }
-    } catch (error) {
-      console.error("Error al procesar carga:", error);
       Swal.fire({
-        icon: "error",
-        title: "Error al procesar carga",
-        text: error.message || "No se pudo procesar la carga",
+        title: "Procesando Carga",
+        text: "Sincronizando inventarios y generando transferencia logística...",
+        allowOutsideClick: false,
+        didOpen: () => {
+          Swal.showLoading();
+        }
       });
-    } finally {
-      setProcessing(false);
-    }
-  };
 
-
-  const handleRemoveLines = async (linesToRemove) => {
-    try {
-      setProcessing(true);
-      await loadsApi.removeOrderLines(
-        accessToken,
-        selectedOrderForDetails,
-        linesToRemove
-      );
+      const res = await actions.processLoad(code);
 
       Swal.fire({
         icon: "success",
-        title: "Líneas eliminadas",
-        text: `${linesToRemove.length} líneas han sido eliminadas del pedido`,
-        timer: 2000,
+        title: "¡Despacho Exitoso!",
+        html: `<div class="text-left p-2"><p>Se han procesado <b>${res.totalOrders}</b> pedidos.</p><p class="mt-2 text-primary-600 font-bold">Load ID: ${res.loadId || 'N/A'}</p></div>`,
+        confirmButtonColor: "#6366f1",
+        confirmButtonText: "Entendido"
       });
-
-      // Recargar detalles
-      const response = await loadsApi.getOrderDetails(
-        accessToken,
-        selectedOrderForDetails
-      );
-      if (response.success) {
-        setOrderDetails(response.data);
-      }
-
-      fetchOrders();
-    } catch (error) {
-      console.error("Error al eliminar líneas:", error);
+    } catch (err) {
       Swal.fire({
         icon: "error",
-        title: "Error",
-        text: error.message || "No se pudieron eliminar las líneas",
+        title: "Error Logístico",
+        text: err.message,
+        confirmButtonColor: "#ef4444"
       });
-    } finally {
-      setProcessing(false);
     }
   };
 
-  const formatCurrency = (amount) => {
-    return new Intl.NumberFormat("es-DO", {
-      style: "currency",
-      currency: "DOP",
-      minimumFractionDigits: 0,
-    }).format(amount || 0);
+  const handleBulkCancel = async () => {
+    const result = await Swal.fire({
+      title: "¿Anular pedidos seleccionados?",
+      text: `Se cancelarán ${selectedOrders.length} pedidos. Esta acción no se puede deshacer.`,
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#ef4444",
+      confirmButtonText: "Sí, anular selección",
+      cancelButtonText: "Mantener pedidos"
+    });
+
+    if (result.isConfirmed) {
+      try {
+        await actions.cancelOrders(selectedOrders);
+        showSuccess("Pedidos anulados correctamente");
+      } catch (err) {
+        showError("Error al anular pedidos");
+      }
+    }
   };
 
-  // Verificar permisos
-  if (!canRead) {
-    return (
-      <Container>
-        <div style={{ textAlign: "center", padding: "60px 20px" }}>
-          <FaExclamationTriangle size={48} color="#ef4444" />
-          <h2>Acceso Denegado</h2>
-          <p>No tienes permisos para acceder a la gestión de cargas.</p>
-        </div>
-      </Container>
-    );
-  }
-
-
+  const handleViewOrder = async (id) => {
+    const res = await actions.getOrderDetails(id);
+    if (res) {
+      setSelectedOrderDetails(res);
+      setModals(prev => ({ ...prev, details: true }));
+    }
+  };
 
   return (
-    <>
+    <div className="min-h-screen bg-slate-50/50 animate-fadeIn">
       <Helmet>
-        <title>Gestión de Cargas - Sistema ERP</title>
-        <meta
-          name="description"
-          content="Gestión y procesamiento de cargas de pedidos"
-        />
+        <title>Gestión de Despachos | Catelli Core</title>
       </Helmet>
 
-      <Container>
-        <PageHeader>
-          <HeaderInfo>
-            <PageTitle>Gestión de Cargas</PageTitle>
-            <PageDescription>
-              Administra y procesa las cargas de pedidos pendientes. Selecciona
-              pedidos, asigna repartidores y gestiona el proceso de
-              distribución.
-            </PageDescription>
-          </HeaderInfo>
-          <HeaderActions>
-            {canManage && (
-              <LoadsButton
-                variant="secondary"
-                onClick={() => (window.location.href = "/loads/history")}
-              >
-                <FaHistory /> Historial
-              </LoadsButton>
-            )}
-            <LoadsButton
-              variant="primary"
-              onClick={fetchOrders}
-              loading={ordersLoading}
-            >
-              <FaSync /> Actualizar
-            </LoadsButton>
-          </HeaderActions>
-        </PageHeader>
+      <div className="max-w-[1600px] mx-auto p-6 lg:p-10 flex flex-col gap-8">
+        {/* PAGE HEADER */}
+        <header className="flex flex-col xl:flex-row justify-between items-start gap-6">
+          <div className="max-w-2xl">
+            <h1 className="text-4xl font-black text-slate-900 tracking-tight">Despacho de Cargas</h1>
+            <p className="text-slate-500 mt-2 text-lg font-medium leading-relaxed">
+              Orquesta la logística de salida. Filtra pedidos pendientes, asigna transportistas y genera certificados de carga en segundos.
+            </p>
+          </div>
+          <div className="flex gap-3 shrink-0">
+            <Button variant="secondary" onClick={() => window.location.href = "/loads/history"} className="!px-6">
+              <FaHistory /> Historial
+            </Button>
+            <Button variant="primary" onClick={actions.fetchOrders} loading={refreshing} className="!px-8 shadow-indigo-500/20">
+              <FaSync /> Sincronizar
+            </Button>
+          </div>
+        </header>
 
-        <StatsGrid>
-          <StatCard>
-            <StatValue color="#f59e0b">{stats.pending}</StatValue>
-            <StatLabel>Pendientes</StatLabel>
-          </StatCard>
-          <StatCard>
-            <StatValue color="#3b82f6">{stats.processing}</StatValue>
-            <StatLabel>Procesando</StatLabel>
-          </StatCard>
-          <StatCard>
-            <StatValue color="#10b981">{stats.completed}</StatValue>
-            <StatLabel>Completados</StatLabel>
-          </StatCard>
-          <StatCard>
-            <StatValue color="#6366f1">
-              {formatCurrency(stats.totalAmount)}
-            </StatValue>
-            <StatLabel>Valor Total</StatLabel>
-          </StatCard>
-        </StatsGrid>
+        {/* METRICS */}
+        <LoadsStatsGrid stats={stats} loading={loading} />
 
-        <ContentArea>
+        {/* FILTERS */}
+        <div className="bg-white rounded-[32px] border border-slate-100 shadow-soft p-2">
           <FiltersPanel
             filters={filters}
-            onFiltersChange={handleFiltersChange}
-            onReset={handleReset}
-            onRefresh={fetchOrders}
-            onSearch={handleSearch} // NUEVO: Buscar manual
+            onFiltersChange={actions.updateFilters}
+            onReset={actions.resetFilters}
+            onRefresh={actions.fetchOrders}
+            onSearch={handleSearch}
             search={search}
-            onSearchChange={setSearch}
-            sellers={sellers}
-            loading={ordersLoading}
+            onSearchChange={actions.setSearch}
+            sellers={metadata.sellers}
+            loading={loading || refreshing}
           />
+        </div>
 
-          {!hasSearched ? (
-            <NoDataMessage>
-              <h3>Bienvenido a la Gestión de Cargas</h3>
-              <p>
-                Usa los filtros y haz clic en "Buscar" para ver los pedidos
-                pendientes de procesar.
-              </p>
-              <LoadsButton
-                variant="primary"
-                onClick={handleSearch}
-                loading={ordersLoading}
-              >
-                <FaSearch /> Buscar Pedidos
-              </LoadsButton>
-            </NoDataMessage>
+        {/* BULK ACTIONS STICKY BANNER */}
+        {selectedOrders.length > 0 && canProcessLoad && (
+          <div className="sticky top-6 z-[100] animate-slideDown">
+            <div className="bg-slate-900 text-white p-5 px-8 rounded-[24px] shadow-2xl shadow-slate-900/40 flex flex-col sm:flex-row justify-between items-center gap-4 border border-white/10 backdrop-blur-xl">
+              <div className="flex items-center gap-4">
+                <div className="w-12 h-12 rounded-2xl bg-indigo-500 flex items-center justify-center text-xl shadow-lg shadow-indigo-500/30">
+                  <FaTruck />
+                </div>
+                <div>
+                  <div className="text-lg font-black tracking-tight leading-tight">
+                    {selectedOrders.length} {selectedOrders.length === 1 ? 'Pedido listo' : 'Pedidos listos'}
+                  </div>
+                  <div className="text-[11px] font-bold text-slate-400 uppercase tracking-widest">Acción masiva en curso</div>
+                </div>
+              </div>
+              <div className="flex gap-3 w-full sm:w-auto">
+                <button 
+                  onClick={handleBulkCancel}
+                  className="flex-1 sm:flex-none px-6 py-3 rounded-xl bg-white/5 border border-white/10 text-sm font-bold hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 transition-all flex items-center justify-center gap-2"
+                >
+                  <FaTimes /> Anular
+                </button>
+                <button 
+                  onClick={handleBulkLoad}
+                  disabled={isProcessing}
+                  className="flex-1 sm:flex-none px-8 py-3 rounded-xl bg-indigo-500 text-sm font-black hover:bg-indigo-400 active:scale-95 transition-all flex items-center justify-center gap-2 shadow-lg shadow-indigo-500/20"
+                >
+                  {isProcessing ? (
+                    <div className="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin" />
+                  ) : <FaCheckCircle />}
+                  Procesar Despacho
+                </button>
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* LISTING */}
+        <div className="bg-white rounded-[40px] border border-slate-100 shadow-premium overflow-hidden">
+          {loading && !refreshing ? (
+            <LoadingUI message="Cargando pedidos pendientes de despacho..." />
           ) : (
             <OrdersList
-              orders={filteredOrders}
+              orders={orders}
               selectedOrders={selectedOrders}
-              onOrderSelect={handleOrderSelect}
-              onSelectAll={handleSelectAll}
+              onOrderSelect={actions.toggleOrderSelection}
+              onSelectAll={actions.selectAllOrders}
               onView={handleViewOrder}
-              onEdit={canUpdate ? handleEditOrder : undefined}
-              onCancel={canUpdate ? handleCancelOrder : undefined}
-              onLoad={canCreate ? handleLoadOrder : undefined}
-              onBulkLoad={canCreate ? handleBulkLoad : undefined}
-              onBulkCancel={canUpdate ? handleBulkCancel : undefined}
-              loading={ordersLoading}
+              onLoad={(id) => {
+                actions.selectAllOrders([id]);
+                setModals(prev => ({ ...prev, delivery: true }));
+              }}
+              onBulkLoad={handleBulkLoad}
+              onBulkCancel={handleBulkCancel}
+              loading={loading}
+              isProcessing={isProcessing}
+              viewMode="cards"
             />
           )}
-        </ContentArea>
+        </div>
 
-        {/* Modales */}
+        {/* MODALS */}
         <OrderDetailsModal
-          isOpen={showDetailsModal}
-          onClose={() => setShowDetailsModal(false)}
-          orderDetails={orderDetails}
-          onRemoveLines={canUpdate ? handleRemoveLines : undefined}
-          editable={canUpdate}
-          loading={processing}
+          isOpen={modals.details}
+          onClose={() => setModals(prev => ({ ...prev, details: false }))}
+          orderDetails={selectedOrderDetails}
+          onRemoveLines={actions.removeOrderLines}
+          editable={true}
         />
 
         <DeliveryPersonSelector
-          isOpen={showDeliverySelector}
-          onClose={() => setShowDeliverySelector(false)}
-          onSelect={handleDeliveryPersonSelect}
-          selectedOrders={selectedOrders
-            .map((id) => filteredOrders.find((order) => order.pedido === id))
-            .filter(Boolean)}
-          deliveryPersons={deliveryPersons}
-          loading={processing}
+          isOpen={modals.delivery}
+          onClose={() => setModals(prev => ({ ...prev, delivery: false }))}
+          onSelect={handleDeliverySelect}
+          selectedOrders={orders.filter(o => selectedOrders.includes(o.pedido))}
+          deliveryPersons={metadata.sellers}
+          loading={loading}
         />
-
-        {/* Overlay de procesamiento */}
-        {processing && (
-          <LoadingOverlay>
-            <div style={{ textAlign: "center" }}>
-              <div style={{ marginBottom: "12px" }}>Procesando...</div>
-              <div style={{ fontSize: "14px", opacity: 0.8 }}>
-                Por favor espera mientras se completa la operación
-              </div>
-            </div>
-          </LoadingOverlay>
-        )}
-      </Container>
-    </>
+      </div>
+    </div>
   );
 }

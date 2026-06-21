@@ -1,5 +1,5 @@
 const UnifiedCancellationService = require("../services/UnifiedCancellationService");
-const TransferTask = require("../models/transferTaks");
+const TransferTask = require("../models/transferTaskModel");
 const logger = require("../services/logger");
 
 /**
@@ -13,57 +13,35 @@ const cancelTransferController = {
     try {
       const { taskId } = req.params;
       const { force, reason } = req.body || {};
+      const userId = req.user?.user_id || req.user?._id || "SYSTEM";
 
-      if (!taskId) {
-        return res.status(400).json({
-          success: false,
-          message: "Task ID is required",
-        });
-      }
+      if (!taskId) return res.status(400).json({ success: false, message: "ID de tarea requerido" });
 
-      // Verificar si la tarea existe en la base de datos
-      const task = await TransferTask.findById(taskId);
-      if (!task) {
-        return res.status(404).json({
-          success: false,
-          message: "Task not found",
-        });
-      }
+      const task = await TransferTask.findById(taskId).lean();
+      if (!task) return res.status(404).json({ success: false, message: "Tarea no encontrada" });
 
-      // Intentar cancelar
       const result = await UnifiedCancellationService.cancelTask(taskId, {
         force: !!force,
-        reason: reason || "Cancelled by user",
+        reason: reason || "Cancelado por el usuario",
         timeout: 30000,
       });
 
-      if (result.success) {
-        // Actualizar base de datos
-        await TransferTask.findByIdAndUpdate(taskId, {
-          status: "cancelling",
-          progress: -1,
-        });
-
-        return res.status(200).json({
-          success: true,
-          message: "Task cancellation initiated",
-          taskId,
-          details: result.message,
-        });
-      } else {
-        return res.status(500).json({
-          success: false,
-          message: "Failed to cancel task",
-          details: result.message,
-        });
+      if (!result.success) {
+        logger.warn(`Fallo al cancelar tarea ${taskId} por ${userId}: ${result.message}`);
+        return res.status(500).json({ success: false, message: "Error al cancelar tarea", details: result.message });
       }
-    } catch (error) {
-      logger.error("Error cancelling task:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Error cancelling task",
-        error: error.message,
+
+      await TransferTask.findByIdAndUpdate(taskId, { status: "cancelling", progress: -1 });
+      logger.info(`Cancelación iniciada para tarea ${taskId} por ${userId}`);
+
+      return res.status(200).json({
+        success: true,
+        message: "Cancelación de tarea iniciada",
+        data: { taskId, details: result.message },
       });
+    } catch (error) {
+      logger.error(`Error en cancelTransferTask (${req.params.taskId}):`, error);
+      return res.status(500).json({ success: false, message: "Error interno al cancelar", error: error.message });
     }
   },
 
@@ -73,48 +51,26 @@ const cancelTransferController = {
   async getTaskCancellationStatus(req, res) {
     try {
       const { taskId } = req.params;
-
-      if (!taskId) {
-        return res.status(400).json({
-          success: false,
-          message: "Task ID is required",
-        });
-      }
+      if (!taskId) return res.status(400).json({ success: false, message: "ID de tarea requerido" });
 
       const status = UnifiedCancellationService.getTaskStatus(taskId);
-
-      return res.status(200).json({
-        success: true,
-        data: status,
-      });
+      return res.status(200).json({ success: true, message: "Estado de cancelación obtenido", data: status });
     } catch (error) {
-      logger.error("Error getting cancellation status:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Error getting cancellation status",
-        error: error.message,
-      });
+      logger.error(`Error en getTaskCancellationStatus (${req.params.taskId}):`, error);
+      return res.status(500).json({ success: false, message: "Error al obtener estado", error: error.message });
     }
   },
 
   /**
-   * Obtiene todas las tareas activas que pueden ser canceladas
+   * Obtiene todas las tareas activas cancelables
    */
   async getActiveCancelableTasks(req, res) {
     try {
       const activeTasks = UnifiedCancellationService.getActiveTasks();
-
-      return res.status(200).json({
-        success: true,
-        data: activeTasks,
-      });
+      return res.status(200).json({ success: true, message: "Tareas activas obtenidas", data: activeTasks });
     } catch (error) {
-      logger.error("Error getting active tasks:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Error getting active tasks",
-        error: error.message,
-      });
+      logger.error("Error en getActiveCancelableTasks:", error);
+      return res.status(500).json({ success: false, message: "Error al obtener tareas activas", error: error.message });
     }
   },
 
@@ -124,25 +80,23 @@ const cancelTransferController = {
   async cancelAllTasks(req, res) {
     try {
       const { force, reason } = req.body || {};
+      const userId = req.user?.user_id || req.user?._id || "SYSTEM";
 
       const results = await UnifiedCancellationService.cancelAllTasks({
         force: !!force,
-        reason: reason || "Mass cancellation requested",
+        reason: reason || "Cancelación masiva solicitada",
         timeout: 30000,
       });
 
+      logger.info(`Cancelación masiva ejecutada por ${userId}: ${results.cancelled} tareas iniciadas.`);
       return res.status(200).json({
         success: true,
-        message: `Cancellation initiated for ${results.cancelled} tasks`,
+        message: `Cancelación iniciada para ${results.cancelled} tareas`,
         data: results,
       });
     } catch (error) {
-      logger.error("Error cancelling all tasks:", error);
-      return res.status(500).json({
-        success: false,
-        message: "Error cancelling all tasks",
-        error: error.message,
-      });
+      logger.error("Error en cancelAllTasks:", error);
+      return res.status(500).json({ success: false, message: "Error en cancelación masiva", error: error.message });
     }
   },
 };

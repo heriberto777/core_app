@@ -1,210 +1,119 @@
-import React, { useState } from "react";
-import styled from "styled-components";
-import { useForm, validateForm, AuthApi, useAuth } from "../../index";
-import Swal from "sweetalert2";
+import React from "react";
+import { useLogin, Input, Button } from "../../index";
 import { Helmet } from "react-helmet-async";
+import LogoCatelli from "../../assets/LogoCatelli_Sin_Fondo.png";
 
-const authController = new AuthApi();
-
+/**
+ * Corporate LoginForm (Tailwind Edition)
+ * Experiencia de entrada con diseño Glassmorphism avanzado.
+ */
 export function LoginForm() {
-  const { login } = useAuth();
-  const { formData, errors, handleChange, handleBlur, setErrors } = useForm(
-    { email: "", password: "" },
-    validateForm
-  );
+  const {
+    formData,
+    errors,
+    loading,
+    message,
+    handleChange,
+    handleBlur,
+    handleSubmit,
+  } = useLogin();
 
-  console.log(formData);
-  const [loading, setLoading] = useState(false);
-  const [message, setMessage] = useState("");
-
-  const handleSubmit = async (e) => {
-    e.preventDefault();
-
-    const validationErrors = validateForm(formData);
-    setErrors(validationErrors);
-
-    if (Object.keys(validationErrors).length > 0) {
-      Swal.fire({
-        icon: "warning",
-        title: "Formulario Incompleto",
-        text: "Por favor, completa todos los campos requeridos.",
-      });
-      return;
-    }
-
-    try {
-      setLoading(true);
-      setMessage(""); // Limpiar mensajes previos
-
-      console.log("🎯 Iniciando login desde formulario...");
-
-      // ⭐ USAR LA FUNCIÓN LOGIN DEL CONTEXTO Y VERIFICAR RESULTADO ⭐
-      const result = await login(formData);
-
-      if (result?.success) {
-        console.log("✅ Login exitoso desde formulario");
-        setMessage("Acceso autorizado. Redirigiendo...");
-        // El usuario será redirigido automáticamente por el AdminRouter
-      } else {
-        // ⭐ MANEJAR CASO DONDE NO HAY EXCEPCIÓN PERO EL LOGIN FALLÓ ⭐
-        throw new Error(result?.error || "Error desconocido en el login");
-      }
-    } catch (error) {
-      console.error("❌ Error en login desde formulario:", error);
-
-      // ⭐ MOSTRAR ERROR ESPECÍFICO AL USUARIO ⭐
-      Swal.fire({
-        icon: "error",
-        title: "Error de Autenticación",
-        text: error.message || "Error al iniciar sesión",
-        confirmButtonText: "Intentar nuevamente",
-      });
-
-      // ⭐ TAMBIÉN MOSTRAR EN INTERFAZ PARA MEJOR UX ⭐
-      setMessage(`Error: ${error.message}`);
-    } finally {
-      setLoading(false);
-    }
-  };
+  const isError = message?.startsWith("Error:");
 
   return (
-    <Container>
+    <div className="flex justify-center items-center min-h-screen w-screen bg-slate-950 relative overflow-hidden">
       <Helmet>
-        <title>Login - Sistema Core ERP </title>
+        <title>Login - Catelli Core ERP</title>
       </Helmet>
-      <FormWrapper>
-        <Title>Iniciar Sesión</Title>
+
+      {/* BACKGROUND DECORATION */}
+      <div className="absolute inset-0 z-0">
+        <div className="absolute top-[-20%] left-[-20%] w-[140%] h-[140%] bg-[radial-gradient(circle_at_0%_0%,rgba(52,131,235,0.15)_0%,transparent_50%),radial-gradient(circle_at_100%_100%,rgba(144,70,255,0.1)_0%,transparent_50%)]" />
+      </div>
+
+      <div className="bg-slate-900/70 backdrop-blur-3xl saturate-150 border border-white/10 rounded-[40px] p-10 md:p-14 w-full max-w-[460px] shadow-2xl flex flex-col items-center mx-4 z-10 animate-slideUp">
+        {/* LOGO */}
+        <div className="mb-8 drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]">
+          <img src={LogoCatelli} alt="Catelli Logo" className="w-40 h-auto object-contain" />
+        </div>
+
+        <div className="text-center mb-10">
+          <h1 className="text-3xl font-extrabold text-white tracking-tight mb-2">Bienvenido</h1>
+          <p className="text-slate-400 font-medium">Ingresa tus credenciales para continuar</p>
+        </div>
+
         {message && (
-          <Message error={message.startsWith("Error:")}>{message}</Message>
+          <div className={`w-full p-4 rounded-2xl text-sm font-bold text-center mb-8 border animate-fadeIn ${isError
+            ? "bg-red-500/10 border-red-500/20 text-red-400"
+            : "bg-emerald-500/10 border-emerald-500/20 text-emerald-400"
+            }`}>
+            {message}
+          </div>
         )}
-        <Form onSubmit={handleSubmit}>
-          <Label>Email</Label>
-          <Input
-            type="email"
-            name="email"
-            placeholder="Ingrese su correo"
-            value={formData.email}
-            onChange={handleChange}
-            onBlur={handleBlur}
-          />
-          {errors.email && <ErrorText>{errors.email}</ErrorText>}
 
-          <Label>Contraseña</Label>
-          <Input
-            type="password"
-            name="password"
-            placeholder="Ingrese su contraseña"
-            value={formData.password}
-            onChange={handleChange}
-            onBlur={handleBlur}
-          />
-          {errors.password && <ErrorText>{errors.password}</ErrorText>}
+        <form onSubmit={handleSubmit} className="w-full space-y-6">
+          <div className="space-y-4">
+            <Input
+              label="Correo Electrónico"
+              type="email"
+              name="email"
+              placeholder="ejemplo@catelli.com"
+              value={formData.email}
+              error={errors.email}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              required
+              className="dark-input"
+            />
 
-          <Button type="submit" disabled={loading}>
-            {loading ? "Cargando..." : "Iniciar Sesión"}
+            <Input
+              label="Contraseña"
+              type="password"
+              name="password"
+              placeholder="••••••••"
+              value={formData.password}
+              error={errors.password}
+              onChange={handleChange}
+              onBlur={handleBlur}
+              required
+              className="dark-input"
+            />
+          </div>
+
+          <Button
+            type="submit"
+            variant="primary"
+            disabled={loading}
+            className="w-full py-4 text-lg font-bold rounded-2xl shadow-xl hover:-translate-y-1 transition-all duration-300"
+          >
+            {loading ? (
+              <div className="flex items-center justify-center gap-3">
+                <div className="w-5 h-5 border-3 border-white/20 border-t-white rounded-full animate-spin" />
+                <span>Verificando...</span>
+              </div>
+            ) : "Iniciar Sesión"}
           </Button>
-        </Form>
-      </FormWrapper>
-    </Container>
+        </form>
+
+        <footer className="mt-12 text-[10px] font-bold text-slate-500 uppercase tracking-widest text-center">
+          &copy; {new Date().getFullYear()} CIGUADR
+          <br />
+          <span className="opacity-50 mt-1 block">Soluciones de Software de Alto Rendimiento</span>
+        </footer>
+      </div>
+
+      <style>{`
+        .dark-input label { color: rgba(255,255,255,0.6) !important; }
+        .dark-input input { 
+          background: rgba(15, 23, 42, 0.6) !important; 
+          border-color: rgba(255, 255, 255, 0.1) !important; 
+          color: white !important;
+        }
+        .dark-input input:focus {
+          border-color: #4f46e5 !important;
+          box-shadow: 0 0 0 4px rgba(79, 70, 229, 0.1) !important;
+        }
+      `}</style>
+    </div>
   );
 }
-
-const Container = styled.div`
-  display: flex;
-  justify-content: center;
-  align-items: center;
-  height: 100vh;
-  background: linear-gradient(to right, #4facfe, #00f2fe);
-`;
-
-const FormWrapper = styled.div`
-  background: white;
-  padding: 2rem;
-  border-radius: 10px;
-  box-shadow: 0 4px 8px rgba(0, 0, 0, 0.2);
-  width: 100%;
-  max-width: 400px;
-  text-align: center;
-`;
-
-const Title = styled.h2`
-  color: #333;
-  margin-bottom: 1rem;
-`;
-
-const Form = styled.form`
-  display: flex;
-  flex-direction: column;
-`;
-
-const Label = styled.label`
-  text-align: left;
-  margin-top: 10px;
-  font-weight: bold;
-`;
-
-const Input = styled.input`
-  padding: 10px;
-  margin: 5px 0 15px;
-  border: 1px solid #ccc;
-  border-radius: 5px;
-  font-size: 16px;
-  width: 100%;
-
-  @media (max-width: 480px) {
-    padding: 12px; /* Inputs más grandes en móviles pequeños */
-    margin: 4px 0 12px;
-  }
-`;
-
-const Button = styled.button`
-  background: #4facfe;
-  color: white;
-  padding: 10px;
-  border: none;
-  border-radius: 5px;
-  font-size: 18px;
-  cursor: pointer;
-  transition: background 0.3s;
-
-  &:hover {
-    background: #00c6fb;
-  }
-
-  &:disabled {
-    background: #ccc;
-    cursor: not-allowed;
-  }
-
-  @media (max-width: 480px) {
-    padding: 12px; /* Botones más grandes en móviles */
-    font-size: 16px; /* Texto más grande para mejor tap target */
-  }
-`;
-
-const ErrorText = styled.p`
-  color: red;
-  font-size: 14px;
-  margin: -10px 0 10px;
-`;
-
-const Message = styled.div`
-  padding: 12px;
-  margin-bottom: 16px;
-  border-radius: 6px;
-  font-size: 14px;
-  text-align: center;
-
-  ${(props) =>
-    props.error
-      ? `
-    background-color: #fee;
-    color: #c53030;
-    border: 1px solid #fc8181;
-  `
-      : `
-    background-color: #f0fff4;
-    color: #2f855a;
-    border: 1px solid #9ae6b4;
-  `}
-`;

@@ -1,109 +1,10 @@
-import styled from "styled-components";
-import { FilterInput, LoadsButton, MultiSelectInput } from "../../index";
+import { FilterInput, LoadsButton } from "../../index";
 import { FaFilter, FaSync, FaSearch } from "react-icons/fa";
 
-const Panel = styled.div`
-  background: ${props => props.theme.cardBg || 'white'};
-  border: 1px solid ${props => props.theme.border || '#e5e7eb'};
-  border-radius: 8px;
-  padding: 16px;
-  margin-bottom: 20px;
-
-  @media (max-width: 768px) {
-    padding: 12px;
-    margin-bottom: 16px;
-  }
-`;
-
-const PanelHeader = styled.div`
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  margin-bottom: 16px;
-  color: ${props => props.theme.text || '#111827'};
-  font-weight: 600;
-
-  @media (max-width: 768px) {
-    margin-bottom: 12px;
-  }
-`;
-
-const FiltersGrid = styled.div`
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(200px, 1fr));
-  gap: 16px;
-  margin-bottom: 16px;
-
-  @media (max-width: 768px) {
-    grid-template-columns: 1fr;
-    gap: 12px;
-    margin-bottom: 12px;
-  }
-
-  @media (max-width: 480px) {
-    grid-template-columns: 1fr;
-  }
-`;
-
-const ActionsRow = styled.div`
-  display: flex;
-  gap: 12px;
-  flex-wrap: wrap;
-
-  @media (max-width: 768px) {
-    gap: 8px;
-  }
-`;
-
-const SearchContainer = styled.div`
-  position: relative;
-  flex: 1;
-  min-width: 200px;
-
-  @media (max-width: 768px) {
-    min-width: auto;
-    width: 100%;
-  }
-`;
-
-const SearchIcon = styled(FaSearch)`
-  position: absolute;
-  left: 12px;
-  top: 50%;
-  transform: translateY(-50%);
-  color: ${props => props.theme.textTertiary || '#9ca3af'};
-  font-size: 14px;
-`;
-
-const SearchInput = styled.input`
-  width: 100%;
-  padding: 8px 12px 8px 36px;
-  border: 1px solid ${props => props.theme.border || '#d1d5db'};
-  border-radius: 6px;
-  font-size: 14px;
-  background-color: ${props => props.theme.inputBg || 'white'};
-  color: ${props => props.theme.text || '#111827'};
-
-  &:focus {
-    outline: none;
-    border-color: ${props => props.theme.primary || '#3b82f6'};
-    box-shadow: 0 0 0 3px ${props => props.theme.primary || '#3b82f6'}20;
-  }
-
-  &::placeholder {
-    color: ${props => props.theme.textTertiary || '#9ca3af'};
-  }
-
-  @media (max-width: 768px) {
-    padding: 6px 10px 6px 32px;
-    font-size: 13px;
-  }
-`;
-
-const SearchButton = styled(LoadsButton)`
-  min-width: 120px;
-`;
-
+/**
+ * Corporate FiltersPanel (Tailwind Edition)
+ * Incluye filtro de vendedores (solo vendedores reales, no repartidores).
+ */
 export function FiltersPanel({
   filters,
   onFiltersChange,
@@ -114,12 +15,15 @@ export function FiltersPanel({
   onSearchChange,
   sellers = [],
   loading = false,
+  className = ""
 }) {
+
   const handleFilterChange = (key, value) => {
-    onFiltersChange({
+    const newFilters = {
       ...filters,
       [key]: value,
-    });
+    };
+    onFiltersChange(newFilters);
   };
 
   const transferStatusOptions = [
@@ -130,27 +34,32 @@ export function FiltersPanel({
     { value: "cancelled", label: "Cancelados" },
   ];
 
+  // Filtrar solo vendedores reales (U_ESVENDEDOR = 'Si'), NO repartidores
+  const sellerOnlyOptions = sellers
+    .filter((seller) => seller.isVendedor === "Si")
+    .map((seller) => ({
+      value: seller.code,
+      label: `${seller.name} (${seller.code})`,
+    }));
 
+  const handleSellerFilterChange = (value) => {
+    if (value === "all") {
+      handleFilterChange("sellers", []);
+    } else {
+      handleFilterChange("sellers", [value]);
+    }
+  };
 
-  // Map sellers to options for the select input
- const sellerOptions = [
-   { value: "all", label: "Todos los vendedores" },
-   ...sellers
-     .filter((seller) => seller.isVendedor === "Si")
-     .map((seller) => ({
-       value: seller.code,
-       label: seller.name,
-     })),
- ];
+  const currentSellerValue = filters.sellers?.length > 0 ? filters.sellers[0] : "all";
 
   return (
-    <Panel>
-      <PanelHeader>
+    <div className={`bg-white border border-slate-200 rounded-lg p-4 mb-5 ${className}`}>
+      <div className="flex items-center gap-2 mb-4 text-slate-800 font-semibold">
         <FaFilter />
         Filtros de Búsqueda
-      </PanelHeader>
+      </div>
 
-      <FiltersGrid>
+      <div className="grid grid-cols-[repeat(auto-fit,minmax(200px,1fr))] gap-4 mb-4">
         <FilterInput
           label="Fecha Desde"
           type="date"
@@ -165,16 +74,6 @@ export function FiltersPanel({
           onChange={(value) => handleFilterChange("dateTo", value)}
         />
 
-        <MultiSelectInput
-          label="Vendedores"
-          value={filters.sellers || []} // Cambiar a array
-          onChange={(value) => handleFilterChange("sellers", value)}
-          options={sellerOptions}
-          placeholder="Todos los vendedores"
-          showTags={true}
-          maxTagsShown={2}
-        />
-
         <FilterInput
           label="Estado"
           type="select"
@@ -182,21 +81,42 @@ export function FiltersPanel({
           onChange={(value) => handleFilterChange("transferStatus", value)}
           options={transferStatusOptions}
         />
-      </FiltersGrid>
 
-      <ActionsRow>
-        <SearchContainer>
-          <SearchIcon />
-          <SearchInput
+        {/* Selector de Vendedor */}
+        <div className="flex flex-col gap-1.5">
+          <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
+            Vendedor
+          </label>
+          <select
+            value={currentSellerValue}
+            onChange={(e) => handleSellerFilterChange(e.target.value)}
+            className="w-full px-3 py-2 border border-slate-200 rounded-md text-sm bg-white text-slate-800 font-medium cursor-pointer focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
+          >
+            <option value="all">Todos los vendedores</option>
+            {sellerOnlyOptions.map((option) => (
+              <option key={option.value} value={option.value}>
+                {option.label}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+
+      <div className="flex gap-3 flex-wrap">
+        <div className="relative flex-1 min-w-[200px]">
+          <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+          <input
+            type="text"
             placeholder="Buscar por pedido, cliente..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
+            className="w-full px-3 py-2 pl-9 border border-slate-200 rounded-md text-sm bg-white text-slate-800 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
           />
-        </SearchContainer>
+        </div>
 
-        <SearchButton variant="primary" onClick={onSearch} loading={loading}>
+        <LoadsButton variant="primary" onClick={onSearch} loading={loading} minWidth="120px">
           <FaSearch /> Buscar
-        </SearchButton>
+        </LoadsButton>
 
         <LoadsButton variant="secondary" onClick={onReset} disabled={loading}>
           Limpiar
@@ -205,7 +125,7 @@ export function FiltersPanel({
         <LoadsButton variant="secondary" onClick={onRefresh} loading={loading}>
           <FaSync /> Actualizar
         </LoadsButton>
-      </ActionsRow>
-    </Panel>
+      </div>
+    </div>
   );
 }

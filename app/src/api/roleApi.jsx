@@ -1,4 +1,4 @@
-import { ENV } from "../utils/constants";
+import { ENV } from "../utils/index";
 
 class RoleApi {
   baseApi = ENV.BASE_API;
@@ -68,7 +68,7 @@ class RoleApi {
         throw new Error(result.message || `HTTP Error ${response.status}`);
       }
 
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error en getRoles:", error);
       if (error.name === "TypeError" && error.message.includes("fetch")) {
@@ -93,7 +93,7 @@ class RoleApi {
       const result = await response.json();
 
       if (response.status !== 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error obteniendo rol:", error);
       throw error;
@@ -309,7 +309,7 @@ class RoleApi {
       const result = await response.json();
 
       if (response.status !== 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error obteniendo roles disponibles:", error);
       throw error;
@@ -332,7 +332,7 @@ class RoleApi {
       const result = await response.json();
 
       if (response.status !== 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error obteniendo recursos:", error);
       throw error;
@@ -355,7 +355,7 @@ class RoleApi {
       const result = await response.json();
 
       if (response.status !== 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error obteniendo acciones:", error);
       throw error;
@@ -406,7 +406,7 @@ class RoleApi {
       const result = await response.json();
 
       if (response.status !== 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error obteniendo estadísticas de roles:", error);
       throw error;
@@ -469,10 +469,6 @@ class RoleApi {
   async getUsersByRole(roleName, accessToken, options = {}) {
     console.log("👥 Obteniendo usuarios del rol:", roleName);
     try {
-      const { page = 1, limit = 10 } = options;
-
-      console.log("👥 Obteniendo usuarios del rol:", roleName);
-
       const url = `${this.baseApi}/${ENV.API_ROUTERS.ROLES}/by-role/${roleName}`;
 
       const params = {
@@ -487,9 +483,33 @@ class RoleApi {
       const result = await response.json();
 
       if (response.status !== 200) throw result;
-      return result;
+      return result.data || result;
     } catch (error) {
       console.error("❌ Error obteniendo usuarios del rol:", error);
+      throw error;
+    }
+  }
+
+  // ⭐ ACTUALIZAR PERMISOS DE MÓDULOS EN ROLES ⭐
+  async updateModulesPermissions(accessToken, roleUpdates) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.ROLES}/update-modules-permissions`;
+      const params = {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: JSON.stringify({ roleUpdates }),
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (response.status !== 200) throw result;
+      return result.data || result;
+    } catch (error) {
+      console.error("❌ Error actualizando permisos de módulos:", error);
       throw error;
     }
   }

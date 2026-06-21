@@ -3,6 +3,7 @@ const User = require("../models/userModel");
 const Role = require("../models/roleModel");
 const ModuleConfig = require("../models/moduleConfigModel");
 const mongoose = require("mongoose");
+const bcrypt = require("bcrypt");
 const cacheService = require("../services/cacheService");
 const logger = require("../services/logger");
 
@@ -28,7 +29,7 @@ async function getActiveModules() {
       const modules = await ModuleConfig.find({ isActive: true })
         .select("name resource actions displayName category version")
         .lean();
-      logger.info(`📋 Módulos activos cargados desde DB: ${modules.length}`);
+      logger.info(`📋 Módulos activos cargados de DB: ${modules.length}`);
       return modules;
     },
     CACHE_TTL.MODULES
@@ -44,18 +45,14 @@ function generateDynamicAdminPermissions(activeModules) {
 
     if (module.actions && Array.isArray(module.actions)) {
       availableActions = module.actions.map((action) => {
-        if (typeof action === "object" && action.name) {
-          return action.name;
-        }
+        if (typeof action === "object" && action.name) return action.name;
         return typeof action === "string" ? action : "read";
       });
     } else {
       availableActions = ["create", "read", "update", "delete"];
     }
 
-    if (!availableActions.includes("manage")) {
-      availableActions.push("manage");
-    }
+    if (!availableActions.includes("manage")) availableActions.push("manage");
 
     const commonActions = getCommonActionsForModule(module);
     availableActions = [...new Set([...availableActions, ...commonActions])];
@@ -70,87 +67,67 @@ function generateDynamicAdminPermissions(activeModules) {
     });
   });
 
-  const systemPermissions = [
-    {
-      resource: "system",
-      actions: ["manage", "configure", "monitor", "backup", "restore"],
-      moduleName: "Sistema General",
-      category: "system",
-      source: "admin",
-    },
-  ];
+  adminPermissions.push({
+    resource: "system",
+    actions: ["manage", "configure", "monitor", "backup", "restore"],
+    moduleName: "Sistema General",
+    category: "system",
+    source: "admin",
+  });
 
-  return [...adminPermissions, ...systemPermissions];
+  return adminPermissions;
 }
 
 // ⭐ OBTENER ACCIONES COMUNES SEGÚN EL TIPO DE MÓDULO ⭐
 function getCommonActionsForModule(module) {
   const categoryActions = {
-    administrative: [
-      "create",
-      "read",
-      "update",
-      "delete",
-      "manage",
-      "configure",
-    ],
+    administrative: ["create", "read", "update", "delete", "manage", "configure"],
     operational: ["create", "read", "update", "delete", "execute", "process"],
     analysis: ["read", "export", "generate", "analyze"],
     security: ["manage", "audit", "monitor"],
     system: ["configure", "manage", "monitor"],
   };
 
-  return (
-    categoryActions[module.category] || ["create", "read", "update", "delete"]
-  );
+  return categoryActions[module.category] || ["create", "read", "update", "delete"];
 }
 
-// ⭐ CALCULAR PERMISOS DINÁMICAMENTE PARA USUARIOS NO ADMIN ⭐
+// ⭐ CÁLCULO DINÁMICO DE PERMISOS PARA USUARIOS NO ADMIN ⭐
 async function calculateUserPermissionsDynamic(user, activeModules) {
   const consolidatedPermissions = new Map();
   const permissionSources = [];
   const accessibleModules = [];
   const modulesSummary = [];
 
-  // Procesar permisos de roles
-  if (user.roles && user.roles.length > 0) {
-    user.roles.forEach((role) => {
-      if (role.isActive && role.permissions) {
-        role.permissions.forEach((perm) => {
-          const existing = consolidatedPermissions.get(perm.resource) || [];
-          const merged = [...new Set([...existing, ...perm.actions])];
-          consolidatedPermissions.set(perm.resource, merged);
-        });
+  // Recolectar todos los permisos posibles
+  const sourceList = [];
+  if (user.permissions?.length > 0) {
+    sourceList.push({ type: "direct", name: "Permisos Directos", permissions: user.permissions });
+  }
 
-        permissionSources.push({
-          source: role.displayName,
-          type: "role",
-          permissions: role.permissions,
-          isActive: role.isActive,
-        });
+  if (user.roles?.length > 0) {
+    user.roles.forEach((role) => {
+      if (role.isActive) {
+        sourceList.push({ type: "role", name: role.displayName || role.name, permissions: role.permissions || [] });
       }
     });
   }
 
-  // Procesar permisos específicos del usuario
-  if (user.permissions && user.permissions.length > 0) {
-    user.permissions.forEach((perm) => {
-      const existing = consolidatedPermissions.get(perm.resource) || [];
-      const merged = [...new Set([...existing, ...perm.actions])];
-      consolidatedPermissions.set(perm.resource, merged);
+  // Consolidar
+  sourceList.forEach((source) => {
+    source.permissions.forEach((perm) => {
+      if (!consolidatedPermissions.has(perm.resource)) {
+        consolidatedPermissions.set(perm.resource, new Set());
+      }
+      perm.actions.forEach((action) => consolidatedPermissions.get(perm.resource).add(action));
     });
+    permissionSources.push({ source: source.name, type: source.type, count: source.permissions.length });
+  });
 
-    permissionSources.push({
-      source: "Permisos Específicos",
-      type: "specific",
-      permissions: user.permissions,
-    });
-  }
-
-  // Mapear con módulos activos y crear resumen
+  // Mapear con módulos activos
   activeModules.forEach((module) => {
-    const userPermissions = consolidatedPermissions.get(module.resource);
-    const hasAccess = userPermissions && userPermissions.length > 0;
+    const userActions = consolidatedPermissions.get(module.resource);
+    const hasAccess = !!userActions && userActions.size > 0;
+    const userPermissions = hasAccess ? Array.from(userActions) : [];
 
     if (hasAccess) {
       accessibleModules.push({
@@ -167,35 +144,24 @@ async function calculateUserPermissionsDynamic(user, activeModules) {
       resource: module.resource,
       displayName: module.displayName,
       category: module.category,
-      hasAccess: hasAccess,
-      permissions: userPermissions || [],
-      availableActions:
-        module.actions?.map((a) => (typeof a === "object" ? a.name : a)) || [],
+      hasAccess,
+      permissions: userPermissions,
+      availableActions: module.actions?.map((a) => (typeof a === "object" ? a.name : a)) || [],
     });
   });
 
-  // Convertir a array final
-  const consolidatedArray = Array.from(consolidatedPermissions.entries()).map(
-    ([resource, actions]) => {
-      const relatedModule = activeModules.find((m) => m.resource === resource);
-      return {
-        resource,
-        actions: actions.sort(),
-        moduleName: relatedModule
-          ? relatedModule.displayName || relatedModule.name
-          : resource,
-        category: relatedModule?.category || "unknown",
-        isModuleActive: !!relatedModule,
-      };
-    }
-  );
+  const consolidatedArray = Array.from(consolidatedPermissions.entries()).map(([resource, actions]) => {
+    const relatedModule = activeModules.find((m) => m.resource === resource);
+    return {
+      resource,
+      actions: Array.from(actions).sort(),
+      moduleName: relatedModule ? relatedModule.displayName || relatedModule.name : resource,
+      category: relatedModule?.category || "unknown",
+      isModuleActive: !!relatedModule,
+    };
+  });
 
-  return {
-    consolidatedPermissions: consolidatedArray,
-    permissionSources,
-    accessibleModules,
-    modulesSummary,
-  };
+  return { consolidatedPermissions: consolidatedArray, permissionSources, accessibleModules, modulesSummary };
 }
 
 // ⭐ INVALIDAR CACHE DE USUARIO ⭐
@@ -204,9 +170,9 @@ async function invalidateUserCache(userId) {
     await cacheService.delete(CACHE_KEYS.USER_PERMISSIONS(userId));
     await cacheService.delete(CACHE_KEYS.USER_PROFILE(userId));
     await cacheService.delete(CACHE_KEYS.USER_ROLES(userId));
-    logger.info(`🗑️ Cache invalidado para usuario: ${userId}`);
+    logger.debug(`Cache invalidado para usuario: ${userId}`);
   } catch (error) {
-    logger.error(`Error invalidando cache de usuario ${userId}:`, error);
+    logger.error(`Error invalidando cache de usuario ${userId} en invalidateUserCache:`, error);
   }
 }
 
@@ -215,9 +181,9 @@ async function invalidateModulesCache() {
   try {
     await cacheService.delete(CACHE_KEYS.ACTIVE_MODULES);
     await cacheService.invalidatePattern("user_permissions_");
-    logger.info("🗑️ Cache de módulos y permisos invalidado");
+    logger.info("Cache de módulos y permisos invalidado");
   } catch (error) {
-    logger.error("Error invalidando cache de módulos:", error);
+    logger.error("Error invalidando cache de módulos en invalidateModulesCache:", error);
   }
 }
 
@@ -225,11 +191,9 @@ async function invalidateModulesCache() {
 // ⭐ CONTROLADORES PRINCIPALES ⭐
 // =====================================================
 
-// ⭐ OBTENER PERFIL DEL USUARIO ACTUAL ⭐
 async function getMe(req, res) {
   try {
-    const userId = req.user.user_id || req.user._id;
-
+    const userId = req.user?.user_id || req.user?._id;
     const user = await cacheService.getOrSet(
       CACHE_KEYS.USER_PROFILE(userId),
       async () => {
@@ -237,92 +201,48 @@ async function getMe(req, res) {
           .select("-password")
           .populate("roles", "name displayName description isActive")
           .lean();
-
-        if (!userData) {
-          throw new Error("Usuario no encontrado");
-        }
-
+        if (!userData) throw new Error("Usuario no encontrado");
         return userData;
       },
       CACHE_TTL.USER_PROFILE
     );
 
-    res.status(200).json({
-      success: true,
-      data: user,
-      fromCache: await cacheService.has(CACHE_KEYS.USER_PROFILE(userId)),
-    });
+    return res.status(200).json({ success: true, data: user });
   } catch (error) {
-    logger.error("❌ Error obteniendo perfil:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al obtener perfil del usuario",
-      error: error.message,
-    });
+    logger.error("Error en getMe:", error);
+    return res.status(500).json({ success: false, message: "Error al obtener perfil del usuario" });
   }
 }
 
-// ⭐ OBTENER PERMISOS DEL USUARIO ACTUAL (COMPLETAMENTE DINÁMICO) ⭐
 async function getUserPermissions(req, res) {
   try {
-    const userId = req.user.user_id || req.user._id;
-    logger.info(`🔑 Obteniendo permisos del usuario: ${userId}`);
-
-    // Verificar cache primero
-    const cachedData = await cacheService.get(
-      CACHE_KEYS.USER_PERMISSIONS(userId)
-    );
-    if (cachedData) {
-      logger.info("📦 Permisos obtenidos del cache para usuario actual");
-      return res.status(200).json({
-        success: true,
-        data: { ...cachedData, fromCache: true, lastUpdated: new Date() },
-      });
-    }
+    const userId = req.user?.user_id || req.user?._id;
+    const cachedData = await cacheService.get(CACHE_KEYS.USER_PERMISSIONS(userId));
+    if (cachedData) return res.status(200).json({ success: true, data: { ...cachedData, fromCache: true } });
 
     const user = await User.findById(userId)
       .populate("roles", "name displayName permissions isActive")
       .select("-password")
       .lean();
 
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "Usuario no encontrado",
-      });
-    }
+    if (!user) return res.status(404).json({ success: false, message: "Usuario no encontrado" });
 
-    // Obtener módulos activos dinámicamente
     const activeModules = await getActiveModules();
-    logger.info(`📋 Módulos activos para permisos: ${activeModules.length}`);
-
     let responseData;
 
-    // Si es admin, generar permisos dinámicamente
     if (user.isAdmin) {
       const adminPermissions = generateDynamicAdminPermissions(activeModules);
-
       responseData = {
         isAdmin: true,
         roles: user.roles || [],
         permissions: adminPermissions,
         consolidatedPermissions: adminPermissions,
         availableModules: activeModules.length,
-        modulesSummary: activeModules.map((m) => ({
-          name: m.name,
-          resource: m.resource,
-          displayName: m.displayName,
-          category: m.category,
-        })),
+        modulesSummary: activeModules.map((m) => ({ name: m.name, resource: m.resource, displayName: m.displayName, category: m.category })),
         lastUpdated: new Date(),
       };
     } else {
-      // Calcular permisos para usuarios no admin
-      const permissionData = await calculateUserPermissionsDynamic(
-        user,
-        activeModules
-      );
-
+      const permissionData = await calculateUserPermissionsDynamic(user, activeModules);
       responseData = {
         isAdmin: false,
         roles: user.roles || [],
@@ -336,147 +256,22 @@ async function getUserPermissions(req, res) {
       };
     }
 
-    // Guardar en cache
-    await cacheService.set(
-      CACHE_KEYS.USER_PERMISSIONS(userId),
-      responseData,
-      CACHE_TTL.USER_PERMISSIONS
-    );
-
-    res.status(200).json({
-      success: true,
-      data: responseData,
-    });
+    await cacheService.set(CACHE_KEYS.USER_PERMISSIONS(userId), responseData, CACHE_TTL.USER_PERMISSIONS);
+    return res.status(200).json({ success: true, data: responseData });
   } catch (error) {
-    logger.error("❌ Error obteniendo permisos:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al obtener permisos del usuario",
-      error: error.message,
-    });
+    logger.error("Error en getUserPermissions:", error);
+    return res.status(500).json({ success: false, message: "Error al obtener permisos del usuario" });
   }
 }
 
-// ⭐ OBTENER TODOS LOS PERMISOS DE UN USUARIO ESPECÍFICO ⭐
-async function getUserAllPermissions(req, res) {
-  try {
-    const { id } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "ID de usuario inválido",
-      });
-    }
-
-    // Verificar cache primero
-    const cacheKey = CACHE_KEYS.USER_PERMISSIONS(id);
-    const cachedData = await cacheService.get(cacheKey);
-    if (cachedData) {
-      logger.info(`📦 Permisos obtenidos del cache para usuario: ${id}`);
-      return res.status(200).json({
-        success: true,
-        data: { ...cachedData, fromCache: true },
-      });
-    }
-
-    const user = await User.findById(id)
-      .populate("roles", "name displayName permissions isActive")
-      .select("-password")
-      .lean();
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "Usuario no encontrado",
-      });
-    }
-
-    // Obtener módulos activos dinámicamente
-    const activeModules = await getActiveModules();
-
-    let responseData;
-
-    // Si es admin, generar permisos dinámicamente
-    if (user.isAdmin) {
-      const adminPermissions = generateDynamicAdminPermissions(activeModules);
-
-      responseData = {
-        userId: user._id,
-        userName: `${user.name} ${user.lastname}`,
-        isAdmin: true,
-        consolidatedPermissions: adminPermissions,
-        rolePermissions: [],
-        specificPermissions: user.permissions || [],
-        totalResources: adminPermissions.length,
-        sources: {
-          admin: "Administrador del Sistema",
-          modules: `${activeModules.length} módulos activos`,
-        },
-        availableModules: activeModules.map((m) => ({
-          name: m.name,
-          resource: m.resource,
-          displayName: m.displayName,
-        })),
-      };
-    } else {
-      // Calcular permisos consolidados dinámicamente
-      const consolidatedData = await calculateUserPermissionsDynamic(
-        user,
-        activeModules
-      );
-
-      responseData = {
-        userId: user._id,
-        userName: `${user.name} ${user.lastname}`,
-        isAdmin: false,
-        ...consolidatedData,
-        availableModules: activeModules.map((m) => ({
-          name: m.name,
-          resource: m.resource,
-          displayName: m.displayName,
-          hasAccess: consolidatedData.consolidatedPermissions.some(
-            (p) => p.resource === m.resource
-          ),
-        })),
-      };
-    }
-
-    // Guardar en cache
-    await cacheService.set(cacheKey, responseData, CACHE_TTL.USER_PERMISSIONS);
-
-    res.status(200).json({
-      success: true,
-      data: responseData,
-    });
-  } catch (error) {
-    logger.error("❌ Error obteniendo permisos:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al obtener permisos del usuario",
-      error: error.message,
-    });
-  }
-}
-
-// ⭐ OBTENER USUARIOS (CON PAGINACIÓN) ⭐
 async function getUsers(req, res) {
   try {
-    const {
-      page = 1,
-      limit = 20,
-      search = "",
-      role = "",
-      activo = "",
-    } = req.body;
-
+    const { page = 1, limit = 20, search = "", role = "", activo = "" } = req.body;
     const pageNumber = parseInt(page, 10);
     const limitNumber = parseInt(limit, 10);
     const skip = (pageNumber - 1) * limitNumber;
 
-    // Construir filtros
     const filters = {};
-
     if (search) {
       filters.$or = [
         { name: { $regex: search, $options: "i" } },
@@ -484,14 +279,8 @@ async function getUsers(req, res) {
         { email: { $regex: search, $options: "i" } },
       ];
     }
-
-    if (role) {
-      filters.role = { $in: Array.isArray(role) ? role : [role] };
-    }
-
-    if (activo !== "") {
-      filters.activo = activo === "true" || activo === true;
-    }
+    if (role) filters.roles = { $in: Array.isArray(role) ? role : [role] };
+    if (activo !== "") filters.activo = activo === "true" || activo === true;
 
     const [users, totalUsers] = await Promise.all([
       User.find(filters)
@@ -505,237 +294,109 @@ async function getUsers(req, res) {
     ]);
 
     const totalPages = Math.ceil(totalUsers / limitNumber);
-
-    res.status(200).json({
+    return res.status(200).json({
       success: true,
       data: {
-        users: users,
-        pagination: {
-          currentPage: pageNumber,
-          totalPages: totalPages,
-          totalUsers: totalUsers,
-          hasNextPage: pageNumber < totalPages,
-          hasPrevPage: pageNumber > 1,
-        },
+        users,
+        pagination: { currentPage: pageNumber, totalPages, totalUsers, hasNextPage: pageNumber < totalPages, hasPrevPage: pageNumber > 1 }
       },
     });
   } catch (error) {
-    logger.error("❌ Error obteniendo usuarios:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al obtener usuarios",
-      error: error.message,
-    });
+    logger.error("Error en getUsers:", error);
+    return res.status(500).json({ success: false, message: "Error al obtener usuarios" });
   }
 }
 
-// ⭐ CREAR USUARIO ⭐
 async function createUser(req, res) {
   try {
     const userData = req.body;
+    const emailLower = userData.email?.toLowerCase().trim();
 
-    // Verificar si el email ya existe
-    const existingUser = await User.findOne({ email: userData.email });
-    if (existingUser) {
-      return res.status(400).json({
-        success: false,
-        message: "El email ya está registrado",
-      });
-    }
+    const existingUser = await User.findOne({ email: emailLower }).lean();
+    if (existingUser) return res.status(409).json({ success: false, message: "El email ya está registrado" });
 
-    const newUser = new User(userData);
+    // Hashear la contraseña antes de guardar
+    const salt = bcrypt.genSaltSync(10);
+    const hashedPassword = bcrypt.hashSync(userData.password, salt);
+
+    const newUser = new User({ ...userData, password: hashedPassword, email: emailLower });
     await newUser.save();
 
-    // Invalidar caches relevantes
     await cacheService.invalidatePattern("user_");
+    logger.info(`Usuario creado: ${newUser.email} por ${req.user?.user_id || req.user?._id}`);
 
-    logger.info(`✅ Usuario creado: ${newUser.email}`, {
-      userId: newUser._id,
-      createdBy: req.user._id,
-    });
-
-    res.status(201).json({
-      success: true,
-      message: "Usuario creado exitosamente",
-      data: newUser,
-    });
+    return res.status(201).json({ success: true, message: "Usuario creado exitosamente", data: { _id: newUser._id, name: newUser.name, email: newUser.email } });
   } catch (error) {
-    logger.error("❌ Error creando usuario:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al crear usuario",
-      error: error.message,
-    });
+    logger.error("Error en createUser:", error);
+    return res.status(500).json({ success: false, message: "Error al crear usuario" });
   }
 }
 
-// ⭐ ACTUALIZAR USUARIO ⭐
 async function updateUser(req, res) {
   try {
     const { id } = req.params;
-    const updateData = req.body;
+    const updateData = { ...req.body };
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "ID de usuario inválido",
-      });
-    }
-
-    // Remover campos sensibles que no se deben actualizar directamente
     delete updateData.password;
     delete updateData._id;
 
-    const updatedUser = await User.findByIdAndUpdate(
-      id,
-      { ...updateData, updatedAt: new Date() },
-      { new: true, runValidators: true }
-    )
+    const updatedUser = await User.findByIdAndUpdate(id, { ...updateData, updatedAt: new Date() }, { new: true, runValidators: true })
       .populate("roles", "name displayName description isActive")
-      .select("-password");
+      .select("-password")
+      .lean();
 
-    if (!updatedUser) {
-      return res.status(404).json({
-        success: false,
-        message: "Usuario no encontrado",
-      });
-    }
+    if (!updatedUser) return res.status(404).json({ success: false, message: "Usuario no encontrado" });
 
-    // Invalidar caches del usuario
     await invalidateUserCache(id);
+    logger.info(`Usuario actualizado: ${updatedUser.email} por ${req.user?.user_id || req.user?._id}`);
 
-    logger.info(`✅ Usuario actualizado: ${updatedUser.email}`, {
-      userId: id,
-      updatedBy: req.user._id,
-    });
-
-    res.status(200).json({
-      success: true,
-      message: "Usuario actualizado exitosamente",
-      data: updatedUser,
-    });
+    return res.status(200).json({ success: true, message: "Usuario actualizado exitosamente", data: updatedUser });
   } catch (error) {
-    logger.error("❌ Error actualizando usuario:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al actualizar usuario",
-      error: error.message,
-    });
+    logger.error("Error en updateUser:", error);
+    return res.status(500).json({ success: false, message: "Error al actualizar usuario" });
   }
 }
 
-// ⭐ ELIMINAR USUARIO (SOFT DELETE) ⭐
 async function deleteUser(req, res) {
   try {
     const { id } = req.params;
+    const user = await User.findByIdAndUpdate(id, { activo: false, updatedAt: new Date() }, { new: true }).select("-password").lean();
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "ID de usuario inválido",
-      });
-    }
+    if (!user) return res.status(404).json({ success: false, message: "Usuario no encontrado" });
 
-    const user = await User.findByIdAndUpdate(
-      id,
-      { activo: false, updatedAt: new Date() },
-      { new: true }
-    ).select("-password");
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "Usuario no encontrado",
-      });
-    }
-
-    // Invalidar caches del usuario
     await invalidateUserCache(id);
+    logger.warn(`Usuario desactivado: ${user.email} por ${req.user?.user_id || req.user?._id}`);
 
-    logger.info(`✅ Usuario desactivado: ${user.email}`, {
-      userId: id,
-      deletedBy: req.user._id,
-    });
-
-    res.status(200).json({
-      success: true,
-      message: "Usuario desactivado exitosamente",
-      data: user,
-    });
+    return res.status(200).json({ success: true, message: "Usuario desactivado exitosamente", data: user });
   } catch (error) {
-    logger.error("❌ Error desactivando usuario:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al desactivar usuario",
-      error: error.message,
-    });
+    logger.error("Error en deleteUser:", error);
+    return res.status(500).json({ success: false, message: "Error al desactivar usuario" });
   }
 }
 
-// ⭐ ACTIVAR/DESACTIVAR USUARIO ⭐
 async function ActiveInactiveUser(req, res) {
   try {
     const { id } = req.params;
-
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "ID de usuario inválido",
-      });
-    }
-
-    const user = await User.findById(id);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "Usuario no encontrado",
-      });
-    }
+    const user = await User.findById(id).lean();
+    if (!user) return res.status(404).json({ success: false, message: "Usuario no encontrado" });
 
     const newStatus = !user.activo;
-    const updatedUser = await User.findByIdAndUpdate(
-      id,
-      { activo: newStatus, updatedAt: new Date() },
-      { new: true }
-    ).select("-password");
+    const updatedUser = await User.findByIdAndUpdate(id, { activo: newStatus, updatedAt: new Date() }, { new: true }).select("-password").lean();
 
-    // Invalidar caches del usuario
     await invalidateUserCache(id);
+    logger.info(`Estado de usuario cambiado (${newStatus ? "activado" : "desactivado"}): ${updatedUser.email} por ${req.user?.user_id || req.user?._id}`);
 
-    logger.info(
-      `✅ Usuario ${newStatus ? "activado" : "desactivado"}: ${
-        updatedUser.email
-      }`,
-      {
-        userId: id,
-        updatedBy: req.user._id,
-      }
-    );
-
-    res.status(200).json({
-      success: true,
-      message: `Usuario ${newStatus ? "activado" : "desactivado"} exitosamente`,
-      data: updatedUser,
-    });
+    return res.status(200).json({ success: true, message: `Usuario ${newStatus ? "activado" : "desactivado"} exitosamente`, data: updatedUser });
   } catch (error) {
-    logger.error("❌ Error cambiando estado de usuario:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al cambiar estado del usuario",
-      error: error.message,
-    });
+    logger.error("Error en ActiveInactiveUser:", error);
+    return res.status(500).json({ success: false, message: "Error al cambiar estado del usuario" });
   }
 }
 
-// ⭐ BUSCAR USUARIOS ⭐
 async function searchUsers(req, res) {
   try {
     const { query, filters = {}, limit = 10 } = req.body;
-
-    const searchFilters = {
-      activo: true,
-      ...filters,
-    };
+    const searchFilters = { activo: true, ...filters };
 
     if (query) {
       searchFilters.$or = [
@@ -751,523 +412,218 @@ async function searchUsers(req, res) {
       .limit(parseInt(limit, 10))
       .lean();
 
-    res.status(200).json({
-      success: true,
-      data: {
-        users: users,
-        total: users.length,
-        query: query,
-      },
-    });
+    return res.status(200).json({ success: true, data: { users, total: users.length } });
   } catch (error) {
-    logger.error("❌ Error buscando usuarios:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al buscar usuarios",
-      error: error.message,
-    });
+    logger.error("Error en searchUsers:", error);
+    return res.status(500).json({ success: false, message: "Error al buscar usuarios" });
   }
 }
 
-// ⭐ ACTUALIZAR ROLES DE USUARIO ⭐
 async function updateUserRoles(req, res) {
   try {
     const { id } = req.params;
     const { roles } = req.body;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "ID de usuario inválido",
-      });
-    }
-
-    // Validar que los roles existen
-    if (roles && roles.length > 0) {
-      const validRoles = await Role.find({
-        _id: { $in: roles },
-        isActive: true,
-      });
-
-      if (validRoles.length !== roles.length) {
-        return res.status(400).json({
-          success: false,
-          message: "Algunos roles no son válidos o están inactivos",
-        });
-      }
-    }
-
-    const updatedUser = await User.findByIdAndUpdate(
-      id,
-      { roles: roles || [], updatedAt: new Date() },
-      { new: true }
-    )
+    const updatedUser = await User.findByIdAndUpdate(id, { roles: roles || [], updatedAt: new Date() }, { new: true })
       .populate("roles", "name displayName description isActive")
-      .select("-password");
+      .select("-password")
+      .lean();
 
-    if (!updatedUser) {
-      return res.status(404).json({
-        success: false,
-        message: "Usuario no encontrado",
-      });
-    }
+    if (!updatedUser) return res.status(404).json({ success: false, message: "Usuario no encontrado" });
 
-    // Invalidar caches del usuario
     await invalidateUserCache(id);
+    logger.info(`Roles actualizados para: ${updatedUser.email} por ${req.user?.user_id || req.user?._id}`);
 
-    logger.info(`✅ Roles actualizados para usuario: ${updatedUser.email}`, {
-      userId: id,
-      newRoles: roles,
-      updatedBy: req.user._id,
-    });
-
-    res.status(200).json({
-      success: true,
-      message: "Roles actualizados exitosamente",
-      data: updatedUser,
-    });
+    return res.status(200).json({ success: true, message: "Roles actualizados exitosamente", data: updatedUser });
   } catch (error) {
-    logger.error("❌ Error actualizando roles:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al actualizar roles",
-      error: error.message,
-    });
+    logger.error("Error en updateUserRoles:", error);
+    return res.status(500).json({ success: false, message: "Error al actualizar roles" });
   }
 }
 
-// ⭐ ACTUALIZAR PERMISOS ESPECÍFICOS ⭐
 async function updateUserSpecificPermissions(req, res) {
   try {
     const { id } = req.params;
     const { permissions } = req.body;
 
-    if (!mongoose.Types.ObjectId.isValid(id)) {
-      return res.status(400).json({
-        success: false,
-        message: "ID de usuario inválido",
-      });
-    }
-
-    const user = await User.findById(id);
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "Usuario no encontrado",
-      });
-    }
-
-    // Validar estructura de permisos
-    if (permissions && Array.isArray(permissions)) {
-      for (const permission of permissions) {
-        if (
-          !permission.resource ||
-          !permission.actions ||
-          !Array.isArray(permission.actions)
-        ) {
-          return res.status(400).json({
-            success: false,
-            message: "Estructura de permisos inválida",
-          });
-        }
-      }
-    }
-
-    const updatedUser = await User.findByIdAndUpdate(
-      id,
-      { permissions: permissions || [], updatedAt: new Date() },
-      { new: true }
-    )
+    const updatedUser = await User.findByIdAndUpdate(id, { permissions: permissions || [], updatedAt: new Date() }, { new: true })
       .populate("roles", "name displayName description")
-      .select("-password");
+      .select("-password")
+      .lean();
 
-    // Invalidar caches del usuario
+    if (!updatedUser) return res.status(404).json({ success: false, message: "Usuario no encontrado" });
+
     await invalidateUserCache(id);
+    logger.info(`Permisos específicos actualizados para: ${updatedUser.email} por ${req.user?.user_id || req.user?._id}`);
 
-    logger.info(
-      `✅ Permisos específicos actualizados para usuario: ${updatedUser.email}`,
-      {
-        userId: id,
-        newPermissions: permissions,
-        updatedBy: req.user._id,
-      }
-    );
-
-    res.status(200).json({
-      success: true,
-      message: "Permisos específicos actualizados correctamente",
-      data: updatedUser,
-    });
+    return res.status(200).json({ success: true, message: "Permisos específicos actualizados correctamente", data: updatedUser });
   } catch (error) {
-    logger.error("❌ Error actualizando permisos específicos:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al actualizar permisos específicos",
-      error: error.message,
-    });
+    logger.error("Error en updateUserSpecificPermissions:", error);
+    return res.status(500).json({ success: false, message: "Error al actualizar permisos específicos" });
   }
 }
 
-// ⭐ OBTENER USUARIOS CON ROLES ⭐
-async function getUsersWithRoles(req, res) {
-  try {
-    const { page = 1, limit = 20 } = req.body;
-
-    const pageNumber = parseInt(page, 10);
-    const limitNumber = parseInt(limit, 10);
-    const skip = (pageNumber - 1) * limitNumber;
-
-    const [users, totalUsers] = await Promise.all([
-      User.find({ activo: true })
-        .populate("roles", "name displayName description isActive")
-        .select("name lastname email roles role isAdmin activo")
-        .sort({ name: 1, lastname: 1 })
-        .skip(skip)
-        .limit(limitNumber)
-        .lean(),
-      User.countDocuments({ activo: true }),
-    ]);
-
-    const usersWithRoleInfo = users.map((user) => ({
-      ...user,
-      totalRoles: user.roles?.length || 0,
-      roleNames:
-        user.roles?.map((role) => role.displayName).join(", ") || "Sin roles",
-      hasActiveRoles: user.roles?.some((role) => role.isActive) || false,
-    }));
-
-    res.status(200).json({
-      success: true,
-      data: {
-        users: usersWithRoleInfo,
-        pagination: {
-          currentPage: pageNumber,
-          totalPages: Math.ceil(totalUsers / limitNumber),
-          totalUsers: totalUsers,
-          hasNextPage: pageNumber < Math.ceil(totalUsers / limitNumber),
-          hasPrevPage: pageNumber > 1,
-        },
-      },
-    });
-  } catch (error) {
-    logger.error("❌ Error obteniendo usuarios con roles:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al obtener usuarios con roles",
-      error: error.message,
-    });
-  }
-}
-
-// ⭐ OBTENER ESTADÍSTICAS DE USUARIOS (CONTINUACIÓN) ⭐
 async function getUserStats(req, res) {
   try {
-    const cacheKey = "user_stats";
-
     const stats = await cacheService.getOrSet(
-      cacheKey,
+      "user_stats",
       async () => {
-        const [
-          totalUsers,
-          activeUsers,
-          adminUsers,
-          usersWithRoles,
-          recentUsers,
-        ] = await Promise.all([
+        const [totalUsers, activeUsers, adminUsers, usersWithRoles, recentUsers] = await Promise.all([
           User.countDocuments(),
           User.countDocuments({ activo: true }),
           User.countDocuments({ isAdmin: true }),
-          User.countDocuments({
-            roles: { $exists: true, $not: { $size: 0 } },
-          }),
-          User.find()
-            .sort({ createdAt: -1 })
-            .limit(5)
-            .select("name lastname email createdAt")
-            .lean(),
+          User.countDocuments({ roles: { $exists: true, $not: { $size: 0 } } }),
+          User.find().sort({ createdAt: -1 }).limit(5).select("name lastname email createdAt").lean(),
         ]);
 
-        // Estadísticas por roles
         const roleStats = await User.aggregate([
           { $match: { activo: true } },
-          { $unwind: { path: "$roles", preserveNullAndEmptyArrays: true } },
-          {
-            $lookup: {
-              from: "roles",
-              localField: "roles",
-              foreignField: "_id",
-              as: "roleData",
-            },
-          },
-          { $unwind: { path: "$roleData", preserveNullAndEmptyArrays: true } },
-          {
-            $group: {
-              _id: "$roleData.displayName",
-              count: { $sum: 1 },
-              roleName: { $first: "$roleData.name" },
-            },
-          },
+          { $unwind: "$roles" },
+          { $lookup: { from: "roles", localField: "roles", foreignField: "_id", as: "roleData" } },
+          { $unwind: "$roleData" },
+          { $group: { _id: "$roleData.displayName", count: { $sum: 1 }, roleName: { $first: "$roleData.name" } } },
           { $sort: { count: -1 } },
         ]);
 
-        return {
-          overview: {
-            total: totalUsers,
-            active: activeUsers,
-            inactive: totalUsers - activeUsers,
-            admins: adminUsers,
-            withRoles: usersWithRoles,
-            withoutRoles: totalUsers - usersWithRoles,
-          },
-          roleDistribution: roleStats,
-          recentUsers: recentUsers,
-          lastUpdated: new Date(),
-        };
+        return { overview: { total: totalUsers, active: activeUsers, admins: adminUsers, withRoles: usersWithRoles }, roleDistribution: roleStats, recentUsers, lastUpdated: new Date() };
       },
-      300 // 5 minutos de cache
+      300
     );
 
-    res.status(200).json({
-      success: true,
-      data: stats,
-    });
+    return res.status(200).json({ success: true, data: stats });
   } catch (error) {
-    logger.error("❌ Error obteniendo estadísticas:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al obtener estadísticas de usuarios",
-      error: error.message,
-    });
+    logger.error("Error en getUserStats:", error);
+    return res.status(500).json({ success: false, message: "Error al obtener estadísticas" });
   }
 }
 
-// ⭐ VALIDAR SISTEMA DE ROLES ⭐
-async function validateUserRoleSystem(req, res) {
-  try {
-    const cacheKey = "role_system_validation";
-
-    const validation = await cacheService.getOrSet(
-      cacheKey,
-      async () => {
-        const [
-          totalUsers,
-          usersWithoutRoles,
-          inactiveRoleUsers,
-          orphanedPermissions,
-          systemRoles,
-          activeModules,
-        ] = await Promise.all([
-          User.countDocuments({ activo: true }),
-          User.countDocuments({
-            activo: true,
-            $or: [
-              { roles: { $exists: false } },
-              { roles: { $size: 0 } },
-              { roles: null },
-            ],
-          }),
-          User.find({ activo: true })
-            .populate("roles")
-            .then(
-              (users) =>
-                users.filter((user) =>
-                  user.roles?.some((role) => !role.isActive)
-                ).length
-            ),
-          User.find({
-            activo: true,
-            permissions: { $exists: true, $not: { $size: 0 } },
-          }).countDocuments(),
-          Role.countDocuments({ isActive: true }),
-          ModuleConfig.countDocuments({ isActive: true }),
-        ]);
-
-        const issues = [];
-        const recommendations = [];
-
-        // Validaciones
-        if (usersWithoutRoles > 0) {
-          issues.push({
-            type: "warning",
-            message: `${usersWithoutRoles} usuarios activos sin roles asignados`,
-            impact: "medium",
-          });
-          recommendations.push("Asignar roles apropiados a usuarios sin roles");
-        }
-
-        if (inactiveRoleUsers > 0) {
-          issues.push({
-            type: "error",
-            message: `${inactiveRoleUsers} usuarios con roles inactivos`,
-            impact: "high",
-          });
-          recommendations.push(
-            "Actualizar o remover roles inactivos de usuarios"
-          );
-        }
-
-        const healthScore = Math.max(0, 100 - issues.length * 15);
-
-        return {
-          systemHealth: {
-            score: healthScore,
-            status:
-              healthScore >= 80
-                ? "healthy"
-                : healthScore >= 60
-                ? "warning"
-                : "critical",
-          },
-          statistics: {
-            totalUsers,
-            usersWithoutRoles,
-            inactiveRoleUsers,
-            orphanedPermissions,
-            systemRoles,
-            activeModules,
-          },
-          issues,
-          recommendations,
-          lastValidation: new Date(),
-        };
-      },
-      600 // 10 minutos de cache
-    );
-
-    res.status(200).json({
-      success: true,
-      data: validation,
-    });
-  } catch (error) {
-    logger.error("❌ Error validando sistema:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al validar sistema de roles",
-      error: error.message,
-    });
-  }
+/**
+ * Alias de getUsers que asegura población de roles (usado por el frontend)
+ */
+async function getUsersWithRoles(req, res) {
+  // Reutilizamos la lógica de getUsers ya que esta ya hace populate de roles
+  return getUsers(req, res);
 }
 
-// ⭐ FUNCIONES LEGACY PARA COMPATIBILIDAD ⭐
-async function validateisRuta(req, res) {
+/**
+ * Obtiene todos los permisos consolidados de un usuario (roles + directos)
+ */
+async function getUserAllPermissions(req, res) {
   try {
-    res.status(200).json({
-      success: true,
-      message: "Ruta validada correctamente",
-      data: { isValid: true },
-    });
-  } catch (error) {
-    logger.error("❌ Error validando ruta:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al validar ruta",
-      error: error.message,
-    });
-  }
-}
-
-async function validateuserActive(req, res) {
-  try {
-    const { userId } = req.body;
-
-    if (!userId || !mongoose.Types.ObjectId.isValid(userId)) {
-      return res.status(400).json({
-        success: false,
-        message: "ID de usuario inválido",
-      });
-    }
-
-    const user = await User.findById(userId).select("activo").lean();
-
-    if (!user) {
-      return res.status(404).json({
-        success: false,
-        message: "Usuario no encontrado",
-      });
-    }
-
-    res.status(200).json({
-      success: true,
-      data: {
-        userId: userId,
-        isActive: user.activo,
-        validated: true,
-      },
-    });
-  } catch (error) {
-    logger.error("❌ Error validando usuario activo:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error al validar usuario activo",
-      error: error.message,
-    });
-  }
-}
-
-// ⭐ FUNCIONES HELPER PARA INVALIDACIÓN DE CACHE ⭐
-async function invalidateUserCacheOnModuleChange() {
-  try {
-    await invalidateModulesCache();
-    logger.info("🔄 Cache invalidado por cambio en módulos");
-  } catch (error) {
-    logger.error("Error invalidando cache por cambio de módulos:", error);
-  }
-}
-
-async function invalidateUserCacheOnRoleChange(roleId) {
-  try {
-    // Encontrar usuarios que tienen este rol
-    const usersWithRole = await User.find({
-      roles: roleId,
-    })
-      .select("_id")
+    const { id } = req.params;
+    const user = await User.findById(id)
+      .populate("roles", "name displayName permissions isActive")
+      .select("permissions roles admin")
       .lean();
 
-    // Invalidar cache de cada usuario
-    for (const user of usersWithRole) {
-      await invalidateUserCache(user._id.toString());
-    }
+    if (!user) return res.status(404).json({ success: false, message: "Usuario no encontrado" });
 
-    logger.info(
-      `🔄 Cache invalidado para ${usersWithRole.length} usuarios por cambio en rol`
-    );
+    const activeModules = await getActiveModules();
+    const permissionData = await calculateUserPermissionsDynamic(user, activeModules);
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        userId: id,
+        consolidatedPermissions: permissionData.consolidatedPermissions,
+        permissionSources: permissionData.permissionSources,
+        accessibleModules: permissionData.accessibleModules
+      }
+    });
   } catch (error) {
-    logger.error("Error invalidando cache por cambio de rol:", error);
+    logger.error(`Error en getUserAllPermissions (${req.params.id}):`, error);
+    return res.status(500).json({ success: false, message: "Error al consolidar permisos" });
   }
 }
 
-// =====================================================
-// ⭐ EXPORTAR TODAS LAS FUNCIONES ⭐
-// =====================================================
+/**
+ * Endpoint de diagnóstico del sistema de roles
+ */
+async function validateRoleSystem(req, res) {
+  try {
+    const totalUsers = await User.countDocuments();
+    const totalRoles = await Role.countDocuments();
+    const activeModules = await getActiveModules();
+
+    const usersWithoutRoles = await User.countDocuments({
+      roles: { $exists: true, $size: 0 },
+      isAdmin: false
+    });
+
+    return res.status(200).json({
+      success: true,
+      data: {
+        status: "healthy",
+        stats: {
+          totalUsers,
+          totalRoles,
+          activeModules: activeModules.length,
+          usersWithoutRoles
+        },
+        timestamp: new Date()
+      }
+    });
+  } catch (error) {
+    logger.error("Error en validateRoleSystem:", error);
+    return res.status(500).json({ success: false, message: "Error en diagnóstico de roles" });
+  }
+}
+
+async function changePassword(req, res) {
+  try {
+    const { id } = req.params;
+    const { currentPassword, newPassword } = req.body;
+    
+    if (!newPassword || newPassword.length < 6) {
+      return res.status(400).json({ 
+        success: false, 
+        message: "La nueva contraseña debe tener al menos 6 caracteres" 
+      });
+    }
+    
+    const user = await User.findById(id).select("+password");
+    if (!user) {
+      return res.status(404).json({ success: false, message: "Usuario no encontrado" });
+    }
+    
+    if (currentPassword) {
+      const isMatch = await user.comparePassword(currentPassword);
+      if (!isMatch) {
+        return res.status(401).json({ success: false, message: "La contraseña actual es incorrecta" });
+      }
+    }
+    
+    // Hashear la nueva contraseña antes de guardar
+    const salt = bcrypt.genSaltSync(10);
+    user.password = bcrypt.hashSync(newPassword, salt);
+    await user.save();
+    
+    await invalidateUserCache(id);
+    logger.info(`Contraseña cambiada para usuario: ${user.email} por ${req.user?.user_id || req.user?._id}`);
+    
+    return res.status(200).json({ success: true, message: "Contraseña actualizada exitosamente" });
+  } catch (error) {
+    logger.error("Error en changePassword:", error);
+    return res.status(500).json({ success: false, message: "Error al cambiar contraseña" });
+  }
+}
+
 module.exports = {
-  // Funciones principales
   getMe,
   getUserPermissions,
-  getUserAllPermissions,
   getUsers,
+  getUsersWithRoles,
   createUser,
   updateUser,
   deleteUser,
+  changePassword,
   ActiveInactiveUser,
   searchUsers,
   updateUserRoles,
   updateUserSpecificPermissions,
-  getUsersWithRoles,
   getUserStats,
-  validateUserRoleSystem,
-
-  // Funciones legacy
-  validateisRuta,
-  validateuserActive,
-
-  // Funciones helper para cache
+  getUserAllPermissions,
+  validateRoleSystem,
   invalidateUserCache,
   invalidateModulesCache,
-  invalidateUserCacheOnModuleChange,
-  invalidateUserCacheOnRoleChange,
-
-  // Funciones utilitarias
-  getActiveModules,
-  generateDynamicAdminPermissions,
-  calculateUserPermissionsDynamic,
 };

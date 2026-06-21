@@ -144,8 +144,8 @@ class UnifiedCancellationService {
       completionStatus: result.success
         ? "completed"
         : result.cancelled
-        ? "cancelled"
-        : "failed",
+          ? "cancelled"
+          : "failed",
     });
 
     // Eliminar después de un tiempo
@@ -162,8 +162,7 @@ class UnifiedCancellationService {
    */
   updateTaskInDatabaseAsync(taskId, updates) {
     // Cargar módulos solo cuando sea necesario para evitar dependencias circulares
-    const TransferTask = require("../models/transferTaks");
-    const TaskExecution = require("../models/taskExecutionModel");
+    const TransferTask = require("../models/transferTaskModel");
 
     // Verificar si es un ID válido de MongoDB
     const isValidObjectId = /^[0-9a-fA-F]{24}$/.test(taskId);
@@ -194,39 +193,36 @@ class UnifiedCancellationService {
               updates.status === "running"
                 ? 0
                 : updates.status === "cancelling"
-                ? -1
-                : updates.status === "cancelled"
-                ? -1
-                : 100,
+                  ? -1
+                  : updates.status === "cancelled"
+                    ? -1
+                    : 100,
             lastExecutionDate: updates.endTime
               ? new Date(updates.endTime)
               : undefined,
             lastExecutionResult: updates.result
               ? {
-                  success: updates.result.success === true,
-                  message: updates.result.message || updates.cancelReason || "",
-                  affectedRecords: updates.result.affectedRecords || 0,
-                  errorDetails: updates.result.error || "",
-                }
+                success: updates.result.success === true,
+                message: updates.result.message || updates.cancelReason || "",
+                affectedRecords: updates.result.affectedRecords || 0,
+                errorDetails: updates.result.error || "",
+              }
               : undefined,
           },
           { new: true }
         );
 
-        // Si hay registro de ejecución, actualizarlo también
-        if (updates.metadata?.executionId) {
-          await TaskExecution.findByIdAndUpdate(
-            updates.metadata.executionId,
-            {
+        // Registro centralizado de la acción de cancelación/finalización en logs
+        if (updates.status === "cancelled" || updates.status === "failed") {
+          logger.info(`⏹️ Estado de tarea ${taskId} actualizado a ${updates.status}`, {
+            operationType: "SYSTEM",
+            entityType: "TAREA",
+            taskId: taskId.toString(),
+            metadata: { 
               status: updates.status,
-              endTime: updates.endTime ? new Date(updates.endTime) : undefined,
-              executionTime: updates.endTime
-                ? updates.endTime - updates.startTime
-                : undefined,
-              errorMessage: updates.cancelReason || updates.result?.error || "",
-            },
-            { new: true }
-          );
+              reason: updates.cancelReason || updates.result?.message
+            }
+          });
         }
       })
       .catch((error) => {

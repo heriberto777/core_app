@@ -1,13 +1,53 @@
-// index.js - Versión optimizada con HTTPS forzado
 require("dotenv").config();
-const app = require("./app");
 const fs = require("fs");
 const https = require("https");
 const http = require("http");
+const path = require("path");
 const logger = require("./services/logger");
+const MongoDbService = require("./services/mongoDbService");
 const AppBootstrap = require("./services/AppBootstrap");
+const DatabaseServiceAdapter = require("./services/DatabaseServiceAdapter");
 
-// Manejo de errores no capturados
+// ✅ 0. Lógica de Pre-Arranque
+const preBootstrap = async () => {
+  try {
+    console.log("🔗 Iniciando conexión base de MongoDB...");
+    await MongoDbService.connect();
+    console.log("✅ MongoDB base conectado");
+    return true;
+  } catch (error) {
+    console.error("❌ Fallo crítico al conectar a MongoDB durante el pre-bootstrap:", error);
+    return false;
+  }
+};
+
+let app;
+
+// ✅ 1. CICLO DE VIDA ASÍNCRONO
+(async () => {
+  const mongoReady = await preBootstrap();
+  if (!mongoReady) {
+    console.error("No se puede continuar sin conexión a MongoDB. Abortando.");
+    process.exit(1);
+  }
+
+  try {
+    app = require("./app");
+
+    console.log("🔌 Inicializando servicio de conexiones SQL...");
+    await DatabaseServiceAdapter.initialize();
+
+    console.log("🚀 Inicializando servicios de aplicación...");
+    await AppBootstrap.initialize();
+
+    // Iniciar el servidor
+    const serverInfo = await startServer();
+    server = serverInfo.server;
+  } catch (err) {
+    console.error("❌ Error fatal en inicialización:", err);
+    process.exit(1);
+  }
+})();
 process.on("uncaughtException", (error) => {
   console.error("🚨 ERROR NO CAPTURADO:", error);
 
@@ -74,6 +114,10 @@ process.on("SIGPIPE", () => {
   console.warn("⚠️ Recibida señal SIGPIPE (conexión rota)");
 });
 
+// ✅ MANEJAR SEÑALES DE CIERRE GRACEFUL
+process.on("SIGTERM", gracefulShutdown("SIGTERM"));
+process.on("SIGINT", gracefulShutdown("SIGINT"));
+
 // Puerto para el servidor
 const defaultPort = process.env.PORT || 3979;
 
@@ -136,14 +180,14 @@ const startServerWithPort = async (serverPort) => {
 
     const hasSSLCerts =
       !isWindows &&
+      process.env.DISABLE_SSL !== "true" &&
       fs.existsSync(`${sslPath}/privkey.pem`) &&
       fs.existsSync(`${sslPath}/fullchain.pem`);
 
     console.log("hasSSLCerts:", hasSSLCerts);
 
     console.log(
-      `Modo: ${isDev ? "desarrollo" : "producción"}, Sistema: ${
-        isWindows ? "Windows" : "Linux/Unix"
+      `Modo: ${isDev ? "desarrollo" : "producción"}, Sistema: ${isWindows ? "Windows" : "Linux/Unix"
       }`
     );
     console.log(`SSL disponible: ${hasSSLCerts ? "Sí" : "No"}`);
@@ -208,7 +252,6 @@ const startServerWithPort = async (serverPort) => {
       }
     });
 
-    // ⭐ MEJORAR LOGGING AL INICIAR ⭐
     return new Promise((resolve, reject) => {
       server.listen(serverPort, () => {
         const protocol = server instanceof https.Server ? "https" : "http";
@@ -221,7 +264,7 @@ const startServerWithPort = async (serverPort) => {
           `🚀 Servidor ${protocol.toUpperCase()} iniciado en puerto ${serverPort}: ${protocol}://localhost:${serverPort}/`
         );
 
-        // ⭐ INFORMACIÓN ADICIONAL ⭐
+        // Información adicional
         console.log(`🔒 SSL/TLS: ${isSSL ? "ACTIVADO" : "DESACTIVADO"}`);
         console.log(
           `🌍 Accesible en: ${protocol}://catelli.ddns.net:${serverPort}/`
@@ -239,7 +282,7 @@ const startServerWithPort = async (serverPort) => {
         resolve({ server, port: serverPort, protocol, ssl: isSSL });
       });
 
-      // ⭐ TIMEOUT PARA EVITAR BLOQUEOS ⭐
+      // Timeout para evitar bloqueos
       setTimeout(() => {
         reject(
           new Error(`Timeout al iniciar servidor en puerto ${serverPort}`)
@@ -269,65 +312,78 @@ const startServer = async () => {
     // Iniciar con el puerto apropiado
     const serverInfo = await startServerWithPort(startPort);
 
-    // ⭐ LOG FINAL DE ESTADO ⭐
+    // Log final de estado
     console.log("✅ Servidor iniciado exitosamente:");
     console.log(`   - Puerto: ${serverInfo.port}`);
     console.log(`   - Protocolo: ${serverInfo.protocol.toUpperCase()}`);
-    console.log(`   - SSL: ${serverInfo.ssl ? "Sí" : "No"}`);
-    console.log(
-      `   - URL: ${serverInfo.protocol}://catelli.ddns.net:${serverInfo.port}/`
-    );
-
-    // Manejar señales para cierre graceful
-    setupGracefulShutdown(serverInfo.server);
+    console.log(`   - SSL: ${serverInfo.ssl ? "SÍ" : "NO"}`);
+    console.log(`   - Entorno: ${process.env.NODE_ENV || "development"}`);
 
     return serverInfo;
-  } catch (err) {
-    console.error("❌ Error crítico al iniciar el servidor:", err);
-    logger.error("Error crítico en arranque:", err);
-
-    // No terminamos el proceso para permitir diagnóstico
-    console.warn(
-      "El servidor no pudo iniciarse pero se mantiene proceso en ejecución"
-    );
+  } catch (error) {
+    console.error("❌ Error al iniciar servidor:", error);
+    logger.error("Error al iniciar servidor:", error);
+    throw error;
   }
 };
 
-// Configurar manejo de señales para cierre graceful
-function setupGracefulShutdown(server) {
-  // SIGTERM (señal standard de shutdown)
-  process.on("SIGTERM", () => handleShutdown("SIGTERM", server));
+let server = null;
 
-  // SIGINT (Ctrl+C)
-  process.on("SIGINT", () => handleShutdown("SIGINT", server));
-}
+// Función para cierre graceful
+function gracefulShutdown(signal) {
+  return async () => {
+    console.log(
+      `\n📴 Señal ${signal} recibida. Cerrando servidor gracefully...`
+    );
+    const log = (msg, level = 'info') => {
+      console.log(msg);
+      if (logger && typeof logger[level] === "function" && logger.transports?.length > 0) {
+        logger[level](msg);
+      }
+    };
 
-// Manejar cierre graceful
-async function handleShutdown(signal, server) {
-  console.log(`Recibida señal ${signal}. Cerrando servidor gracefully...`);
-  logger.info(`Iniciando cierre ordenado por señal ${signal}`);
+    log(`Iniciando cierre ordenado por señal ${signal}`);
 
-  // Cierre ordenado de servicios
-  await AppBootstrap.shutdown().catch((error) => {
-    console.error("Error durante cierre ordenado de servicios:", error);
-    logger.error("Error en shutdown:", error);
-  });
-
-  // Cerrar servidor HTTP/HTTPS
-  if (server) {
-    server.close(() => {
-      console.log("Servidor cerrado. Proceso terminando...");
-      process.exit(0);
+    // Cierre ordenado de servicios
+    await AppBootstrap.shutdown().catch((error) => {
+      console.error("Error durante cierre ordenado de servicios:", error);
+      if (logger && typeof logger.error === "function") logger.error("Error en shutdown:", error);
     });
 
-    // Salir después de un timeout por si server.close() se bloquea
-    setTimeout(() => {
-      console.log("Forzando salida después de timeout en server.close()");
+    // ✅ CERRAR CONNECTIONCENTRALSERVICE
+    try {
+      console.log("🔌 Cerrando servicio de conexiones...");
+      await DatabaseServiceAdapter.shutdown();
+      console.log("✅ Servicio de conexiones cerrado");
+    } catch (error) {
+      console.error("Error cerrando ConnectionCentralService:", error);
+    }
+
+    // Cerrar servidor HTTP/HTTPS
+    if (server) {
+      server.close(() => {
+        console.log("Servidor cerrado.");
+        if (logger && typeof logger.closeLogger === "function") {
+          logger.closeLogger();
+        }
+        process.exit(0);
+      });
+
+      // Salir después de un timeout por si server.close() se bloquea
+      setTimeout(() => {
+        console.log("Forzando salida después de timeout...");
+        if (logger && typeof logger.closeLogger === "function") {
+          logger.closeLogger();
+        }
+        process.exit(0);
+      }, 10000);
+    } else {
+      if (logger && typeof logger.closeLogger === "function") {
+        logger.closeLogger();
+      }
       process.exit(0);
-    }, 10000);
-  } else {
-    process.exit(0);
-  }
+    }
+  };
 }
 
 // Determinar si un error compromete la integridad del proceso
@@ -354,7 +410,7 @@ function isProcessCompromised(error) {
   return false;
 }
 
-// ⭐ LOGGING MEJORADO AL INICIO ⭐
+// Logging al inicio
 console.log("🚀 Iniciando servidor Catelli...");
 console.log("📋 Configuración:");
 console.log(`   - NODE_ENV: ${process.env.NODE_ENV || "development"}`);
@@ -362,8 +418,6 @@ console.log(`   - Puerto por defecto: ${defaultPort}`);
 console.log(`   - Plataforma: ${process.platform}`);
 console.log(`   - Versión Node.js: ${process.version}`);
 
-// Iniciar el servidor
-startServer().catch((err) => {
-  console.error("❌ Error fatal en startServer():", err);
-  process.exit(1);
-});
+// El arranque se controla mediante el bloque asíncrono al inicio del archivo
+ 
+ // update

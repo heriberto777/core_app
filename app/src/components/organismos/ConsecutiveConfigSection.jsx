@@ -1,42 +1,34 @@
 import React, { useEffect, useState } from "react";
-import styled from "styled-components";
 import Swal from "sweetalert2";
-import { TransferApi, useAuth } from "../../index"; // Asegúrate de tener estas importaciones
+import { FaEye, FaPlus, FaTrash, FaInfoCircle, FaCheckCircle, FaExclamationCircle, FaHashtag, FaCogs, FaShareAlt, FaLayerGroup } from "react-icons/fa";
+import { useAuth, Button } from "../../index";
+import { ConsecutiveApi } from "../../api/index";
 
-const api = new TransferApi();
+const api = new ConsecutiveApi();
 
 const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
   const { accessToken } = useAuth();
-  // Accedemos a consecutiveConfig de manera segura
   const consecutiveConfig = mapping.consecutiveConfig || {};
   const isEnabled = consecutiveConfig.enabled || false;
 
   const [assignedConsecutives, setAssignedConsecutives] = useState([]);
-  const [selectedCentralizedConsecutive, setSelectedCentralizedConsecutive] =
-    useState("");
+  const [selectedCentralizedConsecutive, setSelectedCentralizedConsecutive] = useState("");
   const [useCentralizedSystem, setUseCentralizedSystem] = useState(false);
   const [loading, setLoading] = useState(false);
 
-  const [tableMappings, setTableMappings] = useState(
-    consecutiveConfig.applyToTables || []
-  );
+  const [tableMappings, setTableMappings] = useState(consecutiveConfig.applyToTables || []);
 
   useEffect(() => {
-    // Cargar consecutivos asignados al mapping actual
     const loadAssignedConsecutives = async () => {
       try {
         if (mapping && mapping._id) {
           setLoading(true);
-          // Llamar a la API para obtener consecutivos asignados a este mapeo
-          const response = await api.getConsecutivesByEntity(
-            accessToken,
-            "mapping",
-            mapping._id
-          );
+          const response = await api.getConsecutivesByEntity(accessToken, "mapping", mapping._id);
+          const allAssigned = Array.isArray(response) ? response : (response?.data || []);
 
-          if (response && response.data && response.data.length > 0) {
-            setAssignedConsecutives(response.data);
-            setSelectedCentralizedConsecutive(response.data[0]._id);
+          if (allAssigned.length > 0) {
+            setAssignedConsecutives(allAssigned);
+            setSelectedCentralizedConsecutive(allAssigned[0]._id);
             setUseCentralizedSystem(true);
           } else {
             setUseCentralizedSystem(false);
@@ -57,10 +49,8 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
     setTableMappings(consecutiveConfig.applyToTables || []);
   }, [consecutiveConfig.applyToTables]);
 
-  // Obtener todas las tablas disponibles en la configuración
   const availableTables = React.useMemo(() => {
     if (!mapping.tableConfigs) return [];
-
     return mapping.tableConfigs.map((config) => ({
       name: config.name,
       isDetail: config.isDetailTable || false,
@@ -68,101 +58,86 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
     }));
   }, [mapping.tableConfigs]);
 
-  // Función para ver detalles del consecutivo centralizado
   const handleViewConsecutiveDetails = async () => {
     if (!selectedCentralizedConsecutive) return;
-
     try {
       setLoading(true);
-      const response = await api.getConsecutiveById(
-        accessToken,
-        selectedCentralizedConsecutive
-      );
+      const response = await api.getConsecutiveById(accessToken, selectedCentralizedConsecutive);
+      const consec = (response && response._id) ? response : (response?.data);
 
-      if (response.success && response.data) {
-        const consec = response.data;
-
-        // Mostrar detalles en un modal
+      if (consec && consec._id) {
         Swal.fire({
           title: `Consecutivo: ${consec.name}`,
           html: `
-            <div style="text-align: left; padding: 10px;">
-              <p><strong>Descripción:</strong> ${
-                consec.description || "N/A"
-              }</p>
-              <p><strong>Valor actual:</strong> ${consec.currentValue}</p>
-              <p><strong>Formato:</strong> ${
-                consec.pattern ||
-                `${consec.prefix || ""}[valor]${consec.suffix || ""}`
-              }</p>
-              <p><strong>Segmentado:</strong> ${
-                consec.segments?.enabled ? `Sí (${consec.segments.type})` : "No"
-              }</p>
-              <p><strong>Estado:</strong> ${
-                consec.active ? "Activo" : "Inactivo"
-              }</p>
+            <div class="text-left py-4 font-sans">
+              <p class="mb-2"><strong>Descripción:</strong> ${consec.description || "N/A"}</p>
+              <p class="mb-2"><strong>Valor actual:</strong> <span class="bg-slate-100 px-2 py-1 rounded font-extrabold">${consec.currentValue}</span></p>
+              <p class="mb-2"><strong>Formato:</strong> <code>${consec.pattern || `${consec.prefix || ""}[valor]${consec.suffix || ""}`}</code></p>
+              <p class="mb-2"><strong>Segmentado:</strong> ${consec.segments?.enabled ? `Sí (${consec.segments.type})` : "No"}</p>
+              <p class="mb-2"><strong>Estado:</strong> <span class="${consec.active ? "text-emerald-500" : "text-red-500"} font-bold">${consec.active ? "Activo" : "Inactivo"}</span></p>
             </div>
           `,
           icon: "info",
-          confirmButtonText: "Cerrar",
+          confirmButtonText: "Entendido",
+          confirmButtonColor: "#2563eb",
+          customClass: {
+            popup: 'rounded-[24px]',
+            confirmButton: 'rounded-xl px-8 font-bold uppercase text-xs tracking-widest'
+          }
         });
       }
     } catch (error) {
       console.error("Error al obtener detalles del consecutivo:", error);
-      Swal.fire({
-        title: "Error",
-        text: "No se pudieron obtener los detalles del consecutivo",
-        icon: "error",
-      });
     } finally {
       setLoading(false);
     }
   };
 
-  // Función para asignar un consecutivo existente
   const handleAddNewAssignedConsecutive = async () => {
+    const isNewMapping = !mapping || !mapping._id;
+
+    // Validación: mapping debe existir
+    if (!mapping || !mapping._id) {
+      Swal.fire({ icon: "warning", title: "Atención", text: "Guarde el mapeo primero para asignar consecutivos." });
+      return;
+    }
+
     try {
       setLoading(true);
-      // Primero, obtener la lista de consecutivos disponibles
       const response = await api.getConsecutives(accessToken);
       setLoading(false);
 
-      if (!response.success || !response.data || response.data.length === 0) {
-        Swal.fire({
-          title: "Sin consecutivos",
-          text: "No hay consecutivos disponibles para asignar",
-          icon: "info",
-        });
+      const allConsecutives = Array.isArray(response) ? response : (response.data || []);
+      if (allConsecutives.length === 0) {
+        Swal.fire({ title: "Sin consecutivos", text: "No hay consecutivos disponibles", icon: "info" });
         return;
       }
 
-      // Filtrar los consecutivos ya asignados
       const assignedIds = assignedConsecutives.map((c) => c._id);
-      const availableConsecutives = response.data.filter(
-        (c) => !assignedIds.includes(c._id)
-      );
+      const availableConsecutives = allConsecutives.filter((c) => !assignedIds.includes(c._id));
 
       if (availableConsecutives.length === 0) {
-        Swal.fire({
-          title: "Sin consecutivos",
-          text: "Todos los consecutivos ya están asignados a este mapeo",
-          icon: "info",
-        });
+        Swal.fire({ title: "Sin consecutivos", text: "Todos ya están asignados", icon: "info" });
         return;
       }
 
-      // Crear las opciones para el select
+      // Validar que al menos uno esté activo
+      const activeConsecutives = availableConsecutives.filter(c => c.active);
+      if (activeConsecutives.length === 0) {
+        Swal.fire({ icon: "warning", title: "Sin consecutivos activos", text: "Seleccione un consecutivo que esté activo (enabled: true)" });
+        return;
+      }
+
       const options = availableConsecutives
-        .map((c) => `<option value="${c._id}">${c.name}</option>`)
+        .map((c) => `<option value="${c._id}">${c.name} ${c.active ? "(Activo)" : "(Inactivo)"}</option>`)
         .join("");
 
-      // Mostrar el modal de selección
       const { value: selectedId } = await Swal.fire({
         title: "Asignar Consecutivo",
         html: `
-          <div class="form-group">
-            <label for="consecutive-select">Seleccione un consecutivo:</label>
-            <select id="consecutive-select" class="swal2-select" style="width: 100%; margin-top: 10px;">
+          <div class="text-left">
+            <label class="text-xs font-extrabold uppercase text-slate-500">Seleccione un consecutivo:</label>
+            <select id="consecutive-select" class="w-full rounded-xl border border-slate-200 font-bold">
               ${options}
             </select>
           </div>
@@ -170,255 +145,215 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
         showCancelButton: true,
         confirmButtonText: "Asignar",
         cancelButtonText: "Cancelar",
-        preConfirm: () => {
-          return document.getElementById("consecutive-select").value;
-        },
+        confirmButtonColor: "#2563eb",
+        customClass: { popup: 'rounded-[24px]' },
+        preConfirm: () => document.getElementById("consecutive-select").value,
       });
 
-      if (selectedId) {
-        // Realizar la asignación
-        setLoading(true);
-        const assignResult = await api.assignConsecutive(
-          accessToken,
-          selectedId,
-          {
-            entityType: "mapping",
-            entityId: mapping._id,
-            allowedOperations: ["read", "increment"],
-          }
-        );
+      if (!selectedId) {
         setLoading(false);
+        return;
+      }
 
-        if (assignResult.success) {
-          Swal.fire({
-            title: "Éxito",
-            text: "Consecutivo asignado correctamente",
-            icon: "success",
-          });
+      // Validar que el consecutivo seleccionado esté activo
+      const selectedConsecutive = availableConsecutives.find(c => c._id === selectedId);
+      if (!selectedConsecutive || !selectedConsecutive.active) {
+        Swal.fire({ icon: "warning", title: "Consecutivo Inactivo", text: "No puede asignar un consecutivo inactivo." });
+        setLoading(false);
+        return;
+      }
 
-          // Actualizar la lista de consecutivos asignados
-          const newConsecutive = availableConsecutives.find(
-            (c) => c._id === selectedId
-          );
-          setAssignedConsecutives([...assignedConsecutives, newConsecutive]);
-          setSelectedCentralizedConsecutive(selectedId);
-          setUseCentralizedSystem(true);
-        } else {
-          throw new Error(
-            assignResult.message || "Error al asignar consecutivo"
-          );
-        }
+      // Validar que no haya duplicados
+      if (assignedConsecutives.some(c => c._id === selectedId)) {
+        Swal.fire({ icon: "warning", title: "Duplicado", text: "Este consecutivo ya está asignado a este mapeo." });
+        setLoading(false);
+        return;
+      }
+
+      if (isNewMapping) {
+        handleChange({
+          target: {
+            name: "consecutiveConfig",
+            type: "custom",
+            value: { ...consecutiveConfig, pendingAssignmentId: selectedId, enabled: true }
+          }
+        });
+        setAssignedConsecutives([selectedConsecutive]);
+        setSelectedCentralizedConsecutive(selectedId);
+        setUseCentralizedSystem(true);
+        setLoading(false);
+        Swal.fire({ icon: "success", title: "Asignado", text: "Consecutivo asignado correctamente", timer: 2000, showConfirmButton: false });
+        return;
+      }
+
+      setLoading(true);
+      const assignResult = await api.assignConsecutive(accessToken, selectedId, {
+        entityType: "mapping",
+        entityId: mapping._id,
+        allowedOperations: ["read", "increment"],
+      });
+      setLoading(false);
+
+      if (assignResult && (assignResult._id || assignResult.success)) {
+        const newConsecutive = availableConsecutives.find((c) => c._id === selectedId);
+        setAssignedConsecutives([...assignedConsecutives, newConsecutive]);
+        setSelectedCentralizedConsecutive(selectedId);
+        setUseCentralizedSystem(true);
+        Swal.fire({ title: "Éxito", text: "Asignado correctamente", icon: "success", timer: 2000, showConfirmButton: false });
+      } else {
+        Swal.fire({ icon: "error", title: "Error", text: "No se pudo asignar el consecutivo. Verifique que existan permisos." });
       }
     } catch (error) {
       setLoading(false);
-      console.error("Error al asignar consecutivo:", error);
-      Swal.fire({
-        title: "Error",
-        text: error.message || "No se pudo asignar el consecutivo",
-        icon: "error",
-      });
+      console.error("Error al asignar:", error);
+      Swal.fire({ icon: "error", title: "Error", text: "Ocurrió un error al asignar el consecutivo." });
     }
   };
 
-  // Función para crear y asignar un nuevo consecutivo
   const handleCreateAndAssignConsecutive = async () => {
+    if (!mapping || !mapping._id) {
+      Swal.fire({ icon: "warning", title: "Atención", text: "Guarde el mapeo primero para crear nuevos consecutivos." });
+      return;
+    }
+
     try {
       const { value: formValues } = await Swal.fire({
         title: "Crear Nuevo Consecutivo",
         html: `
-          <div class="form-group" style="margin-bottom: 15px; text-align: left;">
-            <label for="name">Nombre:</label>
-            <input id="name" class="swal2-input" placeholder="Nombre del consecutivo">
-          </div>
-          <div class="form-group" style="margin-bottom: 15px; text-align: left;">
-            <label for="description">Descripción:</label>
-            <input id="description" class="swal2-input" placeholder="Descripción (opcional)">
-          </div>
-          <div class="form-group" style="margin-bottom: 15px; text-align: left;">
-            <label for="current-value">Valor inicial:</label>
-            <input id="current-value" type="number" class="swal2-input" value="0">
-          </div>
-          <div class="form-group" style="margin-bottom: 15px; text-align: left;">
-            <label for="prefix">Prefijo (opcional):</label>
-            <input id="prefix" class="swal2-input" placeholder="Ej: INV-">
-          </div>
-          <div class="form-group" style="margin-bottom: 15px; text-align: left;">
-            <label for="pattern">Patrón de formato (opcional):</label>
-            <input id="pattern" class="swal2-input" placeholder="Ej: {PREFIX}{YEAR}-{VALUE:6}">
+          <div class="flex flex-col gap-4 text-left">
+            <div>
+              <label class="text-xs font-extrabold uppercase text-slate-500">Nombre:</label>
+              <input id="name" class="w-full rounded-xl border border-slate-200 p-3" class="swal2-input" placeholder="Ej: Facturas Ventas">
+            </div>
+            <div>
+              <label class="text-xs font-extrabold uppercase text-slate-500">Valor Inicial:</label>
+              <input class="w-full rounded-xl border border-slate-200" value="0">
+            </div>
+            <div>
+              <label class="text-xs font-extrabold uppercase text-slate-500">Prefijo (Opcional):</label>
+              <input class="w-full rounded-xl border border-slate-200" placeholder="Ej: FAC-">
+            </div>
           </div>
         `,
         focusConfirm: false,
         showCancelButton: true,
         confirmButtonText: "Crear y Asignar",
         cancelButtonText: "Cancelar",
+        confirmButtonColor: "#2563eb",
+        customClass: { popup: 'rounded-[28px]' },
         preConfirm: () => {
           const name = document.getElementById("name").value;
-          const description = document.getElementById("description").value;
-          const currentValue = parseInt(
-            document.getElementById("current-value").value || "0",
-            10
-          );
-          const prefix = document.getElementById("prefix").value;
-          const pattern = document.getElementById("pattern").value;
-
-          if (!name) {
-            Swal.showValidationMessage("El nombre es obligatorio");
-            return false;
-          }
-
+          if (!name) { Swal.showValidationMessage("El nombre es obligatorio"); return false; }
           return {
             name,
-            description,
-            currentValue,
-            prefix,
-            pattern,
+            currentValue: parseInt(document.getElementById("current-value").value || "0", 10),
+            prefix: document.getElementById("prefix").value,
             active: true,
           };
         },
       });
 
-      if (formValues) {
-        // Crear el consecutivo
-        setLoading(true);
-        const createResult = await api.createConsecutive(
-          accessToken,
-          formValues
-        );
-
-        if (createResult.success && createResult.data) {
-          // Asignar el consecutivo recién creado
-          const newConsecutiveId = createResult.data._id;
-          const assignResult = await api.assignConsecutive(
-            accessToken,
-            newConsecutiveId,
-            {
-              entityType: "mapping",
-              entityId: mapping._id,
-              allowedOperations: ["read", "increment"],
-            }
-          );
-
-          if (assignResult.success) {
-            Swal.fire({
-              title: "Éxito",
-              text: "Consecutivo creado y asignado correctamente",
-              icon: "success",
-            });
-
-            // Actualizar la lista de consecutivos asignados
-            setAssignedConsecutives([
-              ...assignedConsecutives,
-              createResult.data,
-            ]);
-            setSelectedCentralizedConsecutive(newConsecutiveId);
-            setUseCentralizedSystem(true);
-          } else {
-            throw new Error(
-              assignResult.message || "Error al asignar consecutivo"
-            );
-          }
-        } else {
-          throw new Error(createResult.message || "Error al crear consecutivo");
-        }
-
+      if (!formValues) {
         setLoading(false);
+        return;
+      }
+
+      setLoading(true);
+      const createResult = await api.createConsecutive(accessToken, formValues);
+      const newConsecutive = (createResult && createResult._id) ? createResult : (createResult?.data);
+
+      if (!newConsecutive || !newConsecutive._id) {
+        setLoading(false);
+        Swal.fire({ icon: "error", title: "Error", text: "No se pudo crear el consecutivo." });
+        return;
+      }
+
+      // Validar que no haya duplicados
+      const assignedIds = [...assignedConsecutives.map(c => c._id), newConsecutive._id];
+      const existingConsecutives = Array.isArray(response) ? response : (response?.data || []);
+      const duplicates = existingConsecutives.filter(c => assignedIds.includes(c._id));
+      if (duplicates.length > 0) {
+        setLoading(false);
+        Swal.fire({ icon: "warning", title: "Duplicado", text: "Este consecutivo ya está asignado." });
+        return;
+      }
+
+      const assignResult = await api.assignConsecutive(accessToken, newConsecutive._id, {
+        entityType: "mapping",
+        entityId: mapping._id,
+        allowedOperations: ["read", "increment"],
+      });
+
+      if (assignResult && (assignResult._id || assignResult.success)) {
+        setAssignedConsecutives([...assignedConsecutives, newConsecutive]);
+        setSelectedCentralizedConsecutive(newConsecutive._id);
+        setUseCentralizedSystem(true);
+        Swal.fire({ icon: "success", title: "Éxito", text: "Creado y asignado correctamente", timer: 2000, showConfirmButton: false });
+      } else {
+        Swal.fire({ icon: "error", title: "Error", text: "No se pudo asignar el consecutivo. Verifique los permisos." });
       }
     } catch (error) {
       setLoading(false);
-      console.error("Error al crear y asignar consecutivo:", error);
-      Swal.fire({
-        title: "Error",
-        text: error.message || "No se pudo crear o asignar el consecutivo",
-        icon: "error",
-      });
+      console.error("Error al crear y asignar:", error);
+      Swal.fire({ icon: "error", title: "Error", text: "Ocurrió un error al crear y asignar el consecutivo." });
     }
   };
 
-  // Función para añadir una asignación de tabla-campo
   const addTableFieldMapping = async () => {
-    // Si no hay tablas configuradas
-    if (!availableTables || availableTables.length === 0) {
-      Swal.fire({
-        icon: "warning",
-        title: "No hay tablas configuradas",
-        text: "Primero configure al menos una tabla en la pestaña 'Tablas y Campos'.",
-      });
+    if (!availableTables.length) {
+      Swal.fire({ icon: "warning", title: "No hay tablas", text: "Configure tablas en 'Tablas y Campos' primero." });
       return;
     }
 
-    // Crear opciones de tablas para el select
     const tableOptions = availableTables
-      .map(
-        (table) =>
-          `<option value="${table.name}">${table.name} (${
-            table.isDetail ? "Detalle" : "Principal"
-          })</option>`
-      )
+      .map(t => `<option value="${t.name}">${t.name} (${t.isDetail ? "Detalle" : "Principal"})</option>`)
       .join("");
 
-    // Mostrar formulario con SweetAlert2
     const { value: formValues } = await Swal.fire({
       title: "Asignar Consecutivo a Tabla",
       html: `
-        <div class="form-group" style="margin-bottom: 15px; text-align: left;">
-          <label for="table-select" style="display: block; margin-bottom: 5px; font-weight: 500;">Seleccione Tabla:</label>
-          <select id="table-select" class="swal2-select" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ddd;">
-            ${tableOptions}
-          </select>
-        </div>
-        <div class="form-group" style="margin-bottom: 15px; text-align: left;">
-          <label for="field-select" style="display: block; margin-bottom: 5px; font-weight: 500;">Campo para Consecutivo:</label>
-          <select id="field-select" class="swal2-select" style="width: 100%; padding: 8px; border-radius: 4px; border: 1px solid #ddd;" disabled>
-            <option value="">Seleccione una tabla primero</option>
-          </select>
+        <div class="flex flex-col gap-4 text-left">
+          <div>
+            <label class="text-xs font-extrabold uppercase text-slate-500">Seleccione Tabla:</label>
+            <select id="table-select" class="w-full rounded-xl border border-slate-200">
+              ${tableOptions}
+            </select>
+          </div>
+          <div>
+            <label class="text-xs font-extrabold uppercase text-slate-500">Campo Destino:</label>
+            <select id="field-select" class="w-full rounded-xl border border-slate-200">
+              <option value="">Seleccione una tabla...</option>
+            </select>
+          </div>
         </div>
       `,
-      focusConfirm: false,
-      showCancelButton: true,
-      confirmButtonText: "Añadir",
-      cancelButtonText: "Cancelar",
       didOpen: () => {
-        // Cuando se abre el modal, configurar el evento change para el select de tabla
-        const tableSelect = document.getElementById("table-select");
-        const fieldSelect = document.getElementById("field-select");
+        const tSel = document.getElementById("table-select");
+        const fSel = document.getElementById("field-select");
 
-        tableSelect.addEventListener("change", () => {
-          // Actualizar opciones de campos basado en la tabla seleccionada
-          const selectedTable = availableTables.find(
-            (t) => t.name === tableSelect.value
-          );
-
-          if (selectedTable && selectedTable.fields.length > 0) {
-            // Habilitar y llenar el select de campos
-            fieldSelect.disabled = false;
-            fieldSelect.innerHTML = selectedTable.fields
-              .map((field) => `<option value="${field}">${field}</option>`)
-              .join("");
+        const updateFields = () => {
+          const selected = availableTables.find(t => t.name === tSel.value);
+          if (selected?.fields.length) {
+            fSel.innerHTML = selected.fields.map(f => `<option value="${f}">${f}</option>`).join("");
           } else {
-            // Si no hay campos, deshabilitar select
-            fieldSelect.disabled = true;
-            fieldSelect.innerHTML =
-              '<option value="">No hay campos disponibles</option>';
+            fSel.innerHTML = '<option value="">Sin campos</option>';
           }
-        });
+        };
 
-        // Disparar evento change en la carga para llenar el primer select de campos
-        if (tableSelect.value) {
-          const event = new Event("change");
-          tableSelect.dispatchEvent(event);
-        }
+        tSel.addEventListener("change", updateFields);
+        updateFields();
       },
       preConfirm: () => {
         const tableSelect = document.getElementById("table-select");
         const fieldSelect = document.getElementById("field-select");
 
         if (!tableSelect.value) {
-          Swal.showValidationMessage("Debe seleccionar una tabla");
+          Swal.showValidationMessage("Seleccione una tabla");
           return false;
         }
 
         if (!fieldSelect.value) {
-          Swal.showValidationMessage("Debe seleccionar un campo");
+          Swal.showValidationMessage("Seleccione un campo");
           return false;
         }
 
@@ -427,602 +362,292 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
           fieldName: fieldSelect.value,
         };
       },
+      confirmButtonColor: "#2563eb",
+      customClass: { popup: 'rounded-[28px]' }
     });
 
-    // Si el usuario canceló, no hacer nada
     if (!formValues) return;
-
-    // Verificar que no exista ya la misma asignación
-    const exists = tableMappings.some(
-      (m) =>
-        m.tableName === formValues.tableName &&
-        m.fieldName === formValues.fieldName
-    );
-
-    if (exists) {
-      Swal.fire({
-        icon: "warning",
-        title: "Asignación duplicada",
-        text: `Ya existe una asignación para la tabla ${formValues.tableName} con el campo ${formValues.fieldName}`,
-      });
+    if (tableMappings.some(m => m.tableName === formValues.tableName && m.fieldName === formValues.fieldName)) {
+      Swal.fire({ icon: "warning", title: "Duplicado", text: "Esta asignación ya existe." });
       return;
     }
 
-    // Actualizar la lista de mapeos
-    const updatedMappings = [...(tableMappings || []), formValues];
-
-    // Actualizar estado local
-    setTableMappings(updatedMappings);
-
-    // Actualizar en el estado global
-    const updatedConfig = {
-      ...consecutiveConfig,
-      applyToTables: updatedMappings,
-    };
-
-    // Simular un evento para el handleChange existente
-    const event = {
-      target: {
-        name: "consecutiveConfig",
-        value: updatedConfig,
-        type: "custom",
-      },
-    };
-
-    handleChange(event);
-
-    // Mostrar mensaje de éxito
-    Swal.fire({
-      icon: "success",
-      title: "Asignación creada",
-      text: `Se ha asignado el campo ${formValues.fieldName} de la tabla ${formValues.tableName} para recibir el consecutivo.`,
-      timer: 2000,
-      showConfirmButton: false,
-    });
+    const updated = [...(tableMappings || []), formValues];
+    setTableMappings(updated);
+    handleChange({ target: { name: "consecutiveConfig", value: { ...consecutiveConfig, applyToTables: updated }, type: "custom" } });
   };
 
-  // Función para eliminar una asignación
   const removeTableFieldMapping = async (index) => {
-    // Pedir confirmación
     const result = await Swal.fire({
-      title: "¿Eliminar asignación?",
-      text: `¿Está seguro que desea eliminar esta asignación de consecutivo?`,
+      title: "¿Eliminar?",
+      text: "Se eliminará esta asignación específica.",
       icon: "warning",
       showCancelButton: true,
-      confirmButtonText: "Sí, eliminar",
-      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#ef4444"
     });
-
     if (!result.isConfirmed) return;
 
-    // Continuar con la eliminación
-    const updatedMappings = [...tableMappings];
-    updatedMappings.splice(index, 1);
-
-    // Actualizar estado local
-    setTableMappings(updatedMappings);
-
-    // Actualizar en el estado global
-    const updatedConfig = {
-      ...consecutiveConfig,
-      applyToTables: updatedMappings,
-    };
-
-    // Simular un evento para el handleChange existente
-    const event = {
-      target: {
-        name: "consecutiveConfig",
-        value: updatedConfig,
-        type: "custom",
-      },
-    };
-
-    handleChange(event);
-
-    // Mostrar mensaje de éxito
-    Swal.fire({
-      icon: "success",
-      title: "Asignación eliminada",
-      timer: 1500,
-      showConfirmButton: false,
-    });
+    const updated = [...tableMappings];
+    updated.splice(index, 1);
+    setTableMappings(updated);
+    handleChange({ target: { name: "consecutiveConfig", value: { ...consecutiveConfig, applyToTables: updated }, type: "custom" } });
   };
 
   return (
-    <ConfigSection>
-      <SectionTitle>Configuración de Numeración Consecutiva</SectionTitle>
+    <div className="relative bg-white border border-slate-200 rounded-[32px] p-8 mb-8 shadow-sm animate-in fade-in duration-500 overflow-hidden">
+      {/* Loading Overlay */}
+      {loading && (
+        <div className="absolute inset-0 bg-white/80 backdrop-blur-md flex flex-col items-center justify-center z-20 animate-in fade-in duration-300">
+          <div className="w-10 h-10 border-4 border-blue-600 border-t-transparent rounded-full animate-spin shadow-lg mb-4" />
+          <span className="text-[10px] font-black uppercase tracking-[0.2em] text-blue-600">Sincronizando...</span>
+        </div>
+      )}
 
-      <CheckboxContainer>
-        <CheckboxInput
+      {/* Header */}
+      <div className="flex flex-col gap-2 mb-10 border-b border-slate-50 pb-6">
+        <h3 className="text-xl font-black text-slate-900 flex items-center gap-3">
+          <div className="w-10 h-10 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-blue-600/20">
+            <FaHashtag />
+          </div>
+          Configuración de Consecutivos
+        </h3>
+        <p className="text-sm text-slate-500 font-medium ml-13">
+          Gestione la numeración automática para sus documentos y registros en el sistema de destino.
+        </p>
+      </div>
+
+      {/* Enable Toggle */}
+      <label className={`flex items-center gap-4 px-8 py-5 rounded-[20px] cursor-pointer transition-all border mb-8 group ${
+        isEnabled ? "bg-blue-50/50 border-blue-200" : "bg-slate-50 border-slate-100 hover:bg-slate-100/50"
+      }`}>
+        <div className={`w-12 h-6 rounded-full p-1 transition-colors relative ${isEnabled ? "bg-blue-600" : "bg-slate-300"}`}>
+          <div className={`w-4 h-4 bg-white rounded-full transition-transform transform ${isEnabled ? "translate-x-6" : "translate-x-0"}`} />
+        </div>
+        <input
           type="checkbox"
+          className="sr-only"
           id="consecutive-enabled"
           name="consecutiveConfig.enabled"
           checked={isEnabled}
           onChange={handleChange}
         />
-        <CheckboxLabel htmlFor="consecutive-enabled">
-          Activar numeración consecutiva automática
-        </CheckboxLabel>
-      </CheckboxContainer>
+        <div className="flex flex-col">
+          <span className={`text-sm font-black uppercase tracking-wider ${isEnabled ? "text-blue-700" : "text-slate-500"}`}>Numeración Automática</span>
+          <span className="text-[10px] font-bold text-slate-400">Activa la generación de folios secuenciales para este proceso</span>
+        </div>
+      </label>
 
       {isEnabled && (
-        <SystemSelectionContainer>
-          <FormLabel>Sistema de consecutivos:</FormLabel>
-          <RadioGroup>
-            <RadioOption>
-              <input
-                type="radio"
-                id="local-system"
-                name="consecutive-system"
-                checked={!useCentralizedSystem}
-                onChange={() => setUseCentralizedSystem(false)}
-              />
-              <label htmlFor="local-system">
-                Sistema local (configuración específica para este mapeo)
-              </label>
-            </RadioOption>
+        <div className="flex flex-col gap-10 animate-in slide-in-from-top-4 duration-500">
+          {/* System Selection */}
+          <div className="p-8 bg-slate-50/50 border border-slate-200 rounded-[24px] flex flex-col gap-6">
+            <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
+              <FaCogs /> Sistema de Ejecución
+            </span>
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+              {[
+                { id: "local-system", label: "Sistema Local", sub: "Configuración específica para este mapeo", icon: <FaLayerGroup />, active: !useCentralizedSystem, val: false },
+                { id: "centralized-system", label: "Sistema Centralizado", sub: "Consecutivos compartidos en toda la red", icon: <FaShareAlt />, active: useCentralizedSystem, val: true }
+              ].map(opt => (
+                <div
+                  key={opt.id}
+                  onClick={() => setUseCentralizedSystem(opt.val)}
+                  className={`p-6 rounded-2xl border-2 cursor-pointer transition-all flex items-start gap-4 ${
+                    opt.active ? "bg-white border-blue-500 shadow-xl shadow-blue-500/5 ring-4 ring-blue-500/5" : "bg-white/50 border-slate-100 hover:border-slate-300 grayscale opacity-60"
+                  }`}
+                >
+                  <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${opt.active ? "bg-blue-600 text-white shadow-lg" : "bg-slate-100 text-slate-400"}`}>
+                    {opt.icon}
+                  </div>
+                  <div className="flex flex-col gap-0.5">
+                    <span className={`text-sm font-black ${opt.active ? "text-slate-900" : "text-slate-400"}`}>{opt.label}</span>
+                    <span className="text-[11px] font-medium text-slate-400 leading-tight">{opt.sub}</span>
+                  </div>
+                </div>
+              ))}
+            </div>
 
-            <RadioOption>
-              <input
-                type="radio"
-                id="centralized-system"
-                name="consecutive-system"
-                checked={useCentralizedSystem}
-                onChange={() => setUseCentralizedSystem(true)}
-              />
-              <label htmlFor="centralized-system">
-                Sistema centralizado (consecutivos compartidos)
-              </label>
-            </RadioOption>
-          </RadioGroup>
+            {useCentralizedSystem && (
+              <div className="mt-4 p-8 bg-white border border-slate-200 rounded-[24px] shadow-sm animate-in zoom-in-95 duration-300">
+                {assignedConsecutives.length > 0 ? (
+                  <div className="flex flex-col gap-6">
+                    <div className="flex flex-col gap-2">
+                      <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Consecutivo Asignado</label>
+                      <select
+                        className="w-full px-5 py-4 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 font-black transition-all appearance-none"
+                        value={selectedCentralizedConsecutive}
+                        onChange={(e) => setSelectedCentralizedConsecutive(e.target.value)}
+                      >
+                        {assignedConsecutives.map((c) => (
+                          <option key={c._id} value={c._id}>{c.name}</option>
+                        ))}
+                      </select>
+                    </div>
 
-          {useCentralizedSystem && (
-            <CentralizedOptions>
-              {assignedConsecutives.length > 0 ? (
-                <>
-                  <FormLabel htmlFor="centralized-consecutive">
-                    Consecutivo asignado:
-                  </FormLabel>
-                  <Select
-                    id="centralized-consecutive"
-                    value={selectedCentralizedConsecutive}
-                    onChange={(e) =>
-                      setSelectedCentralizedConsecutive(e.target.value)
-                    }
-                  >
-                    {assignedConsecutives.map((consecutive) => (
-                      <option key={consecutive._id} value={consecutive._id}>
-                        {consecutive.name}
-                      </option>
+                    <div className="flex gap-3 pt-2">
+                      <Button variant="ghost" onClick={handleViewConsecutiveDetails} className="font-bold flex items-center gap-2">
+                        <FaEye className="text-blue-500" /> Ver Detalles
+                      </Button>
+                      <Button variant="ghost" onClick={handleAddNewAssignedConsecutive} className="font-bold flex items-center gap-2">
+                        <FaPlus className="text-blue-500" /> Asignar Otro
+                      </Button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="flex flex-col items-center gap-6 py-4 text-center">
+                    <div className="w-16 h-16 bg-blue-50 rounded-full flex items-center justify-center">
+                      <FaInfoCircle className="text-2xl text-blue-500 opacity-30" />
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-sm font-black text-slate-900">No hay vinculaciones activas</span>
+                      <p className="text-xs text-slate-400 max-w-[280px]">Asigne un consecutivo existente o cree uno nuevo para habilitar este sistema.</p>
+                    </div>
+                    <div className="flex gap-3">
+                      <Button onClick={handleAddNewAssignedConsecutive} variant="secondary" className="px-6">Vincular Existente</Button>
+                      <Button onClick={handleCreateAndAssignConsecutive} disabled={!mapping?._id} className="px-6 shadow-lg shadow-blue-600/20">Crear Nuevo</Button>
+                    </div>
+                  </div>
+                )}
+              </div>
+            )}
+          </div>
+
+          {/* Destination Fields */}
+          <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900 px-1">Campo Encabezado</label>
+                <p className="text-[10px] text-slate-400 font-medium px-1 mb-2">Campo en la tabla principal que recibirá el folio</p>
+                <input
+                  type="text"
+                  name="consecutiveConfig.fieldName"
+                  placeholder="Ej: NUM_FACTURA"
+                  className="w-full px-5 py-4 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-white font-black transition-all shadow-sm placeholder:text-slate-200"
+                  value={consecutiveConfig.fieldName || ""}
+                  onChange={handleChange}
+                />
+              </div>
+            </div>
+
+            <div className="flex flex-col gap-4">
+              <div className="flex flex-col gap-1">
+                <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900 px-1">Campo Detalle (Opcional)</label>
+                <p className="text-[10px] text-slate-400 font-medium px-1 mb-2">Campo en la tabla de detalle para vinculación</p>
+                <input
+                  type="text"
+                  name="consecutiveConfig.detailFieldName"
+                  placeholder="Ej: NUM_PEDIDO"
+                  className="w-full px-5 py-4 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-white font-black transition-all shadow-sm placeholder:text-slate-200"
+                  value={consecutiveConfig.detailFieldName || ""}
+                  onChange={handleChange}
+                />
+              </div>
+            </div>
+          </div>
+
+          {/* Local Config Specifics */}
+          {!useCentralizedSystem && (
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-8 bg-slate-50/50 border border-slate-200 rounded-[24px] animate-in slide-in-from-right-4 duration-500">
+              <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Último Valor Usado</label>
+                  <input
+                    type="number"
+                    name="consecutiveConfig.lastValue"
+                    className="w-full px-5 py-4 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-white font-black transition-all"
+                    value={consecutiveConfig.lastValue || 0}
+                    onChange={handleChange}
+                  />
+                  <small className="text-[10px] text-blue-600 font-bold px-1">El próximo valor generado será {Number(consecutiveConfig.lastValue || 0) + 1}</small>
+                </div>
+
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Prefijo Local</label>
+                  <input
+                    type="text"
+                    name="consecutiveConfig.prefix"
+                    placeholder="Ej: INV-"
+                    className="w-full px-5 py-4 border border-slate-200 rounded-2xl text-sm focus:outline-none focus:border-blue-500 bg-white font-black transition-all"
+                    value={consecutiveConfig.prefix || ""}
+                    onChange={handleChange}
+                  />
+                </div>
+              </div>
+
+              <div className="flex flex-col gap-6">
+                <div className="flex flex-col gap-2">
+                  <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Formato de Patrón</label>
+                  <input
+                    type="text"
+                    name="consecutiveConfig.pattern"
+                    placeholder="Ej: {PREFIX}{YEAR}-{VALUE:6}"
+                    className="w-full px-5 py-4 border border-slate-200 rounded-2xl font-mono text-sm focus:outline-none focus:border-blue-500 bg-white font-black transition-all"
+                    value={consecutiveConfig.pattern || ""}
+                    onChange={handleChange}
+                  />
+                  <div className="grid grid-cols-2 gap-x-4 gap-y-1 mt-2 px-1">
+                    {["{PREFIX}", "{YEAR}", "{VALUE:n}", "{MONTH}", "{DAY}"].map(v => (
+                      <span key={v} className="text-[9px] font-bold text-slate-400 font-mono">{v}</span>
                     ))}
-                  </Select>
+                  </div>
+                </div>
 
-                  <HelpText>
-                    El consecutivo seleccionado será utilizado para generar
-                    valores automáticamente. Los campos configurados a
-                    continuación se usarán para determinar dónde se asignarán
-                    los valores.
-                  </HelpText>
-
-                  <CentralizedActions>
-                    <Button onClick={handleViewConsecutiveDetails}>
-                      Ver detalles
-                    </Button>
-                    <Button onClick={handleAddNewAssignedConsecutive}>
-                      Asignar otro consecutivo
-                    </Button>
-                  </CentralizedActions>
-                </>
-              ) : (
-                <EmptyAssigned>
-                  <p>No hay consecutivos asignados actualmente.</p>
-                  <Button onClick={handleAddNewAssignedConsecutive}>
-                    Asignar un consecutivo existente
-                  </Button>
-                  <Button onClick={handleCreateAndAssignConsecutive}>
-                    Crear y asignar nuevo consecutivo
-                  </Button>
-                </EmptyAssigned>
-              )}
-            </CentralizedOptions>
+                <label className="flex items-center gap-3 cursor-pointer group mt-2">
+                  <input
+                    type="checkbox"
+                    name="consecutiveConfig.updateAfterTransfer"
+                    className="w-5 h-5 rounded border-slate-300 text-blue-600 focus:ring-blue-500"
+                    checked={consecutiveConfig.updateAfterTransfer !== false}
+                    onChange={handleChange}
+                  />
+                  <span className="text-xs font-bold text-slate-600 group-hover:text-slate-900 transition-colors">Actualización inmediata (por documento)</span>
+                </label>
+              </div>
+            </div>
           )}
-        </SystemSelectionContainer>
-      )}
 
-      {/* Solo mostrar la configuración local si se selecciona el sistema local */}
-      {isEnabled && !useCentralizedSystem && (
-        <>
-          <FormGroup>
-            <FormLabel htmlFor="field-name">Campo en encabezado:</FormLabel>
-            <FormInput
-              type="text"
-              id="field-name"
-              name="consecutiveConfig.fieldName"
-              placeholder="Nombre del campo en tabla principal (ej: NUM_CONSECUTIVO)"
-              value={consecutiveConfig.fieldName || ""}
-              onChange={handleChange}
-            />
-            <HelpText>
-              Nombre del campo donde se guardará el consecutivo en la tabla
-              principal
-            </HelpText>
-          </FormGroup>
+          {/* Table-Specific Mappings */}
+          <div className="p-8 bg-slate-50 border border-slate-100 rounded-[32px] flex flex-col gap-6">
+            <div className="flex justify-between items-center px-1">
+              <div className="flex flex-col gap-1">
+                <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900">Asignación Específica por Tablas</span>
+                <p className="text-[10px] text-slate-400 font-medium">Prioridad máxima sobre campos generales</p>
+              </div>
+              <Button onClick={addTableFieldMapping} className="px-6 py-2.5 text-[10px] font-black uppercase shadow-lg shadow-blue-600/20">
+                <FaPlus className="mr-2" /> Añadir Mapeo
+              </Button>
+            </div>
 
-          <FormGroup>
-            <FormLabel htmlFor="detail-field-name">Campo en detalle:</FormLabel>
-            <FormInput
-              type="text"
-              id="detail-field-name"
-              name="consecutiveConfig.detailFieldName"
-              placeholder="Nombre del campo en tabla de detalle (ej: NUM_CONSECUTIVO)"
-              value={consecutiveConfig.detailFieldName || ""}
-              onChange={handleChange}
-            />
-            <HelpText>
-              Nombre del campo donde se guardará el mismo consecutivo en la
-              tabla de detalle
-            </HelpText>
-          </FormGroup>
-
-          {/* Nueva sección para asignación específica de campos a tablas */}
-          <TableFieldMapping>
-            <FormLabel>Asignación específica por tablas:</FormLabel>
-            <HelpText>
-              Configure campos específicos para cada tabla que necesita el
-              consecutivo. Esto tiene prioridad sobre los campos generales
-              definidos arriba.
-            </HelpText>
-
-            <AddButton onClick={addTableFieldMapping}>
-              + Añadir tabla y campo
-            </AddButton>
-
-            <TablesList>
+            <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-2">
               {tableMappings && tableMappings.length > 0 ? (
-                tableMappings.map((mapping, index) => (
-                  <TableItem key={index}>
-                    <strong>Tabla:</strong> {mapping.tableName}
-                    <br />
-                    <strong>Campo:</strong> {mapping.fieldName}
-                    <RemoveButton
-                      onClick={() => removeTableFieldMapping(index)}
-                    >
-                      Eliminar
-                    </RemoveButton>
-                  </TableItem>
+                tableMappings.map((m, index) => (
+                  <div key={index} className="p-6 bg-white border border-slate-200 rounded-[20px] shadow-sm hover:border-blue-300 transition-all group flex flex-col gap-4">
+                    <div className="flex justify-between items-start">
+                      <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors">
+                        <FaLayerGroup />
+                      </div>
+                      <button onClick={() => removeTableFieldMapping(index)} className="text-slate-300 hover:text-red-500 transition-colors p-1">
+                        <FaTrash className="text-sm" />
+                      </button>
+                    </div>
+                    <div className="flex flex-col gap-1">
+                      <span className="text-[10px] font-black text-blue-600 uppercase tracking-widest">{m.tableName}</span>
+                      <span className="text-sm font-black text-slate-900">{m.fieldName}</span>
+                    </div>
+                  </div>
                 ))
               ) : (
-                <HelpText>
-                  No hay asignaciones específicas configuradas. Si no configura
-                  asignaciones específicas, se usarán los campos generales
-                  definidos arriba.
-                </HelpText>
+                <div className="col-span-full py-12 flex flex-col items-center justify-center gap-3 opacity-30">
+                  <FaInfoCircle className="text-2xl" />
+                  <span className="text-xs font-black uppercase tracking-widest">Sin mapeos específicos</span>
+                </div>
               )}
-            </TablesList>
-          </TableFieldMapping>
-
-          <FormGroup>
-            <FormLabel htmlFor="last-value">Último valor usado:</FormLabel>
-            <FormInput
-              type="text"
-              id="last-value"
-              name="consecutiveConfig.lastValue"
-              value={consecutiveConfig.lastValue || 0}
-              onChange={handleChange}
-              placeholder="0"
-            />
-            <HelpText>El próximo consecutivo será este valor + 1</HelpText>
-          </FormGroup>
-
-          <FormGroup>
-            <FormLabel htmlFor="prefix">Prefijo (opcional):</FormLabel>
-            <FormInput
-              type="text"
-              id="prefix"
-              name="consecutiveConfig.prefix"
-              placeholder="Ej: INV-"
-              value={consecutiveConfig.prefix || ""}
-              onChange={handleChange}
-            />
-            <HelpText>
-              Texto que se añadirá antes del número (ej: "FAC-", "INV-", etc.)
-            </HelpText>
-          </FormGroup>
-
-          <FormGroup>
-            <FormLabel htmlFor="pattern">Formato (opcional):</FormLabel>
-            <FormInput
-              type="text"
-              id="pattern"
-              name="consecutiveConfig.pattern"
-              placeholder="Ej: {PREFIX}{VALUE:6}"
-              value={consecutiveConfig.pattern || ""}
-              onChange={handleChange}
-            />
-            <HelpText>Formato del consecutivo. Variables disponibles:</HelpText>
-            <HelpText>{"{PREFIX}"}: Prefijo especificado arriba</HelpText>
-            <HelpText>
-              {"{VALUE:n}"}: Número consecutivo con n dígitos (ej: {"{VALUE:6}"}{" "}
-              para 000001)
-            </HelpText>
-            <HelpText>{"{YEAR}"}: Año actual (ej: 2023)</HelpText>
-            <HelpText>
-              {"{MONTH}"}: Mes actual con dos dígitos (ej: 05)
-            </HelpText>
-            <HelpText>{"{DAY}"}: Día actual con dos dígitos (ej: 09)</HelpText>
-            <HelpText>
-              Ejemplo: {"{PREFIX}{YEAR}-{VALUE:4}"} generará "FAC2023-0001"
-            </HelpText>
-          </FormGroup>
-
-          <CheckboxContainer>
-            <CheckboxInput
-              type="checkbox"
-              id="update-after"
-              name="consecutiveConfig.updateAfterTransfer"
-              checked={consecutiveConfig.updateAfterTransfer !== false}
-              onChange={handleChange}
-            />
-            <CheckboxLabel htmlFor="update-after">
-              Actualizar consecutivo inmediatamente después de cada documento
-            </CheckboxLabel>
-          </CheckboxContainer>
-          <HelpText>
-            Si está desactivado, el consecutivo se actualizará al finalizar todo
-            el proceso
-          </HelpText>
-        </>
+            </div>
+          </div>
+        </div>
       )}
-
-      {loading && (
-        <LoadingOverlay>
-          <LoadingSpinner />
-          Cargando...
-        </LoadingOverlay>
-      )}
-    </ConfigSection>
+    </div>
   );
 };
 
 export default ConsecutiveConfigSection;
-
-// Estilos para el componente
-const ConfigSection = styled.div`
-  position: relative;
-  background-color: ${({ theme }) => theme?.cardBg || "#ffffff"};
-  border-radius: 8px;
-  padding: 1.5rem;
-  margin-bottom: 1.5rem;
-  box-shadow: 0 1px 3px rgba(0, 0, 0, 0.1);
-`;
-
-const SectionTitle = styled.h3`
-  font-size: 1.1rem;
-  font-weight: 600;
-  margin-bottom: 1.25rem;
-  color: ${({ theme }) => theme?.primary || "#333"};
-  border-bottom: 1px solid ${({ theme }) => theme?.border || "#eee"};
-  padding-bottom: 0.5rem;
-`;
-
-const FormGroup = styled.div`
-  margin-bottom: 1rem;
-`;
-
-const FormLabel = styled.label`
-  display: block;
-  margin-bottom: 0.5rem;
-  font-weight: 500;
-  color: ${({ theme }) => theme?.textSecondary || "#555"};
-`;
-
-const FormInput = styled.input`
-  width: 100%;
-  padding: 0.5rem;
-  border: 1px solid ${({ theme }) => theme?.border || "#ccc"};
-  border-radius: 4px;
-  font-size: 14px;
-
-  &:focus {
-    outline: none;
-    border-color: ${({ theme }) => theme?.primary || "#0275d8"};
-    box-shadow: 0 0 0 2px rgba(2, 117, 216, 0.25);
-  }
-`;
-
-const Select = styled.select`
-  width: 100%;
-  padding: 0.5rem;
-  border: 1px solid ${({ theme }) => theme?.border || "#ccc"};
-  border-radius: 4px;
-  font-size: 14px;
-  margin-bottom: 1rem;
-
-  &:focus {
-    outline: none;
-    border-color: ${({ theme }) => theme?.primary || "#0275d8"};
-  }
-`;
-
-const CheckboxContainer = styled.div`
-  display: flex;
-  align-items: center;
-  margin-bottom: 0.75rem;
-`;
-
-const CheckboxInput = styled.input`
-  margin-right: 8px;
-  width: 16px;
-  height: 16px;
-`;
-
-const CheckboxLabel = styled.label`
-  font-size: 14px;
-  user-select: none;
-  cursor: pointer;
-`;
-
-const SystemSelectionContainer = styled.div`
-  margin-bottom: 1.5rem;
-  padding: 1rem;
-  background-color: ${({ theme }) => theme?.tableHeader || "#f8f9fa"};
-  border-radius: 6px;
-`;
-
-const RadioGroup = styled.div`
-  margin: 0.75rem 0;
-`;
-
-const RadioOption = styled.div`
-  display: flex;
-  align-items: center;
-  margin-bottom: 0.5rem;
-
-  input {
-    margin-right: 0.5rem;
-  }
-
-  label {
-    cursor: pointer;
-  }
-`;
-
-const CentralizedOptions = styled.div`
-  margin-top: 1rem;
-  padding: 0.75rem;
-  background-color: ${({ theme }) => theme?.cardBg || "#ffffff"};
-  border-radius: 6px;
-  border: 1px solid ${({ theme }) => theme?.border || "#eee"};
-`;
-
-const CentralizedActions = styled.div`
-  display: flex;
-  gap: 0.5rem;
-  margin-top: 1rem;
-`;
-
-const Button = styled.button`
-  padding: 0.5rem 0.75rem;
-  background-color: ${({ theme }) => theme?.primary || "#0275d8"};
-  color: white;
-  border: none;
-  border-radius: 4px;
-  font-size: 14px;
-  cursor: pointer;
-
-  &:hover {
-    background-color: ${({ theme }) => theme?.primaryHover || "#0269c2"};
-  }
-`;
-
-const EmptyAssigned = styled.div`
-  padding: 1rem;
-  text-align: center;
-
-  p {
-    margin-bottom: 1rem;
-    color: ${({ theme }) => theme?.textSecondary || "#6c757d"};
-  }
-
-  button {
-    margin: 0.5rem;
-  }
-`;
-
-const HelpText = styled.small`
-  display: block;
-  margin-top: 0.25rem;
-  color: ${({ theme }) => theme?.textSecondary || "#6c757d"};
-  font-size: 12px;
-`;
-
-// Componente para seleccionar tablas y campos
-const TableFieldMapping = styled.div`
-  margin-top: 1rem;
-  padding: 0.75rem;
-  background-color: ${({ theme }) => theme?.tableHeader || "#f8f9fa"};
-  border-radius: 6px;
-`;
-
-const TablesList = styled.div`
-  max-height: 250px;
-  overflow-y: auto;
-  margin-top: 0.5rem;
-`;
-
-const TableItem = styled.div`
-  padding: 0.5rem;
-  margin-bottom: 0.5rem;
-  background-color: ${({ theme }) => theme?.cardBg || "#fff"};
-  border: 1px solid ${({ theme }) => theme?.border || "#eee"};
-  border-radius: 4px;
-`;
-
-const AddButton = styled.button`
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  padding: 0.35rem 0.75rem;
-  font-size: 0.8rem;
-  background-color: ${({ theme }) => theme?.primary || "#0275d8"};
-  color: white;
-  border: none;
-  border-radius: 4px;
-  cursor: pointer;
-  margin-bottom: 0.5rem;
-
-  &:hover {
-    background-color: ${({ theme }) => theme?.primaryHover || "#0069d9"};
-  }
-`;
-
-const RemoveButton = styled.button`
-  padding: 0.2rem 0.5rem;
-  font-size: 0.7rem;
-  background-color: ${({ theme }) => theme?.danger || "#dc3545"};
-  color: white;
-  border: none;
-  border-radius: 3px;
-  cursor: pointer;
-  margin-left: 0.5rem;
-
-  &:hover {
-    background-color: ${({ theme }) => theme?.dangerHover || "#bd2130"};
-  }
-`;
-
-const LoadingOverlay = styled.div`
-  position: absolute;
-  top: 0;
-  left: 0;
-  right: 0;
-  bottom: 0;
-  background-color: rgba(255, 255, 255, 0.7);
-  display: flex;
-  flex-direction: column;
-  justify-content: center;
-  align-items: center;
-  z-index: 10;
-  border-radius: 8px;
-  font-size: 14px;
-  color: ${({ theme }) => theme?.primary || "#0275d8"};
-`;
-
-const LoadingSpinner = styled.div`
-  width: 30px;
-  height: 30px;
-  border: 3px solid #f3f3f3;
-  border-top: 3px solid ${({ theme }) => theme?.primary || "#0275d8"};
-  border-radius: 50%;
-  animation: spin 1s linear infinite;
-  margin-bottom: 10px;
-
-  @keyframes spin {
-    0% {
-      transform: rotate(0deg);
-    }
-    100% {
-      transform: rotate(360deg);
-    }
-  }
-`;

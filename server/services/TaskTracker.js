@@ -1,5 +1,5 @@
 const UnifiedCancellationService = require("./UnifiedCancellationService");
-const TransferTask = require("../models/transferTaks");
+const TransferTask = require("../models/transferTaskModel");
 const logger = require("./logger");
 const { sendProgress } = require("./progressSse");
 
@@ -43,8 +43,7 @@ class TaskTracker {
       }
 
       logger.debug(
-        `TaskId: ${taskId}, tipo: ${typeof taskId}, longitud: ${
-          taskId?.length
+        `TaskId: ${taskId}, tipo: ${typeof taskId}, longitud: ${taskId?.length
         }, esValidObjectId: ${isValidObjectId}`
       );
 

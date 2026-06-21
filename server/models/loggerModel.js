@@ -13,12 +13,11 @@ const LogSchema = new Schema(
     message: {
       type: String,
       required: true,
-      maxlength: 2000,
+      maxlength: 10000,
     },
     timestamp: {
       type: Date,
       default: Date.now,
-      index: true,
     },
     source: {
       type: String,
@@ -27,7 +26,7 @@ const LogSchema = new Schema(
     },
     stack: {
       type: String,
-      maxlength: 5000,
+      maxlength: 10000,
     },
     metadata: {
       type: Schema.Types.Mixed,
@@ -39,9 +38,7 @@ const LogSchema = new Schema(
     },
     ip: {
       type: String,
-      index: true,
     },
-    // Nuevos campos para mejor tracking
     sessionId: String,
     requestId: String,
     processId: {
@@ -51,6 +48,67 @@ const LogSchema = new Schema(
     environment: {
       type: String,
       default: process.env.NODE_ENV || "development",
+    },
+    // === CAMPOS OPERACIONALES (nuevos) ===
+    operationType: {
+      type: String,
+      enum: ["TRANSFER", "LOAD", "DELETE", "UPDATE", "CREATE", "QUERY", "EXECUTE", "OTHER"],
+      default: "OTHER",
+      index: true,
+    },
+    entityType: {
+      type: String,
+      enum: ["PEDIDO", "CLIENTE", "CARGA", "ARTICULO", "VENDEDOR", "TRASPASO", "TAREA", "USUARIO", "OTHER"],
+      default: "OTHER",
+      index: true,
+    },
+    entityId: String,
+    affectedRecords: {
+      type: Number,
+      default: 0,
+    },
+    durationMs: {
+      type: Number,
+      default: 0,
+    },
+    // === CAMPOS ADICIONALES (nuevos) ===
+    serverSource: {
+      type: String,
+      enum: ["server1", "server2", "mongodb", "unknown"],
+      default: "unknown",
+    },
+    query: {
+      type: String,
+      maxlength: 5000,
+    },
+    // === CONTEXTO HTTP (nuevos) ===
+    httpMethod: {
+      type: String,
+      enum: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
+    },
+    httpPath: String,
+    httpStatusCode: Number,
+    // === CAMPOS DE ERROR MEJORADOS (nuevos) ===
+    errorCode: String,
+    errorDetails: {
+      type: Schema.Types.Mixed,
+    },
+    // === CAMPOS DE TRANSACCIÓN (nuevos) ===
+    transactionId: String,
+    loadId: String,
+    taskId: String,
+    // === CAMPOS DE MAPPING (nuevos) ===
+    mappingId: { type: String, index: true },
+    mappingName: String,
+    fieldName: String,
+    failedValue: Schema.Types.Mixed,
+    tableSource: String,
+    tableTarget: String,
+    documentId: String,
+    stepName: String,
+    originalStack: {
+      type: String,
+      maxlength: 10000,
     },
   },
   {
@@ -63,6 +121,9 @@ const LogSchema = new Schema(
 LogSchema.index({ level: 1, timestamp: -1 });
 LogSchema.index({ source: 1, timestamp: -1 });
 LogSchema.index({ timestamp: -1, level: 1 });
+LogSchema.index({ level: 1, mappingId: 1, timestamp: -1 });
+LogSchema.index({ mappingId: 1, timestamp: -1 });
+LogSchema.index({ transactionId: 1, timestamp: -1 });
 
 // TTL para logs antiguos (opcional - 30 días)
 LogSchema.index({ timestamp: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });
@@ -81,6 +142,30 @@ LogSchema.statics.createLog = async function (level, message, options = {}) {
       ip: options.ip,
       sessionId: options.sessionId,
       requestId: options.requestId,
+      operationType: options.operationType || "OTHER",
+      entityType: options.entityType || "OTHER",
+      entityId: options.entityId,
+      affectedRecords: options.affectedRecords || 0,
+      durationMs: options.durationMs || 0,
+      serverSource: options.serverSource || "unknown",
+      query: options.query,
+      httpMethod: options.httpMethod,
+      httpPath: options.httpPath,
+      httpStatusCode: options.httpStatusCode,
+      errorCode: options.errorCode,
+      errorDetails: options.errorDetails,
+      transactionId: options.transactionId,
+      loadId: options.loadId,
+      taskId: options.taskId,
+      mappingId: options.mappingId,
+      mappingName: options.mappingName,
+      fieldName: options.fieldName,
+      failedValue: options.failedValue,
+      tableSource: options.tableSource,
+      tableTarget: options.tableTarget,
+      documentId: options.documentId,
+      stepName: options.stepName,
+      originalStack: options.originalStack,
     };
 
     // Limpiar campos undefined
@@ -116,6 +201,30 @@ LogSchema.statics.createBulkLogs = async function (logs) {
       ip: log.ip,
       sessionId: log.sessionId,
       requestId: log.requestId,
+      operationType: log.operationType || "OTHER",
+      entityType: log.entityType || "OTHER",
+      entityId: log.entityId,
+      affectedRecords: log.affectedRecords || 0,
+      durationMs: log.durationMs || 0,
+      serverSource: log.serverSource || "unknown",
+      query: log.query,
+      httpMethod: log.httpMethod,
+      httpPath: log.httpPath,
+      httpStatusCode: log.httpStatusCode,
+      errorCode: log.errorCode,
+      errorDetails: log.errorDetails,
+      transactionId: log.transactionId,
+      loadId: log.loadId,
+      taskId: log.taskId,
+      mappingId: log.mappingId,
+      mappingName: log.mappingName,
+      fieldName: log.fieldName,
+      failedValue: log.failedValue,
+      tableSource: log.tableSource,
+      tableTarget: log.tableTarget,
+      documentId: log.documentId,
+      stepName: log.stepName,
+      originalStack: log.originalStack,
     }));
 
     return await this.insertMany(cleanLogs, { ordered: false });

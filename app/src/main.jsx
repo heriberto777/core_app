@@ -5,6 +5,7 @@ import { AuthProvider } from "./index.js";
 import { App } from "./App.jsx";
 // import "react-toastify/dist/ReactToastify.css";
 // import "sweetalert2/src/sweetalert2.scss";
+import "./index.css";
 import "./App.css";
 
 class ErrorBoundary extends React.Component {
