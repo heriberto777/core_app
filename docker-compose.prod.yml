@@ -12,7 +12,7 @@ services:
         reservations:
           memory: 128M
     expose:
-      - "3000"
+      - "3979"
 
   frontend:
     image: ghcr.io/heriberto777/core_app-frontend:latest
