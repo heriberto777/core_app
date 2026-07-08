@@ -135,6 +135,14 @@ app.use((err, req, res, next) => {
   next(err);
 });
 
+// Evita que el navegador cachee respuestas de la API vía ETag/If-None-Match.
+// Sin esto, un 304 Not Modified llega sin cuerpo y rompe cualquier fetch().json()
+// del frontend con "SyntaxError: JSON.parse: unexpected character at line 1 column 1".
+app.use("/api", (req, res, next) => {
+  res.setHeader("Cache-Control", "no-store");
+  next();
+});
+
 // Rutas
 app.use(`/api/${API_VERSION}/auth`, require("./routes/auth"));
 app.use(`/api/${API_VERSION}/modules`, require("./routes/moduleRoutes"));
