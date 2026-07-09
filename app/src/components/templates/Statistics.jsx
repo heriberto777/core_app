@@ -7,7 +7,7 @@ import {
   Button,
   LoadingUI
 } from "../../index";
-import { FaSync, FaChartLine } from "react-icons/fa";
+import { FaSync, FaChartLine, FaExclamationTriangle } from "react-icons/fa";
 
 /**
  * Statistics (Tailwind Edition)
@@ -23,6 +23,7 @@ export function Statistics() {
     stats,
     loading,
     refreshing,
+    error,
     filters,
     actions
   } = useSystemStats(accessToken);
@@ -74,6 +75,12 @@ export function Statistics() {
       {/* CONTENT */}
       {loading && !refreshing ? (
         <LoadingUI message="Analizando macro-métricas del ecosistema..." />
+      ) : error ? (
+        <div className="flex flex-col items-center justify-center p-20 gap-5 text-center bg-white rounded-3xl border border-slate-100">
+          <FaExclamationTriangle size={40} className="text-red-500" />
+          <p className="font-bold text-red-500">{error}</p>
+          <Button variant="primary" onClick={actions.refreshStats}>Reintentar</Button>
+        </div>
       ) : (
         <div className="animate-fadeIn">
           <IntelligenceGrids stats={stats} />

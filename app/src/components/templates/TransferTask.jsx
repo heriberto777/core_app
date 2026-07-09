@@ -1,4 +1,5 @@
 import React, { useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import {
   FaPlus, FaSync, FaLink, FaChartLine, FaList, FaTable,
@@ -79,6 +80,7 @@ function FilterButton({ children, active, onClick }) {
 }
 
 export function TransferTasks() {
+  const navigate = useNavigate();
   const {
     tasks, allTasks, loading, refreshing, filters, search,
     taskEstimates, setSearch, setFilters,

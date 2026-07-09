@@ -307,7 +307,7 @@ class LoadsApi {
    */
   async getTraspasoDetails(accessToken, traspasoId) {
     try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/traspasos/details/${traspasoId}`;
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/traspasos/${traspasoId}`;
 
       const response = await fetch(url, {
         headers: {

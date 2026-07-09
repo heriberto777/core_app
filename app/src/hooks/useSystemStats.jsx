@@ -26,16 +26,10 @@ export const useSystemStats = (accessToken) => {
 
     const fetchStatsCallback = useCallback(async () => {
         if (!accessToken) return null;
-        try {
-            const stats = await auditApi.getTransferStats(accessToken, {
-                timeRange,
-                taskId: selectedTask !== "all" ? selectedTask : undefined,
-            });
-            return stats || generateMockData();
-        } catch (e) {
-            console.warn("API Stats failed, using mock data:", e);
-            return generateMockData();
-        }
+        return await auditApi.getTransferStats(accessToken, {
+            timeRange,
+            taskId: selectedTask !== "all" ? selectedTask : undefined,
+        });
     }, [accessToken, timeRange, selectedTask]);
 
     const {
@@ -48,36 +42,6 @@ export const useSystemStats = (accessToken) => {
         autoRefresh: true,
         refreshInterval: 60000 // 1 minuto para estadísticas
     });
-
-    function generateMockData() {
-        const lastDays = Array.from({ length: 7 }, (_, i) => {
-            const d = new Date();
-            d.setDate(d.getDate() - (6 - i));
-            return d.toISOString().split("T")[0];
-        });
-
-        return {
-            transfersByDay: lastDays.map(date => ({
-                date,
-                completed: Math.floor(Math.random() * 20) + 10,
-                failed: Math.floor(Math.random() * 5)
-            })),
-            successRate: [
-                { name: "Exitosas", value: 85 },
-                { name: "Fallidas", value: 15 },
-            ],
-            taskPerformance: [
-                { name: "Clientes", executed: 45, avgTime: 1.2, successRate: 98 },
-                { name: "Ventas", executed: 30, avgTime: 2.5, successRate: 92 },
-                { name: "Logística", executed: 25, avgTime: 1.8, successRate: 88 },
-            ],
-            serverResponseTimes: lastDays.map(date => ({
-                date,
-                server1: Math.floor(Math.random() * 50) + 30,
-                server2: Math.floor(Math.random() * 60) + 40
-            }))
-        };
-    }
 
     return {
         stats,

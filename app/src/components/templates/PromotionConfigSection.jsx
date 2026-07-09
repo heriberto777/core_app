@@ -139,10 +139,10 @@ const PromotionConfigSection = ({ mapping = {}, handleChange }) => {
                 {rules.map((rule, index) => (
                   <div
                     key={index}
-                    className={`flex gap-5 bg-white dark:bg-slate-800 border-l-4 border-l-${getRuleColor(rule.type)} border-slate-200 dark:border-slate-700 rounded-2xl p-5 transition-all duration-300 ${
+                    className={`flex gap-5 bg-white dark:bg-slate-800 border-slate-200 dark:border-slate-700 rounded-2xl p-5 transition-all duration-300 ${
                       rule.enabled ? "" : "opacity-60"
                     } hover:bg-slate-100/30 dark:hover:bg-slate-700/30 hover:-translate-y-1 hover:shadow-lg`}
-                    style={{ ...style }}
+                    style={{ borderLeft: `4px solid ${getRuleColor(rule.type)}` }}
                   >
                     <div
                       className="w-10 h-10 rounded-xl flex items-center justify-center flex-shrink-0 text-lg"

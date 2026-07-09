@@ -116,6 +116,8 @@ export function TraspasoManagement() {
       if (details) {
         showInfo(`Visualizando detalles de carga ${details.load_id}`);
       }
+    } catch (error) {
+      showError(error?.message || "No se pudieron obtener los detalles de este traspaso");
     } finally {
       setSingleActionStates(prev => ({ ...prev, [id]: null }));
     }
