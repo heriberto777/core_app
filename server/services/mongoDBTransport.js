@@ -203,6 +203,22 @@ class MongoDBTransport extends Transport {
         ip: info.ip,
         sessionId: info.sessionId,
         requestId: info.requestId,
+        // === CAMPOS OPERACIONALES (ya calculados por sanitizeLogInfo, no descartar) ===
+        operationType: info.operationType,
+        entityType: info.entityType,
+        entityId: info.entityId,
+        affectedRecords: info.affectedRecords,
+        durationMs: info.durationMs,
+        serverSource: info.serverSource,
+        query: info.query,
+        httpMethod: info.httpMethod,
+        httpPath: info.httpPath,
+        httpStatusCode: info.httpStatusCode,
+        errorCode: info.errorCode,
+        errorDetails: info.errorDetails,
+        transactionId: info.transactionId,
+        loadId: info.loadId,
+        taskId: info.taskId,
       }));
 
       const timeout = this.isShuttingDown ? 3000 : 10000;
