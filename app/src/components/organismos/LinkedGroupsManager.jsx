@@ -74,14 +74,14 @@ const LinkedGroupsManager = ({
     `).join("");
 
     const coordinatorInfo = groupData.coordinator ? `
-      <div class="bg-indigo-50/50 border border-indigo-100 p-6 rounded-xl mb-6 space-y-4">
+      <div class="bg-primary-50/50 border border-primary-100 p-6 rounded-xl mb-6 space-y-4">
         <div class="flex items-center gap-3">
-          <div class="w-8 h-8 bg-indigo-600 rounded-xl flex items-center justify-center text-white text-xs">👑</div>
-          <h4 class="text-sm font-black text-indigo-900 uppercase tracking-wider">Tarea Coordinadora: ${groupData.coordinator.name}</h4>
+          <div class="w-8 h-8 bg-primary-600 rounded-xl flex items-center justify-center text-white text-xs">👑</div>
+          <h4 class="text-sm font-black text-primary-900 uppercase tracking-wider">Tarea Coordinadora: ${groupData.coordinator.name}</h4>
         </div>
         <div class="space-y-2">
-            <span class="text-[9px] font-black text-indigo-400 uppercase tracking-widest">Query de Post-Actualización</span>
-            <code class="block p-4 bg-white rounded-xl border border-indigo-100 text-xs font-mono text-indigo-800 shadow-sm">${groupData.coordinator.postUpdateQuery}</code>
+            <span class="text-[9px] font-black text-primary-400 uppercase tracking-widest">Query de Post-Actualización</span>
+            <code class="block p-4 bg-white rounded-xl border border-primary-100 text-xs font-mono text-primary-800 shadow-sm">${groupData.coordinator.postUpdateQuery}</code>
         </div>
       </div>
     ` : '<div class="p-4 bg-amber-50 text-amber-700 rounded-xl text-xs font-bold mb-6 border border-amber-100">⚠️ Este grupo no cuenta con una tarea coordinadora definida.</div>';
@@ -182,7 +182,7 @@ const LinkedGroupsManager = ({
     <div className="p-8 max-w-7xl mx-auto space-y-12 animate-in fade-in duration-700">
       <div className="text-center space-y-3">
         <h2 className="text-3xl font-black text-slate-900 flex items-center justify-center gap-4">
-          <FaLink className="text-indigo-600" /> Gestión de Grupos Vinculados
+          <FaLink className="text-primary-600" /> Gestión de Grupos Vinculados
         </h2>
         <p className="text-sm font-bold text-slate-400 uppercase tracking-widest max-w-2xl mx-auto">Administre la orquestación de tareas encadenadas y sus configuraciones de post-actualización masiva</p>
       </div>
@@ -195,8 +195,8 @@ const LinkedGroupsManager = ({
       )}
 
       {!error && groups.length === 0 ? (
-        <div className="p-24 bg-slate-50/50 border border-dashed border-slate-200 rounded-xl flex flex-col items-center gap-6 text-center group transition-all hover:bg-white hover:border-indigo-200">
-          <div className="w-20 h-20 bg-white rounded-xl flex items-center justify-center text-slate-300 shadow-sm group-hover:text-indigo-500 transition-colors">
+        <div className="p-24 bg-slate-50/50 border border-dashed border-slate-200 rounded-xl flex flex-col items-center gap-6 text-center group transition-all hover:bg-white hover:border-primary-200">
+          <div className="w-20 h-20 bg-white rounded-xl flex items-center justify-center text-slate-300 shadow-sm group-hover:text-primary-500 transition-colors">
             <FaUsers className="text-4xl" />
           </div>
           <div className="space-y-2">
@@ -208,7 +208,7 @@ const LinkedGroupsManager = ({
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
           {groups.map((group) => (
             <div key={group.groupName} className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 border border-slate-100 flex flex-col group/card">
-              <div className="p-8 bg-gradient-to-br from-indigo-600 to-purple-700 text-white relative overflow-hidden">
+              <div className="p-8 bg-primary-600 text-white relative overflow-hidden">
                 <div className="absolute -right-8 -bottom-8 opacity-10 group-hover/card:scale-110 transition-transform duration-700">
                     <FaLink size={120} />
                 </div>
@@ -247,7 +247,7 @@ const LinkedGroupsManager = ({
               <div className="p-8 bg-slate-50/50 border-t border-slate-50 flex gap-3">
                 <button
                   onClick={() => viewGroupDetails(group.groupName)}
-                  className="flex-1 bg-white border border-slate-200 text-slate-900 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:border-indigo-600 hover:text-indigo-600 transition-all shadow-sm"
+                  className="flex-1 bg-white border border-slate-200 text-slate-900 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:border-primary-600 hover:text-primary-600 transition-all shadow-sm"
                 >
                   <FaEye className="inline mr-2" /> Auditoría
                 </button>

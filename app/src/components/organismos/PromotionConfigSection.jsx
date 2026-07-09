@@ -236,10 +236,10 @@ export function PromotionConfigSection({ mapping = {}, handleChange }) {
   };
 
   return (
-    <div className="bg-gradient-to-br from-indigo-50/50 via-white to-purple-50/50 border-2 border-indigo-200 rounded-3xl p-8 mb-8 shadow-lg animate-fadeIn">
+    <div className="bg-white border border-primary-200 rounded-3xl p-8 mb-8 shadow-lg animate-fadeIn">
       {/* HEADER */}
       <div className="flex items-center gap-4 mb-8">
-        <div className="w-14 h-14 bg-gradient-to-br from-indigo-500 to-purple-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-indigo-500/30">
+        <div className="w-14 h-14 bg-primary-600 rounded-2xl flex items-center justify-center text-white shadow-xl shadow-primary-500/30">
           <FaTrophy className="text-2xl" />
         </div>
         <div className="flex flex-col">
@@ -254,7 +254,7 @@ export function PromotionConfigSection({ mapping = {}, handleChange }) {
 
       {/* ENABLE TOGGLE */}
       <label className="flex items-center gap-4 px-8 py-5 rounded-2xl cursor-pointer transition-all border-2 mb-8 group">
-        <div className={`w-12 h-6 rounded-full p-1 transition-colors relative ${promotionConfig.enabled ? "bg-indigo-600" : "bg-slate-300"}`}>
+        <div className={`w-12 h-6 rounded-full p-1 transition-colors relative ${promotionConfig.enabled ? "bg-primary-600" : "bg-slate-300"}`}>
           <div className={`w-4 h-4 bg-white rounded-full transition-transform transform ${promotionConfig.enabled ? "translate-x-6" : "translate-x-0"}`} />
         </div>
         <input
@@ -271,7 +271,7 @@ export function PromotionConfigSection({ mapping = {}, handleChange }) {
           })}
         />
         <div className="flex flex-col">
-          <span className={`text-sm font-black uppercase tracking-wider ${promotionConfig.enabled ? "text-indigo-700" : "text-slate-500"}`}>
+          <span className={`text-sm font-black uppercase tracking-wider ${promotionConfig.enabled ? "text-primary-700" : "text-slate-500"}`}>
             Activar Promociones
           </span>
           <span className="text-xs font-bold text-slate-400">
@@ -282,9 +282,9 @@ export function PromotionConfigSection({ mapping = {}, handleChange }) {
 
       {/* DETECT FIELDS */}
       <div className="grid grid-cols-1 md:grid-cols-2 gap-6 mb-8">
-        <div className="p-6 bg-white/80 backdrop-blur-sm border border-indigo-100 rounded-2xl shadow-sm">
+        <div className="p-6 bg-white/80 backdrop-blur-sm border border-primary-100 rounded-2xl shadow-sm">
           <div className="flex items-center gap-2 mb-4">
-            <FaCogs className="text-indigo-500" />
+            <FaCogs className="text-primary-500" />
             <h4 className="font-bold text-slate-700">Campos de Detección</h4>
           </div>
           <div className="space-y-3">
@@ -304,7 +304,7 @@ export function PromotionConfigSection({ mapping = {}, handleChange }) {
                       value: e.target.value
                     }
                   })}
-                  className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-200 bg-white focus:border-indigo-500 focus:ring-2 focus:ring-indigo-500/20 outline-none transition-all font-medium"
+                  className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-200 bg-white focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 outline-none transition-all font-medium"
                   placeholder={`Ej: ${defaultVal}`}
                 />
               </div>
@@ -312,9 +312,9 @@ export function PromotionConfigSection({ mapping = {}, handleChange }) {
           </div>
         </div>
 
-        <div className="p-6 bg-white/80 backdrop-blur-sm border border-purple-100 rounded-2xl shadow-sm">
+        <div className="p-6 bg-white/80 backdrop-blur-sm border border-slate-200 rounded-2xl shadow-sm">
           <div className="flex items-center gap-2 mb-4">
-            <FaCogs className="text-purple-500" />
+            <FaCogs className="text-slate-500" />
             <h4 className="font-bold text-slate-700">Campos de Destino</h4>
           </div>
           <div className="space-y-3">
@@ -334,7 +334,7 @@ export function PromotionConfigSection({ mapping = {}, handleChange }) {
                       value: e.target.value
                     }
                   })}
-                  className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-200 bg-white focus:border-purple-500 focus:ring-2 focus:ring-purple-500/20 outline-none transition-all font-medium"
+                  className="w-full px-4 py-2.5 text-sm rounded-xl border border-slate-200 bg-white focus:border-slate-500 focus:ring-2 focus:ring-slate-500/20 outline-none transition-all font-medium"
                   placeholder={`Ej: ${defaultVal}`}
                 />
               </div>
@@ -345,7 +345,7 @@ export function PromotionConfigSection({ mapping = {}, handleChange }) {
 
       {/* RULES LIST */}
       <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-500">
-        <div className="flex justify-between items-center pb-4 border-b border-indigo-100">
+        <div className="flex justify-between items-center pb-4 border-b border-primary-100">
           <div>
             <h4 className="text-lg font-bold text-slate-800">Reglas Activas</h4>
             <p className="text-sm text-slate-500 font-medium mt-1">
@@ -360,17 +360,17 @@ export function PromotionConfigSection({ mapping = {}, handleChange }) {
         {promotionConfig.rules?.length > 0 ? (
           <div className="grid grid-cols-1 gap-3">
             {promotionConfig.rules.map((rule, idx) => (
-              <div key={idx} className="flex justify-between items-center p-5 bg-gradient-to-r from-indigo-50/80 to-purple-50/80 hover:from-indigo-50/100 hover:to-purple-50/100 border border-indigo-100 rounded-2xl transition-all group">
+              <div key={idx} className="flex justify-between items-center p-5 bg-primary-50/50 hover:bg-primary-50 border border-primary-100 rounded-2xl transition-all group">
                 <div className="flex-1">
                   <div className="flex items-center gap-3">
-                    <span className="text-xs font-black text-indigo-500 uppercase tracking-wider bg-indigo-100 px-2 py-1 rounded-md">
+                    <span className="text-xs font-black text-primary-500 uppercase tracking-wider bg-primary-100 px-2 py-1 rounded-md">
                       #{idx + 1}
                     </span>
                     <div>
                       <div className="font-bold text-slate-800 text-lg">{rule.name}</div>
                       <div className="text-xs text-slate-500 font-medium mt-1">
-                        <span className="text-indigo-600 font-bold">{PROMOTION_TYPES.find(t => t.value === rule.type)?.label || rule.type}</span>
-                        {rule.isOneTime && <span className="text-purple-600 font-bold ml-2">• Oferta Única</span>}
+                        <span className="text-primary-600 font-bold">{PROMOTION_TYPES.find(t => t.value === rule.type)?.label || rule.type}</span>
+                        {rule.isOneTime && <span className="text-slate-600 font-bold ml-2">• Oferta Única</span>}
                       </div>
                     </div>
                   </div>
@@ -383,8 +383,8 @@ export function PromotionConfigSection({ mapping = {}, handleChange }) {
             ))}
           </div>
         ) : (
-          <div className="text-center py-12 bg-white/60 backdrop-blur-sm rounded-2xl border-2 border-dashed border-indigo-200">
-            <FaTrophy className="text-4xl text-indigo-300 mx-auto mb-4" />
+          <div className="text-center py-12 bg-white/60 backdrop-blur-sm rounded-2xl border-2 border-dashed border-primary-200">
+            <FaTrophy className="text-4xl text-primary-300 mx-auto mb-4" />
             <p className="text-slate-500 font-medium">No hay reglas de promoción configuradas</p>
             <Button variant="primary" onClick={handleAddRule} className="mt-4 flex items-center gap-2">
               <FaPlus /> Crear Primera Regla
