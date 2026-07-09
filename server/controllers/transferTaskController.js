@@ -662,11 +662,12 @@ const getTaskExecutionHistory = async (req, res) => {
     if (!task) return res.status(404).json({ success: false, message: "Tarea no encontrada" });
 
     // Obtener desde Log (Sustituye a TaskExecution)
-    // Filtramos por taskId y buscamos los logs que marcan el FINAL de una ejecución (donde están los stats)
-    const executions = await Log.find({ 
-      taskId: taskId, 
+    // Filtramos por taskId y buscamos los logs que marcan el FINAL de una ejecución (donde están los stats).
+    // "running" es solo la marca de inicio y no debe listarse como una ejecución del historial.
+    const executions = await Log.find({
+      taskId: taskId,
       operationType: "TRANSFER",
-      "metadata.status": { $exists: true } 
+      "metadata.status": { $in: ["completed", "failed", "cancelled"] }
     })
       .sort({ timestamp: -1 })
       .limit(50)
