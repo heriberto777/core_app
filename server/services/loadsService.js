@@ -271,15 +271,37 @@ class LoadsService {
       }
 
       // Fix: eliminar require dinámico
-      const traspasoResult = await traspasoBodega({
-        route: "SYSTEM", // O el código que corresponda
-        salesData: loadData.map(d => ({
-          Code_Product: d.codigo,
-          Quantity: d.cantidad,
-          bodega: d.bodegaOrigen
-        })),
-        bodega_destino: bodegaDestino
-      });
+      let traspasoResult;
+      try {
+        traspasoResult = await traspasoBodega({
+          route: "SYSTEM", // O el código que corresponda
+          salesData: loadData.map(d => ({
+            Code_Product: d.codigo,
+            Quantity: d.cantidad,
+            bodega: d.bodegaOrigen
+          })),
+          bodega_destino: bodegaDestino
+        });
+      } catch (traspasoError) {
+        await LoadsTrackingService.saveTraspasoTracking(null, {
+          loadId,
+          deliveryPersonCode: "SYSTEM",
+          warehouseOrigin: loadData[0].bodegaOrigen,
+          warehouseDestination: bodegaDestino,
+          traspasoResult: { mensaje: traspasoError.message },
+          executionSource: "manual",
+        }, "failed");
+        throw traspasoError;
+      }
+
+      await LoadsTrackingService.saveTraspasoTracking(null, {
+        loadId,
+        deliveryPersonCode: "SYSTEM",
+        warehouseOrigin: loadData[0].bodegaOrigen,
+        warehouseDestination: bodegaDestino,
+        traspasoResult,
+        executionSource: "manual",
+      }, "completed");
 
       await LoadsTrackingService.updateTrackingStatus(loadId, "transferred");
 

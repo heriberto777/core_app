@@ -453,7 +453,8 @@ class LoadsController {
   static async executeTransfer(req, res) {
     try {
       const { loadId } = req.params;
-      const result = await traspasoService.executeTransferByLoadId(loadId);
+      const userId = req.user?.user_id || req.user?._id || "SYSTEM";
+      const result = await traspasoService.executeTransferByLoadId(loadId, userId);
       return res.status(200).json({ success: true, data: result });
     } catch (error) {
       logger.error(`Error en executeTransfer (${req.params.loadId}):`, error);
@@ -485,7 +486,7 @@ class LoadsController {
     try {
       const { traspasoId } = req.params;
       const result = await traspasoService.getTraspasoDetails(traspasoId);
-      return res.status(200).json({ success: true, data: result });
+      return res.status(200).json({ success: true, data: result.data });
     } catch (error) {
       logger.error(`Error en getTraspasoDetails (${req.params.traspasoId}):`, error);
       return res.status(500).json({ success: false, message: "Error al obtener detalles" });
@@ -537,7 +538,7 @@ class LoadsController {
   static async getDeliveryPersonsFilter(req, res) {
     try {
       const result = await traspasoService.getDeliveryPersonsForFilter();
-      return res.status(200).json({ success: true, data: result });
+      return res.status(200).json({ success: true, data: result.data });
     } catch (error) {
       logger.error("Error obteniendo repartidores para filtro:", error);
       return res.status(500).json({
@@ -595,7 +596,7 @@ class LoadsController {
         dateTo: req.query.dateTo,
       };
       const result = await traspasoService.getTraspasoStats(filters);
-      return res.status(200).json({ success: true, data: result });
+      return res.status(200).json({ success: true, data: result.data });
     } catch (error) {
       logger.error("Error obteniendo estadísticas de traspasos:", error);
       return res.status(500).json({
@@ -647,10 +648,11 @@ class LoadsController {
         });
       }
 
+      const userId = req.user?.user_id || req.user?._id || "SYSTEM";
       const results = { executed: 0, failed: 0, errors: [], details: [] };
       for (const loadId of loadIds) {
         try {
-          const result = await traspasoService.executeTransferByLoadId(loadId);
+          const result = await traspasoService.executeTransferByLoadId(loadId, userId);
           if (result.success) {
             results.executed++;
             results.details.push({ loadId, status: "success", message: "Traspaso ejecutado exitosamente" });

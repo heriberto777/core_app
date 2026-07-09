@@ -36,15 +36,17 @@ export function TraspasoManagement() {
     actions
   } = useTransferManagement();
 
-  const [selectedItems, setSelectedItems] = useState([]);
-  const [isProcessingAction, setIsProcessingAction] = useState(false);
-  const [singleActionStates, setSingleActionStates] = useState({});
-  const [filters, setFilters] = useState({
+  const getDefaultFilters = () => ({
     dateFrom: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
     dateTo: new Date().toISOString().split("T")[0],
     status: "all",
     loadId: ""
   });
+
+  const [selectedItems, setSelectedItems] = useState([]);
+  const [isProcessingAction, setIsProcessingAction] = useState(false);
+  const [singleActionStates, setSingleActionStates] = useState({});
+  const [filters, setFilters] = useState(getDefaultFilters());
 
   // Carga inicial
   useEffect(() => {
@@ -63,6 +65,13 @@ export function TraspasoManagement() {
   const handleSearch = () => {
     actions.fetchTraspasos(filters);
     actions.fetchStats(filters);
+  };
+
+  const handleResetFilters = () => {
+    const defaults = getDefaultFilters();
+    setFilters(defaults);
+    actions.fetchTraspasos(defaults);
+    actions.fetchStats(defaults);
   };
 
   const handleRefresh = async () => {
@@ -148,7 +157,7 @@ export function TraspasoManagement() {
           <TraspasoFiltersPanel
             filters={filters}
             onFiltersChange={setFilters}
-            onReset={actions.resetFilters}
+            onReset={handleResetFilters}
             onSearch={handleSearch}
             loading={loading}
             metadata={metadata}

@@ -26,8 +26,6 @@ export * from "./components/meleculas/ListaMenuDesplegable";
 export * from "./components/meleculas/OrderCard";
 export * from "./components/meleculas/OrderDetailsModal";
 export * from "./components/meleculas/RefreshButton";
-export * from "./components/meleculas/TraspasoFilters";
-export * from "./components/meleculas/TraspasoStatusCard";
 export * from "./components/meleculas/ConfirmDialog";
 export * from "./components/meleculas/LogDetailModal";
 export * from "./components/meleculas/ClearLogsModal";
