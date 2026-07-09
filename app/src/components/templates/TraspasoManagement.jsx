@@ -142,7 +142,7 @@ export function TraspasoManagement() {
         <TraspasoStatsGrid stats={stats} loading={loading} />
 
         {/* FILTERS */}
-        <div className="bg-white rounded-[32px] border border-slate-100 shadow-soft p-2">
+        <div className="bg-white rounded-xl border border-slate-100 shadow-soft p-2">
           <TraspasoFiltersPanel
             filters={filters}
             onFiltersChange={setFilters}
@@ -156,7 +156,7 @@ export function TraspasoManagement() {
         {/* BULK ACTIONS STICKY BANNER */}
         {selectedItems.length > 0 && canExecuteTraspaso && (
           <div className="sticky top-6 z-[100] animate-slideDown">
-            <div className="bg-primary-600 text-white p-5 px-8 rounded-[24px] shadow-2xl shadow-primary-900/20 flex flex-col sm:flex-row justify-between items-center gap-4 border border-white/10 backdrop-blur-xl">
+            <div className="bg-primary-600 text-white p-5 px-8 rounded-xl shadow-2xl shadow-primary-900/20 flex flex-col sm:flex-row justify-between items-center gap-4 border border-white/10 backdrop-blur-xl">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-xl shadow-inner">
                   <FaCheckDouble />
@@ -182,7 +182,7 @@ export function TraspasoManagement() {
         )}
 
         {/* LISTING / TABLE */}
-        <div className="bg-white rounded-[40px] border border-slate-100 shadow-premium overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-100 shadow-premium overflow-hidden">
           {loading && !refreshing ? (
             <LoadingUI message="Consultando bitácora de transferencias..." />
           ) : (

@@ -63,7 +63,7 @@ export const RecipientFormModal = ({ isOpen, onClose, onSave, editingRecipient =
 
     return (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[2000] p-5 animate-in fade-in duration-200" onClick={onClose}>
-            <div className="w-full max-w-[550px] bg-white rounded-[24px] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            <div className="w-full max-w-[550px] bg-white rounded-xl overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
                 {/* Header */}
                 <div className="px-6 py-6 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
                     <h3 className="text-xl font-extrabold text-slate-900">

@@ -10,7 +10,7 @@ export function DocumentDetailsModal({ isOpen, onClose, document, details, confi
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[2000] p-4 animate-in fade-in duration-300">
-            <div className="bg-white w-full max-w-[1100px] h-[90vh] rounded-[32px] border border-slate-100 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="bg-white w-full max-w-[1100px] h-[90vh] rounded-xl border border-slate-100 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
                 {/* Header */}
                 <div className="px-8 py-7 bg-white/80 backdrop-blur-md border-b border-slate-50 flex items-center justify-between">
                     <div className="flex items-center gap-4">
@@ -94,7 +94,7 @@ export function DocumentDetailsModal({ isOpen, onClose, document, details, confi
                                 <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3 border-l-4 border-indigo-600 pl-4">
                                     <FaInfoCircle className="text-indigo-500" /> Atributos: {groupName}
                                 </h4>
-                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 p-8 bg-slate-50/50 rounded-[28px] border border-slate-100">
+                                <div className="grid grid-cols-2 md:grid-cols-3 lg:grid-cols-4 gap-6 p-8 bg-slate-50/50 rounded-xl border border-slate-100">
                                     {fields.map((field) => (
                                         <div key={field.key} className="flex flex-col gap-1 group">
                                             <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest group-hover:text-indigo-500 transition-colors">{field.label.replace(/_/g, ' ')}</span>
@@ -123,7 +123,7 @@ export function DocumentDetailsModal({ isOpen, onClose, document, details, confi
                                 <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3 border-l-4 border-indigo-600 pl-4">
                                     <FaTable className="text-indigo-500" /> Partidas: {tableName}
                                 </h4>
-                                <div className="rounded-[28px] border border-slate-100 overflow-hidden shadow-sm bg-white">
+                                <div className="rounded-xl border border-slate-100 overflow-hidden shadow-sm bg-white">
                                     <div className="overflow-x-auto">
                                         <table className="w-full border-collapse">
                                             <thead className="bg-slate-50/50">

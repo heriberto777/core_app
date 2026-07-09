@@ -20,7 +20,7 @@ export function StatCardsGrid({ stats }) {
                 <div 
                   key={idx} 
                   className={`
-                    flex items-center gap-5 p-6 rounded-[28px] border transition-all duration-300 group
+                    flex items-center gap-5 p-6 rounded-xl border transition-all duration-300 group
                     ${it.highlight 
                       ? 'bg-white border-primary-400 shadow-lg -translate-y-1' 
                       : 'bg-white border-slate-100 shadow-soft hover:shadow-md hover:-translate-y-1'}

@@ -9,7 +9,7 @@ export function SummaryFilterPanel({ filters, onUpdate, onClear, onSearch, loadi
     };
 
     return (
-        <div className="bg-white border border-slate-200 rounded-[32px] p-8 shadow-sm flex flex-col gap-8 animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="bg-white border border-slate-200 rounded-xl p-8 shadow-sm flex flex-col gap-8 animate-in fade-in slide-in-from-top-4 duration-500">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
                 <div className="flex flex-col gap-2">
                     <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-1 flex items-center gap-2">

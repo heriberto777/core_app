@@ -142,7 +142,7 @@ export function RoleManagement() {
             </header>
 
             {/* TOOLBAR */}
-            <div className="bg-white p-5 rounded-[24px] border border-slate-200 shadow-soft flex flex-col md:flex-row md:items-center justify-between gap-4">
+            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-soft flex flex-col md:flex-row md:items-center justify-between gap-4">
                 <div className="relative flex-1 max-w-lg">
                     <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
                     <input
@@ -161,7 +161,7 @@ export function RoleManagement() {
 
             {/* CONTENT */}
             {loading && roles.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-32 text-center gap-6 bg-white rounded-[32px] border border-slate-200 border-dashed">
+                <div className="flex flex-col items-center justify-center p-32 text-center gap-6 bg-white rounded-xl border border-slate-200 border-dashed">
                     <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center text-slate-300">
                       <FaShieldAlt size={32} />
                     </div>
@@ -171,7 +171,7 @@ export function RoleManagement() {
                     </div>
                 </div>
             ) : (
-                <div className="bg-white rounded-[32px] border border-slate-200 shadow-soft overflow-hidden">
+                <div className="bg-white rounded-xl border border-slate-200 shadow-soft overflow-hidden">
                     <RolesTable
                         data={roles}
                         onEdit={handleEdit}

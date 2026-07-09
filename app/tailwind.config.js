@@ -6,20 +6,21 @@ export default {
   ],
   theme: {
     extend: {
-      // Colores corporativos - desde tokens.js
+      // Colores corporativos — dirección "Grid": azul de señal único,
+      // casi monocromo en el resto (ver slate más abajo).
       colors: {
         // Brand colors
         primary: {
-          50: '#eef2ff',
-          100: '#e0e7ff',
-          200: '#c7d2fe',
-          300: '#a5b4fc',
-          400: '#818cf8',
-          500: '#6366f1',
-          600: '#4f46e5',
-          700: '#4338ca',
-          800: '#3730a3',
-          900: '#312e81',
+          50: '#eef3ff',
+          100: '#dbe6ff',
+          200: '#b9d0ff',
+          300: '#8bb0ff',
+          400: '#5687ff',
+          500: '#1447e6',
+          600: '#0f3ab8',
+          700: '#0c2e93',
+          800: '#0a2570',
+          900: '#081a4d',
         },
         secondary: {
           50: '#fef2f2',
@@ -96,32 +97,47 @@ export default {
           50: '#fbcbc9',
           600: '#fe6156',
         },
-        // Slate from Tailwind default
+        // Slate — neutro casi puro (sin matiz azulado), no el slate por
+        // defecto de Tailwind. Es el gris que carga casi todo el peso
+        // visual de la app (fondos, bordes, texto), así que es el cambio
+        // de mayor alcance de este token system.
         slate: {
-          50: '#f8fafc',
-          100: '#f1f5f9',
-          200: '#e2e8f0',
-          300: '#cbd5e1',
-          400: '#94a3b8',
-          500: '#64748b',
-          600: '#475569',
-          700: '#334155',
-          800: '#1e293b',
-          900: '#0f172a',
+          50: '#fafafa',
+          100: '#f2f2f2',
+          200: '#e6e6e6',
+          300: '#d1d1d1',
+          400: '#a3a3a3',
+          500: '#737373',
+          600: '#525252',
+          700: '#383838',
+          800: '#232323',
+          900: '#121212',
         }
       },
-      // Border radius - desde tokens.js
+      // Border radius — dirección "Grid": esquinas casi sin redondear.
+      // Colapsa la escala xl/2xl/3xl (antes 12/16/24px) a un rango muy
+      // ajustado, así todo lo que usa rounded-xl/2xl/3xl en los templates
+      // (478 usos) se ve afectado sin tocar cada archivo.
       borderRadius: {
-        base: '6px',
-        xl: '12px',
-        '2xl': '16px',
-        '3xl': '24px',
+        base: '3px',
+        sm: '2px',
+        md: '3px',
+        lg: '4px',
+        xl: '4px',
+        '2xl': '5px',
+        '3xl': '6px',
       },
-      // Box shadows - soft and premium
+      // Box shadows — dirección "Grid": hairlines en vez de sombras suaves.
+      // Se aplanan también lg/xl/2xl (built-ins de Tailwind) para que los
+      // 130 usos existentes de shadow-lg/xl/2xl bajen de intensidad sin
+      // tocar cada archivo.
       boxShadow: {
-        soft: '0 2px 15px -3px rgba(0, 0, 0, 0.07), 0 10px 20px -2px rgba(0, 0, 0, 0.04)',
-        premium: '0 20px 25px -5px rgba(0, 0, 0, 0.1), 0 10px 10px -5px rgba(0, 0, 0, 0.04)',
-        gray: '-2px 14px 20px -4px rgba(0,0,0,0.4)',
+        soft: '0 0 0 1px rgba(0, 0, 0, 0.06)',
+        premium: '0 0 0 1px rgba(0, 0, 0, 0.08)',
+        gray: '0 0 0 1px rgba(0, 0, 0, 0.1)',
+        lg: '0 1px 2px rgba(0, 0, 0, 0.04), 0 0 0 1px rgba(0, 0, 0, 0.04)',
+        xl: '0 2px 4px rgba(0, 0, 0, 0.05), 0 0 0 1px rgba(0, 0, 0, 0.05)',
+        '2xl': '0 4px 8px rgba(0, 0, 0, 0.06), 0 0 0 1px rgba(0, 0, 0, 0.06)',
       },
       // Spacing - desde tokens.js
       spacing: {

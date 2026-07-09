@@ -13,7 +13,7 @@ export const RolesTable = ({ data, onEdit, onDelete, onDuplicate, onToggleStatus
                 <div 
                   key={role._id} 
                   className={`
-                    bg-white rounded-[32px] p-6 border transition-all duration-300 group hover:-translate-y-1
+                    bg-white rounded-xl p-6 border transition-all duration-300 group hover:-translate-y-1
                     ${role.isSystem 
                       ? 'border-amber-200 shadow-amber-900/5 bg-amber-50/10' 
                       : 'border-slate-100 shadow-soft hover:shadow-lg'}

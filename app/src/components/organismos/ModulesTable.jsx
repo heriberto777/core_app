@@ -22,7 +22,7 @@ export const ModulesTable = ({ data, onEdit, onDelete, onDuplicate, onToggleStat
                 <div 
                   key={module._id} 
                   className={`
-                    bg-white rounded-[32px] p-6 border transition-all duration-300 group hover:-translate-y-1
+                    bg-white rounded-xl p-6 border transition-all duration-300 group hover:-translate-y-1
                     ${module.isSystem 
                       ? 'border-primary-200 bg-primary-50/10 shadow-primary-900/5' 
                       : 'border-slate-100 shadow-soft hover:shadow-lg'}

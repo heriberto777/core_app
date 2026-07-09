@@ -64,7 +64,7 @@ export function ReturnProcessModal({ isOpen, onClose, inventoryData, onProcess }
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[2000] p-4 animate-in fade-in duration-300">
-            <div className="bg-white w-full max-w-[1000px] max-h-[95vh] rounded-[32px] border border-slate-100 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="bg-white w-full max-w-[1000px] max-h-[95vh] rounded-xl border border-slate-100 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
                 {/* Header */}
                 <div className="px-8 py-7 flex items-center justify-between border-b border-slate-50 bg-white/80 backdrop-blur-md">
                     <div className="flex items-center gap-4">
@@ -86,7 +86,7 @@ export function ReturnProcessModal({ isOpen, onClose, inventoryData, onProcess }
 
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto p-8 space-y-10">
-                    <div className="bg-amber-50/50 border border-amber-100 text-amber-800 px-6 py-4 rounded-[20px] text-sm flex gap-4 items-start">
+                    <div className="bg-amber-50/50 border border-amber-100 text-amber-800 px-6 py-4 rounded-xl text-sm flex gap-4 items-start">
                         <FaExclamationTriangle className="mt-1 shrink-0 text-amber-500" />
                         <span className="font-medium leading-relaxed">
                             Seleccione los productos que retornarán al inventario central. El sistema validará automáticamente las existencias y actualizará el estatus de la carga.
@@ -99,7 +99,7 @@ export function ReturnProcessModal({ isOpen, onClose, inventoryData, onProcess }
                             <FaCubes className="text-amber-500" /> Inventario Retornable
                         </h4>
                         
-                        <div className="rounded-[28px] border border-slate-100 overflow-hidden shadow-sm">
+                        <div className="rounded-xl border border-slate-100 overflow-hidden shadow-sm">
                             <div className="overflow-x-auto overflow-y-auto max-h-[400px]">
                                 <table className="w-full border-collapse">
                                     <thead className="sticky top-0 bg-slate-50 z-10">
@@ -166,7 +166,7 @@ export function ReturnProcessModal({ isOpen, onClose, inventoryData, onProcess }
                             value={reason}
                             onChange={(e) => setReason(e.target.value)}
                             disabled={processing}
-                            className="w-full p-6 bg-slate-50/50 border border-slate-100 rounded-[24px] text-sm font-bold text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white transition-all resize-none min-h-[120px]"
+                            className="w-full p-6 bg-slate-50/50 border border-slate-100 rounded-xl text-sm font-bold text-slate-900 focus:outline-none focus:border-amber-500 focus:bg-white transition-all resize-none min-h-[120px]"
                         />
                     </div>
                 </div>

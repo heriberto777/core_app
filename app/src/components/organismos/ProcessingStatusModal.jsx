@@ -46,12 +46,12 @@ export function ProcessingStatusModal({ isOpen, taskId, accessToken, mappingName
 
     return (
         <div className="fixed inset-0 bg-slate-900/80 backdrop-blur-md flex items-center justify-center z-[3000] p-4 animate-in fade-in duration-300">
-            <div className="bg-white w-full max-w-[480px] p-10 rounded-[32px] border border-slate-100 shadow-2xl flex flex-col gap-10 animate-in zoom-in-95 duration-500 overflow-hidden relative">
+            <div className="bg-white w-full max-w-[480px] p-10 rounded-xl border border-slate-100 shadow-2xl flex flex-col gap-10 animate-in zoom-in-95 duration-500 overflow-hidden relative">
                 {/* Background Decoration */}
                 <div className="absolute top-0 right-0 w-32 h-32 bg-blue-50 rounded-full blur-3xl -mr-16 -mt-16 opacity-50" />
                 
                 <div className="flex items-center gap-6 relative z-10">
-                    <div className="w-16 h-16 bg-blue-600 rounded-[22px] flex items-center justify-center text-white shadow-xl shadow-blue-600/20 animate-spin">
+                    <div className="w-16 h-16 bg-blue-600 rounded-xl flex items-center justify-center text-white shadow-xl shadow-blue-600/20 animate-spin">
                         <FaSync className="text-2xl" />
                     </div>
                     <div className="flex flex-col">

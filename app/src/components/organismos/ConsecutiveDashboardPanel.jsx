@@ -12,7 +12,7 @@ export function ConsecutiveDashboardPanel({ data, onClose }) {
     return (
         <div className="flex flex-col gap-8 animate-in fade-in duration-500 slide-in-from-top-4">
             {/* Header */}
-            <div className="flex justify-between items-center px-8 py-6 bg-white/50 backdrop-blur-xl border border-slate-200 rounded-[32px] shadow-sm">
+            <div className="flex justify-between items-center px-8 py-6 bg-white/50 backdrop-blur-xl border border-slate-200 rounded-xl shadow-sm">
                 <div className="flex items-center gap-4">
                     <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center text-red-500">
                         <FaHeartbeat className="text-xl animate-pulse" />
@@ -32,7 +32,7 @@ export function ConsecutiveDashboardPanel({ data, onClose }) {
                 {data.map((item) => {
                     const health = getHealth(item);
                     return (
-                        <div key={item.id} className="bg-white border border-slate-100 rounded-[32px] p-8 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group">
+                        <div key={item.id} className="bg-white border border-slate-100 rounded-xl p-8 shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-300 group">
                             <div className="flex justify-between items-start mb-8">
                                 <div className="flex flex-col gap-1">
                                     <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">Identificador</span>

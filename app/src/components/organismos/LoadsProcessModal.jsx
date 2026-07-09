@@ -102,7 +102,7 @@ export const LoadsProcessModal = ({
 
     return (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[2000] p-5 animate-in fade-in duration-300" onClick={onClose}>
-            <div className="w-full max-w-[800px] max-h-[90vh] bg-white rounded-[24px] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
+            <div className="w-full max-w-[800px] max-h-[90vh] bg-white rounded-xl overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-300" onClick={e => e.stopPropagation()}>
                 {/* Header */}
                 <div className="px-6 py-5 bg-slate-50 border-b border-slate-200 flex justify-between items-center">
                     <div>

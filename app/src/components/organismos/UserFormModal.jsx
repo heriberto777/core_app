@@ -80,7 +80,7 @@ export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, rol
 
     return (
         <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn" onClick={onClose}>
-            <div className="bg-white w-full max-w-3xl max-h-[95vh] rounded-[32px] shadow-premium flex flex-col overflow-hidden animate-slideUp" onClick={e => e.stopPropagation()}>
+            <div className="bg-white w-full max-w-3xl max-h-[95vh] rounded-xl shadow-premium flex flex-col overflow-hidden animate-slideUp" onClick={e => e.stopPropagation()}>
                 {/* HEADER */}
                 <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
                     <h3 className="text-xl font-extrabold text-slate-800 flex items-center gap-3">

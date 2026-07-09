@@ -5,11 +5,19 @@
 @layer base {
   body {
     @apply bg-slate-50 text-slate-900 antialiased;
-    font-family: 'Inter', system-ui, sans-serif;
+    font-family: -apple-system, "Segoe UI", "Helvetica Neue", Arial, sans-serif;
   }
 
+  /* Dirección "Grid": encabezados audaces y ajustados, no serif ni
+     semibold suave — la tipografía carga la jerarquía en vez del color. */
   h1, h2, h3, h4, h5, h6 {
-    @apply font-semibold text-slate-800;
+    @apply font-extrabold text-slate-900;
+    letter-spacing: -0.02em;
+  }
+
+  /* Cifras alineadas (tablas, KPIs) — mismo ancho por dígito. */
+  table, .tabular-nums {
+    font-variant-numeric: tabular-nums;
   }
 }
 

@@ -7,7 +7,7 @@ export function SummaryDetailsModal({ isOpen, onClose, summary }) {
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[2000] p-4 animate-in fade-in duration-300">
-            <div className="bg-white w-full max-w-[850px] max-h-[90vh] rounded-[32px] overflow-hidden shadow-2xl border border-slate-100 flex flex-col animate-in zoom-in-95 duration-300">
+            <div className="bg-white w-full max-w-[850px] max-h-[90vh] rounded-xl overflow-hidden shadow-2xl border border-slate-100 flex flex-col animate-in zoom-in-95 duration-300">
                 {/* Header */}
                 <div className="px-8 py-7 bg-white/80 backdrop-blur-md border-b border-slate-50 flex items-center justify-between sticky top-0 z-10">
                     <div className="flex items-center gap-4">
@@ -31,19 +31,19 @@ export function SummaryDetailsModal({ isOpen, onClose, summary }) {
                 <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-10">
                     {/* Header Info Cards */}
                     <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
-                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-[24px] flex flex-col gap-1 hover:bg-white transition-colors">
+                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-xl flex flex-col gap-1 hover:bg-white transition-colors">
                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ruta / Vendedor</span>
                             <span className="text-sm font-black text-slate-900">{summary.route}</span>
                         </div>
-                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-[24px] flex flex-col gap-1 hover:bg-white transition-colors">
+                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-xl flex flex-col gap-1 hover:bg-white transition-colors">
                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Documento Traspaso</span>
                             <span className="text-sm font-black text-slate-900">{summary.documentId || "N/A"}</span>
                         </div>
-                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-[24px] flex flex-col gap-1 hover:bg-white transition-colors">
+                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-xl flex flex-col gap-1 hover:bg-white transition-colors">
                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><FaCalendarAlt className="text-[8px]" /> Fecha Carga</span>
                             <span className="text-sm font-black text-slate-900">{new Date(summary.date).toLocaleDateString()}</span>
                         </div>
-                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-[24px] flex flex-col gap-1 hover:bg-white transition-colors">
+                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-xl flex flex-col gap-1 hover:bg-white transition-colors">
                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Estatus Operativo</span>
                             <span className={`text-[10px] font-black px-2 py-0.5 rounded-md self-start uppercase tracking-widest ${
                                 summary.status === 'completed' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
@@ -53,7 +53,7 @@ export function SummaryDetailsModal({ isOpen, onClose, summary }) {
 
                     {/* Return Data Banner */}
                     {summary.returnData && (
-                        <div className="p-6 bg-amber-50/50 border border-amber-100 rounded-[28px] space-y-4 animate-in slide-in-from-top-4 duration-500">
+                        <div className="p-6 bg-amber-50/50 border border-amber-100 rounded-xl space-y-4 animate-in slide-in-from-top-4 duration-500">
                             <h4 className="text-[11px] font-black text-amber-600 uppercase tracking-[0.2em] flex items-center gap-3">
                                 <FaInfoCircle /> Última Devolución Detectada
                             </h4>
@@ -76,7 +76,7 @@ export function SummaryDetailsModal({ isOpen, onClose, summary }) {
                             <FaCubes className="text-indigo-600" /> Desglose Analítico de Ítems
                         </h4>
                         
-                        <div className="rounded-[28px] border border-slate-100 overflow-hidden shadow-sm bg-white">
+                        <div className="rounded-xl border border-slate-100 overflow-hidden shadow-sm bg-white">
                             <div className="overflow-x-auto">
                                 <table className="w-full border-collapse">
                                     <thead className="bg-slate-50/50">

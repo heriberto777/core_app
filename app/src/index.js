@@ -43,7 +43,7 @@ export * from "./components/organismos/DeliveryPersonSelector";
 export * from "./components/organismos/OrdersList";
 export * from "./components/organismos/ScheduleConfigManager";
 export * from "./components/organismos/ScheduleConfiguration";
-export * from "./components/organismos/Sidebar";
+export * from "./components/organismos/TopNav";
 export * from "./components/organismos/UIComponents";
 export * from "./components/organismos/UserProfile";
 export * from "./components/organismos/TraspasoFiltersPanel";
@@ -100,7 +100,6 @@ export * from "./components/organismos/ModulesTable";
 
 // Organismos con default export
 export { default as ConsecutiveConfigSection } from "./components/organismos/ConsecutiveConfigSection";
-export { default as Header } from "./components/organismos/Header";
 export { default as LinkedGroupsManager } from "./components/organismos/LinkedGroupsManager";
 export { default as Spinner } from "./components/organismos/Spinner";
 export { default as UserRoleManager } from "./components/organismos/UserRoleManager";

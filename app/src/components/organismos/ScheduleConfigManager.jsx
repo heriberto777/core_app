@@ -77,7 +77,7 @@ function showConfigModal(initialTime, initialEnabled, accessToken, onSuccess) {
 
     const generateHTML = () => `
       <div class="text-left space-y-8 mt-6">
-        <div class="flex items-center justify-between p-6 bg-slate-50 rounded-[24px] border border-slate-100">
+        <div class="flex items-center justify-between p-6 bg-slate-50 rounded-xl border border-slate-100">
             <div class="flex flex-col gap-1">
                 <span class="text-sm font-black text-slate-900">Estado del Planificador</span>
                 <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Activar ejecución automática diaria</span>
@@ -101,7 +101,7 @@ function showConfigModal(initialTime, initialEnabled, accessToken, onSuccess) {
             />
         </div>
 
-        <div class="p-6 rounded-[24px] border border-indigo-100 bg-indigo-50/30 flex items-start gap-4">
+        <div class="p-6 rounded-xl border border-indigo-100 bg-indigo-50/30 flex items-start gap-4">
             <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shrink-0 shadow-lg shadow-indigo-600/20">
                 <i class="fas fa-calendar-alt"></i>
             </div>
@@ -132,7 +132,7 @@ function showConfigModal(initialTime, initialEnabled, accessToken, onSuccess) {
       cancelButtonText: "Cancelar",
       showLoaderOnConfirm: true,
       customClass: {
-          popup: 'rounded-[32px] p-8',
+          popup: 'rounded-xl p-8',
           title: 'text-2xl font-black text-slate-900',
           confirmButton: 'px-10 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl hover:bg-black transition-all border-none ml-2',
           cancelButton: 'px-10 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase tracking-widest text-[10px] border-none mr-2'

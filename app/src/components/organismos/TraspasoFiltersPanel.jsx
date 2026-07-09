@@ -23,7 +23,7 @@ export const TraspasoFiltersPanel = ({ filters, onFiltersChange, onReset, onSear
   };
 
   return (
-    <div className={`bg-white/70 backdrop-blur-md border border-slate-200 rounded-[32px] overflow-hidden mb-8 shadow-sm transition-all duration-500 animate-in fade-in slide-in-from-top-4 ${isExpanded ? "ring-1 ring-slate-100" : ""}`}>
+    <div className={`bg-white/70 backdrop-blur-md border border-slate-200 rounded-xl overflow-hidden mb-8 shadow-sm transition-all duration-500 animate-in fade-in slide-in-from-top-4 ${isExpanded ? "ring-1 ring-slate-100" : ""}`}>
       {/* Header */}
       <div 
         className={`px-8 py-5 flex justify-between items-center cursor-pointer transition-colors ${isExpanded ? "bg-slate-50/80 border-b border-slate-100" : "bg-white hover:bg-slate-50"}`}

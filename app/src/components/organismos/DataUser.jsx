@@ -1,5 +1,6 @@
 import {
   useAuth,
+  usePermissions,
   BotonCircular,
   ListaMenuDesplegable
 } from "../../index";
@@ -14,6 +15,7 @@ import { FaUser } from "react-icons/fa";
  */
 export const DataUser = memo(({ stateConfig }) => {
   const { user, logout } = useAuth();
+  const { isAdmin } = usePermissions();
   const navigate = useNavigate();
 
   const handleAction = useCallback(
@@ -44,7 +46,7 @@ export const DataUser = memo(({ stateConfig }) => {
       </div>
 
       {/* ADMIN CORONA */}
-      {user?.role?.includes("admin") && (
+      {isAdmin && (
         <div className="absolute -top-1 -left-1">
           <BotonCircular
             icono={<v.iconocorona />}
@@ -63,7 +65,7 @@ export const DataUser = memo(({ stateConfig }) => {
           {user?.name} {user?.lastname}
         </span>
         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">
-          {user?.role?.includes("admin") ? "Administrador" : "Usuario"}
+          {isAdmin ? "Administrador" : "Usuario"}
         </span>
       </div>
 

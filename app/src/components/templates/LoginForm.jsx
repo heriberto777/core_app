@@ -31,7 +31,7 @@ export function LoginForm() {
         <div className="absolute top-[-20%] left-[-20%] w-[140%] h-[140%] bg-[radial-gradient(circle_at_0%_0%,rgba(52,131,235,0.15)_0%,transparent_50%),radial-gradient(circle_at_100%_100%,rgba(144,70,255,0.1)_0%,transparent_50%)]" />
       </div>
 
-      <div className="bg-slate-900/70 backdrop-blur-3xl saturate-150 border border-white/10 rounded-[40px] p-10 md:p-14 w-full max-w-[460px] shadow-2xl flex flex-col items-center mx-4 z-10 animate-slideUp">
+      <div className="bg-slate-900/70 backdrop-blur-3xl saturate-150 border border-white/10 rounded-xl p-10 md:p-14 w-full max-w-[460px] shadow-2xl flex flex-col items-center mx-4 z-10 animate-slideUp">
         {/* LOGO */}
         <div className="mb-8 drop-shadow-[0_0_15px_rgba(255,255,255,0.2)]">
           <img src={LogoCatelli} alt="Catelli Logo" className="w-40 h-auto object-contain" />

@@ -110,7 +110,7 @@ const UserRoleManager = () => {
       confirmButtonText: "Sí, asignar",
       cancelButtonText: "Cancelar",
       customClass: {
-        popup: 'rounded-[32px] p-8',
+        popup: 'rounded-xl p-8',
         confirmButton: 'px-10 py-3.5 bg-blue-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-blue-600/20',
         cancelButton: 'px-10 py-3.5 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase tracking-widest text-[10px] ml-4'
       },
@@ -170,7 +170,7 @@ const UserRoleManager = () => {
       cancelButtonText: "Cancelar",
       confirmButtonColor: "#d33",
       customClass: {
-        popup: 'rounded-[32px] p-8',
+        popup: 'rounded-xl p-8',
         confirmButton: 'px-10 py-3.5 bg-red-600 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-lg shadow-red-600/20',
         cancelButton: 'px-10 py-3.5 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase tracking-widest text-[10px] ml-4'
       },
@@ -249,7 +249,7 @@ const UserRoleManager = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-6 items-center bg-white/50 backdrop-blur-xl p-8 rounded-[32px] border border-slate-100 shadow-sm">
+      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-6 items-center bg-white/50 backdrop-blur-xl p-8 rounded-xl border border-slate-100 shadow-sm">
         <div className="relative group">
           <FaSearch className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
           <input
@@ -314,7 +314,7 @@ const UserRoleManager = () => {
         {filteredUsers.map((user) => (
           <div
             key={user._id}
-            className={`bg-white rounded-[24px] p-6 border-2 transition-all duration-300 hover:shadow-xl cursor-pointer group relative ${
+            className={`bg-white rounded-xl p-6 border-2 transition-all duration-300 hover:shadow-xl cursor-pointer group relative ${
                 selectedUsers.includes(user._id) ? "border-blue-600 ring-4 ring-blue-500/10 translate-y-[-4px]" : "border-slate-100"
             }`}
             onClick={() => handleUserSelection(user._id)}

@@ -65,7 +65,7 @@ export function Dashboard() {
             <span className="text-lg font-bold text-primary-600 animate-pulse">Optimizando telemetría del sistema...</span>
           </div>
         ) : error ? (
-          <div className="flex flex-col items-center justify-center p-16 bg-red-50/50 border border-red-100 rounded-[32px] text-center gap-4">
+          <div className="flex flex-col items-center justify-center p-16 bg-red-50/50 border border-red-100 rounded-xl text-center gap-4">
             <div className="text-4xl">🔌</div>
             <p className="text-red-600 font-bold text-lg">{error}</p>
             <Button variant="primary" onClick={() => fetchDashboardData()}>Reintentar Conexión</Button>

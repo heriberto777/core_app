@@ -56,7 +56,7 @@ export const DBConnectionModal = ({ isOpen, onClose, onSave, onTest, initialData
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[1000] p-4 animate-in fade-in duration-300">
-            <div className="bg-white w-full max-w-[650px] rounded-[32px] overflow-hidden shadow-2xl border border-slate-100 flex flex-col animate-in zoom-in-95 duration-300">
+            <div className="bg-white w-full max-w-[650px] rounded-xl overflow-hidden shadow-2xl border border-slate-100 flex flex-col animate-in zoom-in-95 duration-300">
                 {/* Header */}
                 <div className="px-8 py-7 bg-white/80 backdrop-blur-md border-b border-slate-50 flex items-center justify-between">
                     <div className="flex items-center gap-4">
