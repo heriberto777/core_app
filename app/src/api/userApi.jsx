@@ -139,9 +139,11 @@ export class User {
       const response = await fetch(url, params);
       const result = await response.json();
 
+      if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
-      return error;
+      console.error("❌ Error en createUser:", error);
+      throw error;
     }
   }
 
@@ -190,10 +192,11 @@ export class User {
       const response = await fetch(url, params);
       const result = await response.json();
 
+      if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
       console.error("❌ Error en updateUser:", error);
-      return error;
+      throw error;
     }
   }
 
@@ -213,10 +216,11 @@ export class User {
       const response = await fetch(url, params);
       const result = await response.json();
 
+      if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
       console.error("❌ Error en deleteUser:", error);
-      return error;
+      throw error;
     }
   }
 
@@ -237,9 +241,11 @@ export class User {
       const response = await fetch(url, params);
       const result = await response.json();
 
+      if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
-      return error;
+      console.error("❌ Error en ActiveInactiveUser:", error);
+      throw error;
     }
   }
 
