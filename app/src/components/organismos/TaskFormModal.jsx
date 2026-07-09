@@ -1,194 +1,56 @@
 import React, { useState, useEffect } from "react";
-import styled from "styled-components";
 import { FaTimes, FaSave, FaDatabase, FaLink, FaList, FaVial, FaQuestionCircle } from "react-icons/fa";
-
-const Overlay = styled.div`
-  position: fixed;
-  top: 0; left: 0; right: 0; bottom: 0;
-  background: rgba(0, 0, 0, 0.7);
-  display: flex; align-items: center; justify-content: center;
-  z-index: 1000; backdrop-filter: blur(4px);
-`;
-
-const ModalContent = styled.div`
-  background: ${({ theme }) => theme.cardBg};
-  width: 95%; max-width: 900px;
-  max-height: 90vh;
-  border-radius: 12px;
-  display: flex; flex-direction: column;
-  box-shadow: ${({ theme }) => theme.shadows.premium};
-  border: 1px solid ${({ theme }) => theme.border};
-  overflow: hidden;
-`;
-
-const Header = styled.div`
-  padding: 15px 20px;
-  background: ${({ theme }) => theme.bg2};
-  border-bottom: 1px solid ${({ theme }) => theme.border};
-  display: flex; justify-content: space-between; align-items: center;
-`;
-
-const TabContainer = styled.div`
-  display: flex;
-  background: ${({ theme }) => theme.bg2};
-  border-bottom: 1px solid ${({ theme }) => theme.border};
-`;
-
-const Tab = styled.button`
-  flex: 1;
-  padding: 12px;
-  border: none; background: none;
-  color: ${({ active, theme }) => active ? theme.primary : theme.textSecondary};
-  font-weight: 600; font-size: 13px;
-  cursor: pointer;
-  border-bottom: 2px solid ${({ active, theme }) => active ? theme.primary : "transparent"};
-  transition: all 0.2s;
-  &:hover { background: ${({ theme }) => theme.border}30; }
-  display: flex; align-items: center; justify-content: center; gap: 8px;
-`;
-
-const Body = styled.div`
-  padding: 20px;
-  overflow-y: auto;
-  flex: 1;
-  display: flex; flex-direction: column; gap: 15px;
-`;
-
-const FormGroup = styled.div`
-  display: flex; flex-direction: column; gap: 6px;
-`;
-
-const Label = styled.label`
-  font-size: 13px; font-weight: 700; color: ${({ theme }) => theme.textSecondary};
-  text-transform: uppercase; letter-spacing: 0.5px;
-  display: flex; align-items: center; gap: 8px;
-`;
-
-const HelpIcon = styled.span`
-  color: ${({ theme }) => theme.primary};
-  cursor: help;
-  position: relative;
-
-  &:hover .tooltip {
-    display: block;
-  }
-`;
-
-const Tooltip = styled.div`
-  display: none;
-  position: absolute;
-  bottom: 100%;
-  left: 50%;
-  transform: translateX(-50%);
-  background: ${({ theme }) => theme.bg4};
-  color: ${({ theme }) => theme.text};
-  padding: 10px 14px;
-  border-radius: 8px;
-  font-size: 12px;
-  font-weight: 400;
-  width: 280px;
-  z-index: 100;
-  box-shadow: ${({ theme }) => theme.shadows.medium};
-  text-transform: none;
-  letter-spacing: normal;
-  line-height: 1.4;
-
-  &::after {
-    content: '';
-    position: absolute;
-    top: 100%;
-    left: 50%;
-    transform: translateX(-50%);
-    border: 6px solid transparent;
-    border-top-color: ${({ theme }) => theme.bg4};
-  }
-`;
-
-const Input = styled.input`
-  padding: 10px; border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.bg2};
-  color: ${({ theme }) => theme.text};
-  font-size: 14px;
-  &:focus { border-color: ${({ theme }) => theme.primary}; outline: none; }
-`;
-
-const Select = styled.select`
-  padding: 10px; border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.bg2};
-  color: ${({ theme }) => theme.text};
-  font-size: 14px;
-`;
-
-const TextArea = styled.textarea`
-  padding: 10px; border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.border};
-  background: ${({ theme }) => theme.bg2};
-  color: ${({ theme }) => theme.text};
-  font-family: 'Fira Code', monospace; font-size: 13px;
-  min-height: 120px; resize: vertical;
-`;
-
-const Footer = styled.div`
-  padding: 15px 20px;
-  border-top: 1px solid ${({ theme }) => theme.border};
-  display: flex; justify-content: flex-end; gap: 12px;
-`;
-
-const CheckboxGroup = styled.div`
-  display: flex; gap: 20px; margin-top: 10px;
-  flex-wrap: wrap;
-`;
-
-const CheckboxLabel = styled.label`
-  display: flex; align-items: center; gap: 8px; cursor: pointer;
-  padding: 8px 12px;
-  background: ${({ theme }) => theme.bg2};
-  border-radius: 8px;
-  border: 1px solid ${({ theme }) => theme.border};
-  font-size: 14px;
-
-  &:hover {
-    border-color: ${({ theme }) => theme.primary};
-  }
-`;
-
-const SectionTitle = styled.h4`
-  margin: 10px 0 5px 0;
-  font-size: 12px;
-  color: ${({ theme }) => theme.primary};
-  text-transform: uppercase;
-  letter-spacing: 1px;
-`;
-
-import { Button } from "../../index";
+import {
+    Button,
+    Modal,
+    ModalHeader,
+    ModalTitle,
+    ModalBody,
+    ModalFooter,
+    FormGroup,
+    Label,
+    UIInput,
+    Select,
+    Textarea,
+} from "../../index";
 
 const FIELD_HELP = {
-  name: "Identificador único de la tarea. Debe ser un nombre descriptivo sin espacios ni caracteres especiales.",
-  type: "Define cómo se ejecuta la tarea: Manual (solo clic), Automática (cron), o Ambas.",
-  transferType: "Dirección de la transferencia de datos entre servidores.",
-  active: "Si está desmarcado, la tarea no podrá ejecutarse ni manualmente ni automáticamente.",
-  clearBeforeInsert: "Elimina todos los registros de la tabla destino antes de insertar los nuevos. Útil para sincronizaciones completas.",
-  query: "Consulta SQL que se ejecutará en el servidor origen para obtener los datos a transferir.",
-  parameters: "Condiciones para filtrar los datos en formato JSON. Ej: [{\"field\": \"status\", \"operator\": \"=\", \"value\": \"A\"}]",
-  linkedGroup: "Nombre del grupo de tareas que se ejecutarán de forma coordinada. Todas las tareas con el mismo grupo se ejecutan juntas.",
-  linkedExecutionOrder: "Orden de ejecución dentro del grupo. Las tareas se ejecutan en orden ascendente (0, 1, 2...).",
-  linkedTasks: "Selecciona otras tareas que se ejecutarán automáticamente después de completar esta tarea.",
-  requiredFields: "Lista de campos que deben tener valor. Si están vacíos, la transferencia fallará.",
-  postUpdateQuery: "SQL que se ejecutará después de transferir los datos. Útil para actualizar estados o limpiar tablas. NO incluir WHERE, se agregará automáticamente con los registros afectados.",
-  targetTable: "Tabla destino para transferencias internas (Server1 → Server1).",
-  executionMode: "Normal: ejecuta todo de una vez. Batches: procesa en lotes para grandes volúmenes de datos.",
-  existenceCheck: "Tabla y campo clave para verificar existencia de registros y construir el WHERE del SQL Post-Ejecución.",
-
+    name: "Identificador único de la tarea. Debe ser un nombre descriptivo sin espacios ni caracteres especiales.",
+    type: "Define cómo se ejecuta la tarea: Manual (solo clic), Automática (cron), o Ambas.",
+    transferType: "Dirección de la transferencia de datos entre servidores.",
+    active: "Si está desmarcado, la tarea no podrá ejecutarse ni manualmente ni automáticamente.",
+    clearBeforeInsert: "Elimina todos los registros de la tabla destino antes de insertar los nuevos. Útil para sincronizaciones completas.",
+    query: "Consulta SQL que se ejecutará en el servidor origen para obtener los datos a transferir.",
+    parameters: "Condiciones para filtrar los datos en formato JSON. Ej: [{\"field\": \"status\", \"operator\": \"=\", \"value\": \"A\"}]",
+    linkedGroup: "Nombre del grupo de tareas que se ejecutarán de forma coordinada. Todas las tareas con el mismo grupo se ejecutan juntas.",
+    linkedExecutionOrder: "Orden de ejecución dentro del grupo. Las tareas se ejecutan en orden ascendente (0, 1, 2...).",
+    linkedTasks: "Selecciona otras tareas que se ejecutarán automáticamente después de completar esta tarea.",
+    requiredFields: "Lista de campos que deben tener valor. Si están vacíos, la transferencia fallará.",
+    postUpdateQuery: "SQL que se ejecutará después de transferir los datos. Útil para actualizar estados o limpiar tablas. NO incluir WHERE, se agregará automáticamente con los registros afectados.",
+    targetTable: "Tabla destino para transferencias internas (Server1 → Server1).",
+    executionMode: "Normal: ejecuta todo de una vez. Batches: procesa en lotes para grandes volúmenes de datos.",
+    existenceCheck: "Tabla y campo clave para verificar existencia de registros y construir el WHERE del SQL Post-Ejecución.",
 };
 
 const FieldHelp = ({ field }) => (
-  <HelpIcon className="tooltip">
-    <FaQuestionCircle size={12} />
-    <Tooltip className="tooltip">{FIELD_HELP[field]}</Tooltip>
-  </HelpIcon>
+    <span className="relative inline-flex group/help cursor-help text-primary-500">
+        <FaQuestionCircle size={12} />
+        <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/help:block w-64 bg-slate-900 text-white text-xs font-normal normal-case tracking-normal leading-relaxed rounded px-3 py-2 z-20 shadow-xl">
+            {FIELD_HELP[field]}
+        </span>
+    </span>
 );
+
+const SectionTitle = ({ children }) => (
+    <h4 className="mt-3 mb-1 text-xs font-bold text-primary-600 uppercase tracking-wider">{children}</h4>
+);
+
+const TABS = [
+    { id: "general", label: "General", icon: FaList },
+    { id: "query", label: "SQL & Params", icon: FaDatabase },
+    { id: "linking", label: "Vinculación", icon: FaLink },
+    { id: "advanced", label: "Avanzado", icon: FaVial },
+];
 
 export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) => {
     const [activeTab, setActiveTab] = useState("general");
@@ -224,6 +86,7 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                 postUpdateMapping: { viewKey: null, tableKey: null }
             });
         }
+        setActiveTab("general");
     }, [task, isOpen]);
 
     const handleChange = (e) => {
@@ -259,44 +122,45 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
         }
     };
 
-    if (!isOpen) return null;
-
     return (
-        <Overlay onClick={onClose}>
-            <ModalContent onClick={e => e.stopPropagation()}>
-                <Header>
-                    <h3 style={{ margin: 0 }}>
-                        {task ? "Editar Tarea de Transferencia" : "Nueva Tarea de Transferencia"}
-                    </h3>
-                    <FaTimes style={{ cursor: 'pointer' }} onClick={onClose} />
-                </Header>
+        <Modal isOpen={isOpen} onClose={onClose} maxWidth="max-w-3xl">
+            <div className="flex flex-col max-h-[90vh]">
+                <div className="px-6 pt-6">
+                    <ModalHeader className="mb-0 pb-4">
+                        <ModalTitle>{task ? "Editar Tarea de Transferencia" : "Nueva Tarea de Transferencia"}</ModalTitle>
+                        <button onClick={onClose} className="text-slate-400 hover:text-slate-700 transition-colors" aria-label="Cerrar">
+                            <FaTimes />
+                        </button>
+                    </ModalHeader>
+                </div>
 
-                <TabContainer>
-                    <Tab active={activeTab === "general"} onClick={() => setActiveTab("general")}>
-                        <FaList /> General
-                    </Tab>
-                    <Tab active={activeTab === "query"} onClick={() => setActiveTab("query")}>
-                        <FaDatabase /> SQL & Params
-                    </Tab>
-                    <Tab active={activeTab === "linking"} onClick={() => setActiveTab("linking")}>
-                        <FaLink /> Vinculación
-                    </Tab>
-                    <Tab active={activeTab === "advanced"} onClick={() => setActiveTab("advanced")}>
-                        <FaVial /> Avanzado
-                    </Tab>
-                </TabContainer>
+                <div className="flex border-b border-slate-200 px-6">
+                    {TABS.map(({ id, label, icon: Icon }) => (
+                        <button
+                            key={id}
+                            onClick={() => setActiveTab(id)}
+                            className={`flex items-center justify-center gap-2 flex-1 py-3 text-[13px] font-semibold border-b-2 transition-colors ${
+                                activeTab === id
+                                    ? "text-primary-600 border-primary-600"
+                                    : "text-slate-500 border-transparent hover:text-slate-800"
+                            }`}
+                        >
+                            <Icon size={12} /> {label}
+                        </button>
+                    ))}
+                </div>
 
-                <Body>
+                <div className="px-6 py-5 overflow-y-auto flex-1">
                     {activeTab === "general" && (
                         <>
                             <FormGroup>
-                                <Label>Nombre de la Tarea <FieldHelp field="name" /></Label>
-                                <Input name="name" value={formData.name} onChange={handleChange} placeholder="Ej: Importar Pedidos Pendientes" />
+                                <Label className="flex items-center gap-2">Nombre de la Tarea <FieldHelp field="name" /></Label>
+                                <UIInput name="name" value={formData.name} onChange={handleChange} placeholder="Ej: Importar Pedidos Pendientes" />
                             </FormGroup>
 
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '15px' }}>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <FormGroup>
-                                    <Label>Tipo de Ejecución <FieldHelp field="type" /></Label>
+                                    <Label className="flex items-center gap-2">Tipo de Ejecución <FieldHelp field="type" /></Label>
                                     <Select name="type" value={formData.type} onChange={handleChange}>
                                         <option value="manual">Manual - Solo se ejecuta con botón</option>
                                         <option value="auto">Automática - Solo con programador (cron)</option>
@@ -304,7 +168,7 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                     </Select>
                                 </FormGroup>
                                 <FormGroup>
-                                    <Label>Tipo de Transferencia <FieldHelp field="transferType" /></Label>
+                                    <Label className="flex items-center gap-2">Tipo de Transferencia <FieldHelp field="transferType" /></Label>
                                     <Select name="transferType" value={formData.transferType} onChange={handleChange}>
                                         <option value="general">General - Transferencia estándar</option>
                                         <option value="up">↑ Transfer Up (Server1 → Server2)</option>
@@ -314,23 +178,23 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                 </FormGroup>
                             </div>
 
-                            <CheckboxGroup>
-                                <CheckboxLabel>
-                                    <input type="checkbox" name="active" checked={formData.active} onChange={handleChange} />
+                            <div className="flex gap-3 flex-wrap mt-1 mb-4">
+                                <label className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded text-sm cursor-pointer hover:border-primary-500 transition-colors">
+                                    <input type="checkbox" name="active" checked={formData.active} onChange={handleChange} className="w-4 h-4 cursor-pointer accent-primary-600" />
                                     <span>Tarea Activa</span>
                                     <FieldHelp field="active" />
-                                </CheckboxLabel>
-                                <CheckboxLabel>
-                                    <input type="checkbox" name="clearBeforeInsert" checked={formData.clearBeforeInsert} onChange={handleChange} />
+                                </label>
+                                <label className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded text-sm cursor-pointer hover:border-primary-500 transition-colors">
+                                    <input type="checkbox" name="clearBeforeInsert" checked={formData.clearBeforeInsert} onChange={handleChange} className="w-4 h-4 cursor-pointer accent-primary-600" />
                                     <span>Borrar antes de insertar</span>
                                     <FieldHelp field="clearBeforeInsert" />
-                                </CheckboxLabel>
-                            </CheckboxGroup>
+                                </label>
+                            </div>
 
                             <SectionTitle>Tabla Destino (Solo para Transferencias Internas)</SectionTitle>
                             <FormGroup>
-                                <Label>Nombre de Tabla <FieldHelp field="targetTable" /></Label>
-                                <Input name="targetTable" value={formData.targetTable || ""} onChange={handleChange} placeholder="Ej: IMPLT_Orders" />
+                                <Label className="flex items-center gap-2">Nombre de Tabla <FieldHelp field="targetTable" /></Label>
+                                <UIInput name="targetTable" value={formData.targetTable || ""} onChange={handleChange} placeholder="Ej: IMPLT_Orders" />
                             </FormGroup>
                         </>
                     )}
@@ -338,16 +202,16 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                     {activeTab === "query" && (
                         <>
                             <FormGroup>
-                                <Label>Consulta SQL Principal <FieldHelp field="query" /></Label>
-                                <TextArea name="query" value={formData.query} onChange={handleChange}
+                                <Label className="flex items-center gap-2">Consulta SQL Principal <FieldHelp field="query" /></Label>
+                                <Textarea name="query" value={formData.query} onChange={handleChange} height="h-32" className="font-mono text-[13px]"
                                     placeholder="SELECT NUM_PED, COD_CLI, FECHA_PED, ... FROM PEDIDO WHERE ESTADO = 'A'" />
                             </FormGroup>
                             <FormGroup>
-                                <Label>Parámetros de Filtrado (JSON) <FieldHelp field="parameters" /></Label>
-                                <TextArea name="parameters" value={formData.parameters} onChange={handleChange}
+                                <Label className="flex items-center gap-2">Parámetros de Filtrado (JSON) <FieldHelp field="parameters" /></Label>
+                                <Textarea name="parameters" value={formData.parameters} onChange={handleChange} height="h-32" className="font-mono text-[13px]"
                                     placeholder='[{"field": "ESTADO", "operator": "=", "value": "A"}, {"field": "FECHA_PED", "operator": ">=", "value": "2024-01-01"}]' />
                             </FormGroup>
-                            <div style={{ background: '#e3f2fd', padding: '12px', borderRadius: '8px', fontSize: '12px', color: '#1565c0' }}>
+                            <div className="bg-primary-50 border border-primary-100 text-primary-700 rounded p-3 text-xs">
                                 <strong>Operadores disponibles:</strong> =, !=, &gt;, &lt;, &ge;, &le;, LIKE, IN, NOT IN
                             </div>
                         </>
@@ -357,26 +221,26 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                         <>
                             <SectionTitle>Grupo de Tareas Vinculadas</SectionTitle>
                             <FormGroup>
-                                <Label>Nombre del Grupo <FieldHelp field="linkedGroup" /></Label>
-                                <Input name="linkedGroup" value={formData.linkedGroup} onChange={handleChange}
+                                <Label className="flex items-center gap-2">Nombre del Grupo <FieldHelp field="linkedGroup" /></Label>
+                                <UIInput name="linkedGroup" value={formData.linkedGroup} onChange={handleChange}
                                     placeholder="Ej: Sincronizacion_Diaria_Completa" />
-                                <small style={{ color: '#888', fontSize: '11px' }}>
+                                <small className="text-slate-400 text-[11px]">
                                     Las tareas con el mismo nombre de grupo se ejecutarán de forma coordinada
                                 </small>
                             </FormGroup>
                             <FormGroup>
-                                <Label>Orden de Ejecución <FieldHelp field="linkedExecutionOrder" /></Label>
-                                <Input type="number" name="linkedExecutionOrder" value={formData.linkedExecutionOrder} onChange={handleChange}
+                                <Label className="flex items-center gap-2">Orden de Ejecución <FieldHelp field="linkedExecutionOrder" /></Label>
+                                <UIInput type="number" name="linkedExecutionOrder" value={formData.linkedExecutionOrder} onChange={handleChange}
                                     min="0" placeholder="0" />
-                                <small style={{ color: '#888', fontSize: '11px' }}>
+                                <small className="text-slate-400 text-[11px]">
                                     Las tareas se ejecutan en orden ascendente (0 → 1 → 2...)
                                 </small>
                             </FormGroup>
 
                             <SectionTitle>Vinculación Directa (Alternativa al Grupo)</SectionTitle>
                             <FormGroup>
-                                <Label>Seleccionar Tareas Vinculadas <FieldHelp field="linkedTasks" /></Label>
-                                <Select multiple style={{ height: '120px' }}
+                                <Label className="flex items-center gap-2">Seleccionar Tareas Vinculadas <FieldHelp field="linkedTasks" /></Label>
+                                <Select multiple className="h-32"
                                     value={formData.linkedTasks}
                                     onChange={(e) => {
                                         const values = Array.from(e.target.selectedOptions, option => option.value);
@@ -387,7 +251,7 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                         <option key={t._id} value={t._id}>{t.name}</option>
                                     ))}
                                 </Select>
-                                <small style={{ color: '#888', fontSize: '11px' }}>
+                                <small className="text-slate-400 text-[11px]">
                                     Estas tareas se ejecutarán automáticamente después de completar la actual
                                 </small>
                             </FormGroup>
@@ -398,49 +262,49 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                         <>
                             <SectionTitle>Validación de Datos</SectionTitle>
                             <FormGroup>
-                                <Label>Campos Obligatorios <FieldHelp field="requiredFields" /></Label>
-                                <Input value={formData.validationRules.requiredFields.join(', ')}
+                                <Label className="flex items-center gap-2">Campos Obligatorios <FieldHelp field="requiredFields" /></Label>
+                                <UIInput value={formData.validationRules.requiredFields.join(', ')}
                                     onChange={(e) => handleValidationChange('requiredFields', e.target.value.split(',').map(s => s.trim()).filter(s => s))}
                                     placeholder="CAMPO1, CAMPO2, CAMPO3" />
-                                <small style={{ color: '#888', fontSize: '11px' }}>
+                                <small className="text-slate-400 text-[11px]">
                                     Lista de campos que no pueden estar vacíos. Separados por coma.
                                 </small>
                             </FormGroup>
 
                             <SectionTitle>Verificación de Existencia</SectionTitle>
-                            <div style={{ display: 'grid', gridTemplateColumns: '1fr 1fr', gap: '10px' }}>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
                                 <FormGroup>
-                                    <Label>Tabla <FieldHelp field="existenceCheck" /></Label>
-                                    <Input
+                                    <Label className="flex items-center gap-2">Tabla <FieldHelp field="existenceCheck" /></Label>
+                                    <UIInput
                                         value={formData.validationRules.existenceCheck?.table || ''}
                                         onChange={(e) => handleValidationChange('existenceCheck', { ...formData.validationRules.existenceCheck, table: e.target.value })}
                                         placeholder="CATELLI.CLIENTE" />
                                 </FormGroup>
                                 <FormGroup>
-                                    <Label>Campo Clave <FieldHelp field="existenceCheck" /></Label>
-                                    <Input
+                                    <Label className="flex items-center gap-2">Campo Clave <FieldHelp field="existenceCheck" /></Label>
+                                    <UIInput
                                         value={formData.validationRules.existenceCheck?.key || ''}
                                         onChange={(e) => handleValidationChange('existenceCheck', { ...formData.validationRules.existenceCheck, key: e.target.value })}
                                         placeholder="Code_ofClient" />
                                 </FormGroup>
                             </div>
-                            <small style={{ color: '#888', fontSize: '11px', marginBottom: '15px', display: 'block' }}>
+                            <small className="text-slate-400 text-[11px] mb-3 block">
                                 Tabla y campo PK para verificar existencia y construir el WHERE del SQL Post-Ejecución automáticamente.
                             </small>
 
                             <SectionTitle>Consulta Post-Transferencia</SectionTitle>
                             <FormGroup>
-                                <Label>SQL Post-Ejecución <FieldHelp field="postUpdateQuery" /></Label>
-                                <TextArea name="postUpdateQuery" value={formData.postUpdateQuery} onChange={handleChange}
+                                <Label className="flex items-center gap-2">SQL Post-Ejecución <FieldHelp field="postUpdateQuery" /></Label>
+                                <Textarea name="postUpdateQuery" value={formData.postUpdateQuery} onChange={handleChange} className="font-mono text-[13px]"
                                     placeholder="UPDATE CATELLI.CLIENTE SET U_TRANSFER_STATUS = 'Normal'" />
-                                <small style={{ color: '#888', fontSize: '11px' }}>
+                                <small className="text-slate-400 text-[11px]">
                                     NO incluir WHERE. Se agregará automáticamente usando el Campo Clave de verificación de existencia.
                                 </small>
                             </FormGroup>
 
                             <SectionTitle>Modo de Ejecución</SectionTitle>
                             <FormGroup>
-                                <Label>Modo de Proceso <FieldHelp field="executionMode" /></Label>
+                                <Label className="flex items-center gap-2">Modo de Proceso <FieldHelp field="executionMode" /></Label>
                                 <Select name="executionMode" value={formData.executionMode} onChange={handleChange}>
                                     <option value="normal">Normal - Todo en una sola ejecución</option>
                                     <option value="batchesSSE">Batches (SSE) - En lotes con progreso en tiempo real</option>
@@ -448,15 +312,17 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                             </FormGroup>
                         </>
                     )}
-                </Body>
+                </div>
 
-                <Footer>
-                    <Button onClick={onClose}>Cancelar</Button>
-                    <Button variant="primary" onClick={handleSave} loading={loading}>
-                        <FaSave /> {task ? "Actualizar Tarea" : "Crear Tarea"}
-                    </Button>
-                </Footer>
-            </ModalContent>
-        </Overlay>
+                <div className="px-6 pb-6">
+                    <ModalFooter className="mt-0 pt-4">
+                        <Button variant="secondary" onClick={onClose}>Cancelar</Button>
+                        <Button variant="primary" onClick={handleSave} loading={loading}>
+                            <FaSave /> {task ? "Actualizar Tarea" : "Crear Tarea"}
+                        </Button>
+                    </ModalFooter>
+                </div>
+            </div>
+        </Modal>
     );
 };
