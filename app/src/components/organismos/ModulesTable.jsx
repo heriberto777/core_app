@@ -1,6 +1,6 @@
 import React, { useState } from "react";
 import {
-    FaCog, FaEdit, FaTrash, FaCopy, FaToggleOn, FaToggleOff,
+    FaCog, FaEdit, FaTrash, FaToggleOn, FaToggleOff,
     FaLayerGroup, FaChevronDown, FaChevronUp, FaCubes
 } from "react-icons/fa";
 import { StatusBadge } from "../index";
@@ -9,7 +9,7 @@ import { StatusBadge } from "../index";
  * ModulesTable (Tailwind Edition)
  * Grid de arquitectura modular con tarjetas de servicio expandibles.
  */
-export const ModulesTable = ({ data, onEdit, onDelete, onDuplicate, onToggleStatus }) => {
+export const ModulesTable = ({ data, onEdit, onDelete, onToggleStatus }) => {
     const [expanded, setExpanded] = useState({});
 
     const toggleExpand = (id) => {
@@ -105,19 +105,12 @@ export const ModulesTable = ({ data, onEdit, onDelete, onDuplicate, onToggleStat
 
                     {/* CONTROL BAR */}
                     <div className="flex gap-2 justify-end mt-6 pt-4 border-t border-slate-50 opacity-0 group-hover:opacity-100 transition-opacity">
-                        <button 
+                        <button
                           onClick={() => onEdit(module)}
-                          className="p-2.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all"
+                          className="p-2.5 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-all"
                           title="Editar servicio"
                         >
                             <FaEdit size={16} />
-                        </button>
-                        <button 
-                          onClick={() => onDuplicate(module)}
-                          className="p-2.5 text-slate-400 hover:text-violet-500 hover:bg-violet-50 rounded-xl transition-all"
-                          title="Clonar esquema"
-                        >
-                            <FaCopy size={16} />
                         </button>
                         <button
                             onClick={() => onToggleStatus(module)}

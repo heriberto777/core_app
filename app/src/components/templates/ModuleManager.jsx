@@ -7,7 +7,7 @@ import {
     ModulesTable,
     Button
 } from "../../index";
-import { FaPlus, FaSearch, FaCogs, FaSync, FaDownload, FaTools } from "react-icons/fa";
+import { FaPlus, FaSearch, FaCogs, FaSync } from "react-icons/fa";
 import Swal from "sweetalert2";
 
 /**
@@ -18,7 +18,7 @@ export function ModuleManager() {
     const [modalOpen, setModalOpen] = useState(false);
     const [selectedModule, setSelectedModule] = useState(null);
 
-    const { accessToken, reloadModuleConfig } = useAuth();
+    const { accessToken, reloadUserPermissions } = useAuth();
     const { hasPermission, isAdmin } = usePermissions();
 
     const {
@@ -29,7 +29,7 @@ export function ModuleManager() {
         searchTerm,
         setSearchTerm,
         actions
-    } = useModules(accessToken, reloadModuleConfig);
+    } = useModules(accessToken, reloadUserPermissions);
 
     const canCreate = hasPermission("modules", "create");
 
@@ -89,36 +89,6 @@ export function ModuleManager() {
         }
     };
 
-    const handleDuplicate = async (module) => {
-        const { value: newNames } = await Swal.fire({
-            title: 'Clonar Esquema de Módulo',
-            html: `
-        <div style="text-align: left; padding: 10px;">
-          <label style="display: block; font-size: 11px; font-weight: 800; color: #64748b; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px;">Nuevo Nombre Técnico</label>
-          <input id="newName" class="swal2-input" style="margin-top: 0; margin-bottom: 15px;" value="${module.name}_copy">
-          <label style="display: block; font-size: 11px; font-weight: 800; color: #64748b; margin-bottom: 5px; text-transform: uppercase; letter-spacing: 0.5px;">Nuevo Nombre Visual</label>
-          <input id="newDisp" class="swal2-input" style="margin-top: 0;" value="${module.displayName} (Copia)">
-        </div>
-      `,
-            showCancelButton: true,
-            confirmButtonText: 'Clonar Servicio',
-            confirmButtonColor: '#6366f1',
-            preConfirm: () => ({
-                newName: document.getElementById('newName').value,
-                newDisplayName: document.getElementById('newDisp').value
-            })
-        });
-
-        if (newNames) {
-            try {
-                await actions.duplicateModule(module._id, newNames);
-                Swal.fire('Clonado', 'El esquema ha sido duplicado con éxito.', 'success');
-            } catch (e) {
-                Swal.fire('Error', e.message || 'Error al clonar', 'error');
-            }
-        }
-    };
-
     const handleInvalidateCache = async () => {
         const result = await Swal.fire({
             title: '¿Invalidar caché global?',
@@ -151,12 +121,6 @@ export function ModuleManager() {
                     <div className="flex gap-2">
                         <Button variant="secondary" size="sm" onClick={handleInvalidateCache} className="!p-3" title="Sincronizar Caché">
                             <FaSync />
-                        </Button>
-                        <Button variant="secondary" size="sm" onClick={() => actions.exportModules()} className="!p-3" title="Exportar Esquema JSON">
-                            <FaDownload />
-                        </Button>
-                        <Button variant="secondary" size="sm" onClick={() => actions.initializeSystemModules()} className="!p-3" title="Reparar Módulos Base">
-                            <FaTools />
                         </Button>
                     </div>
                 )}
@@ -197,7 +161,6 @@ export function ModuleManager() {
                         data={modules}
                         onEdit={handleEdit}
                         onDelete={handleDelete}
-                        onDuplicate={handleDuplicate}
                         onToggleStatus={handleToggleStatus}
                     />
                 </div>
