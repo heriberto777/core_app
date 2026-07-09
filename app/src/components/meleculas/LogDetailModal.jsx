@@ -5,7 +5,7 @@ import { StatusBadge } from "../index";
 const Overlay = (props) => (
   <div
     {...props}
-    className="fixed inset-0 flex items-center justify-center z-1000 bg-black/70 backdrop-blur-sm"
+    className="fixed inset-0 flex items-center justify-center z-[9999] bg-black/70 backdrop-blur-sm"
     onClick={props.onClick}
   />
 );

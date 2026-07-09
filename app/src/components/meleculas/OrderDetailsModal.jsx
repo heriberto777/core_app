@@ -5,7 +5,7 @@ import { FaTimes, FaTrash, FaEdit } from "react-icons/fa";
 const ModalOverlay = (props) => (
   <div
     {...props}
-    className="fixed inset-0 flex items-center justify-center z-1000 p-4 md:p-0"
+    className="fixed inset-0 flex items-center justify-center z-[9999] p-4 md:p-0"
     onClick={props.onClick}
   />
 );
