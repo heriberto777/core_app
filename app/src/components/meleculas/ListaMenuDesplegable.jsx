@@ -4,11 +4,10 @@ import { ItemsDesplegable } from "../../index";
 /**
  * Corporate ListaMenuDesplegable (Tailwind Edition)
  */
-export function ListaMenuDesplegable({ data, top = "0", funcion, className = "" }) {
+export function ListaMenuDesplegable({ data, funcion, className = "" }) {
   return (
     <div
-      className={`p-1.5 min-w-[180px] flex flex-col absolute bg-white border border-slate-200 rounded-xl shadow-xl ${className}`}
-      style={{ top: top }}
+      className={`p-1.5 min-w-[180px] flex flex-col bg-white border border-slate-200 rounded-xl shadow-xl ${className}`}
     >
       {data.map((item, index) => (
         <ItemsDesplegable

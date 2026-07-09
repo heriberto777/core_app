@@ -115,7 +115,6 @@ export class AuditStatsApi {
             if (filters.dateFrom) queryParams.append("dateFrom", filters.dateFrom);
             if (filters.dateTo) queryParams.append("dateTo", filters.dateTo);
             if (filters.search) queryParams.append("search", filters.search);
-            if (filters.user) queryParams.append("user", filters.user);
             if (filters.limit) queryParams.append("limit", filters.limit);
             if (filters.page) queryParams.append("page", filters.page);
 

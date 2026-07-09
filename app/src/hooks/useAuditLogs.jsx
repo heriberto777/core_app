@@ -14,7 +14,6 @@ export const useAuditLogs = (accessToken, initialType = "system") => {
         status: "all",
         taskName: "",
         search: "",
-        user: "",
         operationType: "all",
         limit: 50,
     });
