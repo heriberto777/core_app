@@ -9,19 +9,14 @@ export const useAuditLogs = (accessToken, initialType = "system") => {
     const [filters, setFilters] = useState({
         level: "all",
         source: "",
-        startDate: null,
-        endDate: null,
+        dateFrom: "",
+        dateTo: "",
         status: "all",
         taskName: "",
         search: "",
+        user: "",
+        operationType: "all",
         limit: 50,
-        // === Filtros nuevos ===
-        operationType: [],
-        entityType: [],
-        durationMin: null,
-        durationMax: null,
-        affectedRecordsMin: null,
-        affectedRecordsMax: null,
     });
 
     const [pagination, setPagination] = useState({

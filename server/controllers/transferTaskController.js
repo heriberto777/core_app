@@ -797,7 +797,11 @@ const getTransferHistory = async (req, res) => {
     if (dateFrom || dateTo) {
       query.timestamp = {};
       if (dateFrom) query.timestamp.$gte = new Date(dateFrom);
-      if (dateTo) query.timestamp.$lte = new Date(dateTo);
+      if (dateTo) {
+        const endDate = new Date(dateTo);
+        endDate.setDate(endDate.getDate() + 1);
+        query.timestamp.$lt = endDate;
+      }
     }
 
     if (status) query["metadata.status"] = status;
