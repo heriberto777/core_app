@@ -113,7 +113,7 @@ export function ConsecutiveFormModal({ isOpen, onClose, onSave, consecutive = nu
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[2000] p-4 animate-in fade-in duration-300">
-            <div className="w-full max-w-[800px] max-h-[95vh] bg-white rounded-[32px] border border-slate-100 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="w-full max-w-[800px] max-h-[95vh] bg-white rounded-xl border border-slate-100 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
                 {/* Header */}
                 <div className="px-8 py-7 flex items-center justify-between border-b border-slate-50 bg-white/80 backdrop-blur-md">
                     <div className="flex items-center gap-4">
@@ -225,7 +225,7 @@ export function ConsecutiveFormModal({ isOpen, onClose, onSave, consecutive = nu
                     </div>
 
                     {/* Operational Segments */}
-                    <div className="p-8 bg-slate-50/50 border border-slate-100 rounded-[28px] space-y-6">
+                    <div className="p-8 bg-slate-50/50 border border-slate-100 rounded-xl space-y-6">
                         <div className="flex items-center justify-between">
                             <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3">
                                 <FaLayerGroup className="text-emerald-500" /> Segmentación Operativa
@@ -272,7 +272,7 @@ export function ConsecutiveFormModal({ isOpen, onClose, onSave, consecutive = nu
                     </div>
 
                     {/* ERP Sync */}
-                    <div className="p-8 bg-blue-50/30 border border-blue-100 rounded-[28px] space-y-6">
+                    <div className="p-8 bg-blue-50/30 border border-blue-100 rounded-xl space-y-6">
                         <div className="flex items-center justify-between">
                             <h3 className="text-[11px] font-black text-blue-900 uppercase tracking-[0.2em] flex items-center gap-3">
                                 <FaSync className="text-blue-500" /> Sincronización ERP (SQL Server)

@@ -79,7 +79,7 @@ export const ModuleFormModal = ({ isOpen, onClose, onSave, initialData = null, c
 
     return (
         <div className="fixed inset-0 bg-slate-900/40 backdrop-blur-sm flex items-center justify-center z-[1000] p-4 animate-in fade-in duration-300">
-            <div className="w-full max-w-[850px] max-h-[90vh] bg-white rounded-[32px] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-300">
+            <div className="w-full max-w-[850px] max-h-[90vh] bg-white rounded-xl overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-300">
                 {/* Header */}
                 <div className="bg-white/80 backdrop-blur-md px-8 py-6 flex items-center justify-between border-b border-slate-100">
                     <div className="flex items-center gap-4">
@@ -101,7 +101,7 @@ export const ModuleFormModal = ({ isOpen, onClose, onSave, initialData = null, c
                 {/* Scroll Content */}
                 <div className="flex-1 overflow-y-auto p-8 space-y-10">
                     {/* System Alert */}
-                    <div className="bg-blue-50/50 border border-blue-100 text-blue-700 px-6 py-4 rounded-[20px] text-sm flex gap-4 items-start animate-in slide-in-from-top-2 duration-500">
+                    <div className="bg-blue-50/50 border border-blue-100 text-blue-700 px-6 py-4 rounded-xl text-sm flex gap-4 items-start animate-in slide-in-from-top-2 duration-500">
                         <FaInfoCircle className="mt-1 shrink-0 text-blue-500" />
                         <span className="font-medium leading-relaxed">
                             Los módulos son las unidades funcionales del sistema. Definen los permisos, la posición en el menú y el comportamiento general de la interfaz para los usuarios finales.
@@ -185,7 +185,7 @@ export const ModuleFormModal = ({ isOpen, onClose, onSave, initialData = null, c
                             <FaCheckSquare className="text-blue-600" /> Capacidades Atómicas (Acciones)
                         </h3>
 
-                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50/80 p-6 rounded-[24px] border border-slate-100">
+                        <div className="grid grid-cols-2 sm:grid-cols-4 gap-3 bg-slate-50/80 p-6 rounded-xl border border-slate-100">
                             {availableActions.map(actionObj => {
                                 const actionValue = typeof actionObj === 'string' ? actionObj : (actionObj.name || actionObj.value || '');
                                 const actionLabel = typeof actionObj === 'string' ? actionObj : (actionObj.displayName || actionObj.name || '');

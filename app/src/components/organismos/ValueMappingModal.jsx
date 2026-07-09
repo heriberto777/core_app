@@ -20,7 +20,7 @@ export function ValueMappingModal({ isOpen, onClose, onSave, initialData }) {
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[2500] p-4 animate-in fade-in duration-200" onClick={onClose}>
-            <div className="bg-white w-full max-w-[400px] rounded-[24px] border border-slate-200 shadow-2xl p-6 flex flex-col gap-6 animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            <div className="bg-white w-full max-w-[400px] rounded-xl border border-slate-200 shadow-2xl p-6 flex flex-col gap-6 animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
                     <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
                         <FaExchangeAlt className="text-blue-500 text-sm" /> Mapeo de Valor

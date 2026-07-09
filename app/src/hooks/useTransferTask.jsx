@@ -103,9 +103,18 @@ export const useTransferTask = () => {
                 progressClient.unsubscribe(task._id);
             }
         });
-
-        return () => progressClient.closeAll();
+        // Sin cleanup aquí a propósito: este efecto se re-ejecuta cada vez que
+        // `tasks` cambia (la lista se refresca sola cada 5s), y un cleanup que
+        // cerrara todo cortaría/reabriría la conexión SSE de cualquier tarea
+        // que siga corriendo. Desuscribirse de tareas ya no-"running" ya se
+        // maneja arriba; el cierre de TODAS las conexiones solo debe pasar
+        // cuando el hook se desmonta de verdad (ver efecto siguiente).
     }, [tasks, activeTasks, notificationsEnabled, setTasks]);
+
+    // Cierre real de todas las conexiones SSE solo al desmontar el hook.
+    useEffect(() => {
+        return () => progressClient.closeAll();
+    }, []);
 
     const handleFilterChange = (filterType, value) => {
         setFilters(prev => ({ ...prev, [filterType]: value }));

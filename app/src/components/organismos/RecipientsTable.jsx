@@ -11,7 +11,7 @@ export const RecipientsTable = ({
 }) => {
     if (loading && recipients.length === 0) {
         return (
-            <div className="bg-white/50 border border-slate-200 rounded-[24px] p-20 flex flex-col items-center justify-center gap-4 text-slate-400 animate-pulse">
+            <div className="bg-white/50 border border-slate-200 rounded-xl p-20 flex flex-col items-center justify-center gap-4 text-slate-400 animate-pulse">
                 <div className="w-12 h-12 border-4 border-blue-500 border-t-transparent rounded-full animate-spin" />
                 <span className="font-bold text-sm uppercase tracking-widest">Cargando destinatarios...</span>
             </div>
@@ -19,7 +19,7 @@ export const RecipientsTable = ({
     }
 
     return (
-        <div className="bg-white/70 backdrop-blur-md border border-slate-200 rounded-[24px] shadow-sm overflow-hidden animate-in fade-in duration-500">
+        <div className="bg-white/70 backdrop-blur-md border border-slate-200 rounded-xl shadow-sm overflow-hidden animate-in fade-in duration-500">
             <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                     <thead>

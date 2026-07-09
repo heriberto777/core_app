@@ -66,7 +66,7 @@ export function AuditCenter() {
             </div>
 
             {/* DATA TABLE */}
-            <div className="bg-white rounded-[32px] border border-slate-200 shadow-soft overflow-hidden min-h-[500px]">
+            <div className="bg-white rounded-xl border border-slate-200 shadow-soft overflow-hidden min-h-[500px]">
               <AuditDataTable
                   data={logs}
                   type={logType}

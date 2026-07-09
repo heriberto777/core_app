@@ -89,7 +89,7 @@ export function TableConfigModal({ isOpen, onClose, onSave, initialData }) {
           onClick={onClose}
         >
             <div 
-              className="bg-white w-full max-w-2xl max-h-[90vh] rounded-[32px] shadow-premium flex flex-col overflow-hidden animate-slideUp"
+              className="bg-white w-full max-w-2xl max-h-[90vh] rounded-xl shadow-premium flex flex-col overflow-hidden animate-slideUp"
               onClick={e => e.stopPropagation()}
             >
                 {/* HEADER */}

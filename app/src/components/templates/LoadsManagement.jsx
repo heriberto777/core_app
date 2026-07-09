@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import {
   FaSync,
@@ -27,6 +28,7 @@ import Swal from "sweetalert2";
  * Orquestación logística de despacho con diseño corporativo premium.
  */
 export function LoadsManagement() {
+  const navigate = useNavigate();
   const { accessToken } = useAuth();
   const { showSuccess, showError } = useNotification();
   const {
@@ -149,7 +151,7 @@ export function LoadsManagement() {
             </p>
           </div>
           <div className="flex gap-3 shrink-0">
-            <Button variant="secondary" onClick={() => window.location.href = "/loads/history"} className="!px-6">
+            <Button variant="secondary" onClick={() => navigate("/loads/transfers")} className="!px-6">
               <FaHistory /> Historial
             </Button>
             <Button variant="primary" onClick={actions.fetchOrders} loading={refreshing} className="!px-8 shadow-indigo-500/20">
@@ -162,7 +164,7 @@ export function LoadsManagement() {
         <LoadsStatsGrid stats={stats} loading={loading} />
 
         {/* FILTERS */}
-        <div className="bg-white rounded-[32px] border border-slate-100 shadow-soft p-2">
+        <div className="bg-white rounded-xl border border-slate-100 shadow-soft p-2">
           <FiltersPanel
             filters={filters}
             onFiltersChange={actions.updateFilters}
@@ -179,7 +181,7 @@ export function LoadsManagement() {
         {/* BULK ACTIONS STICKY BANNER */}
         {selectedOrders.length > 0 && canProcessLoad && (
           <div className="sticky top-6 z-[100] animate-slideDown">
-            <div className="bg-slate-900 text-white p-5 px-8 rounded-[24px] shadow-2xl shadow-slate-900/40 flex flex-col sm:flex-row justify-between items-center gap-4 border border-white/10 backdrop-blur-xl">
+            <div className="bg-slate-900 text-white p-5 px-8 rounded-xl shadow-2xl shadow-slate-900/40 flex flex-col sm:flex-row justify-between items-center gap-4 border border-white/10 backdrop-blur-xl">
               <div className="flex items-center gap-4">
                 <div className="w-12 h-12 rounded-2xl bg-indigo-500 flex items-center justify-center text-xl shadow-lg shadow-indigo-500/30">
                   <FaTruck />
@@ -214,7 +216,7 @@ export function LoadsManagement() {
         )}
 
         {/* LISTING */}
-        <div className="bg-white rounded-[40px] border border-slate-100 shadow-premium overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-100 shadow-premium overflow-hidden">
           {loading && !refreshing ? (
             <LoadingUI message="Cargando pedidos pendientes de despacho..." />
           ) : (

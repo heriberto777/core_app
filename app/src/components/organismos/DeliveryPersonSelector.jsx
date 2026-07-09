@@ -69,7 +69,7 @@ export function DeliveryPersonSelector({
 
   return (
     <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[1000] p-4 animate-in fade-in duration-300">
-      <div className="bg-white w-full max-w-[650px] max-h-[90vh] rounded-[32px] overflow-hidden shadow-2xl border border-slate-100 flex flex-col animate-in zoom-in-95 duration-300">
+      <div className="bg-white w-full max-w-[650px] max-h-[90vh] rounded-xl overflow-hidden shadow-2xl border border-slate-100 flex flex-col animate-in zoom-in-95 duration-300">
         {/* Header */}
         <div className="px-8 py-7 border-b border-slate-50 flex items-center justify-between bg-white/80 backdrop-blur-md sticky top-0 z-10">
           <div className="flex items-center gap-4">
@@ -88,7 +88,7 @@ export function DeliveryPersonSelector({
 
         {/* Summary (Sticky below header) */}
         <div className="px-8 pt-8 pb-0 bg-white sticky top-[81px] z-10">
-          <div className="bg-slate-50 border border-slate-100 rounded-[28px] p-8 space-y-6">
+          <div className="bg-slate-50 border border-slate-100 rounded-xl p-8 space-y-6">
             <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3 border-l-4 border-indigo-600 pl-4">
               Resumen de la Carga
             </h4>
@@ -162,7 +162,7 @@ export function DeliveryPersonSelector({
                     key={vendedorId}
                     onClick={() => setSelectedVendedor(vendedor)}
                     className={`
-                      p-6 rounded-[24px] border-2 transition-all duration-300 cursor-pointer relative group flex flex-col gap-4
+                      p-6 rounded-xl border-2 transition-all duration-300 cursor-pointer relative group flex flex-col gap-4
                       ${isSelected 
                         ? "bg-emerald-50 border-emerald-500 shadow-xl shadow-emerald-500/10 scale-[1.02]" 
                         : "bg-white border-slate-100 hover:border-indigo-500 hover:shadow-lg hover:-translate-y-1"}
@@ -198,7 +198,7 @@ export function DeliveryPersonSelector({
         {/* Footer */}
         <div className="px-8 py-6 border-t border-slate-50 bg-white/80 backdrop-blur-md sticky bottom-0 z-10 space-y-6">
           {selectedVendedor && (
-            <div className="p-5 bg-indigo-50 border border-indigo-100 rounded-[20px] flex items-center justify-between animate-in slide-in-from-bottom-4 duration-300">
+            <div className="p-5 bg-indigo-50 border border-indigo-100 rounded-xl flex items-center justify-between animate-in slide-in-from-bottom-4 duration-300">
               <div className="flex items-center gap-4">
                 <div className="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shadow-lg shadow-indigo-600/20">
                   <FaInfoCircle />

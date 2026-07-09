@@ -81,7 +81,7 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
           confirmButtonText: "Entendido",
           confirmButtonColor: "#2563eb",
           customClass: {
-            popup: 'rounded-[24px]',
+            popup: 'rounded-xl',
             confirmButton: 'rounded-xl px-8 font-bold uppercase text-xs tracking-widest'
           }
         });
@@ -146,7 +146,7 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
         confirmButtonText: "Asignar",
         cancelButtonText: "Cancelar",
         confirmButtonColor: "#2563eb",
-        customClass: { popup: 'rounded-[24px]' },
+        customClass: { popup: 'rounded-xl' },
         preConfirm: () => document.getElementById("consecutive-select").value,
       });
 
@@ -240,7 +240,7 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
         confirmButtonText: "Crear y Asignar",
         cancelButtonText: "Cancelar",
         confirmButtonColor: "#2563eb",
-        customClass: { popup: 'rounded-[28px]' },
+        customClass: { popup: 'rounded-xl' },
         preConfirm: () => {
           const name = document.getElementById("name").value;
           if (!name) { Swal.showValidationMessage("El nombre es obligatorio"); return false; }
@@ -363,7 +363,7 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
         };
       },
       confirmButtonColor: "#2563eb",
-      customClass: { popup: 'rounded-[28px]' }
+      customClass: { popup: 'rounded-xl' }
     });
 
     if (!formValues) return;
@@ -394,7 +394,7 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
   };
 
   return (
-    <div className="relative bg-white border border-slate-200 rounded-[32px] p-8 mb-8 shadow-sm animate-in fade-in duration-500 overflow-hidden">
+    <div className="relative bg-white border border-slate-200 rounded-xl p-8 mb-8 shadow-sm animate-in fade-in duration-500 overflow-hidden">
       {/* Loading Overlay */}
       {loading && (
         <div className="absolute inset-0 bg-white/80 backdrop-blur-md flex flex-col items-center justify-center z-20 animate-in fade-in duration-300">
@@ -417,7 +417,7 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
       </div>
 
       {/* Enable Toggle */}
-      <label className={`flex items-center gap-4 px-8 py-5 rounded-[20px] cursor-pointer transition-all border mb-8 group ${
+      <label className={`flex items-center gap-4 px-8 py-5 rounded-xl cursor-pointer transition-all border mb-8 group ${
         isEnabled ? "bg-blue-50/50 border-blue-200" : "bg-slate-50 border-slate-100 hover:bg-slate-100/50"
       }`}>
         <div className={`w-12 h-6 rounded-full p-1 transition-colors relative ${isEnabled ? "bg-blue-600" : "bg-slate-300"}`}>
@@ -440,7 +440,7 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
       {isEnabled && (
         <div className="flex flex-col gap-10 animate-in slide-in-from-top-4 duration-500">
           {/* System Selection */}
-          <div className="p-8 bg-slate-50/50 border border-slate-200 rounded-[24px] flex flex-col gap-6">
+          <div className="p-8 bg-slate-50/50 border border-slate-200 rounded-xl flex flex-col gap-6">
             <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
               <FaCogs /> Sistema de Ejecución
             </span>
@@ -468,7 +468,7 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
             </div>
 
             {useCentralizedSystem && (
-              <div className="mt-4 p-8 bg-white border border-slate-200 rounded-[24px] shadow-sm animate-in zoom-in-95 duration-300">
+              <div className="mt-4 p-8 bg-white border border-slate-200 rounded-xl shadow-sm animate-in zoom-in-95 duration-300">
                 {assignedConsecutives.length > 0 ? (
                   <div className="flex flex-col gap-6">
                     <div className="flex flex-col gap-2">
@@ -547,7 +547,7 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
 
           {/* Local Config Specifics */}
           {!useCentralizedSystem && (
-            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-8 bg-slate-50/50 border border-slate-200 rounded-[24px] animate-in slide-in-from-right-4 duration-500">
+            <div className="grid grid-cols-1 md:grid-cols-2 gap-8 p-8 bg-slate-50/50 border border-slate-200 rounded-xl animate-in slide-in-from-right-4 duration-500">
               <div className="flex flex-col gap-6">
                 <div className="flex flex-col gap-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-slate-400 px-1">Último Valor Usado</label>
@@ -607,7 +607,7 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
           )}
 
           {/* Table-Specific Mappings */}
-          <div className="p-8 bg-slate-50 border border-slate-100 rounded-[32px] flex flex-col gap-6">
+          <div className="p-8 bg-slate-50 border border-slate-100 rounded-xl flex flex-col gap-6">
             <div className="flex justify-between items-center px-1">
               <div className="flex flex-col gap-1">
                 <span className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-900">Asignación Específica por Tablas</span>
@@ -621,7 +621,7 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4 mt-2">
               {tableMappings && tableMappings.length > 0 ? (
                 tableMappings.map((m, index) => (
-                  <div key={index} className="p-6 bg-white border border-slate-200 rounded-[20px] shadow-sm hover:border-blue-300 transition-all group flex flex-col gap-4">
+                  <div key={index} className="p-6 bg-white border border-slate-200 rounded-xl shadow-sm hover:border-blue-300 transition-all group flex flex-col gap-4">
                     <div className="flex justify-between items-start">
                       <div className="w-10 h-10 bg-slate-50 rounded-xl flex items-center justify-center text-slate-400 group-hover:bg-blue-50 group-hover:text-blue-500 transition-colors">
                         <FaLayerGroup />

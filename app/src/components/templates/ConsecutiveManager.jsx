@@ -200,7 +200,7 @@ export function ConsecutiveManager() {
         {showDashboard ? (
           <ConsecutiveDashboardPanel data={dashboardData} onClose={() => setShowDashboard(false)} />
         ) : (
-          <div className="bg-white rounded-[32px] border border-slate-200 shadow-soft overflow-hidden">
+          <div className="bg-white rounded-xl border border-slate-200 shadow-soft overflow-hidden">
             {loading ? (
               <LoadingUI message="Sincronizando consecutivos con el servidor de folios..." />
             ) : filteredConsecutives.length === 0 ? (

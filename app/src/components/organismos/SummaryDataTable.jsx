@@ -13,7 +13,7 @@ export function SummaryDataTable({ summaries, onView, onReturn, refreshing }) {
     };
 
     return (
-        <div className={`w-full border border-slate-200 bg-white rounded-[32px] overflow-hidden shadow-sm transition-all duration-300 ${refreshing ? "opacity-60 grayscale blur-[1px]" : "opacity-100"}`}>
+        <div className={`w-full border border-slate-200 bg-white rounded-xl overflow-hidden shadow-sm transition-all duration-300 ${refreshing ? "opacity-60 grayscale blur-[1px]" : "opacity-100"}`}>
             <div className="overflow-x-auto">
                 <table className="w-full border-collapse">
                     <thead>

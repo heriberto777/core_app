@@ -74,7 +74,7 @@ export function MappingsList({
   return (
     <div className="flex flex-col gap-6 animate-fadeIn">
       {/* HEADER & SEARCH */}
-      <div className="bg-white p-6 rounded-[24px] border border-slate-200 shadow-soft flex flex-col md:flex-row md:items-center justify-between gap-4">
+      <div className="bg-white p-6 rounded-xl border border-slate-200 shadow-soft flex flex-col md:flex-row md:items-center justify-between gap-4">
         <div>
           <h2 className="text-2xl font-extrabold text-slate-800">Mapeos de Datos</h2>
           <p className="text-xs font-bold text-slate-400 uppercase tracking-widest mt-1">Configuraciones de integración</p>
@@ -102,7 +102,7 @@ export function MappingsList({
       {loading ? (
         <LoadingUI message="Obteniendo configuraciones..." />
       ) : (
-        <div className="bg-white rounded-[32px] border border-slate-200 shadow-soft overflow-hidden">
+        <div className="bg-white rounded-xl border border-slate-200 shadow-soft overflow-hidden">
           {filteredMappings.length === 0 ? (
             <div className="p-20 text-center flex flex-col items-center gap-4">
               <div className="text-5xl opacity-20">📂</div>

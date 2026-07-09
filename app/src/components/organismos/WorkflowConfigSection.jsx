@@ -237,7 +237,7 @@ const WorkflowConfigSection = ({ mapping = {}, handleChange, accessToken }) => {
         <div className="flex items-center justify-between">
           <div className="flex items-center gap-4">
             <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
-              <FaExclamation />
+              <FaExclamationTriangle />
             </div>
             <div>
               <h4 className="font-bold text-slate-800">Detener Flujo si hay Error</h4>

@@ -7,7 +7,7 @@ import { ItemsDesplegable } from "../../index";
 export function ListaMenuDesplegable({ data, top = "0", funcion, className = "" }) {
   return (
     <div
-      className={`p-2.5 flex flex-col absolute bg-slate-800 rounded-[22px] shadow-lg ${className}`}
+      className={`p-2.5 flex flex-col absolute bg-slate-800 rounded-xl shadow-lg ${className}`}
       style={{ top: top }}
     >
       {data.map((item, index) => (

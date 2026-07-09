@@ -9,7 +9,7 @@ export function ItemsDesplegable({ item, funcion, className = "" }) {
     <div 
       onClick={funcion}
       className={`
-        cursor-pointer p-2 rounded-[20px] flex items-center gap-2.5
+        cursor-pointer p-2 rounded-xl flex items-center gap-2.5
         hover:bg-slate-700
         ${className}
       `}

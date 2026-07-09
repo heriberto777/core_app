@@ -66,7 +66,7 @@ export const RoleFormModal = ({ isOpen, onClose, onSave, initialData = null, res
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[1000] p-4 animate-in fade-in duration-300">
-            <div className="w-full max-w-[850px] max-h-[90vh] bg-white rounded-[32px] overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-300">
+            <div className="w-full max-w-[850px] max-h-[90vh] bg-white rounded-xl overflow-hidden shadow-2xl flex flex-col animate-in zoom-in-95 duration-300">
                 {/* Header */}
                 <div className="bg-white/80 backdrop-blur-md px-8 py-7 flex items-center justify-between border-b border-slate-50">
                     <div className="flex items-center gap-4">
@@ -89,7 +89,7 @@ export const RoleFormModal = ({ isOpen, onClose, onSave, initialData = null, res
                 <div className="flex-1 overflow-y-auto p-8 space-y-10">
                     {/* System Alert */}
                     {initialData?.isSystem && (
-                        <div className="bg-amber-50/50 border border-amber-100 text-amber-800 px-6 py-4 rounded-[20px] text-sm flex gap-4 items-start animate-in slide-in-from-top-2 duration-500">
+                        <div className="bg-amber-50/50 border border-amber-100 text-amber-800 px-6 py-4 rounded-xl text-sm flex gap-4 items-start animate-in slide-in-from-top-2 duration-500">
                             <FaLock className="mt-1 shrink-0 text-amber-500" />
                             <span className="font-medium leading-relaxed italic">
                                 Este es un rol crítico del sistema. Ciertas propiedades técnicas están restringidas para garantizar la integridad de la plataforma.
@@ -150,7 +150,7 @@ export const RoleFormModal = ({ isOpen, onClose, onSave, initialData = null, res
                             {resources.map(res => {
                                 const resPerm = formData.permissions.find(p => p.resource === res.id);
                                 return (
-                                    <div key={res.id} className="bg-slate-50/50 border border-slate-100 rounded-[28px] p-8 space-y-6 hover:border-indigo-200 transition-all group">
+                                    <div key={res.id} className="bg-slate-50/50 border border-slate-100 rounded-xl p-8 space-y-6 hover:border-indigo-200 transition-all group">
                                         <div className="flex flex-col gap-1">
                                             <div className="flex items-center gap-2">
                                                 <div className="w-2 h-2 rounded-full bg-indigo-500" />

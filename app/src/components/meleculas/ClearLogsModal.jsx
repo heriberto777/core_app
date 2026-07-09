@@ -6,7 +6,7 @@ export const ClearLogsModal = ({ isOpen, onClose, onConfirm, value, onChange }) 
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[1000] p-4 animate-in fade-in duration-300" onClick={onClose}>
-            <div className="bg-white w-full max-w-[500px] rounded-[32px] overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
+            <div className="bg-white w-full max-w-[500px] rounded-xl overflow-hidden shadow-2xl border border-slate-100 animate-in zoom-in-95 duration-300" onClick={(e) => e.stopPropagation()}>
                 {/* Header */}
                 <div className="px-8 py-7 bg-red-50/50 border-b border-red-100 flex items-center justify-between">
                     <div className="flex items-center gap-4">
@@ -25,7 +25,7 @@ export const ClearLogsModal = ({ isOpen, onClose, onConfirm, value, onChange }) 
 
                 {/* Body */}
                 <div className="p-8 space-y-8">
-                    <div className="p-5 bg-red-50 border border-red-100 rounded-[24px] flex gap-4 items-start animate-pulse-subtle">
+                    <div className="p-5 bg-red-50 border border-red-100 rounded-xl flex gap-4 items-start animate-pulse-subtle">
                         <FaExclamationTriangle className="text-red-600 mt-1 shrink-0" />
                         <span className="text-sm font-bold text-red-800 leading-relaxed">
                             Esta acción es irreversible. Se eliminarán permanentemente los registros del servidor según el periodo seleccionado.

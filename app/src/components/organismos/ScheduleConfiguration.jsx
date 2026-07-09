@@ -109,7 +109,7 @@ export function ScheduleConfiguration() {
   const nextExecution = getNextExecutionTime();
 
   return (
-    <div className="bg-white/50 backdrop-blur-xl border border-slate-200 rounded-[32px] p-8 flex flex-col gap-10 shadow-sm animate-in fade-in duration-500">
+    <div className="bg-white/50 backdrop-blur-xl border border-slate-200 rounded-xl p-8 flex flex-col gap-10 shadow-sm animate-in fade-in duration-500">
       {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start gap-6 border-b border-slate-100 pb-8">
         <div className="flex flex-col gap-2">
@@ -136,7 +136,7 @@ export function ScheduleConfiguration() {
       ) : (
         <div className="flex flex-col gap-10">
           {/* Status Card */}
-          <div className={`p-8 rounded-[24px] border-l-8 bg-white shadow-sm flex flex-col gap-6 animate-in slide-in-from-left-4 duration-500 ${
+          <div className={`p-8 rounded-xl border-l-8 bg-white shadow-sm flex flex-col gap-6 animate-in slide-in-from-left-4 duration-500 ${
             scheduleConfig?.enabled ? "border-emerald-500 shadow-emerald-500/5" : "border-red-500 shadow-red-500/5 opacity-80"
           }`}>
             <div className="flex items-center gap-6">
@@ -191,7 +191,7 @@ export function ScheduleConfiguration() {
               { label: "Manuales", val: taskStats.manual, color: "amber", icon: <FaUser /> },
               { label: "Inactivas", val: taskStats.inactive, color: "red", icon: <FaTimes /> }
             ].map(stat => (
-              <div key={stat.label} className="bg-white p-6 rounded-[20px] shadow-sm border border-slate-100 flex items-center gap-5 group hover:border-blue-200 transition-all">
+              <div key={stat.label} className="bg-white p-6 rounded-xl shadow-sm border border-slate-100 flex items-center gap-5 group hover:border-blue-200 transition-all">
                 <div className={`w-12 h-12 rounded-xl flex items-center justify-center text-lg transition-colors bg-${stat.color}-50 text-${stat.color}-500 group-hover:bg-${stat.color}-500 group-hover:text-white`}>
                   {stat.icon}
                 </div>
@@ -205,7 +205,7 @@ export function ScheduleConfiguration() {
 
           {/* Info Section */}
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-8">
-            <div className="p-8 bg-white border border-slate-100 rounded-[28px] shadow-sm flex flex-col gap-6">
+            <div className="p-8 bg-white border border-slate-100 rounded-xl shadow-sm flex flex-col gap-6">
               <h3 className="text-[11px] font-black text-blue-600 uppercase tracking-[0.2em] flex items-center gap-3">
                 <FaInfoCircle /> Funcionamiento
               </h3>
@@ -226,7 +226,7 @@ export function ScheduleConfiguration() {
               </ul>
             </div>
 
-            <div className="p-8 bg-white border border-slate-100 rounded-[28px] shadow-sm flex flex-col gap-6">
+            <div className="p-8 bg-white border border-slate-100 rounded-xl shadow-sm flex flex-col gap-6">
               <h3 className="text-[11px] font-black text-amber-600 uppercase tracking-[0.2em] flex items-center gap-3">
                 <FaShieldAlt /> Consideraciones
               </h3>
@@ -249,7 +249,7 @@ export function ScheduleConfiguration() {
           </div>
 
           {/* History Section */}
-          <div className="p-8 bg-white border border-slate-200 rounded-[32px] shadow-sm flex flex-col gap-8">
+          <div className="p-8 bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col gap-8">
             <div className="flex justify-between items-center px-2">
               <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3">
                 <FaHistory /> Últimas Ejecuciones
@@ -294,7 +294,7 @@ export function ScheduleConfiguration() {
           </div>
 
           {/* Quick Actions */}
-          <div className="p-8 bg-slate-50/50 border border-slate-100 rounded-[32px] flex flex-col gap-6">
+          <div className="p-8 bg-slate-50/50 border border-slate-100 rounded-xl flex flex-col gap-6">
             <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] px-2">Acciones Rápidas</h3>
             <div className="flex gap-4 flex-wrap">
               <Button variant="primary" className="px-8 py-3 shadow-lg shadow-blue-600/20 font-bold">

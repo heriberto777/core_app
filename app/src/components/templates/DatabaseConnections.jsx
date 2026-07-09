@@ -88,7 +88,7 @@ export function DatabaseConnections() {
           {connections.map((conn) => (
             <div 
               key={conn.serverName} 
-              className="bg-white rounded-[32px] p-6 border border-slate-100 shadow-soft hover:shadow-lg transition-all duration-300 group hover:-translate-y-1 flex flex-col gap-6"
+              className="bg-white rounded-xl p-6 border border-slate-100 shadow-soft hover:shadow-lg transition-all duration-300 group hover:-translate-y-1 flex flex-col gap-6"
             >
               {/* CARD HEADER */}
               <div className="flex justify-between items-start">
@@ -138,7 +138,7 @@ export function DatabaseConnections() {
 
           {/* EMPTY STATE OR ADD CARD */}
           {connections.length === 0 && (
-            <div className="md:col-span-2 lg:col-span-3 xl:col-span-4 p-20 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-[40px] bg-slate-50/50">
+            <div className="md:col-span-2 lg:col-span-3 xl:col-span-4 p-20 flex flex-col items-center justify-center border-2 border-dashed border-slate-200 rounded-xl bg-slate-50/50">
                <FaDatabase className="text-slate-200 mb-6" size={64} />
                <p className="text-xl font-extrabold text-slate-400">No hay servidores configurados</p>
                <p className="text-sm text-slate-400 mt-2">Comienza agregando tu primera conexión a base de datos.</p>
