@@ -1,8 +1,7 @@
-import React, { useContext, useState, useMemo, useRef, useEffect } from "react";
-import SwitchMode from "react-switch";
-import { ThemeContext, useAuth, usePermissions, DataUser } from "../../index";
+import React, { useState, useMemo, useRef, useEffect } from "react";
+import { useAuth, usePermissions, DataUser } from "../../index";
 import { NavLink, useLocation } from "react-router-dom";
-import { FaMoon, FaSun, FaChevronDown, FaBars, FaTimes } from "react-icons/fa";
+import { FaChevronDown, FaBars, FaTimes } from "react-icons/fa";
 
 /**
  * TopNav (dirección "Grid")
@@ -10,7 +9,6 @@ import { FaMoon, FaSun, FaChevronDown, FaBars, FaTimes } from "react-icons/fa";
  * categoría, con menús desplegables en vez de una lista siempre visible.
  */
 export function TopNav({ userMenuOpen, setUserMenuOpen }) {
-  const { theme, toggleTheme } = useContext(ThemeContext);
   const { hasPermission, isAdmin } = usePermissions();
   const location = useLocation();
 
@@ -131,17 +129,8 @@ export function TopNav({ userMenuOpen, setUserMenuOpen }) {
         {/* RIGHT: theme + user (desktop) / hamburger (mobile) */}
         <div className="flex items-center gap-4">
           <div className="hidden lg:flex items-center gap-3">
-            <SwitchMode
-              checked={theme === "dark"}
-              onChange={toggleTheme}
-              offColor="#e6e6e6"
-              onColor="#1447e6"
-              uncheckedIcon={<div className="flex justify-center items-center h-full"><FaSun size={11} color="#a3a3a3" /></div>}
-              checkedIcon={<div className="flex justify-center items-center h-full"><FaMoon size={11} color="#fff" /></div>}
-              width={40}
-              height={20}
-              handleDiameter={16}
-            />
+            {/* Toggle claro/oscuro oculto hasta implementar un modo oscuro real
+                para Grid (hoy no hace nada: ver TaskFormModal/estilos legado). */}
             <DataUser
               stateConfig={{
                 openstate: userMenuOpen,
@@ -181,18 +170,6 @@ export function TopNav({ userMenuOpen, setUserMenuOpen }) {
               </div>
             </div>
           ))}
-          <div className="flex items-center justify-between pt-3 border-t border-slate-200">
-            <span className="text-xs font-semibold text-slate-500">Tema {theme === "dark" ? "oscuro" : "claro"}</span>
-            <SwitchMode
-              checked={theme === "dark"}
-              onChange={toggleTheme}
-              offColor="#e6e6e6"
-              onColor="#1447e6"
-              width={40}
-              height={20}
-              handleDiameter={16}
-            />
-          </div>
           <DataUser
             stateConfig={{
               openstate: userMenuOpen,
