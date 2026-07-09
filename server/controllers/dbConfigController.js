@@ -1,13 +1,27 @@
 const DBConfig = require("../models/dbConfigModel");
 const logger = require("../services/logger");
 
+const MASKED_PASSWORD = "••••••••";
+
+/**
+ * Enmascara el password antes de devolver la config al cliente
+ */
+const sanitizeConfig = (config) => {
+  if (!config) return null;
+  const configObj = config.toObject ? config.toObject() : { ...config };
+  if (configObj.password) {
+    configObj.password = MASKED_PASSWORD;
+  }
+  return configObj;
+};
+
 /**
  * Obtener todas las configuraciones de base de datos
  */
 const getDBConfigs = async (req, res) => {
   try {
     const configs = await DBConfig.find().lean();
-    return res.status(200).json({ success: true, data: configs });
+    return res.status(200).json({ success: true, data: configs.map(sanitizeConfig) });
   } catch (error) {
     logger.error("Error en getDBConfigs:", error);
     return res.status(500).json({ success: false, message: "Error al obtener configuraciones", error: error.message });
@@ -23,9 +37,13 @@ const upsertDBConfig = async (req, res) => {
     const existingConfig = await DBConfig.findOne({ serverName });
 
     if (existingConfig) {
+      // Si el cliente reenvía la máscara (no tocó el campo password en el form de edición),
+      // conservar la contraseña real ya almacenada en lugar de sobreescribirla.
+      const passwordToSave = password === MASKED_PASSWORD ? existingConfig.password : password;
+
       const updatedConfig = await DBConfig.findOneAndUpdate(
         { serverName },
-        { type, user, password, host, port, database, instance, options, updatedAt: new Date() },
+        { type, user, password: passwordToSave, host, port, database, instance, options, updatedAt: new Date() },
         { new: true, lean: true }
       );
 
@@ -33,7 +51,7 @@ const upsertDBConfig = async (req, res) => {
       return res.status(200).json({
         success: true,
         message: "Configuración actualizada con éxito",
-        data: updatedConfig,
+        data: sanitizeConfig(updatedConfig),
       });
     }
 
@@ -44,7 +62,7 @@ const upsertDBConfig = async (req, res) => {
     return res.status(201).json({
       success: true,
       message: "Configuración creada con éxito",
-      data: newConfig.toObject(),
+      data: sanitizeConfig(newConfig),
     });
   } catch (error) {
     logger.error("Error en upsertDBConfig:", error);
@@ -76,7 +94,15 @@ const { Connection } = require("tedious");
  * Probar conexión a base de datos (Real)
  */
 const testDBConnection = async (req, res) => {
-  const { host, user, password, database, port, options, type } = req.body;
+  const { serverName, host, user, database, port, options, type } = req.body;
+  let { password } = req.body;
+
+  // Si el cliente reenvía la máscara (probando una conexión ya guardada sin editar
+  // el campo password), usar la contraseña real almacenada para esa conexión.
+  if (password === MASKED_PASSWORD && serverName) {
+    const existingConfig = await DBConfig.findOne({ serverName });
+    if (existingConfig) password = existingConfig.password;
+  }
 
   if (type && type.toLowerCase() !== "mssql") {
     return res.status(400).json({

@@ -4,6 +4,11 @@ const router = express.Router();
 const ConnectionDiagnostic = require("../services/connectionDiagnostic");
 const { robustConnect } = require("../services/transferService");
 const logger = require("../services/logger");
+const { verifyToken, checkPermission } = require("../middlewares/authMiddleware");
+
+// Todas las rutas son de diagnóstico interno: requieren autenticación
+router.use(verifyToken);
+router.use(checkPermission("settings", "read"));
 
 /**
  * @route   GET /api/v1/connection/health
