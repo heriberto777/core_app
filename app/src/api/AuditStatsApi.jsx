@@ -24,9 +24,9 @@ export class AuditStatsApi {
         try {
             const queryParams = new URLSearchParams();
             if (filters.status && filters.status !== "all") queryParams.append("status", filters.status);
-            if (filters.startDate) queryParams.append("dateFrom", filters.startDate.toISOString());
-            if (filters.endDate) queryParams.append("dateTo", filters.endDate.toISOString());
-            if (filters.search) queryParams.append("search", filters.search);
+            if (filters.dateFrom) queryParams.append("dateFrom", filters.dateFrom);
+            if (filters.dateTo) queryParams.append("dateTo", filters.dateTo);
+            if (filters.taskName) queryParams.append("taskName", filters.taskName);
             if (filters.page) queryParams.append("page", filters.page);
             if (filters.limit) queryParams.append("limit", filters.limit);
 
@@ -115,18 +115,12 @@ export class AuditStatsApi {
             if (filters.dateFrom) queryParams.append("dateFrom", filters.dateFrom);
             if (filters.dateTo) queryParams.append("dateTo", filters.dateTo);
             if (filters.search) queryParams.append("search", filters.search);
+            if (filters.user) queryParams.append("user", filters.user);
             if (filters.limit) queryParams.append("limit", filters.limit);
             if (filters.page) queryParams.append("page", filters.page);
-            
-            // === Filtros nuevos ===
-            if (filters.operationType && filters.operationType.length > 0) 
-                queryParams.append("operationType", filters.operationType.join(","));
-            if (filters.entityType && filters.entityType.length > 0) 
-                queryParams.append("entityType", filters.entityType.join(","));
-            if (filters.durationMin) queryParams.append("durationMin", filters.durationMin);
-            if (filters.durationMax) queryParams.append("durationMax", filters.durationMax);
-            if (filters.affectedRecordsMin) queryParams.append("affectedRecordsMin", filters.affectedRecordsMin);
-            if (filters.affectedRecordsMax) queryParams.append("affectedRecordsMax", filters.affectedRecordsMax);
+
+            if (filters.operationType && filters.operationType !== "all")
+                queryParams.append("operationType", filters.operationType);
 
             const url = `${this.baseApi}/logs${queryParams.toString() ? `?${queryParams.toString()}` : ""}`;
             const response = await fetch(url, {
