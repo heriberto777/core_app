@@ -8,8 +8,8 @@ import { Link } from "react-router-dom";
 export function QuickAccessGrid({ className = "" }) {
     const actions = [
         { label: "Tareas", path: "/tasks", icon: <FaExchangeAlt /> },
-        { label: "Logs Sistema", path: "/system-logs", icon: <FaDatabase /> },
-        { label: "Historial", path: "/history", icon: <FaHistory /> },
+        { label: "Logs Sistema", path: "/history?type=system", icon: <FaDatabase /> },
+        { label: "Historial", path: "/history?type=transfer", icon: <FaHistory /> },
         { label: "Estadísticas", path: "/analytics", icon: <FaChartLine /> },
     ];
 

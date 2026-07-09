@@ -1,4 +1,5 @@
 import React, { useEffect } from "react";
+import { useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import {
   FaSync,
@@ -27,6 +28,7 @@ import Swal from "sweetalert2";
  * Orquestación logística de despacho con diseño corporativo premium.
  */
 export function LoadsManagement() {
+  const navigate = useNavigate();
   const { accessToken } = useAuth();
   const { showSuccess, showError } = useNotification();
   const {
@@ -149,7 +151,7 @@ export function LoadsManagement() {
             </p>
           </div>
           <div className="flex gap-3 shrink-0">
-            <Button variant="secondary" onClick={() => window.location.href = "/loads/history"} className="!px-6">
+            <Button variant="secondary" onClick={() => navigate("/loads/transfers")} className="!px-6">
               <FaHistory /> Historial
             </Button>
             <Button variant="primary" onClick={actions.fetchOrders} loading={refreshing} className="!px-8 shadow-indigo-500/20">

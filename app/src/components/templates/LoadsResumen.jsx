@@ -96,7 +96,7 @@ export function LoadsResumen() {
         <div className="flex flex-col lg:flex-row justify-between items-end gap-5">
           <div className="flex flex-col gap-2">
             <button
-              onClick={() => navigate("/loads")}
+              onClick={() => navigate("/loads/cargas")}
               className="bg-none border-none text-blue-500 text-xs font-extrabold flex items-center gap-2 cursor-pointer uppercase hover:opacity-80 transition-opacity p-0"
             >
               <FaArrowLeft /> Volver a Cargas

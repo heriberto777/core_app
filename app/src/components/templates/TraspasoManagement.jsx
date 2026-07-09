@@ -1,4 +1,5 @@
 import React, { useEffect, useState } from "react";
+import { useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import { FaSync, FaHistory, FaCheckDouble } from "react-icons/fa";
 import {
@@ -18,6 +19,7 @@ import {
  * Supervisión y ejecución de transferencias de inventario con diseño corporativo premium.
  */
 export function TraspasoManagement() {
+  const navigate = useNavigate();
   const { accessToken } = useAuth();
   const { hasPermission, isAdmin } = usePermissions();
   const { showSuccess, showError, showInfo } = useNotification();
@@ -129,7 +131,7 @@ export function TraspasoManagement() {
             </p>
           </div>
           <div className="flex gap-3 shrink-0">
-            <Button variant="secondary" onClick={() => window.location.href = "/loads"} className="!px-6">
+            <Button variant="secondary" onClick={() => navigate("/loads/cargas")} className="!px-6">
               <FaHistory /> Historial de Cargas
             </Button>
             <Button variant="primary" onClick={handleRefresh} loading={refreshing} className="!px-8 shadow-primary-500/20">
