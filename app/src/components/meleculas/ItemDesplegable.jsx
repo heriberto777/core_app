@@ -9,13 +9,13 @@ export function ItemsDesplegable({ item, funcion, className = "" }) {
     <div 
       onClick={funcion}
       className={`
-        cursor-pointer p-2 rounded-xl flex items-center gap-2.5
-        hover:bg-slate-700
+        cursor-pointer px-3 py-2 rounded-lg flex items-center gap-2.5
+        hover:bg-slate-50
         ${className}
       `}
     >
-      <Icono className="text-2xl block">{item.icono && <item.icono />}</Icono>
-      <span className="text-white text-sm">{item.text}</span>
+      <Icono className="text-lg block text-slate-500">{item.icono && <item.icono />}</Icono>
+      <span className="text-slate-700 text-sm font-medium">{item.text}</span>
     </div>
   );
 }
