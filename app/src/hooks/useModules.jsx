@@ -4,7 +4,7 @@ import Swal from "sweetalert2";
 
 const cnnModuleApi = new moduleApi();
 
-export function useModules(accessToken, reloadModuleConfig) {
+export function useModules(accessToken, reloadPermissions) {
     const [modules, setModules] = useState([]);
     const [loading, setLoading] = useState(false);
     const [availableActions, setAvailableActions] = useState([]);
@@ -73,7 +73,7 @@ export function useModules(accessToken, reloadModuleConfig) {
 
             if (resp) {
                 await loadModules();
-                if (reloadModuleConfig) await reloadModuleConfig();
+                if (reloadPermissions) await reloadPermissions();
                 return { success: true };
             }
         } catch (error) {
@@ -89,7 +89,7 @@ export function useModules(accessToken, reloadModuleConfig) {
             const resp = await cnnModuleApi.deleteModule(accessToken, moduleId);
             if (resp) {
                 await loadModules();
-                if (reloadModuleConfig) await reloadModuleConfig();
+                if (reloadPermissions) await reloadPermissions();
                 return { success: true };
             }
         } catch (error) {
@@ -103,7 +103,7 @@ export function useModules(accessToken, reloadModuleConfig) {
             const resp = await cnnModuleApi.toggleModuleStatus(accessToken, moduleId);
             if (resp) {
                 await loadModules();
-                if (reloadModuleConfig) await reloadModuleConfig();
+                if (reloadPermissions) await reloadPermissions();
                 return { success: true };
             }
         } catch (error) {
@@ -112,69 +112,13 @@ export function useModules(accessToken, reloadModuleConfig) {
         }
     };
 
-    const duplicateModule = async (moduleId, newNames) => {
-        setLoading(true);
-        try {
-            const resp = await cnnModuleApi.duplicateModule(accessToken, moduleId, newNames);
-            if (resp) {
-                await loadModules();
-                if (reloadModuleConfig) await reloadModuleConfig();
-                return { success: true };
-            }
-        } catch (error) {
-            console.error("Error duplicando módulo:", error);
-            throw error;
-        } finally {
-            setLoading(false);
-        }
-    };
-
     const invalidateCache = async () => {
         try {
             const resp = await cnnModuleApi.invalidateCache(accessToken);
-            if (resp && reloadModuleConfig) await reloadModuleConfig();
+            if (resp && reloadPermissions) await reloadPermissions();
             return { success: true };
         } catch (error) {
             console.error("Error invalidando caché:", error);
-            throw error;
-        }
-    };
-
-    const initializeSystemModules = async () => {
-        setLoading(true);
-        try {
-            const resp = await cnnModuleApi.initializeSystemModules(accessToken);
-            if (resp) {
-                await loadModules();
-                if (reloadModuleConfig) await reloadModuleConfig();
-                return { success: true };
-            }
-        } catch (error) {
-            console.error("Error inicializando módulos del sistema:", error);
-            throw error;
-        } finally {
-            setLoading(false);
-        }
-    };
-
-    const exportModules = async () => {
-        try {
-            const response = await cnnModuleApi.exportModules(accessToken, "json");
-            if (response) {
-                const dataStr = JSON.stringify(response.data || response, null, 2);
-                const dataBlob = new Blob([dataStr], { type: "application/json" });
-                const url = URL.createObjectURL(dataBlob);
-                const link = document.createElement("a");
-                link.href = url;
-                link.download = `modules-export-${new Date().toISOString().split("T")[0]}.json`;
-                document.body.appendChild(link);
-                link.click();
-                document.body.removeChild(link);
-                URL.revokeObjectURL(url);
-                return { success: true };
-            }
-        } catch (error) {
-            console.error("Error exportando módulos:", error);
             throw error;
         }
     };
@@ -196,10 +140,7 @@ export function useModules(accessToken, reloadModuleConfig) {
             saveModule,
             deleteModule,
             toggleModuleStatus,
-            duplicateModule,
             invalidateCache,
-            initializeSystemModules,
-            exportModules,
             setPage: (page) => setPagination(prev => ({ ...prev, current: page }))
         }
     };

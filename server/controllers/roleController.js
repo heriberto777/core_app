@@ -372,11 +372,21 @@ async function getAvailableResources(req, res) {
   try {
     const ModuleConfig = require("../models/moduleConfigModel");
     const modules = await ModuleConfig.find({ isActive: true })
-      .select("name displayName resource category")
+      .select("name displayName description resource actions uiConfig.category")
       .sort({ "uiConfig.order": 1, displayName: 1 })
       .lean();
 
-    return res.status(200).json({ success: true, data: modules });
+    // La Matriz de Permisos de Roles espera un catálogo plano por recurso:
+    // { id, name, description, actions: ["read", "update", ...] }
+    const resources = modules.map((m) => ({
+      id: m.resource,
+      name: m.displayName || m.name,
+      description: m.description || "",
+      category: m.uiConfig?.category,
+      actions: (m.actions || []).map((a) => a.name),
+    }));
+
+    return res.status(200).json({ success: true, data: resources });
   } catch (error) {
     logger.error("Error en getAvailableResources:", error);
     return res.status(500).json({ success: false, message: "Error al obtener recursos disponibles" });

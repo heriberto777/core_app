@@ -139,7 +139,7 @@ const createModule = async (req, res) => {
     const module = new ModuleConfig({ ...req.body, createdBy: userId, lastModifiedBy: userId });
     await module.save();
 
-    await CacheService.flushAll();
+    await CacheService.flush();
     logger.info(`Módulo creado: ${module.name} por ${userId}`);
 
     return res.status(201).json({ success: true, message: "Módulo creado exitosamente", data: module });
@@ -162,7 +162,7 @@ const updateModule = async (req, res) => {
     );
     if (!module) return res.status(404).json({ success: false, message: "Módulo no encontrado" });
 
-    await CacheService.flushAll();
+    await CacheService.flush();
     logger.info(`Módulo actualizado: ${module.name} por ${userId}`);
 
     return res.status(200).json({ success: true, message: "Módulo actualizado", data: module });
@@ -182,7 +182,7 @@ const deleteModule = async (req, res) => {
     if (module.isSystem) return res.status(403).json({ success: false, message: "Módulo de sistema protegido" });
 
     await ModuleConfig.findByIdAndDelete(req.params.id);
-    await CacheService.flushAll();
+    await CacheService.flush();
 
     logger.warn(`Módulo eliminado: ${module.name} por ${req.user?._id}`);
     return res.status(200).json({ success: true, message: "Módulo eliminado" });
@@ -203,7 +203,7 @@ const toggleModuleStatus = async (req, res) => {
     module.isActive = !module.isActive;
     await module.save();
 
-    await CacheService.flushAll();
+    await CacheService.flush();
     logger.info(`Estado de módulo ${module.name} cambiado a ${module.isActive} por ${req.user?._id}`);
 
     return res.status(200).json({ success: true, data: { isActive: module.isActive } });
@@ -218,7 +218,7 @@ const toggleModuleStatus = async (req, res) => {
  */
 const invalidateCache = async (req, res) => {
   try {
-    await CacheService.flushAll();
+    await CacheService.flush();
     logger.info(`Caché global invalidado por ${req.user?._id}`);
     return res.status(200).json({ success: true, message: "Caché global invalidado" });
   } catch (error) {
@@ -226,6 +226,28 @@ const invalidateCache = async (req, res) => {
     return res.status(500).json({ success: false, message: "Error al invalidar caché" });
   }
 };
+
+/**
+ * Acciones estándar disponibles para las "Capacidades Atómicas" de un módulo
+ * (coincide con el enum de ModuleConfigSchema.actions.name)
+ */
+const getAvailableActions = async (req, res) => {
+  const actions = [
+    { name: "create", displayName: "Crear", description: "Permite crear nuevos registros" },
+    { name: "read", displayName: "Leer", description: "Permite visualizar registros" },
+    { name: "update", displayName: "Actualizar", description: "Permite modificar registros existentes" },
+    { name: "delete", displayName: "Eliminar", description: "Permite borrar registros" },
+    { name: "manage", displayName: "Administrar", description: "Control total sobre el módulo" },
+    { name: "export", displayName: "Exportar", description: "Permite exportar datos" },
+    { name: "import", displayName: "Importar", description: "Permite cargar datos masivamente" },
+    { name: "approve", displayName: "Aprobar", description: "Permite autorizar procesos" },
+    { name: "execute", displayName: "Ejecutar", description: "Permite disparar procesos manuales" },
+  ];
+  return res.json({ success: true, data: actions });
+};
+
+const getCategories = async (req, res) =>
+  res.json({ success: true, data: ["operational", "administrative", "analytical", "configuration"] });
 
 module.exports = {
   getAllModules,
@@ -236,13 +258,6 @@ module.exports = {
   deleteModule,
   toggleModuleStatus,
   invalidateCache,
-  // Métodos auxiliares simplificados
-  getAvailableActions: async (req, res) => res.json({ success: true, data: [] }),
-  getCategories: async (req, res) => res.json({ success: true, data: ["operational", "administrative", "analytical", "configuration"] }),
-  searchModules: async (req, res) => res.json({ success: true, data: [] }),
-  duplicateModule: async (req, res) => res.json({ success: true, message: "Próximamente" }),
-  importModules: async (req, res) => res.json({ success: true, message: "Próximamente" }),
-  exportModules: async (req, res) => res.json({ success: true, message: "Próximamente" }),
-  validateSystemIntegrity: async (req, res) => res.json({ success: true, message: "Sistema íntegro" }),
-  initializeSystemModules: async (req, res) => res.json({ success: true, message: "Inicializado" })
+  getAvailableActions,
+  getCategories,
 };

@@ -7,6 +7,7 @@ export const ModuleFormModal = ({ isOpen, onClose, onSave, initialData = null, c
         name: "",
         displayName: "",
         description: "",
+        resource: "",
         isActive: true,
         actions: ["read"],
         uiConfig: {
@@ -38,6 +39,7 @@ export const ModuleFormModal = ({ isOpen, onClose, onSave, initialData = null, c
                 name: "",
                 displayName: "",
                 description: "",
+                resource: "",
                 isActive: true,
                 actions: ["read"],
                 uiConfig: {
@@ -69,7 +71,18 @@ export const ModuleFormModal = ({ isOpen, onClose, onSave, initialData = null, c
         e.preventDefault();
         setLoading(true);
         try {
-            await onSave(formData);
+            // El backend exige actions como objetos {name, displayName, ...},
+            // no como los strings planos que maneja este formulario.
+            const actionsPayload = formData.actions.map(actionName => {
+                const meta = availableActions.find(a => (typeof a === 'string' ? a : a.name) === actionName);
+                const metaObj = typeof meta === 'object' ? meta : null;
+                return {
+                    name: actionName,
+                    displayName: metaObj?.displayName || actionName,
+                    description: metaObj?.description || "",
+                };
+            });
+            await onSave({ ...formData, actions: actionsPayload });
         } finally {
             setLoading(false);
         }
@@ -134,6 +147,22 @@ export const ModuleFormModal = ({ isOpen, onClose, onSave, initialData = null, c
                                 onChange={e => setFormData({ ...formData, displayName: e.target.value })}
                                 placeholder="ej: Facturación Electrónica"
                             />
+                        </div>
+                        <div className="md:col-span-2 flex flex-col gap-2">
+                            <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-1">
+                                Recurso de Permisos
+                            </label>
+                            <input
+                                disabled={initialData?.isSystem}
+                                required
+                                className="w-full px-5 py-4 border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:border-blue-500 bg-slate-50/50 transition-all placeholder:text-slate-300"
+                                value={formData.resource}
+                                onChange={e => setFormData({ ...formData, resource: e.target.value.toLowerCase().replace(/[^a-z0-9_]/g, '') })}
+                                placeholder="ej: facturacion_electronica"
+                            />
+                            <span className="text-xs text-slate-400 font-medium px-1">
+                                Identificador usado por checkPermission() en el backend y por la Matriz de Permisos al configurar Roles. Debe coincidir exactamente con el recurso que protege las rutas de este módulo.
+                            </span>
                         </div>
                         <div className="md:col-span-2 flex flex-col gap-2">
                             <label className="text-[11px] font-black text-slate-400 uppercase tracking-widest px-1">
