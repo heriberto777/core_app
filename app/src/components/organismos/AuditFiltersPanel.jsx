@@ -97,13 +97,13 @@ export function AuditFiltersPanel({
                         </div>
 
                         <div className="flex flex-col gap-2">
-                            <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Usuario</label>
+                            <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Buscar Mensaje</label>
                             <input
                                 type="text"
-                                value={draft.user || ""}
-                                onChange={(e) => setDraftField("user", e.target.value)}
+                                value={draft.search || ""}
+                                onChange={(e) => setDraftField("search", e.target.value)}
                                 onKeyDown={(e) => e.key === "Enter" && applyDraft()}
-                                placeholder="Buscar usuario..."
+                                placeholder="Ej: timeout, conexión rechazada..."
                                 className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
                             />
                         </div>

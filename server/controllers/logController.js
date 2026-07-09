@@ -7,7 +7,7 @@ const logger = require("../services/logger");
 const getLogs = async (req, res) => {
   try {
     const { level, source, dateFrom, dateTo, search, limit = 50, page = 1, sort = "desc",
-            operationType, entityType, mappingId, user } = req.query;
+            operationType, entityType, mappingId } = req.query;
 
     const filter = {};
     if (level && level !== "all") {
@@ -18,7 +18,6 @@ const getLogs = async (req, res) => {
     if (operationType && operationType !== "all") filter.operationType = operationType;
     if (entityType && entityType !== "all") filter.entityType = entityType;
     if (mappingId && mappingId !== "all") filter.mappingId = mappingId;
-    if (user) filter.user = { $regex: user, $options: "i" };
 
     if (dateFrom || dateTo) {
       filter.timestamp = {};

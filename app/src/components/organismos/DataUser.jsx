@@ -74,7 +74,6 @@ export const DataUser = memo(({ stateConfig }) => {
         <div className="absolute top-[calc(100%+8px)] right-0 z-50 animate-slideUp">
           <ListaMenuDesplegable
             data={DesplegableUser}
-            top="0"
             funcion={handleAction}
           />
         </div>
