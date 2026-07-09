@@ -32,8 +32,8 @@ export function Sidebar({ state, setState }) {
       { path: "/tasks", name: "Tareas", icon: "📋", category: "Operaciones", order: 2, isAccessible: hasPermission("tasks", "read") },
       { path: "/loads/cargas", name: "Gestión de Cargas", icon: "🚛", category: "Operaciones", order: 3, isAccessible: hasPermission("loads", "read") },
       { path: "/loads/transfers", name: "Traspasos", icon: "🔄", category: "Operaciones", order: 4, isAccessible: hasPermission("loads", "read") },
-      { path: "/universal-manager", name: "Gestor Universal", icon: "🌍", category: "Operaciones", order: 5, isAccessible: isAdmin || hasPermission("documents", "read") },
-      { path: "/documents", name: "Documentos", icon: "📄", category: "Documentos", order: 6, isAccessible: hasPermission("documents", "read") },
+      { path: "/universal-manager", name: "Gestor Universal", description: "Ejecutar procesos ya configurados, con seguimiento en tiempo real", icon: "🌍", category: "Operaciones", order: 5, isAccessible: isAdmin || hasPermission("documents", "read") },
+      { path: "/documents", name: "Documentos", description: "Configurar mapeos de datos y procesar documentos manualmente", icon: "📄", category: "Documentos", order: 6, isAccessible: hasPermission("documents", "read") },
       { path: "/summaries", name: "Resúmenes", icon: "📊", category: "Análisis", order: 7, isAccessible: hasPermission("reports", "read") },
       { path: "/analytics", name: "Analíticas", icon: "📈", category: "Análisis", order: 8, isAccessible: hasPermission("analytics", "read") },
       { path: "/history", name: "Bitácora", icon: "🕐", category: "Análisis", order: 9, isAccessible: hasPermission("history", "read") },
@@ -125,7 +125,7 @@ export function Sidebar({ state, setState }) {
                       : 'text-slate-500 hover:bg-slate-50 hover:text-slate-900'}
                     ${!isOpen && 'justify-center px-0'}
                   `}
-                  title={!isOpen ? route.name : ""}
+                  title={route.description || route.name}
                 >
                   <span className={`text-xl ${!isOpen && 'scale-110'}`}>{route.icon}</span>
                   {isOpen && <span className="text-sm truncate">{route.name}</span>}

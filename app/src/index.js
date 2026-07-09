@@ -100,7 +100,6 @@ export * from "./components/organismos/ModulesTable";
 
 // Organismos con default export
 export { default as ConsecutiveConfigSection } from "./components/organismos/ConsecutiveConfigSection";
-export { default as DynamicSidebar } from "./components/organismos/DynamicSidebar";
 export { default as Header } from "./components/organismos/Header";
 export { default as LinkedGroupsManager } from "./components/organismos/LinkedGroupsManager";
 export { default as Spinner } from "./components/organismos/Spinner";
