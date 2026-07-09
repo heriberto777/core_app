@@ -147,7 +147,7 @@ export function TransferTasks() {
     setHistoryModal({ open: true, taskId: task._id, data: [], loading: true, filter: 'all' });
     try {
       const historyData = await getTaskHistory(task._id);
-      setHistoryModal(prev => ({ ...prev, data: historyData?.history || [], loading: false }));
+      setHistoryModal(prev => ({ ...prev, data: historyData?.data?.history || [], loading: false }));
     } catch (error) {
       console.error("Error al obtener historial:", error);
       setHistoryModal(prev => ({ ...prev, loading: false, data: [] }));
