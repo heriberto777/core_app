@@ -39,7 +39,6 @@ export function ModuleManager() {
     };
 
     const handleAdd = () => {
-        setSelectedRole(null); // Corrigiendo posible typo en lógica original (selectedModule)
         setSelectedModule(null);
         setModalOpen(true);
     };

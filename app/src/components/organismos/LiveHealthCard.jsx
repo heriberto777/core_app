@@ -1,5 +1,8 @@
 import React, { useState, useEffect } from "react";
 import { FaHeartbeat, FaDatabase, FaBolt, FaExclamationTriangle } from "react-icons/fa";
+import { Telemetry as TelemetryApi } from "../../api/index";
+
+const telemetryApi = new TelemetryApi();
 
 /**
  * Corporate LiveHealthCard (Tailwind Edition)
@@ -10,22 +13,31 @@ export function LiveHealthCard({ accessToken, className = "" }) {
   const [error, setError] = useState(null);
 
   useEffect(() => {
+    if (!accessToken) return;
     let interval;
+    let cancelled = false;
+
     const fetchData = async () => {
       try {
-        setMetrics({ transfers: { recordsProcessed: 150 }, performance: { avgQueryTime: 45 }, db: { connections: { errors: 0 } } });
+        const result = await telemetryApi.getLiveMetrics(accessToken);
+        if (cancelled) return;
+        setMetrics(result?.data || null);
         setError(null);
       } catch (err) {
-        setError("Error de conexión con telemetría");
+        if (cancelled) return;
+        setError(err?.message || "Error de conexión con telemetría");
       } finally {
-        setLoading(false);
+        if (!cancelled) setLoading(false);
       }
     };
 
     fetchData();
     interval = setInterval(fetchData, 5000);
 
-    return () => clearInterval(interval);
+    return () => {
+      cancelled = true;
+      clearInterval(interval);
+    };
   }, [accessToken]);
 
   if (loading && !metrics) {
@@ -82,8 +94,8 @@ export function LiveHealthCard({ accessToken, className = "" }) {
       )}
 
       <div className="mt-2.5 flex items-center gap-2 text-xs text-slate-500">
-        <div className="w-2 h-2 bg-emerald-500 rounded-full shadow-lg shadow-emerald-500/50" />
-        <span>Monitoreo en vivo activo</span>
+        <div className={`w-2 h-2 rounded-full ${error ? "bg-red-400" : "bg-emerald-500 shadow-lg shadow-emerald-500/50"}`} />
+        <span>{error ? "Sin datos de telemetría" : "Monitoreo en vivo activo"}</span>
       </div>
     </div>
   );

@@ -17,7 +17,7 @@ export class DBConfigApi {
       const response = await fetch(url, params);
       const result = await response.json();
 
-      if (response.status !== 200) {
+      if (!response.ok) {
         throw result;
       }
 
@@ -43,7 +43,7 @@ export class DBConfigApi {
       const response = await fetch(url, params);
       const result = await response.json();
 
-      if (response.status !== 200) {
+      if (!response.ok) {
         throw result;
       }
       return result.data || result;
@@ -67,7 +67,7 @@ export class DBConfigApi {
       const response = await fetch(url, params);
       const result = await response.json();
 
-      if (response.status !== 200) {
+      if (!response.ok) {
         throw result;
       }
 

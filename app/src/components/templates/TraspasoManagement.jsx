@@ -109,17 +109,9 @@ export function TraspasoManagement() {
     }
   };
 
-  const handleViewDetails = async (id) => {
-    try {
-      setSingleActionStates(prev => ({ ...prev, [id]: 'details' }));
-      const details = await actions.getDetails(id);
-      if (details) {
-        showInfo(`Visualizando detalles de carga ${details.load_id}`);
-      }
-    } finally {
-      setSingleActionStates(prev => ({ ...prev, [id]: null }));
-    }
-  };
+  // "Ver detalles" está deshabilitado: el backend (traspasoService.getTraspasoDetails)
+  // tiene esa función deliberadamente desactivada ("Tabla deprecada"). Ver TraspasoTrackingTable:
+  // el botón solo se muestra si se pasa onViewDetails, así que simplemente no se pasa.
 
   return (
     <div className="min-h-screen bg-slate-50/50 animate-fadeIn">
@@ -201,7 +193,6 @@ export function TraspasoManagement() {
               selectedItems={selectedItems}
               onSelectItem={handleSelectItem}
               onSelectAll={handleSelectAll}
-              onViewDetails={handleViewDetails}
               onExecute={handleExecuteSingle}
             />
           )}

@@ -124,14 +124,16 @@ export const TraspasoTrackingTable = ({
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
-                    <button 
-                      onClick={() => onViewDetails(t.id)}
-                      disabled={actionStates[t.id] === 'details'}
-                      className="p-2.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all"
-                      title="Ver auditoría"
-                    >
-                      {actionStates[t.id] === 'details' ? <FaSpinner className="animate-spin" /> : <FaEye size={14} />}
-                    </button>
+                    {onViewDetails && (
+                      <button
+                        onClick={() => onViewDetails(t.id)}
+                        disabled={actionStates[t.id] === 'details'}
+                        className="p-2.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all"
+                        title="Ver auditoría"
+                      >
+                        {actionStates[t.id] === 'details' ? <FaSpinner className="animate-spin" /> : <FaEye size={14} />}
+                      </button>
+                    )}
                     {t.status !== 'completed' && (
                       <button 
                         onClick={() => onExecute(t.load_id)}
