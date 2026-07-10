@@ -46,6 +46,7 @@ export * from "./components/organismos/UIComponents";
 export * from "./components/organismos/UserProfile";
 export * from "./components/organismos/TraspasoFiltersPanel";
 export * from "./components/organismos/TraspasoTrackingTable";
+export * from "./components/organismos/TraspasoDetailModal";
 export * from "./components/organismos/NotificationContainer";
 export * from "./components/organismos/TaskMetricsPanel";
 export * from "./components/organismos/TaskFormModal";
