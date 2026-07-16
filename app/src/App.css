@@ -8,6 +8,10 @@
   align-items: center !important;
   justify-content: center !important;
   overflow-y: auto !important;
+  /* Por defecto SweetAlert2 usa z-index 1060, menor que nuestros modales
+     React (z-[9999]); sin esto, un Swal disparado con un modal propio ya
+     abierto detrás (p. ej. confirmar "Desmantelar Grupo") quedaría oculto. */
+  z-index: 10000 !important;
 }
 
 .swal2-popup {
