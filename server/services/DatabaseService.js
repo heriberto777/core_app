@@ -189,9 +189,13 @@ class DatabaseService {
     };
 
     // CORREGIDO: Priorizar instancia sobre puerto
-    if (dbConfig.instance && dbConfig.instance.trim() !== "") {
+    // dbConfig.instance puede llegar como el string literal "null" (dato corrupto
+    // guardado previamente), no como null real; sin este chequeo, tedious intenta
+    // resolver una instancia llamada "null" en vez de usar el puerto.
+    const instanceValue = dbConfig.instance && dbConfig.instance.trim();
+    if (instanceValue && instanceValue.toLowerCase() !== "null") {
       // Si hay instancia, NO usar puerto
-      config.options.instanceName = dbConfig.instance.trim();
+      config.options.instanceName = instanceValue;
       logger.debug(
         `${dbConfig.serverName}: Usando instancia '${config.options.instanceName}' (puerto ignorado)`
       );

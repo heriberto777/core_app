@@ -265,8 +265,12 @@ class ConnectionCentralService {
       },
     };
 
-    if (dbConfig.instance) {
-      config.options.instanceName = dbConfig.instance;
+    // dbConfig.instance puede llegar como el string literal "null" (dato corrupto),
+    // no como null real; sin este chequeo, tedious intenta resolver una instancia
+    // llamada "null" en vez de usar el puerto.
+    const instanceValue = dbConfig.instance && dbConfig.instance.trim();
+    if (instanceValue && instanceValue.toLowerCase() !== "null") {
+      config.options.instanceName = instanceValue;
     }
 
     if (dbConfig.port) {

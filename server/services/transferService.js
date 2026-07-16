@@ -621,12 +621,13 @@ class TransferService {
     const skipPostUpdate = options?.skipPostUpdate === true;
     const transactionId = options?.transactionId || `tx_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
     const startTime = Date.now();
+    let taskInfo;
 
     try {
       this.checkCancellation(signal);
 
       // 1. Preparar la transferencia
-      const taskInfo = await this.prepareTransfer(taskId, signal);
+      taskInfo = await this.prepareTransfer(taskId, signal);
 
       // ACTUALIZACIÓN FALTANTE: Establecer explicitamente status running y progress=0 en mongodb
       await TransferTask.findByIdAndUpdate(taskId, {

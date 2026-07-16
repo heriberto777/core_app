@@ -33,7 +33,13 @@ const getDBConfigs = async (req, res) => {
  */
 const upsertDBConfig = async (req, res) => {
   try {
-    const { serverName, type, user, password, host, port, database, instance, options } = req.body;
+    const { serverName, type, user, password, host, port, database, options } = req.body;
+    // Normalizar instance: puede llegar como el string literal "null" o vacío desde
+    // clientes antiguos o datos heredados; en ambos casos debe guardarse como null real.
+    const rawInstance = req.body.instance;
+    const instance = rawInstance && String(rawInstance).trim() && String(rawInstance).trim().toLowerCase() !== "null"
+      ? String(rawInstance).trim()
+      : null;
     const existingConfig = await DBConfig.findOne({ serverName });
 
     if (existingConfig) {
