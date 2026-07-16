@@ -69,7 +69,7 @@ const getGroupDetails = async (req, res) => {
     const { groupName } = req.params;
     const tasks = await TransferTask.find({ linkedGroup: groupName, active: true })
       .sort({ linkedExecutionOrder: 1 })
-      .select("name linkedExecutionOrder postUpdateQuery postUpdateMapping type lastExecutionDate status")
+      .select("name linkedExecutionOrder postUpdateQuery postUpdateMapping type lastExecutionDate status progress lastExecutionResult")
       .lean();
 
     if (tasks.length === 0) {
@@ -98,6 +98,12 @@ const getGroupDetails = async (req, res) => {
           type: t.type,
           lastExecutionDate: t.lastExecutionDate,
           status: t.status,
+          progress: t.progress ?? 0,
+          // Algunos flujos escriben status "failed" y otros "error" (inconsistencia
+          // existente en el modelo); se expone el mensaje real sin importar cuál se usó.
+          errorMessage: (t.status === "error" || t.status === "failed")
+            ? (t.lastExecutionResult?.message || null)
+            : null,
         })),
       }
     });
