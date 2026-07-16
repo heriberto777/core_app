@@ -265,7 +265,7 @@ class LoadsApi {
 
       const result = await response.json();
       if (!response.ok) throw result;
-      return result.data || result;
+      return { transfers: result.data || [], pagination: result.pagination || {} };
     } catch (error) {
       console.error("Error al obtener traspasos:", error);
       throw error;
@@ -422,30 +422,6 @@ class LoadsApi {
     }
   }
 
-  /**
-   * Cancela un traspaso específico
-   */
-  async cancelTransfer(accessToken, loadId, reason = "") {
-    try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/traspasos/${loadId}/cancel`;
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({ reason }),
-      });
-
-      const result = await response.json();
-      if (!response.ok) throw result;
-      return result.data || result;
-    } catch (error) {
-      console.error("Error al cancelar traspaso:", error);
-      throw error;
-    }
-  }
 }
 
 export default LoadsApi;

@@ -4,12 +4,13 @@
  *
  * Gestiona:
  *   - Registro inicial en MongoDB (LoadTracking)
- *   - Inserción de tracking de traspaso en SQL Server (IMPLT_traspaso_tracking)
+ *   - Trazabilidad real de traspasos en MongoDB (TraspasoTracking)
  *   - Consulta del historial de cargas desde MongoDB
  */
 const logger = require("./logger");
 const DatabaseServiceAdapter = require("./DatabaseServiceAdapter");
 const { LoadTracking } = require("../models/loadsModel");
+const TraspasoTracking = require("../models/traspasoTrackingModel");
 
 class LoadsTrackingService {
     /**
@@ -31,16 +32,59 @@ class LoadsTrackingService {
     }
 
     /**
-     * Guarda el resultado del traspaso en SQL Server.
-     * Unifica el caso exitoso y el fallido en un único método.
+     * Guarda el resultado del traspaso en MongoDB (colección TraspasoTracking).
+     * Unifica el caso exitoso y el fallido en un único método. Reemplaza al
+     * guardado original en IMPLT_traspaso_tracking (SQL Server, deprecada).
      *
-     * @param {object} connection - Conexión SQL activa
-     * @param {object} data       - Datos del traspaso (loadId, deliveryPerson, etc.)
+     * @param {object} connection - Ignorado (se conservó el parámetro para no
+     *                              tocar las llamadas existentes). Ya no se
+     *                              escribe en SQL Server, solo en Mongo.
+     * @param {object} data       - loadId, deliveryPersonCode, deliveryPersonName,
+     *                              warehouseOrigin, warehouseDestination,
+     *                              traspasoResult, userId, executionSource
      * @param {'completed'|'failed'} outcomeType - Resultado del traspaso
      */
     static async saveTraspasoTracking(connection, data, outcomeType = "completed") {
-        logger.info(`Omitiendo guardado en IMPLT_traspaso_tracking (tabla deprecada) para carga ${data.loadId}`);
-        return "DEPRECATED_SQL_TRACKING_" + Date.now();
+        try {
+            const {
+                loadId,
+                deliveryPersonCode,
+                deliveryPersonName,
+                warehouseOrigin,
+                warehouseDestination,
+                traspasoResult,
+                userId,
+                executionSource = "automatic",
+            } = data;
+
+            const totalQuantity = (traspasoResult?.detalleProductos || []).reduce(
+                (sum, p) => sum + (Number(p.cantidad) || 0),
+                0
+            );
+
+            const doc = await TraspasoTracking.create({
+                loadId,
+                documentoInv: traspasoResult?.documento_inv || null,
+                route: deliveryPersonCode,
+                deliveryPersonName,
+                warehouseOrigin,
+                warehouseDestination,
+                status: outcomeType,
+                executionSource,
+                totalLines: traspasoResult?.totalLineas || 0,
+                successfulLines: traspasoResult?.lineasExitosas || 0,
+                failedLines: traspasoResult?.lineasFallidas || 0,
+                totalQuantity,
+                errorMessage: outcomeType === "failed" ? (traspasoResult?.mensaje || null) : null,
+                createdBy: userId ? String(userId) : undefined,
+            });
+
+            logger.info(`Tracking de traspaso guardado: ${doc._id} (carga ${loadId}, ${outcomeType})`);
+            return doc._id.toString();
+        } catch (error) {
+            logger.error(`Error guardando tracking de traspaso para carga ${data?.loadId}:`, error);
+            return null;
+        }
     }
 
     /**

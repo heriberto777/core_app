@@ -11,9 +11,6 @@ export const TraspasoTrackingTable = ({
   loading,
   onViewDetails,
   onExecute,
-  selectedItems = [],
-  onSelectItem,
-  onSelectAll,
   actionStates = {}
 }) => {
 
@@ -39,14 +36,6 @@ export const TraspasoTrackingTable = ({
       <table className="w-full text-left border-collapse">
         <thead>
           <tr className="bg-slate-50/50 border-b border-slate-100">
-            <th className="px-6 py-5 w-10">
-              <input
-                type="checkbox"
-                className="w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 transition-all"
-                onChange={(e) => onSelectAll(e.target.checked)}
-                checked={transfers.length > 0 && selectedItems.length === transfers.length}
-              />
-            </th>
             <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Trazabilidad / Estado</th>
             <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Identificador</th>
             <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Documento</th>
@@ -58,7 +47,7 @@ export const TraspasoTrackingTable = ({
         <tbody className="divide-y divide-slate-50">
           {transfers.length === 0 ? (
             <tr>
-              <td colSpan="7" className="p-32 text-center text-slate-400">
+              <td colSpan="6" className="p-32 text-center text-slate-400">
                 <div className="flex flex-col items-center gap-4">
                   <FaEye size={48} className="opacity-10" />
                   <p className="font-bold">No se encontraron traspasos para este criterio.</p>
@@ -67,18 +56,10 @@ export const TraspasoTrackingTable = ({
             </tr>
           ) : (
             transfers.map(t => (
-              <tr 
-                key={t.id} 
-                className={`hover:bg-slate-50/40 transition-colors group ${selectedItems.includes(t.id) ? "bg-primary-50/20" : ""}`}
+              <tr
+                key={t.id}
+                className="hover:bg-slate-50/40 transition-colors"
               >
-                <td className="px-6 py-4">
-                  <input
-                    type="checkbox"
-                    className="w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 transition-all"
-                    checked={selectedItems.includes(t.id)}
-                    onChange={() => onSelectItem(t.id)}
-                  />
-                </td>
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
                     <div className="text-xl">
@@ -123,13 +104,13 @@ export const TraspasoTrackingTable = ({
                   <div className="text-[10px] font-extrabold text-slate-400 uppercase tracking-tighter">{new Date(t.created_at).toLocaleTimeString()}</div>
                 </td>
                 <td className="px-6 py-4">
-                  <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex gap-1 justify-end">
                     {onViewDetails && (
                       <button
                         onClick={() => onViewDetails(t.id)}
                         disabled={actionStates[t.id] === 'details'}
-                        className="p-2.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all"
-                        title="Ver auditoría"
+                        className="p-2.5 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-all"
+                        title="Ver detalle"
                       >
                         {actionStates[t.id] === 'details' ? <FaSpinner className="animate-spin" /> : <FaEye size={14} />}
                       </button>

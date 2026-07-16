@@ -44,7 +44,7 @@ export const useTransferManagement = () => {
       if (result) {
         setTraspasos(result.transfers || []);
         setPagination({
-          currentPage: result.pagination?.page || 1,
+          currentPage: result.pagination?.currentPage || 1,
           totalPages: result.pagination?.totalPages || 1,
           totalItems: result.pagination?.totalItems || 0
         });

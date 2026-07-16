@@ -4,6 +4,9 @@ const logger = require("./logger");
 const { Request, TYPES } = require("tedious");
 const { sendTraspasoEmail } = require("./emailService");
 const PDFService = require("./pdfService");
+const LoadsTrackingService = require("./LoadsTrackingService");
+const TraspasoTracking = require("../models/traspasoTrackingModel");
+const { DeliveryPerson } = require("../models/loadsModel");
 
 /**
  * Obtiene información adicional de los productos desde la base de datos
@@ -1211,29 +1214,88 @@ async function exportTraspasoData(traspasoId) {
 
 
 /**
- * Obtener detalles de traspaso específico
+ * Obtener detalles de traspaso específico. Acepta el _id de tracking, el
+ * loadId de la Carga que lo originó, o el documento_inv (TRA######).
+ * Las líneas de detalle se consultan en vivo contra SQL Server, que es la
+ * fuente de verdad real (no se duplican en Mongo).
  */
 async function getTraspasoDetails(traspasoId) {
-  throw new Error("Detalles no soportados (Tabla deprecada)");
+  let tracking = null;
+
+  if (/^[0-9a-fA-F]{24}$/.test(traspasoId)) {
+    tracking = await TraspasoTracking.findById(traspasoId).lean();
+  }
+  if (!tracking) {
+    tracking = await TraspasoTracking.findOne({
+      $or: [{ loadId: traspasoId }, { documentoInv: traspasoId }],
+    }).sort({ createdAt: -1 }).lean();
+  }
+
+  if (!tracking) {
+    throw new Error("Traspaso no encontrado");
+  }
+
+  let lineas = [];
+  if (tracking.documentoInv) {
+    lineas = await withConnection("server1", async (connection) => {
+      const result = await DatabaseServiceAdapter.query(
+        connection,
+        `SELECT ARTICULO, BODEGA, BODEGA_DESTINO, CANTIDAD
+         FROM CATELLI.LINEA_DOC_INV
+         WHERE DOCUMENTO_INV = @documento`,
+        { documento: tracking.documentoInv }
+      );
+      return result.recordset || [];
+    });
+  }
+
+  return { success: true, data: { ...tracking, lineas } };
 }
 
 
 /**
- * Obtiene estadísticas de traspasos
+ * Obtiene estadísticas de traspasos desde TraspasoTracking.
+ * No hay estados "pendiente"/"procesando" persistentes porque el traspaso
+ * se ejecuta de forma síncrona (termina en la misma petición): se dejan en
+ * 0 a propósito, no es un dato faltante.
  */
 async function getTraspasoStats(filters = {}) {
+  const { dateFrom, dateTo } = filters;
+  const match = {};
+
+  if (dateFrom || dateTo) {
+    match.createdAt = {};
+    if (dateFrom) match.createdAt.$gte = new Date(dateFrom);
+    if (dateTo) {
+      const endDate = new Date(dateTo);
+      endDate.setDate(endDate.getDate() + 1);
+      match.createdAt.$lt = endDate;
+    }
+  }
+
+  const [total, completed, failed, qtyAgg] = await Promise.all([
+    TraspasoTracking.countDocuments(match),
+    TraspasoTracking.countDocuments({ ...match, status: "completed" }),
+    TraspasoTracking.countDocuments({ ...match, status: "failed" }),
+    TraspasoTracking.aggregate([
+      { $match: match },
+      { $group: { _id: null, totalQuantity: { $sum: "$totalQuantity" } } },
+    ]),
+  ]);
+
   return {
     success: true,
     data: {
-      total: 0,
-      completed: 0,
-      failed: 0,
+      total,
+      completed,
+      failed,
       pending: 0,
       processing: 0,
-      total_products: 0,
-      total_successful: 0,
-      total_failed: 0,
-      avg_success_rate: 0,
+      totalValue: qtyAgg[0]?.totalQuantity || 0,
+      total_products: qtyAgg[0]?.totalQuantity || 0,
+      total_successful: completed,
+      total_failed: failed,
+      avg_success_rate: total > 0 ? Math.round((completed / total) * 100) : 0,
     }
   };
 }
@@ -1242,7 +1304,8 @@ async function getTraspasoStats(filters = {}) {
 /**
  * Ejecutar traspaso por loadId - wrapper para el controller
  */
-async function executeTransferByLoadId(loadId) {
+async function executeTransferByLoadId(loadId, userId = null) {
+  let route = "DEFAULT_ROUTE";
   try {
     // 1. Obtener salesData desde IMPLT_loads_detail
     const salesData = await withConnection("server2", async (connection) => {
@@ -1265,12 +1328,25 @@ async function executeTransferByLoadId(loadId) {
     }
 
     // 2. Usar tu realizarTraspaso existente
-    const route = salesData[0].bodega || 'DEFAULT_ROUTE';
+    route = salesData[0].bodega || "DEFAULT_ROUTE";
     const result = await realizarTraspaso({
       route,
       salesData,
-      bodega_destino: '02'
+      bodega_destino: "02"
     });
+
+    // Este es el único camino de ejecución (manual, botón "Ejecutar") que no
+    // pasaba antes por LoadsTrackingService.saveTraspasoTracking — el flujo
+    // automático desde processOrderLoad ya lo hacía.
+    await LoadsTrackingService.saveTraspasoTracking(null, {
+      loadId,
+      deliveryPersonCode: route,
+      warehouseOrigin: "MULTIPLE",
+      warehouseDestination: "02",
+      traspasoResult: result,
+      userId,
+      executionSource: "manual",
+    }, result?.success ? "completed" : "failed");
 
     return {
       loadId,
@@ -1279,6 +1355,17 @@ async function executeTransferByLoadId(loadId) {
 
   } catch (error) {
     logger.error(`Error executing transfer for loadId ${loadId}:`, error);
+
+    await LoadsTrackingService.saveTraspasoTracking(null, {
+      loadId,
+      deliveryPersonCode: route,
+      warehouseOrigin: "MULTIPLE",
+      warehouseDestination: "02",
+      traspasoResult: { mensaje: error.message },
+      userId,
+      executionSource: "manual",
+    }, "failed");
+
     throw error;
   }
 }
@@ -1311,48 +1398,91 @@ async function getWarehouses() {
 
 
 /**
- * Obtener historial de traspasos con filtros y paginación
+ * Obtener historial de traspasos con filtros y paginación.
+ * Endpoint redundante con getTraspasosList (el frontend actual solo usa
+ * este último) — se deja delegando para no mantener dos fuentes de verdad.
  */
 async function getTraspasoHistory(filters = {}) {
-  return {
-    data: [],
-    pagination: {
-      currentPage: 1,
-      totalPages: 0,
-      totalItems: 0,
-      itemsPerPage: 20,
-      hasNextPage: false,
-      hasPrevPage: false,
-    },
-  };
+  const result = await getTraspasosList(filters);
+  return { data: result.data, pagination: result.pagination };
 }
 
 /**
- * Obtiene todos los traspasos con información completa
+ * Obtiene todos los traspasos con información completa desde TraspasoTracking.
  */
 async function getTraspasosList(filters = {}) {
+  const { page = 1, limit = 20, status, deliveryPerson, loadId, dateFrom, dateTo } = filters;
+
+  const query = {};
+  if (status && status !== "all") query.status = status;
+  if (deliveryPerson && deliveryPerson !== "all") query.route = deliveryPerson;
+  if (loadId) query.loadId = { $regex: loadId, $options: "i" };
+  if (dateFrom || dateTo) {
+    query.createdAt = {};
+    if (dateFrom) query.createdAt.$gte = new Date(dateFrom);
+    if (dateTo) {
+      const endDate = new Date(dateTo);
+      endDate.setDate(endDate.getDate() + 1);
+      query.createdAt.$lt = endDate;
+    }
+  }
+
+  const pageNum = parseInt(page, 10) || 1;
+  const limitNum = parseInt(limit, 10) || 20;
+  const skip = (pageNum - 1) * limitNum;
+
+  const [items, total] = await Promise.all([
+    TraspasoTracking.find(query).sort({ createdAt: -1 }).skip(skip).limit(limitNum).lean(),
+    TraspasoTracking.countDocuments(query),
+  ]);
+
+  const totalPages = Math.ceil(total / limitNum) || 1;
+
   return {
     success: true,
-    data: [],
+    data: items.map((t) => ({
+      id: t._id.toString(),
+      load_id: t.loadId,
+      documento_generated: t.documentoInv || null,
+      status: t.status,
+      status_description: t.status === "completed" ? "Completado" : "Fallido",
+      is_return: 0,
+      success_percentage: t.totalLines > 0
+        ? Math.round((t.successfulLines / t.totalLines) * 100)
+        : (t.status === "completed" ? 100 : 0),
+      lines_successful: t.successfulLines,
+      total_products: t.totalLines,
+      route: t.route,
+      execution_source: t.executionSource,
+      error_message: t.errorMessage || null,
+      created_at: t.createdAt,
+    })),
     pagination: {
-      currentPage: 1,
-      totalPages: 0,
-      totalItems: 0,
-      itemsPerPage: 20,
-      hasNextPage: false,
-      hasPrevPage: false,
+      currentPage: pageNum,
+      totalPages,
+      totalItems: total,
+      itemsPerPage: limitNum,
+      hasNextPage: pageNum < totalPages,
+      hasPrevPage: pageNum > 1,
     },
   };
 }
 
 /**
- * Obtiene repartidores para filtros
+ * Obtiene repartidores activos para el filtro (colección DeliveryPerson,
+ * la misma que usa Gestión de Cargas para crear/editar repartidores).
  */
 async function getDeliveryPersonsForFilter() {
-  return {
-    success: true,
-    data: [],
-  };
+  try {
+    const persons = await DeliveryPerson.find({ isActive: true })
+      .select("code name assignedWarehouse")
+      .sort({ name: 1 })
+      .lean();
+    return { success: true, data: persons };
+  } catch (error) {
+    logger.error("Error en getDeliveryPersonsForFilter:", error);
+    return { success: true, data: [] };
+  }
 }
 
 

@@ -1,30 +1,32 @@
 import React, { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import { FaSync, FaHistory, FaCheckDouble } from "react-icons/fa";
+import { FaSync, FaHistory } from "react-icons/fa";
 import {
   useAuth,
-  usePermissions,
   useTransferManagement,
   useNotification,
   Button,
   TraspasoStatsGrid,
   TraspasoFiltersPanel,
   TraspasoTrackingTable,
+  TraspasoDetailModal,
   LoadingUI
 } from "../../index";
 
 /**
  * TraspasoManagement (Tailwind Edition)
  * Supervisión y ejecución de transferencias de inventario con diseño corporativo premium.
+ *
+ * La ejecución masiva/por lote se retiró a propósito: "ejecutar" un traspaso
+ * mueve inventario real en el ERP (CATELLI.DOCUMENTO_INV), y falta definir
+ * la lógica de cuándo un traspaso queda realmente aprobado en el ERP antes
+ * de exponer un botón que lo dispare por lote sin ese control.
  */
 export function TraspasoManagement() {
   const navigate = useNavigate();
   const { accessToken } = useAuth();
-  const { hasPermission, isAdmin } = usePermissions();
   const { showSuccess, showError, showInfo } = useNotification();
-  
-  const canExecuteTraspaso = hasPermission("loads", "execute") || hasPermission("loads", "create") || isAdmin;
 
   const {
     traspasos,
@@ -33,18 +35,19 @@ export function TraspasoManagement() {
     refreshing,
     error,
     metadata,
+    selectedTraspaso,
     actions
   } = useTransferManagement();
 
-  const [selectedItems, setSelectedItems] = useState([]);
-  const [isProcessingAction, setIsProcessingAction] = useState(false);
-  const [singleActionStates, setSingleActionStates] = useState({});
-  const [filters, setFilters] = useState({
+  const getDefaultFilters = () => ({
     dateFrom: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
     dateTo: new Date().toISOString().split("T")[0],
     status: "all",
     loadId: ""
   });
+
+  const [singleActionStates, setSingleActionStates] = useState({});
+  const [filters, setFilters] = useState(getDefaultFilters());
 
   // Carga inicial
   useEffect(() => {
@@ -65,38 +68,17 @@ export function TraspasoManagement() {
     actions.fetchStats(filters);
   };
 
+  const handleResetFilters = () => {
+    const defaults = getDefaultFilters();
+    setFilters(defaults);
+    actions.fetchTraspasos(defaults);
+    actions.fetchStats(defaults);
+  };
+
   const handleRefresh = async () => {
     await actions.fetchTraspasos(filters, true);
     await actions.fetchStats(filters);
     showInfo("Datos sincronizados correctamente");
-  };
-
-  const handleSelectItem = (id) => {
-    setSelectedItems(prev => prev.includes(id) ? prev.filter(i => i !== id) : [...prev, id]);
-  };
-
-  const handleSelectAll = (checked) => {
-    setSelectedItems(checked ? traspasos.map(t => t.id) : []);
-  };
-
-  const handleBulkExecute = async () => {
-    try {
-      const loadIds = traspasos
-        .filter(t => selectedItems.includes(t.id))
-        .map(t => t.load_id);
-
-      if (loadIds.length === 0) return;
-
-      setIsProcessingAction(true);
-      showInfo(`Iniciando ejecución masiva de ${loadIds.length} traspasos...`);
-      await actions.executeBulkTransfers(loadIds);
-      showSuccess("Traspasos procesados con éxito");
-      setSelectedItems([]);
-    } catch (err) {
-      showError("Error en la ejecución masiva");
-    } finally {
-      setIsProcessingAction(false);
-    }
   };
 
   const handleExecuteSingle = async (loadId) => {
@@ -111,9 +93,16 @@ export function TraspasoManagement() {
     }
   };
 
-  // "Ver detalles" está deshabilitado: el backend (traspasoService.getTraspasoDetails)
-  // tiene esa función deliberadamente desactivada ("Tabla deprecada"). Ver TraspasoTrackingTable:
-  // el botón solo se muestra si se pasa onViewDetails, así que simplemente no se pasa.
+  const handleViewDetails = async (id) => {
+    try {
+      setSingleActionStates(prev => ({ ...prev, [id]: 'details' }));
+      await actions.getDetails(id);
+    } catch (err) {
+      showError("Error al obtener el detalle del traspaso");
+    } finally {
+      setSingleActionStates(prev => ({ ...prev, [id]: null }));
+    }
+  };
 
   return (
     <div className="min-h-screen bg-slate-50/50 animate-fadeIn">
@@ -148,40 +137,12 @@ export function TraspasoManagement() {
           <TraspasoFiltersPanel
             filters={filters}
             onFiltersChange={setFilters}
-            onReset={actions.resetFilters}
+            onReset={handleResetFilters}
             onSearch={handleSearch}
             loading={loading}
             metadata={metadata}
           />
         </div>
-
-        {/* BULK ACTIONS STICKY BANNER */}
-        {selectedItems.length > 0 && canExecuteTraspaso && (
-          <div className="sticky top-6 z-[100] animate-slideDown">
-            <div className="bg-primary-600 text-white p-5 px-8 rounded-xl shadow-2xl shadow-primary-900/20 flex flex-col sm:flex-row justify-between items-center gap-4 border border-white/10 backdrop-blur-xl">
-              <div className="flex items-center gap-4">
-                <div className="w-12 h-12 rounded-2xl bg-white/20 flex items-center justify-center text-xl shadow-inner">
-                  <FaCheckDouble />
-                </div>
-                <div>
-                  <div className="text-lg font-black tracking-tight leading-tight">
-                    {selectedItems.length} Traspasos seleccionados
-                  </div>
-                  <div className="text-[11px] font-bold text-white/60 uppercase tracking-widest">Ejecución post-carga disponible</div>
-                </div>
-              </div>
-              <Button 
-                variant="primary" 
-                size="small" 
-                className="!bg-white !text-primary-600 !border-none !shadow-xl hover:!scale-105"
-                loading={isProcessingAction} 
-                onClick={handleBulkExecute}
-              >
-                Ejecutar Seleccionados
-              </Button>
-            </div>
-          </div>
-        )}
 
         {/* LISTING / TABLE */}
         <div className="bg-white rounded-xl border border-slate-100 shadow-premium overflow-hidden">
@@ -192,14 +153,16 @@ export function TraspasoManagement() {
               transfers={traspasos}
               loading={loading}
               actionStates={singleActionStates}
-              selectedItems={selectedItems}
-              onSelectItem={handleSelectItem}
-              onSelectAll={handleSelectAll}
               onExecute={handleExecuteSingle}
+              onViewDetails={handleViewDetails}
             />
           )}
         </div>
       </div>
+
+      {selectedTraspaso && (
+        <TraspasoDetailModal traspaso={selectedTraspaso} onClose={actions.clearSelection} />
+      )}
     </div>
   );
 }
