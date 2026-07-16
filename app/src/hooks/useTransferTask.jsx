@@ -22,6 +22,7 @@ export const useTransferTask = () => {
         executionMode: "all",
         transferType: "all",
         status: "all",
+        group: "all",
     });
 
     const fetchTasksCallback = useCallback(async () => {
@@ -120,6 +121,10 @@ export const useTransferTask = () => {
         setFilters(prev => ({ ...prev, [filterType]: value }));
     };
 
+    const availableGroups = useMemo(() => {
+        return [...new Set(tasks.map((t) => t.linkedGroup).filter(Boolean))].sort();
+    }, [tasks]);
+
     const filteredTasks = useMemo(() => {
         return tasks.filter((task) => {
             const matchesSearch = task.name.toLowerCase().includes(search.toLowerCase());
@@ -127,7 +132,8 @@ export const useTransferTask = () => {
             const matchesExec = filters.executionMode === "all" || task.executionMode === filters.executionMode;
             const matchesTransfer = filters.transferType === "all" || task.transferType === filters.transferType;
             const matchesStatus = filters.status === "all" || (filters.status === "active" ? task.active : !task.active);
-            return matchesSearch && matchesType && matchesExec && matchesTransfer && matchesStatus;
+            const matchesGroup = filters.group === "all" || task.linkedGroup === filters.group;
+            return matchesSearch && matchesType && matchesExec && matchesTransfer && matchesStatus && matchesGroup;
         });
     }, [tasks, search, filters]);
 
@@ -203,6 +209,7 @@ export const useTransferTask = () => {
     return {
         tasks: filteredTasks,
         allTasks: tasks,
+        availableGroups,
         loading: tasksLoading,
         refreshing: tasksRefreshing,
         error: tasksError,

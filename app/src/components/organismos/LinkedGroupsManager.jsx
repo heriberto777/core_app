@@ -14,6 +14,13 @@ const STATUS_DOT = {
   cancelled: "bg-amber-400",
 };
 
+// Los nombres de grupos/tareas son cadenas largas unidas por "_" sin
+// espacios (p. ej. ACCOUNT_GROUP, IMPLT_accounts_organization); el
+// navegador no las envuelve de forma natural y termina partiéndolas a
+// la mitad de una palabra. Insertar un espacio de ancho cero después
+// de cada "_" le da al navegador un punto de corte razonable.
+const withBreakOpportunities = (text = "") => text.split("_").join("_​");
+
 const LinkedGroupsManager = ({
   accessToken,
   onGroupDeleted = null,
@@ -222,7 +229,7 @@ const LinkedGroupsManager = ({
           <p className="text-sm text-slate-400 font-bold">Ningún grupo coincide con "{searchTerm}".</p>
         </div>
       ) : (
-        <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
+        <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {filteredGroups.map((group) => (
             <div key={group.groupName} className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 border border-slate-100 flex flex-col group/card">
               <div className="p-8 bg-primary-600 text-white relative overflow-hidden">
@@ -230,7 +237,7 @@ const LinkedGroupsManager = ({
                     <FaLink size={120} />
                 </div>
                 <div className="relative z-10 space-y-4">
-                    <h3 className="text-xl font-black leading-tight uppercase tracking-wide break-words" title={group.groupName}>{group.groupName}</h3>
+                    <h3 className="text-lg font-black leading-snug uppercase tracking-wide" title={group.groupName}>{withBreakOpportunities(group.groupName)}</h3>
                     <div className="flex flex-wrap gap-2">
                         <span className="bg-white/20 backdrop-blur-md px-3 py-1.5 rounded-xl text-[10px] font-black uppercase tracking-widest flex items-center gap-2">
                             <FaUsers className="text-[8px]" /> {group.totalTasks} Tareas
@@ -249,7 +256,7 @@ const LinkedGroupsManager = ({
                         <div className="flex items-center gap-3 min-w-0">
                           <span className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-slate-900 text-white text-[10px] font-black">{idx + 1}</span>
                           <div className="flex flex-col min-w-0">
-                              <span className="text-xs font-black text-slate-800 truncate">{task.name}</span>
+                              <span className="text-xs font-black text-slate-800 break-words" title={task.name}>{withBreakOpportunities(task.name)}</span>
                               <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
                                 <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[task.status] || "bg-slate-300"}`} />
                                 {task.status || "pendiente"}

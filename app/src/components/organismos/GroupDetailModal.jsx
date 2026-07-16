@@ -11,6 +11,11 @@ const STATUS_LABELS = {
   cancelled: "Cancelada",
 };
 
+// Los nombres de tareas son cadenas largas unidas por "_" sin espacios;
+// insertar un espacio de ancho cero después de cada "_" le da al
+// navegador un punto de corte razonable en vez de partir a mitad de palabra.
+const withBreakOpportunities = (text = "") => text.split("_").join("_​");
+
 /**
  * GroupDetailModal (Grid)
  * Detalle en vivo de un grupo vinculado: reemplaza el antiguo popup de
@@ -92,7 +97,7 @@ export function GroupDetailModal({ group, onClose, onRemoveTask, onDismantle, re
                       </span>
                       <div className="flex flex-col min-w-0">
                         <div className="flex items-center gap-2 min-w-0">
-                          <span className="text-sm font-black text-slate-900 truncate">{task.name}</span>
+                          <span className="text-sm font-black text-slate-900 break-words" title={task.name}>{withBreakOpportunities(task.name)}</span>
                           {task.isCoordinator && <FaCrown className="text-amber-500 shrink-0" title="Coordinadora" />}
                         </div>
                         <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">
