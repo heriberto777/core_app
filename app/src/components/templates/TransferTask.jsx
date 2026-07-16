@@ -82,7 +82,7 @@ function FilterButton({ children, active, onClick }) {
 export function TransferTasks() {
   const navigate = useNavigate();
   const {
-    tasks, allTasks, loading, refreshing, filters, search,
+    tasks, allTasks, availableGroups, loading, refreshing, filters, search,
     taskEstimates, setSearch, setFilters,
     handleFilterChange, fetchTasks,
     deleteTask, executeTask, cancelTask, getTaskHistory, saveTask, actionStates
@@ -202,6 +202,18 @@ export function TransferTasks() {
               <option value="active">Activas</option>
               <option value="inactive">Inactivas</option>
             </select>
+            {availableGroups.length > 0 && (
+              <select
+                className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[13px] font-medium cursor-pointer focus:border-blue-500 outline-none"
+                value={filters.group}
+                onChange={(e) => handleFilterChange("group", e.target.value)}
+              >
+                <option value="all">Grupo: Todos</option>
+                {availableGroups.map((g) => (
+                  <option key={g} value={g}>{g}</option>
+                ))}
+              </select>
+            )}
           </div>
         </div>
 
