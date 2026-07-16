@@ -828,12 +828,13 @@ class TransferService {
       sendProgress(taskId, -1);
       TaskTracker.completeTask(taskId, "failed");
 
-      return {
-        success: false,
-        message: error.message || "Error durante la transferencia",
-        errorDetail: error.stack,
-        transactionId,
-      };
+      // Relanzar (en vez de devolver {success:false}) para que
+      // executeTransferWithRetry pueda clasificar el error con
+      // isConnectionError() y decidir si reintentar. Si se devolviera
+      // aquí, executeTransfer resolvería "normalmente" y el catch de
+      // executeTransferWithRetry (donde vive la lógica de reintento)
+      // nunca se ejecutaría.
+      throw error;
     }
   }
 
