@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { FaPlus, FaTrash, FaLink, FaArrowRight, FaCogs, FaProjectDiagram, FaInfoCircle, FaExclamationTriangle, FaCheck, FaLock, FaUnlock } from "react-icons/fa";
+import { FaPlus, FaTrash, FaEdit, FaLink, FaArrowRight, FaCogs, FaProjectDiagram, FaInfoCircle, FaExclamationTriangle, FaCheck, FaLock, FaUnlock } from "react-icons/fa";
 import { Button, Input, Select } from "../../index";
 import { MappingApi } from "../../api/index";
 

@@ -113,6 +113,20 @@ const upsertTransferTaskController = async (req, res) => {
 
     if (!name || !query) return res.status(400).json({ success: false, message: "El nombre y la consulta SQL son obligatorios." });
 
+    // Tarea placeholder generada automáticamente al crear/editar un Mapeo
+    // (DynamicTransferService.createMapping/updateMapping, nombre "Mapeo: X" con
+    // espacio y ":" — nunca pasaría la validación de nombre de abajo). Es un
+    // registro de vínculo, no una tarea editable: se administra desde /documents.
+    if (_id) {
+      const existingTask = await TransferTask.findById(_id).lean();
+      if (existingTask?.mappingId) {
+        return res.status(400).json({
+          success: false,
+          message: "Esta tarea es generada automáticamente por un Mapeo de Documentos y no puede editarse desde aquí. Administra el mapeo desde la pantalla de Documentos.",
+        });
+      }
+    }
+
     if (!/^[a-zA-Z0-9_\-\.]+$/.test(name)) {
       return res.status(400).json({ success: false, message: "El nombre de la tarea solo puede contener letras, números, guiones, puntos y guiones bajos." });
     }
@@ -415,9 +429,20 @@ const deleteTransferTask = async (req, res) => {
     const userId = req.user?.user_id || req.user?._id || "SYSTEM";
     if (!identifier) return res.status(400).json({ success: false, message: "Se requiere el nombre o ID de la tarea" });
 
-    const result = mongoose.Types.ObjectId.isValid(identifier)
-      ? await TransferTask.findByIdAndDelete(identifier)
-      : await TransferTask.findOneAndDelete({ name: identifier });
+    const query = mongoose.Types.ObjectId.isValid(identifier) ? { _id: identifier } : { name: identifier };
+    const existingTask = await TransferTask.findOne(query).lean();
+    if (!existingTask) return res.status(404).json({ success: false, message: "Tarea no encontrada" });
+
+    // Tarea vinculada a un Mapeo (TransferMapping.taskId la referencia) — borrarla
+    // deja al mapeo con una referencia rota. Se elimina junto con el mapeo, no aquí.
+    if (existingTask.mappingId) {
+      return res.status(400).json({
+        success: false,
+        message: "Esta tarea es generada automáticamente por un Mapeo de Documentos. Elimina el mapeo desde la pantalla de Documentos para quitarla.",
+      });
+    }
+
+    const result = await TransferTask.findByIdAndDelete(existingTask._id);
 
     if (!result) return res.status(404).json({ success: false, message: "Tarea no encontrada" });
 
