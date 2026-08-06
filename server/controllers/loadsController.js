@@ -194,7 +194,7 @@ class LoadsController {
         httpStatusCode: 200,
       });
 
-      return res.status(200).json({ success: true, data: result });
+      return res.status(200).json({ success: true, data: result.data });
     } catch (error) {
       logger.error("Error en getDeliveryPersons", {
         operationType: "QUERY",
@@ -297,7 +297,7 @@ class LoadsController {
       return res.status(200).json({
         success: true,
         message: result.message || "Pedidos cancelados exitosamente",
-        data: result.data,
+        data: { cancelledCount: result.cancelledCount || 0 },
       });
     } catch (error) {
       logger.error("Error en cancelOrders:", error);
@@ -323,7 +323,7 @@ class LoadsController {
       return res.status(200).json({
         success: true,
         message: result.message || "Líneas eliminadas exitosamente",
-        data: { deletedLinesCount: result.deletedLines?.length || 0, deletedLines: result.deletedLines },
+        data: { deletedLinesCount: result.removedCount || 0 },
       });
     } catch (error) {
       logger.error(`Error en removeOrderLines (Pedido: ${req.params.pedidoId}):`, error);

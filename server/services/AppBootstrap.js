@@ -76,14 +76,18 @@ class AppBootstrap {
         // No fallar por esto
       }
 
-      // 4. Inicializar trabajos cron (opcional)
+      // 4. Inicializar trabajos cron (opcional): resincroniza el estado en
+      // memoria de cronService con la config guardada en Mongo. Antes esto
+      // llamaba a cronService.initializeJobs(), que nunca existió (el typeof
+      // guard lo dejaba pasar en silencio) — el scheduler nunca se activaba
+      // ni siquiera reiniciando el servidor.
       try {
         const cronService = require("./cronService");
-        if (cronService && typeof cronService.initializeJobs === "function") {
-          await cronService.initializeJobs();
-          this.state.cronJobs = true;
-          logger.info("✅ Trabajos cron inicializados");
-        }
+        const Config = require("../models/configModel");
+        const config = await Config.findOne().lean();
+        cronService.syncWithConfig(config);
+        this.state.cronJobs = true;
+        logger.info("✅ Trabajos cron inicializados");
       } catch (error) {
         logger.warn("⚠️ Trabajos cron no pudieron iniciarse:", error.message);
         this.state.cronJobs = false;
@@ -126,9 +130,7 @@ class AppBootstrap {
         try {
           logger.info("⏹️ Deteniendo trabajos cron...");
           const cronService = require("./cronService");
-          if (cronService && typeof cronService.stopAllJobs === "function") {
-            await cronService.stopAllJobs();
-          }
+          cronService.stopCronJob();
           logger.info("✅ Trabajos cron detenidos correctamente");
         } catch (error) {
           logger.warn(`⚠️ Error al detener trabajos cron: ${error.message}`);
