@@ -1,5 +1,6 @@
 const DBConfig = require("../models/dbConfigModel");
 const logger = require("../services/logger");
+const ConnectionCentralService = require("../services/ConnectionCentralService");
 
 const MASKED_PASSWORD = "••••••••";
 
@@ -54,6 +55,15 @@ const upsertDBConfig = async (req, res) => {
       );
 
       logger.info(`Configuración de DB actualizada: ${serverName} por ${req.user?._id}`);
+
+      // Guardar en Mongo no hace que el pool de conexión activo en memoria
+      // se entere del cambio (mismo patrón de bug que el del scheduler) —
+      // se fuerza a cerrar el pool actual para que la próxima conexión lo
+      // reconstruya ya con las credenciales/host nuevos.
+      await ConnectionCentralService.closePool(serverName).catch((err) =>
+        logger.warn(`No se pudo cerrar el pool de ${serverName} tras actualizar: ${err.message}`)
+      );
+
       return res.status(200).json({
         success: true,
         message: "Configuración actualizada con éxito",

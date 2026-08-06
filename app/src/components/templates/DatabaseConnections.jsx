@@ -2,6 +2,7 @@ import React, { useState } from "react";
 import {
   useAuth,
   useDBConnections,
+  usePermissions,
   DBConnectionModal,
   Button,
   StatusBadge,
@@ -19,6 +20,8 @@ export function DatabaseConnections() {
   const [selectedConnection, setSelectedConnection] = useState(null);
 
   const { accessToken } = useAuth();
+  const { hasPermission, isAdmin } = usePermissions();
+  const canManage = hasPermission("settings", "manage") || isAdmin;
   const {
     connections,
     loading,
@@ -75,9 +78,11 @@ export function DatabaseConnections() {
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Infraestructura de Datos</h1>
           <p className="text-slate-500 mt-2 font-medium">Gestión de conexiones y servidores de bases de datos del ecosistema.</p>
         </div>
-        <Button variant="primary" onClick={handleAdd}>
-          <FaPlus /> Nueva Conexión
-        </Button>
+        {canManage && (
+          <Button variant="primary" onClick={handleAdd}>
+            <FaPlus /> Nueva Conexión
+          </Button>
+        )}
       </header>
 
       {/* CONTENT */}
@@ -95,20 +100,22 @@ export function DatabaseConnections() {
                 <div className="w-14 h-14 rounded-2xl bg-primary-100 text-primary-600 flex items-center justify-center text-2xl shadow-inner transition-transform group-hover:scale-110 duration-300">
                   <FaDatabase />
                 </div>
-                <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <button 
-                    onClick={() => handleEdit(conn)}
-                    className="p-2.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all"
-                  >
-                    <FaEdit size={16} />
-                  </button>
-                  <button 
-                    onClick={() => handleDelete(conn.serverName)}
-                    className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
-                  >
-                    <FaTrash size={16} />
-                  </button>
-                </div>
+                {canManage && (
+                  <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <button
+                      onClick={() => handleEdit(conn)}
+                      className="p-2.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all"
+                    >
+                      <FaEdit size={16} />
+                    </button>
+                    <button
+                      onClick={() => handleDelete(conn.serverName)}
+                      className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                    >
+                      <FaTrash size={16} />
+                    </button>
+                  </div>
+                )}
               </div>
 
               {/* INFO */}
@@ -142,9 +149,11 @@ export function DatabaseConnections() {
                <FaDatabase className="text-slate-200 mb-6" size={64} />
                <p className="text-xl font-extrabold text-slate-400">No hay servidores configurados</p>
                <p className="text-sm text-slate-400 mt-2">Comienza agregando tu primera conexión a base de datos.</p>
-               <Button variant="primary" onClick={handleAdd} className="mt-8">
-                  <FaPlus /> Configurar Servidor
-               </Button>
+               {canManage && (
+                 <Button variant="primary" onClick={handleAdd} className="mt-8">
+                    <FaPlus /> Configurar Servidor
+                 </Button>
+               )}
             </div>
           )}
         </div>

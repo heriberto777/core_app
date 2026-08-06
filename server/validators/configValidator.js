@@ -64,8 +64,9 @@ const upsertDBConfigSchema = [
         .withMessage("El nombre del servidor es obligatorio"),
     body("type")
         .custom((value) => {
-            console.log("🔍 Validando TYPE:", value, typeof value);
-            const allowed = ["mssql", "mongodb", "mysql", "postgres", "mariadb", "sqlserver"];
+            // Debe coincidir exactamente con el enum real de dbConfigModel.js;
+            // "sqlserver" se aceptaba aquí pero el modelo lo rechazaba siempre.
+            const allowed = ["mssql", "mongodb", "mysql", "postgres", "mariadb"];
             if (!value) return false;
             const cleanValue = String(value).trim().toLowerCase();
             return allowed.includes(cleanValue);

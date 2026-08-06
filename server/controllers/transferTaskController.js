@@ -6,7 +6,7 @@ const {
   upsertTransferTask: upsertTransferTaskService,
 } = require("../services/transferService");
 const Config = require("../models/configModel");
-const { startCronJob } = require("../services/cronService");
+const { setSchedulerEnabled } = require("../services/cronService");
 const { executeDynamicSelect } = require("../services/dynamicQueryService");
 const { formatDateToYYYYMMDD } = require("../utils/formatDate");
 const { realizarTraspaso } = require("../services/traspasoService");
@@ -452,7 +452,11 @@ const updateConfig = async (req, res) => {
 
     logger.info(`Configuración de cron actualizada: ${config.hour} (Enabled: ${config.enabled}) por ${userId}`);
 
-    if (config.enabled !== false) startCronJob(config.hour);
+    // setSchedulerEnabled es la única función que realmente pone en true la
+    // variable de módulo `isEnabled` de cronService; llamar a startCronJob
+    // directamente (como antes) nunca activaba el cron porque ese chequeo
+    // interno seguía en false para siempre.
+    setSchedulerEnabled(config.enabled, config.hour);
 
     return res.status(200).json({ success: true, message: "Configuración actualizada correctamente", data: config });
   } catch (error) {

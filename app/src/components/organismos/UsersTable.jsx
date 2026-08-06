@@ -1,12 +1,16 @@
 import React from "react";
 import { FaEdit, FaTrash, FaEye, FaToggleOn, FaToggleOff, FaCrown } from "react-icons/fa";
-import { StatusBadge } from "../index";
+import { StatusBadge, usePermissions } from "../../index";
 
 /**
  * UsersTable (Tailwind Edition)
  * Tabla de identidades con diseño de alta fidelidad.
  */
 export const UsersTable = ({ data, onEdit, onDelete, onToggleStatus, onView, currentUserId }) => {
+    const { hasPermission, isAdmin } = usePermissions();
+    const canUpdate = hasPermission("users", "update") || isAdmin;
+    const canDelete = hasPermission("users", "delete") || isAdmin;
+
     return (
         <div className="overflow-x-auto">
             <table className="w-full text-left border-collapse">
@@ -78,22 +82,26 @@ export const UsersTable = ({ data, onEdit, onDelete, onToggleStatus, onView, cur
                                     >
                                         <FaEye size={14} />
                                     </button>
-                                    <button 
-                                      onClick={() => onEdit(user)}
-                                      className="p-2 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all"
-                                      title="Editar"
-                                    >
-                                        <FaEdit size={14} />
-                                    </button>
-                                    <button
-                                        onClick={() => onToggleStatus(user._id, user.activo)}
-                                        className={`p-2 rounded-lg transition-all ${user.activo ? "text-amber-500 hover:bg-amber-50" : "text-emerald-500 hover:bg-emerald-50"}`}
-                                        title={user.activo ? "Desactivar" : "Activar"}
-                                    >
-                                        {user.activo ? <FaToggleOn size={16} /> : <FaToggleOff size={16} />}
-                                    </button>
-                                    {user._id !== currentUserId && (
-                                        <button 
+                                    {canUpdate && (
+                                        <button
+                                          onClick={() => onEdit(user)}
+                                          className="p-2 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all"
+                                          title="Editar"
+                                        >
+                                            <FaEdit size={14} />
+                                        </button>
+                                    )}
+                                    {canUpdate && (
+                                        <button
+                                            onClick={() => onToggleStatus(user._id, user.activo)}
+                                            className={`p-2 rounded-lg transition-all ${user.activo ? "text-amber-500 hover:bg-amber-50" : "text-emerald-500 hover:bg-emerald-50"}`}
+                                            title={user.activo ? "Desactivar" : "Activar"}
+                                        >
+                                            {user.activo ? <FaToggleOn size={16} /> : <FaToggleOff size={16} />}
+                                        </button>
+                                    )}
+                                    {canDelete && user._id !== currentUserId && (
+                                        <button
                                           onClick={() => onDelete(user)}
                                           className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all"
                                           title="Eliminar"

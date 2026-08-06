@@ -1,12 +1,17 @@
 import React from "react";
 import { FaShieldAlt, FaUsers, FaCrown, FaEdit, FaTrash, FaCopy, FaToggleOn, FaToggleOff } from "react-icons/fa";
-import { StatusBadge } from "../index";
+import { StatusBadge, usePermissions } from "../../index";
 
 /**
  * RolesTable (Tailwind Edition)
  * Grid de políticas de seguridad con diseño de tarjetas premium.
  */
 export const RolesTable = ({ data, onEdit, onDelete, onDuplicate, onToggleStatus, onViewUsers }) => {
+    const { hasPermission, isAdmin } = usePermissions();
+    const canCreate = hasPermission("roles", "create") || isAdmin;
+    const canUpdate = hasPermission("roles", "update") || isAdmin;
+    const canDelete = hasPermission("roles", "delete") || isAdmin;
+
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
             {data.map(role => (
@@ -76,29 +81,35 @@ export const RolesTable = ({ data, onEdit, onDelete, onDuplicate, onToggleStatus
                         >
                             <FaUsers size={16} />
                         </button>
-                        <button 
-                          onClick={() => onEdit(role)}
-                          className="p-2.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all"
-                          title="Editar política"
-                        >
-                            <FaEdit size={16} />
-                        </button>
-                        <button 
-                          onClick={() => onDuplicate(role)}
-                          className="p-2.5 text-slate-400 hover:text-violet-500 hover:bg-violet-50 rounded-xl transition-all"
-                          title="Clonar política"
-                        >
-                            <FaCopy size={16} />
-                        </button>
-                        <button
-                            onClick={() => onToggleStatus(role._id, role.isActive)}
-                            className={`p-2.5 rounded-xl transition-all ${role.isActive ? "text-amber-500 hover:bg-amber-50" : "text-emerald-500 hover:bg-emerald-50"}`}
-                            title={role.isActive ? "Desactivar" : "Activar"}
-                        >
-                            {role.isActive ? <FaToggleOn size={18} /> : <FaToggleOff size={18} />}
-                        </button>
-                        {!role.isSystem && role.userCount === 0 && (
-                            <button 
+                        {canUpdate && (
+                            <button
+                              onClick={() => onEdit(role)}
+                              className="p-2.5 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-xl transition-all"
+                              title="Editar política"
+                            >
+                                <FaEdit size={16} />
+                            </button>
+                        )}
+                        {canCreate && (
+                            <button
+                              onClick={() => onDuplicate(role)}
+                              className="p-2.5 text-slate-400 hover:text-violet-500 hover:bg-violet-50 rounded-xl transition-all"
+                              title="Clonar política"
+                            >
+                                <FaCopy size={16} />
+                            </button>
+                        )}
+                        {canUpdate && (
+                            <button
+                                onClick={() => onToggleStatus(role._id, role.isActive)}
+                                className={`p-2.5 rounded-xl transition-all ${role.isActive ? "text-amber-500 hover:bg-amber-50" : "text-emerald-500 hover:bg-emerald-50"}`}
+                                title={role.isActive ? "Desactivar" : "Activar"}
+                            >
+                                {role.isActive ? <FaToggleOn size={18} /> : <FaToggleOff size={18} />}
+                            </button>
+                        )}
+                        {canDelete && !role.isSystem && role.userCount === 0 && (
+                            <button
                               onClick={() => onDelete(role)}
                               className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
                               title="Eliminar política"
