@@ -13,6 +13,11 @@ const upsertTransferTaskSchema = [
     body("transferType").optional().isIn(["up", "down", "internal", ""]).withMessage("transferType inválido"),
     body("executionMode").optional().isIn(["normal", "batchesSSE"]).withMessage("executionMode inválido"),
     body("parameters").optional().isArray().withMessage("Parámetros debe ser un array"),
+    body("parameters.*.field").notEmpty().withMessage("Cada parámetro requiere 'field'"),
+    body("parameters.*.operator").notEmpty().withMessage("Cada parámetro requiere 'operator'"),
+    // value puede ser 0/false/"" legítimamente (igual que el required de Mongoose,
+    // que solo rechaza null/undefined), por eso no se usa notEmpty() aquí.
+    body("parameters.*.value").custom((value) => value !== undefined && value !== null).withMessage("Cada parámetro requiere 'value'"),
     body("linkedGroup").optional().trim(),
     body("linkedExecutionOrder").optional().isInt({ min: 0 }).toInt(),
     body("postUpdateQuery").optional().trim(),
@@ -52,9 +57,12 @@ const insertTrapasoSchema = [
     body("salesData").isArray({ min: 1 }).withMessage("salesData debe ser un array no vacío"),
 ];
 
-// Esquema para actualización de configuración
+// Esquema para actualización de configuración de horas del scheduler.
+// El controller (updateConfig) y el frontend usan {hour, enabled} planos,
+// nunca un objeto "config" anidado — el esquema debe reflejar eso.
 const updateConfigSchema = [
-    body("config").isObject().withMessage("Configuración debe ser un objeto"),
+    body("hour").optional().matches(/^([01]\d|2[0-3]):([0-5]\d)$/).withMessage("Formato de hora inválido (HH:MM)"),
+    body("enabled").optional().isBoolean().withMessage("enabled debe ser booleano"),
 ];
 
 // Esquema para obtener historial

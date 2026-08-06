@@ -12,6 +12,7 @@ import {
     UIInput,
     Select,
     Textarea,
+    useNotification,
 } from "../../index";
 
 const FIELD_HELP = {
@@ -53,6 +54,7 @@ const TABS = [
 ];
 
 export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) => {
+    const { showError } = useNotification();
     const [activeTab, setActiveTab] = useState("general");
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
@@ -106,17 +108,24 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
     };
 
     const handleSave = async () => {
+        let finalData;
         try {
-            const finalData = {
+            finalData = {
                 ...formData,
                 parameters: JSON.parse(formData.parameters),
-                linkedExecutionOrder: parseInt(formData.linkedExecutionOrder),
+                linkedExecutionOrder: parseInt(formData.linkedExecutionOrder, 10) || 0,
                 executeLinkedTasks: formData.linkedGroup !== ""
             };
+        } catch (e) {
+            showError("El JSON de Parámetros no es válido: " + e.message);
+            return;
+        }
+
+        try {
             setLoading(true);
             await onSave(finalData);
         } catch (e) {
-            alert("Error: " + e.message);
+            showError(e.message || "Error al guardar la tarea");
         } finally {
             setLoading(false);
         }

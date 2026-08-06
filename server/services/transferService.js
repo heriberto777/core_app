@@ -478,13 +478,20 @@ class TransferService {
    * Crea o actualiza una tarea de transferencia en MongoDB
    */
   async upsertTransferTask(taskData) {
-    console.log("taskData", taskData);
-
     try {
-      let task = await TransferTask.findOne({ name: taskData.name });
+      // Al editar, taskData._id identifica el documento real a actualizar.
+      // Buscar solo por name aquí causaba que renombrar una tarea existente
+      // no encontrara el documento original y cayera a create() con el _id
+      // del documento viejo, chocando con su propia clave (E11000).
+      let task = taskData._id
+        ? await TransferTask.findById(taskData._id)
+        : await TransferTask.findOne({ name: taskData.name });
+
       if (task) {
         task = await TransferTask.findByIdAndUpdate(task._id, taskData, {
           new: true,
+          runValidators: true,
+          context: "query",
         });
       } else {
         task = await TransferTask.create(taskData);
@@ -492,11 +499,18 @@ class TransferService {
       return { success: true, task };
     } catch (error) {
       logger.error("Error en upsertTransferTask:", error);
-      return {
-        success: false,
-        message: "Error al guardar la tarea",
-        error: error.message || "Error desconocido",
-      };
+
+      if (error.code === 11000) {
+        return { success: false, message: "Ya existe una tarea con ese nombre." };
+      }
+      if (error.name === "ValidationError") {
+        return {
+          success: false,
+          message: "Error de validación de esquema",
+          errors: Object.values(error.errors).map((e) => e.message),
+        };
+      }
+      return { success: false, message: error.message || "Error al guardar la tarea" };
     }
   }
 
