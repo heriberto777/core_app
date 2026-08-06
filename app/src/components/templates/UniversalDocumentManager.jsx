@@ -279,7 +279,7 @@ export function UniversalDocumentManager() {
                         onSelectAll={handleSelectAll}
                         onViewDetails={handleViewDetails}
                         onProcess={handleProcess}
-                        onEditEntity={handleEditEntity}
+                        onEditEntity={canEditMapping ? handleEditEntity : undefined}
                         actionStates={actionStates}
                     />
                 )}

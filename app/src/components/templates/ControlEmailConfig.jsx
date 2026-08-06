@@ -5,6 +5,7 @@ import Swal from "sweetalert2";
 
 import {
   useAuth,
+  usePermissions,
   useEmailConfig,
   EmailConfigTable,
   EmailConfigFormModal,
@@ -15,6 +16,9 @@ import {
 
 export function ControlEmailConfig() {
   const { accessToken } = useAuth();
+  const { hasPermission, isAdmin } = usePermissions();
+  const canUpdate = hasPermission("settings", "update") || isAdmin;
+  const canDelete = hasPermission("settings", "delete") || isAdmin;
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isTestOpen, setIsTestOpen] = useState(false);
@@ -121,9 +125,13 @@ export function ControlEmailConfig() {
           </div>
 
           <div className="flex gap-3">
-            <Button variant="outline" icon={<FaCog />} onClick={onInitializeDefaults}>Inicializar Defaults</Button>
+            {canUpdate && (
+              <Button variant="outline" icon={<FaCog />} onClick={onInitializeDefaults}>Inicializar Defaults</Button>
+            )}
             <Button variant="secondary" icon={<FaSync className={refreshing ? "animate-spin" : ""} />} onClick={actions.refetch} disabled={loading}>Refrescar</Button>
-            <Button variant="primary" icon={<FaPlus />} onClick={handleOpenAdd}>Agregar Cuenta</Button>
+            {canUpdate && (
+              <Button variant="primary" icon={<FaPlus />} onClick={handleOpenAdd}>Agregar Cuenta</Button>
+            )}
           </div>
         </div>
 
@@ -141,10 +149,10 @@ export function ControlEmailConfig() {
         ) : (
           <EmailConfigTable
             configs={configs}
-            onEdit={handleOpenEdit}
-            onDelete={onDeleteConfig}
-            onToggle={(c) => actions.toggleStatus(c._id)}
-            onSetDefault={onSetDefault}
+            onEdit={canUpdate ? handleOpenEdit : undefined}
+            onDelete={canDelete ? onDeleteConfig : undefined}
+            onToggle={canUpdate ? (c) => actions.toggleStatus(c._id) : undefined}
+            onSetDefault={canUpdate ? onSetDefault : undefined}
             onTest={handleOpenTest}
           />
         )}

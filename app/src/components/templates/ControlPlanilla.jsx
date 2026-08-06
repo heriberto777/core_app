@@ -3,6 +3,7 @@ import { Helmet } from "react-helmet-async";
 import { FaPlus, FaSync, FaTools, FaBell } from "react-icons/fa";
 import {
   useAuth,
+  usePermissions,
   useEmailRecipients,
   useNotification,
   Button,
@@ -14,6 +15,9 @@ import Swal from "sweetalert2";
 
 export function ControlPlanilla() {
   const { accessToken } = useAuth();
+  const { hasPermission, isAdmin } = usePermissions();
+  const canUpdate = hasPermission("settings", "update") || isAdmin;
+  const canDelete = hasPermission("settings", "delete") || isAdmin;
   const { showSuccess, showError, showInfo } = useNotification();
   const {
     recipients,
@@ -115,12 +119,16 @@ export function ControlPlanilla() {
             </p>
           </div>
           <div className="flex gap-3">
-            <Button variant="outline" onClick={handleInitialize}>
-              <FaTools /> Inicializar Defaults
-            </Button>
-            <Button variant="primary" onClick={() => { setEditingRecipient(null); setModalOpen(true); }}>
-              <FaPlus /> Agregar Destinatario
-            </Button>
+            {canUpdate && (
+              <Button variant="outline" onClick={handleInitialize}>
+                <FaTools /> Inicializar Defaults
+              </Button>
+            )}
+            {canUpdate && (
+              <Button variant="primary" onClick={() => { setEditingRecipient(null); setModalOpen(true); }}>
+                <FaPlus /> Agregar Destinatario
+              </Button>
+            )}
           </div>
         </div>
 
@@ -144,9 +152,9 @@ export function ControlPlanilla() {
         <RecipientsTable
           recipients={recipients}
           loading={loading}
-          onEdit={(r) => { setEditingRecipient(r); setModalOpen(true); }}
-          onDelete={handleDelete}
-          onToggle={handleToggle}
+          onEdit={canUpdate ? (r) => { setEditingRecipient(r); setModalOpen(true); } : undefined}
+          onDelete={canDelete ? handleDelete : undefined}
+          onToggle={canUpdate ? handleToggle : undefined}
         />
 
         <RecipientFormModal
