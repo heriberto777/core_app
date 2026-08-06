@@ -22,7 +22,7 @@ import {
 
 export function ConfigurationPage() {
   const [activeTab, setActiveTab] = useState("database");
-  const { user, loading } = useAuth();
+  const { loading } = useAuth();
   const { isAdmin, hasPermission } = usePermissions();
 
   if (loading) return <LoadingUI message="Cargando configuración..." />;
@@ -35,6 +35,8 @@ export function ConfigurationPage() {
       icon: <FaDatabase />,
       component: <DatabaseConnections />,
       requiresAdmin: true,
+      requiredResource: "settings",
+      requiredAction: "read",
     },
     {
       id: "email",
@@ -67,6 +69,11 @@ export function ConfigurationPage() {
       icon: <FaClock />,
       component: <ScheduleConfiguration />,
       requiresAdmin: true,
+      // El scheduler vive bajo el recurso "loads" en el backend
+      // (transferTaskRoutes.js: /config/horas usa checkPermission("loads", ...)),
+      // no un recurso propio — se refleja igual aquí a propósito.
+      requiredResource: "loads",
+      requiredAction: "read",
     },
     {
       id: "users",
@@ -75,11 +82,17 @@ export function ConfigurationPage() {
       icon: <FaUser />,
       component: <UserManagement />,
       requiresAdmin: true,
+      requiredResource: "users",
+      requiredAction: "read",
     },
   ];
 
+  // Antes esto comparaba contra `user.role` (campo legacy, deprecated —
+  // ver useBasePermissions.hasLegacyRole), que el formulario de creación de
+  // usuarios nunca llena. Un usuario marcado isAdmin o con un rol moderno
+  // con permisos reales nunca veía estas pestañas por esa desconexión.
   const availableTabs = configTabs.filter(
-    (tab) => !tab.requiresAdmin || user?.role?.includes("admin")
+    (tab) => !tab.requiresAdmin || isAdmin || hasPermission(tab.requiredResource, tab.requiredAction)
   );
 
   const activeTabData = availableTabs.find((t) => t.id === activeTab);
