@@ -18,7 +18,7 @@ export const useTransferTask = () => {
     const previousTasksRef = useRef(null);
 
     const [filters, setFilters] = useState({
-        type: "all",
+        type: [], // array de tipos seleccionados ("manual"/"auto"/"both"); vacío = todos
         executionMode: "all",
         transferType: "all",
         status: "all",
@@ -128,7 +128,7 @@ export const useTransferTask = () => {
     const filteredTasks = useMemo(() => {
         return tasks.filter((task) => {
             const matchesSearch = task.name.toLowerCase().includes(search.toLowerCase());
-            const matchesType = filters.type === "all" || task.type === filters.type;
+            const matchesType = filters.type.length === 0 || filters.type.includes(task.type);
             const matchesExec = filters.executionMode === "all" || task.executionMode === filters.executionMode;
             const matchesTransfer = filters.transferType === "all" || task.transferType === filters.transferType;
             const matchesStatus = filters.status === "all" || (filters.status === "active" ? task.active : !task.active);

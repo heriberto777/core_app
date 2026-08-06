@@ -35,7 +35,14 @@ export class TransferTaskApi {
                 body: JSON.stringify(datos),
             });
             const result = await response.json();
-            if (!response.ok) throw result;
+            if (!response.ok) {
+                const detail = Array.isArray(result?.errors) ? result.errors.join(", ") : null;
+                const err = new Error(
+                    [result?.message || "Error al guardar la tarea", detail].filter(Boolean).join(": ")
+                );
+                err.errors = result?.errors;
+                throw err;
+            }
             return result;
         } catch (error) {
             console.error("Error al guardar tarea:", error);

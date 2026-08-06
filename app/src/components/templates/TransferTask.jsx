@@ -17,8 +17,15 @@ import {
   ContentHeader,
   FilterInput,
   LinkedGroupsManager,
-  TransferTaskApi
+  TransferTaskApi,
+  MultiSelectInput
 } from "../../index";
+
+const TASK_TYPE_OPTIONS = [
+  { value: "manual", label: "Manuales" },
+  { value: "auto", label: "Automáticas" },
+  { value: "both", label: "Ambas" },
+];
 
 const taskApi = new TransferTaskApi();
 
@@ -184,16 +191,16 @@ export function TransferTasks() {
             onChange={(e) => setSearch(e.target.value)}
           />
           <div className="flex gap-2 items-center">
-            <select 
-              className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[13px] font-medium cursor-pointer focus:border-blue-500 outline-none"
-              value={filters.type} 
-              onChange={(e) => handleFilterChange("type", e.target.value)}
-            >
-              <option value="all">Tipos: Todos</option>
-              <option value="manual">Manuales</option>
-              <option value="auto">Automáticas</option>
-            </select>
-            <select 
+            <div className="w-44">
+              <MultiSelectInput
+                value={filters.type}
+                onChange={(values) => handleFilterChange("type", values)}
+                options={TASK_TYPE_OPTIONS}
+                placeholder="Tipos: Todos"
+                showTags={false}
+              />
+            </div>
+            <select
               className="px-3 py-2 rounded-lg border border-slate-300 dark:border-slate-600 bg-slate-50 dark:bg-slate-700 text-slate-700 dark:text-slate-200 text-[13px] font-medium cursor-pointer focus:border-blue-500 outline-none"
               value={filters.status} 
               onChange={(e) => handleFilterChange("status", e.target.value)}

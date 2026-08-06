@@ -186,13 +186,26 @@ const upsertTransferTaskController = async (req, res) => {
       lastGroupExecutionId: null,
     };
 
+    // Persistir las versiones "clean" (ya validadas arriba) en vez de los
+    // valores crudos del body — antes se calculaban solo para las validaciones
+    // de este bloque y nunca se aplicaban a taskData, así que una tarea
+    // vinculada solo por linkedTasks (sin linkedGroup) se guardaba con
+    // executeLinkedTasks:false por venir así del formulario.
+    taskData.linkedGroup = cleanLinkedGroup;
+    taskData.linkedTasks = cleanLinkedTasks;
+    taskData.executeLinkedTasks = cleanExecuteLinkedTasks;
+
     if (_id) taskData._id = _id;
 
     const result = await transferService.upsertTransferTask(taskData);
 
     if (!result.success) {
       logger.warn(`Error al guardar tarea ${name}: ${result.message}`);
-      return res.status(500).json({ success: false, message: result.message || "Error al guardar la tarea" });
+      return res.status(400).json({
+        success: false,
+        message: result.message || "Error al guardar la tarea",
+        errors: result.errors,
+      });
     }
 
     logger.info(`[TransferTask] Tarea ${name} guardada exitosamente.`);
@@ -397,7 +410,7 @@ const deleteTransferTask = async (req, res) => {
 
     if (!result) return res.status(404).json({ success: false, message: "Tarea no encontrada" });
 
-    logger.info(`[TransferTask] Tarea eliminada: ${name} por ${userId}`);
+    logger.info(`[TransferTask] Tarea eliminada: ${identifier} por ${userId}`);
     return res.status(200).json({ success: true, message: "Tarea eliminada correctamente" });
   } catch (error) {
     logger.error(`Error en deleteTransferTask (${req.params.name}):`, error);
