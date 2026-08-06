@@ -272,7 +272,7 @@ export function TransferTasks() {
                       <StatusBadge status={task.status || (task.active ? "active" : "inactive")} />
                       {!task.active && <span className="text-[10px] text-red-500 font-semibold">INACTIVA</span>}
                       {task.mappingId && (
-                        <span className="text-[10px] text-violet-600 font-semibold" title="Generada automáticamente por un Mapeo de Documentos. Se procesa desde /documents, no se ejecuta manual ni por programación.">
+                        <span className="text-[10px] text-violet-600 font-semibold" title="Generada automáticamente por un Mapeo de Documentos. Se administra desde /documents — aquí solo se puede ver su historial.">
                           MAPEO
                         </span>
                       )}
@@ -374,10 +374,10 @@ export function TransferTasks() {
                   )}
                 </div>
                 <div className="p-3 pr-4 bg-slate-50/20 dark:bg-slate-700/20 border-t border-slate-200 dark:border-slate-700 flex justify-end gap-2">
-                  {canEditTask && (
+                  {canEditTask && !task.mappingId && (
                     <Button variant="ghost" onClick={() => handleEdit(task)} disabled={task.status === "running"} title="Editar"><FaEdit /></Button>
                   )}
-                  {canDeleteTask && (
+                  {canDeleteTask && !task.mappingId && (
                     <Button variant="ghost" loading={actionStates[task._id] === 'deleting'} onClick={() => deleteTask(task._id)} disabled={task.status === "running"} className="text-red-500" title="Eliminar"><FaTrash /></Button>
                   )}
                   <Button variant="ghost" loading={actionStates[task._id] === 'history'} onClick={() => handleViewHistory(task)} title="Ver Historial"><FaHistory /></Button>
@@ -418,7 +418,7 @@ export function TransferTasks() {
                     <td className="px-3 py-2 capitalize">{task.type}</td>
                     <td className="px-3 py-2">
                       <div className="flex gap-2">
-                        {canEditTask && (
+                        {canEditTask && !task.mappingId && (
                           <Button variant="ghost" onClick={() => handleEdit(task)}><FaEdit /></Button>
                         )}
                         {canExecuteTask && !task.mappingId && (

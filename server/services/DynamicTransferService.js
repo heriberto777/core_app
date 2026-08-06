@@ -5645,6 +5645,14 @@ class DynamicTransferService {
   async deleteMapping(mappingId) {
     try {
       const result = await TransferMapping.findByIdAndDelete(mappingId);
+
+      // Limpia la tarea placeholder creada automáticamente para este mapeo
+      // (createMapping/updateMapping) — sin esto quedaba huérfana en la
+      // colección TransferTask (visible y sin sentido en la pantalla de Tareas).
+      if (result?.taskId) {
+        await TransferTask.deleteOne({ _id: result.taskId, mappingId: result._id });
+      }
+
       return !!result;
     } catch (error) {
       logger.error(
