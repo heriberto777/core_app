@@ -271,6 +271,11 @@ export function TransferTasks() {
                     <div className="flex gap-1.5 items-center">
                       <StatusBadge status={task.status || (task.active ? "active" : "inactive")} />
                       {!task.active && <span className="text-[10px] text-red-500 font-semibold">INACTIVA</span>}
+                      {task.mappingId && (
+                        <span className="text-[10px] text-violet-600 font-semibold" title="Generada automáticamente por un Mapeo de Documentos. Se procesa desde /documents, no se ejecuta manual ni por programación.">
+                          MAPEO
+                        </span>
+                      )}
                     </div>
                   </div>
                 </div>
@@ -376,12 +381,12 @@ export function TransferTasks() {
                     <Button variant="ghost" loading={actionStates[task._id] === 'deleting'} onClick={() => deleteTask(task._id)} disabled={task.status === "running"} className="text-red-500" title="Eliminar"><FaTrash /></Button>
                   )}
                   <Button variant="ghost" loading={actionStates[task._id] === 'history'} onClick={() => handleViewHistory(task)} title="Ver Historial"><FaHistory /></Button>
-                  {canExecuteTask && (
-                    <Button 
-                      variant="primary" 
-                      loading={actionStates[task._id] === 'executing'} 
-                      onClick={() => executeTask(task._id)} 
-                      disabled={task.status === "running" || !task.active} 
+                  {canExecuteTask && !task.mappingId && (
+                    <Button
+                      variant="primary"
+                      loading={actionStates[task._id] === 'executing'}
+                      onClick={() => executeTask(task._id)}
+                      disabled={task.status === "running" || !task.active}
                       title={task.active ? "Ejecutar" : "Tarea inactiva"}
                     >
                       <FaPlay />
@@ -413,8 +418,12 @@ export function TransferTasks() {
                     <td className="px-3 py-2 capitalize">{task.type}</td>
                     <td className="px-3 py-2">
                       <div className="flex gap-2">
-                        <Button variant="ghost" onClick={() => handleEdit(task)}><FaEdit /></Button>
-                        <Button variant="primary" loading={actionStates[task._id] === 'executing'} onClick={() => executeTask(task._id)} disabled={task.status === "running"}><FaPlay /></Button>
+                        {canEditTask && (
+                          <Button variant="ghost" onClick={() => handleEdit(task)}><FaEdit /></Button>
+                        )}
+                        {canExecuteTask && !task.mappingId && (
+                          <Button variant="primary" loading={actionStates[task._id] === 'executing'} onClick={() => executeTask(task._id)} disabled={task.status === "running"}><FaPlay /></Button>
+                        )}
                       </div>
                     </td>
                   </tr>

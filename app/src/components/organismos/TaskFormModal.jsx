@@ -92,7 +92,8 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
     }, [task, isOpen]);
 
     const handleChange = (e) => {
-        const { name, value, type, checked } = e.target;
+        const { name, value, type, checked } = e?.target || {};
+        if (!name) return;
         if (type === "checkbox") {
             setFormData(prev => ({ ...prev, [name]: checked }));
         } else {

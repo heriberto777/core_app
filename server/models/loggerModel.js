@@ -124,6 +124,7 @@ LogSchema.index({ timestamp: -1, level: 1 });
 LogSchema.index({ level: 1, mappingId: 1, timestamp: -1 });
 LogSchema.index({ mappingId: 1, timestamp: -1 });
 LogSchema.index({ transactionId: 1, timestamp: -1 });
+LogSchema.index({ taskId: 1, timestamp: -1, operationType: 1 });
 
 // TTL para logs antiguos (opcional - 30 días)
 LogSchema.index({ timestamp: 1 }, { expireAfterSeconds: 30 * 24 * 60 * 60 });

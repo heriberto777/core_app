@@ -179,6 +179,11 @@ class TransferService {
       const tasks = await TransferTask.find({
         active: true,
         type: { $in: ["auto", "both"] },
+        // Excluye tareas placeholder generadas automáticamente al crear/editar un
+        // Mapeo (DynamicTransferService.createMapping/updateMapping) — no son
+        // ejecutables (query "DYNAMIC_MAPPING_PROCESS"), el procesamiento real
+        // ocurre desde /documents, no debe recogerlas el scheduler automático.
+        mappingId: null,
       });
 
       return tasks.map((task) => ({

@@ -282,6 +282,17 @@ const executeTransferTask = async (req, res) => {
       return res.status(400).json({ success: false, message: "Solo se pueden ejecutar manualmente las tareas de tipo 'manual' o 'both'." });
     }
 
+    // Tarea generada automáticamente al crear/editar un Mapeo (server/services/DynamicTransferService.js
+    // createMapping/updateMapping) — es un placeholder de registro (query "DYNAMIC_MAPPING_PROCESS", no
+    // ejecutable), el procesamiento real ocurre desde /documents. No debe ejecutarse ni manual ni por cron.
+    if (task.mappingId) {
+      logger.warn(`⚠️ [executeTransferTask] Tarea derivada de mapeo, ejecución bloqueada: ${task.name}`);
+      return res.status(400).json({
+        success: false,
+        message: "Esta tarea es generada automáticamente por un Mapeo de Documentos y no puede ejecutarse desde aquí. Procesa los documentos desde la pantalla de Documentos.",
+      });
+    }
+
     const taskInProgress = await TransferTask.findOne({ status: "running", type: { $in: ["auto", "both"] } }).lean();
     if (taskInProgress) {
       logger.warn(`⚠️ [executeTransferTask] Tarea en progreso: ${taskInProgress.name}`);
@@ -806,9 +817,13 @@ const getVendedores = async (req, res) => {
 const getTransferHistory = async (req, res) => {
   try {
     const { dateFrom, dateTo, status, taskName, page = 1, limit = 20 } = req.query;
-    const query = { 
+    const query = {
       operationType: "TRANSFER",
-      "metadata.status": { $exists: true } // Solo finales de ejecución
+      "metadata.status": { $exists: true }, // Solo finales de ejecución
+      // Excluye logs de otros dominios (Traspasos de inventario, devoluciones)
+      // que también usan operationType "TRANSFER" pero nunca setean mappingName
+      // — antes aparecían acá como "N/A" en la columna de nombre de tarea.
+      mappingName: { $exists: true, $nin: [null, ""] },
     };
 
     if (dateFrom || dateTo) {

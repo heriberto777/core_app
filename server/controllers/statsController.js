@@ -135,30 +135,45 @@ async function getTaskPerformance(startDate, taskId) {
   try {
     const tasksQuery = taskId && taskId !== "all" ? { _id: taskId } : {};
     const tasks = await TransferTask.find(tasksQuery).lean();
-    const taskPerformance = [];
+    if (tasks.length === 0) return [];
 
-    for (const task of tasks) {
-      const taskFilter = { taskId: task._id.toString(), timestamp: { $gte: startDate }, operationType: "TRANSFER" };
-      
-      const executedCount = await Log.countDocuments(taskFilter);
-      const successCount = await Log.countDocuments({ ...taskFilter, "metadata.status": "completed" });
+    // Antes esto hacía 3 queries secuenciales POR CADA tarea (N+1) contra `logs`
+    // sin índice de soporte en `taskId` — con decenas de tareas y una colección
+    // de logs grande, esto tardaba >90s y Cloudflare cortaba con 504. Una sola
+    // aggregate agrupada por taskId reemplaza las 3×N queries por 1.
+    const taskIds = tasks.map((t) => t._id.toString());
+    const results = await Log.aggregate([
+      {
+        $match: {
+          taskId: { $in: taskIds },
+          timestamp: { $gte: startDate },
+          operationType: "TRANSFER",
+        },
+      },
+      {
+        $group: {
+          _id: "$taskId",
+          executed: { $sum: 1 },
+          success: { $sum: { $cond: [{ $eq: ["$metadata.status", "completed"] }, 1, 0] } },
+          avgTime: { $avg: "$durationMs" },
+        },
+      },
+    ]);
 
-      const avgTimeResult = await Log.aggregate([
-        { $match: { ...taskFilter, durationMs: { $exists: true, $ne: null } } },
-        { $group: { _id: null, avgTime: { $avg: "$durationMs" } } },
-      ]);
+    const statsByTaskId = new Map(results.map((r) => [r._id, r]));
 
-      const avgTime = avgTimeResult.length > 0 ? Math.round(avgTimeResult[0].avgTime / 1000) : 0;
-      const successRate = executedCount > 0 ? Math.round((successCount / executedCount) * 100) : 0;
+    return tasks.map((task) => {
+      const stats = statsByTaskId.get(task._id.toString());
+      const executed = stats?.executed || 0;
+      const success = stats?.success || 0;
 
-      taskPerformance.push({
+      return {
         name: task.name,
-        executed: executedCount,
-        avgTime,
-        successRate,
-      });
-    }
-    return taskPerformance;
+        executed,
+        avgTime: stats?.avgTime ? Math.round(stats.avgTime / 1000) : 0,
+        successRate: executed > 0 ? Math.round((success / executed) * 100) : 0,
+      };
+    });
   } catch (error) {
     logger.error("Error en getTaskPerformance:", error);
     return [];
