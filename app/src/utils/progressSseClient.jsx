@@ -27,8 +27,11 @@ export class ProgressSseClient {
     this.unsubscribe(taskId);
 
     try {
-      // Crear EventSource para esta tarea usando la ruta definida en progressSse.js
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER_PROGRESS}/progress/${taskId}`;
+      // Crear EventSource para esta tarea usando la ruta definida en progressSse.js.
+      // EventSource no puede enviar headers, así que el token va por query string
+      // (verifySseToken en el backend lo lee de ahí en vez de Authorization).
+      const token = localStorage.getItem(ENV.JWT.ACCESS);
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER_PROGRESS}/progress/${taskId}?token=${encodeURIComponent(token || "")}`;
 
       console.log(`Conectando a SSE: ${url}`);
       const eventSource = new EventSource(url);

@@ -7,6 +7,7 @@ import Swal from "sweetalert2";
 
 import {
   useAuth,
+  usePermissions,
   useConsecutiveManager,
   ConsecutiveFormModal,
   ConsecutiveDetailsModal,
@@ -23,6 +24,9 @@ import {
  */
 export function ConsecutiveManager() {
   const { accessToken } = useAuth();
+  const { hasPermission, isAdmin } = usePermissions();
+  const canUpdate = hasPermission("settings", "update") || isAdmin;
+  const canDelete = hasPermission("settings", "delete") || isAdmin;
 
   const {
     filteredConsecutives,
@@ -183,9 +187,11 @@ export function ConsecutiveManager() {
           <Button variant="secondary" onClick={() => setShowDashboard(!showDashboard)} className="whitespace-nowrap">
             {showDashboard ? <><FaHistory /> Lista</> : <><FaChartLine /> Dashboard</>}
           </Button>
-          <Button variant="primary" onClick={openCreate} className="whitespace-nowrap">
-            <FaPlus /> Nuevo Folio
-          </Button>
+          {canUpdate && (
+            <Button variant="primary" onClick={openCreate} className="whitespace-nowrap">
+              <FaPlus /> Nuevo Folio
+            </Button>
+          )}
           <button 
             onClick={loadConsecutives} 
             className={`w-12 h-12 rounded-xl bg-white border border-slate-200 text-slate-400 flex items-center justify-center hover:bg-slate-50 hover:text-primary-500 transition-all ${loading ? 'animate-spin' : ''}`}
@@ -252,10 +258,18 @@ export function ConsecutiveManager() {
                           <div className="flex gap-1 justify-end opacity-0 group-hover:opacity-100 transition-opacity">
                             <button onClick={() => onGetNextValue(c)} className="p-2 text-slate-400 hover:text-primary-500 hover:bg-primary-50 rounded-lg transition-all" title="Generar Siguiente"><FaPlay size={14}/></button>
                             <button onClick={() => onViewDetails(c)} className="p-2 text-slate-400 hover:text-indigo-500 hover:bg-indigo-50 rounded-lg transition-all" title="Métricas"><FaInfoCircle size={14}/></button>
-                            <button onClick={() => onAssignClick(c)} className="p-2 text-slate-400 hover:text-violet-500 hover:bg-violet-50 rounded-lg transition-all" title="Vincular"><FaLink size={14}/></button>
-                            <button onClick={() => onResetClick(c)} className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-all" title="Reiniciar"><FaSync size={14}/></button>
-                            <button onClick={() => openEdit(c)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all" title="Editar"><FaEdit size={14}/></button>
-                            <button onClick={() => onDeleteClick(c)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Eliminar"><FaTrash size={14}/></button>
+                            {canUpdate && (
+                              <button onClick={() => onAssignClick(c)} className="p-2 text-slate-400 hover:text-violet-500 hover:bg-violet-50 rounded-lg transition-all" title="Vincular"><FaLink size={14}/></button>
+                            )}
+                            {canUpdate && (
+                              <button onClick={() => onResetClick(c)} className="p-2 text-slate-400 hover:text-amber-500 hover:bg-amber-50 rounded-lg transition-all" title="Reiniciar"><FaSync size={14}/></button>
+                            )}
+                            {canUpdate && (
+                              <button onClick={() => openEdit(c)} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-lg transition-all" title="Editar"><FaEdit size={14}/></button>
+                            )}
+                            {canDelete && (
+                              <button onClick={() => onDeleteClick(c)} className="p-2 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-lg transition-all" title="Eliminar"><FaTrash size={14}/></button>
+                            )}
                           </div>
                         </td>
                       </tr>

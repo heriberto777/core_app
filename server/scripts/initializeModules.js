@@ -684,6 +684,10 @@ async function initializeSystemModules() {
         version: "1.0.0",
       },
       {
+        // Sin uso real: no hay ninguna ruta backend con checkPermission("profile", ...)
+        // ni ninguna pantalla del frontend que verifique este recurso — cada usuario
+        // ve/edita su propio perfil sin pasar por el sistema de permisos. Se deja
+        // isActive: false para que no aparezca como asignable en la UI de Roles.
         name: "profile",
         displayName: "Perfil de Usuario",
         description: "Módulo para gestionar el perfil personal",
@@ -722,6 +726,162 @@ async function initializeSystemModules() {
           category: "configuration",
           order: 2,
           showInMenu: true,
+          showInDashboard: false,
+        },
+        restrictions: {
+          requireAdmin: false,
+          minimumRole: "user",
+          contextRules: [],
+        },
+        isSystem: true,
+        isActive: false,
+        version: "1.0.1",
+      },
+      {
+        name: "config",
+        displayName: "Configuración del Scheduler",
+        description: "Módulo para administrar la programación automática y la caché del sistema",
+        resource: "config",
+        actions: [
+          {
+            name: "read",
+            displayName: "Ver Configuración",
+            description: "Visualizar la configuración del scheduler",
+            isDefault: true,
+          },
+          {
+            name: "update",
+            displayName: "Editar Configuración",
+            description: "Modificar la hora y el estado del scheduler",
+            isDefault: false,
+          },
+          {
+            name: "manage",
+            displayName: "Gestionar Caché",
+            description: "Ver y limpiar la caché del sistema",
+            isDefault: false,
+          },
+        ],
+        routes: [
+          {
+            path: "/configuration",
+            method: "GET",
+            requiredAction: "read",
+            isMain: true,
+          },
+        ],
+        uiConfig: {
+          icon: "FaClock",
+          color: "#0d6efd",
+          category: "configuration",
+          order: 3,
+          showInMenu: false,
+          showInDashboard: false,
+        },
+        restrictions: {
+          requireAdmin: false,
+          minimumRole: "manager",
+          contextRules: [],
+        },
+        isSystem: true,
+        isActive: true,
+        version: "1.0.0",
+      },
+      {
+        name: "mappings",
+        displayName: "Mapeos de Documentos",
+        description: "Módulo para administrar los mapeos de procesamiento de documentos",
+        resource: "mappings",
+        actions: [
+          {
+            name: "read",
+            displayName: "Ver Mapeos",
+            description: "Visualizar mapeos existentes",
+            isDefault: true,
+          },
+          {
+            name: "create",
+            displayName: "Crear Mapeos",
+            description: "Crear nuevos mapeos",
+            isDefault: false,
+          },
+          {
+            name: "update",
+            displayName: "Editar Mapeos",
+            description: "Modificar mapeos existentes",
+            isDefault: false,
+          },
+          {
+            name: "delete",
+            displayName: "Eliminar Mapeos",
+            description: "Eliminar mapeos",
+            isDefault: false,
+          },
+          {
+            name: "execute",
+            displayName: "Procesar Documentos",
+            description: "Ejecutar el procesamiento de documentos por mapeo",
+            isDefault: false,
+          },
+        ],
+        routes: [
+          {
+            path: "/documents",
+            method: "GET",
+            requiredAction: "read",
+            isMain: true,
+          },
+        ],
+        uiConfig: {
+          icon: "FaFileAlt",
+          color: "#6610f2",
+          category: "operational",
+          order: 5,
+          showInMenu: false,
+          showInDashboard: false,
+        },
+        restrictions: {
+          requireAdmin: false,
+          minimumRole: "user",
+          contextRules: [],
+        },
+        isSystem: true,
+        isActive: true,
+        version: "1.0.0",
+      },
+      {
+        name: "orders",
+        displayName: "Pedidos",
+        description: "Módulo para visualizar y procesar pedidos",
+        resource: "orders",
+        actions: [
+          {
+            name: "read",
+            displayName: "Ver Pedidos",
+            description: "Visualizar pedidos",
+            isDefault: true,
+          },
+          {
+            name: "execute",
+            displayName: "Procesar Pedidos",
+            description: "Ejecutar el procesamiento de pedidos",
+            isDefault: false,
+          },
+        ],
+        routes: [
+          {
+            path: "/loads",
+            method: "GET",
+            requiredAction: "read",
+            isMain: true,
+          },
+        ],
+        uiConfig: {
+          icon: "FaBoxes",
+          color: "#fd7e14",
+          category: "operational",
+          order: 6,
+          showInMenu: false,
           showInDashboard: false,
         },
         restrictions: {

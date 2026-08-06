@@ -105,6 +105,7 @@ router.patch(
 // PATCH /api/v1/users/user/password/:id - Cambiar contraseña
 router.patch(
   "/user/password/:id",
+  checkPermission("users", "update"),
   changePassword
 );
 

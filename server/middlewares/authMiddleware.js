@@ -91,6 +91,49 @@ const verifyToken = async (req, res, next) => {
   }
 };
 
+// EventSource del navegador no puede enviar headers personalizados, así que
+// las rutas SSE (progressRoutes.js) reciben el token por query string en vez
+// del header Authorization estándar.
+const verifySseToken = async (req, res, next) => {
+  try {
+    const token = req.query.token;
+
+    if (!token) {
+      return res.status(401).json({
+        success: false,
+        message: "No se proporcionó token de autorización",
+      });
+    }
+
+    const payload = decoded(token);
+
+    if (payload.token_type !== "access" || !payload.user_id) {
+      return res.status(401).json({
+        success: false,
+        message: "Token inválido",
+      });
+    }
+
+    const user = await User.findById(payload.user_id).select("-password");
+
+    if (!user || !user.activo) {
+      return res.status(401).json({
+        success: false,
+        message: "Usuario no encontrado o desactivado",
+      });
+    }
+
+    req.user = user;
+    next();
+  } catch (error) {
+    logger.error("Error en verifySseToken:", error.message);
+    return res.status(401).json({
+      success: false,
+      message: "Token inválido o expirado",
+    });
+  }
+};
+
 // Resto de funciones del middleware...
 const checkPermission = (resource, action) => {
   return async (req, res, next) => {
@@ -115,7 +158,11 @@ const checkPermission = (resource, action) => {
       const userPermission = user.permissions?.find(
         (p) => p.resource === resource
       );
-      if (userPermission && userPermission.actions.includes(action)) {
+      if (
+        userPermission &&
+        (userPermission.actions.includes(action) ||
+          userPermission.actions.includes("manage"))
+      ) {
         return next();
       }
 
@@ -392,6 +439,7 @@ const checkDocumentUpload = (documentType = "general") => {
 
 module.exports = {
   verifyToken,
+  verifySseToken,
   checkPermission,
   requireAdmin,
   requireRole,
