@@ -711,6 +711,49 @@ class DatabaseService {
     });
   }
 
+  /**
+   * Crea un SAVEPOINT (SAVE TRAN) dentro de una transacción ya activa —
+   * permite deshacer solo lo escrito desde este punto (ej. un documento del
+   * batch) sin perder los cambios confirmados de los documentos anteriores
+   * ni tener que cerrar la transacción completa.
+   */
+  async createSavepoint(connection, name) {
+    return new Promise((resolve, reject) => {
+      const timeout = setTimeout(() => {
+        reject(new Error(`Savepoint '${name}' timeout`));
+      }, 30000);
+
+      connection.saveTransaction((err) => {
+        clearTimeout(timeout);
+        if (err) {
+          reject(err);
+        } else {
+          resolve();
+        }
+      }, name);
+    });
+  }
+
+  /**
+   * Revierte solo hasta el SAVEPOINT indicado — la transacción externa sigue
+   * activa después de esto (no equivale a un rollback completo).
+   */
+  async rollbackToSavepoint(connection, name) {
+    return new Promise((resolve) => {
+      const timeout = setTimeout(() => {
+        resolve(); // No fallar el batch completo por un timeout de rollback parcial
+      }, 30000);
+
+      connection.rollbackTransaction((err) => {
+        clearTimeout(timeout);
+        if (err) {
+          logger.warn(`Rollback a savepoint '${name}' con advertencia: ${err.message}`);
+        }
+        resolve();
+      }, name);
+    });
+  }
+
   // ===============================
   // MÉTODOS DE QUERIES
   // ===============================

@@ -506,11 +506,32 @@ const validatePromotionConfig = async (req, res) => {
       });
     }
 
-    // Validaciones técnicas
-    if (!config.promotionTable) issues.push("Falta definir la tabla de promociones origen");
-    if (!config.targetPromotionTable) issues.push("Falta definir la tabla de promociones destino");
-    if (!config.mappingRules || config.mappingRules.length === 0) {
-      issues.push("No hay reglas de mapeo definidas para promociones");
+    // Validaciones contra los campos reales del schema (promotionConfig.rules,
+    // .detectFields, .targetFields — antes se validaban promotionTable/
+    // targetPromotionTable/mappingRules, que no existen en ningún lado del
+    // repo, así que este endpoint siempre devolvía "inválido" sin importar
+    // qué tan bien configurado estuviera el mapeo).
+    const hasDetailTable = (mapping.tableConfigs || []).some((tc) => tc.isDetailTable);
+    if (!hasDetailTable) {
+      issues.push("El mapeo no tiene ninguna tabla de detalle configurada — las promociones nunca se evaluarán (ver DynamicTransferService.shouldUsePromotions).");
+    }
+
+    const rules = config.rules || [];
+    if (rules.length === 0) {
+      issues.push("No hay reglas de promoción definidas");
+    } else {
+      const enabledRules = rules.filter((r) => r.enabled !== false);
+      if (enabledRules.length === 0) {
+        issues.push("Todas las reglas de promoción están deshabilitadas");
+      }
+      enabledRules.forEach((rule) => {
+        if (!rule.conditions || Object.keys(rule.conditions).length === 0) {
+          issues.push(`La regla "${rule.name}" no tiene ninguna condición configurada — se aplicará a todos los documentos.`);
+        }
+        if (!rule.actions || Object.keys(rule.actions).length === 0) {
+          issues.push(`La regla "${rule.name}" no tiene ninguna acción configurada y no tendrá ningún efecto.`);
+        }
+      });
     }
 
     const isValid = issues.length === 0;
@@ -597,10 +618,11 @@ const queryDynamicValue = async (req, res) => {
         query
       );
 
-      // Retornar el primer valor de la primera fila
+      // Retornar el primer valor de la primera fila. DatabaseService.query()
+      // resuelve { recordset, rowsAffected } — no un array directo.
       let value = null;
-      if (result && result.length > 0) {
-        const firstRow = result[0];
+      if (result?.recordset?.length > 0) {
+        const firstRow = result.recordset[0];
         value = Object.values(firstRow)[0];
       }
 

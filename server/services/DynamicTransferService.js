@@ -39,7 +39,13 @@ class DynamicTransferService {
     const localAbortController = !signal ? new AbortController() : null;
     signal = signal || localAbortController.signal;
 
-    const cancelTaskId = `dynamic_process_${mappingId}_${Date.now()}`;
+    // Clave temporal — se reemplaza abajo por mapping.taskId (el _id real de
+    // TransferTask que ve el usuario en la pantalla de Tareas) en cuanto se
+    // carga el mapeo, para que el botón "Cancelar" de esa pantalla (que llama
+    // a TaskTracker.cancelTask(taskId) con ese _id) realmente encuentre y
+    // aborte este proceso — antes usaban claves completamente distintas y la
+    // cancelación nunca llegaba a dispararse.
+    let cancelTaskId = `dynamic_process_${mappingId}_${Date.now()}`;
 
     // Configurar timeout interno como medida de seguridad
     const timeoutId = setTimeout(() => {
@@ -65,6 +71,10 @@ class DynamicTransferService {
       if (!mapping) {
         clearTimeout(timeoutId);
         throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
+      }
+
+      if (mapping.taskId) {
+        cancelTaskId = mapping.taskId.toString();
       }
 
       logger.info(`🚀 INICIANDO TRANSFERENCIA - Mapping: ${mapping.name}`, {
@@ -219,12 +229,27 @@ class DynamicTransferService {
             const documentId = documentIds[i];
             let currentConsecutive = null;
 
+            // SAVEPOINT por documento: antes, todo el batch corría en una única
+            // transacción sin aislamiento por documento — si un documento
+            // insertaba bien su encabezado y luego fallaba en un detalle, ese
+            // encabezado quedaba confirmado igual al hacer COMMIT del batch
+            // completo al final (huérfano en el destino real). Ahora, si este
+            // documento falla, se revierte SOLO lo que escribió él, sin tocar
+            // los documentos ya confirmados en savepoints anteriores.
+            // SQL Server trunca los nombres de savepoint a 32 caracteres —
+            // "sp_<indice>" se mantiene corto a propósito para no arriesgar
+            // colisiones entre documentos distintos del mismo batch.
+            const savepointName = `sp_${i}`;
+
             try {
               logger.info(
                 `📋 Procesando documento ${i + 1}/${documentIds.length
                 }: ${documentId} ${shouldUsePromotions ? "(CON PROMOCIONES)" : "(ESTÁNDAR)"
                 }`
               );
+
+              await DatabaseServiceAdapter.createSavepoint(sourceConnection, savepointName);
+              await DatabaseServiceAdapter.createSavepoint(targetConnection, savepointName);
 
               // Generar consecutivo si es necesario
               if (
@@ -283,6 +308,18 @@ class DynamicTransferService {
                 }
             } catch (error) {
               hasErrors = true;
+
+              // Revertir SOLO lo que este documento alcanzó a escribir (ej. un
+              // encabezado insertado antes de fallar en un detalle), sin
+              // afectar los documentos anteriores ya confirmados en sus
+              // propios savepoints ni cerrar la transacción del batch.
+              try {
+                await DatabaseServiceAdapter.rollbackToSavepoint(targetConnection, savepointName);
+                await DatabaseServiceAdapter.rollbackToSavepoint(sourceConnection, savepointName);
+              } catch (savepointError) {
+                logger.error(`No se pudo revertir al savepoint del documento ${documentId}: ${savepointError.message}`);
+              }
+
               await this.handleDocumentError(
                 error,
                 documentId,
@@ -2638,9 +2675,20 @@ class DynamicTransferService {
       return null;
     }
 
-    const nextValue = (consecutiveConfig.lastValue || 0) + 1;
-    let formatted = nextValue.toString();
+    // $inc atómico en vez de leer mapping.consecutiveConfig.lastValue (objeto
+    // en memoria, cargado UNA vez por lote) + escribir el valor calculado:
+    // antes, todos los documentos del mismo batch releían el mismo lastValue
+    // desactualizado y terminaban con el mismo número de consecutivo — y dos
+    // ejecuciones concurrentes del mismo mapeo tenían la misma condición de
+    // carrera a nivel de base de datos.
+    const updated = await TransferMapping.findByIdAndUpdate(
+      mapping._id,
+      { $inc: { "consecutiveConfig.lastValue": 1 } },
+      { new: true }
+    );
+    const nextValue = updated.consecutiveConfig.lastValue;
 
+    let formatted = nextValue.toString();
     if (consecutiveConfig.pattern) {
       formatted = consecutiveConfig.pattern
         .replace(/{PREFIX}/g, consecutiveConfig.prefix || "")
@@ -2657,11 +2705,6 @@ class DynamicTransferService {
     } else {
       formatted = (consecutiveConfig.prefix || "") + nextValue;
     }
-
-    // Actualizar el último valor en el mapping
-    await TransferMapping.findByIdAndUpdate(mapping._id, {
-      "consecutiveConfig.lastValue": nextValue,
-    });
 
     return {
       value: nextValue,
@@ -5492,14 +5535,15 @@ class DynamicTransferService {
    * @returns {Promise<Object>} - Configuración creada
    */
   async createMapping(mappingData) {
+    let createdTaskId = null;
     try {
       // Crear tarea relacionada si no existe
       if (!mappingData.taskId) {
         const taskName = `Mapeo: ${mappingData.name}`;
-        
+
         // Verificar si ya existe una tarea con este nombre
         let task = await TransferTask.findOne({ name: taskName });
-        
+
         if (!task) {
           task = new TransferTask({
             name: taskName,
@@ -5517,11 +5561,12 @@ class DynamicTransferService {
           });
 
           await task.save();
+          createdTaskId = task._id;
           logger.info(`Tarea creada automáticamente para mapeo: ${task._id}`);
         } else {
           logger.info(`Tarea existente reutilizada para mapeo: ${task._id}`);
         }
-        
+
         mappingData.taskId = task._id;
       }
 
@@ -5535,8 +5580,32 @@ class DynamicTransferService {
         });
       }
 
+      // Consumir la asignación de consecutivo centralizado pendiente (solo
+      // podía guardarse como pendingAssignmentId mientras el mapeo no tenía
+      // _id todavía — ver ConsecutiveConfigSection.jsx). Ahora que existe,
+      // se crea la asignación real y se limpia el campo temporal.
+      const pendingAssignmentId = savedMapping.consecutiveConfig?.pendingAssignmentId;
+      if (pendingAssignmentId) {
+        try {
+          await ConsecutiveService.assignConsecutive(
+            pendingAssignmentId,
+            { entityType: "mapping", entityId: savedMapping._id, allowedOperations: ["read", "increment"] },
+            { id: "SYSTEM", name: "System" }
+          );
+        } catch (assignError) {
+          logger.warn(`No se pudo finalizar la asignación de consecutivo pendiente para el mapeo ${savedMapping._id}: ${assignError.message}`);
+        }
+        savedMapping.consecutiveConfig.pendingAssignmentId = null;
+        await savedMapping.save();
+      }
+
       return savedMapping;
     } catch (error) {
+      // Si el mapeo no pudo guardarse (ej. nombre duplicado) pero la tarea
+      // placeholder sí se creó, no dejarla huérfana.
+      if (createdTaskId) {
+        await TransferTask.deleteOne({ _id: createdTaskId }).catch(() => {});
+      }
       logger.error(`Error al crear configuración de mapeo: ${error.message}`);
       throw error;
     }
@@ -5549,13 +5618,14 @@ class DynamicTransferService {
    * @returns {Promise<Object>} - Configuración actualizada
    */
   async updateMapping(mappingId, mappingData) {
+    let createdTaskId = null;
     try {
       // Crear tarea relacionada si no existe
       if (!mappingData.taskId) {
         const taskName = `Mapeo: ${mappingData.name}`;
-        
+
         let task = await TransferTask.findOne({ name: taskName });
-        
+
         if (!task) {
           task = new TransferTask({
             name: taskName,
@@ -5573,19 +5643,30 @@ class DynamicTransferService {
           });
 
           await task.save();
+          createdTaskId = task._id;
           logger.info(`Tarea creada automáticamente durante actualización: ${task._id}`);
         }
-        
+
         mappingData.taskId = task._id;
       }
 
+      // runValidators: antes un PUT no corría ningún required/enum del schema
+      // (name/sourceServer/targetServer en la raíz, tableConfigs[].sourceTable/
+      // targetTable, fieldMappings[].targetField, workflowConfig.nextMappings[].
+      // linkField, enums de transferType/entityType/joinType/promotionConfig.
+      // rules[].type, etc.) — un mapeo se podía dejar con campos requeridos
+      // vacíos o valores de enum inválidos sin ningún error hasta que fallaba
+      // en tiempo de ejecución con un error de SQL mucho más confuso.
       const mapping = await TransferMapping.findByIdAndUpdate(
         mappingId,
         mappingData,
-        { new: true }
+        { new: true, runValidators: true, context: "query" }
       );
       return mapping;
     } catch (error) {
+      if (createdTaskId) {
+        await TransferTask.deleteOne({ _id: createdTaskId }).catch(() => {});
+      }
       logger.error(
         `Error al actualizar configuración de mapeo: ${error.message}`
       );

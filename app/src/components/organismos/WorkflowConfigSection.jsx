@@ -46,76 +46,134 @@ const WorkflowConfigSection = ({ mapping = {}, handleChange, accessToken }) => {
     });
   };
 
-  const addNextMapping = async () => {
-    const result = await import("sweetalert2").then(m => m.Swal.fire({
-      title: "Añadir Siguiente Mapeo",
+  // El esquema real (transferMappingModel.js: WorkflowConfigSchema.nextMappings)
+  // guarda { mappingId (ref a otro TransferMapping), linkField (obligatorio),
+  // parentLinkField, description, autoExecute, executionOrder } — nada de
+  // name/entityType/stopOnError. El formulario pedía/mostraba campos que nunca
+  // existieron en la base de datos, por eso el nombre siempre salía vacío.
+  const openNextMappingDialog = async (existing = null, currentIndex = null) => {
+    const { default: Swal } = await import("sweetalert2");
+
+    const usedIds = (workflowConfig.nextMappings || [])
+      .filter((_, i) => i !== currentIndex)
+      .map(n => n.mappingId);
+    let selectableMappings = allMappings.filter(m => !usedIds.includes(m._id));
+
+    if (existing?.mappingId && !selectableMappings.some(m => m._id === existing.mappingId)) {
+      const linkedMapping = allMappings.find(m => m._id === existing.mappingId);
+      selectableMappings = [
+        { _id: existing.mappingId, name: linkedMapping?.name || "(mapeo eliminado)" },
+        ...selectableMappings,
+      ];
+    }
+
+    if (selectableMappings.length === 0) {
+      Swal.fire("Sin mapeos disponibles", "No hay otros mapeos configurados para encadenar, o ya están todos añadidos a este flujo.", "info");
+      return null;
+    }
+
+    const result = await Swal.fire({
+      title: existing ? "Editar Siguiente Mapeo" : "Añadir Siguiente Mapeo",
       html: `
         <div class="workflow-form-container">
           <div class="workflow-form-group">
-            <label class="workflow-form-label">Nombre del Mapeo Siguiente</label>
-            <input id="nextMappingName" class="workflow-form-input" placeholder="Ej: Procesamiento de Pagos">
-          </div>
-          <div class="workflow-form-group">
-            <label class="workflow-form-label">Tipo de Entidad</label>
-            <select id="nextEntityType" class="workflow-form-select">
-              <option value="orders">Pedidos</option>
-              <option value="invoices">Facturas</option>
-              <option value="customers">Clientes</option>
+            <label class="workflow-form-label">Mapeo a Ejecutar</label>
+            <select id="nextMappingId" class="workflow-form-select">
+              ${selectableMappings.map(m => `<option value="${m._id}" ${existing?.mappingId === m._id ? "selected" : ""}>${m.name}</option>`).join("")}
             </select>
           </div>
           <div class="workflow-form-group">
+            <label class="workflow-form-label">Campo de Enlace en el Mapeo Hijo (linkField) *</label>
+            <input id="nextLinkField" class="workflow-form-input" placeholder="Ej: NUM_PED_ORIGEN" value="${existing?.linkField || ""}">
+          </div>
+          <div class="workflow-form-group">
+            <label class="workflow-form-label">Campo de Enlace en este Mapeo (opcional)</label>
+            <input id="nextParentLinkField" class="workflow-form-input" placeholder="Vacío = usa el ID del documento procesado" value="${existing?.parentLinkField || ""}">
+          </div>
+          <div class="workflow-form-group">
+            <label class="workflow-form-label">Descripción (opcional)</label>
+            <input id="nextDescription" class="workflow-form-input" placeholder="Ej: Genera cuentas por cobrar" value="${existing?.description || ""}">
+          </div>
+          <div class="workflow-form-group">
             <label class="workflow-form-checkbox">
-              <input id="stopOnError" type="checkbox" checked> Detener flujo si hay error
+              <input id="nextAutoExecute" type="checkbox" ${existing?.autoExecute !== false ? "checked" : ""}> Ejecutar automáticamente
             </label>
           </div>
         </div>
       `,
       focusConfirm: false,
       showCancelButton: true,
-      confirmButtonText: "Añadir",
+      confirmButtonText: existing ? "Guardar" : "Añadir",
       cancelButtonText: "Cancelar",
       preConfirm: () => {
-        const name = document.getElementById("nextMappingName").value;
-        const entityType = document.getElementById("nextEntityType").value;
-        const stopOnError = document.getElementById("stopOnError").checked;
+        const mappingId = document.getElementById("nextMappingId").value;
+        const linkField = document.getElementById("nextLinkField").value.trim();
+        const parentLinkField = document.getElementById("nextParentLinkField").value.trim();
+        const description = document.getElementById("nextDescription").value.trim();
+        const autoExecute = document.getElementById("nextAutoExecute").checked;
 
-        if (!name) {
-          Swal.showValidationMessage("El nombre es requerido");
+        if (!mappingId) {
+          Swal.showValidationMessage("Selecciona un mapeo");
+          return false;
+        }
+        if (!linkField) {
+          Swal.showValidationMessage("El campo de enlace (linkField) es obligatorio");
           return false;
         }
 
-        return {
-          name,
-          entityType,
-          stopOnError
-        };
+        return { mappingId, linkField, parentLinkField: parentLinkField || undefined, description: description || undefined, autoExecute };
       }
-    }));
+    });
 
-    if (formValues) {
-      const nextMappings = [...(workflowConfig.nextMappings || [])];
-      nextMappings.push(formValues);
-      handleChange({
-        target: {
-          name: "workflowConfig",
-          type: "custom",
-          value: { ...workflowConfig, nextMappings }
-        }
-      });
-    }
+    return result.value || null;
+  };
+
+  const addNextMapping = async () => {
+    const formValues = await openNextMappingDialog();
+    if (!formValues) return;
+
+    const nextMappings = [...(workflowConfig.nextMappings || [])];
+    nextMappings.push({ ...formValues, executionOrder: nextMappings.length });
+    handleChange({
+      target: {
+        name: "workflowConfig",
+        type: "custom",
+        value: { ...workflowConfig, nextMappings }
+      }
+    });
+  };
+
+  const editNextMapping = async (index) => {
+    const existing = workflowConfig.nextMappings[index];
+    const formValues = await openNextMappingDialog(existing, index);
+    if (!formValues) return;
+
+    const nextMappings = [...(workflowConfig.nextMappings || [])];
+    nextMappings[index] = { ...nextMappings[index], ...formValues };
+    handleChange({
+      target: {
+        name: "workflowConfig",
+        type: "custom",
+        value: { ...workflowConfig, nextMappings }
+      }
+    });
   };
 
   const removeNextMapping = async (index) => {
-    const result = await import("sweetalert2").then(m => m.Swal.fire({
+    const { default: Swal } = await import("sweetalert2");
+    const target = workflowConfig.nextMappings[index];
+    const targetName = allMappings.find(m => m._id === target?.mappingId)?.name || "este mapeo";
+
+    const result = await Swal.fire({
       title: "¿Eliminar?",
-      text: `¿Está seguro que desea eliminar el siguiente mapeo "${workflowConfig.nextMappings[index]?.name}"?`,
+      text: `¿Está seguro que desea eliminar el siguiente mapeo "${targetName}"?`,
       icon: "warning",
       showCancelButton: true,
       confirmButtonColor: "#ef4444",
       cancelButtonColor: "#6b7280",
       confirmButtonText: "Sí, eliminar",
       cancelButtonText: "Cancelar"
-    }));
+    });
 
     if (result.isConfirmed) {
       const nextMappings = workflowConfig.nextMappings.filter((_, i) => i !== index);
@@ -127,19 +185,6 @@ const WorkflowConfigSection = ({ mapping = {}, handleChange, accessToken }) => {
         }
       });
     }
-  };
-
-  const updateNextMapping = (index, field, value) => {
-    const nextMappings = [...(workflowConfig.nextMappings || [])];
-    nextMappings[index] = { ...nextMappings[index], [field]: value };
-
-    handleChange({
-      target: {
-        name: "workflowConfig.nextMappings",
-        type: "custom",
-        value: nextMappings
-      }
-    });
   };
 
   return (
@@ -197,31 +242,39 @@ const WorkflowConfigSection = ({ mapping = {}, handleChange, accessToken }) => {
 
         {workflowConfig.nextMappings?.length > 0 ? (
           <div className="grid grid-cols-1 gap-3">
-            {workflowConfig.nextMappings.map((nextMapping, idx) => (
-              <div key={idx} className="flex justify-between items-center p-5 bg-gradient-to-r from-emerald-50/80 to-teal-50/80 hover:from-emerald-50/100 hover:to-teal-50/100 border border-emerald-100 rounded-2xl transition-all group">
-                <div className="flex items-center gap-4">
-                  <div className="flex items-center justify-center w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl font-black text-sm">
-                    #{idx + 1}
-                  </div>
-                  <div>
-                    <div className="font-bold text-slate-800 text-lg">{nextMapping.name}</div>
-                    <div className="text-xs text-slate-500 font-medium">
-                      {nextMapping.entityType === "orders" && "Pedidos"}
-                      {nextMapping.entityType === "invoices" && "Facturas"}
-                      {nextMapping.entityType === "customers" && "Clientes"}
+            {workflowConfig.nextMappings.map((nextMapping, idx) => {
+              const linkedMapping = allMappings.find(m => m._id === nextMapping.mappingId);
+              return (
+                <div key={idx} className="flex justify-between items-center p-5 bg-gradient-to-r from-emerald-50/80 to-teal-50/80 hover:from-emerald-50/100 hover:to-teal-50/100 border border-emerald-100 rounded-2xl transition-all group">
+                  <div className="flex items-center gap-4">
+                    <div className="flex items-center justify-center w-10 h-10 bg-emerald-100 text-emerald-600 rounded-xl font-black text-sm">
+                      #{idx + 1}
+                    </div>
+                    <div>
+                      <div className="font-bold text-slate-800 text-lg">
+                        {loading ? "Cargando..." : (linkedMapping?.name || "⚠️ Mapeo no encontrado")}
+                      </div>
+                      <div className="text-xs text-slate-500 font-medium">
+                        Enlaza por <code className="font-mono">{nextMapping.linkField}</code>
+                        {nextMapping.parentLinkField && <> (usando <code className="font-mono">{nextMapping.parentLinkField}</code> de este mapeo)</>}
+                        {nextMapping.autoExecute === false && <span className="ml-2 text-amber-600 font-bold">MANUAL</span>}
+                      </div>
+                      {nextMapping.description && (
+                        <div className="text-xs text-slate-400 mt-0.5">{nextMapping.description}</div>
+                      )}
                     </div>
                   </div>
+                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <Button variant="ghost" className="bg-white p-2" onClick={() => editNextMapping(idx)}>
+                      <FaEdit />
+                    </Button>
+                    <Button variant="ghost" className="bg-white p-2 text-red-500 hover:bg-red-50" onClick={() => removeNextMapping(idx)}>
+                      <FaTrash />
+                    </Button>
+                  </div>
                 </div>
-                <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
-                  <Button variant="ghost" className="bg-white p-2" onClick={() => {}}>
-                    <FaEdit />
-                  </Button>
-                  <Button variant="ghost" className="bg-white p-2 text-red-500 hover:bg-red-50" onClick={() => removeNextMapping(idx)}>
-                    <FaTrash />
-                  </Button>
-                </div>
-              </div>
-            ))}
+              );
+            })}
           </div>
         ) : (
           <div className="text-center py-12 bg-white/60 backdrop-blur-sm rounded-2xl border-2 border-dashed border-emerald-200">

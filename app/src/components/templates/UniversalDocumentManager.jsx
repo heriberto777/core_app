@@ -74,6 +74,7 @@ export function UniversalDocumentManager() {
         handleSelectAll,
         executeProcessing,
         getDocumentDetails,
+        updateEntityData,
         fetchDocuments,
         activeMappingId,
         setSelectedDocuments,
@@ -163,10 +164,16 @@ export function UniversalDocumentManager() {
         setIsEditOpen(true);
     };
 
-    const handleSaveEdit = async () => {
-        setIsEditOpen(false);
-        setEditingDoc(null);
-        await fetchDocuments();
+    const handleSaveEdit = async (updateData) => {
+        try {
+            await updateEntityData(updateData);
+            setIsEditOpen(false);
+            setEditingDoc(null);
+            await fetchDocuments();
+            Swal.fire("Actualizado", "Los datos han sido actualizados correctamente.", "success");
+        } catch (error) {
+            Swal.fire("Error", error.message || "No se pudo actualizar la entidad", "error");
+        }
     };
 
     const renderLauncher = () => (

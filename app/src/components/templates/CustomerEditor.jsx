@@ -26,7 +26,7 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
     error,
     handleChange,
     handleSave,
-    handleRefreshField,
+    handleRefreshDynamicField,
     loadSourceData
   } = useCustomerEditor(accessToken, { customer, mappingId, onSave });
 
@@ -128,7 +128,7 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
           meta={fieldMeta}
           loadingFields={fieldLoading}
           onChange={handleChange}
-          onRefreshField={handleRefreshField}
+          onRefreshField={handleRefreshDynamicField}
         />
       </div>
 

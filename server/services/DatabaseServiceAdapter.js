@@ -41,6 +41,14 @@ class DatabaseServiceAdapter {
     return await DatabaseService.withTransaction(serverKey, callback);
   }
 
+  async createSavepoint(connection, name) {
+    return await DatabaseService.createSavepoint(connection, name);
+  }
+
+  async rollbackToSavepoint(connection, name) {
+    return await DatabaseService.rollbackToSavepoint(connection, name);
+  }
+
   async withConnections(mapping, callback) {
     await this.initialize();
 

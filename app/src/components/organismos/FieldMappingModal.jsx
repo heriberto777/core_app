@@ -1,4 +1,5 @@
 import React, { useState, useEffect } from "react";
+import Swal from "sweetalert2";
 import { FaSave, FaTimes, FaPlus, FaTrash, FaCogs, FaDatabase, FaEye, FaSync } from "react-icons/fa";
 import { Button, Input } from "../../index";
 
@@ -59,7 +60,11 @@ export function FieldMappingModal({ isOpen, onClose, onSave, initialData, consec
                 ...initialData,
                 sourceField: initialData.sourceField || "",
                 defaultValue: initialData.defaultValue || "",
-                valueType: initialData.fieldType || initialData.valueType || "text",
+                // valueType no existe en el schema (server/models/transferMappingModel.js
+                // solo tiene fieldType, con su propio enum que incluye select/textarea) —
+                // sembrarlo desde fieldType aquí es lo que causaba que se sobreescribiera
+                // el fieldType real al guardar (ver handleSubmit).
+                valueType: initialData.valueType || "text",
                 removePrefix: initialData.removePrefix || "",
                 lookupQuery: initialData.lookupQuery || "",
                 lookupParams: initialData.lookupParams || [],
@@ -151,9 +156,12 @@ export function FieldMappingModal({ isOpen, onClose, onSave, initialData, consec
 
         setLoading(true);
         try {
+            // formData.fieldType ya viene del selector "Tipo de Campo UI" (con
+            // select/textarea disponibles) — antes se sobreescribía aquí con
+            // valueType (solo text/number/date/boolean), perdiendo select/textarea
+            // en cada guardado.
             const dataToSave = {
                 ...formData,
-                fieldType: formData.valueType,
                 transform: JSON.parse(JSON.stringify(formData.transform)) || {}
             };
             await onSave(dataToSave);
