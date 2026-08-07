@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useMemo } from "react";
+import React, { useState, useEffect, useMemo, useRef } from "react";
 import { FaTimes, FaSave, FaDatabase, FaLink, FaList, FaVial, FaQuestionCircle } from "react-icons/fa";
 import {
     Button,
@@ -23,8 +23,8 @@ const FIELD_HELP = {
     clearBeforeInsert: "Elimina todos los registros de la tabla destino antes de insertar los nuevos. Útil para sincronizaciones completas.",
     query: "Consulta SQL que se ejecutará en el servidor origen para obtener los datos a transferir.",
     parameters: "Condiciones para filtrar los datos en formato JSON. Ej: [{\"field\": \"status\", \"operator\": \"=\", \"value\": \"A\"}]",
-    linkedGroup: "Nombre del grupo de tareas que se ejecutarán de forma coordinada. Todas las tareas con el mismo grupo se ejecutan juntas.",
-    linkedExecutionOrder: "Orden de ejecución dentro del grupo. Las tareas se ejecutan en orden ascendente (0, 1, 2...).",
+    linkedGroup: "Nombre del grupo de tareas que se ejecutarán de forma coordinada. Todas las tareas con el mismo grupo se ejecutan juntas. Si escribes el nombre de un grupo existente, esta tarea se une a él.",
+    linkedExecutionOrder: "Orden de ejecución dentro del grupo. Las tareas se ejecutan en orden ascendente (0, 1, 2...). Se sugiere automáticamente al elegir un grupo existente, pero puedes cambiarlo.",
     linkedTasks: "Selecciona otras tareas que se ejecutarán automáticamente después de completar esta tarea.",
     requiredFields: "Lista de campos que deben tener valor. Si están vacíos, la transferencia fallará.",
     postUpdateQuery: "SQL que se ejecutará después de transferir los datos. Útil para actualizar estados o limpiar tablas. NO incluir WHERE, se agregará automáticamente con los registros afectados.",
@@ -95,6 +95,36 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
         const names = new Set(allTasks.map((t) => t.linkedGroup).filter(Boolean));
         return Array.from(names).sort();
     }, [allTasks]);
+
+    // Órdenes ya usados por cada grupo, para poder sugerir "el siguiente
+    // disponible" al unirse a uno existente en vez de forzar a adivinarlo.
+    const groupTaskOrders = useMemo(() => {
+        const map = {};
+        allTasks.forEach((t) => {
+            if (!t.linkedGroup) return;
+            (map[t.linkedGroup] ||= []).push(t.linkedExecutionOrder || 0);
+        });
+        return map;
+    }, [allTasks]);
+
+    // Último grupo para el que ya se evaluó una sugerencia de orden (arranca
+    // en el grupo con el que la tarea entró al modal). Sin este control, cada
+    // vez que el campo de grupo pierde el foco sin haber cambiado de valor
+    // (ej. el usuario ajustó el orden a mano y volvió a hacer clic fuera del
+    // campo de grupo) se recalcularía de nuevo y pisaría el ajuste manual.
+    const lastSuggestedGroupRef = useRef(task?.linkedGroup || "");
+    useEffect(() => {
+        lastSuggestedGroupRef.current = task?.linkedGroup || "";
+    }, [task, isOpen]);
+
+    const handleGroupBlur = () => {
+        const groupName = formData.linkedGroup.trim();
+        if (!groupName || groupName === lastSuggestedGroupRef.current) return;
+        lastSuggestedGroupRef.current = groupName;
+        const orders = groupTaskOrders[groupName];
+        if (!orders || orders.length === 0) return; // grupo nuevo: se deja el valor actual (por defecto 0)
+        setFormData((prev) => ({ ...prev, linkedExecutionOrder: Math.max(...orders) + 1 }));
+    };
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e?.target || {};
@@ -244,6 +274,7 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                     al existente. El datalist sugiere los nombres reales sin quitar
                                     la posibilidad de escribir uno nuevo para crear otro grupo. */}
                                 <UIInput name="linkedGroup" value={formData.linkedGroup} onChange={handleChange}
+                                    onBlur={handleGroupBlur}
                                     list="linked-group-names" autoComplete="off"
                                     placeholder="Ej: Sincronizacion_Diaria_Completa" />
                                 <datalist id="linked-group-names">
@@ -261,7 +292,9 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                 <UIInput type="number" name="linkedExecutionOrder" value={formData.linkedExecutionOrder} onChange={handleChange}
                                     min="0" placeholder="0" />
                                 <small className="text-slate-400 text-[11px]">
-                                    Las tareas se ejecutan en orden ascendente (0 → 1 → 2...)
+                                    Las tareas se ejecutan en orden ascendente (0 → 1 → 2...). Al elegir un grupo
+                                    existente se sugiere automáticamente el siguiente orden disponible — podés
+                                    cambiarlo si necesitás una posición distinta.
                                 </small>
                             </FormGroup>
 
