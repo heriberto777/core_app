@@ -64,7 +64,6 @@ export function useEmailConfig(accessToken) {
             deleteConfig,
             toggleStatus,
             setAsDefault,
-            initializeDefaults,
             testConfig,
         },
     };

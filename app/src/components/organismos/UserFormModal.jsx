@@ -7,7 +7,7 @@ import { usePermissions } from "../../index";
  * UserFormModal (Tailwind Edition)
  * Modal corporativo para configuración de identidades y permisos.
  */
-export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, roles = [], resources = [], actions = [] }) => {
+export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, roles = [], resources = [] }) => {
     // El backend ya descarta isAdmin si quien edita no es admin (userController.js:
     // createUser/updateUser), pero mostrar el checkbox habilitado igual induciría a
     // pensar que el cambio se aplicó cuando en realidad se ignora en silencio.
@@ -198,25 +198,31 @@ export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, rol
                                     Los permisos asignados aquí se sumarán a los que el usuario ya posea por sus roles.
                                 </div>
                                 {resources.map(res => (
-                                    <div key={res._id} className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm space-y-4">
+                                    <div key={res.id} className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm space-y-4">
                                         <div className="flex flex-col">
-                                            <h4 className="text-sm font-extrabold text-slate-800">{res.displayName}</h4>
+                                            <h4 className="text-sm font-extrabold text-slate-800">{res.name}</h4>
                                             <p className="text-[11px] text-slate-400 font-medium">{res.description}</p>
                                         </div>
                                         <div className="flex flex-wrap gap-2">
-                                            {actions.map(act => {
-                                                const val = typeof act === 'string' ? act : act._id;
-                                                const lab = typeof act === 'string' ? act : act.displayName;
-                                                const isChecked = (formData.permissions || []).find(p => p.resource === res._id)?.actions?.includes(val);
+                                            {/* getAvailableResources() devuelve {id, name, actions: [nombres de acción]}
+                                                (no {_id, displayName} como se asumía aquí, ni un array de objetos con
+                                                _id como el prop global "actions"). Usar los campos equivocados dejaba
+                                                val/res._id siempre en undefined, y togglear cualquier checkbox tiraba
+                                                "can't access property name of undefined" en handleTogglePermission.
+                                                Además, iterar sobre las acciones propias de cada recurso (en vez del
+                                                catálogo global completo) evita ofrecer acciones sin sentido para ese
+                                                recurso, igual que ya hace RoleFormModal.jsx. */}
+                                            {(res.actions || []).map(action => {
+                                                const isChecked = (formData.permissions || []).find(p => p.resource === res.id)?.actions?.includes(action);
                                                 return (
-                                                    <label key={val} className={`
+                                                    <label key={action} className={`
                                                         px-3 py-1.5 rounded-xl text-[11px] font-extrabold uppercase tracking-tight cursor-pointer transition-all border
-                                                        ${isChecked 
-                                                          ? 'bg-primary-500 border-primary-500 text-white shadow-md' 
+                                                        ${isChecked
+                                                          ? 'bg-primary-500 border-primary-500 text-white shadow-md'
                                                           : 'bg-slate-50 border-slate-100 text-slate-400 hover:bg-slate-100'}
                                                     `}>
-                                                        <input type="checkbox" className="hidden" checked={isChecked || false} onChange={() => handleTogglePermission(res._id, val)} />
-                                                        {lab}
+                                                        <input type="checkbox" className="hidden" checked={isChecked || false} onChange={() => handleTogglePermission(res.id, action)} />
+                                                        {action}
                                                     </label>
                                                 );
                                             })}
