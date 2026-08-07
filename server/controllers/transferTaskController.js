@@ -509,21 +509,19 @@ const updateConfig = async (req, res) => {
       return res.status(400).json({ success: false, message: "Formato de hora inválido (HH:MM)" });
     }
 
-    // Igual que en configController.updateConfig (la otra ruta que escribe
-    // este mismo documento Config): solo tocar los campos realmente
-    // enviados, para no resetear la hora guardada cuando solo se manda
-    // {enabled}.
+    // Solo tocar los campos realmente enviados, para no resetear la hora
+    // guardada cuando solo se manda {enabled}.
     const setFields = { lastModified: new Date() };
-    const setOnInsertFields = {};
+    const setOnInsertFields = { singleton: "singleton" };
     if (hour !== undefined) setFields.hour = hour; else setOnInsertFields.hour = "02:00";
     if (enabled !== undefined) setFields.enabled = enabled; else setOnInsertFields.enabled = true;
 
-    const updateDoc = { $set: setFields };
-    if (Object.keys(setOnInsertFields).length > 0) updateDoc.$setOnInsert = setOnInsertFields;
-
+    // Filtrar por el campo "singleton" (con índice único) en vez de {} para
+    // que el upsert sea realmente atómico frente a escrituras concurrentes
+    // sobre una colección vacía, en vez de depender solo de la buena suerte.
     const config = await Config.findOneAndUpdate(
-      {},
-      updateDoc,
+      { singleton: "singleton" },
+      { $set: setFields, $setOnInsert: setOnInsertFields },
       { upsert: true, new: true, runValidators: true }
     );
 

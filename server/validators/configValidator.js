@@ -1,20 +1,6 @@
 const { body, param } = require("express-validator");
 
 /**
- * Esquemas de validación para Configuración del Sistema (Scheduler)
- */
-const updateSchedulerSchema = [
-    body("hour")
-        .optional()
-        .matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
-        .withMessage("Formato de hora inválido. Use formato HH:MM (24 horas)"),
-    body("enabled")
-        .optional()
-        .isBoolean()
-        .withMessage("enabled debe ser un valor booleano"),
-];
-
-/**
  * Esquemas de validación para Configuración de Email
  */
 const createEmailConfigSchema = [
@@ -133,7 +119,6 @@ const upsertDBConfigSchema = [
 ];
 
 module.exports = {
-    updateSchedulerSchema,
     createEmailConfigSchema,
     updateEmailConfigSchema,
     testEmailSchema,

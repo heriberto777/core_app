@@ -9,7 +9,11 @@ const {
 } = require("./emailService");
 const { notifyTransferResults, notifyCriticalError } = require("./notificationDispatcher");
 
-let task;
+// "task" debe iniciar en null (no undefined): getSchedulerStatus() calcula
+// active como "task !== null", y undefined !== null es true en JS — con
+// "let task;" el status reportaba active:true justo después de arrancar el
+// server, incluso con el scheduler deshabilitado y sin ningún cron programado.
+let task = null;
 let isRunning = false;
 let isEnabled = false;
 let currentHour = "02:00";

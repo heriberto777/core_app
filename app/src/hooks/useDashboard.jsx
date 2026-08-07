@@ -67,11 +67,19 @@ export function useDashboard(accessToken) {
             // 3. Process Schedule
             if (schedule.status === "fulfilled" && schedule.value?.hour) {
                 setExecutionTime(schedule.value.hour);
-                const [hour, minute] = schedule.value.hour.split(":");
-                const nextRun = new Date();
-                nextRun.setHours(Number(hour), Number(minute), 0, 0);
-                if (nextRun < new Date()) nextRun.setDate(nextRun.getDate() + 1);
-                setNextScheduled(nextRun);
+                // "hour" casi siempre existe aunque el scheduler esté desactivado
+                // (el documento Config guarda la última hora configurada); sin
+                // comprobar "enabled" el panel del Dashboard mostraba una cuenta
+                // regresiva de "próxima ejecución" con el planificador apagado.
+                if (schedule.value.enabled) {
+                    const [hour, minute] = schedule.value.hour.split(":");
+                    const nextRun = new Date();
+                    nextRun.setHours(Number(hour), Number(minute), 0, 0);
+                    if (nextRun < new Date()) nextRun.setDate(nextRun.getDate() + 1);
+                    setNextScheduled(nextRun);
+                } else {
+                    setNextScheduled(null);
+                }
             }
 
             // 4. Process Servers
