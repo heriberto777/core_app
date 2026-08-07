@@ -208,10 +208,12 @@ const getRuleIcon = (type) => {
   switch (type) {
     case "FAMILY_DISCOUNT":
     case "INVOICE_DISCOUNT":
+    case "PERCENTAGE_BONUS":
       return <FaPercentage />;
     case "QUANTITY_BONUS":
     case "SCALED_BONUS":
     case "PRODUCT_BONUS":
+    case "MINIMUM_QUANTITY":
       return <FaGift />;
     default:
       return <FaInfoCircle />;
@@ -225,6 +227,8 @@ const getRuleColor = (type) => {
     case "QUANTITY_BONUS": return "#10b981";
     case "SCALED_BONUS": return "#34d399";
     case "PRODUCT_BONUS": return "#60a5fa";
+    case "MINIMUM_QUANTITY": return "#fbbf24";
+    case "PERCENTAGE_BONUS": return "#a78bfa";
     default: return "#94a3b8";
   }
 };

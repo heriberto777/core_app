@@ -205,6 +205,13 @@ const PromotionConfigSchema = new Schema({
     invoiceQuantity: { type: String, default: "CANTIDAD_A_FACTURAR" }, // Campo cantidad a facturar
     bonusQuantity: { type: String, default: "CANTIDAD_BONIF" }, // Campo cantidad bonificación
   },
+  // conditions/actions son Mixed a propósito: server/services/PromotionProcessor.js
+  // (applyPromotionRule/evaluateRuleConditions) espera una forma DISTINTA por
+  // cada `type` de regla (ver ese archivo), no un shape único — antes este
+  // schema declaraba campos fijos (familyCode/minAmount/discountPercent/...)
+  // que nunca coincidían con lo que el motor de ejecución realmente lee
+  // (rule.actions.discount, .bonusThreshold, .scales, etc.), así que ninguna
+  // regla creada desde la UI podía tener efecto real al procesar documentos.
   rules: [
     {
       name: { type: String, required: true },
@@ -217,33 +224,17 @@ const PromotionConfigSchema = new Schema({
           "PRODUCT_BONUS",
           "INVOICE_DISCOUNT",
           "ONE_TIME_OFFER",
+          "MINIMUM_QUANTITY",
+          "PERCENTAGE_BONUS",
         ],
         required: true,
       },
       enabled: { type: Boolean, default: true },
-      conditions: {
-        familyCode: { type: String }, // Para descuentos por familia
-        minAmount: { type: Number }, // Monto mínimo
-        minQuantity: { type: Number }, // Cantidad mínima
-        productCode: { type: String }, // Código de producto específico
-        customerType: { type: String }, // Tipo de cliente
-        priceList: { type: String }, // Lista de precios
-        zone: { type: String }, // Zona
-      },
-      actions: {
-        discountPercent: { type: Number }, // Porcentaje de descuento
-        bonusQuantity: { type: Number }, // Cantidad de bonificación
-        bonusProduct: { type: String }, // Producto de bonificación
-        scaleRules: [
-          {
-            // Para bonificaciones escaladas
-            fromQuantity: { type: Number },
-            toQuantity: { type: Number },
-            bonusQuantity: { type: Number },
-            bonusProduct: { type: String },
-          },
-        ],
-      },
+      // { [nombreCampo]: { equals|greaterThan|lessThan|includes|excludes: valor } }
+      conditions: { type: Schema.Types.Mixed, default: {} },
+      // Forma según `type` — ver PromotionProcessor.js:875-1224 para el detalle
+      // exacto de qué lee cada applyXxxRule.
+      actions: { type: Schema.Types.Mixed, default: {} },
       priority: { type: Number, default: 0 }, // Prioridad de aplicación
       isOneTime: { type: Boolean, default: false }, // Si es oferta única
       description: { type: String },
