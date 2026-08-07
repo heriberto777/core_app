@@ -91,7 +91,7 @@ export const UsersTable = ({ data, onEdit, onDelete, onToggleStatus, onView, cur
                                             <FaEdit size={14} />
                                         </button>
                                     )}
-                                    {canUpdate && (
+                                    {canUpdate && user._id !== currentUserId && (
                                         <button
                                             onClick={() => onToggleStatus(user._id, user.activo)}
                                             className={`p-2 rounded-lg transition-all ${user.activo ? "text-amber-500 hover:bg-amber-50" : "text-emerald-500 hover:bg-emerald-50"}`}

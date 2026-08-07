@@ -6,6 +6,7 @@ const mongoose = require("mongoose");
 const bcrypt = require("bcrypt");
 const cacheService = require("../services/cacheService");
 const logger = require("../services/logger");
+const { getFilePath } = require("../utils/images");
 
 // ⭐ CONSTANTES PARA CACHE ⭐
 const CACHE_KEYS = {
@@ -309,8 +310,19 @@ async function getUsers(req, res) {
 
 async function createUser(req, res) {
   try {
-    const userData = req.body;
+    const userData = { ...req.body };
     const emailLower = userData.email?.toLowerCase().trim();
+
+    // isAdmin/createdBy nunca deben venir del cliente: isAdmin es un bypass
+    // total de checkPermission (server/middlewares/authMiddleware.js) para
+    // TODO el sistema, no solo para el recurso "users" — solo un admin
+    // existente puede otorgarlo. Antes cualquier usuario con permiso
+    // "users:create" (no necesariamente admin) podía crear una cuenta nueva
+    // con isAdmin:true.
+    if (!req.user?.isAdmin) {
+      delete userData.isAdmin;
+    }
+    delete userData.createdBy;
 
     const existingUser = await User.findOne({ email: emailLower }).lean();
     if (existingUser) return res.status(409).json({ success: false, message: "El email ya está registrado" });
@@ -319,7 +331,18 @@ async function createUser(req, res) {
     const salt = bcrypt.genSaltSync(10);
     const hashedPassword = bcrypt.hashSync(userData.password, salt);
 
-    const newUser = new User({ ...userData, password: hashedPassword, email: emailLower });
+    // req.file lo llena multer (router usa upload.single("avatar")) — antes
+    // esto nunca se leía, así que el archivo se guardaba en disco pero el
+    // usuario se creaba sin ningún avatar vinculado.
+    const avatarPath = getFilePath(req.file);
+
+    const newUser = new User({
+      ...userData,
+      password: hashedPassword,
+      email: emailLower,
+      createdBy: req.user?.user_id || req.user?._id,
+      ...(avatarPath ? { avatar: avatarPath } : {}),
+    });
     await newUser.save();
 
     await cacheService.invalidatePattern("user_");
@@ -339,6 +362,18 @@ async function updateUser(req, res) {
 
     delete updateData.password;
     delete updateData._id;
+    delete updateData.createdBy;
+    // isAdmin es un bypass total de checkPermission para TODO el sistema
+    // (server/middlewares/authMiddleware.js), no solo para "users" — solo un
+    // admin existente puede otorgarlo/quitarlo. Antes cualquier rol con
+    // permiso "users:update" podía mandar {isAdmin:true} y volverse admin.
+    if (!req.user?.isAdmin) {
+      delete updateData.isAdmin;
+    }
+
+    // Mismo caso que createUser: req.file lo llena multer, pero nunca se leía.
+    const avatarPath = getFilePath(req.file);
+    if (avatarPath) updateData.avatar = avatarPath;
 
     const updatedUser = await User.findByIdAndUpdate(id, { ...updateData, updatedAt: new Date() }, { new: true, runValidators: true })
       .populate("roles", "name displayName description isActive")
@@ -360,6 +395,11 @@ async function updateUser(req, res) {
 async function deleteUser(req, res) {
   try {
     const { id } = req.params;
+    const requesterId = req.user?.user_id || req.user?._id;
+    if (requesterId && id === requesterId.toString()) {
+      return res.status(400).json({ success: false, message: "No puedes eliminar/desactivar tu propia cuenta" });
+    }
+
     const user = await User.findByIdAndUpdate(id, { activo: false, updatedAt: new Date() }, { new: true }).select("-password").lean();
 
     if (!user) return res.status(404).json({ success: false, message: "Usuario no encontrado" });
@@ -377,6 +417,11 @@ async function deleteUser(req, res) {
 async function ActiveInactiveUser(req, res) {
   try {
     const { id } = req.params;
+    const requesterId = req.user?.user_id || req.user?._id;
+    if (requesterId && id === requesterId.toString()) {
+      return res.status(400).json({ success: false, message: "No puedes activar/desactivar tu propia cuenta" });
+    }
+
     const user = await User.findById(id).lean();
     if (!user) return res.status(404).json({ success: false, message: "Usuario no encontrado" });
 
@@ -511,14 +556,31 @@ async function getUsersWithRoles(req, res) {
 async function getUserAllPermissions(req, res) {
   try {
     const { id } = req.params;
+    // "admin" no es un campo real del schema (es isAdmin) — ese select era
+    // un no-op silencioso, y calculateUserPermissionsDynamic nunca revisa
+    // isAdmin, así que un admin real aparecía con permisos incompletos/vacíos.
     const user = await User.findById(id)
       .populate("roles", "name displayName permissions isActive")
-      .select("permissions roles admin")
+      .select("permissions roles isAdmin")
       .lean();
 
     if (!user) return res.status(404).json({ success: false, message: "Usuario no encontrado" });
 
     const activeModules = await getActiveModules();
+
+    if (user.isAdmin) {
+      const adminPermissions = generateDynamicAdminPermissions(activeModules);
+      return res.status(200).json({
+        success: true,
+        data: {
+          userId: id,
+          consolidatedPermissions: adminPermissions,
+          permissionSources: [{ source: "Administrador", type: "admin", count: adminPermissions.length }],
+          accessibleModules: activeModules,
+        }
+      });
+    }
+
     const permissionData = await calculateUserPermissionsDynamic(user, activeModules);
 
     return res.status(200).json({

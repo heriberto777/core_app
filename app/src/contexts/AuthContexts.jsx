@@ -267,6 +267,23 @@ export function AuthProvider({ children }) {
     }
   }, [accessToken, user]);
 
+  // UserProfile.jsx (pantalla de "Mi Perfil") destructura updateUser de
+  // useAuth() para guardar sus propios cambios, pero el contexto nunca lo
+  // exponía — cualquier intento de guardar el perfil propio fallaba siempre
+  // con "updateUser is not a function".
+  const updateUser = useCallback(
+    async (data) => {
+      if (!accessToken || !user?._id) {
+        throw new Error("No hay sesión activa para actualizar el perfil");
+      }
+      const result = await userController.updateOwnProfile(accessToken, data);
+      const updatedFields = result?.data || result;
+      setUser((prevUser) => ({ ...prevUser, ...updatedFields }));
+      return result;
+    },
+    [accessToken, user?._id]
+  );
+
   // Fix #3 — initializeAuth usa await consistente para eliminar la race condition
   // donde hasInitialized.current se marcaba true antes de que loginWithToken terminara.
   useEffect(() => {
