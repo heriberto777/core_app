@@ -5618,13 +5618,14 @@ class DynamicTransferService {
    * @returns {Promise<Object>} - Configuración actualizada
    */
   async updateMapping(mappingId, mappingData) {
+    let createdTaskId = null;
     try {
       // Crear tarea relacionada si no existe
       if (!mappingData.taskId) {
         const taskName = `Mapeo: ${mappingData.name}`;
-        
+
         let task = await TransferTask.findOne({ name: taskName });
-        
+
         if (!task) {
           task = new TransferTask({
             name: taskName,
@@ -5642,19 +5643,30 @@ class DynamicTransferService {
           });
 
           await task.save();
+          createdTaskId = task._id;
           logger.info(`Tarea creada automáticamente durante actualización: ${task._id}`);
         }
-        
+
         mappingData.taskId = task._id;
       }
 
+      // runValidators: antes un PUT no corría ningún required/enum del schema
+      // (name/sourceServer/targetServer en la raíz, tableConfigs[].sourceTable/
+      // targetTable, fieldMappings[].targetField, workflowConfig.nextMappings[].
+      // linkField, enums de transferType/entityType/joinType/promotionConfig.
+      // rules[].type, etc.) — un mapeo se podía dejar con campos requeridos
+      // vacíos o valores de enum inválidos sin ningún error hasta que fallaba
+      // en tiempo de ejecución con un error de SQL mucho más confuso.
       const mapping = await TransferMapping.findByIdAndUpdate(
         mappingId,
         mappingData,
-        { new: true }
+        { new: true, runValidators: true, context: "query" }
       );
       return mapping;
     } catch (error) {
+      if (createdTaskId) {
+        await TransferTask.deleteOne({ _id: createdTaskId }).catch(() => {});
+      }
       logger.error(
         `Error al actualizar configuración de mapeo: ${error.message}`
       );

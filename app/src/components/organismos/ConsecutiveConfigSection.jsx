@@ -223,15 +223,15 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
           <div class="flex flex-col gap-4 text-left">
             <div>
               <label class="text-xs font-extrabold uppercase text-slate-500">Nombre:</label>
-              <input id="name" class="w-full rounded-xl border border-slate-200 p-3" class="swal2-input" placeholder="Ej: Facturas Ventas">
+              <input id="name" class="w-full rounded-xl border border-slate-200 p-3" placeholder="Ej: Facturas Ventas">
             </div>
             <div>
               <label class="text-xs font-extrabold uppercase text-slate-500">Valor Inicial:</label>
-              <input class="w-full rounded-xl border border-slate-200" value="0">
+              <input id="current-value" type="number" class="w-full rounded-xl border border-slate-200 p-3" value="0">
             </div>
             <div>
               <label class="text-xs font-extrabold uppercase text-slate-500">Prefijo (Opcional):</label>
-              <input class="w-full rounded-xl border border-slate-200" placeholder="Ej: FAC-">
+              <input id="prefix" class="w-full rounded-xl border border-slate-200 p-3" placeholder="Ej: FAC-">
             </div>
           </div>
         `,
@@ -268,16 +268,8 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
         return;
       }
 
-      // Validar que no haya duplicados
-      const assignedIds = [...assignedConsecutives.map(c => c._id), newConsecutive._id];
-      const existingConsecutives = Array.isArray(response) ? response : (response?.data || []);
-      const duplicates = existingConsecutives.filter(c => assignedIds.includes(c._id));
-      if (duplicates.length > 0) {
-        setLoading(false);
-        Swal.fire({ icon: "warning", title: "Duplicado", text: "Este consecutivo ya está asignado." });
-        return;
-      }
-
+      // No hace falta chequear duplicados: newConsecutive se acaba de crear,
+      // no puede estar ya asignado a este mapeo.
       const assignResult = await api.assignConsecutive(accessToken, newConsecutive._id, {
         entityType: "mapping",
         entityId: mapping._id,
