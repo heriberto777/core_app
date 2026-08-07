@@ -229,12 +229,27 @@ class DynamicTransferService {
             const documentId = documentIds[i];
             let currentConsecutive = null;
 
+            // SAVEPOINT por documento: antes, todo el batch corría en una única
+            // transacción sin aislamiento por documento — si un documento
+            // insertaba bien su encabezado y luego fallaba en un detalle, ese
+            // encabezado quedaba confirmado igual al hacer COMMIT del batch
+            // completo al final (huérfano en el destino real). Ahora, si este
+            // documento falla, se revierte SOLO lo que escribió él, sin tocar
+            // los documentos ya confirmados en savepoints anteriores.
+            // SQL Server trunca los nombres de savepoint a 32 caracteres —
+            // "sp_<indice>" se mantiene corto a propósito para no arriesgar
+            // colisiones entre documentos distintos del mismo batch.
+            const savepointName = `sp_${i}`;
+
             try {
               logger.info(
                 `📋 Procesando documento ${i + 1}/${documentIds.length
                 }: ${documentId} ${shouldUsePromotions ? "(CON PROMOCIONES)" : "(ESTÁNDAR)"
                 }`
               );
+
+              await DatabaseServiceAdapter.createSavepoint(sourceConnection, savepointName);
+              await DatabaseServiceAdapter.createSavepoint(targetConnection, savepointName);
 
               // Generar consecutivo si es necesario
               if (
@@ -293,6 +308,18 @@ class DynamicTransferService {
                 }
             } catch (error) {
               hasErrors = true;
+
+              // Revertir SOLO lo que este documento alcanzó a escribir (ej. un
+              // encabezado insertado antes de fallar en un detalle), sin
+              // afectar los documentos anteriores ya confirmados en sus
+              // propios savepoints ni cerrar la transacción del batch.
+              try {
+                await DatabaseServiceAdapter.rollbackToSavepoint(targetConnection, savepointName);
+                await DatabaseServiceAdapter.rollbackToSavepoint(sourceConnection, savepointName);
+              } catch (savepointError) {
+                logger.error(`No se pudo revertir al savepoint del documento ${documentId}: ${savepointError.message}`);
+              }
+
               await this.handleDocumentError(
                 error,
                 documentId,
