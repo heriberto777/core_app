@@ -14,11 +14,14 @@ export function EmailTestModal({ isOpen, onClose, config, onSendTest }) {
         setLoading(true);
         setResult(null);
         try {
-            const success = await onSendTest(config._id, testEmail);
-            if (success) {
-                setResult({ success: true, message: `Correo de prueba enviado con éxito a ${testEmail}. Por favor revisa la bandeja de entrada y la carpeta de spam.` });
+            // La API responde {success, message} — un objeto es siempre truthy en
+            // JS, así que había que leer response.success explícitamente en vez de
+            // tratar cualquier respuesta resuelta como un envío exitoso.
+            const response = await onSendTest(config._id, testEmail);
+            if (response?.success) {
+                setResult({ success: true, message: response.message || `Correo de prueba enviado con éxito a ${testEmail}. Por favor revisa la bandeja de entrada y la carpeta de spam.` });
             } else {
-                setResult({ success: false, message: "El servidor SMTP rechazó la conexión o las credenciales son inválidas." });
+                setResult({ success: false, message: response?.message || "El servidor SMTP rechazó la conexión o las credenciales son inválidas." });
             }
         } catch (err) {
             setResult({ success: false, message: err.message || "Error inesperado al intentar enviar el correo de prueba." });
