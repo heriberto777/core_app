@@ -39,7 +39,13 @@ class DynamicTransferService {
     const localAbortController = !signal ? new AbortController() : null;
     signal = signal || localAbortController.signal;
 
-    const cancelTaskId = `dynamic_process_${mappingId}_${Date.now()}`;
+    // Clave temporal — se reemplaza abajo por mapping.taskId (el _id real de
+    // TransferTask que ve el usuario en la pantalla de Tareas) en cuanto se
+    // carga el mapeo, para que el botón "Cancelar" de esa pantalla (que llama
+    // a TaskTracker.cancelTask(taskId) con ese _id) realmente encuentre y
+    // aborte este proceso — antes usaban claves completamente distintas y la
+    // cancelación nunca llegaba a dispararse.
+    let cancelTaskId = `dynamic_process_${mappingId}_${Date.now()}`;
 
     // Configurar timeout interno como medida de seguridad
     const timeoutId = setTimeout(() => {
@@ -65,6 +71,10 @@ class DynamicTransferService {
       if (!mapping) {
         clearTimeout(timeoutId);
         throw new Error(`Configuración de mapeo ${mappingId} no encontrada`);
+      }
+
+      if (mapping.taskId) {
+        cancelTaskId = mapping.taskId.toString();
       }
 
       logger.info(`🚀 INICIANDO TRANSFERENCIA - Mapping: ${mapping.name}`, {
@@ -2638,9 +2648,20 @@ class DynamicTransferService {
       return null;
     }
 
-    const nextValue = (consecutiveConfig.lastValue || 0) + 1;
-    let formatted = nextValue.toString();
+    // $inc atómico en vez de leer mapping.consecutiveConfig.lastValue (objeto
+    // en memoria, cargado UNA vez por lote) + escribir el valor calculado:
+    // antes, todos los documentos del mismo batch releían el mismo lastValue
+    // desactualizado y terminaban con el mismo número de consecutivo — y dos
+    // ejecuciones concurrentes del mismo mapeo tenían la misma condición de
+    // carrera a nivel de base de datos.
+    const updated = await TransferMapping.findByIdAndUpdate(
+      mapping._id,
+      { $inc: { "consecutiveConfig.lastValue": 1 } },
+      { new: true }
+    );
+    const nextValue = updated.consecutiveConfig.lastValue;
 
+    let formatted = nextValue.toString();
     if (consecutiveConfig.pattern) {
       formatted = consecutiveConfig.pattern
         .replace(/{PREFIX}/g, consecutiveConfig.prefix || "")
@@ -2657,11 +2678,6 @@ class DynamicTransferService {
     } else {
       formatted = (consecutiveConfig.prefix || "") + nextValue;
     }
-
-    // Actualizar el último valor en el mapping
-    await TransferMapping.findByIdAndUpdate(mapping._id, {
-      "consecutiveConfig.lastValue": nextValue,
-    });
 
     return {
       value: nextValue,
@@ -5492,14 +5508,15 @@ class DynamicTransferService {
    * @returns {Promise<Object>} - Configuración creada
    */
   async createMapping(mappingData) {
+    let createdTaskId = null;
     try {
       // Crear tarea relacionada si no existe
       if (!mappingData.taskId) {
         const taskName = `Mapeo: ${mappingData.name}`;
-        
+
         // Verificar si ya existe una tarea con este nombre
         let task = await TransferTask.findOne({ name: taskName });
-        
+
         if (!task) {
           task = new TransferTask({
             name: taskName,
@@ -5517,11 +5534,12 @@ class DynamicTransferService {
           });
 
           await task.save();
+          createdTaskId = task._id;
           logger.info(`Tarea creada automáticamente para mapeo: ${task._id}`);
         } else {
           logger.info(`Tarea existente reutilizada para mapeo: ${task._id}`);
         }
-        
+
         mappingData.taskId = task._id;
       }
 
@@ -5535,8 +5553,32 @@ class DynamicTransferService {
         });
       }
 
+      // Consumir la asignación de consecutivo centralizado pendiente (solo
+      // podía guardarse como pendingAssignmentId mientras el mapeo no tenía
+      // _id todavía — ver ConsecutiveConfigSection.jsx). Ahora que existe,
+      // se crea la asignación real y se limpia el campo temporal.
+      const pendingAssignmentId = savedMapping.consecutiveConfig?.pendingAssignmentId;
+      if (pendingAssignmentId) {
+        try {
+          await ConsecutiveService.assignConsecutive(
+            pendingAssignmentId,
+            { entityType: "mapping", entityId: savedMapping._id, allowedOperations: ["read", "increment"] },
+            { id: "SYSTEM", name: "System" }
+          );
+        } catch (assignError) {
+          logger.warn(`No se pudo finalizar la asignación de consecutivo pendiente para el mapeo ${savedMapping._id}: ${assignError.message}`);
+        }
+        savedMapping.consecutiveConfig.pendingAssignmentId = null;
+        await savedMapping.save();
+      }
+
       return savedMapping;
     } catch (error) {
+      // Si el mapeo no pudo guardarse (ej. nombre duplicado) pero la tarea
+      // placeholder sí se creó, no dejarla huérfana.
+      if (createdTaskId) {
+        await TransferTask.deleteOne({ _id: createdTaskId }).catch(() => {});
+      }
       logger.error(`Error al crear configuración de mapeo: ${error.message}`);
       throw error;
     }

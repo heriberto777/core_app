@@ -52,7 +52,7 @@ const WorkflowConfigSection = ({ mapping = {}, handleChange, accessToken }) => {
   // name/entityType/stopOnError. El formulario pedía/mostraba campos que nunca
   // existieron en la base de datos, por eso el nombre siempre salía vacío.
   const openNextMappingDialog = async (existing = null, currentIndex = null) => {
-    const { Swal } = await import("sweetalert2");
+    const { default: Swal } = await import("sweetalert2");
 
     const usedIds = (workflowConfig.nextMappings || [])
       .filter((_, i) => i !== currentIndex)
@@ -160,7 +160,7 @@ const WorkflowConfigSection = ({ mapping = {}, handleChange, accessToken }) => {
   };
 
   const removeNextMapping = async (index) => {
-    const { Swal } = await import("sweetalert2");
+    const { default: Swal } = await import("sweetalert2");
     const target = workflowConfig.nextMappings[index];
     const targetName = allMappings.find(m => m._id === target?.mappingId)?.name || "este mapeo";
 

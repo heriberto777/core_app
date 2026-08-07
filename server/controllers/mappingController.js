@@ -597,10 +597,11 @@ const queryDynamicValue = async (req, res) => {
         query
       );
 
-      // Retornar el primer valor de la primera fila
+      // Retornar el primer valor de la primera fila. DatabaseService.query()
+      // resuelve { recordset, rowsAffected } — no un array directo.
       let value = null;
-      if (result && result.length > 0) {
-        const firstRow = result[0];
+      if (result?.recordset?.length > 0) {
+        const firstRow = result.recordset[0];
         value = Object.values(firstRow)[0];
       }
 

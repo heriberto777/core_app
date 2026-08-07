@@ -170,6 +170,15 @@ const ConsecutiveConfigSchema = new Schema({
       fieldName: { type: String, required: true }, // Nombre del campo en esa tabla
     },
   ],
+  // La asignación real de un consecutivo centralizado vive en la colección
+  // Consecutive (Consecutive.assignedTo, vía ConsecutiveService.assignConsecutive),
+  // no aquí — DynamicTransferService.setupCentralizedConsecutives ya la resuelve
+  // consultando esa asignación por (entityType:"mapping", entityId:mapping._id).
+  // pendingAssignmentId solo existe para el caso de un mapeo TODAVÍA no guardado
+  // (sin _id aún) — ConsecutiveConfigSection.jsx lo deja aquí temporalmente y
+  // DynamicTransferService.createMapping lo consume para crear la asignación
+  // real en cuanto el mapeo obtiene su _id definitivo.
+  pendingAssignmentId: { type: String, default: null },
 });
 
 // NUEVO: Schema para configuración de marcado procesado
