@@ -20,10 +20,7 @@ const DBConfig = require("../models/dbConfigModel");
 const mongoose = require("mongoose");
 const DynamicTransferService = require("../services/DynamicTransferService");
 const LinkedTasksService = require("../services/LinkedTasksService");
-const {
-  sendTransferResultsEmail,
-  sendCriticalErrorEmail,
-} = require("../services/emailService");
+const { notifyTransferResults } = require("../services/notificationDispatcher");
 const ConsecutiveService = require("../services/ConsecutiveService");
 
 /**
@@ -314,6 +311,7 @@ const executeTransferTask = async (req, res) => {
     }
 
     logger.info(`🚀 [executeTransferTask] Iniciando ejecución de: ${task.name}`);
+    const taskStartTime = Date.now();
     let result = null;
     let isLinkedGroup = false;
 
@@ -333,41 +331,60 @@ const executeTransferTask = async (req, res) => {
       isLinkedGroup = false;
     }
 
-    if (!result) return res.status(500).json({ success: false, message: "Error: No se obtuvo resultado de la ejecución" });
-
-    if (result.success) {
-      setImmediate(async () => {
-        try {
-          if (isLinkedGroup && result.linkedTasksResults) {
-            const emailData = result.linkedTasksResults.map(r => ({
-              name: r.taskName || "Tarea desconocida",
-              success: r.success || false,
-              inserted: r.inserted || 0,
-              updated: r.updated || 0,
-              duplicates: r.duplicates || 0,
-              rows: r.rows || 0,
-              message: r.message || "Completado",
-              errorDetail: r.error || "N/A",
-            }));
-            await sendTransferResultsEmail(emailData, "manual_linked_group");
-          } else {
-            const emailData = [{
-              name: task.name,
-              success: result.success,
-              inserted: result.inserted || 0,
-              updated: result.updated || 0,
-              duplicates: result.duplicates || 0,
-              rows: result.rows || 0,
-              message: result.message || "Completado",
-              errorDetail: result.errorDetail || "N/A",
-            }];
-            await sendTransferResultsEmail(emailData, "manual");
-          }
-        } catch (emailError) {
-          logger.error(`Error enviando correo de transferencia: ${emailError.message}`);
-        }
+    if (!result) {
+      // Antes esto retornaba sin notificar nada — el usuario nunca se
+      // enteraba de que una ejecución manual no produjo ningún resultado.
+      setImmediate(() => {
+        notifyTransferResults(
+          [{ name: task.name, success: false, errorDetail: "No se obtuvo resultado de la ejecución" }],
+          { runType: "manual", scheduledHour: "manual", startTime: taskStartTime, endTime: Date.now() }
+        ).catch((notifyError) => logger.error(`Error enviando notificación de tarea sin resultado: ${notifyError.message}`));
       });
+      return res.status(500).json({ success: false, message: "Error: No se obtuvo resultado de la ejecución" });
     }
+
+    // Antes esto solo notificaba si result.success === true — una ejecución
+    // manual que fallaba nunca generaba correo/webhook, dejando al usuario
+    // sin ninguna señal de que algo salió mal.
+    setImmediate(async () => {
+      try {
+        const scheduledHourLabel = isLinkedGroup ? "manual_linked_group" : "manual";
+        let emailData;
+
+        if (isLinkedGroup && result.linkedTasksResults) {
+          emailData = result.linkedTasksResults.map(r => ({
+            name: r.taskName || "Tarea desconocida",
+            success: r.success || false,
+            inserted: r.inserted || 0,
+            updated: r.updated || 0,
+            duplicates: r.duplicates || 0,
+            rows: r.rows || 0,
+            message: r.message || (r.success ? "Completado" : "Error"),
+            errorDetail: r.error || (r.success ? undefined : "Error desconocido"),
+          }));
+        } else {
+          emailData = [{
+            name: task.name,
+            success: result.success,
+            inserted: result.inserted || 0,
+            updated: result.updated || 0,
+            duplicates: result.duplicates || 0,
+            rows: result.rows || 0,
+            message: result.message || (result.success ? "Completado" : "Error"),
+            errorDetail: result.errorDetail || (result.success ? undefined : "Error desconocido"),
+          }];
+        }
+
+        await notifyTransferResults(emailData, {
+          runType: "manual",
+          scheduledHour: scheduledHourLabel,
+          startTime: taskStartTime,
+          endTime: Date.now(),
+        });
+      } catch (notifyError) {
+        logger.error(`Error enviando notificación de transferencia: ${notifyError.message}`);
+      }
+    });
 
     return res.status(200).json({
       success: result.success || false,

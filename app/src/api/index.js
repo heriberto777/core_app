@@ -1,5 +1,6 @@
 
 export * from "./EmailConfigApi";
+export * from "./NotificationConfigApi";
 export { default as LoadsApi } from "./LoadsApi";
 export { default as TransferSummaryApi } from "./TransferSummaryApi";
 export * from "./authApi";

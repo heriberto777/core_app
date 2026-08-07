@@ -31,6 +31,7 @@ export const ENV = {
     CONFIG_TASK: "config",
     EMAIL_RECIPIENTS: "email-recipients",
     EMAIL_CONFIG: "email-config",
+    NOTIFICATION_CONFIG: "notification-config",
     SUMMARIES: "summaries",
     LOGS: "logs",
   },

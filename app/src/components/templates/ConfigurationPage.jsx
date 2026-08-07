@@ -7,6 +7,7 @@ import {
   FaClock,
   FaUser,
   FaDatabase,
+  FaBell,
 } from "react-icons/fa";
 import {
   useAuth,
@@ -14,6 +15,7 @@ import {
   ControlEmailConfig,
   ConsecutiveManager,
   ControlPlanilla,
+  ControlNotificationConfig,
   UserManagement,
   DatabaseConnections,
   ScheduleConfiguration,
@@ -60,6 +62,14 @@ export function ConfigurationPage() {
       description: "Gestione las listas de contactos y planillas que recibirán información del sistema.",
       icon: <FaUsers />,
       component: <ControlPlanilla />,
+      requiresAdmin: false,
+    },
+    {
+      id: "notifications",
+      label: "Notificaciones (Webhook)",
+      description: "Conecta un webhook externo (ej. n8n) para recibir el resumen de tareas automáticas y manuales.",
+      icon: <FaBell />,
+      component: <ControlNotificationConfig />,
       requiresAdmin: false,
     },
     {
