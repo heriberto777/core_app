@@ -200,6 +200,42 @@ export class User {
     }
   }
 
+  // Autoservicio: el propio usuario edita su perfil vía PATCH /user/me
+  // (no requiere permiso "users", a diferencia de updateUser que sí lo exige).
+  async updateOwnProfile(accessToken, userData) {
+    try {
+      const formData = new FormData();
+
+      Object.keys(userData).forEach((key) => {
+        if (key !== "fileAvatar") {
+          formData.append(key, userData[key]);
+        }
+      });
+
+      if (userData.fileAvatar) {
+        formData.append("avatar", userData.fileAvatar);
+      }
+
+      const url = `${ENV.BASE_API}/${ENV.API_ROUTERS.USERS}/user/me`;
+      const params = {
+        method: "PATCH",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+        body: formData,
+      };
+
+      const response = await fetch(url, params);
+      const result = await response.json();
+
+      if (!response.ok) throw result;
+      return result.data || result;
+    } catch (error) {
+      console.error("❌ Error actualizando perfil propio:", error);
+      throw error;
+    }
+  }
+
   async deleteUser(accessToken, userId) {
     try {
       console.log("🗑️ Eliminando usuario:", userId);
@@ -275,7 +311,7 @@ export class User {
       return result.data || result;
     } catch (error) {
       console.error("❌ Error en getUsersWithRoles:", error);
-      return error;
+      throw error;
     }
   }
 
@@ -306,7 +342,7 @@ export class User {
       return result;
     } catch (error) {
       console.error("❌ Error actualizando roles:", error);
-      return error;
+      throw error;
     }
   }
 

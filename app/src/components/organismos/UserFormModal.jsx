@@ -1,12 +1,18 @@
 import React, { useState, useEffect } from "react";
 import { FaUser, FaEnvelope, FaShieldAlt, FaPhone, FaLock, FaUserShield, FaTimes } from "react-icons/fa";
 import { Button, Input } from "../index";
+import { usePermissions } from "../../index";
 
 /**
  * UserFormModal (Tailwind Edition)
  * Modal corporativo para configuración de identidades y permisos.
  */
 export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, roles = [], resources = [], actions = [] }) => {
+    // El backend ya descarta isAdmin si quien edita no es admin (userController.js:
+    // createUser/updateUser), pero mostrar el checkbox habilitado igual induciría a
+    // pensar que el cambio se aplicó cuando en realidad se ignora en silencio.
+    const { isAdmin: viewerIsAdmin } = usePermissions();
+
     const [formData, setFormData] = useState({
         name: "", lastname: "", email: "", telefono: "",
         password: "", roles: [], permissions: [], isAdmin: false
@@ -129,17 +135,22 @@ export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, rol
                                 )}
 
                                 <div className="md:col-span-2 p-5 bg-amber-50 rounded-2xl border border-amber-100 flex items-center gap-4">
-                                    <input 
-                                        type="checkbox" 
-                                        checked={formData.isAdmin} 
+                                    <input
+                                        type="checkbox"
+                                        checked={formData.isAdmin}
                                         onChange={e => setFormData({ ...formData, isAdmin: e.target.checked })}
-                                        className="w-6 h-6 rounded-lg text-amber-600 border-amber-200 focus:ring-amber-500"
+                                        disabled={!viewerIsAdmin}
+                                        className="w-6 h-6 rounded-lg text-amber-600 border-amber-200 focus:ring-amber-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                     />
                                     <div>
                                         <div className="text-sm font-extrabold text-amber-900 flex items-center gap-2">
                                           <FaUserShield className="text-amber-500" /> Administrador de Sistema
                                         </div>
-                                        <div className="text-xs font-medium text-amber-700/70">Otorga acceso total a todas las funciones del ERP.</div>
+                                        <div className="text-xs font-medium text-amber-700/70">
+                                          {viewerIsAdmin
+                                            ? "Otorga acceso total a todas las funciones del ERP."
+                                            : "Solo un administrador puede otorgar o quitar este privilegio."}
+                                        </div>
                                     </div>
                                 </div>
 

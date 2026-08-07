@@ -41,7 +41,7 @@ export function EmailConfigTable({
                     </thead>
                     <tbody>
                         {configs.map((config, idx) => (
-                            <tr key={config.id || idx} className="hover:bg-slate-50/10 border-b border-slate-100/40">
+                            <tr key={config._id || idx} className="hover:bg-slate-50/10 border-b border-slate-100/40">
                                 <td className="p-4">
                                     <div className="flex items-center gap-2 font-extrabold text-slate-800">
                                         <FaEnvelope className="text-amber-500" />
@@ -59,7 +59,7 @@ export function EmailConfigTable({
                                     </div>
                                 </td>
                                 <td className="p-4 text-slate-600">
-                                    {config.username}
+                                    {config.auth?.user}
                                 </td>
                                 <td className="p-4">
                                     <div className="flex items-center gap-2">
@@ -75,20 +75,25 @@ export function EmailConfigTable({
                                     </div>
                                 </td>
                                 <td className="p-4">
-                                    <div className={`flex items-center gap-1.5 text-xs font-bold ${config.active ? "text-emerald-600" : "text-red-500"}`}>
-                                        {config.active ? <FaToggleOn /> : <FaToggleOff />}
-                                        {config.active ? "Activo" : "Inactivo"}
+                                    <div className={`flex items-center gap-1.5 text-xs font-bold ${config.isActive ? "text-emerald-600" : "text-red-500"}`}>
+                                        {config.isActive ? <FaToggleOn /> : <FaToggleOff />}
+                                        {config.isActive ? "Activo" : "Inactivo"}
                                     </div>
                                 </td>
                                 <td className="p-4">
                                     <div className="flex gap-2 justify-end">
                                         {onSetDefault && (
-                                            <Button variant="ghost" size="small" onClick={() => onSetDefault(config.id)} title="Establecer por defecto">
+                                            <Button variant="ghost" size="small" onClick={() => onSetDefault(config)} title="Establecer por defecto">
                                                 <FaStar />
                                             </Button>
                                         )}
+                                        {onToggle && (
+                                            <Button variant="ghost" size="small" onClick={() => onToggle(config)} title={config.isActive ? "Desactivar" : "Activar"}>
+                                                {config.isActive ? <FaToggleOn /> : <FaToggleOff />}
+                                            </Button>
+                                        )}
                                         {onTest && (
-                                            <Button variant="ghost" size="small" onClick={() => onTest(config.id)} title="Probar configuración">
+                                            <Button variant="ghost" size="small" onClick={() => onTest(config)} title="Probar configuración">
                                                 <FaEnvelope />
                                             </Button>
                                         )}
@@ -98,7 +103,7 @@ export function EmailConfigTable({
                                             </Button>
                                         )}
                                         {onDelete && (
-                                            <Button variant="ghost" size="small" onClick={() => onDelete(config.id)} title="Eliminar" className="text-red-500 hover:text-red-700">
+                                            <Button variant="ghost" size="small" onClick={() => onDelete(config)} title="Eliminar" className="text-red-500 hover:text-red-700">
                                                 <FaTrash />
                                             </Button>
                                         )}

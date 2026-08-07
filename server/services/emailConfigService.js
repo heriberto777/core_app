@@ -134,6 +134,11 @@ class EmailConfigService {
    */
   static async updateConfig(id, updateData) {
     try {
+      const existing = await EmailConfig.findById(id);
+      if (!existing) {
+        throw new Error(`No se encontró configuración con ID: ${id}`);
+      }
+
       // Asegurar que no se puede modificar el nombre a uno existente
       if (updateData.name) {
         const existingConfig = await EmailConfig.findOne({
@@ -148,7 +153,30 @@ class EmailConfigService {
         }
       }
 
+      // findByIdAndUpdate reemplaza el subdocumento "auth" completo en vez de
+      // fusionarlo con el existente. El formulario de edición omite auth.pass
+      // a propósito cuando el usuario no quiere cambiar la contraseña, así que
+      // sin este merge la edición fallaba la validación (o, peor, borraba la
+      // contraseña guardada) cada vez que no se reingresaba.
+      if (updateData.auth) {
+        updateData.auth = {
+          user: updateData.auth.user ?? existing.auth.user,
+          pass: updateData.auth.pass || existing.auth.pass,
+        };
+      }
+
       updateData.updatedAt = new Date();
+
+      // findByIdAndUpdate NO dispara el hook pre("save") del modelo, que es lo
+      // único que garantiza "solo un default a la vez" en createConfig/setAsDefault
+      // (esos sí usan .save()). Sin esto, editar una config y marcarla default
+      // desde el formulario general dejaría dos configs con isDefault:true.
+      if (updateData.isDefault === true) {
+        await EmailConfig.updateMany(
+          { _id: { $ne: id }, isDefault: true },
+          { $set: { isDefault: false, updatedAt: new Date() } }
+        );
+      }
 
       const updatedConfig = await EmailConfig.findByIdAndUpdate(
         id,
@@ -293,37 +321,36 @@ class EmailConfigService {
    * @returns {Promise<boolean>} true si la prueba fue exitosa
    */
   static async testConfig(configId, testEmail) {
-    try {
-      logger.info(`Iniciando prueba de configuración ID: ${configId}`);
+    logger.info(`Iniciando prueba de configuración ID: ${configId}`);
 
-      const config = await EmailConfig.findById(configId);
+    const config = await EmailConfig.findById(configId);
 
-      if (!config) {
-        logger.error(`No se encontró configuración con ID: ${configId}`);
-        throw new Error(`No se encontró configuración con ID: ${configId}`);
-      }
-
-      logger.info(`Configuración encontrada: ${config.name}`);
-      logger.debug(
-        `Detalles de configuración: host=${config.host}, port=${config.port}, secure=${config.secure}`
-      );
-
-      // Importar EmailService aquí para evitar dependencias circulares
-      const EmailService = require("./emailService");
-
-      const result = await EmailService.testEmailConfig(config, testEmail);
-
-      if (result) {
-        logger.info(`Prueba de configuración exitosa: ${config.name}`);
-      } else {
-        logger.warn(`Prueba de configuración fallida: ${config.name}`);
-      }
-
-      return result;
-    } catch (error) {
-      logger.error("Error al probar configuración de email:", error);
-      return false;
+    if (!config) {
+      logger.error(`No se encontró configuración con ID: ${configId}`);
+      throw new Error(`No se encontró configuración con ID: ${configId}`);
     }
+
+    logger.info(`Configuración encontrada: ${config.name}`);
+    logger.debug(
+      `Detalles de configuración: host=${config.host}, port=${config.port}, secure=${config.secure}`
+    );
+
+    // Importar EmailService aquí para evitar dependencias circulares
+    const EmailService = require("./emailService");
+
+    // No envolver en try/catch que devuelva false: EmailService.testEmailConfig
+    // ya captura los fallos de envío y devuelve un booleano real; si esta capa
+    // tragara el resultado o cualquier excepción, el controller nunca podría
+    // distinguir un envío fallido de uno exitoso.
+    const result = await EmailService.testEmailConfig(config, testEmail);
+
+    if (result) {
+      logger.info(`Prueba de configuración exitosa: ${config.name}`);
+    } else {
+      logger.warn(`Prueba de configuración fallida: ${config.name}`);
+    }
+
+    return result;
   }
 }
 

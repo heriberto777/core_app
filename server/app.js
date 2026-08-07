@@ -149,8 +149,6 @@ app.use(`/api/${API_VERSION}/modules`, require("./routes/moduleRoutes"));
 app.use(`/api/${API_VERSION}/task`, require("./routes/transferTaskRoutes"));
 app.use(`/api/${API_VERSION}/users`, require("./routes/userRoutes"));
 app.use(`/api/${API_VERSION}/config`, require("./routes/dbRoutes"));
-app.use(`/api/${API_VERSION}/scheduler`, require("./routes/schedulerRoutes"));
-app.use(`/api/${API_VERSION}/cache`, require("./routes/cacheRoutes"));
 
 app.use(
   `/api/${API_VERSION}/email-recipients`,

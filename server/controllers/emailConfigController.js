@@ -144,7 +144,14 @@ const setAsDefault = async (req, res) => {
 const testConfig = async (req, res) => {
   try {
     const { testEmail } = req.body;
-    await EmailConfigService.testConfig(req.params.id, testEmail);
+    const success = await EmailConfigService.testConfig(req.params.id, testEmail);
+
+    if (!success) {
+      return res.status(400).json({
+        success: false,
+        message: "No se pudo enviar el correo de prueba. Verifica el host, puerto, usuario y contraseña de la configuración."
+      });
+    }
 
     return res.status(200).json({
       success: true,

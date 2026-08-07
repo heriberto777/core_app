@@ -6,7 +6,7 @@ const {
   upsertTransferTask: upsertTransferTaskService,
 } = require("../services/transferService");
 const Config = require("../models/configModel");
-const { setSchedulerEnabled } = require("../services/cronService");
+const { setSchedulerEnabled, getSchedulerStatus } = require("../services/cronService");
 const { executeDynamicSelect } = require("../services/dynamicQueryService");
 const { formatDateToYYYYMMDD } = require("../utils/formatDate");
 const { realizarTraspaso } = require("../services/traspasoService");
@@ -477,7 +477,19 @@ const deleteTransferTask = async (req, res) => {
 const getConfigurarHora = async (req, res) => {
   try {
     const config = await Config.findOne().lean();
-    const data = config || { hour: "02:00", enabled: true };
+    const baseData = config || { hour: "02:00", enabled: true };
+    // enabled solo refleja el documento guardado en Mongo; el frontend
+    // (indicador "SISTEMA ACTIVO") necesita saber si el cron realmente está
+    // programado en memoria ahora mismo (active) para no mostrar "activo"
+    // justo después de un reinicio del server antes de que el cron se
+    // vuelva a levantar, o viceversa.
+    const schedulerStatus = getSchedulerStatus();
+    const data = {
+      ...baseData,
+      active: schedulerStatus.active,
+      running: schedulerStatus.running,
+      nextExecution: schedulerStatus.nextExecution,
+    };
     return res.status(200).json({ success: true, message: "Configuración obtenida correctamente", data });
   } catch (error) {
     logger.error("Error en getConfigurarHora:", error);
@@ -497,10 +509,20 @@ const updateConfig = async (req, res) => {
       return res.status(400).json({ success: false, message: "Formato de hora inválido (HH:MM)" });
     }
 
+    // Solo tocar los campos realmente enviados, para no resetear la hora
+    // guardada cuando solo se manda {enabled}.
+    const setFields = { lastModified: new Date() };
+    const setOnInsertFields = { singleton: "singleton" };
+    if (hour !== undefined) setFields.hour = hour; else setOnInsertFields.hour = "02:00";
+    if (enabled !== undefined) setFields.enabled = enabled; else setOnInsertFields.enabled = true;
+
+    // Filtrar por el campo "singleton" (con índice único) en vez de {} para
+    // que el upsert sea realmente atómico frente a escrituras concurrentes
+    // sobre una colección vacía, en vez de depender solo de la buena suerte.
     const config = await Config.findOneAndUpdate(
-      {},
-      { hour, enabled: enabled !== undefined ? enabled : true, lastModified: new Date() },
-      { upsert: true, new: true }
+      { singleton: "singleton" },
+      { $set: setFields, $setOnInsert: setOnInsertFields },
+      { upsert: true, new: true, runValidators: true }
     );
 
     logger.info(`Configuración de cron actualizada: ${config.hour} (Enabled: ${config.enabled}) por ${userId}`);

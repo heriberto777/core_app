@@ -738,6 +738,11 @@ async function initializeSystemModules() {
         version: "1.0.1",
       },
       {
+        // Desactivado: las rutas que este módulo protegía (schedulerRoutes.js
+        // /api/v1/scheduler y cacheRoutes.js /api/v1/cache) no tenían ningún
+        // llamador en el frontend y fueron eliminadas — el scheduler real se
+        // controla vía transferTaskController's /task/config/horas (recurso
+        // "loads"), y la caché vía moduleRoutes.js (recurso "modules").
         name: "config",
         displayName: "Configuración del Scheduler",
         description: "Módulo para administrar la programación automática y la caché del sistema",
@@ -784,7 +789,7 @@ async function initializeSystemModules() {
           contextRules: [],
         },
         isSystem: true,
-        isActive: true,
+        isActive: false,
         version: "1.0.0",
       },
       {

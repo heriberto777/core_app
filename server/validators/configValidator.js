@@ -1,20 +1,6 @@
 const { body, param } = require("express-validator");
 
 /**
- * Esquemas de validación para Configuración del Sistema (Scheduler)
- */
-const updateSchedulerSchema = [
-    body("hour")
-        .optional()
-        .matches(/^([01]\d|2[0-3]):([0-5]\d)$/)
-        .withMessage("Formato de hora inválido. Use formato HH:MM (24 horas)"),
-    body("enabled")
-        .optional()
-        .isBoolean()
-        .withMessage("enabled debe ser un valor booleano"),
-];
-
-/**
  * Esquemas de validación para Configuración de Email
  */
 const createEmailConfigSchema = [
@@ -42,6 +28,45 @@ const createEmailConfigSchema = [
         .notEmpty()
         .withMessage("La contraseña de autenticación es obligatoria"),
     body("from")
+        .trim()
+        .notEmpty()
+        .withMessage("El campo remitente (from) es obligatorio"),
+];
+
+// El formulario de edición omite auth.pass a propósito cuando el usuario no
+// quiere cambiarla (para no sobrescribir la contraseña guardada con un valor
+// vacío); createEmailConfigSchema exige auth.pass siempre, así que reusarlo en
+// la ruta PUT hacía fallar toda edición que no reingresara la contraseña.
+const updateEmailConfigSchema = [
+    body("name")
+        .optional()
+        .trim()
+        .notEmpty()
+        .withMessage("El nombre de la configuración es obligatorio"),
+    body("host")
+        .optional()
+        .trim()
+        .notEmpty()
+        .withMessage("El host es obligatorio"),
+    body("port")
+        .optional()
+        .isInt({ min: 1, max: 65535 })
+        .withMessage("Puerto inválido"),
+    body("secure")
+        .optional()
+        .isBoolean(),
+    body("auth.user")
+        .optional()
+        .trim()
+        .notEmpty()
+        .withMessage("El usuario de autenticación es obligatorio"),
+    body("auth.pass")
+        .optional()
+        .trim()
+        .notEmpty()
+        .withMessage("La contraseña de autenticación no puede quedar vacía si se envía"),
+    body("from")
+        .optional()
         .trim()
         .notEmpty()
         .withMessage("El campo remitente (from) es obligatorio"),
@@ -94,8 +119,8 @@ const upsertDBConfigSchema = [
 ];
 
 module.exports = {
-    updateSchedulerSchema,
     createEmailConfigSchema,
+    updateEmailConfigSchema,
     testEmailSchema,
     upsertDBConfigSchema,
 };

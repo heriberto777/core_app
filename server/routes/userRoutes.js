@@ -50,6 +50,24 @@ router.get("/user/me", getMe);
 // GET /api/v1/users/user/permissions - Permisos del usuario actual
 router.get("/user/permissions", getUserPermissions);
 
+// PATCH /api/v1/users/user/me - Autoservicio: el usuario edita su propio perfil.
+// Sin checkPermission("users",...) a propósito: editar tu propio registro no es
+// "gestionar usuarios", y exigir ese permiso dejaba sin poder guardar su perfil
+// a cualquier usuario sin rol de administración de usuarios. El id se toma del
+// token (nunca del body/params del cliente) para que no pueda usarse para editar
+// a otra persona; updateUser ya despoja isAdmin/createdBy si el requester no es admin.
+router.patch(
+  "/user/me",
+  upload.single("avatar"),
+  (req, res, next) => {
+    req.params.id = (req.user?.user_id || req.user?._id || "").toString();
+    next();
+  },
+  updateUserSchema,
+  validate,
+  updateUser
+);
+
 // GET /api/v1/users/stats - Estadísticas de usuarios
 router.get("/stats", checkPermission("users", "read"), getUserStats);
 

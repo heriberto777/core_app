@@ -47,16 +47,20 @@ const UserRoleManager = () => {
     if (!accessToken) return;
     setLoading(true);
     try {
+      // userApi.getUsersWithRoles ya devuelve el payload desenvuelto
+      // ({users, pagination}), no {success, data} — este chequeo de
+      // response.success nunca era verdadero, así que esta pantalla jamás
+      // llegaba a cargar usuarios ni siquiera cuando la petición sí tenía éxito.
       const response = await userApi.getUsersWithRoles(accessToken, {
         page: 1,
         limit: 100,
         search: searchTerm,
       });
 
-      if (response && response.success) {
-        setUsers(response.data?.users || response.users || []);
+      if (response && response.users) {
+        setUsers(response.users);
       } else {
-        throw new Error(response?.message || "Error cargando usuarios");
+        throw new Error("Error cargando usuarios");
       }
     } catch (error) {
       console.error("Error cargando usuarios:", error);
@@ -122,7 +126,7 @@ const UserRoleManager = () => {
       try {
         const promises = selectedUsers.map(async (userId) => {
           const user = users.find((u) => u._id === userId);
-          const currentRoleIds = user.rolesInfo?.map((r) => r._id) || [];
+          const currentRoleIds = user.roles?.map((r) => r._id) || [];
           if (!currentRoleIds.includes(selectedRole)) {
             const newRoleIds = [...currentRoleIds, selectedRole];
             return userApi.updateUserRoles(accessToken, userId, newRoleIds);
@@ -153,7 +157,7 @@ const UserRoleManager = () => {
     const role = roles.find((r) => r._id === selectedRole);
     const usersWithRole = selectedUsers.filter((userId) => {
       const user = users.find((u) => u._id === userId);
-      return user.rolesInfo?.some((r) => r._id === selectedRole);
+      return user.roles?.some((r) => r._id === selectedRole);
     });
 
     if (usersWithRole.length === 0) {
@@ -182,7 +186,7 @@ const UserRoleManager = () => {
       try {
         const promises = usersWithRole.map(async (userId) => {
           const user = users.find((u) => u._id === userId);
-          const currentRoleIds = user.rolesInfo?.map((r) => r._id) || [];
+          const currentRoleIds = user.roles?.map((r) => r._id) || [];
           const newRoleIds = currentRoleIds.filter((id) => id !== selectedRole);
           return userApi.updateUserRoles(accessToken, userId, newRoleIds);
         });
@@ -338,8 +342,8 @@ const UserRoleManager = () => {
             </div>
 
             <div className="flex flex-wrap gap-2">
-              {user.rolesInfo && user.rolesInfo.length > 0 ? (
-                user.rolesInfo.map((role) => (
+              {user.roles && user.roles.length > 0 ? (
+                user.roles.map((role) => (
                   <span key={role._id} className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all ${
                       role.isActive ? "bg-blue-50 border-blue-100 text-blue-700" : "bg-slate-50 border-slate-200 text-slate-400 opacity-60"
                   }`}>

@@ -4,13 +4,10 @@ import Swal from "sweetalert2";
 import {
   FaUser,
   FaEnvelope,
-  FaLock,
   FaCamera,
   FaEdit,
   FaSave,
   FaTimes,
-  FaEye,
-  FaEyeSlash,
 } from "react-icons/fa";
 
 /**
@@ -19,23 +16,14 @@ import {
 export function UserProfile({ className = "" }) {
   const { user, accessToken, updateUser, loading } = useAuth();
   const [editing, setEditing] = useState(false);
-  const [showPasswords, setShowPasswords] = useState({
-    current: false,
-    new: false,
-    confirm: false,
-  });
   const [formData, setFormData] = useState({
     name: user?.name || "",
     lastname: user?.lastname || "",
     email: user?.email || "",
     telefono: user?.telefono || "",
   });
-  const [passwords, setPasswords] = useState({
-    current: "",
-    new: "",
-    confirm: "",
-  });
   const [previewAvatar, setPreviewAvatar] = useState(null);
+  const [avatarFile, setAvatarFile] = useState(null);
   const fileInputRef = useRef(null);
 
   if (loading) return <LoadingUI message="Cargando perfil..." />;
@@ -52,6 +40,11 @@ export function UserProfile({ className = "" }) {
         Swal.fire("Error", "El archivo no puede ser mayor a 5MB", "error");
         return;
       }
+      // Antes solo se guardaba la vista previa (data URL) — el archivo real
+      // nunca se enviaba, así que cambiar la foto no tenía ningún efecto al
+      // guardar. userApi.updateUser ya sabe manejar "fileAvatar" (lo agrega
+      // al FormData como "avatar"), solo faltaba conservar el File real.
+      setAvatarFile(file);
       const reader = new FileReader();
       reader.onload = (e) => setPreviewAvatar(e.target.result);
       reader.readAsDataURL(file);
@@ -60,9 +53,10 @@ export function UserProfile({ className = "" }) {
 
   const handleSave = async () => {
     try {
-      await updateUser(formData);
+      await updateUser(avatarFile ? { ...formData, fileAvatar: avatarFile } : formData);
       Swal.fire("Éxito", "Perfil actualizado correctamente", "success");
       setEditing(false);
+      setAvatarFile(null);
     } catch (error) {
       Swal.fire("Error", error.message, "error");
     }
@@ -113,7 +107,9 @@ export function UserProfile({ className = "" }) {
               className="hidden"
             />
           </div>
-          <p className="mt-3 text-sm text-slate-500 font-medium">{user?.role?.[0] || "Usuario"}</p>
+          <p className="mt-3 text-sm text-slate-500 font-medium">
+            {user?.isAdmin ? "Administrador" : (user?.roles?.[0]?.displayName || "Usuario")}
+          </p>
         </div>
 
         <div className="flex-1 grid grid-cols-1 md:grid-cols-2 gap-4">

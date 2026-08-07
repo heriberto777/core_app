@@ -7,7 +7,6 @@ import {
   FaInfoCircle,
   FaShieldAlt,
   FaHistory,
-  FaPlay,
   FaEye,
   FaTasks,
   FaEnvelope,
@@ -16,6 +15,7 @@ import {
   FaUser,
   FaCalendarCheck,
 } from "react-icons/fa";
+import { useNavigate } from "react-router-dom";
 import { useAuth, ScheduleConfigButton, Button } from "../../index";
 import { TransferTaskApi } from "../../api/index";
 
@@ -23,6 +23,7 @@ const cnnApi = new TransferTaskApi();
 
 export function ScheduleConfiguration() {
   const { accessToken } = useAuth();
+  const navigate = useNavigate();
   const [scheduleConfig, setScheduleConfig] = useState(null);
   const [loading, setLoading] = useState(true);
   const [taskStats, setTaskStats] = useState({
@@ -51,23 +52,24 @@ export function ScheduleConfiguration() {
 
   const loadTaskStats = async () => {
     try {
-      // Datos simulados - puedes conectar con API real
+      const tasks = await cnnApi.getTasks(accessToken);
+      const list = Array.isArray(tasks) ? tasks : [];
       setTaskStats({
-        total: 12,
-        automatic: 8,
-        manual: 3,
-        inactive: 1,
+        total: list.length,
+        automatic: list.filter((t) => t.type === "auto" || t.type === "both").length,
+        manual: list.filter((t) => t.type === "manual").length,
+        inactive: list.filter((t) => !t.active).length,
       });
     } catch (error) {
       console.error("Error al cargar estadísticas:", error);
     }
   };
 
-  const handleConfigSuccess = (result) => {
-    setScheduleConfig({
-      hour: result.hour,
-      enabled: result.enabled,
-    });
+  const handleConfigSuccess = () => {
+    // Recargar desde el backend en vez de confiar en el eco optimista del
+    // modal: solo el backend sabe si el cron realmente quedó activo en
+    // memoria (active/running), que es lo que el indicador de estado usa.
+    loadScheduleConfig();
   };
 
   const getNextExecutionTime = () => {
@@ -107,6 +109,10 @@ export function ScheduleConfiguration() {
   };
 
   const nextExecution = getNextExecutionTime();
+  // "SISTEMA ACTIVO" debe reflejar si el cron está realmente programado en
+  // memoria ahora mismo (active), no solo el flag "enabled" guardado en
+  // Mongo — ambos pueden divergir justo después de un reinicio del server.
+  const isSchedulerActive = scheduleConfig?.active ?? scheduleConfig?.enabled;
 
   return (
     <div className="bg-white/50 backdrop-blur-xl border border-slate-200 rounded-xl p-8 flex flex-col gap-10 shadow-sm animate-in fade-in duration-500">
@@ -137,24 +143,24 @@ export function ScheduleConfiguration() {
         <div className="flex flex-col gap-10">
           {/* Status Card */}
           <div className={`p-8 rounded-xl border-l-8 bg-white shadow-sm flex flex-col gap-6 animate-in slide-in-from-left-4 duration-500 ${
-            scheduleConfig?.enabled ? "border-emerald-500 shadow-emerald-500/5" : "border-red-500 shadow-red-500/5 opacity-80"
+            isSchedulerActive ? "border-emerald-500 shadow-emerald-500/5" : "border-red-500 shadow-red-500/5 opacity-80"
           }`}>
             <div className="flex items-center gap-6">
               <div className={`w-14 h-14 rounded-2xl flex items-center justify-center text-white text-xl shadow-lg ${
-                scheduleConfig?.enabled ? "bg-emerald-500 shadow-emerald-500/20" : "bg-red-500 shadow-red-500/20"
+                isSchedulerActive ? "bg-emerald-500 shadow-emerald-500/20" : "bg-red-500 shadow-red-500/20"
               }`}>
-                {scheduleConfig?.enabled ? <FaCheck /> : <FaTimes />}
+                {isSchedulerActive ? <FaCheck /> : <FaTimes />}
               </div>
               <div className="flex flex-col">
                 <span className="text-sm font-black text-slate-400 uppercase tracking-widest">Estado del Programador</span>
-                <span className={`text-xl font-black ${scheduleConfig?.enabled ? "text-emerald-600" : "text-red-600"}`}>
-                  {scheduleConfig?.enabled ? "SISTEMA ACTIVO" : "SISTEMA INACTIVO"}
+                <span className={`text-xl font-black ${isSchedulerActive ? "text-emerald-600" : "text-red-600"}`}>
+                  {isSchedulerActive ? "SISTEMA ACTIVO" : "SISTEMA INACTIVO"}
                 </span>
               </div>
             </div>
 
             <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-slate-50 ml-20">
-              {scheduleConfig?.enabled ? (
+              {isSchedulerActive ? (
                 <>
                   <div className="flex flex-col gap-1">
                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Hora Configurada</span>
@@ -254,42 +260,22 @@ export function ScheduleConfiguration() {
               <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3">
                 <FaHistory /> Últimas Ejecuciones
               </h3>
-              <Button variant="ghost" className="text-blue-600 font-bold text-xs uppercase tracking-widest">
+              <Button variant="ghost" className="text-blue-600 font-bold text-xs uppercase tracking-widest" onClick={() => navigate("/history")}>
                 Ver Todo el Historial
               </Button>
             </div>
 
-            <div className="overflow-x-auto">
-              <table className="w-full border-collapse">
-                <thead>
-                  <tr className="bg-slate-50/50">
-                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Fecha y Hora</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Carga</th>
-                    <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Estado</th>
-                    <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Duración</th>
-                  </tr>
-                </thead>
-                <tbody className="divide-y divide-slate-50">
-                  {[
-                    { date: "06/06/2025 02:00:15", tasks: "8 tareas", status: "success", time: "12m 34s" },
-                    { date: "05/06/2025 02:00:12", tasks: "7 tareas", status: "warning", time: "15m 22s" },
-                    { date: "04/06/2025 02:00:08", tasks: "8 tareas", status: "success", time: "11m 45s" }
-                  ].map((row, i) => (
-                    <tr key={i} className="hover:bg-slate-50/50 transition-colors group">
-                      <td className="px-6 py-4 text-sm font-bold text-slate-700">{row.date}</td>
-                      <td className="px-6 py-4 text-sm font-medium text-slate-500">{row.tasks}</td>
-                      <td className="px-6 py-4">
-                        <span className={`inline-flex px-3 py-1 rounded-full text-[10px] font-black uppercase tracking-wider ${
-                          row.status === "success" ? "bg-emerald-100 text-emerald-700" : "bg-amber-100 text-amber-700"
-                        }`}>
-                          {row.status === "success" ? "Exitoso" : "Advertencia"}
-                        </span>
-                      </td>
-                      <td className="px-6 py-4 text-right text-xs font-bold text-slate-400">{row.time}</td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
+            {/* No existe todavía un endpoint que agregue el historial de
+                ejecuciones automáticas across todas las tareas en un solo
+                resumen — mostrar filas inventadas como si fueran datos
+                reales era engañoso. El detalle real por tarea sí existe en
+                el Centro de Auditoría. */}
+            <div className="flex flex-col items-center justify-center gap-3 py-10 text-slate-400">
+              <FaHistory className="text-3xl opacity-30" />
+              <p className="text-xs font-bold text-center max-w-sm">
+                El resumen agregado de ejecuciones automáticas aún no está disponible aquí.
+                Consulta el detalle completo por tarea en el Centro de Auditoría.
+              </p>
             </div>
           </div>
 
@@ -297,16 +283,13 @@ export function ScheduleConfiguration() {
           <div className="p-8 bg-slate-50/50 border border-slate-100 rounded-xl flex flex-col gap-6">
             <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] px-2">Acciones Rápidas</h3>
             <div className="flex gap-4 flex-wrap">
-              <Button variant="primary" className="px-8 py-3 shadow-lg shadow-blue-600/20 font-bold">
-                <FaPlay className="mr-2" /> Ejecutar Ahora
-              </Button>
-              <Button variant="ghost" className="px-6 py-3 bg-white border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 shadow-sm">
+              <Button variant="ghost" className="px-6 py-3 bg-white border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 shadow-sm" onClick={() => navigate("/history")}>
                 <FaEye className="mr-2" /> Ver Logs
               </Button>
-              <Button variant="ghost" className="px-6 py-3 bg-white border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 shadow-sm">
+              <Button variant="ghost" className="px-6 py-3 bg-white border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 shadow-sm" onClick={() => navigate("/tasks")}>
                 <FaTasks className="mr-2" /> Gestionar Tareas
               </Button>
-              <Button variant="ghost" className="px-6 py-3 bg-white border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 shadow-sm">
+              <Button variant="ghost" className="px-6 py-3 bg-white border border-slate-200 text-slate-600 font-bold hover:bg-slate-50 shadow-sm" onClick={() => navigate("/configuraciones")}>
                 <FaEnvelope className="mr-2" /> Config. Email
               </Button>
             </div>

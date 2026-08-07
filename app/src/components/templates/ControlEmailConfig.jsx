@@ -1,5 +1,5 @@
 import React, { useState } from "react";
-import { FaSync, FaPlus, FaCog, FaExclamationTriangle, FaEnvelope } from "react-icons/fa";
+import { FaSync, FaPlus, FaExclamationTriangle, FaEnvelope } from "react-icons/fa";
 import { Helmet } from "react-helmet-async";
 import Swal from "sweetalert2";
 
@@ -17,8 +17,11 @@ import {
 export function ControlEmailConfig() {
   const { accessToken } = useAuth();
   const { hasPermission, isAdmin } = usePermissions();
-  const canUpdate = hasPermission("settings", "update") || isAdmin;
-  const canDelete = hasPermission("settings", "delete") || isAdmin;
+  // El backend exige checkPermission("settings","manage") para create/update/
+  // delete/toggle/default/test (ver emailConfigRoutes.js); "update"/"delete"
+  // no existen como acciones separadas ahí, así que ningún rol sin isAdmin
+  // podía usar estos botones aunque el frontend los mostrara habilitados.
+  const canManage = hasPermission("settings", "manage") || isAdmin;
 
   const [isFormOpen, setIsFormOpen] = useState(false);
   const [isTestOpen, setIsTestOpen] = useState(false);
@@ -91,24 +94,6 @@ export function ControlEmailConfig() {
     }
   };
 
-  const onInitializeDefaults = async () => {
-    const result = await Swal.fire({
-      title: "Inicializar Sistema",
-      text: "¿Deseas crear las configuraciones SMTP estándar del sistema?",
-      icon: "question",
-      showCancelButton: true
-    });
-
-    if (result.isConfirmed) {
-      try {
-        await actions.initializeDefaults();
-        Swal.fire({ title: "Listo", text: "Configuraciones inicializadas.", icon: "success", timer: 2000, showConfirmButton: false });
-      } catch (err) {
-        Swal.fire({ title: "Error", text: err.message, icon: "error" });
-      }
-    }
-  };
-
   return (
     <div className="min-h-screen bg-white dark:bg-slate-900 flex flex-col animate-fadeIn">
       <Helmet>
@@ -125,11 +110,8 @@ export function ControlEmailConfig() {
           </div>
 
           <div className="flex gap-3">
-            {canUpdate && (
-              <Button variant="outline" icon={<FaCog />} onClick={onInitializeDefaults}>Inicializar Defaults</Button>
-            )}
             <Button variant="secondary" icon={<FaSync className={refreshing ? "animate-spin" : ""} />} onClick={actions.refetch} disabled={loading}>Refrescar</Button>
-            {canUpdate && (
+            {canManage && (
               <Button variant="primary" icon={<FaPlus />} onClick={handleOpenAdd}>Agregar Cuenta</Button>
             )}
           </div>
@@ -149,10 +131,10 @@ export function ControlEmailConfig() {
         ) : (
           <EmailConfigTable
             configs={configs}
-            onEdit={canUpdate ? handleOpenEdit : undefined}
-            onDelete={canDelete ? onDeleteConfig : undefined}
-            onToggle={canUpdate ? (c) => actions.toggleStatus(c._id) : undefined}
-            onSetDefault={canUpdate ? onSetDefault : undefined}
+            onEdit={canManage ? handleOpenEdit : undefined}
+            onDelete={canManage ? onDeleteConfig : undefined}
+            onToggle={canManage ? (c) => actions.toggleStatus(c._id) : undefined}
+            onSetDefault={canManage ? onSetDefault : undefined}
             onTest={handleOpenTest}
           />
         )}
@@ -169,6 +151,7 @@ export function ControlEmailConfig() {
           isOpen={isTestOpen}
           onClose={() => setIsTestOpen(false)}
           config={selectedConfig}
+          onSendTest={actions.testConfig}
         />
       </div>
     </div>

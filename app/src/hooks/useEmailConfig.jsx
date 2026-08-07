@@ -3,25 +3,23 @@ import { EmailConfigApi } from "../api/index";
 import { useFetchData } from "./useFetchData";
 
 const emailConfigApi = new EmailConfigApi();
-const FETCH_INTERVAL = 5000;
 
 export function useEmailConfig(accessToken) {
     const fetchConfigsCallback = useCallback(async () => {
         return await emailConfigApi.getConfigs(accessToken);
     }, [accessToken]);
 
+    // useFetchData solo expone {data, loading, error, refreshing, handleRefresh,
+    // setData, fetchData} — no "refetch"/"loadingState"/"autoRefresh". Llamar a
+    // un "refetch" inexistente lanzaba TypeError tras cada mutación exitosa,
+    // haciendo que toda creación/edición/borrado pareciera fallar en la UI.
     const {
         data: configs,
         loading,
         refreshing,
-        loadingState,
         error,
-        refetch,
+        fetchData: refetch,
     } = useFetchData(fetchConfigsCallback, [accessToken], {
-        autoRefresh: true,
-        refreshInterval: FETCH_INTERVAL,
-        enableCache: true,
-        cacheTime: 60000,
         initialData: [],
     });
 
@@ -50,11 +48,6 @@ export function useEmailConfig(accessToken) {
         await refetch();
     };
 
-    const initializeDefaults = async () => {
-        await emailConfigApi.initializeDefaults(accessToken);
-        await refetch();
-    };
-
     const testConfig = async (id, testEmail) => {
         return await emailConfigApi.testConfig(accessToken, id, testEmail);
     };
@@ -63,7 +56,6 @@ export function useEmailConfig(accessToken) {
         configs,
         loading,
         refreshing,
-        loadingState,
         error,
         refetch,
         actions: {

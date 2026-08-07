@@ -15,7 +15,8 @@
     "init-user-permissions": "node scripts/updateUserPermissions.js",
     "init-user-routes": "node scripts/initializeRoutes.js",
     "setup": "node scripts/setup.js",
-    "setup-roles": "node scripts/initRoles.js"
+    "setup-roles": "node scripts/initRoles.js",
+    "ensure-config-index": "node scripts/ensureConfigSingletonIndex.js"
   },
   "keywords": [
     "nodejs",

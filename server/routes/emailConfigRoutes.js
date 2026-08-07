@@ -2,7 +2,7 @@
 const express = require("express");
 const router = express.Router();
 const { validate } = require("../middlewares/validator");
-const { createEmailConfigSchema, testEmailSchema } = require("../validators/configValidator");
+const { createEmailConfigSchema, updateEmailConfigSchema, testEmailSchema } = require("../validators/configValidator");
 const { verifyToken, checkPermission } = require("../middlewares/authMiddleware");
 const emailConfigController = require("../controllers/emailConfigController");
 
@@ -22,7 +22,7 @@ router.post(
 router.put(
   "/:id",
   checkPermission("settings", "manage"),
-  createEmailConfigSchema,
+  updateEmailConfigSchema,
   validate,
   emailConfigController.updateConfig
 );
