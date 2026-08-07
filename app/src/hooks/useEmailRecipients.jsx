@@ -5,13 +5,13 @@ import { useFetchData } from "./useFetchData";
 const cnnApi = new EmailRecipientApi();
 
 export const useEmailRecipients = (accessToken) => {
-    const FETCH_INTERVAL = 10000; // 10 segundos para control de destinatarios
-
     const fetchRecipientsCallback = useCallback(async () => {
         if (!accessToken) return [];
         return await cnnApi.getRecipients(accessToken);
     }, [accessToken]);
 
+    // useFetchData no soporta autoRefresh/refreshInterval (los ignora en
+    // silencio) — no hay un auto-refresh real detrás de esas opciones.
     const {
         data: recipients,
         loading,
@@ -19,8 +19,6 @@ export const useEmailRecipients = (accessToken) => {
         error,
         fetchData: fetchRecipients,
     } = useFetchData(fetchRecipientsCallback, [accessToken], {
-        autoRefresh: true,
-        refreshInterval: FETCH_INTERVAL,
         initialData: [],
     });
 

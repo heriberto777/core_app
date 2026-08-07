@@ -16,8 +16,14 @@ import Swal from "sweetalert2";
 export function ControlPlanilla() {
   const { accessToken } = useAuth();
   const { hasPermission, isAdmin } = usePermissions();
-  const canUpdate = hasPermission("settings", "update") || isAdmin;
-  const canDelete = hasPermission("settings", "delete") || isAdmin;
+  // El backend (emailRecipientRoutes.js) protege estas rutas con el recurso
+  // "loads", no "settings" — comprobar "settings" aquí dejaba botones
+  // visibles que el backend rechazaría (o viceversa) según los permisos
+  // reales del rol.
+  const canCreate = hasPermission("loads", "create") || isAdmin;
+  const canUpdate = hasPermission("loads", "update") || isAdmin;
+  const canDelete = hasPermission("loads", "delete") || isAdmin;
+  const canManage = hasPermission("loads", "manage") || isAdmin;
   const { showSuccess, showError, showInfo } = useNotification();
   const {
     recipients,
@@ -36,7 +42,7 @@ export function ControlPlanilla() {
       showSuccess("Destinatario agregado con éxito");
       setModalOpen(false);
     } catch (err) {
-      showError("Error al crear destinatario");
+      showError(err.message || "Error al crear destinatario");
     }
   };
 
@@ -47,7 +53,7 @@ export function ControlPlanilla() {
       setModalOpen(false);
       setEditingRecipient(null);
     } catch (err) {
-      showError("Error al actualizar destinatario");
+      showError(err.message || "Error al actualizar destinatario");
     }
   };
 
@@ -67,7 +73,7 @@ export function ControlPlanilla() {
         await actions.deleteRecipient(id);
         showSuccess("Destinatario eliminado");
       } catch (err) {
-        showError("No se pudo eliminar el registro");
+        showError(err.message || "No se pudo eliminar el registro");
       }
     }
   };
@@ -77,7 +83,7 @@ export function ControlPlanilla() {
       await actions.toggleStatus(id);
       showSuccess(`${name} ha sido ${currentStatus ? 'desactivado' : 'activado'}`);
     } catch (err) {
-      showError("Error al cambiar estado de envío");
+      showError(err.message || "Error al cambiar estado de envío");
     }
   };
 
@@ -96,7 +102,7 @@ export function ControlPlanilla() {
         await actions.initializeDefaults();
         showSuccess("Destinatarios inicializados correctamente");
       } catch (err) {
-        showError("Error al inicializar valores");
+        showError(err.message || "Error al inicializar valores");
       }
     }
   };
@@ -119,12 +125,12 @@ export function ControlPlanilla() {
             </p>
           </div>
           <div className="flex gap-3">
-            {canUpdate && (
+            {canManage && (
               <Button variant="outline" onClick={handleInitialize}>
                 <FaTools /> Inicializar Defaults
               </Button>
             )}
-            {canUpdate && (
+            {canCreate && (
               <Button variant="primary" onClick={() => { setEditingRecipient(null); setModalOpen(true); }}>
                 <FaPlus /> Agregar Destinatario
               </Button>
@@ -143,7 +149,7 @@ export function ControlPlanilla() {
             </p>
           </div>
           <div className="ml-auto">
-            <Button variant="ghost" onClick={actions.fetchRecipients} loading={refreshing}>
+            <Button variant="ghost" onClick={() => actions.fetchRecipients(true)} loading={refreshing}>
               <FaSync />
             </Button>
           </div>
@@ -154,7 +160,7 @@ export function ControlPlanilla() {
           loading={loading}
           onEdit={canUpdate ? (r) => { setEditingRecipient(r); setModalOpen(true); } : undefined}
           onDelete={canDelete ? handleDelete : undefined}
-          onToggle={canUpdate ? handleToggle : undefined}
+          onToggle={canManage ? handleToggle : undefined}
         />
 
         <RecipientFormModal

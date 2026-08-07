@@ -17,8 +17,13 @@ const emailRecipientSchema = new mongoose.Schema(
       required: true,
       trim: true,
       lowercase: true,
+      // Alineado con la validación del frontend (RecipientFormModal.jsx): el
+      // regex anterior (\w{2,3} en el TLD, sin "+") rechazaba direcciones
+      // válidas como alias+tag@dominio.com o TLDs largos (.technology), que
+      // sí pasaban la validación del formulario — el usuario recibía un 400
+      // confuso después de que el formulario ya había aceptado el correo.
       match: [
-        /^\w+([.-]?\w+)*@\w+([.-]?\w+)*(\.\w{2,3})+$/,
+        /^[^\s@]+@[^\s@]+\.[^\s@]+$/,
         "Por favor ingrese un correo válido",
       ],
     },

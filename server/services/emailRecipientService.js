@@ -155,13 +155,10 @@ const getAllRecipients = async (filter = {}) => {
  */
 const getRecipientById = async (id) => {
   try {
-    const recipient = await EmailRecipient.findById(id);
-
-    if (!recipient) {
-      throw new Error(`No se encontró destinatario con ID: ${id}`);
-    }
-
-    return recipient;
+    // El controller decide 404 vs 500 según si esto devuelve null o lanza;
+    // lanzar aquí para "no encontrado" hacía que ese caso cayera siempre al
+    // catch del controller (500) en vez del chequeo if (!recipient) (404).
+    return await EmailRecipient.findById(id);
   } catch (error) {
     logger.error(`Error al obtener destinatario por ID:`, error);
     throw error;
