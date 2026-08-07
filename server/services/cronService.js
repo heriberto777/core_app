@@ -7,6 +7,7 @@ const {
   sendTransferResultsEmail,
   sendCriticalErrorEmail,
 } = require("./emailService");
+const { notifyTransferResults, notifyCriticalError } = require("./notificationDispatcher");
 
 let task;
 let isRunning = false;
@@ -119,12 +120,17 @@ const executeAutomaticTransfers = async () => {
     if (!tasks.length) {
       logger.info("ℹ️ No hay transferencias definidas para ejecutar.");
 
-      // Enviar correo informativo
+      // Enviar notificación informativa (correo + webhook si está habilitado)
       try {
-        await sendTransferResultsEmail([], currentHour, null);
-        logger.info("📧 Correo informativo enviado (sin tareas)");
-      } catch (emailError) {
-        logger.error("📧 Error enviando correo informativo:", emailError);
+        await notifyTransferResults([], {
+          runType: "automatic",
+          scheduledHour: currentHour,
+          startTime,
+          endTime: Date.now(),
+        });
+        logger.info("📧 Notificación informativa enviada (sin tareas)");
+      } catch (notifyError) {
+        logger.error("📧 Error enviando notificación informativa:", notifyError);
       }
       return;
     }
@@ -349,28 +355,35 @@ const executeAutomaticTransfers = async () => {
     logger.info(`📦 Total registros: ${totalRecords}`);
     logger.info("===============================================");
 
-    // **ENVÍO DE CORREO - CRÍTICO**
+    // **ENVÍO DE NOTIFICACIONES (correo + webhook) - CRÍTICO**
     try {
       if (results.length > 0) {
-        await sendTransferResultsEmail(results, currentHour, null);
+        await notifyTransferResults(results, {
+          runType: "automatic",
+          scheduledHour: currentHour,
+          startTime,
+          endTime: Date.now(),
+        });
         logger.info(
-          `📧 ✅ Correo de resultados enviado para ${results.length} transferencias`
+          `📧 ✅ Notificación de resultados enviada para ${results.length} transferencias`
         );
       }
-    } catch (emailError) {
-      logger.error(`📧 ❌ ERROR enviando correo:`, emailError);
+    } catch (notifyError) {
+      logger.error(`📧 ❌ ERROR enviando notificación:`, notifyError);
 
-      // Fallback a correo de error crítico
+      // Fallback a notificación de error crítico
       try {
-        await sendCriticalErrorEmail(
-          `Error enviando correo de resultados: ${emailError.message}`,
-          currentHour,
-          `Resultados disponibles: ${successfulTasks} exitosas, ${failedTasks} fallidas`
+        await notifyCriticalError(
+          `Error enviando notificación de resultados: ${notifyError.message}`,
+          {
+            scheduledHour: currentHour,
+            additionalInfo: `Resultados disponibles: ${successfulTasks} exitosas, ${failedTasks} fallidas`,
+          }
         );
-        logger.info(`📧 Correo de error crítico enviado como fallback`);
+        logger.info(`📧 Notificación de error crítico enviada como fallback`);
       } catch (criticalError) {
         logger.error(
-          `📧 ❌ Error total enviando correo crítico:`,
+          `📧 ❌ Error total enviando notificación crítica:`,
           criticalError
         );
       }
@@ -383,11 +396,11 @@ const executeAutomaticTransfers = async () => {
 
     try {
       const errorMessage = `Error crítico durante la ejecución: ${error.message}`;
-      await sendCriticalErrorEmail(errorMessage, currentHour, error.stack);
-      logger.info(`📧 Correo de error crítico enviado`);
-    } catch (emailError) {
+      await notifyCriticalError(errorMessage, { scheduledHour: currentHour, additionalInfo: error.stack });
+      logger.info(`📧 Notificación de error crítico enviada`);
+    } catch (notifyError) {
       logger.error(
-        `❌ Error al enviar correo de notificación: ${emailError.message}`
+        `❌ Error al enviar notificación: ${notifyError.message}`
       );
     }
   } finally {

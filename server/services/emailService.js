@@ -448,7 +448,7 @@ class EmailService {
     }
   }
 
-  async sendTransferResultsEmail(results, scheduledHour, configName = null) {
+  async sendTransferResultsEmail(results, scheduledHour, configName = null, meta = null) {
     try {
       const recipients = await getRecipientEmails("transferencias");
 
@@ -461,11 +461,16 @@ class EmailService {
 
       const successResults = results.filter((r) => r.success);
       const failedResults = results.filter((r) => !r.success);
+      const isManualRun = scheduledHour === "manual" || scheduledHour === "manual_linked_group";
 
       const subject =
         failedResults.length === 0
-          ? "✅ Transferencias Automáticas Completadas con Éxito"
-          : `⚠️ Transferencias Automáticas: ${failedResults.length} errores`;
+          ? isManualRun
+            ? "✅ Tarea Ejecutada con Éxito"
+            : "✅ Transferencias Automáticas Completadas con Éxito"
+          : isManualRun
+            ? `⚠️ Tarea Ejecutada con Errores`
+            : `⚠️ Transferencias Automáticas: ${failedResults.length} errores`;
 
       const resultsWithDuplicates = results.filter(
         (result) =>
@@ -474,14 +479,29 @@ class EmailService {
           result.duplicatedRecords.length > 0
       );
 
+      // Resumen de errores consolidado: antes solo se veía el error por fila
+      // en la tabla de detalle, sin un bloque corto y fácil de leer de un vistazo.
+      const errorSummary = failedResults.map((r) => ({
+        name: r.name,
+        message: r.errorDetail || r.message || "Error desconocido",
+      }));
+
       const templateData = {
         title: subject,
         subtitle: `Resumen: ${successResults.length} exitosas, ${failedResults.length} fallidas`,
         successCount: successResults.length,
         failedCount: failedResults.length,
         scheduledHour,
+        isManualRun,
         results,
         resultsWithDuplicates,
+        errorSummary,
+        // startTime/endTime/durationLabel: antes este correo nunca decía
+        // cuándo realmente arrancó/terminó el proceso, solo la hora
+        // *programada* del cron (que no es lo mismo).
+        startTime: meta?.startTime || null,
+        endTime: meta?.endTime || null,
+        durationLabel: meta?.durationLabel || null,
         timestamp: new Date().toLocaleString(),
       };
 

@@ -196,12 +196,50 @@ class EmailTemplateService {
               <span class="summary-label">Fallidas:</span>
               <span class="{{#if failedCount}}error{{else}}success{{/if}}">{{failedCount}}</span>
             </div>
+            {{#unless isManualRun}}
             <div class="summary-item">
               <span class="summary-label">Hora programada:</span>
               <span>{{scheduledHour}}</span>
             </div>
+            {{/unless}}
+            {{#if isManualRun}}
+            <div class="summary-item">
+              <span class="summary-label">Tipo de ejecución:</span>
+              <span>Manual</span>
+            </div>
+            {{/if}}
+            {{#if startTime}}
+            <div class="summary-item">
+              <span class="summary-label">Hora de Inicio:</span>
+              <span>{{startTime}}</span>
+            </div>
+            {{/if}}
+            {{#if endTime}}
+            <div class="summary-item">
+              <span class="summary-label">Hora de Finalización:</span>
+              <span>{{endTime}}</span>
+            </div>
+            {{/if}}
+            {{#if durationLabel}}
+            <div class="summary-item">
+              <span class="summary-label">Duración Total:</span>
+              <span>{{durationLabel}}</span>
+            </div>
+            {{/if}}
           </div>
-          
+
+          {{#if errorSummary}}
+          <div class="summary" style="border-left: 4px solid #e74c3c;">
+            <h2>Resumen de Errores</h2>
+            {{#each errorSummary}}
+            <div class="summary-item">
+              <span class="summary-label">{{name}}:</span>
+              <span class="error">{{message}}</span>
+            </div>
+            {{/each}}
+          </div>
+          {{/if}}
+
           <h3>Detalle de Transferencias</h3>
           <table>
             <thead>
@@ -426,7 +464,23 @@ class EmailTemplateService {
         plainText += `RESUMEN DE TRANSFERENCIAS\n`;
         plainText += `Exitosas: ${data.successCount}\n`;
         plainText += `Fallidas: ${data.failedCount}\n`;
-        plainText += `Hora programada: ${data.scheduledHour}\n\n`;
+        if (data.isManualRun) {
+          plainText += `Tipo de ejecución: Manual\n`;
+        } else {
+          plainText += `Hora programada: ${data.scheduledHour}\n`;
+        }
+        if (data.startTime) plainText += `Hora de Inicio: ${data.startTime}\n`;
+        if (data.endTime) plainText += `Hora de Finalización: ${data.endTime}\n`;
+        if (data.durationLabel) plainText += `Duración Total: ${data.durationLabel}\n`;
+        plainText += `\n`;
+
+        if (data.errorSummary && data.errorSummary.length > 0) {
+          plainText += `RESUMEN DE ERRORES\n`;
+          data.errorSummary.forEach((e) => {
+            plainText += `- ${e.name}: ${e.message}\n`;
+          });
+          plainText += `\n`;
+        }
 
         plainText += `DETALLE DE TRANSFERENCIAS\n`;
         data.results.forEach((result) => {

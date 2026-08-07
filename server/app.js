@@ -189,6 +189,10 @@ app.use(
   `/api/${API_VERSION}/email-config`,
   require("./routes/emailConfigRoutes")
 );
+app.use(
+  `/api/${API_VERSION}/notification-config`,
+  require("./routes/notificationConfigRoutes")
+);
 app.use(`/api/${API_VERSION}/loads`, require("./routes/loadsRoutes"));
 app.use(`/api/${API_VERSION}/telemetry`, require("./routes/telemetryRoutes"));
 app.use(`/api/${API_VERSION}/customers`, require("./routes/customerRoutes"));
