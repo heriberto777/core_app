@@ -48,7 +48,16 @@ const transferTaskSchema = new mongoose.Schema(
     // Estado actual de la tarea
     status: {
       type: String,
-      enum: ["pending", "running", "completed", "error", "cancelled"],
+      // "failed" se agrega como alias de "error": decenas de sitios en
+      // transferService.js/DynamicTransferService.js/dynamicQueryService.js/
+      // ordersController.js escriben status:"failed" al marcar una tarea
+      // fallida, vía findByIdAndUpdate sin runValidators — nunca fallaban al
+      // escribirse, pero el valor quedaba fuera del enum real y solo
+      // explotaba después, al re-guardar la tarea desde una ruta que sí
+      // valida el documento completo (ej. el fix de runValidators en
+      // upsertTransferTask). Más seguro aceptar el término que ya usa la
+      // mayoría del código que renombrar cada call site a "error".
+      enum: ["pending", "running", "completed", "error", "failed", "cancelled"],
       default: "pending",
     },
 
