@@ -44,14 +44,21 @@ const updateConfig = async (req, res) => {
   try {
     const { hour, enabled } = req.body;
 
+    // Forzar hour a "02:00" cuando no viene en el body (p.ej. un toggle que
+    // solo manda {enabled}) reseteaba silenciosamente la hora ya guardada.
+    // $setOnInsert solo aplica esos defaults si el documento no existía aún.
+    const setFields = { lastModified: new Date() };
+    const setOnInsertFields = {};
+    if (hour !== undefined) setFields.hour = hour; else setOnInsertFields.hour = "02:00";
+    if (enabled !== undefined) setFields.enabled = enabled; else setOnInsertFields.enabled = true;
+
+    const updateDoc = { $set: setFields };
+    if (Object.keys(setOnInsertFields).length > 0) updateDoc.$setOnInsert = setOnInsertFields;
+
     const config = await Config.findOneAndUpdate(
       {},
-      {
-        hour: hour || "02:00",
-        enabled: enabled !== undefined ? enabled : true,
-        lastModified: new Date(),
-      },
-      { upsert: true, new: true, lean: true }
+      updateDoc,
+      { upsert: true, new: true, lean: true, runValidators: true }
     );
 
     cronService.setSchedulerEnabled(config.enabled, config.hour);

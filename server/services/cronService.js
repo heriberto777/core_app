@@ -109,7 +109,6 @@ const executeAutomaticTransfers = async () => {
   const startTime = Date.now();
   isRunning = true;
   let results = [];
-  let processedGroups = new Set(); // ← IMPORTANTE: Evitar duplicados
 
   try {
     logger.info("🔄 === INICIANDO TRANSFERENCIAS AUTOMÁTICAS ===");
