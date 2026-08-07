@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useMemo } from "react";
 import { FaTimes, FaSave, FaDatabase, FaLink, FaList, FaVial, FaQuestionCircle } from "react-icons/fa";
 import {
     Button,
@@ -90,6 +90,11 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
         }
         setActiveTab("general");
     }, [task, isOpen]);
+
+    const existingGroupNames = useMemo(() => {
+        const names = new Set(allTasks.map((t) => t.linkedGroup).filter(Boolean));
+        return Array.from(names).sort();
+    }, [allTasks]);
 
     const handleChange = (e) => {
         const { name, value, type, checked } = e?.target || {};
@@ -232,10 +237,23 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                             <SectionTitle>Grupo de Tareas Vinculadas</SectionTitle>
                             <FormGroup>
                                 <Label className="flex items-center gap-2">Nombre del Grupo <FieldHelp field="linkedGroup" /></Label>
+                                {/* Antes era texto libre sin ninguna referencia a los grupos ya
+                                    existentes — para "agregar" una tarea a un grupo había que
+                                    recordar y volver a escribir el nombre exacto, con el riesgo
+                                    de un typo silencioso creando un grupo nuevo en vez de sumarse
+                                    al existente. El datalist sugiere los nombres reales sin quitar
+                                    la posibilidad de escribir uno nuevo para crear otro grupo. */}
                                 <UIInput name="linkedGroup" value={formData.linkedGroup} onChange={handleChange}
+                                    list="linked-group-names" autoComplete="off"
                                     placeholder="Ej: Sincronizacion_Diaria_Completa" />
+                                <datalist id="linked-group-names">
+                                    {existingGroupNames.map((name) => (
+                                        <option key={name} value={name} />
+                                    ))}
+                                </datalist>
                                 <small className="text-slate-400 text-[11px]">
-                                    Las tareas con el mismo nombre de grupo se ejecutarán de forma coordinada
+                                    Las tareas con el mismo nombre de grupo se ejecutarán de forma coordinada.
+                                    {existingGroupNames.length > 0 && " Empieza a escribir para ver los grupos existentes."}
                                 </small>
                             </FormGroup>
                             <FormGroup>

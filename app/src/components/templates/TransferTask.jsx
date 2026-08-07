@@ -40,10 +40,15 @@ function ModalOverlay({ children, onClick }) {
   );
 }
 
-function ModalContent({ children, onClick, style }) {
+function ModalContent({ children, onClick, style, className = "" }) {
+  // className reemplaza el ancho por defecto en vez de sumarse a él: dos
+  // clases "max-w-*" en Tailwind compiten por orden de aparición en el CSS
+  // generado (no por orden en el atributo class), así que antes cualquier
+  // className pasado por un caller (ej. "max-w-[600px]" del modal de Tareas
+  // Vinculadas) se ignoraba en silencio y el modal quedaba siempre en 800px.
   return (
     <div
-      className="bg-white w-[90%] max-w-[800px] max-h-[90vh] rounded-xl overflow-hidden flex flex-col shadow-2xl"
+      className={`bg-white w-[90%] max-h-[90vh] rounded-xl overflow-hidden flex flex-col shadow-2xl ${className || "max-w-[800px]"}`}
       style={{ ...style, display: 'flex', flexDirection: 'column', height: '100%' }}
       onClick={e => e.stopPropagation()}
     >
@@ -444,14 +449,18 @@ export function TransferTasks() {
 
       {showGroupsManager && (
         <ModalOverlay onClick={() => setShowGroupsManager(false)}>
-          <ModalContent onClick={e => e.stopPropagation()}>
+          <ModalContent onClick={e => e.stopPropagation()} className="max-w-[1100px]">
             <ModalHeader>
               <h3 className="text-lg font-semibold mb-2">🔗 Grupos de Vinculación</h3>
               <Button variant="ghost" className="ml-2" onClick={() => setShowGroupsManager(false)}>✕</Button>
             </ModalHeader>
-            <div className="p-5">
+            {/* Antes era un <div> plano sin overflow-y-auto, y ModalContent
+                tiene overflow-hidden — cualquier grupo con muchas tareas
+                (o simplemente 2+ grupos) quedaba recortado sin forma de
+                hacer scroll para verlo completo. */}
+            <ModalBody>
               <LinkedGroupsManager accessToken={accessToken} onGroupDeleted={fetchTasks} onClose={() => setShowGroupsManager(false)} />
-            </div>
+            </ModalBody>
           </ModalContent>
         </ModalOverlay>
       )}
