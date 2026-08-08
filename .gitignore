@@ -15,6 +15,16 @@ build/              # Excluye la carpeta de construcción
 .vscode/            # Configuración de Visual Studio Code
 .idea/              # Configuración de JetBrains IDEs
 *.swp               # Archivos temporales de Vim
+*~                  # Backups de editor (vim, etc.) — server/.env~ terminó versionado por esta falta
+*.un~               # Undo-history de Vim (binario)
+*.clean-backup
+*.import-path-backup
+*.pre-cleanup-backup
+*.manager-pattern-backup
+
+# Basura de diagnóstico versionada por error en la raíz
+/logs/
+/tmp/
 
 
 server/logs/       # no cargas los logs
