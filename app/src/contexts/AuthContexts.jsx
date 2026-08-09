@@ -145,7 +145,6 @@ export function AuthProvider({ children }) {
   const login = useCallback(
     async (formData) => {
       try {
-        setLoading(true);
         setError(null);
 
         console.log("🎯 Iniciando login desde contexto...");
@@ -184,8 +183,6 @@ export function AuthProvider({ children }) {
         setError(error.message);
         // ⭐ IMPORTANTE: SIEMPRE ARROJA LA EXCEPCIÓN PARA QUE LoginForm LA MANEJE ⭐
         throw error;
-      } finally {
-        setLoading(false);
       }
     },
     [loginWithToken]
