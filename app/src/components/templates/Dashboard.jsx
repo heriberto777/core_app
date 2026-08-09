@@ -36,7 +36,7 @@ export function Dashboard() {
   const handleScheduleSuccess = () => fetchDashboardData(true);
 
   return (
-    <div className="flex flex-col min-h-screen bg-slate-50 animate-fadeIn">
+    <div className="flex flex-col min-h-dvh bg-slate-50 animate-fadeIn">
       <Helmet>
         <title>Dashboard - Sistema Core ERP</title>
       </Helmet>

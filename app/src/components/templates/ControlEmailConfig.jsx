@@ -95,7 +95,7 @@ export function ControlEmailConfig() {
   };
 
   return (
-    <div className="min-h-screen bg-white dark:bg-slate-900 flex flex-col animate-fadeIn">
+    <div className="min-h-dvh bg-white dark:bg-slate-900 flex flex-col animate-fadeIn">
       <Helmet>
         <title>Email Config - Core ERP</title>
       </Helmet>

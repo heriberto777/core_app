@@ -238,7 +238,7 @@ export function DocumentsVisualization() {
   };
 
   return (
-    <div className="flex flex-col gap-5 p-5 min-h-screen bg-gray-50 dark:bg-slate-900">
+    <div className="flex flex-col gap-5 p-5 min-h-dvh bg-gray-50 dark:bg-slate-900">
       <div className="text-center mb-5">
         <h2 className="m-0 text-3xl font-extrabold text-gray-900 dark:text-white">Centro de Gestión de Datos</h2>
         <p className="mt-1 text-gray-500 dark:text-gray-400 text-sm">Visualización y procesamiento masivo de documentos entre servidores</p>

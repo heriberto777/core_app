@@ -22,7 +22,12 @@ export function LoginForm() {
   const isError = message?.startsWith("Error:");
 
   return (
-    <div className="flex justify-center items-center min-h-screen w-screen bg-slate-50">
+    // min-h-dvh (no min-h-screen/100vh): en móvil, 100vh se mide con la
+    // barra de direcciones oculta, así que el contenedor queda más alto
+    // que el área realmente visible y el card centrado termina fuera de
+    // pantalla sin poder hacer scroll — se ve como una página en blanco.
+    // dvh sí recalcula con el viewport visible real.
+    <div className="flex justify-center items-center min-h-dvh w-full bg-slate-50">
       <Helmet>
         <title>Login - Catelli Core ERP</title>
       </Helmet>

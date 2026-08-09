@@ -31,7 +31,7 @@ export function AdminLayout({
   if (error) {
     return (
       <LayoutContext.Provider value={layoutContextValue}>
-        <div className="flex flex-col items-center justify-center min-h-screen bg-slate-50 p-8 text-center">
+        <div className="flex flex-col items-center justify-center min-h-dvh bg-slate-50 p-8 text-center">
           <div className="text-5xl mb-4">⚠️</div>
           <h2 className="text-2xl font-bold text-red-500 mb-2">Error en la aplicación</h2>
           <p className="text-slate-500 mb-6 max-w-md">{error}</p>
@@ -48,7 +48,7 @@ export function AdminLayout({
 
   return (
     <LayoutContext.Provider value={layoutContextValue}>
-      <div className="min-h-screen bg-slate-50 text-slate-900">
+      <div className="min-h-dvh bg-slate-50 text-slate-900">
         <TopNav userMenuOpen={userMenuOpen} setUserMenuOpen={setUserMenuOpen} />
 
         <main className="max-w-[1600px] mx-auto flex flex-col">

@@ -332,7 +332,7 @@ export function UniversalDocumentManager() {
     };
 
     return (
-        <div className="p-8 bg-gray-50 dark:bg-slate-900 min-h-screen animate-fadeIn">
+        <div className="p-8 bg-gray-50 dark:bg-slate-900 min-h-dvh animate-fadeIn">
             {renderContent()}
 
             <DocumentDetailsModal
