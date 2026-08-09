@@ -135,19 +135,3 @@ export const useNotification = () => {
     showInfo,
   };
 };
-
-/**
- * Hook para usar notificaciones en contexto
- * Si tienes un contexto de notificaciones global
- */
-export const useNotificationContext = () => {
-  // Si tienes un contexto de notificaciones, úsalo aquí
-  // const context = useContext(NotificationContext);
-  // if (!context) {
-  //   throw new Error('useNotificationContext must be used within NotificationProvider');
-  // }
-  // return context;
-
-  // Por ahora, usar el hook local
-  return useNotification();
-};

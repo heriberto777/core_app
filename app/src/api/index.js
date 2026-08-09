@@ -8,7 +8,6 @@ export * from "./dbConfigApi";
 export * from "./emailRecipientApi";
 export { default as moduleApi } from "./moduleApi";
 export { default as roleApi } from "./roleApi";
-export * from "./transferApi";
 export * from "./userApi";
 
 // Segmented APIs (Phase 17)

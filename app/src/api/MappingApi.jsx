@@ -178,26 +178,6 @@ export class MappingApi {
         }
     }
 
-    async updateConsecutiveConfig(accessToken, mappingId, consecutiveConfig) {
-        try {
-            const url = `${this.baseApi}/mappings/${mappingId}/consecutive`;
-            const response = await fetch(url, {
-                method: "POST",
-                headers: {
-                    "Content-Type": "application/json",
-                    Authorization: `Bearer ${accessToken}`,
-                },
-                body: JSON.stringify(consecutiveConfig),
-            });
-            const result = await response.json();
-            if (!response.ok) throw result;
-            return result;
-        } catch (error) {
-            console.error("Error al actualizar configuración de consecutivos:", error);
-            throw error;
-        }
-    }
-
     async updateEntityData(accessToken, updateData) {
         try {
             const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/update-entity-data`;

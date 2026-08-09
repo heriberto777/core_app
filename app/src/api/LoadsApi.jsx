@@ -171,66 +171,6 @@ class LoadsApi {
     }
   }
 
-  /**
-   * Obtiene historial de cargas
-   */
-  async getLoadHistory(accessToken, filters = {}) {
-    try {
-      const queryParams = new URLSearchParams();
-
-      if (filters.page) queryParams.append("page", filters.page);
-      if (filters.limit) queryParams.append("limit", filters.limit);
-      if (filters.status && filters.status !== "all")
-        queryParams.append("status", filters.status);
-      if (filters.dateFrom) queryParams.append("dateFrom", filters.dateFrom);
-      if (filters.dateTo) queryParams.append("dateTo", filters.dateTo);
-
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/history${queryParams.toString() ? `?${queryParams.toString()}` : ""
-        }`;
-
-      const response = await fetch(url, {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      });
-
-      const result = await response.json();
-      if (!response.ok) throw result;
-      return result.data || result;
-    } catch (error) {
-      console.error("Error al obtener historial:", error);
-      throw error;
-    }
-  }
-
-  /**
-   * Procesa traspaso de inventario
-   */
-  async processInventoryTransfer(accessToken, loadId, bodegaDestino) {
-    try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/inventory-transfer`;
-
-      const response = await fetch(url, {
-        method: "POST",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
-          loadId,
-          bodegaDestino,
-        }),
-      });
-
-      const result = await response.json();
-      if (!response.ok) throw result;
-      return result.data || result;
-    } catch (error) {
-      console.error("Error al procesar traspaso:", error);
-      throw error;
-    }
-  }
-
   // ========================================
   // MÉTODOS PARA GESTIÓN DE TRASPASOS (CONSOLIDADOS)
   // ========================================

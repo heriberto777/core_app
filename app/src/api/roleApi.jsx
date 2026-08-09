@@ -78,28 +78,6 @@ class RoleApi {
     }
   }
 
-  async getRoleById(accessToken, roleId) {
-    try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.ROLES}/get/${roleId}`;
-      const params = {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-      };
-
-      const response = await fetch(url, params);
-      const result = await response.json();
-
-      if (response.status !== 200) throw result;
-      return result.data || result;
-    } catch (error) {
-      console.error("❌ Error obteniendo rol:", error);
-      throw error;
-    }
-  }
-
   async createRole(accessToken, roleData) {
     try {
       console.log("📝 Creando rol:", roleData);
@@ -198,53 +176,6 @@ class RoleApi {
       return result;
     } catch (error) {
       console.error("❌ Error eliminando rol:", error);
-      throw error;
-    }
-  }
-
-  // Mejorar assignRole existente
-  async assignRole(accessToken, userId, roleId) {
-    try {
-      console.log("👤 Asignando rol individual:", { userId, roleId });
-
-      // Primero obtener roles actuales del usuario
-      const userResponse = await fetch(
-        `${this.baseApi}/${ENV.API_ROUTERS.USERS}/user/${userId}`,
-        {
-          headers: { Authorization: `Bearer ${accessToken}` },
-        }
-      );
-
-      if (!userResponse.ok) {
-        throw new Error("Error obteniendo datos del usuario");
-      }
-
-      const userData = await userResponse.json();
-      const currentRoles = userData.data?.roles?.map((r) => r._id) || [];
-
-      // Agregar nuevo rol si no lo tiene
-      const newRoles = currentRoles.includes(roleId)
-        ? currentRoles
-        : [...currentRoles, roleId];
-
-      // Actualizar roles del usuario
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.USERS}/${userId}/roles`;
-      const params = {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ roles: newRoles }),
-      };
-
-      const response = await fetch(url, params);
-      const result = await response.json();
-
-      if (response.status !== 200) throw result;
-      return result;
-    } catch (error) {
-      console.error("❌ Error asignando rol individual:", error);
       throw error;
     }
   }
@@ -388,82 +319,6 @@ class RoleApi {
     }
   }
 
-  // Obtener estadísticas de roles
-  async getRoleStats(accessToken) {
-    try {
-      console.log("📊 Obteniendo estadísticas de roles...");
-
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.ROLES}/stats`;
-      const params = {
-        method: "GET",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-      };
-
-      const response = await fetch(url, params);
-      const result = await response.json();
-
-      if (response.status !== 200) throw result;
-      return result.data || result;
-    } catch (error) {
-      console.error("❌ Error obteniendo estadísticas de roles:", error);
-      throw error;
-    }
-  }
-
-  // Asignar múltiples usuarios a un rol
-  async assignUsersToRole(accessToken, roleId, userIds) {
-    try {
-      console.log("👥 Asignando usuarios al rol:", { roleId, userIds });
-
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.ROLES}/assign-users`;
-      const params = {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ roleId, userIds }),
-      };
-
-      const response = await fetch(url, params);
-      const result = await response.json();
-
-      if (response.status !== 200) throw result;
-      return result;
-    } catch (error) {
-      console.error("❌ Error asignando usuarios al rol:", error);
-      throw error;
-    }
-  }
-
-  // Remover múltiples usuarios de un rol
-  async removeUsersFromRole(accessToken, roleId, userIds) {
-    try {
-      console.log("👥 Removiendo usuarios del rol:", { roleId, userIds });
-
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.ROLES}/remove-users`;
-      const params = {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ roleId, userIds }),
-      };
-
-      const response = await fetch(url, params);
-      const result = await response.json();
-
-      if (response.status !== 200) throw result;
-      return result;
-    } catch (error) {
-      console.error("❌ Error removiendo usuarios del rol:", error);
-      throw error;
-    }
-  }
 
   // Obtener usuarios de un rol específico
   async getUsersByRole(roleName, accessToken, options = {}) {
@@ -490,29 +345,6 @@ class RoleApi {
     }
   }
 
-  // ⭐ ACTUALIZAR PERMISOS DE MÓDULOS EN ROLES ⭐
-  async updateModulesPermissions(accessToken, roleUpdates) {
-    try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.ROLES}/update-modules-permissions`;
-      const params = {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${accessToken}`,
-        },
-        body: JSON.stringify({ roleUpdates }),
-      };
-
-      const response = await fetch(url, params);
-      const result = await response.json();
-
-      if (response.status !== 200) throw result;
-      return result.data || result;
-    } catch (error) {
-      console.error("❌ Error actualizando permisos de módulos:", error);
-      throw error;
-    }
-  }
 }
 
 export default RoleApi;
