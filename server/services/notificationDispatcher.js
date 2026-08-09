@@ -126,5 +126,4 @@ async function notifyCriticalError(errorMessage, options = {}) {
 module.exports = {
   notifyTransferResults,
   notifyCriticalError,
-  formatDuration,
 };

@@ -1,21 +1,6 @@
 const { body, param, query } = require("express-validator");
 
 /**
- * Esquemas de validación para Módulos
- */
-const createModuleSchema = [
-    body("name").trim().notEmpty().withMessage("El nombre del módulo es obligatorio").toLowerCase(),
-    body("displayName").trim().notEmpty().withMessage("El nombre a mostrar es obligatorio"),
-    body("resource").trim().notEmpty().withMessage("El recurso es obligatorio"),
-];
-
-const updateModuleSchema = [
-    param("id").isMongoId().withMessage("ID de módulo inválido"),
-    body("displayName").optional().trim().notEmpty(),
-    body("description").optional().trim(),
-];
-
-/**
  * Esquemas de validación para Mappings
  */
 const createMappingSchema = [
@@ -45,8 +30,6 @@ const processOrdersSchema = [
 ];
 
 module.exports = {
-    createModuleSchema,
-    updateModuleSchema,
     createMappingSchema,
     getDocumentsSchema,
     getOrdersSchema,

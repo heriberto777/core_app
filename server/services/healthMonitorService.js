@@ -464,55 +464,11 @@ async function performFullDiagnostic() {
   }
 }
 
-/**
- * Registrar un error en el monitor de salud
- * @param {String} type - Tipo de error ('database' o 'connection')
- * @param {Error} error - Objeto de error
- */
-function registerError(type, error) {
-  if (!["database", "connection"].includes(type)) {
-    logger.warn(`Tipo de error no reconocido: ${type}`);
-    return;
-  }
-
-  HEALTH_CONFIG.errorCounters[type]++;
-  logger.warn(
-    `Error de ${type} registrado (${HEALTH_CONFIG.errorCounters[type]}/${HEALTH_CONFIG.errorThreshold[type]}):`,
-    error.message
-  );
-
-  // Si alcanzamos el umbral, programar una comprobación inmediata
-  if (HEALTH_CONFIG.errorCounters[type] >= HEALTH_CONFIG.errorThreshold[type]) {
-    logger.warn(
-      `Umbral de errores de ${type} alcanzado, programando comprobación inmediata...`
-    );
-
-    setTimeout(async () => {
-      try {
-        if (!HEALTH_CONFIG.isChecking) {
-          HEALTH_CONFIG.isChecking = true;
-          await checkSystemHealth();
-          HEALTH_CONFIG.isChecking = false;
-        }
-      } catch (checkError) {
-        HEALTH_CONFIG.isChecking = false;
-        logger.error("Error en comprobación programada:", checkError);
-      }
-    }, 1000);
-  }
-}
-
 module.exports = {
   startHealthMonitor,
   stopHealthMonitor,
   checkSystemHealth,
   performFullDiagnostic,
-  registerError,
   attemptDatabaseRecovery,
   attemptConnectionRecovery,
-  getStatus: () => ({
-    isMonitoring: !!monitorInterval,
-    config: HEALTH_CONFIG,
-    lastCheck: new Date().toISOString(),
-  }),
 };

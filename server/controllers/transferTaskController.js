@@ -1040,50 +1040,6 @@ const getTransferSummaries = async (req, res) => {
 };
 
 /**
- * Obtiene estadísticas diarias de ejecuciones
- */
-const getDailyStats = async (req, res) => {
-  try {
-    const today = new Date();
-    today.setHours(0, 0, 0, 0);
-    const tomorrow = new Date(today);
-    tomorrow.setDate(tomorrow.getDate() + 1);
-
-    const executions = await Log.find({ 
-      timestamp: { $gte: today, $lt: tomorrow },
-      operationType: "TRANSFER",
-      "metadata.status": { $exists: true }
-    }).sort({ timestamp: -1 }).lean();
-
-    const stats = {
-      total: executions.length,
-      completed: executions.filter(e => e.metadata?.status === "completed").length,
-      failed: executions.filter(e => ["failed", "cancelled"].includes(e.metadata?.status)).length,
-    };
-
-    return res.status(200).json({
-      success: true,
-      message: "Estadísticas diarias obtenidas (vía logs)",
-      data: {
-        date: today.toISOString().split("T")[0],
-        executions: executions.map(e => ({
-          taskId: e.taskId,
-          taskName: e.mappingName,
-          date: e.timestamp,
-          status: e.metadata?.status || (e.level === "error" ? "failed" : "completed"),
-          totalRecords: e.metadata?.totalRecords || e.affectedRecords || 0,
-          executionTime: e.durationMs || 0,
-        })),
-        stats,
-      },
-    });
-  } catch (error) {
-    logger.error("Error en getDailyStats:", error);
-    return res.status(500).json({ success: false, message: "Error al obtener estadísticas", error: error.message });
-  }
-};
-
-/**
  * Obtiene datos de origen por mapping
  */
 const getSourceDataByMapping = async (req, res) => {
@@ -1154,41 +1110,6 @@ const updateEntityData = async (req, res) => {
   }
 };
 
-/**
- * Obtiene estadísticas de grupos vinculados
- */
-const getLinkedGroupStats = async (req, res) => {
-  try {
-    const stats = LinkedTasksService.getGroupExecutionStats();
-    const linkedGroups = await TransferTask.aggregate([
-      { $match: { linkedGroup: { $exists: true, $nin: [null, ""] }, active: true } },
-      {
-        $group: {
-          _id: "$linkedGroup",
-          tasks: { $push: { id: "$_id", name: "$name", executionOrder: "$linkedExecutionOrder" } },
-          count: { $sum: 1 },
-        },
-      },
-    ]).exec();
-
-    return res.status(200).json({
-      success: true,
-      message: "Estadísticas de grupos vinculados obtenidas",
-      data: {
-        activeExecutions: stats,
-        linkedGroups: linkedGroups.map(g => ({
-          groupName: g._id,
-          taskCount: g.count,
-          tasks: g.tasks.sort((a, b) => a.executionOrder - b.executionOrder),
-        })),
-      },
-    });
-  } catch (error) {
-    logger.error("Error en getLinkedGroupStats:", error);
-    return res.status(500).json({ success: false, message: "Error al obtener estadísticas", error: error.message });
-  }
-};
-
 module.exports = {
   getTransferTasks,
   getTransferTask,
@@ -1209,10 +1130,8 @@ module.exports = {
   getTransferHistory,
   checkServerStatus,
   getTransferSummaries,
-  getDailyStats,
   getSourceDataByMapping,
   updateEntityData,
   getTaskLinkingInfo,
   executeLinkedGroup,
-  getLinkedGroupStats,
 };
