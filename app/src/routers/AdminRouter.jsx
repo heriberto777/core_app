@@ -21,9 +21,11 @@ import { UserProfile } from "../components/organismos/UserProfile";
 import { UniversalDocumentManager } from "../components/templates/UniversalDocumentManager";
 
 // ⭐ COMPONENTE DE LOADING MEJORADO ⭐
+// min-h-dvh, no min-h-screen: ver nota en LoginForm.jsx sobre el bug de
+// 100vh en navegadores móviles (barra de direcciones).
 const AuthLoader = () => (
   <div
-    className="flex flex-col items-center justify-center min-h-screen gap-4 text-slate-600"
+    className="flex flex-col items-center justify-center min-h-dvh gap-4 text-slate-600"
   >
     <div className="text-6xl">🔄</div>
     <div>Cargando aplicación...</div>

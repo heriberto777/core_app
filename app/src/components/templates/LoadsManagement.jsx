@@ -136,7 +136,7 @@ export function LoadsManagement() {
   };
 
   return (
-    <div className="min-h-screen bg-slate-50/50 animate-fadeIn">
+    <div className="min-h-dvh bg-slate-50/50 animate-fadeIn">
       <Helmet>
         <title>Gestión de Despachos | Catelli Core</title>
       </Helmet>

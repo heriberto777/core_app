@@ -70,7 +70,7 @@ const UnauthorizedPage = () => {
 };
 
 const Container = () => (
-  <div className="min-h-screen flex items-center justify-center bg-white dark:bg-slate-900 p-4">
+  <div className="min-h-dvh flex items-center justify-center bg-white dark:bg-slate-900 p-4">
 </div>
 );
 
