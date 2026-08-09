@@ -70,34 +70,6 @@ export class TransferSummaryApi {
   }
 
   /**
-   * Get a transfer summary by loadId
-   */
-  async getSummaryByLoadId(accessToken, loadId) {
-    try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.SUMMARIES}/load/${loadId}`;
-
-      const params = {
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-        },
-      };
-
-      const response = await fetch(url, params);
-      const result = await response.json();
-
-      if (response.status !== 200) throw result;
-
-      return result.data || result;
-    } catch (error) {
-      console.error(
-        `Error fetching transfer summary by loadId ${loadId}:`,
-        error
-      );
-      throw error;
-    }
-  }
-
-  /**
    * Check inventory levels for possible returns
    */
   async checkInventoryForReturns(accessToken, summaryId) {

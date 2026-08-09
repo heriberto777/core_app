@@ -144,21 +144,6 @@ export class TransferTaskApi {
         }
     }
 
-    async getTaskStatus(accessToken) {
-        try {
-            const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/config/task-status`;
-            const response = await fetch(url, {
-                headers: { Authorization: `Bearer ${accessToken}` }
-            });
-            const result = await response.json();
-            if (!response.ok) throw result;
-            return result.data || result;
-        } catch (error) {
-            console.error("Error al obtener estado de tareas:", error);
-            throw error;
-        }
-    }
-
     // --- GESTIÓN DE CANCELACIÓN ---
 
     async cancelTask(accessToken, taskId, options = {}) {
@@ -215,44 +200,6 @@ export class TransferTaskApi {
         }
     }
 
-    async getActiveCancelableTasks(accessToken) {
-        try {
-            const url = `${this.baseApi}/${ENV.API_ROUTERS.CANCELLATION}/active`;
-            const response = await fetch(url, {
-                headers: { Authorization: `Bearer ${accessToken}` }
-            });
-            const result = await response.json();
-            if (!response.ok) throw result;
-            return result;
-        } catch (error) {
-            console.error("Error al obtener tareas cancelables:", error);
-            throw error;
-        }
-    }
-
-    async cancelAllTasks(accessToken, options = {}) {
-        try {
-            const url = `${this.baseApi}/${ENV.API_ROUTERS.CANCELLATION}/cancel-all`;
-            const response = await fetch(url, {
-                method: "POST",
-                headers: {
-                    Authorization: `Bearer ${accessToken}`,
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({
-                    force: options.force || false,
-                    reason: options.reason || "Cancelación masiva",
-                }),
-            });
-            const result = await response.json();
-            if (!response.ok) throw result;
-            return result;
-        } catch (error) {
-            console.error("Error al cancelar todas las tareas:", error);
-            throw error;
-        }
-    }
-
     startCancellationMonitoring(accessToken, taskId, onStatusChange) {
         if (this.statusCheckIntervals.has(taskId)) {
             clearInterval(this.statusCheckIntervals.get(taskId));
@@ -281,37 +228,6 @@ export class TransferTaskApi {
     }
 
     // --- TAREAS VINCULADAS ---
-
-    async getTaskLinkingInfo(accessToken, taskId) {
-        try {
-            const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/linking-info/${taskId}`;
-            const response = await fetch(url, {
-                headers: { Authorization: `Bearer ${accessToken}` }
-            });
-            const result = await response.json();
-            if (!response.ok) throw result;
-            return result;
-        } catch (error) {
-            console.error("Error al obtener info de vinculación:", error);
-            throw error;
-        }
-    }
-
-    async executeLinkedGroup(accessToken, taskId) {
-        try {
-            const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/execute-linked-group/${taskId}`;
-            const response = await fetch(url, {
-                method: "POST",
-                headers: { Authorization: `Bearer ${accessToken}` }
-            });
-            const result = await response.json();
-            if (!response.ok) throw result;
-            return result;
-        } catch (error) {
-            console.error("Error al ejecutar grupo vinculado:", error);
-            throw error;
-        }
-    }
 
     async getLinkedGroups(token) {
         try {
@@ -374,26 +290,6 @@ export class TransferTaskApi {
             return result.data || result;
         } catch (error) {
             console.error("Error al remover tarea del grupo:", error);
-            throw error;
-        }
-    }
-
-    async reorderGroupTasks(token, groupName, taskOrders) {
-        try {
-            const url = `${this.baseApi}/linked-groups/${encodeURIComponent(groupName)}/reorder`;
-            const response = await fetch(url, {
-                method: "PUT",
-                headers: {
-                    Authorization: `Bearer ${token}`,
-                    "Content-Type": "application/json",
-                },
-                body: JSON.stringify({ taskOrders }),
-            });
-            const result = await response.json();
-            if (!response.ok) throw result;
-            return result.data || result;
-        } catch (error) {
-            console.error("Error al reordenar tareas:", error);
             throw error;
         }
     }

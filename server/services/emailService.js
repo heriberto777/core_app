@@ -195,24 +195,6 @@ class EmailService {
   }
 
   /**
-   * Limpia el cache de transporters
-   */
-  clearTransporterCache() {
-    for (const [key, transporter] of this.transporters) {
-      try {
-        if (transporter && typeof transporter.close === "function") {
-          transporter.close();
-        }
-      } catch (error) {
-        logger.warn(`Error al cerrar transporter ${key}:`, error);
-      }
-    }
-
-    this.transporters.clear();
-    logger.debug("Cache de transporters limpiado");
-  }
-
-  /**
    * Prueba una configuración de email con reintentos
    * @param {Object} config - Configuración a probar
    * @param {string} testEmail - Email donde enviar la prueba
@@ -595,9 +577,6 @@ class EmailService {
 const emailServiceInstance = new EmailService();
 
 module.exports = {
-  sendEmail: emailServiceInstance.sendEmail.bind(emailServiceInstance),
-  sendTemplatedEmail:
-    emailServiceInstance.sendTemplatedEmail.bind(emailServiceInstance),
   sendTraspasoEmail:
     emailServiceInstance.sendTraspasoEmail.bind(emailServiceInstance),
   sendTransferResultsEmail:
@@ -606,6 +585,4 @@ module.exports = {
     emailServiceInstance.sendCriticalErrorEmail.bind(emailServiceInstance),
   testEmailConfig:
     emailServiceInstance.testEmailConfig.bind(emailServiceInstance),
-  clearTransporterCache:
-    emailServiceInstance.clearTransporterCache.bind(emailServiceInstance),
 };

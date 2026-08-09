@@ -93,47 +93,7 @@ function sendEvent(taskId, eventType, data) {
   }
 }
 
-/**
- * Envía una actualización de estado a todos los clientes SSE o a uno específico
- * @param {String} status - Estado a enviar
- * @param {String} message - Mensaje descriptivo
- * @param {String} specificTaskId - ID de tarea específica (opcional)
- */
-function broadcastStatus(status, message, specificTaskId = null) {
-  const targets = specificTaskId
-    ? [specificTaskId]
-    : Object.keys(sseConnections);
-
-  for (const taskId of targets) {
-    sendEvent(taskId, "status", {
-      status,
-      message,
-      timestamp: Date.now(),
-    });
-  }
-}
-
-/**
- * Cierra todas las conexiones SSE al apagar el servidor
- */
-function closeAllConnections() {
-  for (const taskId in sseConnections) {
-    if (sseConnections[taskId].keepAliveInterval) {
-      clearInterval(sseConnections[taskId].keepAliveInterval);
-    }
-
-    try {
-      sseConnections[taskId].res.end();
-    } catch (error) {
-      console.error(`Error al cerrar conexión SSE ${taskId}:`, error);
-    }
-  }
-}
-
 module.exports = {
   progressSseHandler,
   sendProgress,
-  sendEvent,
-  broadcastStatus,
-  closeAllConnections,
 };

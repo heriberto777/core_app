@@ -26,11 +26,7 @@ export * from "./components/meleculas/ListaMenuDesplegable";
 export * from "./components/meleculas/OrderCard";
 export * from "./components/meleculas/OrderDetailsModal";
 export * from "./components/meleculas/RefreshButton";
-export * from "./components/meleculas/ConfirmDialog";
 export * from "./components/meleculas/LogDetailModal";
-export * from "./components/meleculas/ClearLogsModal";
-export { Pagination as CustomPagination } from "./components/meleculas/Pagination";
-export * from "./components/meleculas/DateRangeInput";
 
 
 
@@ -101,14 +97,12 @@ export * from "./components/organismos/ModulesTable";
 // Organismos con default export
 export { default as ConsecutiveConfigSection } from "./components/organismos/ConsecutiveConfigSection";
 export { default as LinkedGroupsManager } from "./components/organismos/LinkedGroupsManager";
-export { default as Spinner } from "./components/organismos/Spinner";
 export { default as UserRoleManager } from "./components/organismos/UserRoleManager";
 export { default as WorkflowConfigSection } from "./components/organismos/WorkflowConfigSection";
 
 
 // Templates
 export * from "./components/templates/ConfigurationPage";
-export * from "./components/templates/ConsecutiveDashboard";
 export * from "./components/templates/ConsecutiveManager";
 export * from "./components/templates/ControlEmailConfig";
 export * from "./components/templates/ControlNotificationConfig";
@@ -124,7 +118,6 @@ export * from "./components/templates/ModuleManager";
 export * from "./components/templates/MappingEditor";
 export * from "./components/templates/MappingsList";
 export * from "./components/templates/RoleManagement";
-export * from "./components/templates/PlanillaBase";
 export * from "./components/templates/Statistics";
 export * from "./components/templates/AuditCenter";
 export * from "./components/templates/UserManagement";
@@ -134,23 +127,16 @@ export * from "./components/templates/UniversalDocumentManager";
 
 
 // Templates con default export
-export { default as DetailTableWithPromotions } from "./components/templates/DetailTableWithPromotions";
 export { default as DocumentsVisualization } from "./components/templates/DocumentsVisualization";
 export { default as PromotionConfigSection } from "./components/templates/PromotionConfigSection";
-export { default as PromotionIndicator } from "./components/templates/PromotionIndicator";
-export { default as ProtectedComponent } from "./components/templates/ProtectedComponent";
 
 // ========== HOOKS ==========
 export * from "./hooks/useAuth";
 export * from "./hooks/useFetchTask";
-export * from "./hooks/useForm";
 export * from "./hooks/useLogin";
 export * from "./hooks/usePermissions";
-export * from "./hooks/useFetchTransfers";
 export * from "./hooks/useTransferManagement";
 export * from "./hooks/useNotification";
-export * from "./hooks/usePagination";
-export * from "./hooks/useDebounce";
 export * from "./hooks/useTransferTask";
 export * from "./hooks/useLoadsTasks";
 export * from "./hooks/useMappingEditor";

@@ -25,26 +25,4 @@ export class Telemetry {
         }
     }
 
-    /**
-     * Obtiene tendencias históricas de telemetría
-     * @param {string} accessToken - Token de acceso
-     * @param {number} hours - Horas atrás para la consulta
-     * @returns {Promise<Object>}
-     */
-    async getTrends(accessToken, hours = 24) {
-        try {
-            const response = await axios.get(
-                `${ENV.BASE_PATH}/api/${ENV.API_VERSION}/telemetry/trends?hours=${hours}`,
-                {
-                    headers: {
-                        Authorization: `Bearer ${accessToken}`,
-                    },
-                }
-            );
-            return response.data;
-        } catch (error) {
-            console.error("Error fetching telemetry trends:", error);
-            throw error.response?.data || error.message;
-        }
-    }
 }

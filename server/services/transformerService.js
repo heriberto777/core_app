@@ -260,43 +260,6 @@ function transformBoolean(value, config) {
 }
 
 /**
- * Transforma un objeto completo según su configuración de campos
- * @param {Object} data - Objeto con los datos a transformar
- * @param {Array} fieldMappings - Arreglo de configuraciones de campo del mapping
- * @returns {Object} Objeto transformado
- */
-function transformDataObject(data, fieldMappings) {
-  if (!data || typeof data !== "object") {
-    return data;
-  }
-
-  if (!Array.isArray(fieldMappings) || fieldMappings.length === 0) {
-    return data;
-  }
-
-  const result = {};
-
-  for (const fieldMapping of fieldMappings) {
-    const { sourceField, targetField, transform: transformConfig } = fieldMapping;
-
-    if (!targetField) continue;
-
-    // Obtener el valor del campo origen
-    const value = sourceField ? data[sourceField] : data[targetField];
-
-    // Aplicar transformación si existe configuración
-    if (transformConfig && transformConfig.transformType) {
-      result[targetField] = transformValue(value, transformConfig);
-    } else {
-      // Si no hay transformación, usar el valor original
-      result[targetField] = value;
-    }
-  }
-
-  return result;
-}
-
-/**
  * Valida que un valor cumpla con las restricciones del campo
  * @param {*} value - Valor a validar
  * @param {Object} config - Configuración del campo
@@ -335,13 +298,7 @@ function validateField(value, config) {
 
 module.exports = {
   transformValue,
-  transformDataObject,
   validateField,
-  // Exportar funciones utilitarias para testing
   transformString,
-  transformNumber,
-  transformDate,
-  transformDatetime,
-  transformBoolean,
   formatDate,
 };

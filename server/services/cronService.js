@@ -496,13 +496,6 @@ const getNextExecutionTime = (cronExpression) => {
   }
 };
 
-// FUNCIÓN DE TESTING
-const testAutomaticExecution = async () => {
-  logger.info("🧪 === INICIANDO PRUEBA MANUAL ===");
-  await executeAutomaticTransfers();
-  logger.info("🧪 === PRUEBA COMPLETADA ===");
-};
-
 const getCronDiagnostics = () => {
   return {
     isEnabled,
@@ -529,6 +522,5 @@ module.exports = {
   setSchedulerEnabled,
   getSchedulerStatus,
   syncWithConfig,
-  testAutomaticExecution, // Para testing manual
   getCronDiagnostics,
 };

@@ -200,65 +200,6 @@ const checkPermission = (resource, action) => {
   };
 };
 
-// Fix #4 — early return guard: verifica que req.user exista antes de acceder a sus propiedades
-const requireAdmin = (req, res, next) => {
-  if (!req.user) {
-    return res.status(401).json({
-      success: false,
-      message: "No autenticado",
-    });
-  }
-  if (!req.user.isAdmin) {
-    return res.status(403).json({
-      success: false,
-      message: "Se requieren permisos de administrador",
-    });
-  }
-  next();
-};
-
-// Verificar rol específico
-const requireRole = (roleName) => {
-  return async (req, res, next) => {
-    try {
-      const user = req.user;
-
-      if (user.isAdmin) {
-        return next();
-      }
-
-      // Verificar roles legacy
-      if (user.role && user.role.includes(roleName)) {
-        return next();
-      }
-
-      // Verificar roles nuevos
-      if (user.roles && user.roles.length > 0) {
-        const userRoles = await Role.find({
-          _id: { $in: user.roles },
-          name: roleName,
-          isActive: true,
-        });
-
-        if (userRoles.length > 0) {
-          return next();
-        }
-      }
-
-      return res.status(403).json({
-        success: false,
-        message: `Se requiere el rol: ${roleName}`,
-      });
-    } catch (error) {
-      console.error("❌ Error verificando rol:", error.message);
-      return res.status(500).json({
-        success: false,
-        message: "Error verificando rol",
-      });
-    }
-  };
-};
-
 // Función helper para verificar permiso individual (agregar al inicio)
 const checkUserPermission = (user, resource, action) => {
   // Verificar en roles del usuario
@@ -341,110 +282,10 @@ const checkPermissions = (permissions, type = "AND") => {
   };
 };
 
-// Middleware específico para transferencias
-const checkTransferPermission = async (req, res, next) => {
-  try {
-    // Fix #2 — reusar req.user poblado desde verifyToken (no hacer nueva query)
-    const user = req.user;
-    const { fromUserId, toUserId } = req.body;
-
-    if (user.isAdmin === true) {
-      return next();
-    }
-
-    if (!checkUserPermission(user, "tasks", "update")) {
-      return res.status(403).json({
-        success: false,
-        message: "No tienes permisos para transferir tareas",
-      });
-    }
-
-    if (checkUserPermission(user, "tasks", "manage")) {
-      return next();
-    }
-
-    if (fromUserId && fromUserId !== String(user._id)) {
-      return res.status(403).json({
-        success: false,
-        message: "Solo puedes transferir tus propias tareas",
-      });
-    }
-
-    next();
-  } catch (error) {
-    logger.error("Error verificando permisos de transferencia:", error);
-    res.status(500).json({
-      success: false,
-      message: "Error verificando permisos",
-    });
-  }
-};
-
-// Middleware para carga de documentos
-const checkDocumentUpload = (documentType = "general") => {
-  return async (req, res, next) => {
-    try {
-      const { user_id } = req.user;
-      const user = await User.findById(user_id).populate("roles");
-
-      if (!user || !user.activo) {
-        return res.status(403).json({
-          success: false,
-          message: "Usuario no autorizado",
-        });
-      }
-
-      if (user.isAdmin === true) {
-        return next();
-      }
-
-      // Verificar permiso básico de documentos
-      if (!checkUserPermission(user, "documents", "create")) {
-        return res.status(403).json({
-          success: false,
-          message: "No tienes permisos para cargar documentos",
-        });
-      }
-
-      // Verificaciones adicionales según tipo de documento
-      switch (documentType) {
-        case "sensitive":
-          if (!checkUserPermission(user, "documents", "manage")) {
-            return res.status(403).json({
-              success: false,
-              message: "No tienes permisos para cargar documentos sensibles",
-            });
-          }
-          break;
-        case "bulk":
-          if (!checkUserPermission(user, "loads", "create")) {
-            return res.status(403).json({
-              success: false,
-              message: "No tienes permisos para cargas masivas",
-            });
-          }
-          break;
-      }
-
-      next();
-    } catch (error) {
-      console.error("Error verificando permisos de carga:", error);
-      res.status(500).json({
-        success: false,
-        message: "Error verificando permisos",
-      });
-    }
-  };
-};
-
 module.exports = {
   verifyToken,
   verifySseToken,
   checkPermission,
-  requireAdmin,
-  requireRole,
   checkPermissions, // ⭐ NUEVA
-  checkTransferPermission, // ⭐ NUEVA
-  checkDocumentUpload, // ⭐ NUEVA
   checkUserPermission, // ⭐ NUEVA (helper)
 };

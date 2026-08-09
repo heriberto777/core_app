@@ -41,27 +41,6 @@ class ModuleApi {
     }
   }
 
-  // ⭐ OBTENER MÓDULO POR ID ⭐
-  async getModuleById(accessToken, moduleId) {
-    try {
-      const url = `${this.baseApi}/${ENV.API_ROUTERS.MODULE}/${moduleId}`;
-      const response = await fetch(url, {
-        method: "GET",
-        headers: {
-          Authorization: `Bearer ${accessToken}`,
-          "Content-Type": "application/json",
-        },
-      });
-
-      const result = await response.json();
-      if (!response.ok) throw result;
-      return result.data || result;
-    } catch (error) {
-      console.error("❌ Error obteniendo módulo:", error);
-      throw error;
-    }
-  }
-
   // ⭐ CREAR MÓDULO ⭐
   async createModule(accessToken, moduleData) {
     try {

@@ -134,36 +134,6 @@ export class AuditStatsApi {
         }
     }
 
-    async getLogsSummary(accessToken) {
-        try {
-            const url = `${this.baseApi}/${ENV.API_ROUTERS.LOGS}/summary`;
-            const response = await fetch(url, {
-                headers: { Authorization: `Bearer ${accessToken}` }
-            });
-            const result = await response.json();
-            if (!response.ok) throw result;
-            return result.data || result;
-        } catch (error) {
-            console.error("Error resumen logs:", error);
-            throw error;
-        }
-    }
-
-    async getLogDetail(accessToken, logId) {
-        try {
-            const url = `${this.baseApi}/${ENV.API_ROUTERS.LOGS}/detail/${logId}`;
-            const response = await fetch(url, {
-                headers: { Authorization: `Bearer ${accessToken}` }
-            });
-            const result = await response.json();
-            if (!response.ok) throw result;
-            return result.data || result;
-        } catch (error) {
-            console.error("Error detalle log:", error);
-            throw error;
-        }
-    }
-
     async cleanOldLogs(accessToken, olderThan = 365) {
         try {
             const url = `${this.baseApi}/${ENV.API_ROUTERS.LOGS}/clean`;
@@ -184,33 +154,4 @@ export class AuditStatsApi {
         }
     }
 
-    async getLogSources(accessToken) {
-        try {
-            const url = `${this.baseApi}/${ENV.API_ROUTERS.LOGS}/sources`;
-            const response = await fetch(url, {
-                headers: { Authorization: `Bearer ${accessToken}` }
-            });
-            const result = await response.json();
-            if (!response.ok) throw result;
-            return result.data || result;
-        } catch (error) {
-            console.error("Error fuentes de logs:", error);
-            throw error;
-        }
-    }
-
-    async getLogsDiagnostic(accessToken) {
-        try {
-            const url = `${this.baseApi}/${ENV.API_ROUTERS.LOGS}/diagnostic`;
-            const response = await fetch(url, {
-                headers: { Authorization: `Bearer ${accessToken}` }
-            });
-            const result = await response.json();
-            if (!response.ok) throw result;
-            return result.data || result;
-        } catch (error) {
-            console.error("Error diagnóstico logs:", error);
-            throw error;
-        }
-    }
 }
