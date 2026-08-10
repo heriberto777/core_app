@@ -170,9 +170,14 @@ export function useDocumentsVisualization(accessToken) {
 
         if (overrideIds && overrideIds.length === 1) {
             setActionStates(prev => ({ ...prev, [overrideIds[0]]: 'processing' }));
-        } else {
-            setIsProcessing(true);
         }
+        // Antes solo se activaba para el procesamiento masivo — procesar un
+        // solo documento (botón por fila) nunca abría ProcessingStatusModal,
+        // así que el resultado real (éxito o fallo) nunca se mostraba en ese
+        // caso. El taskId que usa el modal de progreso vive en el mapeo
+        // (activeConfig.taskId), no en la ejecución puntual, así que es
+        // válido para ambos casos.
+        setIsProcessing(true);
 
         try {
             const result = await api.processDocumentsByMapping(accessToken, activeMappingId, idsToProcess);
