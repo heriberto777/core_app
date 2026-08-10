@@ -149,26 +149,25 @@ export function AdminRouter() {
         }
       />
 
+      {/* Sin `title`: LoadsManagement ya dibuja su propio header ("Despacho
+          de Cargas") — el de la ruta ("Cargas de Datos") era un texto
+          distinto mostrado a la vez, no solo una duplicación. */}
       <Route
         path="/loads/cargas"
         element={
           <ProtectedRoute resource="loads" action="read">
-            <LayoutWrapper
-              component={LoadsManagement}
-              title="Cargas de Datos"
-            />
+            <LayoutWrapper component={LoadsManagement} />
           </ProtectedRoute>
         }
       />
 
+      {/* Sin `title`: TraspasoManagement ya dibuja su propio header con el
+          mismo texto ("Gestión de Traspasos") — se mostraba duplicado. */}
       <Route
         path="/loads/transfers"
         element={
           <ProtectedRoute resource="loads" action="read">
-            <LayoutWrapper
-              component={TraspasoManagement}
-              title="Gestión de Traspasos"
-            />
+            <LayoutWrapper component={TraspasoManagement} />
           </ProtectedRoute>
         }
       />
@@ -186,14 +185,14 @@ export function AdminRouter() {
       />
 
       {/* ⭐ RUTAS DE ANÁLISIS ⭐ */}
+      {/* Sin `title`: LoadsResumen ya dibuja su propio header ("Auditoría de
+          Traspasos") — el de la ruta ("Resúmenes y Reportes") era un texto
+          distinto mostrado a la vez, no solo una duplicación. */}
       <Route
         path="/summaries"
         element={
           <ProtectedRoute resource="reports" action="read">
-            <LayoutWrapper
-              component={LoadsResumen}
-              title="Resúmenes y Reportes"
-            />
+            <LayoutWrapper component={LoadsResumen} />
           </ProtectedRoute>
         }
       />
