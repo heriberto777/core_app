@@ -391,7 +391,10 @@ class DynamicTransferService {
       }
 
       const finalResultWithChained = {
-        success: true,
+        // Antes quedaba hardcodeado en true sin importar hasErrors/failed —
+        // cualquier consumidor que solo mirara este campo (en vez de
+        // status/failed) veía éxito aunque hubieran fallado documentos.
+        success: !hasErrors,
         transactionId,
         useCentralizedConsecutives,
         centralizedConsecutiveId,

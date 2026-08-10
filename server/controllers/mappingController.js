@@ -465,7 +465,11 @@ const processDocumentsWithPromotions = async (req, res) => {
     const result = await DynamicTransferService.processDocuments(documentIds, mappingId);
 
     res.json({
-      success: true,
+      // Antes quedaba hardcodeado en true sin importar result.failed, pese a
+      // que el mensaje de al lado sí distinguía "con errores" — cualquier
+      // consumidor que solo mirara `success` (patrón {success,message,data}
+      // estándar del backend) veía éxito aunque hubieran fallado documentos.
+      success: result.failed === 0,
       message: result.failed > 0 ? `Procesamiento completado con errores` : "Procesamiento exitoso",
       data: result,
     });

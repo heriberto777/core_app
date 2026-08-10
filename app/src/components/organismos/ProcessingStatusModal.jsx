@@ -24,7 +24,11 @@ export function ProcessingStatusModal({ isOpen, taskId, accessToken, mappingName
                         if (task.currentStep) setCurrentStep(task.currentStep);
                         setStatus(task.status);
                         
-                        if (task.status === "completed" || task.status === "failed") {
+                        // DynamicTransferService.js solo persiste "error" cuando hay
+                        // fallos (nunca "failed", aunque el modelo lo soporte) — sin
+                        // este caso el polling nunca termina y ProcessingResultsModal
+                        // no llega a abrirse cuando el procesamiento falla.
+                        if (task.status === "completed" || task.status === "failed" || task.status === "error") {
                             clearInterval(interval);
                             if (onFinished && task.lastProcessingResult) {
                                 setTimeout(() => onFinished(task.lastProcessingResult), 500);
