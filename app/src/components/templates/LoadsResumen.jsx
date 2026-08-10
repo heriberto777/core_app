@@ -135,22 +135,22 @@ export function LoadsResumen() {
               refreshing={refreshing}
             />
 
-            <div className="flex justify-between items-center p-5 bg-white dark:bg-slate-800 rounded-2xl border border-gray-200/40 dark:border-slate-700/40">
+            <div className="flex flex-col sm:flex-row justify-between items-center gap-4 p-5 bg-white dark:bg-slate-800 rounded-2xl border border-gray-200/40 dark:border-slate-700/40">
               <div className="text-xs text-gray-500 dark:text-gray-400">
                 Página <strong>{pagination.currentPage}</strong> de <strong>{pagination.totalPages}</strong>
               </div>
-              <div className="flex gap-3">
+              <div className="flex gap-3 w-full sm:w-auto">
                 <button
                   disabled={pagination.currentPage === 1}
                   onClick={() => pagination.handlePageChange(pagination.currentPage - 1)}
-                  className="flex items-center gap-2 px-5 py-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/10 text-xs font-extrabold cursor-pointer transition-all hover:bg-blue-500 hover:text-white hover:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-50 disabled:hover:text-inherit disabled:hover:border-inherit"
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/10 text-xs font-extrabold cursor-pointer transition-all hover:bg-blue-500 hover:text-white hover:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-50 disabled:hover:text-inherit disabled:hover:border-inherit"
                 >
                   <FaChevronLeft /> Anterior
                 </button>
                 <button
                   disabled={pagination.currentPage === pagination.totalPages}
                   onClick={() => pagination.handlePageChange(pagination.currentPage + 1)}
-                  className="flex items-center gap-2 px-5 py-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/10 text-xs font-extrabold cursor-pointer transition-all hover:bg-blue-500 hover:text-white hover:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-50 disabled:hover:text-inherit disabled:hover:border-inherit"
+                  className="flex-1 sm:flex-none flex items-center justify-center gap-2 px-5 py-2 rounded-xl border border-gray-200 dark:border-slate-700 bg-gray-50 dark:bg-slate-800/10 text-xs font-extrabold cursor-pointer transition-all hover:bg-blue-500 hover:text-white hover:border-blue-500 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-gray-50 disabled:hover:text-inherit disabled:hover:border-inherit"
                 >
                   Siguiente <FaChevronRight />
                 </button>
