@@ -273,9 +273,12 @@ export function AdminRouter() {
       />
 
       {/* ⭐ PERFIL DE USUARIO - ACCESO UNIVERSAL ⭐ */}
+      {/* Sin `title`: UserProfile ya dibuja su propio header ("Perfil de
+          Usuario") — el de la ruta era un texto distinto ("Mi Perfil")
+          mostrado a la vez. */}
       <Route
         path="/perfil"
-        element={<LayoutWrapper component={UserProfile} title="Mi Perfil" />}
+        element={<LayoutWrapper component={UserProfile} />}
       />
 
       {/* ⭐ RUTA CATCH-ALL ⭐ */}
