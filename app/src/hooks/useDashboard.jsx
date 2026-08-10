@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback } from "react";
 import { TransferTaskApi, AuditStatsApi } from "../api/index";
+import { nextOccurrenceInZone } from "../utils/index";
 
 const taskApi = new TransferTaskApi();
 const auditApi = new AuditStatsApi();
@@ -20,6 +21,7 @@ export function useDashboard(accessToken) {
     const [lastTransfers, setLastTransfers] = useState([]);
     const [nextScheduled, setNextScheduled] = useState(null);
     const [executionTime, setExecutionTime] = useState("02:00");
+    const [scheduleTimezone, setScheduleTimezone] = useState("America/Santo_Domingo");
 
     const [loading, setLoading] = useState(true);
     const [refreshing, setRefreshing] = useState(false);
@@ -67,16 +69,18 @@ export function useDashboard(accessToken) {
             // 3. Process Schedule
             if (schedule.status === "fulfilled" && schedule.value?.hour) {
                 setExecutionTime(schedule.value.hour);
+                const timezone = schedule.value.timezone || "America/Santo_Domingo";
+                setScheduleTimezone(timezone);
                 // "hour" casi siempre existe aunque el scheduler esté desactivado
                 // (el documento Config guarda la última hora configurada); sin
                 // comprobar "enabled" el panel del Dashboard mostraba una cuenta
                 // regresiva de "próxima ejecución" con el planificador apagado.
                 if (schedule.value.enabled) {
                     const [hour, minute] = schedule.value.hour.split(":");
-                    const nextRun = new Date();
-                    nextRun.setHours(Number(hour), Number(minute), 0, 0);
-                    if (nextRun < new Date()) nextRun.setDate(nextRun.getDate() + 1);
-                    setNextScheduled(nextRun);
+                    // Antes usaba new Date().setHours(...), que interpreta la hora
+                    // en la zona horaria del navegador — no necesariamente la misma
+                    // zona en la que realmente se programa la ejecución automática.
+                    setNextScheduled(nextOccurrenceInZone(Number(hour), Number(minute), timezone));
                 } else {
                     setNextScheduled(null);
                 }
@@ -120,6 +124,7 @@ export function useDashboard(accessToken) {
         lastTransfers,
         nextScheduled,
         executionTime,
+        scheduleTimezone,
         loading,
         refreshing,
         error,

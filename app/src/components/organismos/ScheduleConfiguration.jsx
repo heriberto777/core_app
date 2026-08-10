@@ -18,6 +18,7 @@ import {
 import { useNavigate } from "react-router-dom";
 import { useAuth, ScheduleConfigButton, Button } from "../../index";
 import { TransferTaskApi } from "../../api/index";
+import { nextOccurrenceInZone, SCHEDULE_TIMEZONE_OPTIONS } from "../../utils/index";
 
 const cnnApi = new TransferTaskApi();
 
@@ -78,22 +79,22 @@ export function ScheduleConfiguration() {
     }
 
     const [hours, minutes] = scheduleConfig.hour.split(":").map(Number);
-    const nextRun = new Date();
-    nextRun.setHours(hours, minutes, 0, 0);
+    const timezone = scheduleConfig.timezone || "America/Santo_Domingo";
+    // Antes usaba new Date().setHours(...), que interpreta la hora en la
+    // zona horaria del navegador — no necesariamente la zona configurada.
+    const nextRun = nextOccurrenceInZone(hours, minutes, timezone);
 
-    if (nextRun < new Date()) {
-      nextRun.setDate(nextRun.getDate() + 1);
-    }
-
-    const timeString = nextRun.toLocaleTimeString([], {
+    const timeString = nextRun.toLocaleTimeString("es-DO", {
       hour: "2-digit",
       minute: "2-digit",
+      timeZone: timezone,
     });
 
-    const dateString = nextRun.toLocaleDateString([], {
+    const dateString = nextRun.toLocaleDateString("es-DO", {
       weekday: "long",
       day: "numeric",
       month: "long",
+      timeZone: timezone,
     });
 
     const timeUntil = Math.ceil((nextRun - new Date()) / (1000 * 60 * 60));
@@ -164,7 +165,11 @@ export function ScheduleConfiguration() {
                 <>
                   <div className="flex flex-col gap-1">
                     <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Hora Configurada</span>
-                    <span className="text-sm font-black text-slate-900 bg-slate-50 px-3 py-1 rounded-lg w-fit">{scheduleConfig.hour}</span>
+                    <span className="text-sm font-black text-slate-900 bg-slate-50 px-3 py-1 rounded-lg w-fit">
+                      {scheduleConfig.hour}
+                      {" · "}
+                      {SCHEDULE_TIMEZONE_OPTIONS.find((tz) => tz.value === scheduleConfig.timezone)?.label || scheduleConfig.timezone || "America/Santo_Domingo"}
+                    </span>
                   </div>
                   {typeof nextExecution === "object" && (
                     <>

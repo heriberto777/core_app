@@ -2,7 +2,7 @@ import React from "react";
 import { FaCalendarAlt, FaClock } from "react-icons/fa";
 import { ScheduleConfigButton } from "../../index";
 
-export function SchedulerPanel({ nextRun, onConfigSuccess, loading }) {
+export function SchedulerPanel({ nextRun, timezone, onConfigSuccess, loading }) {
     return (
         <div className="bg-white rounded-xl p-8 border border-slate-100 shadow-sm flex flex-col gap-8 flex-1 animate-in fade-in duration-700 group/card">
             {/* Header */}
@@ -19,10 +19,13 @@ export function SchedulerPanel({ nextRun, onConfigSuccess, loading }) {
 
                 <div className="flex flex-col items-center relative z-10">
                     <div className="text-5xl font-black text-indigo-600 tracking-tighter group-hover/card:scale-110 transition-transform duration-500">
-                        {nextRun ? nextRun.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit' }) : "--:--"}
+                        {/* Sin timeZone explícito, el navegador formatea nextRun (un
+                            instante absoluto correcto) en SU propia zona horaria local,
+                            que puede no coincidir con la zona configurada del negocio. */}
+                        {nextRun ? nextRun.toLocaleTimeString("es-DO", { hour: '2-digit', minute: '2-digit', timeZone: timezone }) : "--:--"}
                     </div>
                     <div className="text-sm font-black text-slate-900 uppercase tracking-widest mt-2 px-6 py-2 bg-white rounded-full shadow-sm border border-slate-100 group-hover/card:border-indigo-200 transition-colors">
-                        {nextRun ? nextRun.toLocaleDateString([], { weekday: 'long', day: 'numeric', month: 'long' }) : "Sin programación activa"}
+                        {nextRun ? nextRun.toLocaleDateString("es-DO", { weekday: 'long', day: 'numeric', month: 'long', timeZone: timezone }) : "Sin programación activa"}
                     </div>
                 </div>
 

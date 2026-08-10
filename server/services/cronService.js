@@ -1,6 +1,7 @@
 // services/cronService.js - Versión COMPLETAMENTE corregida
 const cron = require("node-cron");
 const logger = require("./logger");
+const { nextOccurrenceInZone } = require("../utils/timezoneUtils");
 
 // IMPORTACIÓN CORREGIDA - Usar destructuring
 const {
@@ -17,10 +18,14 @@ let task = null;
 let isRunning = false;
 let isEnabled = false;
 let currentHour = "02:00";
+// Antes estaba hardcodeada como literal "America/Santo_Domingo" en el
+// cron.schedule de abajo y no se podía ajustar sin tocar código — ahora
+// viene de Config.timezone (ver transferTaskController.js/syncWithConfig).
+let currentTimezone = "America/Santo_Domingo";
 let transferService;
 let LinkedTasksService;
 
-const startCronJob = (hour) => {
+const startCronJob = (hour, timezone) => {
   // Importaciones diferidas
   if (!transferService) {
     transferService = require("./transferService");
@@ -53,6 +58,7 @@ const startCronJob = (hour) => {
   }
 
   currentHour = hour;
+  if (timezone) currentTimezone = timezone;
   const [hh, mm] = hour.split(":");
   const cronExpression = `${mm} ${hh} * * *`;
 
@@ -87,14 +93,14 @@ const startCronJob = (hour) => {
       },
       {
         scheduled: true,
-        timezone: "America/Santo_Domingo",
+        timezone: currentTimezone,
       }
     );
 
     task.start();
-    logger.info(`✅ Cron job iniciado para las ${hour}`);
+    logger.info(`✅ Cron job iniciado para las ${hour} (${currentTimezone})`);
 
-    return { enabled: isEnabled, active: true, hour: currentHour };
+    return { enabled: isEnabled, active: true, hour: currentHour, timezone: currentTimezone };
   } catch (cronError) {
     logger.error("❌ Error al crear cron job:", cronError);
     return {
@@ -128,6 +134,7 @@ const executeAutomaticTransfers = async () => {
         await notifyTransferResults([], {
           runType: "automatic",
           scheduledHour: currentHour,
+          timezone: currentTimezone,
           startTime,
           endTime: Date.now(),
         });
@@ -364,6 +371,7 @@ const executeAutomaticTransfers = async () => {
         await notifyTransferResults(results, {
           runType: "automatic",
           scheduledHour: currentHour,
+          timezone: currentTimezone,
           startTime,
           endTime: Date.now(),
         });
@@ -380,6 +388,7 @@ const executeAutomaticTransfers = async () => {
           `Error enviando notificación de resultados: ${notifyError.message}`,
           {
             scheduledHour: currentHour,
+            timezone: currentTimezone,
             additionalInfo: `Resultados disponibles: ${successfulTasks} exitosas, ${failedTasks} fallidas`,
           }
         );
@@ -399,7 +408,7 @@ const executeAutomaticTransfers = async () => {
 
     try {
       const errorMessage = `Error crítico durante la ejecución: ${error.message}`;
-      await notifyCriticalError(errorMessage, { scheduledHour: currentHour, additionalInfo: error.stack });
+      await notifyCriticalError(errorMessage, { scheduledHour: currentHour, timezone: currentTimezone, additionalInfo: error.stack });
       logger.info(`📧 Notificación de error crítico enviada`);
     } catch (notifyError) {
       logger.error(
@@ -425,36 +434,35 @@ const stopCronJob = () => {
   return false;
 };
 
-const setSchedulerEnabled = (enabled, hour = "02:00") => {
+const setSchedulerEnabled = (enabled, hour = "02:00", timezone) => {
   isEnabled = enabled;
   if (hour && hour !== currentHour) {
     currentHour = hour;
   }
+  if (timezone) currentTimezone = timezone;
 
   logger.info(
     `🔧 Configurando planificador: ${enabled ? "HABILITADO" : "DESHABILITADO"
-    } a las ${currentHour}`
+    } a las ${currentHour} (${currentTimezone})`
   );
 
   if (enabled) {
-    return startCronJob(currentHour);
+    return startCronJob(currentHour, currentTimezone);
   } else {
     stopCronJob();
-    return { enabled: false, active: false, hour: currentHour };
+    return { enabled: false, active: false, hour: currentHour, timezone: currentTimezone };
   }
 };
 
 const getSchedulerStatus = () => {
+  const [hour, minute] = currentHour.split(":").map(Number);
   const status = {
     enabled: isEnabled,
     active: task !== null,
     running: isRunning,
     hour: currentHour,
-    nextExecution: task
-      ? getNextExecutionTime(
-        `${currentHour.split(":")[1]} ${currentHour.split(":")[0]} * * *`
-      )
-      : null,
+    timezone: currentTimezone,
+    nextExecution: task ? getNextExecutionTime(hour, minute) : null,
   };
 
   logger.debug("📊 Estado del planificador:", status);
@@ -466,30 +474,20 @@ const syncWithConfig = (config) => {
     return getSchedulerStatus();
   }
   logger.info("🔄 Sincronizando con configuración:", config);
-  return setSchedulerEnabled(config.enabled, config.hour);
+  return setSchedulerEnabled(config.enabled, config.hour, config.timezone);
 };
 
-const getNextExecutionTime = (cronExpression) => {
+// Antes calculaba "próxima ejecución" con setHours/setMinutes sobre la hora
+// del contenedor (típicamente UTC, sin TZ configurada) — coincidía con la
+// hora real solo si el contenedor corriera justo en currentTimezone. Ahora
+// usa currentTimezone explícitamente, igual que el cron real programado más
+// arriba con node-cron.
+const getNextExecutionTime = (hour, minute) => {
   try {
-    if (!cronExpression) return null;
-
-    const parts = cronExpression.split(" ");
-    if (parts.length !== 5) return null;
-
-    const [minute, hour] = parts;
-    const now = new Date();
-    const nextRun = new Date();
-
-    nextRun.setHours(parseInt(hour, 10));
-    nextRun.setMinutes(parseInt(minute, 10));
-    nextRun.setSeconds(0);
-    nextRun.setMilliseconds(0);
-
-    if (nextRun <= now) {
-      nextRun.setDate(nextRun.getDate() + 1);
+    if (hour === undefined || minute === undefined || Number.isNaN(hour) || Number.isNaN(minute)) {
+      return null;
     }
-
-    return nextRun;
+    return nextOccurrenceInZone(hour, minute, currentTimezone);
   } catch (error) {
     logger.error(`❌ Error calculando próxima ejecución: ${error.message}`);
     return null;
@@ -497,17 +495,15 @@ const getNextExecutionTime = (cronExpression) => {
 };
 
 const getCronDiagnostics = () => {
+  const [hour, minute] = currentHour.split(":").map(Number);
   return {
     isEnabled,
     isRunning,
     currentHour,
+    currentTimezone,
     taskExists: task !== null,
     taskActive: task ? !task.destroyed : false,
-    nextExecution: task
-      ? getNextExecutionTime(
-        `${currentHour.split(":")[1]} ${currentHour.split(":")[0]} * * *`
-      )
-      : null,
+    nextExecution: task ? getNextExecutionTime(hour, minute) : null,
     transferServiceLoaded: !!transferService,
     linkedTasksServiceLoaded: !!LinkedTasksService,
     emailFunctionsLoaded: !!(

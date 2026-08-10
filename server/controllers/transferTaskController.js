@@ -1,5 +1,6 @@
 const TransferTask = require("../models/transferTaskModel");
 const Log = require("../models/loggerModel");
+const { assertValidTimeZone } = require("../utils/timezoneUtils");
 const {
   executeTransferManual,
   insertInBatchesSSE,
@@ -334,10 +335,11 @@ const executeTransferTask = async (req, res) => {
     if (!result) {
       // Antes esto retornaba sin notificar nada — el usuario nunca se
       // enteraba de que una ejecución manual no produjo ningún resultado.
-      setImmediate(() => {
+      setImmediate(async () => {
+        const config = await Config.findOne().lean();
         notifyTransferResults(
           [{ name: task.name, success: false, errorDetail: "No se obtuvo resultado de la ejecución" }],
-          { runType: "manual", scheduledHour: "manual", startTime: taskStartTime, endTime: Date.now() }
+          { runType: "manual", scheduledHour: "manual", timezone: config?.timezone, startTime: taskStartTime, endTime: Date.now() }
         ).catch((notifyError) => logger.error(`Error enviando notificación de tarea sin resultado: ${notifyError.message}`));
       });
       return res.status(500).json({ success: false, message: "Error: No se obtuvo resultado de la ejecución" });
@@ -349,6 +351,7 @@ const executeTransferTask = async (req, res) => {
     setImmediate(async () => {
       try {
         const scheduledHourLabel = isLinkedGroup ? "manual_linked_group" : "manual";
+        const config = await Config.findOne().lean();
         let emailData;
 
         if (isLinkedGroup && result.linkedTasksResults) {
@@ -378,6 +381,7 @@ const executeTransferTask = async (req, res) => {
         await notifyTransferResults(emailData, {
           runType: "manual",
           scheduledHour: scheduledHourLabel,
+          timezone: config?.timezone,
           startTime: taskStartTime,
           endTime: Date.now(),
         });
@@ -477,7 +481,7 @@ const deleteTransferTask = async (req, res) => {
 const getConfigurarHora = async (req, res) => {
   try {
     const config = await Config.findOne().lean();
-    const baseData = config || { hour: "02:00", enabled: true };
+    const baseData = config || { hour: "02:00", enabled: true, timezone: "America/Santo_Domingo" };
     // enabled solo refleja el documento guardado en Mongo; el frontend
     // (indicador "SISTEMA ACTIVO") necesita saber si el cron realmente está
     // programado en memoria ahora mismo (active) para no mostrar "activo"
@@ -502,11 +506,19 @@ const getConfigurarHora = async (req, res) => {
  */
 const updateConfig = async (req, res) => {
   try {
-    const { hour, enabled } = req.body;
+    const { hour, enabled, timezone } = req.body;
     const userId = req.user?.user_id || req.user?._id || "SYSTEM";
 
     if (hour && !/^([01]\d|2[0-3]):([0-5]\d)$/.test(hour)) {
       return res.status(400).json({ success: false, message: "Formato de hora inválido (HH:MM)" });
+    }
+
+    if (timezone) {
+      try {
+        assertValidTimeZone(timezone);
+      } catch (tzError) {
+        return res.status(400).json({ success: false, message: `Zona horaria inválida: ${timezone}` });
+      }
     }
 
     // Solo tocar los campos realmente enviados, para no resetear la hora
@@ -515,6 +527,7 @@ const updateConfig = async (req, res) => {
     const setOnInsertFields = { singleton: "singleton" };
     if (hour !== undefined) setFields.hour = hour; else setOnInsertFields.hour = "02:00";
     if (enabled !== undefined) setFields.enabled = enabled; else setOnInsertFields.enabled = true;
+    if (timezone !== undefined) setFields.timezone = timezone; else setOnInsertFields.timezone = "America/Santo_Domingo";
 
     // Filtrar por el campo "singleton" (con índice único) en vez de {} para
     // que el upsert sea realmente atómico frente a escrituras concurrentes
@@ -525,13 +538,13 @@ const updateConfig = async (req, res) => {
       { upsert: true, new: true, runValidators: true }
     );
 
-    logger.info(`Configuración de cron actualizada: ${config.hour} (Enabled: ${config.enabled}) por ${userId}`);
+    logger.info(`Configuración de cron actualizada: ${config.hour} (${config.timezone}, Enabled: ${config.enabled}) por ${userId}`);
 
     // setSchedulerEnabled es la única función que realmente pone en true la
     // variable de módulo `isEnabled` de cronService; llamar a startCronJob
     // directamente (como antes) nunca activaba el cron porque ese chequeo
     // interno seguía en false para siempre.
-    setSchedulerEnabled(config.enabled, config.hour);
+    setSchedulerEnabled(config.enabled, config.hour, config.timezone);
 
     return res.status(200).json({ success: true, message: "Configuración actualizada correctamente", data: config });
   } catch (error) {

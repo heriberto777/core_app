@@ -430,7 +430,7 @@ class EmailService {
     }
   }
 
-  async sendTransferResultsEmail(results, scheduledHour, configName = null, meta = null) {
+  async sendTransferResultsEmail(results, scheduledHour, configName = null, meta = null, timezone = "America/Santo_Domingo") {
     try {
       const recipients = await getRecipientEmails("transferencias");
 
@@ -484,7 +484,7 @@ class EmailService {
         startTime: meta?.startTime || null,
         endTime: meta?.endTime || null,
         durationLabel: meta?.durationLabel || null,
-        timestamp: new Date().toLocaleString(),
+        timestamp: new Date().toLocaleString("es-DO", { timeZone: timezone }),
       };
 
       if (resultsWithDuplicates.length > 0) {
@@ -518,7 +518,8 @@ class EmailService {
     errorMessage,
     scheduledHour = null,
     additionalInfo = null,
-    configName = null
+    configName = null,
+    timezone = "America/Santo_Domingo"
   ) {
     try {
       const recipients = await getRecipientEmails("erroresCriticos");
@@ -537,7 +538,7 @@ class EmailService {
         errorMessage,
         scheduledHour,
         additionalInfo,
-        timestamp: new Date().toLocaleString(),
+        timestamp: new Date().toLocaleString("es-DO", { timeZone: timezone }),
       };
 
       return await this.sendTemplatedEmail(
@@ -553,7 +554,7 @@ class EmailService {
 
       try {
         const recipients = await getRecipientEmails("erroresCriticos");
-        const simpleText = `ERROR CRÍTICO: ${errorMessage}\n\nFecha y hora: ${new Date().toLocaleString()}`;
+        const simpleText = `ERROR CRÍTICO: ${errorMessage}\n\nFecha y hora: ${new Date().toLocaleString("es-DO", { timeZone: timezone })}`;
         return await this.sendEmail(
           recipients,
           subject,

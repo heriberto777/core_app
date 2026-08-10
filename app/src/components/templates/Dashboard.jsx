@@ -26,6 +26,7 @@ export function Dashboard() {
     serverStatus,
     lastTransfers,
     nextScheduled,
+    scheduleTimezone,
     loading,
     refreshing,
     error,
@@ -86,6 +87,7 @@ export function Dashboard() {
               <div className="xl:col-span-1">
                 <SchedulerPanel
                   nextRun={nextScheduled}
+                  timezone={scheduleTimezone}
                   onConfigSuccess={handleScheduleSuccess}
                   loading={loading}
                 />

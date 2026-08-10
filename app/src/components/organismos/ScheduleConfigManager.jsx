@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { useAuth } from "../../index";
 import { TransferTaskApi } from "../../api/index";
+import { nextOccurrenceInZone, SCHEDULE_TIMEZONE_OPTIONS } from "../../utils/index";
 import Swal from "sweetalert2";
 import { FaCog, FaPlay, FaPause, FaClock, FaInfoCircle, FaCalendarAlt } from "react-icons/fa";
 
@@ -30,10 +31,11 @@ export function ScheduleConfigButton({ disabled = false, onSuccess }) {
       const response = await cnnApi.getSchuledTime(accessToken);
       const currentHour = response?.hour || "02:00";
       const currentEnabled = response?.enabled !== false;
-      showConfigModal(currentHour, currentEnabled, accessToken, onSuccess);
+      const currentTimezone = response?.timezone || "America/Santo_Domingo";
+      showConfigModal(currentHour, currentEnabled, currentTimezone, accessToken, onSuccess);
     } catch (error) {
       console.error("Error fetching schedule config:", error);
-      showConfigModal("02:00", true, accessToken, onSuccess);
+      showConfigModal("02:00", true, "America/Santo_Domingo", accessToken, onSuccess);
     } finally {
       setLoading(false);
     }
@@ -53,25 +55,27 @@ export function ScheduleConfigButton({ disabled = false, onSuccess }) {
 export function openScheduleConfigModal(accessToken, onSuccess) {
   if (!accessToken) return;
   cnnApi.getSchuledTime(accessToken).then((response) => {
-    showConfigModal(response?.hour || "02:00", response?.enabled !== false, accessToken, onSuccess);
+    showConfigModal(response?.hour || "02:00", response?.enabled !== false, response?.timezone || "America/Santo_Domingo", accessToken, onSuccess);
   }).catch(() => {
-    showConfigModal("02:00", true, accessToken, onSuccess);
+    showConfigModal("02:00", true, "America/Santo_Domingo", accessToken, onSuccess);
   });
 }
 
-function showConfigModal(initialTime, initialEnabled, accessToken, onSuccess) {
+function showConfigModal(initialTime, initialEnabled, initialTimezone, accessToken, onSuccess) {
     let modalTime = initialTime;
     let modalEnabled = initialEnabled;
+    let modalTimezone = initialTimezone || "America/Santo_Domingo";
 
+    // Antes calculaba con new Date().setHours(...), que usa la zona horaria
+    // del navegador de quien abre el modal — no necesariamente la misma
+    // zona en la que realmente se programa la ejecución automática.
     const getNextExecutionDisplay = () => {
       if (!modalEnabled) return "Ejecución deshabilitada";
       const [hours, minutes] = modalTime.split(":").map(Number);
-      const nextRun = new Date();
-      nextRun.setHours(hours, minutes, 0, 0);
-      if (nextRun < new Date()) nextRun.setDate(nextRun.getDate() + 1);
-      
-      const formattedTime = nextRun.toLocaleTimeString([], { hour: "2-digit", minute: "2-digit" });
-      const formattedDate = nextRun.toLocaleDateString([], { weekday: "short", day: "numeric", month: "short" });
+      const nextRun = nextOccurrenceInZone(hours, minutes, modalTimezone);
+
+      const formattedTime = nextRun.toLocaleTimeString("es-DO", { hour: "2-digit", minute: "2-digit", timeZone: modalTimezone });
+      const formattedDate = nextRun.toLocaleDateString("es-DO", { weekday: "short", day: "numeric", month: "short", timeZone: modalTimezone });
       return `${formattedTime} • ${formattedDate}`;
     };
 
@@ -99,6 +103,22 @@ function showConfigModal(initialTime, initialEnabled, accessToken, onSuccess) {
               ${!modalEnabled ? "disabled" : ""}
               class="w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl text-xl font-black text-center focus:outline-none focus:border-indigo-500 transition-all ${!modalEnabled ? "opacity-30 grayscale cursor-not-allowed" : ""}"
             />
+        </div>
+
+        <div class="space-y-4">
+            <div class="flex items-center gap-2 px-2">
+                <i class="fas fa-globe-americas text-indigo-500 text-xs"></i>
+                <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Zona horaria</span>
+            </div>
+            <select
+              id="timezoneSelect"
+              ${!modalEnabled ? "disabled" : ""}
+              class="w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl text-sm font-bold text-center focus:outline-none focus:border-indigo-500 transition-all ${!modalEnabled ? "opacity-30 grayscale cursor-not-allowed" : ""}"
+            >
+              ${SCHEDULE_TIMEZONE_OPTIONS.map(
+                (tz) => `<option value="${tz.value}" ${tz.value === modalTimezone ? "selected" : ""}>${tz.label}</option>`
+              ).join("")}
+            </select>
         </div>
 
         <div class="p-6 rounded-xl border border-indigo-100 bg-indigo-50/30 flex items-start gap-4">
@@ -140,6 +160,7 @@ function showConfigModal(initialTime, initialEnabled, accessToken, onSuccess) {
       buttonsStyling: false,
       didOpen: (popup) => {
         const timeInput = popup.querySelector("#timeInput");
+        const timezoneSelect = popup.querySelector("#timezoneSelect");
         const toggleButton = popup.querySelector("#toggleScheduler");
         const nextRunDisplay = popup.querySelector("#nextRunDisplay");
         const scheduleDesc = popup.querySelector("#scheduleDesc");
@@ -149,14 +170,23 @@ function showConfigModal(initialTime, initialEnabled, accessToken, onSuccess) {
           if (nextRunDisplay) nextRunDisplay.textContent = getNextExecutionDisplay();
         });
 
+        timezoneSelect?.addEventListener("change", (e) => {
+          modalTimezone = e.target.value;
+          if (nextRunDisplay) nextRunDisplay.textContent = getNextExecutionDisplay();
+        });
+
         toggleButton?.addEventListener("click", () => {
           modalEnabled = !modalEnabled;
           toggleButton.className = `px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm ${modalEnabled ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500"}`;
           toggleButton.innerHTML = modalEnabled ? '<i class="fas fa-play"></i> Activado' : '<i class="fas fa-pause"></i> Pausado';
-          
+
           if (timeInput) {
               timeInput.disabled = !modalEnabled;
               timeInput.className = `w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl text-xl font-black text-center focus:outline-none focus:border-indigo-500 transition-all ${!modalEnabled ? "opacity-30 grayscale cursor-not-allowed" : ""}`;
+          }
+          if (timezoneSelect) {
+              timezoneSelect.disabled = !modalEnabled;
+              timezoneSelect.className = `w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl text-sm font-bold text-center focus:outline-none focus:border-indigo-500 transition-all ${!modalEnabled ? "opacity-30 grayscale cursor-not-allowed" : ""}`;
           }
           if (nextRunDisplay) nextRunDisplay.textContent = getNextExecutionDisplay();
           if (scheduleDesc) scheduleDesc.textContent = modalEnabled ? 'Las tareas automáticas se procesarán en la ventana de mantenimiento definida.' : 'El procesamiento automático está inactivo.';
@@ -164,8 +194,8 @@ function showConfigModal(initialTime, initialEnabled, accessToken, onSuccess) {
       },
       preConfirm: async () => {
         try {
-          const result = await cnnApi.addTimeTransfer(accessToken, { hour: modalTime, enabled: modalEnabled });
-          if (result) return { success: true, hour: modalTime, enabled: modalEnabled };
+          const result = await cnnApi.addTimeTransfer(accessToken, { hour: modalTime, enabled: modalEnabled, timezone: modalTimezone });
+          if (result) return { success: true, hour: modalTime, enabled: modalEnabled, timezone: modalTimezone };
           throw new Error("Error en servidor");
         } catch (error) {
           Swal.showValidationMessage(error.message);

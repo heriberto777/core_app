@@ -28,11 +28,16 @@ function buildErrorSummary(results) {
     .map((r) => ({ name: r.name, message: r.errorDetail || r.message || "Error desconocido" }));
 }
 
-function buildMeta(startTime, endTime) {
+function buildMeta(startTime, endTime, timezone) {
   const durationMs = endTime - startTime;
+  // Antes usaba toLocaleString() sin zona horaria — heredaba la del
+  // contenedor (UTC, sin TZ configurada) en vez de la zona de negocio con la
+  // que realmente se programó el cron (ver cronService.js), así que el
+  // mensaje mostraba una hora de inicio/fin distinta a la real.
+  const localeOptions = timezone ? { timeZone: timezone } : undefined;
   return {
-    startTime: new Date(startTime).toLocaleString(),
-    endTime: new Date(endTime).toLocaleString(),
+    startTime: new Date(startTime).toLocaleString("es-DO", localeOptions),
+    endTime: new Date(endTime).toLocaleString("es-DO", localeOptions),
     durationMs,
     durationLabel: formatDuration(durationMs),
   };
@@ -48,19 +53,20 @@ async function notifyTransferResults(results, options = {}) {
   const {
     runType = "automatic", // "automatic" | "manual"
     scheduledHour = null,
+    timezone = "America/Santo_Domingo",
     startTime = Date.now(),
     endTime = Date.now(),
     configName = null,
   } = options;
 
-  const meta = buildMeta(startTime, endTime);
+  const meta = buildMeta(startTime, endTime, timezone);
   const errors = buildErrorSummary(results);
   const successCount = results.filter((r) => r.success).length;
   const failedCount = results.length - successCount;
 
   // Correo (siempre se intenta enviar — ya lo hacía antes)
   try {
-    await sendTransferResultsEmail(results, scheduledHour, configName, meta);
+    await sendTransferResultsEmail(results, scheduledHour, configName, meta, timezone);
   } catch (error) {
     logger.error(`Error enviando correo de resultados (${runType}): ${error.message}`);
   }
@@ -99,10 +105,15 @@ async function notifyTransferResults(results, options = {}) {
 }
 
 async function notifyCriticalError(errorMessage, options = {}) {
-  const { scheduledHour = null, additionalInfo = null, configName = null } = options;
+  const {
+    scheduledHour = null,
+    additionalInfo = null,
+    configName = null,
+    timezone = "America/Santo_Domingo",
+  } = options;
 
   try {
-    await sendCriticalErrorEmail(errorMessage, scheduledHour, additionalInfo, configName);
+    await sendCriticalErrorEmail(errorMessage, scheduledHour, additionalInfo, configName, timezone);
   } catch (error) {
     logger.error(`Error enviando correo de error crítico: ${error.message}`);
   }
