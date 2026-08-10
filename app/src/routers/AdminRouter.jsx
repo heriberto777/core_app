@@ -125,26 +125,25 @@ export function AdminRouter() {
       />
 
       {/* ⭐ RUTAS DE OPERACIONES ⭐ */}
+      {/* Sin `title`: TransferTasks ya dibuja su propio header vía
+          ContentHeader ("Gestor de Tareas de Sincronización"). */}
       <Route
         path="/tasks"
         element={
           <ProtectedRoute resource="tasks" action="read">
-            <LayoutWrapper
-              component={TransferTasks}
-              title="Gestión de Tareas"
-            />
+            <LayoutWrapper component={TransferTasks} />
           </ProtectedRoute>
         }
       />
 
+      {/* Sin `title`: UniversalDocumentManager ya dibuja su propio header
+          ("Centro de Operaciones Universales") — el de la ruta era un
+          texto distinto ("Gestión de Documentos") mostrado a la vez. */}
       <Route
         path="/universal-manager"
         element={
           <ProtectedRoute resource="documents" action="read">
-            <LayoutWrapper
-              component={UniversalDocumentManager}
-              title="Gestión de Documentos"
-            />
+            <LayoutWrapper component={UniversalDocumentManager} />
           </ProtectedRoute>
         }
       />
@@ -173,14 +172,14 @@ export function AdminRouter() {
         }
       />
 
+      {/* Sin `title`: DocumentsVisualization ya dibuja su propio header
+          ("Centro de Gestión de Datos") — el de la ruta era un texto
+          distinto ("Gestión de Documentos") mostrado a la vez. */}
       <Route
         path="/documents"
         element={
           <ProtectedRoute resource="documents" action="read">
-            <LayoutWrapper
-              component={DocumentsVisualization}
-              title="Gestión de Documentos"
-            />
+            <LayoutWrapper component={DocumentsVisualization} />
           </ProtectedRoute>
         }
       />

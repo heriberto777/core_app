@@ -18,7 +18,11 @@ import {
   FilterInput,
   LinkedGroupsManager,
   TransferTaskApi,
-  MultiSelectInput
+  MultiSelectInput,
+  Modal,
+  ModalHeader,
+  ModalTitle,
+  ModalBody
 } from "../../index";
 
 const TASK_TYPE_OPTIONS = [
@@ -28,53 +32,6 @@ const TASK_TYPE_OPTIONS = [
 ];
 
 const taskApi = new TransferTaskApi();
-
-function ModalOverlay({ children, onClick }) {
-  return (
-    <div 
-      className="fixed top-0 left-0 right-0 bottom-0 bg-black/60 flex items-center justify-center z-[2000] backdrop-blur-sm"
-      onClick={onClick}
-    >
-      {children}
-    </div>
-  );
-}
-
-function ModalContent({ children, onClick, style, className = "" }) {
-  // className reemplaza el ancho por defecto en vez de sumarse a él: dos
-  // clases "max-w-*" en Tailwind compiten por orden de aparición en el CSS
-  // generado (no por orden en el atributo class), así que antes cualquier
-  // className pasado por un caller (ej. "max-w-[600px]" del modal de Tareas
-  // Vinculadas) se ignoraba en silencio y el modal quedaba siempre en 800px.
-  return (
-    <div
-      className={`bg-white w-[90%] max-h-[90vh] rounded-xl overflow-hidden flex flex-col shadow-2xl ${className || "max-w-[800px]"}`}
-      style={{ ...style, display: 'flex', flexDirection: 'column', height: '100%' }}
-      onClick={e => e.stopPropagation()}
-    >
-      {children}
-    </div>
-  );
-}
-
-function ModalHeader({ children, style }) {
-  return (
-    <div
-      className="p-4 border-b border-slate-200 flex justify-between items-center bg-slate-50"
-      style={{ ...style, display: 'flex', alignItems: 'center' }}
-    >
-      {children}
-    </div>
-  );
-}
-
-function ModalBody({ children, style }) {
-  return (
-    <div className="p-5 overflow-y-auto" style={{ ...style, display: 'block' }}>
-      {children}
-    </div>
-  );
-}
 
 function FilterButton({ children, active, onClick }) {
   return (
@@ -447,238 +404,228 @@ export function TransferTasks() {
         allTasks={allTasks}
       />
 
-      {showGroupsManager && (
-        <ModalOverlay onClick={() => setShowGroupsManager(false)}>
-          <ModalContent onClick={e => e.stopPropagation()} className="max-w-[1100px]">
-            <ModalHeader>
-              <h3 className="text-lg font-semibold mb-2">🔗 Grupos de Vinculación</h3>
-              <Button variant="ghost" className="ml-2" onClick={() => setShowGroupsManager(false)}>✕</Button>
-            </ModalHeader>
-            {/* Antes era un <div> plano sin overflow-y-auto, y ModalContent
-                tiene overflow-hidden — cualquier grupo con muchas tareas
-                (o simplemente 2+ grupos) quedaba recortado sin forma de
-                hacer scroll para verlo completo. */}
-            <ModalBody>
-              <LinkedGroupsManager accessToken={accessToken} onGroupDeleted={fetchTasks} onClose={() => setShowGroupsManager(false)} />
-            </ModalBody>
-          </ModalContent>
-        </ModalOverlay>
-      )}
+      <Modal isOpen={showGroupsManager} onClose={() => setShowGroupsManager(false)} maxWidth="max-w-[1100px]">
+        <ModalHeader>
+          <ModalTitle>🔗 Grupos de Vinculación</ModalTitle>
+          <Button variant="ghost" onClick={() => setShowGroupsManager(false)}><FaTimes /></Button>
+        </ModalHeader>
+        <ModalBody>
+          <LinkedGroupsManager accessToken={accessToken} onGroupDeleted={fetchTasks} onClose={() => setShowGroupsManager(false)} />
+        </ModalBody>
+      </Modal>
 
-      {linkedTasksModal.open && (
-        <ModalOverlay onClick={() => setLinkedTasksModal({ open: false, task: null, linkedTasks: [] })}>
-          <ModalContent onClick={e => e.stopPropagation()} className="max-w-[600px]">
-            <ModalHeader>
-              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                <FaLink className="text-blue-500" />
-                Tareas Vinculadas
-              </h3>
-              <Button variant="ghost" className="ml-2" onClick={() => setLinkedTasksModal({ open: false, task: null, linkedTasks: [] })}>
-                <FaTimes />
-              </Button>
-            </ModalHeader>
-            <ModalBody>
-              {linkedTasksModal.task?.linkedGroup ? (
-                <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
-                  <strong>Grupo:</strong> {linkedTasksModal.task.linkedGroup}
-                </div>
-              ) : null}
+      <Modal
+        isOpen={linkedTasksModal.open}
+        onClose={() => setLinkedTasksModal({ open: false, task: null, linkedTasks: [] })}
+        maxWidth="max-w-[600px]"
+      >
+        <ModalHeader>
+          <ModalTitle className="flex items-center gap-2">
+            <FaLink className="text-blue-500" /> Tareas Vinculadas
+          </ModalTitle>
+          <Button variant="ghost" onClick={() => setLinkedTasksModal({ open: false, task: null, linkedTasks: [] })}>
+            <FaTimes />
+          </Button>
+        </ModalHeader>
+        <ModalBody>
+          {linkedTasksModal.task?.linkedGroup ? (
+            <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
+              <strong>Grupo:</strong> {linkedTasksModal.task.linkedGroup}
+            </div>
+          ) : null}
 
-              {linkedTasksModal.linkedTasks.length > 0 ? (
-                <div className="flex flex-col gap-3">
-                  {linkedTasksModal.linkedTasks.map((task, index) => (
-                    <div key={task.id || task._id} className="p-3 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50">
-                      <div className="flex justify-between items-center mb-2">
-                        <strong>{task.name}</strong>
-                        <StatusBadge status={task.status} />
-                      </div>
-                      <div className="text-xs text-slate-600 dark:text-slate-400 grid grid-cols-2 gap-2">
-                        <div><strong>Tipo:</strong> {task.type}</div>
-                        {task.order !== undefined && <div><strong>Orden:</strong> {task.order}</div>}
-                        {task.isCoordinator && <div className="text-amber-600 font-bold">Coordinador</div>}
-                      </div>
-                    </div>
-                  ))}
+          {linkedTasksModal.linkedTasks.length > 0 ? (
+            <div className="flex flex-col gap-3">
+              {linkedTasksModal.linkedTasks.map((task, index) => (
+                <div key={task.id || task._id} className="p-3 border border-slate-200 dark:border-slate-700 rounded-lg bg-slate-50 dark:bg-slate-800/50">
+                  <div className="flex justify-between items-center mb-2">
+                    <strong>{task.name}</strong>
+                    <StatusBadge status={task.status} />
+                  </div>
+                  <div className="text-xs text-slate-600 dark:text-slate-400 grid grid-cols-2 gap-2">
+                    <div><strong>Tipo:</strong> {task.type}</div>
+                    {task.order !== undefined && <div><strong>Orden:</strong> {task.order}</div>}
+                    {task.isCoordinator && <div className="text-amber-600 font-bold">Coordinador</div>}
+                  </div>
                 </div>
-              ) : (
-                <p className="text-center text-slate-400">
-                  {linkedTasksModal.task?.linkedGroup
-                    ? 'No hay tareas en este grupo'
-                    : 'No hay tareas vinculadas'}
-                </p>
-              )}
-            </ModalBody>
-          </ModalContent>
-        </ModalOverlay>
-      )}
+              ))}
+            </div>
+          ) : (
+            <p className="text-center text-slate-400">
+              {linkedTasksModal.task?.linkedGroup
+                ? 'No hay tareas en este grupo'
+                : 'No hay tareas vinculadas'}
+            </p>
+          )}
+        </ModalBody>
+      </Modal>
 
       {/* Modal de Historial de Tarea */}
-      {historyModal.open && (
-        <ModalOverlay onClick={() => setHistoryModal({ open: false, taskId: null, data: [], loading: false, filter: 'all' })}>
-          <ModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '900px', maxHeight: '85vh' }}>
-            <ModalHeader>
-              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                <FaHistory className="text-slate-600 dark:text-slate-400" />
-                Historial de Ejecuciones
-              </h3>
-              <div className="flex gap-2 items-center">
-                <Button
-                  variant="outline"
-                  size="small"
-                  onClick={() => navigate(`/history?search=${tasks.find(t => t._id === historyModal.taskId)?.name || ''}`)}
-                  title="Ver en Bitácora Central"
-                  className="h-8 px-3"
-                >
-                  <FaEye className="mr-1.5" /> Ver en Bitácora
-                </Button>
-                <Button variant="ghost" onClick={() => setHistoryModal({ open: false, taskId: null, data: [], loading: false, filter: 'all' })}>
-                  <FaTimes />
-                </Button>
-              </div>
-            </ModalHeader>
-            <ModalBody>
-              {/* Filtros */}
-              <div className="mb-4 flex gap-2 flex-wrap">
-                <FilterButton
-                  active={historyModal.filter === 'all'}
-                  onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'all' }))}
-                >
-                  Todos
-                </FilterButton>
-                <FilterButton
-                  active={historyModal.filter === 'completed'}
-                  onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'completed' }))}
-                >
-                  Exitosos
-                </FilterButton>
-                <FilterButton
-                  active={historyModal.filter === 'failed'}
-                  onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'failed' }))}
-                >
-                  Errores
-                </FilterButton>
-                <FilterButton
-                  active={historyModal.filter === 'running'}
-                  onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'running' }))}
-                >
-                  En Proceso
-                </FilterButton>
-                <FilterButton
-                  active={historyModal.filter === 'cancelled'}
-                  onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'cancelled' }))}
-                >
-                  Cancelados
-                </FilterButton>
-              </div>
+      <Modal
+        isOpen={historyModal.open}
+        onClose={() => setHistoryModal({ open: false, taskId: null, data: [], loading: false, filter: 'all' })}
+        maxWidth="max-w-[900px]"
+      >
+        <ModalHeader>
+          <ModalTitle className="flex items-center gap-2">
+            <FaHistory className="text-slate-600 dark:text-slate-400" /> Historial de Ejecuciones
+          </ModalTitle>
+          <div className="flex gap-2 items-center">
+            <Button
+              variant="outline"
+              size="small"
+              onClick={() => navigate(`/history?search=${tasks.find(t => t._id === historyModal.taskId)?.name || ''}`)}
+              title="Ver en Bitácora Central"
+              className="h-8 px-3"
+            >
+              <FaEye className="mr-1.5" /> Ver en Bitácora
+            </Button>
+            <Button variant="ghost" onClick={() => setHistoryModal({ open: false, taskId: null, data: [], loading: false, filter: 'all' })}>
+              <FaTimes />
+            </Button>
+          </div>
+        </ModalHeader>
+        <ModalBody>
+          {/* Filtros */}
+          <div className="mb-4 flex gap-2 flex-wrap">
+            <FilterButton
+              active={historyModal.filter === 'all'}
+              onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'all' }))}
+            >
+              Todos
+            </FilterButton>
+            <FilterButton
+              active={historyModal.filter === 'completed'}
+              onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'completed' }))}
+            >
+              Exitosos
+            </FilterButton>
+            <FilterButton
+              active={historyModal.filter === 'failed'}
+              onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'failed' }))}
+            >
+              Errores
+            </FilterButton>
+            <FilterButton
+              active={historyModal.filter === 'running'}
+              onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'running' }))}
+            >
+              En Proceso
+            </FilterButton>
+            <FilterButton
+              active={historyModal.filter === 'cancelled'}
+              onClick={() => setHistoryModal(prev => ({ ...prev, filter: 'cancelled' }))}
+            >
+              Cancelados
+            </FilterButton>
+          </div>
 
-              {historyModal.loading ? (
-                <div className="text-center py-10">Cargando historial...</div>
-              ) : (
-                (() => {
-                  const dataArray = Array.isArray(historyModal.data) ? historyModal.data : [];
-                  const filteredData = dataArray.filter(exec => {
-                    if (historyModal.filter === 'all') return true;
-                    return exec.status === historyModal.filter;
-                  });
+          {historyModal.loading ? (
+            <div className="text-center py-10">Cargando historial...</div>
+          ) : (
+            (() => {
+              const dataArray = Array.isArray(historyModal.data) ? historyModal.data : [];
+              const filteredData = dataArray.filter(exec => {
+                if (historyModal.filter === 'all') return true;
+                return exec.status === historyModal.filter;
+              });
 
-                  if (filteredData.length === 0) {
-                    return (
-                      <div className="text-center py-10 text-slate-400">
-                        No hay historial de ejecuciones para esta tarea
-                      </div>
-                    );
-                  }
+              if (filteredData.length === 0) {
+                return (
+                  <div className="text-center py-10 text-slate-400">
+                    No hay historial de ejecuciones para esta tarea
+                  </div>
+                );
+              }
 
-                  return (
-                    <div className="overflow-x-auto">
-                      <table className="w-full border-collapse min-w-[700px]">
-                        <thead>
-                          <tr className="bg-slate-100 dark:bg-slate-800">
-                            <th className="px-3 py-2 text-left text-xs border-b-2 border-slate-300 dark:border-slate-600">Fecha</th>
-                            <th className="px-3 text-left text-xs border-b-2 border-slate-300 dark:border-slate-600">Estado</th>
-                            <th className="px-3 text-center text-xs border-b-2 border-slate-300 dark:border-slate-600">Insertados</th>
-                            <th className="px-3 text-center text-xs border-b-2 border-slate-300 dark:border-slate-600">Actualizados</th>
-                            <th className="px-3 text-center text-xs border-b-2 border-slate-300 dark:border-slate-600">Duplicados</th>
-                            <th className="px-3 text-left text-xs border-b-2 border-slate-300 dark:border-slate-600">Mensaje</th>
-                            <th className="px-3 text-center text-xs border-b-2 border-slate-300 dark:border-slate-600">Acción</th>
-                          </tr>
-                        </thead>
-                        <tbody>
-                          {filteredData.map((exec, idx) => (
-                            <tr key={idx} className="border-b border-slate-200 dark:border-slate-700">
-                              <td className="px-3 py-2 text-xs">
-                                {exec.date ? new Date(exec.date).toLocaleString() : '-'}
-                              </td>
-                              <td className="px-3">
-                                <StatusBadge status={exec.status}>{exec.status}</StatusBadge>
-                              </td>
-                              <td className="px-3 text-center text-xs">{exec.inserted || exec.successfulRecords || 0}</td>
-                              <td className="px-3 text-center text-xs">{exec.updated || 0}</td>
-                              <td className="px-3 text-center text-xs">{exec.duplicates || 0}</td>
-                              <td className="px-3 py-2 text-xs max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap">
-                                {exec.message || exec.error || '-'}
-                              </td>
-                              <td className="px-3 text-center">
-                                {(exec.status === 'failed' || exec.errorDetails || exec.errorDetail) && (
-                                  <Button
-                                    variant="ghost"
-                                    className="px-2 py-1 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
-                                    onClick={() => handleViewError(
-                                      `Error en Ejecución`,
-                                      exec.message || 'Error en la transferencia',
-                                      exec.errorDetails || exec.errorDetail || 'Sin detalles adicionales'
-                                    )}
-                                    title="Ver error"
-                                  >
-                                    <FaExclamationTriangle size={12} />
-                                  </Button>
+              return (
+                <div className="overflow-x-auto">
+                  <table className="w-full border-collapse min-w-[700px]">
+                    <thead>
+                      <tr className="bg-slate-100 dark:bg-slate-800">
+                        <th className="px-3 py-2 text-left text-xs border-b-2 border-slate-300 dark:border-slate-600">Fecha</th>
+                        <th className="px-3 text-left text-xs border-b-2 border-slate-300 dark:border-slate-600">Estado</th>
+                        <th className="px-3 text-center text-xs border-b-2 border-slate-300 dark:border-slate-600">Insertados</th>
+                        <th className="px-3 text-center text-xs border-b-2 border-slate-300 dark:border-slate-600">Actualizados</th>
+                        <th className="px-3 text-center text-xs border-b-2 border-slate-300 dark:border-slate-600">Duplicados</th>
+                        <th className="px-3 text-left text-xs border-b-2 border-slate-300 dark:border-slate-600">Mensaje</th>
+                        <th className="px-3 text-center text-xs border-b-2 border-slate-300 dark:border-slate-600">Acción</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {filteredData.map((exec, idx) => (
+                        <tr key={idx} className="border-b border-slate-200 dark:border-slate-700">
+                          <td className="px-3 py-2 text-xs">
+                            {exec.date ? new Date(exec.date).toLocaleString() : '-'}
+                          </td>
+                          <td className="px-3">
+                            <StatusBadge status={exec.status}>{exec.status}</StatusBadge>
+                          </td>
+                          <td className="px-3 text-center text-xs">{exec.inserted || exec.successfulRecords || 0}</td>
+                          <td className="px-3 text-center text-xs">{exec.updated || 0}</td>
+                          <td className="px-3 text-center text-xs">{exec.duplicates || 0}</td>
+                          <td className="px-3 py-2 text-xs max-w-[200px] overflow-hidden text-ellipsis whitespace-nowrap">
+                            {exec.message || exec.error || '-'}
+                          </td>
+                          <td className="px-3 text-center">
+                            {(exec.status === 'failed' || exec.errorDetails || exec.errorDetail) && (
+                              <Button
+                                variant="ghost"
+                                className="px-2 py-1 text-xs text-red-500 hover:bg-red-50 dark:hover:bg-red-900/20"
+                                onClick={() => handleViewError(
+                                  `Error en Ejecución`,
+                                  exec.message || 'Error en la transferencia',
+                                  exec.errorDetails || exec.errorDetail || 'Sin detalles adicionales'
                                 )}
-                              </td>
-                            </tr>
-                          ))}
-                        </tbody>
-                      </table>
-                      <div className="mt-2 text-xs text-slate-500">
-                        Mostrando {filteredData.length} de {dataArray.length} registros
-                      </div>
-                    </div>
-                  );
-                })()
-              )}
-            </ModalBody>
-          </ModalContent>
-        </ModalOverlay>
-      )}
+                                title="Ver error"
+                              >
+                                <FaExclamationTriangle size={12} />
+                              </Button>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                  <div className="mt-2 text-xs text-slate-500">
+                    Mostrando {filteredData.length} de {dataArray.length} registros
+                  </div>
+                </div>
+              );
+            })()
+          )}
+        </ModalBody>
+      </Modal>
 
       {/* Modal de Error Detallado */}
-      {errorModal.open && (
-        <ModalOverlay onClick={() => setErrorModal({ open: false, title: '', message: '', details: '' })}>
-          <ModalContent onClick={e => e.stopPropagation()} style={{ maxWidth: '600px' }}>
-            <ModalHeader className="bg-red-500 text-white">
-              <h3 className="text-lg font-semibold mb-2 flex items-center gap-2">
-                <FaExclamationTriangle className="text-white" /> {errorModal.title}
-              </h3>
-              <Button variant="ghost" className="text-white" onClick={() => setErrorModal({ open: false, title: '', message: '', details: '' })}>
-                <FaTimes />
-              </Button>
-            </ModalHeader>
-            <ModalBody>
-              <div className="mb-4">
-                <strong className="block mb-2">Mensaje:</strong>
-                <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-lg border-l-4 border-red-500">
-                  {errorModal.message}
-                </div>
-              </div>
-              <div>
-                <strong className="block mb-2">Detalles del Error:</strong>
-                <pre className="p-3 bg-black text-red-400 rounded-lg overflow-auto max-h-[250px] font-mono text-xs">
-                  {errorModal.details || 'Sin detalles adicionales'}
-                </pre>
-              </div>
-            </ModalBody>
-          </ModalContent>
-        </ModalOverlay>
-      )}
+      <Modal
+        isOpen={errorModal.open}
+        onClose={() => setErrorModal({ open: false, title: '', message: '', details: '' })}
+        maxWidth="max-w-[600px]"
+      >
+        <ModalHeader className="bg-red-500 border-red-600 text-white">
+          <ModalTitle className="flex items-center gap-2 text-white">
+            <FaExclamationTriangle className="text-white" /> {errorModal.title}
+          </ModalTitle>
+          <Button variant="ghost" className="text-white" onClick={() => setErrorModal({ open: false, title: '', message: '', details: '' })}>
+            <FaTimes />
+          </Button>
+        </ModalHeader>
+        <ModalBody>
+          <div className="mb-4">
+            <strong className="block mb-2">Mensaje:</strong>
+            <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-lg border-l-4 border-red-500">
+              {errorModal.message}
+            </div>
+          </div>
+          <div>
+            <strong className="block mb-2">Detalles del Error:</strong>
+            <pre className="p-3 bg-black text-red-400 rounded-lg overflow-auto max-h-[250px] font-mono text-xs">
+              {errorModal.details || 'Sin detalles adicionales'}
+            </pre>
+          </div>
+        </ModalBody>
+      </Modal>
     </div>
   );
 }
