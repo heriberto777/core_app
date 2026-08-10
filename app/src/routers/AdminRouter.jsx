@@ -223,14 +223,14 @@ export function AdminRouter() {
       />
 
       {/* ⭐ RUTAS DE ADMINISTRACIÓN ⭐ */}
+      {/* Los 3 headers propios (UserManagement/RoleManagement/ModuleManager)
+          usan un texto distinto al que pasaba la ruta — se deja de pasar
+          `title` en los 3, mismo criterio que en las fases anteriores. */}
       <Route
         path="/users"
         element={
           <ProtectedRoute resource="users" action="read" requireAdmin>
-            <LayoutWrapper
-              component={UserManagement}
-              title="Gestión de Usuarios"
-            />
+            <LayoutWrapper component={UserManagement} />
           </ProtectedRoute>
         }
       />
@@ -239,10 +239,7 @@ export function AdminRouter() {
         path="/roles"
         element={
           <ProtectedRoute resource="roles" action="read" requireAdmin>
-            <LayoutWrapper
-              component={RoleManagement}
-              title="Gestión de Roles"
-            />
+            <LayoutWrapper component={RoleManagement} />
           </ProtectedRoute>
         }
       />
@@ -251,10 +248,7 @@ export function AdminRouter() {
         path="/modules"
         element={
           <ProtectedRoute resource="modules" action="read" requireAdmin>
-            <LayoutWrapper
-              component={ModuleManager}
-              title="Gestión de Modulos"
-            />
+            <LayoutWrapper component={ModuleManager} />
           </ProtectedRoute>
         }
       />
