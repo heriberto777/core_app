@@ -21,7 +21,7 @@ export const Modal = ({ children, isOpen, onClose, maxWidth = "max-w-lg" }) => {
   return ReactDOM.createPortal(
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4" onClick={onClose}>
       <div
-        className={`bg-white rounded-2xl w-[95%] ${maxWidth} max-h-[90vh] overflow-y-auto relative shadow-2xl border border-slate-200`}
+        className={`bg-white rounded-2xl w-[95%] ${maxWidth} max-h-[90vh] flex flex-col overflow-hidden relative shadow-2xl border border-slate-200`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}
@@ -31,8 +31,12 @@ export const Modal = ({ children, isOpen, onClose, maxWidth = "max-w-lg" }) => {
   );
 };
 
+// shrink-0 en Header/Footer + overflow-y-auto en Body: antes toda la tarjeta
+// (header incluido) scrolleaba junto con el contenido — en modales con
+// contenido largo (ej. historial con muchas filas) el header desaparecía
+// al hacer scroll en vez de quedar fijo arriba.
 export const ModalHeader = ({ children, className = "", ...props }) => (
-  <div className={`flex justify-between items-center mb-4 pb-3 border-b border-slate-200 ${className}`} {...props}>
+  <div className={`flex justify-between items-center mb-4 pb-3 border-b border-slate-200 shrink-0 ${className}`} {...props}>
     {children}
   </div>
 );
@@ -44,13 +48,13 @@ export const ModalTitle = ({ children, className = "", ...props }) => (
 );
 
 export const ModalBody = ({ children, className = "", ...props }) => (
-  <div className={`mb-4 ${className}`} {...props}>
+  <div className={`mb-4 overflow-y-auto flex-1 ${className}`} {...props}>
     {children}
   </div>
 );
 
 export const ModalFooter = ({ children, className = "", ...props }) => (
-  <div className={`flex justify-end gap-2.5 pt-4 border-t border-slate-200 ${className}`} {...props}>
+  <div className={`flex justify-end gap-2.5 pt-4 border-t border-slate-200 shrink-0 ${className}`} {...props}>
     {children}
   </div>
 );
