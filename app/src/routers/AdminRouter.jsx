@@ -120,11 +120,12 @@ export function AdminRouter() {
       <Route path="/" element={<SmartRedirect />} />
 
       {/* ⭐ DASHBOARD - ACCESO UNIVERSAL ⭐ */}
+      {/* Sin `title`: Dashboard.jsx ya dibuja su propio header ("Panel de
+          Control" + botón Sincronizar) — pasarlo aquí duplicaba el título,
+          uno chico desde AdminLayout y otro grande debajo desde Dashboard. */}
       <Route
         path="/dashboard"
-        element={
-          <LayoutWrapper component={Dashboard} title="Panel de Control" />
-        }
+        element={<LayoutWrapper component={Dashboard} />}
       />
 
       {/* ⭐ RUTAS DE OPERACIONES ⭐ */}
