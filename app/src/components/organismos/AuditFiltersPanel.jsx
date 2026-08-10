@@ -61,7 +61,7 @@ export function AuditFiltersPanel({
     return (
         <div className={`bg-white border border-slate-200 rounded-xl p-6 mb-6 shadow-soft ${className}`}>
             {isSystem && (
-                <div className="flex gap-2 mb-6 border-b border-slate-200 pb-4">
+                <div className="flex flex-wrap gap-2 mb-6 border-b border-slate-200 pb-4">
                     {LEVEL_TABS.map(tab => (
                         <button
                             key={tab.id}
