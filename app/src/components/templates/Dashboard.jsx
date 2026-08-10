@@ -90,10 +90,10 @@ export function Dashboard() {
                   loading={loading}
                 />
               </div>
-              <div className="xl:col-span-3">
+              <div className="md:col-span-2 xl:col-span-3">
                 <QuickAccessGrid />
               </div>
-              <div className="xl:col-span-3">
+              <div className="md:col-span-2 xl:col-span-3">
                 <RecentActivitiesTable transfers={lastTransfers} />
               </div>
             </div>
