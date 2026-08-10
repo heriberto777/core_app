@@ -14,6 +14,7 @@ export function TopNav({ userMenuOpen, setUserMenuOpen }) {
 
   const [openCategory, setOpenCategory] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
+  const [expandedMobileCategories, setExpandedMobileCategories] = useState(() => new Set());
   const navRef = useRef(null);
 
   const routesConfig = useMemo(
@@ -44,6 +45,24 @@ export function TopNav({ userMenuOpen, setUserMenuOpen }) {
   }, [routesConfig]);
 
   const isCategoryActive = (routes) => routes.some((r) => location.pathname.startsWith(r.path));
+
+  const toggleMobileCategory = (category) => {
+    setExpandedMobileCategories((prev) => {
+      const next = new Set(prev);
+      if (next.has(category)) next.delete(category);
+      else next.add(category);
+      return next;
+    });
+  };
+
+  const openMobileMenu = () => {
+    // Al abrir, se expande solo la categoría de la página actual — el resto
+    // arranca plegado para no obligar a scrollear las ~13 rutas repartidas
+    // en 6 categorías cada vez que se abre el menú.
+    const active = groupedRoutes.find((g) => isCategoryActive(g.routes))?.category;
+    setExpandedMobileCategories(active ? new Set([active]) : new Set());
+    setMobileOpen(true);
+  };
 
   useEffect(() => {
     const handleClickOutside = (e) => {
@@ -140,7 +159,7 @@ export function TopNav({ userMenuOpen, setUserMenuOpen }) {
           </div>
 
           <button
-            onClick={() => setMobileOpen((v) => !v)}
+            onClick={() => (mobileOpen ? setMobileOpen(false) : openMobileMenu())}
             className="lg:hidden p-2 text-slate-600"
             aria-label={mobileOpen ? "Cerrar menú" : "Abrir menú"}
           >
@@ -149,28 +168,47 @@ export function TopNav({ userMenuOpen, setUserMenuOpen }) {
         </div>
       </div>
 
-      {/* MOBILE PANEL */}
+      {/* MOBILE PANEL — acordeón por categoría, mismo patrón que el sidebar
+          de Configuraciones: cada categoría se puede plegar/desplegar en
+          vez de mostrar las ~13 rutas de las 6 categorías siempre abiertas. */}
       {mobileOpen && (
-        <nav className="lg:hidden border-t border-slate-200 px-4 py-3 flex flex-col gap-4 max-h-[70vh] overflow-y-auto">
-          {groupedRoutes.map(({ category, routes }) => (
-            <div key={category}>
-              <div className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mb-1.5">{category}</div>
-              <div className="flex flex-col gap-0.5">
-                {routes.map((route) => (
-                  <NavLink
-                    key={route.path}
-                    to={route.path}
-                    className={({ isActive }) =>
-                      `px-2 py-2 text-sm font-semibold rounded ${isActive ? "text-primary-600 bg-primary-50" : "text-slate-600"}`
-                    }
-                  >
-                    {route.name}
-                  </NavLink>
-                ))}
+        <nav className="lg:hidden border-t border-slate-200 px-4 py-3 flex flex-col gap-2 max-h-[70vh] overflow-y-auto">
+          {groupedRoutes.map(({ category, routes }) => {
+            const isExpanded = expandedMobileCategories.has(category);
+            return (
+              <div key={category} className="flex flex-col gap-0.5">
+                <button
+                  onClick={() => toggleMobileCategory(category)}
+                  className="flex items-center gap-2 py-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider"
+                  aria-expanded={isExpanded}
+                >
+                  <span className="flex-1 text-left">{category}</span>
+                  <FaChevronDown
+                    size={10}
+                    className={`transition-transform ${isExpanded ? "rotate-180" : ""}`}
+                  />
+                </button>
+
+                {isExpanded && (
+                  <div className="flex flex-col gap-0.5 pb-1 animate-fadeIn">
+                    {routes.map((route) => (
+                      <NavLink
+                        key={route.path}
+                        to={route.path}
+                        className={({ isActive }) =>
+                          `px-2 py-2 text-sm font-semibold rounded ${isActive ? "text-primary-600 bg-primary-50" : "text-slate-600"}`
+                        }
+                      >
+                        {route.name}
+                      </NavLink>
+                    ))}
+                  </div>
+                )}
               </div>
-            </div>
-          ))}
+            );
+          })}
           <DataUser
+            mobile
             stateConfig={{
               openstate: userMenuOpen,
               setOpenState: () => setUserMenuOpen(!userMenuOpen),

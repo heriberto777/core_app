@@ -159,7 +159,7 @@ export function ScheduleConfiguration() {
               </div>
             </div>
 
-            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-slate-50 ml-20">
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 pt-4 border-t border-slate-50 sm:ml-20">
               {isSchedulerActive ? (
                 <>
                   <div className="flex flex-col gap-1">
@@ -256,7 +256,7 @@ export function ScheduleConfiguration() {
 
           {/* History Section */}
           <div className="p-8 bg-white border border-slate-200 rounded-xl shadow-sm flex flex-col gap-8">
-            <div className="flex justify-between items-center px-2">
+            <div className="flex flex-col sm:flex-row gap-3 justify-between items-center px-2">
               <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3">
                 <FaHistory /> Últimas Ejecuciones
               </h3>
