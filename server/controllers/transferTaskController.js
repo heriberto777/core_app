@@ -336,7 +336,11 @@ const executeTransferTask = async (req, res) => {
       // Antes esto retornaba sin notificar nada — el usuario nunca se
       // enteraba de que una ejecución manual no produjo ningún resultado.
       setImmediate(async () => {
-        const config = await Config.findOne().lean();
+        // Filtrar por singleton, no un findOne() a ciegas: en entornos donde
+        // nunca se corrió el índice único (ver comentario en configModel.js),
+        // puede haber un documento viejo sin el campo `singleton` conviviendo
+        // con el real — un findOne() sin filtro podía devolver ese huérfano.
+        const config = await Config.findOne({ singleton: "singleton" }).lean();
         notifyTransferResults(
           [{ name: task.name, success: false, errorDetail: "No se obtuvo resultado de la ejecución" }],
           { runType: "manual", scheduledHour: "manual", timezone: config?.timezone, startTime: taskStartTime, endTime: Date.now() }
@@ -351,7 +355,11 @@ const executeTransferTask = async (req, res) => {
     setImmediate(async () => {
       try {
         const scheduledHourLabel = isLinkedGroup ? "manual_linked_group" : "manual";
-        const config = await Config.findOne().lean();
+        // Filtrar por singleton, no un findOne() a ciegas: en entornos donde
+        // nunca se corrió el índice único (ver comentario en configModel.js),
+        // puede haber un documento viejo sin el campo `singleton` conviviendo
+        // con el real — un findOne() sin filtro podía devolver ese huérfano.
+        const config = await Config.findOne({ singleton: "singleton" }).lean();
         let emailData;
 
         if (isLinkedGroup && result.linkedTasksResults) {
@@ -480,7 +488,13 @@ const deleteTransferTask = async (req, res) => {
  */
 const getConfigurarHora = async (req, res) => {
   try {
-    const config = await Config.findOne().lean();
+    // Filtrar por singleton, no un findOne() a ciegas: si en algún momento
+    // se creó un documento sin el campo `singleton` (índice único nunca
+    // aplicado, ver comentario en configModel.js) y otro con él, un
+    // findOne() sin filtro puede devolver el huérfano en vez del real —
+    // esto pasó en producción: el Dashboard mostraba una hora vieja que
+    // nunca cambiaba sin importar cuántas veces se guardara la nueva.
+    const config = await Config.findOne({ singleton: "singleton" }).lean();
     const baseData = config || { hour: "02:00", enabled: true, timezone: "America/Santo_Domingo" };
     // enabled solo refleja el documento guardado en Mongo; el frontend
     // (indicador "SISTEMA ACTIVO") necesita saber si el cron realmente está

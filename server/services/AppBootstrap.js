@@ -84,7 +84,11 @@ class AppBootstrap {
       try {
         const cronService = require("./cronService");
         const Config = require("../models/configModel");
-        const config = await Config.findOne().lean();
+        // Filtrar por singleton, no un findOne() a ciegas: si conviven un
+        // documento huérfano (sin `singleton`, de antes de que existiera el
+        // índice único — ver configModel.js) y el real, un findOne() sin
+        // filtro puede levantar el cron con la hora vieja en cada reinicio.
+        const config = await Config.findOne({ singleton: "singleton" }).lean();
         cronService.syncWithConfig(config);
         this.state.cronJobs = true;
         logger.info("✅ Trabajos cron inicializados");
