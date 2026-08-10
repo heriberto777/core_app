@@ -1,4 +1,4 @@
-import React, { useState, createContext } from "react";
+import React, { useState, useEffect, createContext } from "react";
 import { TopNav, useAuth, NotificationContainer, LoadingSpinner } from "../../index";
 
 // Contexto para el Layout
@@ -22,6 +22,14 @@ export function AdminLayout({
 
   const [userMenuOpen, setUserMenuOpen] = useState(false);
   const [pageLoading, setPageLoading] = useState(loading);
+
+  // El prop `loading` solo se leía como valor inicial de useState — si un
+  // template pasaba `loading` y ese valor cambiaba después (ej. al terminar
+  // un fetch), pageLoading nunca se enteraba. Por eso ningún template usaba
+  // este mecanismo tal cual y cada uno terminaba armando su propio spinner.
+  useEffect(() => {
+    setPageLoading(loading);
+  }, [loading]);
 
   const layoutContextValue = {
     userMenuOpen, setUserMenuOpen,

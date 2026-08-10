@@ -82,8 +82,11 @@ const ProtectedRoute = ({
 };
 
 // ⭐ WRAPPER PARA COMPONENTES CON LAYOUT ⭐
-const LayoutWrapper = ({ component: Component, title, ...props }) => (
-  <AdminLayout title={title}>
+// subtitle/actions/toolbar se destructuran explícitamente para que lleguen a
+// AdminLayout — antes caían en ...props y se spreadeaban sobre <Component>,
+// por lo que el subtitle de /configuraciones nunca se mostraba.
+const LayoutWrapper = ({ component: Component, title, subtitle, actions, toolbar, ...props }) => (
+  <AdminLayout title={title} subtitle={subtitle} actions={actions} toolbar={toolbar}>
     <Component {...props} />
   </AdminLayout>
 );
