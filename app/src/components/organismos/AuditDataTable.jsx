@@ -142,14 +142,15 @@ export const AuditDataTable = ({
             </div>
 
             {/* PAGINACIÓN */}
-            <div className="mt-auto px-6 py-4 bg-slate-50/30 border-t border-slate-100 flex justify-between items-center">
+            <div className="mt-auto px-6 py-4 bg-slate-50/30 border-t border-slate-100 flex flex-col sm:flex-row gap-3 justify-between items-center">
                 <span className="text-xs font-bold text-slate-400 uppercase tracking-widest">
                     Página <span className="text-slate-900">{pagination.page}</span> de <span className="text-slate-900">{pagination.pages}</span>
                 </span>
-                <div className="flex gap-2">
+                <div className="flex gap-2 w-full sm:w-auto">
                     <Button
                         variant="secondary"
                         size="sm"
+                        className="flex-1 sm:flex-none"
                         disabled={pagination.page <= 1}
                         onClick={() => onPageChange(pagination.page - 1)}
                     >
@@ -158,6 +159,7 @@ export const AuditDataTable = ({
                     <Button
                         variant="secondary"
                         size="sm"
+                        className="flex-1 sm:flex-none"
                         disabled={pagination.page >= pagination.pages}
                         onClick={() => onPageChange(pagination.page + 1)}
                     >

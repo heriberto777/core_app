@@ -89,7 +89,7 @@ export function Statistics() {
 
       {/* FOOTER INFO */}
       {!loading && (
-        <footer className="mt-8 pt-8 border-t border-slate-100 flex justify-between items-center text-[10px] font-bold text-slate-300 uppercase tracking-[0.2em]">
+        <footer className="mt-8 pt-8 border-t border-slate-100 flex flex-col sm:flex-row gap-1.5 sm:gap-0 justify-between items-center text-[10px] font-bold text-slate-300 uppercase tracking-[0.2em]">
           <span>&copy; {new Date().getFullYear()} Catelli Intelligence Engine</span>
           <span>Sincronizado: {new Date().toLocaleTimeString()}</span>
         </footer>

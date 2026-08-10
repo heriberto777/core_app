@@ -198,26 +198,26 @@ export function AdminRouter() {
         }
       />
 
+      {/* Sin `title`: Statistics ya dibuja su propio header ("Centro de
+          Inteligencia") — el de la ruta era un texto distinto ("Análisis y
+          Estadísticas") mostrado a la vez. */}
       <Route
         path="/analytics"
         element={
           <ProtectedRoute resource="analytics" action="read">
-            <LayoutWrapper
-              component={Statistics}
-              title="Análisis y Estadísticas"
-            />
+            <LayoutWrapper component={Statistics} />
           </ProtectedRoute>
         }
       />
 
+      {/* Sin `title`: AuditCenter ya dibuja su propio header ("Central de
+          Auditoría") — el de la ruta era un texto distinto ("Bitácora
+          Centralizada") mostrado a la vez. */}
       <Route
         path="/history"
         element={
           <ProtectedRoute resource="history" action="read">
-            <LayoutWrapper
-              component={AuditCenter}
-              title="Bitácora Centralizada"
-            />
+            <LayoutWrapper component={AuditCenter} />
           </ProtectedRoute>
         }
       />
