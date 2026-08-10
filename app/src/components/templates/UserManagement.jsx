@@ -13,8 +13,13 @@ import Swal from "sweetalert2";
 /**
  * UserManagement (Tailwind Edition)
  * Gestión de identidades con diseño corporativo suave.
+ *
+ * `hideHeader`: ConfigurationPage.jsx embebe este componente completo como
+ * contenido de su pestaña "Gestión de Usuarios", que ya dibuja su propio
+ * título/descripción — sin esto, se veían dos encabezados seguidos con
+ * textos distintos para la misma sección.
  */
-export function UserManagement() {
+export function UserManagement({ hideHeader = false }) {
     const [modalOpen, setModalOpen] = useState(false);
     const [selectedUser, setSelectedUser] = useState(null);
 
@@ -118,10 +123,12 @@ export function UserManagement() {
     return (
         <div className="flex flex-col gap-8 w-full max-w-[1440px] mx-auto p-6 lg:p-10 animate-fadeIn">
             {/* HEADER */}
-            <header className="mb-2">
-                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Gestión de Identidades</h1>
-                <p className="text-slate-500 mt-2 font-medium">Administra usuarios, privilegios y accesos al ecosistema.</p>
-            </header>
+            {!hideHeader && (
+                <header className="mb-2">
+                    <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Gestión de Identidades</h1>
+                    <p className="text-slate-500 mt-2 font-medium">Administra usuarios, privilegios y accesos al ecosistema.</p>
+                </header>
+            )}
 
             {/* TOOLBAR */}
             <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-soft flex flex-col md:flex-row md:items-center justify-between gap-4">
