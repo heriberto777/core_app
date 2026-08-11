@@ -219,6 +219,8 @@ class MongoDBTransport extends Transport {
         transactionId: info.transactionId,
         loadId: info.loadId,
         taskId: info.taskId,
+        mappingName: info.mappingName,
+        mappingId: info.mappingId,
       }));
 
       const timeout = this.isShuttingDown ? 3000 : 10000;
@@ -317,6 +319,14 @@ class MongoDBTransport extends Transport {
       transactionId: rest.transactionId,
       loadId: rest.loadId,
       taskId: rest.taskId,
+      // transferService.js/DynamicTransferService.js pasan estos dos en cada
+      // log de operationType "TRANSFER", pero al no estar en esta lista se
+      // descartaban en silencio antes de llegar a Mongo — el filtro
+      // mappingName:{$exists:true} de getTransferHistory (Últimas
+      // Actividades / Central de Auditoría) nunca encontraba nada, aunque
+      // las transferencias se hubieran ejecutado y guardado correctamente.
+      mappingName: rest.mappingName,
+      mappingId: rest.mappingId,
     };
   }
 
