@@ -7,6 +7,7 @@ import { App } from "./App.jsx";
 // import "sweetalert2/src/sweetalert2.scss";
 import "./index.css";
 import "./App.css";
+import "./utils/authInterceptor.jsx";
 
 class ErrorBoundary extends React.Component {
   constructor(props) {

@@ -317,6 +317,19 @@ export function AuthProvider({ children }) {
     initializeAuth();
   }, []); // Solo se ejecuta UNA vez
 
+  // ⭐ SESIÓN EXPIRADA DETECTADA POR EL INTERCEPTOR GLOBAL ⭐
+  // authInterceptor.jsx (fuera de React) dispara este evento cuando falla el
+  // refresh (ej. refresh token también expirado), para evitar que componentes
+  // con polling (ej. LiveHealthCard) sigan reintentando un 401 sin fin.
+  useEffect(() => {
+    const handleSessionExpired = () => {
+      console.warn("🧹 Sesión expirada (refresh fallido) - cerrando sesión...");
+      logout();
+    };
+    window.addEventListener("auth:session-expired", handleSessionExpired);
+    return () => window.removeEventListener("auth:session-expired", handleSessionExpired);
+  }, [logout]);
+
   // ⭐ VALORES DEL CONTEXTO ⭐
   const contextValue = {
     // Estados
