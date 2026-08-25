@@ -14,6 +14,7 @@ class AppBootstrap {
       connectionService: false,
       healthMonitor: false,
       cronJobs: false,
+      schedulerWatchdog: false,
     };
   }
 
@@ -98,6 +99,19 @@ class AppBootstrap {
         // No fallar por esto
       }
 
+      // 5. Watchdog del scheduler (siempre, incluso si el paso 4 falló): si
+      // el resync anterior coincidió con una ventana en la que Mongo estaba
+      // inalcanzable, esto re-arma el cron solo al reconectar (o en el
+      // chequeo periódico), sin depender de un reinicio manual.
+      try {
+        const cronService = require("./cronService");
+        cronService.startSchedulerWatchdog();
+        this.state.schedulerWatchdog = true;
+      } catch (error) {
+        logger.warn("⚠️ No se pudo iniciar el watchdog del scheduler:", error.message);
+        this.state.schedulerWatchdog = false;
+      }
+
       const successCount = Object.values(this.state).filter(Boolean).length;
       const totalServices = Object.keys(this.state).length;
 
@@ -129,11 +143,12 @@ class AppBootstrap {
       logger.info("📴 Iniciando cierre ordenado de servicios...");
       let shutdownSuccess = true;
 
-      // 1. Detener trabajos cron primero
-      if (this.state.cronJobs) {
+      // 1. Detener trabajos cron primero (y su watchdog)
+      if (this.state.cronJobs || this.state.schedulerWatchdog) {
         try {
           logger.info("⏹️ Deteniendo trabajos cron...");
           const cronService = require("./cronService");
+          cronService.stopSchedulerWatchdog();
           cronService.stopCronJob();
           logger.info("✅ Trabajos cron detenidos correctamente");
         } catch (error) {
@@ -193,6 +208,7 @@ class AppBootstrap {
         connectionService: false,
         healthMonitor: false,
         cronJobs: false,
+        schedulerWatchdog: false,
       };
       this.initialized = false;
 

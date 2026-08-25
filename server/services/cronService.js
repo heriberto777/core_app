@@ -1,5 +1,6 @@
 // services/cronService.js - Versión COMPLETAMENTE corregida
 const cron = require("node-cron");
+const mongoose = require("mongoose");
 const logger = require("./logger");
 const { nextOccurrenceInZone } = require("../utils/timezoneUtils");
 
@@ -24,6 +25,8 @@ let currentHour = "02:00";
 let currentTimezone = "America/Santo_Domingo";
 let transferService;
 let LinkedTasksService;
+let watchdogInterval = null;
+let mongoReconnectListenerAttached = false;
 
 const startCronJob = (hour, timezone) => {
   // Importaciones diferidas
@@ -512,6 +515,65 @@ const getCronDiagnostics = () => {
   };
 };
 
+/**
+ * Re-sincroniza el estado del cron con la configuración guardada en Mongo.
+ * AppBootstrap.initialize() ya hace este resync una vez al arrancar, pero si
+ * esa lectura coincide con una ventana en la que MongoDB está inalcanzable,
+ * falla en silencio (solo un warning) y el cron queda desarmado (`task ===
+ * null`) aunque la config diga `enabled: true` — nada más lo vuelve a
+ * intentar. Este watchdog cubre ese caso: se dispara al reconectar Mongo y,
+ * como red de seguridad adicional, en un chequeo periódico.
+ */
+const resyncFromDatabase = async (trigger) => {
+  try {
+    if (mongoose.connection.readyState !== 1) return;
+
+    const Config = require("../models/configModel");
+    const config = await Config.findOne({ singleton: "singleton" }).lean();
+    if (!config) return;
+
+    const isDesynced =
+      (config.enabled && task === null) || (!config.enabled && task !== null);
+    if (!isDesynced) return;
+
+    logger.warn(
+      `🔧 Scheduler desincronizado con la configuración guardada (enabled=${config.enabled}, active=${task !== null}) — resincronizando [${trigger}]`
+    );
+    syncWithConfig(config);
+  } catch (error) {
+    logger.warn(
+      `⚠️ Watchdog del scheduler: no se pudo resincronizar (${trigger}): ${error.message}`
+    );
+  }
+};
+
+const startSchedulerWatchdog = () => {
+  if (!mongoReconnectListenerAttached) {
+    mongoose.connection.on("reconnected", () =>
+      resyncFromDatabase("mongo-reconnected")
+    );
+    mongoReconnectListenerAttached = true;
+  }
+
+  if (!watchdogInterval) {
+    watchdogInterval = setInterval(
+      () => resyncFromDatabase("chequeo-periodico"),
+      5 * 60 * 1000
+    );
+    logger.info(
+      "🩺 Watchdog del scheduler iniciado (revisión cada 5 min + al reconectar Mongo)"
+    );
+  }
+};
+
+const stopSchedulerWatchdog = () => {
+  if (watchdogInterval) {
+    clearInterval(watchdogInterval);
+    watchdogInterval = null;
+    logger.info("🩺 Watchdog del scheduler detenido");
+  }
+};
+
 module.exports = {
   startCronJob,
   stopCronJob,
@@ -519,4 +581,6 @@ module.exports = {
   getSchedulerStatus,
   syncWithConfig,
   getCronDiagnostics,
+  startSchedulerWatchdog,
+  stopSchedulerWatchdog,
 };
