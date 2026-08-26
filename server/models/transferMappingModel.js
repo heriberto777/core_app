@@ -114,7 +114,11 @@ const FieldMappingSchema = new Schema({
     // Para datetime (fecha con hora)
     datetimeFormat: {
       type: String,
-      enum: ["YYYY-MM-DDTHH:MM:SS", "YYYY-MM-DD HH:MM:SS", "DD/MM/YYYY HH:MM"],
+      // "YYYY-MM-DD 00:00:00.000" faltaba aquí aunque transformerService.js
+      // (formatDate) ya lo soporta en ejecución — cualquier mapeo guardado
+      // con ese valor fallaba runValidators en CADA actualización posterior,
+      // sin importar qué campo se estuviera editando.
+      enum: ["YYYY-MM-DDTHH:MM:SS", "YYYY-MM-DD HH:MM:SS", "YYYY-MM-DD 00:00:00.000", "DD/MM/YYYY HH:MM"],
       default: "YYYY-MM-DDTHH:MM:SS",
     },
     // Para booleanos

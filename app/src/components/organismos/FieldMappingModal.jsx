@@ -410,6 +410,28 @@ export function FieldMappingModal({ isOpen, onClose, onSave, initialData, consec
                                             <label className="flex items-center gap-3 cursor-pointer"><input type="checkbox" name="transform.thousandsSeparator" checked={formData.transform.thousandsSeparator} onChange={handleChange} /> <span className="text-sm font-medium">Sep. Miles</span></label>
                                           </>
                                         )}
+                                        {formData.transform.transformType === "date" && (
+                                          <div className="flex flex-col gap-1.5 w-full">
+                                            <label className="text-[13px] font-semibold text-slate-500 ml-1">Formato de Fecha</label>
+                                            <select name="transform.dateFormat" value={formData.transform.dateFormat || "YYYY-MM-DD"} onChange={handleChange} className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 bg-white focus:border-primary-500 outline-none">
+                                              <option value="YYYY-MM-DD">YYYY-MM-DD</option>
+                                              <option value="DD/MM/YYYY">DD/MM/YYYY</option>
+                                              <option value="MM/DD/YYYY">MM/DD/YYYY</option>
+                                              <option value="DD-MM-YYYY">DD-MM-YYYY</option>
+                                            </select>
+                                          </div>
+                                        )}
+                                        {formData.transform.transformType === "datetime" && (
+                                          <div className="flex flex-col gap-1.5 w-full">
+                                            <label className="text-[13px] font-semibold text-slate-500 ml-1">Formato de Fecha y Hora</label>
+                                            <select name="transform.datetimeFormat" value={formData.transform.datetimeFormat || "YYYY-MM-DDTHH:MM:SS"} onChange={handleChange} className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 bg-white focus:border-primary-500 outline-none">
+                                              <option value="YYYY-MM-DDTHH:MM:SS">YYYY-MM-DDTHH:MM:SS</option>
+                                              <option value="YYYY-MM-DD HH:MM:SS">YYYY-MM-DD HH:MM:SS</option>
+                                              <option value="YYYY-MM-DD 00:00:00.000">YYYY-MM-DD 00:00:00.000 (hora fija en cero)</option>
+                                              <option value="DD/MM/YYYY HH:MM">DD/MM/YYYY HH:MM</option>
+                                            </select>
+                                          </div>
+                                        )}
                                       </div>
                                     )}
                                     <Input label="Valor por defecto (si es null)" name="transform.defaultValue" value={formData.transform?.defaultValue || ""} onChange={handleChange} placeholder="N/A" />
