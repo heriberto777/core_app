@@ -41,6 +41,7 @@ const ModuleConfigSchema = new mongoose.Schema(
             "export",
             "import",
             "approve",
+            "assign",
           ],
         },
         displayName: {

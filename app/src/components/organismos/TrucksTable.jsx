@@ -76,7 +76,7 @@ export const TrucksTable = ({ trucks = [], loading, onEdit, onToggleActive }) =>
                             onClick={() => onEdit(truck)}
                             title="Editar camión"
                           >
-                            <FaEdit />
+                            <FaEdit size={16} />
                           </Button>
                           <Button
                             variant="ghost"

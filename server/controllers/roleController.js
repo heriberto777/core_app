@@ -150,7 +150,22 @@ async function updateRole(req, res) {
     const role = await Role.findById(id);
     if (!role) return res.status(404).json({ success: false, message: "Rol no encontrado" });
 
-    if (role.isSystem) return res.status(403).json({ success: false, message: "No se pueden editar roles del sistema" });
+    // Los roles de sistema no se pueden renombrar/redescribir (protege su identidad),
+    // pero sus permisos sí evolucionan a medida que se suman módulos nuevos al sistema.
+    if (role.isSystem) {
+      if (!permissions) {
+        return res.status(400).json({ success: false, message: "Los roles de sistema solo permiten actualizar permisos" });
+      }
+
+      const updatedRole = await Role.findByIdAndUpdate(
+        id,
+        { permissions, updatedBy: userId, updatedAt: new Date() },
+        { new: true, runValidators: true }
+      ).lean();
+
+      logger.info(`Permisos de rol de sistema actualizados: ${updatedRole.displayName} por ${userId}`);
+      return res.status(200).json({ success: true, message: "Permisos actualizados exitosamente", data: updatedRole });
+    }
 
     const duplicateRole = await Role.findOne({
       _id: { $ne: id },

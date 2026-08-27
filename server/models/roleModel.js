@@ -28,10 +28,11 @@ const roleSchema = new mongoose.Schema(
         actions: [
           {
             type: String,
-            // Debe incluir las mismas 9 acciones que roleController.getAvailableActions
-            // ya le ofrece a la UI — antes solo se permitían 5, así que asignar
-            // export/import/approve/execute a un rol fallaba al guardar.
-            enum: ["create", "read", "update", "delete", "manage", "export", "import", "approve", "execute"],
+            // Debe incluir las mismas acciones que roleController.getAvailableActions
+            // le ofrece a la UI, más cualquier acción custom que ya viva en algún
+            // ModuleConfig (ej. "assign", agregada directo en Mongo para rutas) —
+            // si no está acá, falla la validación al guardar el rol que la usa.
+            enum: ["create", "read", "update", "delete", "manage", "export", "import", "approve", "execute", "assign"],
             required: true,
           },
         ],
@@ -47,11 +48,11 @@ const roleSchema = new mongoose.Schema(
     },
     createdBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "Usuario",
     },
     updatedBy: {
       type: mongoose.Schema.Types.ObjectId,
-      ref: "User",
+      ref: "Usuario",
     },
   },
   {

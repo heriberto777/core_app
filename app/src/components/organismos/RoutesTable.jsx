@@ -68,7 +68,7 @@ export const RoutesTable = ({ routes = [], loading, onEdit, onToggleActive }) =>
                             onClick={() => onEdit(route)}
                             title="Editar descripción"
                           >
-                            <FaEdit />
+                            <FaEdit size={16} />
                           </Button>
                           <Button
                             variant="ghost"
