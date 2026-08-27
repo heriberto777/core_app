@@ -92,6 +92,13 @@ export * from "./components/organismos/RolesTable";
 export * from "./components/organismos/LiveHealthCard";
 export * from "./components/organismos/ModuleFormModal";
 export * from "./components/organismos/ModulesTable";
+export * from "./components/organismos/RouteFormModal";
+export * from "./components/organismos/RoutesTable";
+export * from "./components/organismos/RouteAssignmentModal";
+export * from "./components/organismos/SellerRouteAssignmentModal";
+export * from "./components/organismos/ClientAssignmentTable";
+export * from "./components/organismos/TruckFormModal";
+export * from "./components/organismos/TrucksTable";
 
 
 // Organismos con default export
@@ -118,6 +125,9 @@ export * from "./components/templates/ModuleManager";
 export * from "./components/templates/MappingEditor";
 export * from "./components/templates/MappingsList";
 export * from "./components/templates/RoleManagement";
+export * from "./components/templates/RoutesManagement";
+export * from "./components/templates/RouteAssignmentCenter";
+export * from "./components/templates/TrucksManagement";
 export * from "./components/templates/Statistics";
 export * from "./components/templates/AuditCenter";
 export * from "./components/templates/UserManagement";
@@ -155,6 +165,9 @@ export * from "./hooks/useSystemStats";
 export * from "./hooks/useDBConnections";
 export * from "./hooks/useUsers";
 export * from "./hooks/useRoles";
+export * from "./hooks/useRoutes";
+export * from "./hooks/useRouteAssignment";
+export * from "./hooks/useTrucks";
 export * from "./hooks/useModules";
 export * from "./hooks/useMappings";
 

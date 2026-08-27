@@ -34,6 +34,7 @@ class Telemetry {
         cancelled: 0,
         recordsProcessed: 0,
         recordsInserted: 0,
+        recordsUpdated: 0,
         recordsDuplicated: 0,
       },
 
@@ -300,6 +301,7 @@ class Telemetry {
     this.metrics.transfers.cancelled = 0;
     this.metrics.transfers.recordsProcessed = 0;
     this.metrics.transfers.recordsInserted = 0;
+    this.metrics.transfers.recordsUpdated = 0;
     this.metrics.transfers.recordsDuplicated = 0;
 
     // Resetear métricas de DB de la sesión

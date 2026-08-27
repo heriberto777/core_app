@@ -21,6 +21,7 @@ const FIELD_HELP = {
     transferType: "Dirección de la transferencia de datos entre servidores.",
     active: "Si está desmarcado, la tarea no podrá ejecutarse ni manualmente ni automáticamente.",
     clearBeforeInsert: "Elimina todos los registros de la tabla destino antes de insertar los nuevos. Útil para sincronizaciones completas.",
+    updateOnDuplicate: "Si un registro ya existe en destino (mismo campo clave), actualiza sus valores en vez de saltarlo. Solo tiene efecto con \"Borrar antes de insertar\" desactivado — si no, nunca hay duplicados que actualizar.",
     query: "Consulta SQL que se ejecutará en el servidor origen para obtener los datos a transferir.",
     parameters: "Condiciones para filtrar los datos en formato JSON. Ej: [{\"field\": \"status\", \"operator\": \"=\", \"value\": \"A\"}]",
     linkedGroup: "Nombre del grupo de tareas que se ejecutarán de forma coordinada. Todas las tareas con el mismo grupo se ejecutan juntas. Si escribes el nombre de un grupo existente, esta tarea se une a él.",
@@ -59,7 +60,7 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
     const [loading, setLoading] = useState(false);
     const [formData, setFormData] = useState({
         name: "", type: "manual", transferType: "general", executionMode: "normal",
-        active: true, clearBeforeInsert: false, query: "", parameters: "[]",
+        active: true, clearBeforeInsert: false, updateOnDuplicate: false, query: "", parameters: "[]",
         linkedGroup: "", linkedExecutionOrder: 0, executeLinkedTasks: false,
         linkedTasks: [], postUpdateQuery: "",
         validationRules: { requiredFields: [], existenceCheck: { table: "", key: "" } },
@@ -71,6 +72,7 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
             setFormData({
                 ...task,
                 parameters: JSON.stringify(task.parameters || [], null, 2),
+                updateOnDuplicate: task.updateOnDuplicate || false,
                 linkedGroup: task.linkedGroup || "",
                 linkedExecutionOrder: task.linkedExecutionOrder || 0,
                 linkedTasks: task.linkedTasks || [],
@@ -81,7 +83,7 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
         } else {
             setFormData({
                 name: "", type: "manual", transferType: "general", executionMode: "normal",
-                active: true, clearBeforeInsert: false, query: "", parameters: "[]",
+                active: true, clearBeforeInsert: false, updateOnDuplicate: false, query: "", parameters: "[]",
                 linkedGroup: "", linkedExecutionOrder: 0, executeLinkedTasks: false,
                 linkedTasks: [], postUpdateQuery: "",
                 validationRules: { requiredFields: [], existenceCheck: { table: "", key: "" } },
@@ -233,6 +235,11 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                     <input type="checkbox" name="clearBeforeInsert" checked={formData.clearBeforeInsert} onChange={handleChange} className="w-4 h-4 cursor-pointer accent-primary-600" />
                                     <span>Borrar antes de insertar</span>
                                     <FieldHelp field="clearBeforeInsert" />
+                                </label>
+                                <label className={`flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded text-sm transition-colors ${formData.clearBeforeInsert ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:border-primary-500"}`}>
+                                    <input type="checkbox" name="updateOnDuplicate" checked={formData.updateOnDuplicate} onChange={handleChange} disabled={formData.clearBeforeInsert} className="w-4 h-4 cursor-pointer accent-primary-600" />
+                                    <span>Actualizar si ya existe</span>
+                                    <FieldHelp field="updateOnDuplicate" />
                                 </label>
                             </div>
 

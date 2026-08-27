@@ -1,0 +1,2567 @@
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts]    Script Date: 25/08/2026 4:08:59 PM ******/
+DROP VIEW [dbo].[IMPLT_accounts]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts]    Script Date: 25/08/2026 4:08:59 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+
+
+CREATE   VIEW [dbo].[IMPLT_accounts]
+AS
+WITH IMPLT_accounts AS (
+    SELECT
+        cl.CLIENTE,
+		cl.RUBRO4_CLIENTE,
+        cl.NOMBRE,--Name1
+        cl.ALIAS,--Name2
+        RTRIM(LTRIM(REPLACE(REPLACE(cl.CONTRIBUYENTE, '|', ''), '-', ''))) AS NIF,
+        cl.DIRECCION,--Direcion1
+        cl.PAIS,
+        cl.TELEFONO1,
+        cl.FAX,
+        cl.E_MAIL,
+        cl.U_CLUSTER,
+        cl.ACTIVO,
+        cl.CATEGORIA_CLIENTE,
+        cl.ZONA,
+        cl.NIVEL_PRECIO,
+        cl.U_LATITUD,
+        cl.U_LONGITUD,
+        cl.MONEDA,
+        cl.U_607_CLIENTE_GENERICO,
+        cl.EXENTO_IMPUESTOS,
+        cl.CONTACTO,
+        cl.VENDEDOR,
+        z.NOMBRE AS ZONA_NOMBRE,
+		CL.U_TRANSFER_STATUS, 
+        CL.CONDICION_PAGO,
+        CL.U_IS_SYNCS
+    FROM CATELLI.CLIENTE cl
+    INNER JOIN CATELLI.zona z ON cl.zona = z.zona
+    WHERE cl.ACTIVO = 'S'
+      AND cl.CLIENTE NOT LIKE 'N%'
+      AND cl.VENDEDOR NOT IN ('999', '998', '22')
+      AND cl.NIVEL_PRECIO NOT LIKE 'OTROS' --AND U_ESTATUS = 'Nuevo'
+      and CL.U_IS_SYNCS like '1'
+)
+SELECT
+    CASE
+        WHEN SUBSTRING(CLIENTE, PATINDEX('%[A-Za-z]%', CLIENTE), 1) NOT LIKE 'O'
+             THEN 'CN' + CLIENTE
+        ELSE CLIENTE
+    END AS Code_ofClient,
+	  RUBRO4_CLIENTE AS Code_Account,
+    CASE WHEN RTRIM(LTRIM(REPLACE(REPLACE(NOMBRE, '|', ''), ',', ''))) LIKE '' THEN 'NA' ELSE RTRIM(LTRIM(REPLACE(REPLACE(NOMBRE, '|', ''), ',', ''))) END AS Name1,
+    CASE WHEN RTRIM(LTRIM(REPLACE(REPLACE(NOMBRE, '|', ''), ',', ''))) LIKE '' THEN 'NA' ELSE RTRIM(LTRIM(REPLACE(REPLACE(NOMBRE, '|', ''), ',', ''))) END AS Name2,
+    NIF,
+    PAIS AS Code_Country,
+	CASE WHEN 
+    SUBSTRING(
+         LTRIM(REPLACE(REPLACE(REPLACE(CAST(DIRECCION AS VARCHAR(MAX)), '|', ''), CHAR(13), ''), CHAR(10), ''))
+         , 1, 75) LIKE '' THEN 'NA' ELSE  SUBSTRING(
+         LTRIM(REPLACE(REPLACE(REPLACE(CAST(DIRECCION AS VARCHAR(MAX)), '|', ''), CHAR(13), ''), CHAR(10), ''))
+         , 1, 75) END  AS Address1,
+		 CASE WHEN  SUBSTRING(
+         LTRIM(REPLACE(REPLACE(REPLACE(CAST(DIRECCION AS VARCHAR(MAX)), '|', ''), CHAR(13), ''), CHAR(10), ''))
+         , 76, 150) LIKE '' THEN 'NA' ELSE  SUBSTRING(
+         LTRIM(REPLACE(REPLACE(REPLACE(CAST(DIRECCION AS VARCHAR(MAX)), '|', ''), CHAR(13), ''), CHAR(10), ''))
+         , 76, 150) END AS Address2,
+    CASE
+        WHEN SUBSTRING(ZONA, PATINDEX('%[A-Za-z]%', ZONA), 1) NOT LIKE 'O'
+             THEN 'CN' + ZONA
+        ELSE ZONA
+    END AS Code_Province,
+    ZONA_NOMBRE AS Province,
+    CASE WHEN SUBSTRING(LTRIM(REPLACE(TELEFONO1, '/', '')), 1, 12) LIKE '' THEN 'NA' ELSE SUBSTRING(LTRIM(REPLACE(TELEFONO1, '/', '')), 1, 12) END  AS Phone1,
+    CASE WHEN SUBSTRING(LTRIM(REPLACE(TELEFONO1, '/', '')), 13, 30) LIKE '' THEN 'NA' ELSE SUBSTRING(LTRIM(REPLACE(TELEFONO1, '/', '')), 13, 30) END AS Phone2,
+    CASE WHEN RTRIM(LTRIM(REPLACE(FAX, '/', ''))) LIKE '' THEN 'NA' ELSE  RTRIM(LTRIM(REPLACE(FAX, '/', ''))) END AS Fax,
+    CASE WHEN E_MAIL LIKE '' THEN 'NA' ELSE E_MAIL END AS E_mail,
+    '02' AS Code_Type,
+    CASE
+        WHEN U_CLUSTER IS NULL THEN 'N'
+        ELSE U_CLUSTER
+    END AS Code_Potential,
+    CASE
+        WHEN ACTIVO = 'S' THEN '1'
+        ELSE '0'
+    END AS Code_Status,
+    CATEGORIA_CLIENTE AS Code_Agrupation1,
+	CATEGORIA_CLIENTE AS Code_ClassificationA,
+	Code_ClassificationB = CASE CATEGORIA_CLIENTE WHEN 'A1' THEN 'A1'
+				WHEN 'A2' THEN 'A1'
+				WHEN 'A3' THEN 'A1'
+				WHEN 'Q1' THEN 'D1'
+				WHEN 'D1' THEN 'D1'
+				WHEN 'D2' THEN 'D1'
+				WHEN 'SUR' THEN 'D1'
+				WHEN 'C1' THEN 'C1'
+				WHEN 'SM' THEN 'C1'
+				WHEN 'C2' THEN 'C1'
+				WHEN 'C3' THEN 'C1'
+				WHEN 'B1' THEN 'OT'
+				WHEN 'OT' THEN 'OT'
+				WHEN 'EM' THEN 'OT'
+				WHEN 'FA' THEN 'OT'
+				WHEN 'CA' THEN 'OT'
+				WHEN 'H1' THEN 'OT'
+				else 'OT' END,
+    NIVEL_PRECIO AS Code_Price_List,
+    CASE WHEN U_LATITUD LIKE '' OR  U_LATITUD IS NULL THEN 'NA'  ELSE U_LATITUD  END  AS Latitude,
+     CASE WHEN U_LONGITUD LIKE '' OR  U_LONGITUD IS NULL THEN 'NA'  ELSE U_LONGITUD  END    AS Length,
+    MONEDA AS Code_Currency,
+    --CASE
+    --    WHEN NIVEL_PRECIO IN ('COLGATE', 'BRONZE', 'GOLD', 'SILVER', 'LISTA_MA', 'LISTA_INN', 'LISTA_SM', 'LISTA_IND', 'IND_VIP')
+    --         THEN '01'
+    --    ELSE NIVEL_PRECIO
+    --END AS Code_Warehouse,
+    '01' AS Code_Warehouse,
+    CASE 
+    WHEN CONDICION_PAGO >= 3 THEN '3' ELSE '2' END AS Code_Payment_Term,
+    CASE
+        WHEN U_607_CLIENTE_GENERICO = 'NO' THEN '0'
+        ELSE '1'
+    END AS Gen_Account, 
+    CONTACTO AS Contact_Name,
+    CONTACTO AS Owner,    
+    CASE
+        WHEN SUBSTRING(VENDEDOR, PATINDEX('%[A-Za-z]%', VENDEDOR), 1) NOT LIKE 'O'
+             THEN 'C' + VENDEDOR
+        ELSE VENDEDOR END AS Code_Seller,
+	CASE 
+		WHEN U_TRANSFER_STATUS = '1' THEN '1'
+		WHEN U_TRANSFER_STATUS = '2' THEN '2'
+		WHEN U_TRANSFER_STATUS = '3' THEN '3'
+		else '0'
+	end as Transfer_status
+FROM IMPLT_accounts;
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_agrupation1]    Script Date: 25/08/2026 4:09:12 PM ******/
+DROP VIEW [dbo].[IMPLT_accounts_agrupation1]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_agrupation1]    Script Date: 25/08/2026 4:09:12 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE   VIEW [dbo].[IMPLT_accounts_agrupation1]
+AS
+SELECT 
+    TRIM(cc.CATEGORIA_CLIENTE) AS Code,
+    TRIM(cc.DESCRIPCION) AS Description,
+    '1' AS Transfer_Status
+FROM CATELLI.CATEGORIA_CLIENTE cc
+WHERE cc.CATEGORIA_CLIENTE IS NOT NULL;
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_agrupation2]    Script Date: 25/08/2026 4:09:25 PM ******/
+DROP VIEW [dbo].[IMPLT_accounts_agrupation2]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_agrupation2]    Script Date: 25/08/2026 4:09:25 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_accounts_agrupation2
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_accounts_agrupation2]
+AS
+SELECT 
+    TRIM(cc.CATEGORIA_CLIENTE) AS Code,
+    TRIM(cc.CATEGORIA_CLIENTE) AS Code_Agrupation1,
+    TRIM(cc.DESCRIPCION) AS Description,
+    '1' AS Transfer_Status
+FROM CATELLI.CATEGORIA_CLIENTE cc
+WHERE cc.CATEGORIA_CLIENTE IS NOT NULL;
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_agrupation3]    Script Date: 25/08/2026 4:09:35 PM ******/
+DROP VIEW [dbo].[IMPLT_accounts_agrupation3]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_agrupation3]    Script Date: 25/08/2026 4:09:35 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_accounts_agrupation3
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_accounts_agrupation3]
+AS
+SELECT 
+    cc.CATEGORIA_CLIENTE AS Code,
+    cc.CATEGORIA_CLIENTE AS Code_Agrupation1,
+	cc.CATEGORIA_CLIENTE as Code_Agrupation2,
+    cc.DESCRIPCION AS Description,
+    '1' AS Transfer_Status
+FROM CATELLI.CATEGORIA_CLIENTE cc
+WHERE cc.CATEGORIA_CLIENTE IS NOT NULL;
+
+GO
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_array]    Script Date: 25/08/2026 4:09:47 PM ******/
+DROP VIEW [dbo].[IMPLT_accounts_array]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_array]    Script Date: 25/08/2026 4:09:47 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_accounts_array
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_accounts_array]
+AS
+WITH AccountsArray AS (
+    SELECT 
+        CASE 
+            WHEN u_type = '19' THEN '1'
+            WHEN u_descrip IN ('A', 'B', 'C', 'D', 'F', 'N', 'S') THEN u_descrip
+            ELSE U_CODIGO
+        END AS Code,
+        u_type AS Type,
+        u_descrip AS Description,
+        1 AS Transfer_status
+    FROM CATELLI.U_ACCOUNTS_ARRAY
+    UNION ALL
+   SELECT 
+        Tipo AS Code,
+        '32' AS Type,
+        descripcion AS Description,
+        1 AS Transfer_status
+    FROM CATELLI.NCF_CONSECUTIVO
+    WHERE ACTIVO LIKE 'S'
+    UNION ALL
+    SELECT 
+        pais AS Code,
+        '50' AS Type,
+        nombre AS Description,
+        1 AS Transfer_status
+    FROM CATELLI.pais
+    UNION ALL
+    SELECT 
+        nivel_precio AS Code,
+        '53' AS Type,
+        nivel_precio AS Description,
+        1 AS Transfer_status
+    FROM CATELLI.nivel_precio
+    UNION ALL
+    SELECT 
+        moneda AS Code,
+        '54' AS Type,
+        nombre AS Description,
+        1 AS Transfer_status
+    FROM CATELLI.MONEDA
+    
+)
+SELECT * FROM AccountsArray;
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_credit]    Script Date: 25/08/2026 4:09:58 PM ******/
+DROP VIEW [dbo].[IMPLT_accounts_credit]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_credit]    Script Date: 25/08/2026 4:09:58 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+CREATE VIEW [dbo].[IMPLT_accounts_credit]
+AS
+SELECT 
+    CASE 
+        WHEN SUBSTRING(CL.CLIENTE, PATINDEX('%[A-Za-z]%', CL.CLIENTE), 1) NOT LIKE 'O'
+             THEN CONCAT('CN', CL.CLIENTE)
+        ELSE CL.CLIENTE
+    END AS Code_Account,
+    --CL.LIMITE_CREDITO,
+    -- CAST(CL.LIMITE_CREDITO AS VARCHAR(13)) AS Credit_Limit
+    CAST(ROUND(CAST(cl.LIMITE_CREDITO AS NUMERIC(11,2)), 2) AS VARCHAR(13)) AS Credit_Limit,
+    CAST(ROUND(CAST(cl.SALDO AS NUMERIC(11,2)), 2) AS VARCHAR(13)) AS Credit_Consum,
+    CASE 
+        WHEN CL.MOROSO = 'S' THEN '1'
+        ELSE '0'
+    END AS Lock_Credit,
+    '0' AS Source_Create,
+    CASE 
+        WHEN CL.U_TRANSFER_STATUS IN ('1', '2', '3') THEN CAST(CL.U_TRANSFER_STATUS AS INT)
+        ELSE 0
+    END AS Transfer_status
+FROM CATELLI.CLIENTE CL
+WHERE CL.ACTIVO = 'S'
+  AND CL.CLIENTE NOT LIKE 'N%'
+  AND CL.VENDEDOR NOT IN ('999', '998', '22')
+  AND CL.U_IS_SYNCS = '1';
+GO
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_function]    Script Date: 25/08/2026 4:10:08 PM ******/
+DROP VIEW [dbo].[IMPLT_accounts_function]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_function]    Script Date: 25/08/2026 4:10:08 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_accounts_function
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_accounts_function]
+AS
+WITH AccountsFunction AS (
+    SELECT 
+        CASE 
+           WHEN SUBSTRING(CL.cliente, PATINDEX('%[A-Za-z]%', CL.cliente), 1) NOT LIKE 'O'
+                 THEN 'CN' + CL.cliente
+            ELSE cl.CLIENTE
+        END AS Code_Account,
+        'CATELLI' AS Code_Unit_Org,
+        'CATELLI' AS Code_Sales_Org,
+        CASE 
+           WHEN SUBSTRING(CL.cliente, PATINDEX('%[A-Za-z]%', CL.cliente), 1) NOT LIKE 'O'
+                 THEN 'CN' + CL.cliente
+            ELSE cl.CLIENTE
+        END AS Code_Function,
+        'RG' AS Code_Type_Function,
+        '1' AS By_Default,
+        NULL AS Notes,
+        NULL AS Specialties,
+        NULL AS Sub_Specialties,
+        NULL AS Additional,
+        '0' AS Is_Plus,
+        SUBSTRING(LTRIM(REPLACE(REPLACE(COALESCE(cl.TELEFONO1, ''), '/', ''), '|', '')), 1, 12) AS Phone1,
+        SUBSTRING(LTRIM(REPLACE(REPLACE(COALESCE(cl.TELEFONO1, ''), '/', ''), '|', '')), 13, 30) AS Phone2,
+        cl.E_MAIL AS E_mail,
+        'Q' AS Code_Frecuency,
+        '1' AS Code_Week1,
+        MAX(CASE WHEN rc.DIA = 0 THEN '1' ELSE '0' END) AS Visit_Mon1,
+        MAX(CASE WHEN rc.DIA = 1 THEN '1' ELSE '0' END) AS Visit_Tue1,
+        MAX(CASE WHEN rc.DIA = 2 THEN '1' ELSE '0' END) AS Visit_Wen1,
+        MAX(CASE WHEN rc.DIA = 3 THEN '1' ELSE '0' END) AS Visit_Thu1,
+        MAX(CASE WHEN rc.DIA = 4 THEN '1' ELSE '0' END) AS Visit_Fri1,
+        MAX(CASE WHEN rc.DIA = 5 THEN '1' ELSE '0' END) AS Visit_Sat1,
+        MAX(CASE WHEN rc.DIA = 6 THEN '1' ELSE '0' END) AS Visit_Sun1,
+        '0' AS Code_Week2,
+        MAX(CASE WHEN rc.DIA = 0 THEN '1' ELSE '0' END) AS Visit_Mon2,
+        MAX(CASE WHEN rc.DIA = 1 THEN '1' ELSE '0' END) AS Visit_Tue2,
+        MAX(CASE WHEN rc.DIA = 2 THEN '1' ELSE '0' END) AS Visit_Wen2,
+        MAX(CASE WHEN rc.DIA = 3 THEN '1' ELSE '0' END) AS Visit_Thu2,
+        MAX(CASE WHEN rc.DIA = 4 THEN '1' ELSE '0' END) AS Visit_Fri2,
+        MAX(CASE WHEN rc.DIA = 5 THEN '1' ELSE '0' END) AS Visit_Sat2,
+        MAX(CASE WHEN rc.DIA = 6 THEN '1' ELSE '0' END) AS Visit_Sun2,
+       CASE 
+		WHEN U_TRANSFER_STATUS = '1' THEN '1'
+		WHEN U_TRANSFER_STATUS = '2' THEN '2'
+		WHEN U_TRANSFER_STATUS = '3' THEN '3'
+		else '0'
+	end as Transfer_status
+    FROM CATELLI.CLIENTE cl
+    INNER JOIN erpadmin.ruta_cliente rc ON cl.CLIENTE = rc.CLIENTE
+    WHERE cl.ACTIVO = 'S'
+      AND cl.CLIENTE NOT LIKE 'N%'
+      AND cl.VENDEDOR NOT IN ('999', '998', '22') and CL.U_IS_SYNCS like '1'
+    GROUP BY cl.CLIENTE, cl.TELEFONO1, cl.E_MAIL, cl.U_TRANSFER_STATUS, CL.U_IS_SYNCS
+)
+SELECT * FROM AccountsFunction --where Code_Account LIKE '10021'
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_org]    Script Date: 25/08/2026 4:10:18 PM ******/
+DROP VIEW [dbo].[IMPLT_accounts_org]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_org]    Script Date: 25/08/2026 4:10:18 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_accounts_org
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_accounts_org]
+AS
+WITH AccountsOrg AS (
+	SELECT 
+    CASE 
+       WHEN SUBSTRING(CL.cliente, PATINDEX('%[A-Za-z]%', CL.cliente), 1) NOT LIKE 'O'
+             THEN 'CN' + CL.cliente
+        ELSE cl.CLIENTE
+    END AS Code_Account,
+    'CATELLI' AS Code_Unit_Org,
+    'CATELLI' AS Code_Sales_Org,
+    CASE WHEN cl.ACTIVO = 'S' THEN '1' ELSE '0' END AS Code_Status,
+    cl.CONDICION_PAGO AS Code_Payment,
+    cl.NIVEL_PRECIO AS Code_Price_List,
+    NULL AS Code_Plant,
+    cl.MONEDA AS Code_Currency,
+    '1' AS Price_Schema,
+    NULL AS IBAN,
+    sn.TIPO AS Code_Segment,
+    CASE WHEN cp.DIAS_NETO <> 0 THEN '1' ELSE '0' END AS Code_Payment_method,
+    CASE 
+        WHEN CL.U_TRANSFER_STATUS = '1' THEN '1'
+        WHEN CL.U_TRANSFER_STATUS = '2' THEN '2'
+        WHEN CL.U_TRANSFER_STATUS = '3' THEN '3'
+        ELSE '0'
+    END AS Transfer_status
+FROM CATELLI.CLIENTE cl
+INNER JOIN CATELLI.CONDICION_PAGO cp 
+    ON cp.CONDICION_PAGO = cl.CONDICION_PAGO
+INNER JOIN CATELLI.NCF_CONSECUTIVO sn
+    ON sn.TIPO_CONTRIBUYENTE = cl.TIPO_CONTRIBUYENTE
+    AND sn.ACTIVO = 'S'
+WHERE cl.VENDEDOR NOT IN ('999', '998', '22') 
+  AND cl.ACTIVO = 'S' 
+  AND cl.TIPO_CONTRIBUYENTE IN ('O','F')
+  AND CL.U_IS_SYNCS LIKE '1'
+)
+SELECT * FROM AccountsOrg;
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_organ_credit]    Script Date: 25/08/2026 4:10:34 PM ******/
+DROP VIEW [dbo].[IMPLT_accounts_organ_credit]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_organ_credit]    Script Date: 25/08/2026 4:10:34 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_accounts_organ_credit
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_accounts_organ_credit]
+AS
+WITH AccountsOrganCredit AS (
+    SELECT 
+        CASE 
+           WHEN SUBSTRING(CL.cliente, PATINDEX('%[A-Za-z]%', CL.cliente), 1) NOT LIKE 'O'
+                 THEN 'CN' + CL.cliente
+            ELSE cl.CLIENTE
+        END AS Code_Account,
+        'CATELLI' AS Code_Unit_Org,
+        'CATELLI' AS Code_Sales_Org,
+		CONVERT(VARCHAR(14), CAST(ROUND(cl.LIMITE_CREDITO, 2) AS DECIMAL(14,2))) AS Credit_Limit,
+        CONVERT(VARCHAR(14), CAST(ROUND(cl.SALDO, 2) AS DECIMAL(14,2))) AS Credit_Consum,
+        0 AS Lock_Credit,
+        CASE 
+		WHEN CL.U_TRANSFER_STATUS = '1' THEN '1'
+		WHEN CL.U_TRANSFER_STATUS = '2' THEN '2'
+		WHEN CL.U_TRANSFER_STATUS = '3' THEN '3'
+		else '0'
+	end as Transfer_status
+    FROM CATELLI.CLIENTE cl
+    WHERE cl.ACTIVO = 'S'
+      AND cl.CLIENTE NOT LIKE 'N%'
+      AND cl.VENDEDOR NOT IN ('999', '998', '22')
+      and CL.U_IS_SYNCS like '1'
+)
+SELECT * FROM AccountsOrganCredit;
+--  CAST(TotalAmount * (PORC_IMPUESTO1 / 100.0) AS NUMERIC(11,3)) AS Amount_Tax1,
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_organization]    Script Date: 25/08/2026 4:10:48 PM ******/
+DROP VIEW [dbo].[IMPLT_accounts_organization]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_organization]    Script Date: 25/08/2026 4:10:48 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_accounts_organization
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_accounts_organization]
+AS
+WITH AccountsOrganization AS (
+    SELECT 
+        CASE 
+           WHEN SUBSTRING(CL.cliente, PATINDEX('%[A-Za-z]%', CL.cliente), 1) NOT LIKE 'O'
+                 THEN 'CN' + CL.cliente
+            ELSE CL.CLIENTE
+        END AS Code_Account,
+        'CATELLI' AS Code_Unit_Org,
+        'CATELLI' AS Code_Sales_Org,
+       CASE
+        WHEN SUBSTRING(VENDEDOR, PATINDEX('%[A-Za-z]%', VENDEDOR), 1) NOT LIKE 'O'
+             THEN 'C' + VENDEDOR
+        ELSE VENDEDOR END AS Code_Seller,
+       CASE 
+		WHEN CL.U_TRANSFER_STATUS = '1' THEN '1'
+		WHEN CL.U_TRANSFER_STATUS = '2' THEN '2'
+		WHEN CL.U_TRANSFER_STATUS = '3' THEN '3'
+		else '0'
+	end as Transfer_status
+    FROM CATELLI.CLIENTE CL
+    WHERE CL.CLIENTE NOT LIKE 'N%'
+      AND CL.CATEGORIA_CLIENTE NOT LIKE 'EM'
+      AND CL.VENDEDOR NOT IN ('999', '998', '22') AND CL.ACTIVO = 'S'
+      and CL.U_IS_SYNCS like '1'
+)
+SELECT * FROM AccountsOrganization;
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_payment]    Script Date: 25/08/2026 4:11:34 PM ******/
+DROP VIEW [dbo].[IMPLT_accounts_payment]
+GO
+
+/****** Object:  View [dbo].[IMPLT_accounts_payment]    Script Date: 25/08/2026 4:11:34 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_accounts_payment
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_accounts_payment]
+AS
+WITH AccountsPayment AS (
+    SELECT 
+        CASE 
+            WHEN SUBSTRING(CL.cliente, PATINDEX('%[A-Za-z]%', CL.cliente), 1) NOT LIKE 'O'
+                 THEN 'CN' + CL.cliente
+            ELSE CL.CLIENTE
+        END AS Code_Account,
+        'CATELLI' AS Code_Sales_Org,
+        CL.CONDICION_PAGO AS Code_Payment,
+         CASE 
+		WHEN CL.U_TRANSFER_STATUS = '1' THEN '1'
+		WHEN CL.U_TRANSFER_STATUS = '2' THEN '2'
+		WHEN CL.U_TRANSFER_STATUS = '3' THEN '3'
+		else '0'
+	end as Transfer_status
+    FROM CATELLI.CLIENTE CL
+    WHERE CL.ACTIVO = 'S'
+      AND CL.CLIENTE NOT LIKE 'N%'
+      AND CL.VENDEDOR NOT IN ('999', '998', '22')
+      and CL.U_IS_SYNCS like '1'
+)
+SELECT * FROM AccountsPayment;
+
+GO
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_addresses]    Script Date: 25/08/2026 4:12:09 PM ******/
+DROP VIEW [dbo].[IMPLT_addresses]
+GO
+
+/****** Object:  View [dbo].[IMPLT_addresses]    Script Date: 25/08/2026 4:12:09 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_addresses
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_addresses]
+AS
+WITH AddressData AS (
+    SELECT 
+        CASE 
+           WHEN SUBSTRING(CL.cliente, PATINDEX('%[A-Za-z]%', CL.cliente), 1) NOT LIKE 'O'
+                 THEN 'CN' + CL.cliente
+            ELSE cl.CLIENTE
+        END AS Code_ofClient,
+        cl.PAIS AS Code_Country,
+        CASE 
+            WHEN LEFT(cl.ZONA, 1) BETWEEN 'A' AND 'Z' AND LEFT(cl.ZONA, 1) <> 'O'
+                 THEN 'CN' + cl.ZONA
+            ELSE cl.ZONA
+        END AS Code_Region,
+        NULL AS ZIP,
+        LEFT(LTRIM(REPLACE(REPLACE(REPLACE(CAST(cl.DIRECCION AS VARCHAR(8000)), '|', ''), 'DETALLE:', ''), ',', '')), 75) AS Address1,
+        RIGHT(LTRIM(REPLACE(REPLACE(REPLACE(CAST(cl.DIRECCION AS VARCHAR(8000)), '|', ''), 'DETALLE:', ''), ',', '')), 75) AS Address2,
+        NULL AS Population,
+        LEFT(RTRIM(LTRIM(REPLACE(REPLACE(cl.TELEFONO1, '/', ''), '|', ''))), 12) AS Phone1,
+        RIGHT(RTRIM(LTRIM(REPLACE(REPLACE(cl.TELEFONO1, '/', ''), '|', ''))), 30) AS Phone2,
+        LTRIM(REPLACE(REPLACE(cl.FAX, '/', ''), '|', '')) AS Fax,
+        cl.E_MAIL AS E_mail,
+        CASE WHEN cl.ACTIVO = 'S' THEN '1' ELSE '0' END AS Code_Status,
+       CASE 
+		WHEN U_TRANSFER_STATUS = '1' THEN '1'
+		WHEN U_TRANSFER_STATUS = '2' THEN '2'
+		WHEN U_TRANSFER_STATUS = '3' THEN '3'
+		else '0'
+	end as Transfer_status
+    FROM CATELLI.CLIENTE cl
+    WHERE cl.ACTIVO = 'S'
+      AND cl.CLIENTE NOT LIKE 'N%'
+      AND cl.VENDEDOR NOT IN ('999', '998', '22')
+      and CL.U_IS_SYNCS like '1'
+)
+SELECT * FROM AddressData;
+
+GO
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_addresses_accounts]    Script Date: 25/08/2026 4:12:23 PM ******/
+DROP VIEW [dbo].[IMPLT_addresses_accounts]
+GO
+
+/****** Object:  View [dbo].[IMPLT_addresses_accounts]    Script Date: 25/08/2026 4:12:23 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_addresses_accounts
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_addresses_accounts]
+AS
+WITH AddressAccounts AS (
+    SELECT 
+        CASE 
+            WHEN SUBSTRING(CL.cliente, PATINDEX('%[A-Za-z]%', CL.cliente), 1) NOT LIKE 'O'
+                 THEN 'CN' + CL.cliente
+            ELSE cl.CLIENTE
+        END AS Code_Address,
+        'CATELLI' AS Code_Unit_Org,
+        'CATELLI' AS Code_Sales_Org,
+        cl.CLIENTE AS Code_Account,
+        '1' AS By_Default,
+       CASE 
+		WHEN CL.U_TRANSFER_STATUS = '1' THEN '1'
+		WHEN CL.U_TRANSFER_STATUS = '2' THEN '2'
+		WHEN CL.U_TRANSFER_STATUS = '3' THEN '3'
+		else '0'
+	end as Transfer_status
+    FROM CATELLI.CLIENTE cl
+    WHERE cl.ACTIVO = 'S'
+      AND cl.CLIENTE NOT LIKE 'N%'
+      AND cl.VENDEDOR NOT IN ('999', '998', '22')
+      and CL.U_IS_SYNCS like '1'
+)
+SELECT * FROM AddressAccounts;
+
+GO
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_addresses_org]    Script Date: 25/08/2026 4:12:51 PM ******/
+DROP VIEW [dbo].[IMPLT_addresses_org]
+GO
+
+/****** Object:  View [dbo].[IMPLT_addresses_org]    Script Date: 25/08/2026 4:12:51 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_addresses_org
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_addresses_org]
+AS
+WITH AddressesOrg AS (
+    SELECT 
+        CASE 
+            WHEN SUBSTRING(CL.cliente, PATINDEX('%[A-Za-z]%', CL.cliente), 1) NOT LIKE 'O'
+                 THEN 'CN' + CL.cliente
+            ELSE cl.CLIENTE
+        END AS Code_Address,
+        'CATELLI' AS Code_Unit_Org,
+        'CATELLI' AS Code_Sales_Org,
+        CASE WHEN cl.ACTIVO = 'S' THEN '1' ELSE '0' END AS Code_Status,
+       CASE 
+		WHEN CL.U_TRANSFER_STATUS = '1' THEN '1'
+		WHEN CL.U_TRANSFER_STATUS = '2' THEN '2'
+		WHEN CL.U_TRANSFER_STATUS = '3' THEN '3'
+		else '0'
+	end as Transfer_status
+    FROM CATELLI.CLIENTE cl
+    WHERE cl.ACTIVO = 'S'
+      AND cl.CLIENTE NOT LIKE 'N%'
+      AND cl.VENDEDOR NOT IN ('999', '998', '22')
+      and CL.U_IS_SYNCS like '1'
+)
+SELECT * FROM AddressesOrg;
+
+GO
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_addresses_organization]    Script Date: 25/08/2026 4:13:17 PM ******/
+DROP VIEW [dbo].[IMPLT_addresses_organization]
+GO
+
+/****** Object:  View [dbo].[IMPLT_addresses_organization]    Script Date: 25/08/2026 4:13:17 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_addresses_organization
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_addresses_organization]
+AS
+WITH AddressesOrg AS (
+    SELECT 
+        CASE 
+            WHEN SUBSTRING(CL.cliente, PATINDEX('%[A-Za-z]%', CL.cliente), 1) NOT LIKE 'O'
+                 THEN 'CN' + CL.cliente
+            ELSE cl.CLIENTE
+        END AS Code_Address,
+        'CATELLI' AS Code_Unit_Org,
+        'CATELLI' AS Code_Sales_Org,
+        CASE
+        WHEN SUBSTRING(VENDEDOR, PATINDEX('%[A-Za-z]%', VENDEDOR), 1) NOT LIKE 'O'
+             THEN 'C' + VENDEDOR
+        ELSE VENDEDOR END AS Code_Seller,
+        CASE WHEN cl.ACTIVO = 'S' THEN '1' ELSE '0' END AS Code_Status,
+       CASE 
+		WHEN CL.U_TRANSFER_STATUS = '1' THEN '1'
+		WHEN CL.U_TRANSFER_STATUS = '2' THEN '2'
+		WHEN CL.U_TRANSFER_STATUS = '3' THEN '3'
+		else '0'
+	end as Transfer_status
+    FROM CATELLI.CLIENTE cl
+    WHERE cl.ACTIVO = 'S'
+      AND cl.CLIENTE NOT LIKE 'N%'
+      AND cl.VENDEDOR NOT IN ('999', '998', '22')
+      and CL.U_IS_SYNCS like '1'
+)
+SELECT * FROM AddressesOrg;
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_collections_pending]    Script Date: 25/08/2026 4:13:25 PM ******/
+DROP VIEW [dbo].[IMPLT_collections_pending]
+GO
+
+/****** Object:  View [dbo].[IMPLT_collections_pending]    Script Date: 25/08/2026 4:13:25 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_collections_pending
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_collections_pending]
+AS
+WITH CollectionsPending AS (
+    SELECT 
+        do.DOCUMENTO AS Num_Invoice,
+        do.DOCUMENTO AS NumDocum,
+        CONVERT(VARCHAR, do.FECHA_DOCUMENTO, 112) AS Date_Doc,
+        CASE 
+            WHEN SUBSTRING(do.cliente, PATINDEX('%[A-Za-z]%', do.cliente), 1) NOT LIKE 'O'
+                 THEN 'CN' + do.cliente
+            ELSE do.CLIENTE
+        END AS Code_Account,
+        CASE 
+            WHEN do.TIPO IN ('FAC') THEN '01'
+            WHEN do.TIPO IN ('N/D') THEN '02'
+            WHEN do.TIPO IN ('N/C') THEN 'NC'
+            ELSE 'ND'
+        END AS Code_Type,
+        CAST(do.MONTO AS varchar(45)) AS Total_Amount,
+        CAST((do.MONTO - do.SALDO) AS varchar(45)) AS Total_Collected,
+        CONVERT(VARCHAR, do.FECHA_VENCE, 112) AS Date_End,
+        do.CONDICION_PAGO AS Code_Payment,
+        CAST(do.SUBTOTAL AS varchar(45)) AS Amount_Gross,
+        '1' AS Transfer_Status
+    FROM CATELLI.DOCUMENTOS_CC do
+    WHERE do.SALDO > 0
+      AND do.TIPO IN ('FAC', 'N/D', 'O/D') ---do.FECHA >= '2025-03-05 00:00:00.000'
+)
+SELECT * FROM CollectionsPending;
+
+
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_contacts]    Script Date: 25/08/2026 4:13:47 PM ******/
+DROP VIEW [dbo].[IMPLT_contacts]
+GO
+
+/****** Object:  View [dbo].[IMPLT_contacts]    Script Date: 25/08/2026 4:13:47 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_contacts
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_contacts]
+AS
+WITH Contacts AS (
+    SELECT 
+        CASE 
+            WHEN SUBSTRING(CL.cliente, PATINDEX('%[A-Za-z]%', CL.cliente), 1) NOT LIKE 'O'
+                 THEN 'CN' + CL.cliente
+            ELSE cl.CLIENTE
+        END AS Code_ofClient,
+        LEFT(LTRIM(REPLACE(CAST(cl.CONTACTO AS VARCHAR(8000)), ',', '')), 75) AS Name1,
+        LTRIM(REPLACE(cl.CONTRIBUYENTE, '|', '')) AS NIF,
+        LEFT(LTRIM(REPLACE(REPLACE(REPLACE(CAST(cl.DIRECCION AS VARCHAR(8000)), '|', ''), 'DETALLE:', ''), ',', '')), 75) AS Address,
+        case when  LEFT(LTRIM(REPLACE(REPLACE(cl.TELEFONO1, '/', ''), '|', '')), 12) is null or  LEFT(LTRIM(REPLACE(REPLACE(cl.TELEFONO1, '/', ''), '|', '')), 12) like '' then '0' else  LEFT(LTRIM(REPLACE(REPLACE(cl.TELEFONO1, '/', ''), '|', '')), 12) end AS Phone1,
+        case when SUBSTRING(LTRIM(REPLACE(REPLACE(cl.TELEFONO1, '/', ''), '|', '')), 13, 30) is null or  SUBSTRING(LTRIM(REPLACE(REPLACE(cl.TELEFONO1, '/', ''), '|', '')), 13, 30) like '' then '0' else 
+		SUBSTRING(LTRIM(REPLACE(REPLACE(cl.TELEFONO1, '/', ''), '|', '')), 13, 30) end AS Phone2,
+        CONVERT(VARCHAR, cl.FECHA_INGRESO, 112) AS Date_Bird,
+        case when NULLIF(LTRIM(cl.E_MAIL), '') is null or NULLIF(LTRIM(cl.E_MAIL), '') like '' then '0'  else NULLIF(LTRIM(cl.E_MAIL), '') end AS E_mail,
+        CASE WHEN cl.ACTIVO = 'S' THEN '1' ELSE '0' END AS Code_Status,
+        '1' AS Code_ClassificationA,
+        '4' AS Code_ClassificationB,
+        '5' AS Code_ClassificationC,
+        '1' AS Principal,
+        LEFT(LTRIM(REPLACE(CAST(cl.CONTACTO AS VARCHAR(8000)), ',', '')), 75) AS Description,
+        CASE 
+		WHEN CL.U_TRANSFER_STATUS = '1' THEN '1'
+		WHEN CL.U_TRANSFER_STATUS = '2' THEN '2'
+		WHEN CL.U_TRANSFER_STATUS = '3' THEN '3'
+		else '0'
+	end as Transfer_status
+    FROM CATELLI.CLIENTE cl
+    WHERE cl.ACTIVO = 'S'
+      AND cl.CLIENTE NOT LIKE 'N%'
+      AND cl.VENDEDOR NOT IN ('999', '998', '22')
+      and CL.U_IS_SYNCS like '1'
+)
+SELECT * FROM Contacts;
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_contacts_accounts]    Script Date: 25/08/2026 4:13:58 PM ******/
+DROP VIEW [dbo].[IMPLT_contacts_accounts]
+GO
+
+/****** Object:  View [dbo].[IMPLT_contacts_accounts]    Script Date: 25/08/2026 4:13:58 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_contacts_accounts
+-- Nota: Se encontró una definición duplicada; se utiliza la siguiente versión.
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_contacts_accounts]
+AS
+WITH ContactsAccounts AS (
+    SELECT 
+        CASE 
+            WHEN SUBSTRING(CL.cliente, PATINDEX('%[A-Za-z]%', CL.cliente), 1) NOT LIKE 'O'
+                 THEN 'CN' + CL.cliente
+            ELSE cl.CLIENTE
+        END AS Code_Contact,
+        'CATELLI' AS Code_Unit_Org,
+        'CATELLI' AS Code_Sales_Org,
+        CASE 
+            WHEN SUBSTRING(CL.cliente, PATINDEX('%[A-Za-z]%', CL.cliente), 1) NOT LIKE 'O'
+                 THEN 'CN' + CL.cliente
+            ELSE cl.CLIENTE
+        END AS Code_Account,
+        '0' AS Source_Create,
+       CASE 
+		WHEN CL.U_TRANSFER_STATUS = '1' THEN '1'
+		WHEN CL.U_TRANSFER_STATUS = '2' THEN '2'
+		WHEN CL.U_TRANSFER_STATUS = '3' THEN '3'
+		else '0'
+	end as Transfer_status
+    FROM CATELLI.CLIENTE cl
+    WHERE cl.ACTIVO = 'S'
+      AND cl.CLIENTE NOT LIKE 'N%'
+      AND cl.VENDEDOR NOT IN ('999', '998', '22')
+      and CL.U_IS_SYNCS like '1'
+)
+SELECT * FROM ContactsAccounts;
+
+GO
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_contacts_array]    Script Date: 25/08/2026 4:14:08 PM ******/
+DROP VIEW [dbo].[IMPLT_contacts_array]
+GO
+
+/****** Object:  View [dbo].[IMPLT_contacts_array]    Script Date: 25/08/2026 4:14:08 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_contacts_array
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_contacts_array]
+AS
+WITH ContactsArray AS (
+    SELECT 
+        code AS Code,
+        type AS Type,
+        description AS Description,
+        Transfer_status AS Transfer_Status
+    FROM catelli.contacts_array
+)
+SELECT * FROM ContactsArray;
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_contacts_organization]    Script Date: 25/08/2026 4:14:19 PM ******/
+DROP VIEW [dbo].[IMPLT_contacts_organization]
+GO
+
+/****** Object:  View [dbo].[IMPLT_contacts_organization]    Script Date: 25/08/2026 4:14:19 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_contacts_organization
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_contacts_organization]
+AS
+WITH ContactsOrganization AS (
+    SELECT 
+        CASE 
+            WHEN SUBSTRING(CL.cliente, PATINDEX('%[A-Za-z]%', CL.cliente), 1) NOT LIKE 'O'
+                 THEN 'CN' + CL.cliente
+            ELSE CL.cliente
+        END AS Code_Contact,
+        'CATELLI' AS Code_Unit_Org,
+        'CATELLI' AS Code_Sales_Org,
+       CASE 
+		WHEN cl.U_ESTATUS = 'Nuevo' THEN '1'
+		WHEN cl.U_ESTATUS = 'EnEspera' THEN '3'
+		WHEN cl.U_ESTATUS = 'Cambio' THEN '2'
+		else '0'
+	end as Transfer_status
+    FROM CATELLI.CLIENTE CL
+    WHERE 
+	   CL.VENDEDOR NOT IN ('999','998','22') and CL.cliente NOT LIKE 'N%'
+      and CL.U_IS_SYNCS like '1'
+)
+SELECT * FROM ContactsOrganization;
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_hist_orders]    Script Date: 25/08/2026 4:14:35 PM ******/
+DROP VIEW [dbo].[IMPLT_hist_orders]
+GO
+
+/****** Object:  View [dbo].[IMPLT_hist_orders]    Script Date: 25/08/2026 4:14:35 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_hist_orders
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_hist_orders]
+AS
+WITH HistOrders AS (
+    SELECT
+        pel.PEDIDO AS Order_Num,
+        pel.PEDIDO_LINEA AS Num_Line,
+        pel.PEDIDO AS Order_Num_ofClient,
+        'S' AS Type_Rec,
+        CONVERT(VARCHAR, pel.FECHA_ENTREGA, 112) AS Date_Delivery,
+        CONVERT(VARCHAR, pe.FECHA_PEDIDO, 112) AS Order_Date,
+        CASE
+           WHEN SUBSTRING(pe.cliente, PATINDEX('%[A-Za-z]%', pe.cliente), 1) NOT LIKE 'O'
+                 THEN 'CN' + pe.cliente
+            ELSE pe.CLIENTE
+        END AS Code_Account,
+        pel.ARTICULO AS Code_Product,
+        pel.LOTE AS Lot_Number,
+        CAST(pel.CANTIDAD_FACTURADA AS varchar(45)) AS Quantity,
+        CAST(pel.CANTIDAD_PEDIDA AS varchar(45)) AS Quantity_Order,
+        ar.UNIDAD_VENTA AS Unit_Measure,
+        CAST(pel.PRECIO_UNITARIO AS varchar(45)) AS Price_Br,
+        CAST(CAST(pel.PRECIO_UNITARIO - (pel.MONTO_DESCUENTO / NULLIF(pel.CANTIDAD_PEDIDA, 0)) AS DECIMAL(18,2)) AS varchar(45)) AS Price,
+        CAST(CAST((pel.PRECIO_UNITARIO - (pel.MONTO_DESCUENTO / NULLIF(pel.CANTIDAD_PEDIDA, 0))) * pel.CANTIDAD_PEDIDA AS DECIMAL(18,2)) AS varchar(45)) AS Total_Amount,
+        CAST(im.IMPUESTO1 AS varchar(45)) AS Por_Tax1,
+        CAST(CAST(((pel.PRECIO_UNITARIO - (pel.MONTO_DESCUENTO / NULLIF(pel.CANTIDAD_PEDIDA, 0))) * pel.CANTIDAD_PEDIDA) * (im.IMPUESTO1 / 100) AS DECIMAL(18,2)) AS varchar(45)) AS Amount_Tax1,
+        'RD' AS Code_Currency,
+        pe.CONDICION_PAGO AS Code_Paymentway,
+            CASE 
+                WHEN LEFT(pe.VENDEDOR, 1) BETWEEN 'A' AND 'Z' AND LEFT(pe.VENDEDOR, 1) <> 'O'
+                     THEN 'C' + pe.VENDEDOR
+                ELSE pe.VENDEDOR
+            END AS Code_Seller,
+            1 AS Transfer_Status
+    FROM CATELLI.PEDIDO_LINEA pel
+    INNER JOIN CATELLI.PEDIDO pe ON pe.PEDIDO = pel.PEDIDO
+    INNER JOIN CATELLI.ARTICULO ar ON ar.ARTICULO = pel.ARTICULO
+    INNER JOIN CATELLI.IMPUESTO im ON im.IMPUESTO = ar.IMPUESTO
+    WHERE pel.CANTIDAD_PEDIDA <> 0
+      AND pe.ESTADO = 'F' AND pe.RUBRO1 IS NULL--NOT LIKE 'PRIP'
+      AND pe.VENDEDOR NOT IN ('999','998','22')
+      AND pe.FECHA_PEDIDO >= DATEADD(MONTH, -3, CAST(GETDATE() AS DATE))
+)
+SELECT * FROM HistOrders;
+
+GO
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_loads_detail]    Script Date: 25/08/2026 4:14:44 PM ******/
+DROP VIEW [dbo].[IMPLT_loads_detail]
+GO
+
+/****** Object:  View [dbo].[IMPLT_loads_detail]    Script Date: 25/08/2026 4:14:44 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_loads_detail
+-- Se ha eliminado el ORDER BY ya que no es permitido en una vista.
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_loads_detail]
+AS
+WITH LoadDetails AS (
+    SELECT 
+        'CO' + SUBSTRING(fa.FACTURA, 2, 20) AS Code,
+        'CATELLI' AS Code_Unit_Org,
+        'CATELLI' AS Code_Sales_Org,
+        fl.LINEA AS Num_Line,
+        '999999999' AS Lot_Group,
+        fl.ARTICULO AS Code_Product,
+        CONVERT(VARCHAR, fl.FECHA_FACTURA, 112) AS Date_Load,
+        CAST(fl.CANTIDAD AS numeric(15,2)) AS Quantity,
+        ar.UNIDAD_ALMACEN AS Unit_Type,
+        p.BODEGA AS Code_Warehouse_Sou,
+        fa.VENDEDOR AS Code_Route,
+        1 AS Transfer_status
+		
+    FROM CATELLI.FACTURA_LINEA fl
+    INNER JOIN CATELLI.ARTICULO ar ON ar.ARTICULO = fl.ARTICULO
+    INNER JOIN CATELLI.FACTURA fa ON fa.TIPO_DOCUMENTO = fl.TIPO_DOCUMENTO 
+         AND fa.FACTURA = fl.FACTURA
+    INNER JOIN CATELLI.PEDIDO p ON p.pedido = fa.pedido
+    WHERE fa.ANULADA = 'N'
+      AND fa.FECHA >= '2025-01-01 00:00:00.000'
+)
+SELECT * FROM LoadDetails;
+
+GO
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_Orders]    Script Date: 25/08/2026 4:14:55 PM ******/
+DROP VIEW [dbo].[IMPLT_Orders]
+GO
+
+/****** Object:  View [dbo].[IMPLT_Orders]    Script Date: 25/08/2026 4:14:55 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+CREATE VIEW [dbo].[IMPLT_Orders]
+as
+WITH BaseData AS (
+  SELECT 
+    pl.PEDIDO,
+    pl.PEDIDO_LINEA,
+    pl.CANTIDAD_PEDIDA,
+    pl.CANTIDAD_BONIFICAD,  -- Asegúrate que existe este campo
+    pl.PRECIO_UNITARIO,
+    pl.MONTO_DESCUENTO,
+    pl.PORC_DESCUENTO,
+    pl.PORC_IMPUESTO1,
+    pl.PORC_IMPUESTO2,
+    pE.RUBRO5,
+    pe.FECHA_PROMETIDA,
+    pe.FECHA_PEDIDO,
+    pe.CLIENTE,
+    pe.VENDEDOR,
+    cl.detalle_direccion,
+    ar.ARTICULO,
+    ar.UNIDAD_ALMACEN,
+    pl.BODEGA
+  FROM CATELLI.PEDIDO_LINEA AS pl
+  INNER JOIN CATELLI.PEDIDO AS pe ON pe.PEDIDO = pl.PEDIDO
+  INNER JOIN CATELLI.CLIENTE AS cl ON cl.CLIENTE = pe.CLIENTE
+  LEFT JOIN CATELLI.ARTICULO AS ar ON ar.ARTICULO = pl.ARTICULO  -- LEFT para no perder líneas
+  WHERE pe.estado = 'N'
+    -- REMOVÍ el filtro de cantidad_pedida para incluir todas las líneas
+),
+Calc AS (
+  -- LÍNEAS DE CANTIDAD PEDIDA
+  SELECT 
+    PEDIDO,
+    PEDIDO_LINEA,
+    CAST(PEDIDO_LINEA AS VARCHAR(10)) + '-P' AS LINEA_TIPO,  -- ✅ CAST agregado
+    'P' AS TIPO_LINEA,
+    CANTIDAD_PEDIDA AS Cantidad,
+    PRECIO_UNITARIO,
+    MONTO_DESCUENTO,
+    PORC_DESCUENTO,
+    PORC_IMPUESTO1,
+    PORC_IMPUESTO2,
+    RUBRO5,
+    FECHA_PROMETIDA,
+    FECHA_PEDIDO,
+    CLIENTE,
+    VENDEDOR,
+    detalle_direccion,
+    ARTICULO,
+    UNIDAD_ALMACEN,
+    BODEGA,
+    (CANTIDAD_PEDIDA * PRECIO_UNITARIO) AS SubTotal,
+    ((CANTIDAD_PEDIDA * PRECIO_UNITARIO) - MONTO_DESCUENTO) AS TotalAmount
+  FROM BaseData
+  WHERE CANTIDAD_PEDIDA <> 0  -- Solo incluir si hay cantidad pedida
+
+  UNION ALL
+
+  -- LÍNEAS DE CANTIDAD BONIFICADA
+  SELECT 
+    PEDIDO,
+    PEDIDO_LINEA,
+    CAST(PEDIDO_LINEA AS VARCHAR(10)) + '-B' AS LINEA_TIPO,  -- ✅ CAST agregado
+    'B' AS TIPO_LINEA,  -- Identificador adicional
+    CANTIDAD_BONIFICAD AS Cantidad,
+    0 AS PRECIO_UNITARIO,  -- Bonificación no tiene precio
+    0 AS MONTO_DESCUENTO,
+    0 AS PORC_DESCUENTO,
+    0 AS PORC_IMPUESTO1,
+    0 AS PORC_IMPUESTO2,
+    RUBRO5,
+    FECHA_PROMETIDA,
+    FECHA_PEDIDO,
+    CLIENTE,
+    VENDEDOR,
+    detalle_direccion,
+    ARTICULO,
+    UNIDAD_ALMACEN,
+    BODEGA,
+    0 AS SubTotal,
+    0 AS TotalAmount
+  FROM BaseData
+  WHERE CANTIDAD_BONIFICAD > 0  -- Solo incluir si hay bonificación
+)
+SELECT
+  'CATELLI' AS Code_Unit_Org,
+  'CATELLI' AS Code_Sales_Org,
+  PEDIDO AS Order_Num_ofClient,
+  PEDIDO_LINEA AS Num_Line,  -- Ahora incluye '-P' o '-B'
+  NULL AS Order_Num,
+  'S' AS Type_Rec,
+  RUBRO5 AS Code_load,
+  CONVERT(VARCHAR, FECHA_PROMETIDA, 112) AS Date_Delivery,
+  CONVERT(VARCHAR, FECHA_PEDIDO, 112) AS Order_Date,
+  CLIENTE AS Code_Account,
+  ARTICULO AS Code_Product,
+  '999999999' AS Lot_Number,
+  CAST(Cantidad AS NUMERIC(11,3)) AS Quantity,
+  CAST(Cantidad AS NUMERIC(11,3)) AS Quantity_Order,
+  UNIDAD_ALMACEN AS Unit_Measure,
+  CAST(PRECIO_UNITARIO AS NUMERIC(11,3)) AS Price_Br,
+  CAST(CASE WHEN Cantidad <> 0 THEN TotalAmount / Cantidad ELSE 0 END AS NUMERIC(11,3)) AS Price,
+  CAST(TotalAmount AS NUMERIC(11,3)) AS Total_Amount,
+  CAST(PORC_DESCUENTO AS NUMERIC(5,2)) AS Por_Discount1,
+  CAST(MONTO_DESCUENTO AS NUMERIC(11,3)) AS Amount_Discount1,
+  NULL AS Por_Discount2,
+  NULL AS Amount_Discount2,
+  NULL AS Por_Discount3,
+  NULL AS Amount_Discount3,
+  CAST(PORC_IMPUESTO1 AS NUMERIC(5,2)) AS Por_Tax1,
+  CAST(TotalAmount * (PORC_IMPUESTO1 / 100.0) AS NUMERIC(11,3)) AS Amount_Tax1,
+  CAST(PORC_IMPUESTO2 AS NUMERIC(5,2)) AS Por_Tax2,
+  CAST(TotalAmount * (PORC_IMPUESTO2 / 100.0) AS NUMERIC(11,3)) AS Amount_Tax2,
+  'RD' AS Code_Currency,
+  '0' AS Secuence,
+  PEDIDO AS Order_Num_Cli,
+  NULL AS Code_Paymentway,
+  VENDEDOR AS Code_Seller,
+  NULL AS Order_Type,
+  '0' AS Sale_Type,
+  NULL AS Code_ReturnCause,
+  detalle_direccion AS Code_Address,
+  '00' AS Transport,
+  1 AS Transfer_status
+FROM Calc 
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_payment_org_terms]    Script Date: 25/08/2026 4:15:23 PM ******/
+DROP VIEW [dbo].[IMPLT_payment_org_terms]
+GO
+
+/****** Object:  View [dbo].[IMPLT_payment_org_terms]    Script Date: 25/08/2026 4:15:23 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_payment_org_terms
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_payment_org_terms]
+AS
+WITH PaymentOrgTerms AS (
+    SELECT 
+        cp.CONDICION_PAGO AS Code,
+        'CATELLI' AS Code_Unit_Org,
+        'CATELLI' AS Code_Sales_Org,
+        cp.DESCRIPCION AS Description,
+        cp.DIAS_NETO AS Days,
+        CASE 
+        WHEN cp.DIAS_NETO IN (0, 1) THEN '0'
+        ELSE '1'
+    END AS Credit,
+        COALESCE(cp.PLAZO_CONDPAGO, '') AS Days_EP,
+		CAST(cp.DESCUENTO_CONTADO AS varchar(45)) AS Discount,
+        1 AS Transfer_status
+    FROM CATELLI.CONDICION_PAGO cp
+    where cp.CARGA_SYNC = '1'
+)
+SELECT * FROM PaymentOrgTerms;
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_payment_term]    Script Date: 25/08/2026 4:15:35 PM ******/
+DROP VIEW [dbo].[IMPLT_payment_term]
+GO
+
+/****** Object:  View [dbo].[IMPLT_payment_term]    Script Date: 25/08/2026 4:15:35 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_payment_term
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_payment_term]
+AS
+SELECT 
+    cp.CONDICION_PAGO AS Code,
+    cp.DESCRIPCION AS Description,
+    CASE 
+        WHEN cp.DIAS_NETO IN (0, 1) THEN '0'
+        ELSE '1'
+    END AS Credit,
+    cp.DIAS_NETO AS Days,
+    '1' AS Transfer_Status
+FROM CATELLI.CONDICION_PAGO cp
+--WHERE cp.CONDICION_PAGO NOT IN (
+--      'C', 'C10', 'C20', '0', '21', '30', '1', 
+--      '45', '7', '15', '14', '28', '11', '41', 
+--      '5', '22', '60'
+--);
+
+GO
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_pricing]    Script Date: 25/08/2026 4:15:46 PM ******/
+DROP VIEW [dbo].[IMPLT_pricing]
+GO
+
+/****** Object:  View [dbo].[IMPLT_pricing]    Script Date: 25/08/2026 4:15:46 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_pricing
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_pricing]
+AS
+WITH BaseQuery AS (
+    SELECT 
+        'ZPR0' AS Secuence,
+        '001' AS Code_Table,
+        'CATELLI' AS Code1,
+        ap.NIVEL_PRECIO AS Code2,
+        ar.ARTICULO AS Code3,
+        ISNULL(ar.CLASIFICACION_1, '') AS Code4,
+        ISNULL(ar.CLASIFICACION_2, '') AS Code5,
+        ISNULL(ar.CLASIFICACION_3, '') AS Code6,
+        ISNULL(ar.CLASIFICACION_4, '') AS Code7,
+        ISNULL(ar.CLASIFICACION_5, '') AS Code8,
+        CAST(ap.PRECIO * ISNULL(ar.PESO_BRUTO, 1) AS decimal(11,3)) AS Value,
+        '1' AS Base,
+        CASE 
+            WHEN MANUFACTURADOR LIKE 'CA%' THEN 'CAJA'
+            WHEN MANUFACTURADOR LIKE 'FA%' THEN 'FDR'
+            WHEN MANUFACTURADOR LIKE 'CO%' THEN 'CMB'
+            WHEN MANUFACTURADOR LIKE 'GA%' THEN 'GLN'
+            WHEN MANUFACTURADOR LIKE 'SA%' THEN 'SACO'
+            WHEN MANUFACTURADOR LIKE 'DI%' THEN 'DSP'
+            WHEN MANUFACTURADOR LIKE 'RI%' THEN 'RST'
+            WHEN MANUFACTURADOR LIKE 'UN%' THEN 'UND'
+            ELSE '999'
+        END AS Unit_Measure,
+        '0' AS Type_Value,
+        'RD' AS Code_Currency,
+        CONVERT(VARCHAR, ap.FECHA_INICIO, 112) AS Date_Ini,
+        CONVERT(VARCHAR, ap.FECHA_FIN, 112) AS Date_Fin,
+        'NULL' AS ValueKey,
+        'NULL' AS ID_ERP,
+        1 AS Transfer_status
+    FROM CATELLI.ARTICULO_PRECIO ap
+    INNER JOIN CATELLI.ARTICULO ar ON ap.ARTICULO = ar.ARTICULO
+    INNER JOIN CATELLI.UNIDAD_DE_MEDIDA un ON ar.UNIDAD_VENTA = un.UNIDAD_MEDIDA
+    INNER JOIN CATELLI.NIVEL_PRECIO np ON np.NIVEL_PRECIO = ap.NIVEL_PRECIO
+    INNER JOIN CATELLI.VERSION_NIVEL ve ON ve.NIVEL_PRECIO = ap.NIVEL_PRECIO 
+         AND ve.MONEDA = ap.MONEDA 
+         AND ve.VERSION = ap.VERSION
+    WHERE ve.estado = 'A'
+      ---AND ar.ACTIVO = 'S'
+      AND ve.ESTADO = 'A'
+      AND NOT (MANUFACTURADOR LIKE 'un%' OR MANUFACTURADOR LIKE 'di%')
+      AND ar.CLASIFICACION_4 NOT LIKE 'GND%' AND np.SINC_MOVIL = 'S'
+)
+SELECT * FROM BaseQuery
+UNION ALL
+SELECT 
+    'ZPR0' AS Secuence,
+    '001' AS Code_Table,
+    'CATELLI' AS Code1,
+    ap.NIVEL_PRECIO AS Code2,
+    ar.ARTICULO AS Code3,
+    ar.CLASIFICACION_1 AS Code4,
+    ar.CLASIFICACION_2 AS Code5,
+    ar.CLASIFICACION_3 AS Code6,
+    ar.CLASIFICACION_4 AS Code7,
+    ISNULL(ar.CLASIFICACION_5, '') AS Code8,
+    CAST(ap.PRECIO AS decimal(11,3)) AS Value,
+   '1' AS Base,
+    ar.UNIDAD_VENTA AS Unit_Measure,
+    '0' AS Type_Value,
+    'RD' AS Code_Currency,
+    CONVERT(VARCHAR, ap.FECHA_INICIO, 112) AS Date_Ini,
+    CONVERT(VARCHAR, ap.FECHA_FIN, 112) AS Date_Fin,
+    'NULL' AS ValueKey,
+    'NULL' AS ID_ERP,
+    1 AS Transfer_status
+FROM CATELLI.ARTICULO_PRECIO ap
+INNER JOIN CATELLI.ARTICULO ar ON ap.ARTICULO = ar.ARTICULO
+INNER JOIN CATELLI.UNIDAD_DE_MEDIDA un ON ar.UNIDAD_VENTA = un.UNIDAD_MEDIDA
+INNER JOIN CATELLI.NIVEL_PRECIO np ON np.NIVEL_PRECIO = ap.NIVEL_PRECIO
+INNER JOIN CATELLI.VERSION_NIVEL ve ON ve.NIVEL_PRECIO = ap.NIVEL_PRECIO 
+     AND ve.MONEDA = ap.MONEDA 
+     AND ve.VERSION = ap.VERSION
+WHERE ve.estado = 'A'
+  ---AND ar.ACTIVO = 'S'
+  AND ve.ESTADO = 'A'
+  AND NOT (
+      MANUFACTURADOR LIKE 'co%' AND PESO_BRUTO = 1
+      OR MANUFACTURADOR LIKE 'ca%' AND PESO_BRUTO = 1
+      OR MANUFACTURADOR LIKE 'fa%' AND PESO_BRUTO = 1
+      OR MANUFACTURADOR LIKE 'ga%' AND PESO_BRUTO = 1
+      OR MANUFACTURADOR LIKE 'sa%' AND PESO_BRUTO = 1
+  ) AND ar.CLASIFICACION_4 NOT LIKE 'GND%' AND np.SINC_MOVIL = 'S'
+UNION ALL
+SELECT 
+    'MWST' AS Secuence,
+    '003' AS Code_Table,
+    'CATELLI' AS Code1,
+    ap.NIVEL_PRECIO AS Code2,
+    ar.ARTICULO AS Code3,
+    ISNULL(ar.CLASIFICACION_1, '') AS Code4,
+    ISNULL(ar.CLASIFICACION_2, '') AS Code5,
+    ISNULL(ar.CLASIFICACION_3, '') AS Code6,
+    ISNULL(ar.CLASIFICACION_4, '') AS Code7,
+    ISNULL(ar.CLASIFICACION_5, '') AS Code8,
+    CASE 
+    WHEN I.IMPUESTO1 = 0 THEN CAST(CAST(ap.PRECIO AS DECIMAL(11,3)) * 0.00 AS VARCHAR(45))
+    WHEN I.IMPUESTO1 = 8 THEN CAST(CAST(ap.PRECIO AS DECIMAL(11,3)) * 0.08 AS VARCHAR(45))
+    WHEN I.IMPUESTO1 = 9 THEN CAST(CAST(ap.PRECIO AS DECIMAL(11,3)) * 0.09 AS VARCHAR(45))
+    WHEN I.IMPUESTO1 = 13 THEN CAST(CAST(ap.PRECIO AS DECIMAL(11,3)) * 0.13 AS VARCHAR(45))
+    WHEN I.IMPUESTO1 = 16 THEN CAST(CAST(ap.PRECIO AS DECIMAL(11,3)) * 0.16 AS VARCHAR(45))
+    WHEN I.IMPUESTO1 = 18 THEN CAST(CAST(ap.PRECIO AS DECIMAL(11,3)) * 0.18 AS VARCHAR(45))
+    ELSE '0' 
+END AS Value,
+    '1' AS Base,
+    ar.UNIDAD_VENTA AS Unit_Measure,
+    '0' AS Type_Value,
+    'RD' AS Code_Currency,
+    CONVERT(VARCHAR, ap.FECHA_INICIO, 112) AS Date_Ini,
+    CONVERT(VARCHAR, ap.FECHA_FIN, 112) AS Date_Fin,
+    'NULL' AS ValueKey,
+    'NULL' AS ID_ERP,
+    1 AS Transfer_status
+FROM CATELLI.ARTICULO_PRECIO ap
+INNER JOIN CATELLI.ARTICULO ar ON ap.ARTICULO = ar.ARTICULO
+INNER JOIN CATELLI.IMPUESTO I ON ar.IMPUESTO = I.IMPUESTO
+INNER JOIN CATELLI.UNIDAD_DE_MEDIDA un ON ar.UNIDAD_VENTA = un.UNIDAD_MEDIDA
+INNER JOIN CATELLI.NIVEL_PRECIO np ON np.NIVEL_PRECIO = ap.NIVEL_PRECIO
+INNER JOIN CATELLI.VERSION_NIVEL ve ON ve.NIVEL_PRECIO = ap.NIVEL_PRECIO 
+     AND ve.MONEDA = ap.MONEDA 
+     AND ve.VERSION = ap.VERSION
+WHERE ve.estado = 'A'
+  --AND ar.ACTIVO = 'S'
+  AND ve.ESTADO = 'A'
+  AND NOT (MANUFACTURADOR LIKE 'un%' OR MANUFACTURADOR LIKE 'di%') 
+  AND ar.CLASIFICACION_4 NOT LIKE 'GND%' AND np.SINC_MOVIL = 'S'
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_products]    Script Date: 25/08/2026 4:16:04 PM ******/
+DROP VIEW [dbo].[IMPLT_products]
+GO
+
+/****** Object:  View [dbo].[IMPLT_products]    Script Date: 25/08/2026 4:16:04 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_products
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_products]
+AS
+WITH ArticulosActivos AS (
+    SELECT 
+        ARTICULO,
+        DESCRIPCION,
+        CLASIFICACION_1,
+        CLASIFICACION_2,
+        CLASIFICACION_3,
+        CLASIFICACION_4,
+        CLASIFICACION_5,
+		ACTIVO,
+		CODIGO_BARRAS_INVT,
+        PESO_BRUTO,
+        UNIDAD_VENTA,
+        UNIDAD_EMPAQUE,
+        MANUFACTURADOR,
+        PESO_NETO,
+        VOLUMEN,
+        IMPUESTO,
+		U_ESTATUS
+    FROM CATELLI.ARTICULO WITH (NOLOCK)
+    WHERE CLASIFICACION_4 NOT LIKE 'GND%'
+),
+ImpuestoInfo AS (
+    SELECT 
+        IMPUESTO,
+        IMPUESTO1
+    FROM CATELLI.IMPUESTO WITH (NOLOCK)
+)
+SELECT 
+    ar.ARTICULO AS Code_ofClient,
+    LEFT(ar.DESCRIPCION, 100) AS Description,
+     LEFT(ar.DESCRIPCION, 30) AS Description_short,
+    '01' AS Code_Hierarchy1,
+    NULL AS Code_Hierarchy2,
+    NULL AS Code_Hierarchy3,
+    NULL AS Code_Hierarchy4,
+    ar.CLASIFICACION_1 AS Code_ClassificationA,
+    ar.CLASIFICACION_2 AS Code_ClassificationB,
+    ar.CLASIFICACION_3 AS Code_ClassificationC,
+    ar.CLASIFICACION_4 AS Code_ClassificationD,
+    ar.CLASIFICACION_5 AS Code_ClassificationE,
+    CASE
+        WHEN ar.ACTIVO = 'S' THEN '1'
+        ELSE '1' END 
+	 AS Code_Status,
+    AR.CODIGO_BARRAS_INVT AS Ean14,
+	CAST(ar.PESO_BRUTO AS VARCHAR(45)) AS Factor_Conversion,
+    COALESCE(tu.Descripcion, ar.UNIDAD_VENTA) AS Unit_Type_Sales,
+    COALESCE(tui.Descripcion, ar.UNIDAD_EMPAQUE) AS Unit_Type_Inv,
+    CAST(ar.PESO_NETO AS VARCHAR(45)) AS Weight,
+    NULL AS Unit_Type_Weight,
+    NULL AS Factor_Convert_W,
+    '0' AS Trazability,
+    CAST(ar.VOLUMEN AS VARCHAR(45)) AS Volume,
+    'NULL' AS Unit_type_volume,
+   CAST(im.IMPUESTO1 AS VARCHAR(45)) AS Tax1,
+    COALESCE(tui.Descripcion, ar.UNIDAD_EMPAQUE) AS Code_Unit_Type_Box,
+    '0' AS Source_Create,
+   CASE 
+		WHEN ar.U_ESTATUS = 'Nuevo' THEN 1
+		WHEN ar.U_ESTATUS = 'EnEspera' THEN 1
+		else 1
+	end as Transfer_status
+FROM ArticulosActivos ar
+LEFT JOIN ImpuestoInfo im ON im.IMPUESTO = ar.IMPUESTO
+LEFT JOIN Tipo_Unidad tu ON LEFT(ar.MANUFACTURADOR, 2) = tu.Cod_Unidad
+LEFT JOIN Tipo_Unidad tui ON LEFT(ar.UNIDAD_EMPAQUE, 2) = tui.Cod_Unidad
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_products_array]    Script Date: 25/08/2026 4:16:18 PM ******/
+DROP VIEW [dbo].[IMPLT_products_array]
+GO
+
+/****** Object:  View [dbo].[IMPLT_products_array]    Script Date: 25/08/2026 4:16:18 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_products_array
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_products_array]
+AS
+WITH Clasification AS (
+    SELECT 
+        CLASIFICACION AS Code,
+        CASE 
+            WHEN agrupacion BETWEEN '1' AND '5' THEN agrupacion
+            ELSE 'NULL'
+        END AS Type,
+        descripcion AS Description,
+        1 AS Transfer_status
+    FROM CATELLI.CLASIFICACION
+    WHERE agrupacion BETWEEN '1' AND '5'
+),
+ProductArray AS (
+    SELECT 
+        CASE 
+            WHEN MANUFACTURADOR LIKE 'CA%' THEN 'CAJA'
+            WHEN MANUFACTURADOR LIKE 'FA%' THEN 'FDR'
+            WHEN MANUFACTURADOR LIKE 'CO%' THEN 'CMB'
+            WHEN MANUFACTURADOR LIKE 'GA%' THEN 'GLN'
+            WHEN MANUFACTURADOR LIKE 'SA%' THEN 'SACO'
+            WHEN MANUFACTURADOR LIKE 'DI%' THEN 'DSP'
+            WHEN MANUFACTURADOR LIKE 'RI%' THEN 'RST'
+            WHEN MANUFACTURADOR LIKE 'UN%' THEN 'UND'
+            WHEN MANUFACTURADOR LIKE 'CB%' THEN 'COMBO'
+            ELSE 'UND'
+        END AS Code,
+        '50' AS Type,
+        pa.u_descrip AS Description,
+        1 AS Transfer_status
+    FROM CATELLI.articulo A
+    INNER JOIN CATELLI.U_PRODUCTS_ARRAY pa  
+        ON (
+           CASE 
+             WHEN MANUFACTURADOR LIKE 'CA%' THEN 'CAJA'
+             WHEN MANUFACTURADOR LIKE 'FA%' THEN 'FDR'
+             WHEN MANUFACTURADOR LIKE 'CO%' THEN 'CMB'
+             WHEN MANUFACTURADOR LIKE 'GA%' THEN 'GLN'
+             WHEN MANUFACTURADOR LIKE 'SA%' THEN 'SACO'
+             WHEN MANUFACTURADOR LIKE 'DI%' THEN 'DSP'
+             WHEN MANUFACTURADOR LIKE 'RI%' THEN 'RST'
+             WHEN MANUFACTURADOR LIKE 'UN%' THEN 'UND'
+             WHEN MANUFACTURADOR LIKE 'CB%' THEN 'COMBO'
+             ELSE 'UND'
+           END
+        ) = pa.u_codCATELLI
+)
+SELECT * FROM Clasification
+UNION ALL
+SELECT * FROM ProductArray;
+
+GO
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_products_hierarchy2]    Script Date: 25/08/2026 4:16:40 PM ******/
+DROP VIEW [dbo].[IMPLT_products_hierarchy2]
+GO
+
+/****** Object:  View [dbo].[IMPLT_products_hierarchy2]    Script Date: 25/08/2026 4:16:40 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_products_hierarchy2
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_products_hierarchy2]
+AS
+SELECT 
+    CAST(cl.CLASIFICACION AS VARCHAR(50)) AS Code,
+    '1' AS Code_Hierarchy1,
+    CAST(cl.DESCRIPCION AS VARCHAR(255)) AS Description,
+    '1' AS Transfer_Status
+FROM CATELLI.CLASIFICACION cl
+WHERE cl.AGRUPACION = 1
+  AND cl.U_jerarquia = '1';
+
+GO
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_products_hierarchy3]    Script Date: 25/08/2026 4:17:02 PM ******/
+DROP VIEW [dbo].[IMPLT_products_hierarchy3]
+GO
+
+/****** Object:  View [dbo].[IMPLT_products_hierarchy3]    Script Date: 25/08/2026 4:17:02 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_products_hierarchy3
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_products_hierarchy3]
+AS
+SELECT 
+    CAST(cl.CLASIFICACION AS VARCHAR(50)) AS Code,
+    '1' AS Code_Hierarchy1,
+    CAST(cl.U_jerarquia AS VARCHAR(50)) AS Code_Hierarchy2,
+    CAST(cl.DESCRIPCION AS VARCHAR(255)) AS Description,
+    '1' AS Transfer_Status
+FROM CATELLI.CLASIFICACION cl
+WHERE cl.AGRUPACION = 2
+  AND cl.U_jerarquia <> '';
+
+GO
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_products_hierarchy4]    Script Date: 25/08/2026 4:17:19 PM ******/
+DROP VIEW [dbo].[IMPLT_products_hierarchy4]
+GO
+
+/****** Object:  View [dbo].[IMPLT_products_hierarchy4]    Script Date: 25/08/2026 4:17:19 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_products_hierarchy4
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_products_hierarchy4]
+AS
+WITH HierarchyLevel1 AS (
+    SELECT CLASIFICACION, DESCRIPCION, AGRUPACION, U_JERARQUIA
+    FROM CATELLI.CLASIFICACION
+    WHERE AGRUPACION = 1 AND U_JERARQUIA <> ''
+),
+HierarchyLevel2 AS (
+    SELECT CLASIFICACION, DESCRIPCION, AGRUPACION, U_JERARQUIA
+    FROM CATELLI.CLASIFICACION
+    WHERE AGRUPACION = 2 AND U_JERARQUIA <> ''
+),
+HierarchyLevel3 AS (
+    SELECT CLASIFICACION, DESCRIPCION, AGRUPACION, U_JERARQUIA
+    FROM CATELLI.CLASIFICACION
+    WHERE AGRUPACION = 3 AND U_JERARQUIA <> ''
+)
+SELECT 
+    t1.CLASIFICACION AS Code,
+    '1' AS Code_Hierarchy1,
+    t3.CLASIFICACION AS Code_Hierarchy2,
+    t2.CLASIFICACION AS Code_Hierarchy3,
+    t1.DESCRIPCION AS Description,
+    '1' AS Transfer_Status
+FROM HierarchyLevel3 t1
+LEFT JOIN HierarchyLevel2 t2 ON t1.U_JERARQUIA = t2.CLASIFICACION
+LEFT JOIN HierarchyLevel1 t3 ON t2.U_JERARQUIA = t3.CLASIFICACION;
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_products_measure]    Script Date: 25/08/2026 4:17:40 PM ******/
+DROP VIEW [dbo].[IMPLT_products_measure]
+GO
+
+/****** Object:  View [dbo].[IMPLT_products_measure]    Script Date: 25/08/2026 4:17:40 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_products_measure
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_products_measure]
+AS
+WITH ProductMeasure AS (
+    SELECT 
+        ar.ARTICULO AS Code_Product,
+        CASE 
+            WHEN LEFT(ar.MANUFACTURADOR, 2) IN ('CA', 'FA', 'CO', 'GA', 'SA', 'DI', 'RI', 'UN', 'CB','BO','LI','SE','PR','BT')
+                 THEN CASE LEFT(ar.MANUFACTURADOR, 2)
+                         WHEN 'CA' THEN 'CAJA'
+                         WHEN 'FA' THEN 'FDR'
+                         WHEN 'CO' THEN 'CMB'
+                         WHEN 'GA' THEN 'GLN'
+                         WHEN 'SA' THEN 'SACO'
+                         WHEN 'DI' THEN 'DSP'
+                         WHEN 'RI' THEN 'RST'
+                         WHEN 'UN' THEN 'UND'
+                         WHEN 'CB' THEN 'CB'
+						 WHEN 'MA' THEN 'MUE'
+						 WHEN 'PR' THEN 'PRO'
+						 WHEN 'LI' THEN 'LIQ'
+						 WHEN 'BO' THEN 'BOT'
+						 WHEN 'SE' THEN 'SER'
+						 WHEN 'BT' THEN 'BUL'
+                      END
+            ELSE 'UND'
+        END AS Unit_Measure,
+        CAST(ar.PESO_BRUTO AS varchar(45)) AS Factor_Conversion, 
+         CASE 
+		WHEN ar.U_ESTATUS = 'Nuevo' THEN '1'
+		WHEN ar.U_ESTATUS = 'EnEspera' THEN '3'
+		else '2'
+	end as Transfer_status
+    FROM CATELLI.ARTICULO ar
+    INNER JOIN CATELLI.UNIDAD_DE_MEDIDA un ON ar.UNIDAD_VENTA = un.UNIDAD_MEDIDA
+    WHERE ar.CLASIFICACION_4 NOT IN ('GND')
+      AND ar.TIPO NOT IN ('K')
+      AND LEFT(ar.MANUFACTURADOR, 2) NOT IN ('UN', 'DI') AND AR.ACTIVO  = 'S'
+    UNION ALL
+    SELECT 
+        ar.ARTICULO AS Code_Product,
+        ar.UNIDAD_VENTA AS Unit_Measure,
+        CAST(ar.FACTOR_CONVER_1 AS varchar(45)) AS Factor_Conversion,
+          CASE 
+		WHEN ar.U_ESTATUS = 'Nuevo' THEN '1'
+		WHEN ar.U_ESTATUS = 'EnEspera' THEN '3'
+		else '2'
+	end as Transfer_status 
+    FROM CATELLI.ARTICULO ar
+    INNER JOIN CATELLI.UNIDAD_DE_MEDIDA un ON ar.UNIDAD_VENTA = un.UNIDAD_MEDIDA
+    WHERE  ar.CLASIFICACION_4 NOT IN ('GND')
+      AND ar.TIPO NOT IN ('K')
+      AND NOT (
+          (LEFT(ar.MANUFACTURADOR, 2) IN ('CO', 'CA', 'FA', 'GA', 'SA', 'FA', 'CB') AND ar.PESO_BRUTO = 1)
+      ) --AND  AR.ACTIVO  = 'S'
+)
+SELECT * FROM ProductMeasure;
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_products_organization]    Script Date: 25/08/2026 4:19:04 PM ******/
+DROP VIEW [dbo].[IMPLT_products_organization]
+GO
+
+/****** Object:  View [dbo].[IMPLT_products_organization]    Script Date: 25/08/2026 4:19:04 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_products_organization
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_products_organization]
+AS
+WITH ProductOrganization AS (
+    SELECT 
+        ar.ARTICULO AS Code_Product,
+        'CATELLI' AS Code_Unit_Org,
+        'CATELLI' AS Code_Sales_Org,
+        CASE WHEN ar.ACTIVO = 'S' THEN '1' ELSE '0' END AS Code_Status,
+        1 AS Unit_Box,
+        CASE 
+            WHEN ar.MANUFACTURADOR LIKE 'CA%' AND ar.PESO_BRUTO = 1 THEN 'CAJA'
+            WHEN ar.MANUFACTURADOR LIKE 'FA%' AND ar.PESO_BRUTO = 1 THEN 'FDR'
+            WHEN ar.MANUFACTURADOR LIKE 'CO%' AND ar.PESO_BRUTO = 1 THEN 'CMB'
+            WHEN ar.MANUFACTURADOR LIKE 'GA%' AND ar.PESO_BRUTO = 1 THEN 'GLN'
+            WHEN ar.MANUFACTURADOR LIKE 'SA%' AND ar.PESO_BRUTO = 1 THEN 'SACO'
+            WHEN ar.MANUFACTURADOR LIKE 'DI%' AND ar.PESO_BRUTO = 1 THEN 'DSP'
+            WHEN ar.MANUFACTURADOR LIKE 'RI%' AND ar.PESO_BRUTO = 1 THEN 'RST'
+            WHEN ar.MANUFACTURADOR LIKE 'UN%' AND ar.PESO_BRUTO = 1 THEN 'UND'
+            ELSE ar.UNIDAD_VENTA 
+        END AS Unit_Type_Sales,
+        CASE 
+            WHEN ar.UNIDAD_EMPAQUE LIKE 'CA%' THEN 'CAJA'
+            WHEN ar.UNIDAD_EMPAQUE LIKE 'FA%' THEN 'FDR'
+            WHEN ar.UNIDAD_EMPAQUE LIKE 'CO%' THEN 'CMB'
+            WHEN ar.UNIDAD_EMPAQUE LIKE 'GA%' THEN 'GLN'
+            WHEN ar.UNIDAD_EMPAQUE LIKE 'SA%' THEN 'SACO'
+            WHEN ar.UNIDAD_EMPAQUE LIKE 'DI%' THEN 'DSP'
+            WHEN ar.UNIDAD_EMPAQUE LIKE 'RI%' THEN 'RST'
+            WHEN ar.UNIDAD_EMPAQUE LIKE 'UN%' THEN 'UND'
+            ELSE ar.UNIDAD_EMPAQUE 
+        END AS Unit_Type_Inv,
+        CAST(ar.PESO_BRUTO AS varchar(45)) AS Factor_Conversion,
+        '0' AS Trazability,
+        CASE 
+		WHEN ar.U_ESTATUS = 'Nuevo' THEN '1'
+		WHEN ar.U_ESTATUS = 'EnEspera' THEN '3'
+		else '2'
+	end as Transfer_status
+    FROM CATELLI.ARTICULO ar
+    WHERE ar.CLASIFICACION_4 NOT LIKE 'GND%' --AND ar.ACTIVO = 'S'
+   
+)
+SELECT * FROM ProductOrganization;
+
+GO
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_products_packs]    Script Date: 25/08/2026 4:31:30 PM ******/
+DROP VIEW [dbo].[IMPLT_products_packs]
+GO
+
+/****** Object:  View [dbo].[IMPLT_products_packs]    Script Date: 25/08/2026 4:31:30 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_products_packs
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_products_packs]
+AS
+WITH ProductPacks AS (
+    SELECT 
+        ae.ARTICULO_PADRE AS Code_Product,
+        ae.ARTICULO_HIJO AS Code_Component,
+        CAST(ae.cantidad AS varchar(45)) AS Quantity,
+        a.UNIDAD_ALMACEN AS Unit_Type_Sales,
+        '1' AS Transfer_Status
+    FROM CATELLI.articulo_ensamble ae
+    INNER JOIN CATELLI.ARTICULO a ON ae.ARTICULO_HIJO = a.ARTICULO
+    --WHERE a.ACTIVO = 'S'
+)
+SELECT * FROM ProductPacks;
+
+GO
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_provinces]    Script Date: 25/08/2026 4:31:54 PM ******/
+DROP VIEW [dbo].[IMPLT_provinces]
+GO
+
+/****** Object:  View [dbo].[IMPLT_provinces]    Script Date: 25/08/2026 4:31:54 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_provinces
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_provinces]
+AS
+WITH Provinces AS (
+    SELECT 
+        CASE 
+            WHEN SUBSTRING(zona, PATINDEX('%[A-Za-z]%', zona), 1) NOT LIKE 'O'
+                 THEN 'CN' + zona
+            ELSE zona
+        END AS Code,
+        'RD' AS Code_Country,
+        nombre AS Description,
+        1 AS Transfer_Status
+    FROM CATELLI.zona
+)
+SELECT * FROM Provinces;
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_route_accounts]    Script Date: 25/08/2026 4:32:51 PM ******/
+DROP VIEW [dbo].[IMPLT_route_accounts]
+GO
+
+/****** Object:  View [dbo].[IMPLT_route_accounts]    Script Date: 25/08/2026 4:32:51 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_route_accounts
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_route_accounts]
+AS
+WITH RouteData AS (
+    SELECT 
+        CASE 
+            WHEN SUBSTRING(rc.cliente, PATINDEX('%[A-Za-z]%', rc.cliente), 1) NOT LIKE 'O'
+                 THEN 'CN' + rc.cliente
+            ELSE rc.cliente
+        END AS Code_Account,
+        rc.RUTA AS Code_Route,
+        ru.DESCRIPCION AS Description,
+       CASE 
+            WHEN SUBSTRING(ra.AGENTE, PATINDEX('%[A-Za-z]%', ra.AGENTE), 1) NOT IN ('O','R')
+                 THEN 'C' + ra.AGENTE
+            ELSE ra.AGENTE
+        END AS Code_Seller,
+        CASE WHEN DIA = 0 THEN '1' ELSE '0' END AS Visit_Mon,
+        CASE WHEN DIA = 1 THEN '1' ELSE '0' END AS Visit_Tue,
+        CASE WHEN DIA = 2 THEN '1' ELSE '0' END AS Visit_Wen,
+        CASE WHEN DIA = 3 THEN '1' ELSE '0' END AS Visit_Thu,
+        CASE WHEN DIA = 4 THEN '1' ELSE '0' END AS Visit_Fri,
+        CASE WHEN DIA = 5 THEN '1' ELSE '0' END AS Visit_Sat,
+        CASE WHEN DIA = 6 THEN '1' ELSE '0' END AS Visit_Sun,
+        'S' AS Code_Frecuency,
+        '0' AS Code_Week,
+        '0' AS Source_Create,
+        1 AS Transfer_status
+    FROM erpadmin.RUTA_CLIENTE rc
+    INNER JOIN erpadmin.RUTA_RT ru ON rc.RUTA = ru.RUTA
+    INNER JOIN erpadmin.RUTA_ASIGNADA_RT ra ON ra.RUTA = ru.RUTA
+    INNER JOIN CATELLI.CLIENTE C ON C.CLIENTE = rc.CLIENTE
+    WHERE C.ACTIVO LIKE 'S'
+      AND rc.RUTA NOT IN ('C999')
+      AND ru.ACTIVA LIKE 'S'
+      AND C.VENDEDOR NOT IN ('999','998','22')
+)
+SELECT * FROM RouteData;
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_route_org_accounts]    Script Date: 25/08/2026 4:33:06 PM ******/
+DROP VIEW [dbo].[IMPLT_route_org_accounts]
+GO
+
+/****** Object:  View [dbo].[IMPLT_route_org_accounts]    Script Date: 25/08/2026 4:33:06 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_route_org_accounts
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_route_org_accounts]
+AS
+WITH RouteAccounts AS (
+    SELECT 
+        CASE 
+            WHEN SUBSTRING(rc.cliente, PATINDEX('%[A-Za-z]%', rc.cliente), 1) NOT LIKE 'O'
+                 THEN 'CN' + rc.cliente
+            ELSE rc.cliente
+        END AS Code_Account,
+        'CATELLI' AS Code_Unit_Org,
+        'CATELLI' AS Code_Sales_Org,
+        ru.RUTA AS Code_Route,
+        ru.DESCRIPCION AS Description,
+        CASE 
+            WHEN SUBSTRING(ra.AGENTE, PATINDEX('%[A-Za-z]%', ra.AGENTE), 1) NOT IN ('O','R')
+                 THEN 'C' + ra.AGENTE
+            ELSE ra.AGENTE
+        END AS Code_Seller,
+        CASE WHEN rc.DIA = 0 THEN '1' ELSE '0' END AS Visit_Mon,
+        CASE WHEN rc.DIA = 1 THEN '1' ELSE '0' END AS Visit_Tue,
+        CASE WHEN rc.DIA = 2 THEN '1' ELSE '0' END AS Visit_Wen,
+        CASE WHEN rc.DIA = 3 THEN '1' ELSE '0' END AS Visit_Thu,
+        CASE WHEN rc.DIA = 4 THEN '1' ELSE '0' END AS Visit_Fri,
+        CASE WHEN rc.DIA = 5 THEN '1' ELSE '0' END AS Visit_Sat,
+        CASE WHEN rc.DIA = 6 THEN '1' ELSE '0' END AS Visit_Sun,
+        'S' AS Code_Frecuency,
+        '1' AS Code_Week,
+        1 AS Transfer_status
+    FROM erpadmin.RUTA_CLIENTE rc
+    INNER JOIN erpadmin.RUTA_RT ru ON rc.RUTA = ru.RUTA
+    INNER JOIN erpadmin.RUTA_ASIGNADA_RT ra ON ra.RUTA = ru.RUTA
+    INNER JOIN CATELLI.CLIENTE C ON C.CLIENTE = rc.CLIENTE
+    WHERE C.ACTIVO LIKE 'S'
+      AND rc.RUTA NOT IN ('C999')
+      AND ru.ACTIVA LIKE 'S'
+      AND C.VENDEDOR NOT IN ('999','998','22')
+)
+SELECT * FROM RouteAccounts --where Code_Route in ('N101','RP01','RP07')
+
+GO
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_Sales_Quota]    Script Date: 25/08/2026 4:33:18 PM ******/
+DROP VIEW [dbo].[IMPLT_Sales_Quota]
+GO
+
+/****** Object:  View [dbo].[IMPLT_Sales_Quota]    Script Date: 25/08/2026 4:33:18 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_Sales_Quota
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_Sales_Quota]
+AS
+SELECT 
+    'CATELLI' AS Code_Unit_Org,
+    'CATELLI' AS Code_Sales_Org,
+    CASE 
+          WHEN SUBSTRING(c.VENDEDOR, PATINDEX('%[A-Za-z]%', c.VENDEDOR), 1)  NOT IN ('O','R','W','M')
+                 THEN 'C' + c.VENDEDOR
+            ELSE c.VENDEDOR
+        END AS Code_Seller,
+    --c.vendedor AS Code_Seller, 
+    c.marca AS Code_Brand,
+    c.Subcategoria AS Code_Category, 
+    CAST(ROUND(CAST(c.Cuota_ajustada AS NUMERIC(11,2)), 2) AS VARCHAR(14)) AS Quota, 
+    CAST(ROUND(CAST(c.CuotaCajas AS NUMERIC(11,2)), 2) AS VARCHAR(14)) AS Quota_Box, 
+    --0 As Real_brand,
+    COALESCE(vm.Total_Ventas_Brand, 0) AS Real_brand, 
+    COALESCE(vm.Total_Cajas_Brand, 0) AS Real_Box,
+    '1' AS Source_Create, 
+    1 AS Transfer_status, 
+    LEFT(c.mes_anno, 7) AS ANNO_MES,
+    c.mes
+FROM dbo.cuota c
+LEFT JOIN dbo.Ventas_Marca_Mensual vm 
+    ON c.Subcategoria = vm.Code_Category 
+    AND c.vendedor = vm.Code_Seller
+    AND LEFT(c.mes_anno, 7) = vm.ANNO_MES;
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_sellers]    Script Date: 25/08/2026 4:33:27 PM ******/
+DROP VIEW [dbo].[IMPLT_sellers]
+GO
+
+/****** Object:  View [dbo].[IMPLT_sellers]    Script Date: 25/08/2026 4:33:27 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_sellers
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_sellers]
+AS
+WITH SellerData AS (
+    SELECT 
+     CASE 
+          WHEN SUBSTRING(ve.VENDEDOR, PATINDEX('%[A-Za-z]%', ve.VENDEDOR), 1)  NOT IN ('O','R')
+                 THEN 'C' + ve.VENDEDOR
+            ELSE ve.VENDEDOR
+        END AS Code_Seller,
+        ve.NOMBRE AS Name,
+        CASE WHEN ve.U_ESVENDEDOR = 'Re' Then '13'
+             WHEN ve.U_ESVENDEDOR = 'Al' Then '12'ELSE '02' END AS Type,
+        ve.u_bodega_central AS Code_Warehouse,
+        CASE 
+            WHEN SUBSTRING(ve.VENDEDOR, PATINDEX('%[A-Za-z]%', ve.VENDEDOR), 1) NOT IN ('O','R')
+                 THEN 'C' + ve.VENDEDOR
+            ELSE ve.VENDEDOR
+        END AS Code_Seller_Del,
+        NULL AS Code_Manager,
+        'RD' AS Code_Country,
+        NULL AS Phone,
+        NULL AS Email,
+        '0' AS Source_Create,
+		CASE 
+		WHEN U_ESTATUS = 'Nuevo' THEN 1
+		WHEN U_ESTATUS = 'EnEspera' THEN 3
+		else 2
+	end as Transfer_status
+        
+    FROM CATELLI.VENDEDOR ve
+    WHERE ve.U_esvendedor  IN ('Si','Re','Al')
+  )
+SELECT * FROM SellerData;
+
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_sellers_org]    Script Date: 25/08/2026 4:33:56 PM ******/
+DROP VIEW [dbo].[IMPLT_sellers_org]
+GO
+
+/****** Object:  View [dbo].[IMPLT_sellers_org]    Script Date: 25/08/2026 4:33:56 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_sellers_org
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_sellers_org]
+AS
+WITH SellerOrgData AS (
+    SELECT 
+        CASE 
+            WHEN SUBSTRING(ve.VENDEDOR, PATINDEX('%[A-Za-z]%', ve.VENDEDOR), 1) NOT IN ('O','R')
+                 THEN 'C' + ve.VENDEDOR
+            ELSE ve.VENDEDOR
+        END AS Code_Seller,
+        'CATELLI' AS Code_Unit_Org,
+        'CATELLI' AS Code_Sales_Org,
+        ve.U_SUPERASIGNADO AS Code_Manager,
+       CASE 
+		WHEN U_ESTATUS = 'Nuevo' THEN '1'
+		WHEN U_ESTATUS = 'EnEspera' THEN '3'
+		WHEN U_ESTATUS = 'Cambio' THEN '2'
+		else '0'
+	end as Transfer_status
+    FROM CATELLI.VENDEDOR ve
+    WHERE ve.U_esvendedor  IN ('Si','Re','Al')
+)
+SELECT * FROM SellerOrgData;
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_trucks]    Script Date: 25/08/2026 4:34:08 PM ******/
+DROP VIEW [dbo].[IMPLT_trucks]
+GO
+
+/****** Object:  View [dbo].[IMPLT_trucks]    Script Date: 25/08/2026 4:34:08 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_trucks
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_trucks]
+AS
+SELECT 
+    Code,
+    Code_Unit_Org,
+    Code_Sales_Org,
+    Description,
+    Plate,
+    CASE 
+        WHEN SUBSTRING(Code_Seller, PATINDEX('%[A-Za-z]%', Code_Seller), 1) NOT IN ('O','R')
+             THEN 'C' + Code_Seller
+        ELSE Code_Seller
+    END AS Code_Seller,
+    Source_Create,
+    Transfer_status
+FROM CATELLI.trucks;
+
+GO
+
+
+USE [EXACTUS]
+GO
+
+/****** Object:  View [dbo].[IMPLT_warehouses_stock]    Script Date: 25/08/2026 4:34:27 PM ******/
+DROP VIEW [dbo].[IMPLT_warehouses_stock]
+GO
+
+/****** Object:  View [dbo].[IMPLT_warehouses_stock]    Script Date: 25/08/2026 4:34:27 PM ******/
+SET ANSI_NULLS ON
+GO
+
+SET QUOTED_IDENTIFIER ON
+GO
+
+
+
+---------------------------------------------------------------------
+-- Vista: IMPLT_warehouses_stock
+---------------------------------------------------------------------
+CREATE   VIEW [dbo].[IMPLT_warehouses_stock]
+AS
+WITH WarehouseStock AS (
+    SELECT 
+        'CATELLI' AS Code_Unit_Org,
+        'CATELLI' AS Code_Sales_Org,
+        BA.BODEGA AS Code_Warehouse, 
+        A.ARTICULO AS Code_Product,
+        BA.NOMBRE AS Description,
+        '999999' AS Lot_Group,
+       CAST(B.CANT_DISPONIBLE AS VARCHAR)  AS Quantity,
+        A.UNIDAD_VENTA AS Unit_Type,
+        CAST(A.PESO_BRUTO AS VARCHAR) AS Factor_Conversion
+    FROM CATELLI.ARTICULO A
+    JOIN CATELLI.EXISTENCIA_BODEGA B ON A.ARTICULO = B.ARTICULO
+	join catelli.BODEGA BA ON B.BODEGA = BA.BODEGA
+    WHERE  A.ACTIVO = 'S'
+)
+SELECT * FROM WarehouseStock
+
+GO
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

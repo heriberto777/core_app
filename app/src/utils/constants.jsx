@@ -34,6 +34,9 @@ export const ENV = {
     NOTIFICATION_CONFIG: "notification-config",
     SUMMARIES: "summaries",
     LOGS: "logs",
+    ROUTES: "routes",
+    ROUTE_ACCOUNTS: "route-accounts",
+    TRUCKS: "trucks",
   },
   JWT: {
     ACCESS: "access",

@@ -150,18 +150,13 @@ const upsertTransferTaskController = async (req, res) => {
       return res.status(400).json({ success: false, message: "Una tarea no puede tener tanto grupo vinculado como tareas vinculadas directas." });
     }
 
-    if (cleanLinkedGroup && postUpdateQuery && postUpdateQuery.trim() !== "") {
-      const existingCoordinators = await TransferTask.find({
-        linkedGroup: cleanLinkedGroup,
-        postUpdateQuery: { $exists: true, $nin: [null, ""] },
-        _id: { $ne: _id },
-        active: true,
-      }).lean();
-
-      if (existingCoordinators.length > 0) {
-        return res.status(400).json({ success: false, message: `Ya existe una tarea coordinadora en el grupo "${cleanLinkedGroup}": ${existingCoordinators[0].name}.` });
-      }
-    }
+    // Antes exigía una sola tarea con postUpdateQuery por grupo ("la
+    // coordinadora"). Ya no aplica: LinkedTasksService.executeLinkedGroup()
+    // deja que cada miembro corra su propio postUpdateQuery (ej. marcar su
+    // propia tabla core_app.*_syncs) — solo la tarea de menor
+    // linkedExecutionOrder con postUpdateQuery difiere el suyo al paso
+    // coordinado del grupo. Que varios miembros tengan postUpdateQuery es
+    // el caso normal ahora, no un conflicto.
 
     if (cleanLinkedTasks.length > 0) {
       const linkedTasksExist = await TransferTask.find({ _id: { $in: cleanLinkedTasks }, active: true }).lean();

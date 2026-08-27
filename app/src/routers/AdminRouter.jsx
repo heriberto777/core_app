@@ -16,6 +16,9 @@ import { AuditCenter } from "../components/templates/AuditCenter";
 import { TraspasoManagement } from "../components/templates/TraspasoManagement";
 import { UserManagement } from "../components/templates/UserManagement";
 import { RoleManagement } from "../components/templates/RoleManagement";
+import { RoutesManagement } from "../components/templates/RoutesManagement";
+import { RouteAssignmentCenter } from "../components/templates/RouteAssignmentCenter";
+import { TrucksManagement } from "../components/templates/TrucksManagement";
 import { ConfigurationPage } from "../components/templates/ConfigurationPage";
 import { UserProfile } from "../components/organismos/UserProfile";
 import { UniversalDocumentManager } from "../components/templates/UniversalDocumentManager";
@@ -183,6 +186,40 @@ export function AdminRouter() {
         element={
           <ProtectedRoute resource="documents" action="read">
             <LayoutWrapper component={DocumentsVisualization} />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Sin `title`: RoutesManagement ya dibuja su propio header ("Gestión
+          de Rutas"), mismo criterio que el resto de los templates de esta
+          sección. */}
+      <Route
+        path="/rutas"
+        element={
+          <ProtectedRoute resource="routes" action="read">
+            <LayoutWrapper component={RoutesManagement} />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Sin `title`: RouteAssignmentCenter ya dibuja su propio header
+          ("Centro de Carga de Rutas"). */}
+      <Route
+        path="/rutas/asignacion"
+        element={
+          <ProtectedRoute resource="routes" action="read">
+            <LayoutWrapper component={RouteAssignmentCenter} />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Sin `title`: TrucksManagement ya dibuja su propio header ("Gestión
+          de Camiones"), mismo criterio que RoutesManagement. */}
+      <Route
+        path="/camiones"
+        element={
+          <ProtectedRoute resource="trucks" action="read">
+            <LayoutWrapper component={TrucksManagement} />
           </ProtectedRoute>
         }
       />

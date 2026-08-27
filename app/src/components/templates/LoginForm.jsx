@@ -28,7 +28,7 @@ export function LoginForm() {
   return (
     <div className="flex min-h-dvh w-full bg-slate-50">
       <Helmet>
-        <title>Login - Catelli Core ERP</title>
+        <title>Login - Core ERP</title>
       </Helmet>
 
       {/* PANEL DE MARCA — solo en pantallas grandes */}
@@ -38,8 +38,8 @@ export function LoginForm() {
           <img src={LogoCatelli} alt="Catelli Logo" className="w-40 h-auto object-contain brightness-0 invert" />
         </div>
         <div className="relative max-w-md">
-          <h2 className="text-3xl font-extrabold tracking-tight leading-tight mb-3">
-            Catelli Core ERP
+          <h2 className="text-6xl font-extrabold tracking-tight leading-tight mb-3">
+            Core ERP
           </h2>
           <p className="text-primary-100 text-base leading-relaxed">
             Plataforma central de gestión logística: cargas, traspasos y tareas de transferencia en un solo lugar.

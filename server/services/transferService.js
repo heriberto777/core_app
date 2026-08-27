@@ -1143,6 +1143,7 @@ class TransferService {
     }
 
     let totalInserted = 0;
+    let totalUpdated = 0;
     let duplicateCount = 0;
     let duplicatedRecords = [];
     let processedCount = 0;
@@ -1270,6 +1271,7 @@ class TransferService {
           );
 
           let batchInserted = 0;
+          let batchUpdated = 0;
           let batchSkipped = 0;
 
           for (const record of batch) {
@@ -1299,15 +1301,40 @@ class TransferService {
                   .join("|");
 
                 if (existingKeysSet.has(recordKey)) {
-                  duplicateCount++;
-                  batchSkipped++;
+                  if (task.updateOnDuplicate) {
+                    try {
+                      const updateResult = await this._updateRecord(
+                        connection,
+                        targetTableName,
+                        validatedRecord,
+                        mergeKeys
+                      );
 
-                  const duplicateRecord = {};
-                  mergeKeys.forEach((key) => {
-                    duplicateRecord[key] = validatedRecord[key];
-                  });
+                      if (updateResult?.rowsAffected > 0) {
+                        totalUpdated++;
+                        batchUpdated++;
+                        Telemetry.trackTransfer("recordsUpdated");
+                      }
+                    } catch (updateError) {
+                      if (signal.aborted)
+                        throw new Error("Tarea cancelada por el usuario");
 
-                  duplicatedRecords.push(duplicateRecord);
+                      throw new Error(
+                        `Error al actualizar registro existente: ${updateError.message || "Error desconocido"
+                        }`
+                      );
+                    }
+                  } else {
+                    duplicateCount++;
+                    batchSkipped++;
+
+                    const duplicateRecord = {};
+                    mergeKeys.forEach((key) => {
+                      duplicateRecord[key] = validatedRecord[key];
+                    });
+
+                    duplicatedRecords.push(duplicateRecord);
+                  }
                   continue;
                 }
               }
@@ -1394,7 +1421,7 @@ class TransferService {
           }
 
           logger.debug(
-            `Lote ${batchNumber}/${totalBatches}: ${batchInserted} insertados, ${batchSkipped} duplicados`
+            `Lote ${batchNumber}/${totalBatches}: ${batchInserted} insertados, ${batchUpdated} actualizados, ${batchSkipped} duplicados`
           );
 
           const progress = Math.min(
@@ -1439,6 +1466,7 @@ class TransferService {
 
         return {
           inserted: totalInserted,
+          updated: totalUpdated,
           duplicates: duplicateCount,
           duplicatedRecords: reportedDuplicates,
           hasMoreDuplicates,
@@ -1466,6 +1494,37 @@ class TransferService {
 
     const params = {};
     columns.forEach((col) => {
+      params[col] = record[col];
+    });
+
+    return await DatabaseServiceAdapter.query(connection, sql, params);
+  }
+
+  /**
+   * Actualiza un registro existente en destino (updateOnDuplicate:true).
+   * mergeKeys va en el WHERE, el resto de columnas en el SET.
+   */
+  async _updateRecord(connection, tableName, record, mergeKeys) {
+    const setColumns = Object.keys(record).filter(
+      (col) => !mergeKeys.includes(col)
+    );
+
+    if (setColumns.length === 0) {
+      // No hay nada más que la clave — no hay ningún UPDATE que hacer.
+      return { rowsAffected: 0 };
+    }
+
+    const setClause = setColumns
+      .map((col) => `[${col}] = @${col}`)
+      .join(", ");
+    const whereClause = mergeKeys
+      .map((col) => `[${col}] = @${col}`)
+      .join(" AND ");
+
+    const sql = `UPDATE ${tableName} SET ${setClause} WHERE ${whereClause}`;
+
+    const params = {};
+    Object.keys(record).forEach((col) => {
       params[col] = record[col];
     });
 

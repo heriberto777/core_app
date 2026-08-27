@@ -188,12 +188,20 @@ class LinkedTasksService {
         try {
           logger.info(`🔄 Ejecutando tarea del grupo: ${task.name}`);
 
-          // Ejecutar la tarea con skipPostUpdate para evitar que se ejecute el Post-Update
-          // durante la ejecución del grupo. El Post-Update se ejecutará solo al final por la tarea coordinadora.
+          // Solo se difiere el postUpdateQuery de la coordinadora — se ejecuta
+          // una sola vez al final, coordinado sobre la unión de claves del
+          // grupo. Un miembro no-coordinador con su propio postUpdateQuery
+          // (ej. marcar su propia tabla core_app.*_syncs como sincronizada)
+          // lo corre normal, igual que si se ejecutara suelto — no tiene nada
+          // que coordinar con el resto del grupo.
+          const isCoordinatorTask =
+            !!coordinatorTask &&
+            task._id.toString() === coordinatorTask._id.toString();
+
           const result = await transferService.executeTransferWithRetry(
             task._id.toString(),
             3,
-            { skipPostUpdate: true }
+            { skipPostUpdate: isCoordinatorTask }
           );
 
           results.push({

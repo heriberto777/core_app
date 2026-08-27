@@ -90,6 +90,18 @@ const transferTaskSchema = new mongoose.Schema(
         "Si se deben borrar registros de la tabla destino antes de insertar",
     },
 
+    // Con clearBeforeInsert:false, una clave que ya existe en destino se
+    // salta silenciosamente (correcto para feeds de solo-alta, como pedidos
+    // o facturas). Este flag cambia ese comportamiento a UPDATE de la fila
+    // existente — necesario para tareas que envían transfer_status=2
+    // (Cambio) y esperan que el valor viejo en destino se reemplace.
+    updateOnDuplicate: {
+      type: Boolean,
+      default: false,
+      description:
+        "Si una clave ya existe en destino, actualizarla en vez de saltarla (requiere clearBeforeInsert:false)",
+    },
+
     // Configuración de tabla destino para transferencias internas
     targetTable: {
       type: String,

@@ -192,6 +192,9 @@ app.use(
   require("./routes/notificationConfigRoutes")
 );
 app.use(`/api/${API_VERSION}/loads`, require("./routes/loadsRoutes"));
+app.use(`/api/${API_VERSION}/routes`, require("./routes/routesRoutes"));
+app.use(`/api/${API_VERSION}/route-accounts`, require("./routes/routeAccountsRoutes"));
+app.use(`/api/${API_VERSION}/trucks`, require("./routes/trucksRoutes"));
 app.use(`/api/${API_VERSION}/telemetry`, require("./routes/telemetryRoutes"));
 app.use(`/api/${API_VERSION}/customers`, require("./routes/customerRoutes"));
 //Comentario
