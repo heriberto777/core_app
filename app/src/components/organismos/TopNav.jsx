@@ -26,6 +26,7 @@ export function TopNav({ userMenuOpen, setUserMenuOpen }) {
       { path: "/universal-manager", name: "Gestor Universal", description: "Ejecutar procesos ya configurados, con seguimiento en tiempo real", category: "Operaciones", order: 5, isAccessible: isAdmin || hasPermission("documents", "read") },
       { path: "/rutas", name: "Gestión de Rutas", category: "Operaciones", order: 6, isAccessible: isAdmin || hasPermission("routes", "read") },
       { path: "/camiones", name: "Gestión de Camiones", category: "Operaciones", order: 7, isAccessible: isAdmin || hasPermission("trucks", "read") },
+      { path: "/objetivos-base", name: "Objetivos Base", category: "Operaciones", order: 7, isAccessible: isAdmin || hasPermission("cluster-base", "read") },
       { path: "/documents", name: "Documentos", description: "Configurar mapeos de datos y procesar documentos manualmente", category: "Documentos", order: 8, isAccessible: hasPermission("documents", "read") },
       { path: "/summaries", name: "Resúmenes", category: "Análisis", order: 7, isAccessible: hasPermission("reports", "read") },
       { path: "/analytics", name: "Analíticas", category: "Análisis", order: 8, isAccessible: hasPermission("analytics", "read") },

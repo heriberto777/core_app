@@ -81,17 +81,17 @@ export const RecipientsTable = ({
                                             {onEdit && (
                                                 <Button
                                                     variant="ghost"
-                                                    className="w-9 h-9 p-0 flex items-center justify-center rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all"
+                                                    className="!w-9 !h-9 !p-0 flex items-center justify-center rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all"
                                                     onClick={() => onEdit(r)}
                                                     title="Editar"
                                                 >
-                                                    <FaEdit />
+                                                    <FaEdit size={16} />
                                                 </Button>
                                             )}
                                             {onToggle && (
                                                 <Button
                                                     variant="ghost"
-                                                    className={`w-9 h-9 p-0 flex items-center justify-center rounded-xl transition-all ${
+                                                    className={`!w-9 !h-9 !p-0 flex items-center justify-center rounded-xl transition-all ${
                                                         r.isSend ? "hover:bg-amber-50 text-amber-500" : "hover:bg-emerald-50 text-emerald-500"
                                                     }`}
                                                     onClick={() => onToggle(r._id, r.isSend, r.name)}
@@ -103,11 +103,11 @@ export const RecipientsTable = ({
                                             {onDelete && (
                                                 <Button
                                                     variant="ghost"
-                                                    className="w-9 h-9 p-0 flex items-center justify-center rounded-xl hover:bg-red-50 text-red-500 transition-all"
+                                                    className="!w-9 !h-9 !p-0 flex items-center justify-center rounded-xl hover:bg-red-50 text-red-500 transition-all"
                                                     onClick={() => onDelete(r._id, r.name)}
                                                     title="Eliminar"
                                                 >
-                                                    <FaTrash />
+                                                    <FaTrash size={16} />
                                                 </Button>
                                             )}
                                         </div>

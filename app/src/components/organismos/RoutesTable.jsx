@@ -64,7 +64,7 @@ export const RoutesTable = ({ routes = [], loading, onEdit, onToggleActive }) =>
                         <>
                           <Button
                             variant="ghost"
-                            className="w-9 h-9 p-0 flex items-center justify-center rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+                            className="!w-9 !h-9 !p-0 flex items-center justify-center rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-all"
                             onClick={() => onEdit(route)}
                             title="Editar descripción"
                           >
@@ -72,7 +72,7 @@ export const RoutesTable = ({ routes = [], loading, onEdit, onToggleActive }) =>
                           </Button>
                           <Button
                             variant="ghost"
-                            className={`w-9 h-9 p-0 flex items-center justify-center rounded-xl transition-all ${
+                            className={`!w-9 !h-9 !p-0 flex items-center justify-center rounded-xl transition-all ${
                               route.active ? "hover:bg-amber-50 text-amber-500" : "hover:bg-emerald-50 text-emerald-500"
                             }`}
                             onClick={() => onToggleActive(route.code_route, route.active)}

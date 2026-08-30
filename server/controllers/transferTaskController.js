@@ -3,7 +3,6 @@ const Log = require("../models/loggerModel");
 const { assertValidTimeZone } = require("../utils/timezoneUtils");
 const {
   executeTransferManual,
-  insertInBatchesSSE,
   upsertTransferTask: upsertTransferTaskService,
 } = require("../services/transferService");
 const Config = require("../models/configModel");
@@ -23,6 +22,7 @@ const DynamicTransferService = require("../services/DynamicTransferService");
 const LinkedTasksService = require("../services/LinkedTasksService");
 const { notifyTransferResults } = require("../services/notificationDispatcher");
 const ConsecutiveService = require("../services/ConsecutiveService");
+const LoadsSQLService = require("../services/LoadsSQLService");
 
 /**
  * Obtener todas las tareas de transferencia
@@ -635,7 +635,12 @@ async function runTask(req, res) {
 }
 
 /**
- * Inserta órdenes en base a datos recibidos
+ * Inserta órdenes — en core_app.loads_orders_staging (server1), no ya directo
+ * en dbo.IMPLT_Orders (server2). El mismo motor de Tareas de Transferencia que
+ * usa el Flujo A (Despacho de Cargas) se encarga de empujarlas después —
+ * unifica los dos flujos de Cargas en un solo mecanismo de escritura, en vez
+ * de que este (Flujo B, Carga de Camiones) siga insertando directo con
+ * insertInBatchesSSE, pisándole el mismo documento Mongo al Flujo A.
  */
 async function insertOrders(req, res) {
   try {
@@ -652,14 +657,14 @@ async function insertOrders(req, res) {
       return validItem;
     });
 
-    const task = await TransferTask.findOne({ name: "IMPLT_Orders" }).lean();
-    if (!task) return res.status(404).json({ success: false, message: "Tarea IMPLT_Orders no encontrada." });
+    await withConnection("server1", async (connection) => {
+      await LoadsSQLService.insertToLoadsOrdersStaging(connection, validSalesData);
+    });
 
-    const result = await insertInBatchesSSE(task._id, validSalesData, 100);
     return res.status(200).json({
       success: true,
-      message: "Datos insertados correctamente en IMPLT_Orders",
-      data: result,
+      message: "Datos insertados correctamente en core_app.loads_orders_staging",
+      data: { inserted: validSalesData.length },
     });
   } catch (error) {
     logger.error("Error en insertOrders:", error);
@@ -668,7 +673,11 @@ async function insertOrders(req, res) {
 }
 
 /**
- * Inserta detalle de cargas
+ * Inserta detalle de cargas — en core_app.loads_detail_staging (server1),
+ * reusando la misma función que el Flujo A (agrega por Code_Product +
+ * Code_Warehouse_Orig). Acá el almacén de origen es uno solo para todo el
+ * camión (bodega del request), no por línea como en el Flujo A, así que se
+ * completa Code_Warehouse_Orig en cada registro antes de pasarlo.
  */
 async function insertLoadsDetail(req, res) {
   try {
@@ -679,36 +688,22 @@ async function insertLoadsDetail(req, res) {
       return res.status(400).json({ success: false, message: "Datos incompletos para loads_detail." });
     }
 
-    const task = await TransferTask.findOne({ name: "IMPLT_loads_detail" }).lean();
-    if (!task) return res.status(404).json({ success: false, message: "Tarea IMPLT_loads_detail no encontrada." });
-
-    const modifiedData = salesData.map((record, index) => ({
-      Code: loadId,
-      Num_Line: index + 1,
-      Lot_Group: "9999999999",
-      Code_Product: record.Code_Product,
-      Date_Load: record.Order_Date,
-      Quantity: record.Quantity.toString(),
-      Unit_Type: record.Unit_Measure,
-      Code_Warehouse_Sou: bodega,
-      Code_Route: route,
-      Source_Create: 0,
-      Transfer_status: "1",
-      Status_SAP: null,
-      Code_Unit_Org: "CATELLI",
-      Code_Sales_Org: "CATELLI",
+    const ordersDataConBodega = salesData.map((record) => ({
+      ...record,
+      Code_Warehouse_Orig: record.Code_Warehouse_Orig || bodega,
+      Quantity: Number(record.Quantity) || 0,
     }));
 
-    logger.info(`Insertando ${modifiedData.length} registros en loads_detail por ${userId}`);
-    const result = await insertInBatchesSSE(task._id, modifiedData, 100);
+    logger.info(`Insertando detalle de carga (${ordersDataConBodega.length} líneas) para loadId ${loadId} por ${userId}`);
 
-    // Actualizar el valor actual en el nuevo sistema si es necesario (opcional)
-    // El ConsecutiveService ya maneja el incremento automáticamente en getNextConsecutiveValue
+    await withConnection("server1", async (connection) => {
+      await LoadsSQLService.insertToLoadsDetailStaging(connection, loadId, route, ordersDataConBodega);
+    });
 
     return res.status(200).json({
       success: true,
-      message: "Datos insertados correctamente en IMPLT_loads_detail",
-      data: result,
+      message: "Datos insertados correctamente en core_app.loads_detail_staging",
+      data: { loadId },
     });
   } catch (error) {
     logger.error("Error en insertLoadsDetail:", error);
@@ -751,7 +746,15 @@ async function insertLoadsTrapaso(req, res) {
  */
 async function getLoadConsecutiveMongo(req, res) {
   try {
-    const loadId = await ConsecutiveService.getNextConsecutiveValue("LOAD");
+    // getNextConsecutiveValue devuelve un array de { numeric, formatted, segment }
+    // (soporta reservar varios de una vez) -- acá solo pedimos uno, así que hay
+    // que sacar el string formateado del primer elemento, si no queda un objeto
+    // crudo donde se espera un string (rompe el cast a String en LoadTracking).
+    const values = await ConsecutiveService.getNextConsecutiveValue("LOAD");
+    const loadId = Array.isArray(values) ? values[0]?.formatted : values?.formatted;
+    if (!loadId) {
+      throw new Error("El consecutivo 'LOAD' no devolvió un valor formateado válido");
+    }
 
     return res.status(200).json({
       success: true,

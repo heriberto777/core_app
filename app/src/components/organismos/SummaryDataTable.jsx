@@ -73,20 +73,20 @@ export function SummaryDataTable({ summaries, onView, onReturn, refreshing }) {
                                         <div className="flex items-center justify-end gap-2 opacity-0 group-hover:opacity-100 transition-all duration-300 transform translate-x-2 group-hover:translate-x-0">
                                             <Button 
                                                 variant="ghost" 
-                                                className="w-10 h-10 p-0 flex items-center justify-center rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all"
+                                                className="!w-10 !h-10 !p-0 flex items-center justify-center rounded-xl hover:bg-blue-50 hover:text-blue-600 transition-all"
                                                 onClick={() => onView(summary._id)}
                                                 title="Ver detalles técnicos"
                                             >
-                                                <FaEye />
+                                                <FaEye size={16} />
                                             </Button>
                                             {summary.status !== "full_return" && (
                                                 <Button
                                                     variant="ghost"
-                                                    className="w-10 h-10 p-0 flex items-center justify-center rounded-xl hover:bg-amber-50 text-amber-600 transition-all"
+                                                    className="!w-10 !h-10 !p-0 flex items-center justify-center rounded-xl hover:bg-amber-50 text-amber-600 transition-all"
                                                     onClick={() => onReturn(summary._id)}
                                                     title="Procesar devolución"
                                                 >
-                                                    <FaUndo />
+                                                    <FaUndo size={16} />
                                                 </Button>
                                             )}
                                         </div>

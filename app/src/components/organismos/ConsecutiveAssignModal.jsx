@@ -64,7 +64,7 @@ export function ConsecutiveAssignModal({ isOpen, onClose, onAssign, consecutive,
                         </div>
                         <h3 className="text-xl font-extrabold text-slate-900">Vincular Folio</h3>
                     </div>
-                    <Button variant="ghost" onClick={onClose} className="rounded-full w-10 h-10 p-0 flex items-center justify-center">
+                    <Button variant="ghost" onClick={onClose} className="rounded-full !w-10 !h-10 !p-0 flex items-center justify-center">
                         <FaTimes className="text-slate-400" />
                     </Button>
                 </div>

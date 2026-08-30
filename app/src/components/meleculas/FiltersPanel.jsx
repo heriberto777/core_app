@@ -1,4 +1,4 @@
-import { FilterInput, LoadsButton } from "../../index";
+import { FilterInput, LoadsButton, MultiSelectInput } from "../../index";
 import { FaFilter, FaSync, FaSearch } from "react-icons/fa";
 
 /**
@@ -42,16 +42,6 @@ export function FiltersPanel({
       label: `${seller.name} (${seller.code})`,
     }));
 
-  const handleSellerFilterChange = (value) => {
-    if (value === "all") {
-      handleFilterChange("sellers", []);
-    } else {
-      handleFilterChange("sellers", [value]);
-    }
-  };
-
-  const currentSellerValue = filters.sellers?.length > 0 ? filters.sellers[0] : "all";
-
   return (
     <div className={`bg-white border border-slate-200 rounded-lg p-4 mb-5 ${className}`}>
       <div className="flex items-center gap-2 mb-4 text-slate-800 font-semibold">
@@ -82,24 +72,14 @@ export function FiltersPanel({
           options={transferStatusOptions}
         />
 
-        {/* Selector de Vendedor */}
-        <div className="flex flex-col gap-1.5">
-          <label className="text-xs font-semibold text-slate-600 uppercase tracking-wider">
-            Vendedor
-          </label>
-          <select
-            value={currentSellerValue}
-            onChange={(e) => handleSellerFilterChange(e.target.value)}
-            className="w-full px-3 py-2 border border-slate-200 rounded-md text-sm bg-white text-slate-800 font-medium cursor-pointer focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 transition-all"
-          >
-            <option value="all">Todos los vendedores</option>
-            {sellerOnlyOptions.map((option) => (
-              <option key={option.value} value={option.value}>
-                {option.label}
-              </option>
-            ))}
-          </select>
-        </div>
+        {/* Selector de Vendedores (multiple, una carga puede juntar pedidos de varios) */}
+        <MultiSelectInput
+          label="Vendedores"
+          value={filters.sellers || []}
+          onChange={(value) => handleFilterChange("sellers", value)}
+          options={sellerOnlyOptions}
+          placeholder="Todos los vendedores"
+        />
       </div>
 
       <div className="flex gap-3 flex-wrap">

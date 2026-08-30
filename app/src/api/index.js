@@ -10,6 +10,7 @@ export { default as moduleApi } from "./moduleApi";
 export { default as roleApi } from "./roleApi";
 export { default as RoutesApi } from "./RoutesApi";
 export { default as TrucksApi } from "./TrucksApi";
+export { default as ClusterBaseApi } from "./ClusterBaseApi";
 export * from "./userApi";
 
 // Segmented APIs (Phase 17)

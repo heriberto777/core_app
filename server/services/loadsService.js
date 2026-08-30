@@ -13,6 +13,7 @@ const { realizarTraspaso, traspasoBodega } = require("./traspasoService");
 // Sub-servicios especializados
 const LoadsSQLService = require("./LoadsSQLService");
 const LoadsTrackingService = require("./LoadsTrackingService");
+const ConsecutiveService = require("./ConsecutiveService");
 const { DeliveryPerson } = require("../models/loadsModel");
 
 class LoadsService {
@@ -132,16 +133,19 @@ class LoadsService {
           step = "prepareTraspasoData";
           const traspasoData = LoadsSQLService.prepareTraspasoData(ordersData, bodegaDestino);
 
-          // PASOS 4 y 5: Insertar en server2
-          await withConnection("server2", async (server2Connection) => {
-            step = "insertToIMPLTOrders";
-            logger.info(`${step}: Insertando en IMPLT_Orders...`);
-            await LoadsSQLService.insertToIMPLTOrders(server2Connection, ordersData);
+          // PASOS 4 y 5: Insertar en staging (server1, misma transaccion) — una
+          // tarea del motor de Tareas de Transferencia se encarga de empujarlo
+          // a server2 despues. Antes esto insertaba directo en server2 en una
+          // conexion aparte, y dejaba filas huerfanas ahi si el traspaso (PASO 6)
+          // fallaba luego, porque no había forma de revertir un INSERT ya hecho
+          // en otro servidor.
+          step = "insertToLoadsOrdersStaging";
+          logger.info(`${step}: Insertando en core_app.loads_orders_staging...`);
+          await LoadsSQLService.insertToLoadsOrdersStaging(server1Connection, ordersData);
 
-            step = "insertToIMPLTLoadsDetail";
-            logger.info(`${step}: Insertando en IMPLT_Loads_Detail...`);
-            await LoadsSQLService.insertToIMPLTLoadsDetail(server2Connection, loadId, deliveryPersonCode, ordersData);
-          });
+          step = "insertToLoadsDetailStaging";
+          logger.info(`${step}: Insertando en core_app.loads_detail_staging...`);
+          await LoadsSQLService.insertToLoadsDetailStaging(server1Connection, loadId, deliveryPersonCode, ordersData);
 
           // PASO 6: Ejecutar traspaso automático
           step = "realizarTraspaso";
@@ -254,13 +258,19 @@ class LoadsService {
 
   /**
    * Procesa el traspaso de inventario diferido.
+   *
+   * Lee de core_app.loads_detail_staging (server1), no de dbo.IMPLT_loads_detail
+   * (server2): esa tabla se llena directo en la misma transaccion de
+   * processOrderLoad, mientras que server2 depende de que ya haya corrido la
+   * tarea de push — si alguien reintenta el traspaso antes de esa corrida,
+   * leer de server2 no encontraría nada.
    */
   static async processInventoryTransfer(loadId, bodegaDestino) {
     try {
-      const loadData = await withConnection("server2", async (connection) => {
+      const loadData = await withConnection("server1", async (connection) => {
         const query = `
-          SELECT Code_Product as codigo, Quantity as cantidad, Code_Warehouse_Sou as bodegaOrigen
-          FROM dbo.IMPLT_loads_detail WHERE Code = @loadId
+          SELECT code_product as codigo, quantity as cantidad, code_warehouse_sou as bodegaOrigen
+          FROM core_app.loads_detail_staging WHERE code = @loadId
         `;
         const result = await DatabaseServiceAdapter.query(connection, query, { loadId });
         return result.recordset;
@@ -317,12 +327,23 @@ class LoadsService {
   }
 
   /**
-   * Genera un nuevo loadId único de 24 caracteres numéricos (conforme al requerimiento histórico).
+   * Genera un nuevo loadId — via el consecutivo Mongo "LOAD", el mismo que ya
+   * usa el Flujo B (Carga de Camiones, getLoadConsecutiveMongo) para no tener
+   * dos generadores de loadId distintos. Antes era un id de 24 dígitos
+   * (timestamp + random); Code / Code_load en server2 solo tienen un tope de
+   * 24 caracteres, no un formato fijo, así que un consecutivo más corto entra
+   * sin problema.
    */
   static async generateLoadId() {
-    const timestamp = Date.now().toString();
-    const random = Math.floor(Math.random() * 1e11).toString().padStart(11, '0');
-    return `${timestamp}${random}`.substring(0, 24);
+    // getNextConsecutiveValue devuelve un array de { numeric, formatted, segment }
+    // (getNextValue del modelo soporta reservar varios de una vez) -- acá solo
+    // pedimos uno, así que hay que sacar el string formateado del primer elemento.
+    const values = await ConsecutiveService.getNextConsecutiveValue("LOAD");
+    const formatted = Array.isArray(values) ? values[0]?.formatted : values?.formatted;
+    if (!formatted) {
+      throw new Error("El consecutivo 'LOAD' no devolvió un valor formateado válido");
+    }
+    return formatted;
   }
 }
 

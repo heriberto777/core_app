@@ -37,6 +37,7 @@ export const ENV = {
     ROUTES: "routes",
     ROUTE_ACCOUNTS: "route-accounts",
     TRUCKS: "trucks",
+    CLUSTER_BASE: "cluster-base",
   },
   JWT: {
     ACCESS: "access",

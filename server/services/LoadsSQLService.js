@@ -505,21 +505,28 @@ class LoadsSQLService {
     }
 
     /**
-     * Inserta los datos transformados en IMPLT_Orders (server2).
+     * Inserta los datos transformados en core_app.loads_orders_staging (server1,
+     * misma conexion/transaccion que el resto de processOrderLoad). Antes esto
+     * insertaba directo en dbo.IMPLT_Orders (server2) en una conexion aparte —
+     * si el traspaso fallaba despues, esas filas quedaban huerfanas ahi porque
+     * no habia forma de revertir un INSERT ya hecho en otro servidor. Ahora una
+     * tarea del motor de Tareas de Transferencia empuja desde este staging a
+     * server2, y si la transaccion de server1 se revierte, esta fila se revierte
+     * con ella — no hay nada que limpiar en server2 porque nunca llegó a existir.
      */
-    static async insertToIMPLTOrders(connection, ordersData) {
+    static async insertToLoadsOrdersStaging(connection, ordersData) {
         for (const order of ordersData) {
             await DatabaseServiceAdapter.query(connection, `
-        INSERT INTO dbo.IMPLT_Orders (
-          Code_Unit_Org, Code_Sales_Org, Order_Num_ofClient, Num_Line, Order_Num,
-          Type_Rec, Code_load, Date_Delivery, Order_Date, Code_Account, Code_Product,
-          Lot_Number, Quantity, Quantity_Order, Unit_Measure, Price_Br, Price,
-          Total_Amount, Por_Discount1, Amount_Discount1, Por_Tax1, Amount_Tax1,
-          Por_Tax2, Amount_Tax2, Code_Currency, Secuence, Order_Num_Cli,
-          Code_Seller, Sale_Type, Code_Address, Transport, Transfer_status
+        INSERT INTO core_app.loads_orders_staging (
+          code_load, num_line, code_unit_org, code_sales_org, order_num_ofclient, order_num,
+          type_rec, date_delivery, order_date, code_account, code_product,
+          lot_number, quantity, quantity_order, unit_measure, price_br, price,
+          total_amount, por_discount1, amount_discount1, por_tax1, amount_tax1,
+          por_tax2, amount_tax2, code_currency, secuence, order_num_cli,
+          code_seller, sale_type, code_address, transport, transfer_status
         ) VALUES (
-          @Code_Unit_Org, @Code_Sales_Org, @Order_Num_ofClient, @Num_Line, @Order_Num,
-          @Type_Rec, @Code_load, @Date_Delivery, @Order_Date, @Code_Account, @Code_Product,
+          @Code_load, @Num_Line, @Code_Unit_Org, @Code_Sales_Org, @Order_Num_ofClient, @Order_Num,
+          @Type_Rec, @Date_Delivery, @Order_Date, @Code_Account, @Code_Product,
           @Lot_Number, @Quantity, @Quantity_Order, @Unit_Measure, @Price_Br, @Price,
           @Total_Amount, @Por_Discount1, @Amount_Discount1, @Por_Tax1, @Amount_Tax1,
           @Por_Tax2, @Amount_Tax2, @Code_Currency, @Secuence, @Order_Num_Cli,
@@ -527,13 +534,15 @@ class LoadsSQLService {
         )
       `, order);
         }
-        logger.info(`${ordersData.length} registros insertados en IMPLT_Orders`);
+        logger.info(`${ordersData.length} registros insertados en core_app.loads_orders_staging`);
     }
 
     /**
-     * Inserta el resumen de la carga en IMPLT_loads_detail (server2).
+     * Inserta el resumen de la carga en core_app.loads_detail_staging (server1) —
+     * mismo motivo que insertToLoadsOrdersStaging: evitar filas huerfanas en
+     * server2 cuando el traspaso falla despues del insert.
      */
-    static async insertToIMPLTLoadsDetail(connection, loadId, route, ordersData) {
+    static async insertToLoadsDetailStaging(connection, loadId, route, ordersData) {
         if (!ordersData || ordersData.length === 0) return;
 
         const productMap = new Map();
@@ -556,12 +565,12 @@ class LoadsSQLService {
         let lineNumber = 1;
         for (const product of productMap.values()) {
             await DatabaseServiceAdapter.query(connection, `
-        INSERT INTO dbo.IMPLT_loads_detail (
-          Code, Num_Line, Lot_Group, Code_Product, Date_Load, Quantity, Unit_Type,
-          Code_Warehouse_Sou, Code_Route, Source_Create, Transfer_status
+        INSERT INTO core_app.loads_detail_staging (
+          code, num_line, lot_group, code_product, date_load, quantity, unit_type,
+          code_warehouse_sou, code_route, source_create, transfer_status
         ) VALUES (
           @Code, @Num_Line, '999999999', @Code_Product, @Date_Load, @Quantity, 'UND',
-          @warehouseSource, @route, '0', '1'
+          @warehouseSource, @route, '0', 1
         )
       `, {
                 Code: loadId,
@@ -573,7 +582,7 @@ class LoadsSQLService {
                 route
             });
         }
-        logger.info(`${lineNumber - 1} líneas insertadas en IMPLT_loads_detail`);
+        logger.info(`${lineNumber - 1} líneas insertadas en core_app.loads_detail_staging`);
     }
 
     // ─── Otras operaciones de pedidos ─────────────────────────────────────────

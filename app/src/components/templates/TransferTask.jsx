@@ -405,11 +405,11 @@ export function TransferTasks() {
       />
 
       <Modal isOpen={showGroupsManager} onClose={() => setShowGroupsManager(false)} maxWidth="max-w-[1100px]">
-        <ModalHeader>
+        <ModalHeader className="px-6 pt-6">
           <ModalTitle>🔗 Grupos de Vinculación</ModalTitle>
           <Button variant="ghost" onClick={() => setShowGroupsManager(false)}><FaTimes /></Button>
         </ModalHeader>
-        <ModalBody>
+        <ModalBody className="px-6 pb-6">
           <LinkedGroupsManager accessToken={accessToken} onGroupDeleted={fetchTasks} onClose={() => setShowGroupsManager(false)} />
         </ModalBody>
       </Modal>
@@ -419,7 +419,7 @@ export function TransferTasks() {
         onClose={() => setLinkedTasksModal({ open: false, task: null, linkedTasks: [] })}
         maxWidth="max-w-[600px]"
       >
-        <ModalHeader>
+        <ModalHeader className="px-6 pt-6">
           <ModalTitle className="flex items-center gap-2">
             <FaLink className="text-blue-500" /> Tareas Vinculadas
           </ModalTitle>
@@ -427,7 +427,7 @@ export function TransferTasks() {
             <FaTimes />
           </Button>
         </ModalHeader>
-        <ModalBody>
+        <ModalBody className="px-6 pb-6">
           {linkedTasksModal.task?.linkedGroup ? (
             <div className="mb-4 p-3 bg-blue-50 dark:bg-blue-900/20 rounded-lg">
               <strong>Grupo:</strong> {linkedTasksModal.task.linkedGroup}
@@ -466,7 +466,7 @@ export function TransferTasks() {
         onClose={() => setHistoryModal({ open: false, taskId: null, data: [], loading: false, filter: 'all' })}
         maxWidth="max-w-[900px]"
       >
-        <ModalHeader>
+        <ModalHeader className="px-6 pt-6">
           <ModalTitle className="flex items-center gap-2">
             <FaHistory className="text-slate-600 dark:text-slate-400" /> Historial de Ejecuciones
           </ModalTitle>
@@ -485,7 +485,7 @@ export function TransferTasks() {
             </Button>
           </div>
         </ModalHeader>
-        <ModalBody>
+        <ModalBody className="px-6 pb-6">
           {/* Filtros */}
           <div className="mb-4 flex gap-2 flex-wrap">
             <FilterButton
@@ -603,7 +603,7 @@ export function TransferTasks() {
         onClose={() => setErrorModal({ open: false, title: '', message: '', details: '' })}
         maxWidth="max-w-[600px]"
       >
-        <ModalHeader className="bg-red-500 border-red-600 text-white">
+        <ModalHeader className="bg-red-500 border-red-600 text-white px-6 pt-6">
           <ModalTitle className="flex items-center gap-2 text-white">
             <FaExclamationTriangle className="text-white" /> {errorModal.title}
           </ModalTitle>
@@ -611,7 +611,7 @@ export function TransferTasks() {
             <FaTimes />
           </Button>
         </ModalHeader>
-        <ModalBody>
+        <ModalBody className="px-6 pb-6">
           <div className="mb-4">
             <strong className="block mb-2">Mensaje:</strong>
             <div className="p-3 bg-slate-100 dark:bg-slate-800 rounded-lg border-l-4 border-red-500">

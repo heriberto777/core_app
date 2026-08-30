@@ -19,6 +19,7 @@ import { RoleManagement } from "../components/templates/RoleManagement";
 import { RoutesManagement } from "../components/templates/RoutesManagement";
 import { RouteAssignmentCenter } from "../components/templates/RouteAssignmentCenter";
 import { TrucksManagement } from "../components/templates/TrucksManagement";
+import { ClusterBaseSettings } from "../components/templates/ClusterBaseSettings";
 import { ConfigurationPage } from "../components/templates/ConfigurationPage";
 import { UserProfile } from "../components/organismos/UserProfile";
 import { UniversalDocumentManager } from "../components/templates/UniversalDocumentManager";
@@ -220,6 +221,16 @@ export function AdminRouter() {
         element={
           <ProtectedRoute resource="trucks" action="read">
             <LayoutWrapper component={TrucksManagement} />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Sin `title`: ClusterBaseSettings ya dibuja su propio header. */}
+      <Route
+        path="/objetivos-base"
+        element={
+          <ProtectedRoute resource="cluster-base" action="read">
+            <LayoutWrapper component={ClusterBaseSettings} />
           </ProtectedRoute>
         }
       />

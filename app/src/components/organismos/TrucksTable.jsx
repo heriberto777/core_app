@@ -72,7 +72,7 @@ export const TrucksTable = ({ trucks = [], loading, onEdit, onToggleActive }) =>
                         <>
                           <Button
                             variant="ghost"
-                            className="w-9 h-9 p-0 flex items-center justify-center rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-all"
+                            className="!w-9 !h-9 !p-0 flex items-center justify-center rounded-xl hover:bg-indigo-50 hover:text-indigo-600 transition-all"
                             onClick={() => onEdit(truck)}
                             title="Editar camión"
                           >
@@ -80,7 +80,7 @@ export const TrucksTable = ({ trucks = [], loading, onEdit, onToggleActive }) =>
                           </Button>
                           <Button
                             variant="ghost"
-                            className={`w-9 h-9 p-0 flex items-center justify-center rounded-xl transition-all ${
+                            className={`!w-9 !h-9 !p-0 flex items-center justify-center rounded-xl transition-all ${
                               truck.active ? "hover:bg-amber-50 text-amber-500" : "hover:bg-emerald-50 text-emerald-500"
                             }`}
                             onClick={() => onToggleActive(truck.code, truck.active)}

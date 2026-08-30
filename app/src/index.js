@@ -99,6 +99,8 @@ export * from "./components/organismos/SellerRouteAssignmentModal";
 export * from "./components/organismos/ClientAssignmentTable";
 export * from "./components/organismos/TruckFormModal";
 export * from "./components/organismos/TrucksTable";
+export * from "./components/organismos/ClusterBaseFormModal";
+export * from "./components/organismos/ClusterBaseTable";
 
 
 // Organismos con default export
@@ -128,6 +130,7 @@ export * from "./components/templates/RoleManagement";
 export * from "./components/templates/RoutesManagement";
 export * from "./components/templates/RouteAssignmentCenter";
 export * from "./components/templates/TrucksManagement";
+export * from "./components/templates/ClusterBaseSettings";
 export * from "./components/templates/Statistics";
 export * from "./components/templates/AuditCenter";
 export * from "./components/templates/UserManagement";
@@ -168,6 +171,7 @@ export * from "./hooks/useRoles";
 export * from "./hooks/useRoutes";
 export * from "./hooks/useRouteAssignment";
 export * from "./hooks/useTrucks";
+export * from "./hooks/useClusterBase";
 export * from "./hooks/useModules";
 export * from "./hooks/useMappings";
 

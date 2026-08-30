@@ -18,6 +18,7 @@
     "setup-roles": "node scripts/initRoles.js",
     "init-routes-module": "node scripts/initRoutesModule.js",
     "init-trucks-module": "node scripts/initTrucksModule.js",
+    "init-cluster-base-module": "node scripts/initClusterBaseModule.js",
     "ensure-config-index": "node scripts/ensureConfigSingletonIndex.js"
   },
   "keywords": [
