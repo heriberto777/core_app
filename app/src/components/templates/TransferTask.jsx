@@ -1,9 +1,10 @@
 import React, { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
+import Swal from "sweetalert2";
 import {
   FaPlus, FaSync, FaLink, FaChartLine, FaList, FaTable,
-  FaEdit, FaTrash, FaPlay, FaStop, FaHistory, FaEye, FaTimes, FaExclamationTriangle
+  FaEdit, FaTrash, FaPlay, FaStop, FaHistory, FaEye, FaTimes, FaExclamationTriangle, FaPlayCircle
 } from "react-icons/fa";
 import {
   useTransferTask,
@@ -54,7 +55,7 @@ export function TransferTasks() {
     tasks, allTasks, availableGroups, loading, refreshing, filters, search,
     taskEstimates, setSearch, setFilters,
     handleFilterChange, fetchTasks,
-    deleteTask, executeTask, cancelTask, getTaskHistory, saveTask, actionStates
+    deleteTask, executeTask, executeAllTasks, executingAll, cancelTask, getTaskHistory, saveTask, actionStates
   } = useTransferTask();
 
   const { hasPermission, isAdmin } = usePermissions();
@@ -84,6 +85,22 @@ export function TransferTasks() {
     if (!canCreateTask) return;
     setSelectedTask(null);
     setIsModalOpen(true);
+  };
+
+  const handleExecuteAll = async () => {
+    const activeCount = allTasks.filter((t) => t.active && !t.mappingId).length;
+    const confirm = await Swal.fire({
+      icon: "warning",
+      title: "¿Ejecutar todas las tareas?",
+      text: `Se van a disparar todas las tareas activas que se pueden correr solas (${activeCount} aprox.), respetando grupos vinculados y los parámetros ya configurados en cada una. Puede tardar varios minutos.`,
+      showCancelButton: true,
+      confirmButtonText: "Ejecutar todo",
+      cancelButtonText: "Cancelar",
+      confirmButtonColor: "#2563eb",
+    });
+    if (!confirm.isConfirmed) return;
+
+    await executeAllTasks();
   };
 
   const openLinkedTasksModal = async (task) => {
@@ -193,6 +210,11 @@ export function TransferTasks() {
           <Button variant="primary" onClick={fetchTasks} loading={refreshing}>
             <FaSync className={refreshing ? "spinning" : ""} /> {refreshing ? "Sincronizando..." : "Refrescar"}
           </Button>
+          {canExecuteTask && (
+            <Button variant="success" onClick={handleExecuteAll} loading={executingAll}>
+              <FaPlayCircle /> {executingAll ? "Iniciando..." : "Ejecutar Todo"}
+            </Button>
+          )}
           {isAdmin && (
             <Button variant="secondary" onClick={() => setShowGroupsManager(true)}><FaLink /> Grupos</Button>
           )}

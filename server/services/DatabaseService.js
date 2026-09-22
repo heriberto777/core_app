@@ -87,7 +87,16 @@ class DatabaseService {
         acquireTimeoutMillis: 90000, // 90 segundos
         idleTimeoutMillis: 600000, // 10 minutos
         evictionRunIntervalMillis: 120000, // 2 minutos
-        testOnBorrow: false,
+        // Antes en false: el pool nunca corría _validateConnection() al
+        // entregar una conexión, así que una conexión que quedó a medio
+        // morir (el socket cayó mientras estaba idle en el pool — típico de
+        // un firewall/NAT con idle timeout más corto que idleTimeoutMillis)
+        // se seguía entregando igual, y el primer execSql fallaba con
+        // "Connection lost - unexpected end of message stream" (ESOCKET).
+        // _validateConnection ya chequea connection._isHealthy (que el
+        // listener "error" de _createConnection sí actualiza) sin hacer
+        // ningún roundtrip de red, así que activarlo no agrega latencia real.
+        testOnBorrow: true,
         testOnReturn: false,
         fifo: false,
       };

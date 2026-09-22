@@ -371,16 +371,26 @@ const executeAutomaticTransfers = async () => {
     // **ENVÍO DE NOTIFICACIONES (correo + webhook) - CRÍTICO**
     try {
       if (results.length > 0) {
-        await notifyTransferResults(results, {
+        const { emailSent, webhookSent } = await notifyTransferResults(results, {
           runType: "automatic",
           scheduledHour: currentHour,
           timezone: currentTimezone,
           startTime,
           endTime: Date.now(),
         });
-        logger.info(
-          `📧 ✅ Notificación de resultados enviada para ${results.length} transferencias`
-        );
+        // Antes se logueaba "enviada" siempre, aunque notifyTransferResults
+        // nunca lanza cuando el correo falla (sin destinatarios configurados,
+        // SMTP caído, etc.) — devuelve false en silencio. Con el resultado
+        // propagado, esto queda visible en el log en vez de mentir.
+        if (emailSent || webhookSent) {
+          logger.info(
+            `📧 ✅ Notificación de resultados enviada para ${results.length} transferencias (correo: ${emailSent ? "sí" : "no"}, webhook: ${webhookSent ? "sí" : "no"})`
+          );
+        } else {
+          logger.warn(
+            `📧 ⚠️ Ningún canal de notificación pudo enviarse para ${results.length} transferencias — revisar destinatarios configurados (Configuración de Notificaciones) y logs de correo/webhook arriba`
+          );
+        }
       }
     } catch (notifyError) {
       logger.error(`📧 ❌ ERROR enviando notificación:`, notifyError);
@@ -421,6 +431,42 @@ const executeAutomaticTransfers = async () => {
   } finally {
     isRunning = false;
   }
+};
+
+/**
+ * Dispara manualmente el mismo recorrido que hace el cron diario
+ * (executeAutomaticTransfers) — para el botón "Ejecutar Todo" del Gestor de
+ * Tareas. Mismo guard de concurrencia que usa el propio callback del cron
+ * (isRunning), pero sin depender de que el planificador esté habilitado:
+ * correr manual no tiene nada que ver con si el cron automático está
+ * prendido o no. No espera a que termine — recorrer todas las tareas puede
+ * tardar minutos, y el caller (el controller HTTP) responde de una vez;
+ * el progreso ya se ve por el estado de cada tarea en la tabla (SSE/Mongo),
+ * igual que cuando corre por el cron.
+ */
+const runAllTasksNow = () => {
+  if (!transferService) {
+    transferService = require("./transferService");
+  }
+  if (!LinkedTasksService) {
+    try {
+      LinkedTasksService = require("./LinkedTasksService");
+    } catch (error) {
+      logger.warn("LinkedTasksService no disponible");
+      LinkedTasksService = null;
+    }
+  }
+
+  if (isRunning) {
+    return { started: false, reason: "already_running" };
+  }
+
+  logger.info("🚀 === INICIANDO EJECUCIÓN MANUAL DE TODAS LAS TAREAS ===");
+  executeAutomaticTransfers().catch((error) => {
+    logger.error("❌ Error en ejecución manual de todas las tareas:", error);
+  });
+
+  return { started: true };
 };
 
 // Resto de funciones
@@ -583,4 +629,5 @@ module.exports = {
   getCronDiagnostics,
   startSchedulerWatchdog,
   stopSchedulerWatchdog,
+  runAllTasksNow,
 };

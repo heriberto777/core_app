@@ -94,6 +94,26 @@ export class TransferTaskApi {
         }
     }
 
+    async executeAllTasks(accessToken) {
+        try {
+            const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/execute-all`;
+            const response = await fetch(url, {
+                method: "POST",
+                headers: {
+                    "Content-Type": "application/json",
+                    Authorization: `Bearer ${accessToken}`,
+                }
+            });
+
+            const result = await response.json();
+            if (!response.ok) throw new Error(result?.message || `Error ${response.status}`);
+            return result;
+        } catch (error) {
+            console.error("Error ejecutando todas las tareas:", error);
+            throw error;
+        }
+    }
+
     async addTimeTransfer(accessToken, datos) {
         try {
             const url = `${this.baseApi}/${ENV.API_ROUTERS.TRANSFER}/config/horas`;

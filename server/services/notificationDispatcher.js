@@ -64,14 +64,20 @@ async function notifyTransferResults(results, options = {}) {
   const successCount = results.filter((r) => r.success).length;
   const failedCount = results.length - successCount;
 
-  // Correo (siempre se intenta enviar — ya lo hacía antes)
+  // Antes esta función no devolvía nada: sendTransferResultsEmail ya
+  // devuelve `false` (sin lanzar) cuando no hay destinatarios configurados o
+  // el envío falla, pero como acá nunca se leía ese valor, cronService.js
+  // logueaba "Notificación enviada" igual — quedaba invisible que en
+  // realidad nunca salió ningún correo.
+  let emailSent = false;
   try {
-    await sendTransferResultsEmail(results, scheduledHour, configName, meta, timezone);
+    emailSent = await sendTransferResultsEmail(results, scheduledHour, configName, meta, timezone);
   } catch (error) {
     logger.error(`Error enviando correo de resultados (${runType}): ${error.message}`);
   }
 
   // Webhook (n8n u otro), solo si está configurado y habilitado para este tipo de corrida
+  let webhookSent = false;
   try {
     const config = await getNotificationConfig();
     const enabledForThisRunType =
@@ -98,10 +104,13 @@ async function notifyTransferResults(results, options = {}) {
           errorDetail: r.success ? undefined : r.errorDetail,
         })),
       });
+      webhookSent = true;
     }
   } catch (error) {
     logger.error(`Error enviando webhook de resultados (${runType}): ${error.message}`);
   }
+
+  return { emailSent, webhookSent };
 }
 
 async function notifyCriticalError(errorMessage, options = {}) {
@@ -112,12 +121,14 @@ async function notifyCriticalError(errorMessage, options = {}) {
     timezone = "America/Santo_Domingo",
   } = options;
 
+  let emailSent = false;
   try {
-    await sendCriticalErrorEmail(errorMessage, scheduledHour, additionalInfo, configName, timezone);
+    emailSent = await sendCriticalErrorEmail(errorMessage, scheduledHour, additionalInfo, configName, timezone);
   } catch (error) {
     logger.error(`Error enviando correo de error crítico: ${error.message}`);
   }
 
+  let webhookSent = false;
   try {
     const config = await getNotificationConfig();
     if (config?.webhookEnabled) {
@@ -128,10 +139,13 @@ async function notifyCriticalError(errorMessage, options = {}) {
         additionalInfo,
         timestamp: new Date().toISOString(),
       });
+      webhookSent = true;
     }
   } catch (error) {
     logger.error(`Error enviando webhook de error crítico: ${error.message}`);
   }
+
+  return { emailSent, webhookSent };
 }
 
 module.exports = {

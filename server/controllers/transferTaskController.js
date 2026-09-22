@@ -6,7 +6,7 @@ const {
   upsertTransferTask: upsertTransferTaskService,
 } = require("../services/transferService");
 const Config = require("../models/configModel");
-const { setSchedulerEnabled, getSchedulerStatus } = require("../services/cronService");
+const { setSchedulerEnabled, getSchedulerStatus, runAllTasksNow } = require("../services/cronService");
 const { executeDynamicSelect } = require("../services/dynamicQueryService");
 const { formatDateToYYYYMMDD } = require("../utils/formatDate");
 const { realizarTraspaso } = require("../services/traspasoService");
@@ -402,6 +402,37 @@ const executeTransferTask = async (req, res) => {
     });
   } catch (error) {
     logger.error(`❌ [executeTransferTask] Error crítico: ${error.message}`);
+    return res.status(500).json({ success: false, message: "Error interno del servidor", error: error.message });
+  }
+};
+
+/**
+ * Ejecuta manualmente TODAS las tareas activas que se pueden correr solas
+ * (mismo recorrido que hace el cron diario, respetando grupos vinculados y
+ * los parámetros ya configurados en cada tarea) — para el botón "Ejecutar
+ * Todo" del Gestor de Tareas. No espera a que termine: recorrer todas las
+ * tareas puede tardar minutos, así que responde de una vez y el progreso se
+ * ve en la tabla (cada tarea actualiza su propio status/progress vía SSE,
+ * igual que cuando corre por el cron).
+ */
+const executeAllTasks = async (req, res) => {
+  try {
+    const result = runAllTasksNow();
+
+    if (!result.started) {
+      return res.status(409).json({
+        success: false,
+        message: "Ya hay una ejecución en curso (automática o manual) — esperá a que termine.",
+      });
+    }
+
+    logger.info(`🚀 [executeAllTasks] Ejecución manual de todas las tareas iniciada por ${req.user?.email || req.user?.name || "desconocido"}`);
+    return res.status(202).json({
+      success: true,
+      message: "Ejecución de todas las tareas iniciada — el progreso se ve en la tabla de tareas.",
+    });
+  } catch (error) {
+    logger.error(`❌ [executeAllTasks] Error: ${error.message}`);
     return res.status(500).json({ success: false, message: "Error interno del servidor", error: error.message });
   }
 };
@@ -1141,6 +1172,7 @@ module.exports = {
   upsertTransferTaskController,
   deleteTransferTask,
   executeTransferTask,
+  executeAllTasks,
   getConfigurarHora,
   updateConfig,
   runTask,

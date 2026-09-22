@@ -15,6 +15,7 @@ export const useTransferTask = () => {
     const [actionStates, setActionStates] = useState({}); // Track { taskId: 'executing'|'deleting'|'canceling'|'history' }
     const [taskEstimates, setTaskEstimates] = useState({});
     const [notificationsEnabled, setNotificationsEnabled] = useState(false);
+    const [executingAll, setExecutingAll] = useState(false);
     const previousTasksRef = useRef(null);
 
     const [filters, setFilters] = useState({
@@ -194,6 +195,25 @@ export const useTransferTask = () => {
         }
     };
 
+    // Corre todas las tareas activas que se pueden lanzar solas (mismo
+    // recorrido que hace el cron diario, respetando grupos vinculados) — el
+    // backend responde de una vez sin esperar a que termine, el progreso se
+    // ve reflejado en cada fila de la tabla a medida que fetchTasks refresca.
+    const executeAllTasks = async () => {
+        setExecutingAll(true);
+        try {
+            const result = await taskApi.executeAllTasks(accessToken);
+            showSuccess(result?.message || "Ejecución de todas las tareas iniciada");
+            fetchTasks();
+            return true;
+        } catch (error) {
+            showError("Error al ejecutar todas las tareas: " + error.message);
+            return false;
+        } finally {
+            setExecutingAll(false);
+        }
+    };
+
     const saveTask = async (formData, isEdit = false) => {
         try {
             await taskApi.upsertTransferTask(accessToken, formData);
@@ -224,6 +244,8 @@ export const useTransferTask = () => {
         fetchTasks,
         deleteTask,
         executeTask,
+        executeAllTasks,
+        executingAll,
         cancelTask,
         getTaskHistory,
         saveTask,
