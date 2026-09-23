@@ -5,7 +5,9 @@
       "Bash(Get-Content *)",
       "Bash(Get-ChildItem -Path \"D:\\\\proyectos\\\\app\\\\core_app\\\\app\\\\src\\\\api\" -File)",
       "Bash(Select-Object Name)",
-      "Bash(Get-ChildItem -Path \"D:\\\\proyectos\\\\app\\\\core_app\\\\app\\\\src\\\\utils\" -Recurse -File)"
+      "Bash(Get-ChildItem -Path \"D:\\\\proyectos\\\\app\\\\core_app\\\\app\\\\src\\\\utils\" -Recurse -File)",
+      "Bash(grep -n 'app.use\\(`/api/' app.js)",
+      "Bash(timeout 20 docker version)"
     ]
   }
 }
