@@ -842,41 +842,41 @@ class DynamicTransferService {
 
         // Log específico de cada bonificación
         bonusLines.forEach((line, index) => {
-          logger.error(`🎁 🔍 BONIFICACIÓN ${index + 1}:`);
-          logger.error(
+          logger.debug(`🎁 🔍 BONIFICACIÓN ${index + 1}:`);
+          logger.debug(
             `🎁 🔍   Línea: ${line.NUM_LN} | Artículo: ${line.COD_ART}`
           );
-          logger.error(
+          logger.debug(
             `🎁 🔍   PEDIDO_LINEA_BONIF: ${line.PEDIDO_LINEA_BONIF}`
           );
-          logger.error(
+          logger.debug(
             `🎁 🔍   CANTIDAD_BONIFICAD: ${line.CANTIDAD_BONIFICAD}`
           );
-          logger.error(`🎁 🔍   CANTIDAD_PEDIDA: ${line.CANTIDAD_PEDIDA}`);
-          logger.error(
+          logger.debug(`🎁 🔍   CANTIDAD_PEDIDA: ${line.CANTIDAD_PEDIDA}`);
+          logger.debug(
             `🎁 🔍   CANTIDAD_A_FACTURA: ${line.CANTIDAD_A_FACTURA}`
           );
-          logger.error(`🎁 🔍   _PROMOTION_TYPE: ${line._PROMOTION_TYPE}`);
+          logger.debug(`🎁 🔍   _PROMOTION_TYPE: ${line._PROMOTION_TYPE}`);
         });
 
         // Log específico de cada trigger
         triggerLines.forEach((line, index) => {
-          logger.error(`🎯 🔍 TRIGGER ${index + 1}:`);
-          logger.error(
+          logger.debug(`🎯 🔍 TRIGGER ${index + 1}:`);
+          logger.debug(
             `🎯 🔍   Línea: ${line.NUM_LN} | Artículo: ${line.COD_ART}`
           );
-          logger.error(`🎯 🔍   CANTIDAD_PEDIDA: ${line.CANTIDAD_PEDIDA}`);
-          logger.error(
+          logger.debug(`🎯 🔍   CANTIDAD_PEDIDA: ${line.CANTIDAD_PEDIDA}`);
+          logger.debug(
             `🎯 🔍   CANTIDAD_A_FACTURA: ${line.CANTIDAD_A_FACTURA}`
           );
-          logger.error(`🎯 🔍   _PROMOTION_TYPE: ${line._PROMOTION_TYPE}`);
+          logger.debug(`🎯 🔍   _PROMOTION_TYPE: ${line._PROMOTION_TYPE}`);
         });
       }
 
-      logger.error(`🎁 🔍 DATOS ANTES DE PROCESAR CADA REGISTRO:`);
+      logger.debug(`🎁 🔍 DATOS ANTES DE PROCESAR CADA REGISTRO:`);
       detailsData.forEach((record, index) => {
-        logger.error(`🎁 🔍 ---- REGISTRO ${index + 1} ----`);
-        logger.error(
+        logger.debug(`🎁 🔍 ---- REGISTRO ${index + 1} ----`);
+        logger.debug(
           `🎁 🔍   Datos completos: ${JSON.stringify(record, null, 2)}`
         );
 
@@ -898,7 +898,7 @@ class DynamicTransferService {
           }
         });
 
-        logger.error(
+        logger.debug(
           `🎁 🔍   Campos promoción encontrados: ${foundPromotionFields.join(", ") || "NINGUNO"
           }`
         );
@@ -917,7 +917,7 @@ class DynamicTransferService {
       ) {
         const record = detailsData[recordIndex];
 
-        logger.error(
+        logger.debug(
           `Procesando registro ${recordIndex + 1}/${detailsData.length}`
         );
 
@@ -946,7 +946,7 @@ class DynamicTransferService {
             }
           }
 
-          logger.error(
+          logger.debug(
             `Datos que van a processTable: ${JSON.stringify(record, null, 2)}`
           );
 
@@ -964,7 +964,7 @@ class DynamicTransferService {
             secondaryReservations
           );
 
-          logger.error(`Registro ${recordIndex + 1} procesado exitosamente`);
+          logger.debug(`Registro ${recordIndex + 1} procesado exitosamente`);
         } catch (recordError) {
           logger.error(
             `Error procesando registro ${recordIndex + 1}: ${recordError.message
@@ -988,14 +988,14 @@ class DynamicTransferService {
     }
 
     // ✅ RESUMEN FINAL
-    logger.error(
+    logger.debug(
       `🎁 🔍 ============ RESUMEN FINAL DE PROCESAMIENTO ============`
     );
-    logger.error(`🎁 🔍 Total tablas procesadas: ${processedTables.length}`);
-    logger.error(
+    logger.debug(`🎁 🔍 Total tablas procesadas: ${processedTables.length}`);
+    logger.debug(
       `🎁 🔍 Promociones aplicadas: ${totalPromotionsApplied ? "SÍ" : "NO"}`
     );
-    logger.error(`🎁 🔍 Tablas procesadas: ${processedTables.join(", ")}`);
+    logger.debug(`🎁 🔍 Tablas procesadas: ${processedTables.join(", ")}`);
 
     return {
       promotionsApplied: totalPromotionsApplied,
@@ -1730,17 +1730,17 @@ class DynamicTransferService {
     // Determinar qué datos usar para procesamiento
     const dataForProcessing = isDetailTable ? tableData : sourceData;
 
-    logger.error(
+    logger.debug(
       `============ INICIANDO processTable: ${tableConfig.name} ============`
     );
-    logger.error(`isDetailTable: ${isDetailTable}`);
-    logger.error(
+    logger.debug(`isDetailTable: ${isDetailTable}`);
+    logger.debug(
       `dataForProcessing claves: ${Object.keys(dataForProcessing).join(", ")}`
     );
 
     // Verificar si hay datos de promociones
     const hasPromotionData = this.detectPromotionData(dataForProcessing);
-    logger.error(`¿Detecta promociones? ${hasPromotionData}`);
+    logger.debug(`¿Detecta promociones? ${hasPromotionData}`);
 
     // Validar configuración de campos
     if (!tableConfig.fieldMappings || tableConfig.fieldMappings.length === 0) {
@@ -1750,18 +1750,18 @@ class DynamicTransferService {
 
     // DEBUGGING específico
     if (dataForProcessing._IS_REGULAR_WITH_DISCOUNT) {
-      logger.error(`LÍNEA REGULAR CON DESCUENTO - debe usar flujo normal`);
+      logger.debug(`LÍNEA REGULAR CON DESCUENTO - debe usar flujo normal`);
     }
 
     if (dataForProcessing._IS_BONUS_LINE) {
-      logger.error(`LÍNEA BONIFICACIÓN REAL - debe usar flujo de promociones`);
+      logger.debug(`LÍNEA BONIFICACIÓN REAL - debe usar flujo de promociones`);
     }
 
     // Lógica mejorada para promociones
     let allFieldMappings = [];
 
     if (hasPromotionData && dataForProcessing._IS_BONUS_LINE) {
-      logger.error(
+      logger.debug(
         `DATOS DE PROMOCIONES DETECTADOS en tabla ${tableConfig.name}`
       );
 
@@ -1769,7 +1769,7 @@ class DynamicTransferService {
       tableConfig.fieldMappings.forEach((fm) => {
         if (fm.targetField) {
           processedFieldNames.add(fm.targetField.toLowerCase());
-          logger.error(
+          logger.debug(
             `Original: ${fm.sourceField || "null"} -> ${fm.targetField}`
           );
         }
@@ -1782,7 +1782,7 @@ class DynamicTransferService {
         processedFieldNames
       );
 
-      logger.error(
+      logger.debug(
         `MAPPINGS AUTOMÁTICOS GENERADOS: ${promotionFieldMappings.length}`
       );
 
@@ -1792,7 +1792,7 @@ class DynamicTransferService {
         ...promotionFieldMappings,
       ];
 
-      logger.error(
+      logger.debug(
         `MAPPINGS TOTALES: ${tableConfig.fieldMappings.length} originales + ${promotionFieldMappings.length} automáticos = ${allFieldMappings.length}`
       );
 
@@ -1801,7 +1801,7 @@ class DynamicTransferService {
     } else {
       // Flujo normal sin promociones
       allFieldMappings = tableConfig.fieldMappings;
-      logger.error(
+      logger.debug(
         `NO se detectaron promociones, usando ${allFieldMappings.length} mappings normales`
       );
     }
@@ -1827,7 +1827,7 @@ class DynamicTransferService {
       );
     }
 
-    logger.error(
+    logger.debug(
       `PROCESANDO ${allFieldMappings.length} campos del mapping para tabla ${tableConfig.name}`
     );
 
@@ -1854,15 +1854,15 @@ class DynamicTransferService {
         continue;
       }
 
-      logger.error(
+      logger.debug(
         `---- PROCESANDO CAMPO ${fieldIndex + 1}/${allFieldMappings.length
         } ----`
       );
-      logger.error(
+      logger.debug(
         `Campo: ${fieldMapping.sourceField || "(automático)"} -> ${fieldMapping.targetField
         }`
       );
-      logger.error(`Es promoción: ${fieldMapping.isPromotionField || false}`);
+      logger.debug(`Es promoción: ${fieldMapping.isPromotionField || false}`);
 
       try {
         // Usar método processField mejorado
@@ -1885,7 +1885,7 @@ class DynamicTransferService {
             targetFields.push(fieldMapping.targetField);
             targetValues.push(processedField.value);
             directSqlFields.add(fieldMapping.targetField);
-            logger.error(
+            logger.debug(
               `Campo SQL directo: ${fieldMapping.targetField} = ${processedField.value}`
             );
           } else {
@@ -1901,22 +1901,22 @@ class DynamicTransferService {
 
               // Log específico para campos de promoción
               if (fieldMapping.isPromotionField) {
-                logger.error(
+                logger.debug(
                   `CAMPO PROMOCIÓN PROCESADO: ${fieldMapping.targetField} = ${processedField.value}`
                 );
               } else {
-                logger.error(
+                logger.debug(
                   `Campo normal procesado: ${fieldMapping.targetField} = ${processedField.value}`
                 );
               }
             } else {
-              logger.error(
+              logger.debug(
                 `Campo omitido (valor null y no requerido): ${fieldMapping.targetField}`
               );
             }
           }
         } else {
-          logger.error(`Campo no procesado: ${fieldMapping.targetField}`);
+          logger.debug(`Campo no procesado: ${fieldMapping.targetField}`);
         }
       } catch (fieldError) {
         const failedValue = fieldMapping.sourceField ? dataForProcessing[fieldMapping.sourceField] : null;
@@ -2000,10 +2000,10 @@ class DynamicTransferService {
     }
 
     // Log final de campos a insertar
-    logger.error(
+    logger.debug(
       `============ RESUMEN FINAL PARA ${tableConfig.targetTable} ============`
     );
-    logger.error(`Total campos a insertar: ${targetFields.length}`);
+    logger.debug(`Total campos a insertar: ${targetFields.length}`);
 
     // Identificar campos de promoción
     const promotionFieldsInTarget = targetFields.filter(
@@ -2014,7 +2014,7 @@ class DynamicTransferService {
     );
 
     if (promotionFieldsInTarget.length > 0) {
-      logger.error(
+      logger.debug(
         `CAMPOS DE PROMOCIÓN A INSERTAR: ${promotionFieldsInTarget.join(", ")}`
       );
     }
@@ -2027,7 +2027,7 @@ class DynamicTransferService {
     });
 
     if (lookupFieldsInTarget.length > 0) {
-      logger.error(
+      logger.debug(
         `CAMPOS DE LOOKUP A INSERTAR: ${lookupFieldsInTarget
           .map((field) => `${field}=${targetData[field]}`)
           .join(", ")}`
@@ -3061,28 +3061,28 @@ class DynamicTransferService {
 
     try {
       // ✅ 1. MOSTRAR DATOS COMPLETOS EN JSON ANTES DE PROCESAR
-      logger.error(
+      logger.debug(
         `🔍 ============ DATOS RECIBIDOS PARA INSERCIÓN ============`
       );
-      logger.error(`🔍 Tabla destino: ${targetTable}`);
-      logger.error(
+      logger.debug(`🔍 Tabla destino: ${targetTable}`);
+      logger.debug(
         `🔍 CAMPOS RECIBIDOS (${targetFields.length}): ${JSON.stringify(
           targetFields,
           null,
           2
         )}`
       );
-      logger.error(
+      logger.debug(
         `🔍 VALUES RECIBIDOS (${targetValues.length}): ${JSON.stringify(
           targetValues,
           null,
           2
         )}`
       );
-      logger.error(
+      logger.debug(
         `🔍 TARGET DATA RECIBIDO: ${JSON.stringify(targetData, null, 2)}`
       );
-      logger.error(
+      logger.debug(
         `🔍 DIRECT SQL FIELDS: ${JSON.stringify(
           Array.from(directSqlFields),
           null,
@@ -3130,7 +3130,7 @@ class DynamicTransferService {
               nullable: col.IS_NULLABLE === 'YES'
             };
           });
-          logger.error(`🔍 SCHEMA OBTENIDO para ${targetTable}: ${Object.keys(columnTypes).length} columnas`);
+          logger.debug(`🔍 SCHEMA OBTENIDO para ${targetTable}: ${Object.keys(columnTypes).length} columnas`);
         }
       } catch (schemaError) {
         logger.warn(`⚠️ No se pudo obtener schema de ${targetTable}: ${schemaError.message}`);
@@ -3310,10 +3310,10 @@ class DynamicTransferService {
       )}) VALUES (${finalInsertData.valores.join(", ")})`;
 
       // ✅ 4. MOSTRAR TODOS LOS VALORES A INSERTAR EN FORMATO JSON SÚPER CLARO
-      logger.error(
+      logger.debug(
         `🎁 ============ ESTOS SON LOS VALORES A INSERTAR YA CON PROMOCIONES INCLUIDA ============`
       );
-      logger.error(
+      logger.debug(
         `🎁 DATOS COMPLETOS PARA INSERCIÓN: ${JSON.stringify(
           finalInsertData,
           null,
@@ -3322,18 +3322,18 @@ class DynamicTransferService {
       );
 
       // ✅ 5. MOSTRAR RESUMEN EJECUTIVO
-      logger.error(`🎁 ============ RESUMEN EJECUTIVO ============`);
-      logger.error(`🎁 Tabla destino: ${finalInsertData.tabla}`);
-      logger.error(
+      logger.debug(`🎁 ============ RESUMEN EJECUTIVO ============`);
+      logger.debug(`🎁 Tabla destino: ${finalInsertData.tabla}`);
+      logger.debug(
         `🎁 Total campos a insertar: ${finalInsertData.resumenCampos.total}`
       );
-      logger.error(
+      logger.debug(
         `🎁 Campos de PROMOCIÓN: ${finalInsertData.resumenCampos.promocion}`
       );
-      logger.error(
+      logger.debug(
         `🎁 Campos REGULARES: ${finalInsertData.resumenCampos.regulares}`
       );
-      logger.error(
+      logger.debug(
         `🎁 Campos SQL directo: ${finalInsertData.resumenCampos.sqlDirecto}`
       );
 
@@ -3354,10 +3354,10 @@ class DynamicTransferService {
       });
 
       if (camposPromocion.length > 0) {
-        logger.error(
+        logger.debug(
           `🎁 ============ CAMPOS DE PROMOCIÓN INCLUIDOS ============`
         );
-        logger.error(
+        logger.debug(
           `🎁 CAMPOS DE PROMOCIÓN (${camposPromocion.length}): ${JSON.stringify(
             camposPromocion,
             null,
@@ -3365,12 +3365,12 @@ class DynamicTransferService {
           )}`
         );
       } else {
-        logger.error(`🎁 ❌ NO HAY CAMPOS DE PROMOCIÓN EN LA INSERCIÓN`);
+        logger.debug(`🎁 ❌ NO HAY CAMPOS DE PROMOCIÓN EN LA INSERCIÓN`);
       }
 
       // ✅ 7. MOSTRAR QUERY Y PARÁMETROS FINALES
-      logger.error(`🎁 ============ QUERY Y PARÁMETROS FINALES ============`);
-      logger.error(`🎁 QUERY SQL: ${finalInsertData.query}`);
+      logger.debug(`🎁 ============ QUERY Y PARÁMETROS FINALES ============`);
+      logger.debug(`🎁 QUERY SQL: ${finalInsertData.query}`);
       logger.error(
         `🎁 PARÁMETROS: ${JSON.stringify(finalInsertData.parametros, null, 2)}`
       );
@@ -3383,7 +3383,7 @@ class DynamicTransferService {
       }
 
       // ✅ 9. VALIDACIÓN DETALLADA DE CADA PARÁMETRO CON AUTOCORRECCIÓN
-      logger.error(`🔍 ============ VALIDACIÓN DETALLADA DE PARÁMETROS ============`);
+      logger.debug(`🔍 ============ VALIDACIÓN DETALLADA DE PARÁMETROS ============`);
       const paramValidation = [];
       const corrections = [];
       
@@ -3471,7 +3471,7 @@ class DynamicTransferService {
             razon: "Valor 'NULL' string convertido a vacío"
           });
           
-          logger.error(`🔧 CORRECCIÓN 'NULL': ${key} = "${originalValue}" → ""`);
+          logger.debug(`🔧 CORRECCIÓN 'NULL': ${key} = "${originalValue}" → ""`);
           
           valueLength = 0;
           valueStr = "";
@@ -3525,7 +3525,7 @@ class DynamicTransferService {
                   razon
                 });
                 
-                logger.error(`🔧 CORRECCIÓN FECHA: ${key} = "${originalValue}" → "${formattedDate}"`);
+                logger.debug(`🔧 CORRECCIÓN FECHA: ${key} = "${originalValue}" → "${formattedDate}"`);
                 
                 valueLength = formattedDate.length;
                 valueStr = formattedDate;
@@ -3553,7 +3553,7 @@ class DynamicTransferService {
               razon: `Valor con comillas excedía límite de ${maxLength} chars`
             });
             
-            logger.error(`🔧 CORRECCIÓN AUTOMÁTICA: ${key} = "${originalValue}" → "${cleanedValue}"`);
+            logger.debug(`🔧 CORRECCIÓN AUTOMÁTICA: ${key} = "${originalValue}" → "${cleanedValue}"`);
             
             valueLength = cleanedValue.length;
             isProblematic = false;
@@ -3575,17 +3575,17 @@ class DynamicTransferService {
       });
       
       if (corrections.length > 0) {
-        logger.error(`🔧 ============ CORRECCIONES AUTOMÁTICAS APLICADAS ============`);
-        logger.error(`🔧 TOTAL: ${corrections.length} correcciones`);
+        logger.debug(`🔧 ============ CORRECCIONES AUTOMÁTICAS APLICADAS ============`);
+        logger.debug(`🔧 TOTAL: ${corrections.length} correcciones`);
         corrections.forEach(c => {
-          logger.error(`🔧 ${c.campo}: "${c.original}" → "${c.corregido}" (${c.razon})`);
+          logger.debug(`🔧 ${c.campo}: "${c.original}" → "${c.corregido}" (${c.razon})`);
         });
       }
       
-      logger.error(`🔍 VALIDACIÓN COMPLETA: ${JSON.stringify(paramValidation, null, 2)}`);
+      logger.debug(`🔍 VALIDACIÓN COMPLETA: ${JSON.stringify(paramValidation, null, 2)}`);
 
       // ✅ 9. EJECUTAR INSERCIÓN
-      logger.error(`🚀 EJECUTANDO INSERCIÓN...`);
+      logger.debug(`🚀 EJECUTANDO INSERCIÓN...`);
 
       const startTime = Date.now();
       
@@ -3608,18 +3608,18 @@ class DynamicTransferService {
         camposPromocion: finalInsertData.resumenCampos.promocion,
       };
 
-      logger.error(`🎁 ============ RESULTADO FINAL DE INSERCIÓN ============`);
-      logger.error(
+      logger.debug(`🎁 ============ RESULTADO FINAL DE INSERCIÓN ============`);
+      logger.debug(
         `🎁 RESULTADO COMPLETO: ${JSON.stringify(resultadoFinal, null, 2)}`
       );
 
       if (finalInsertData.resumenCampos.promocion > 0) {
-        logger.error(`🎁 ✅ ¡INSERCIÓN CON PROMOCIONES EXITOSA!`);
-        logger.error(
+        logger.debug(`🎁 ✅ ¡INSERCIÓN CON PROMOCIONES EXITOSA!`);
+        logger.debug(
           `🎁 Se insertaron ${finalInsertData.resumenCampos.promocion} campos de promoción en ${targetTable}`
         );
       } else {
-        logger.error(`📋 ✅ Inserción estándar exitosa (sin promociones)`);
+        logger.debug(`📋 ✅ Inserción estándar exitosa (sin promociones)`);
       }
 
       return result;
@@ -6895,7 +6895,7 @@ class DynamicTransferService {
           upperTargetField.includes("PEDIDA") ||
           upperTargetField.includes("FACTURA")
         ) {
-          logger.error(`🎁 Línea bonificación: ${targetField} = 0`);
+          logger.debug(`🎁 Línea bonificación: ${targetField} = 0`);
           return 0;
         }
       }
@@ -6903,13 +6903,13 @@ class DynamicTransferService {
       // Para líneas regulares, algunos campos deben ser null/0
       if (sourceData._IS_TRIGGER_LINE) {
         if (upperTargetField.includes("BONIF")) {
-          logger.error(`🎁 Línea trigger: ${targetField} = 0`);
+          logger.debug(`🎁 Línea trigger: ${targetField} = 0`);
           return 0;
         }
       }
     }
 
-    logger.error(`🔍 ❌ No se encontró valor para ${targetField}`);
+    logger.debug(`🔍 ❌ No se encontró valor para ${targetField}`);
     return null;
   }
 
