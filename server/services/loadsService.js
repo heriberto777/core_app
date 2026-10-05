@@ -144,8 +144,18 @@ class LoadsService {
           await LoadsSQLService.insertToLoadsOrdersStaging(server1Connection, ordersData);
 
           step = "insertToLoadsDetailStaging";
-          logger.info(`${step}: Insertando en core_app.loads_detail_staging...`);
-          await LoadsSQLService.insertToLoadsDetailStaging(server1Connection, loadId, deliveryPersonCode, ordersData);
+          // Code_Route real del cliente (core_app.route_accounts_syncs, ver
+          // getTransformedOrdersData) — no el código del repartidor. Un
+          // repartidor entrega una sola ruta, así que toma la de cualquier
+          // línea de la carga; si ningún cliente tiene ruta asignada todavía
+          // (no debería pasar en producción, pero no hay que romper la carga
+          // por eso), cae de vuelta al código del repartidor como antes.
+          const codeRoute = ordersData[0]?.Code_Route;
+          if (!codeRoute) {
+            logger.warn(`${step}: ningún cliente de la carga tiene Ruta de Reparto asignada en route_accounts_syncs — usando código de repartidor (${deliveryPersonCode}) como Code_Route de respaldo`);
+          }
+          logger.info(`${step}: Insertando en core_app.loads_detail_staging (Code_Route=${codeRoute || deliveryPersonCode})...`);
+          await LoadsSQLService.insertToLoadsDetailStaging(server1Connection, loadId, codeRoute || deliveryPersonCode, ordersData);
 
           // PASO 6: Ejecutar traspaso automático
           step = "realizarTraspaso";

@@ -456,7 +456,11 @@ class LoadsSQLService {
                RUBRO5, FECHA_PROMETIDA, FECHA_PEDIDO, CLIENTE, VENDEDOR, RUBRO4,
                detalle_direccion, ARTICULO, UNIDAD_ALMACEN, BODEGA_ORIGEN_REAL, LOCALIZACION_ORIGEN_REAL,
                (CANTIDAD_PEDIDA * PRECIO_UNITARIO) AS SubTotal,
-               ((CANTIDAD_PEDIDA * PRECIO_UNITARIO) - MONTO_DESCUENTO) AS TotalAmount
+               ((CANTIDAD_PEDIDA * PRECIO_UNITARIO) - MONTO_DESCUENTO) AS TotalAmount,
+               CASE
+                 WHEN SUBSTRING(CLIENTE, PATINDEX('%[A-Za-z]%', CLIENTE), 1) NOT IN ('O','R')
+                   THEN 'CN' + CLIENTE ELSE CLIENTE
+               END AS Code_Account_Calc
         FROM BaseData WHERE CANTIDAD_PEDIDA <> 0
         UNION ALL
         SELECT PEDIDO, PEDIDO_LINEA, CAST(PEDIDO_LINEA AS VARCHAR(10)) + '-B' AS LINEA_TIPO,
@@ -464,7 +468,11 @@ class LoadsSQLService {
                0 AS MONTO_DESCUENTO, 0 AS PORC_DESCUENTO, 0 AS PORC_IMPUESTO1, 0 AS PORC_IMPUESTO2,
                RUBRO5, FECHA_PROMETIDA, FECHA_PEDIDO, CLIENTE, VENDEDOR, RUBRO4,
                detalle_direccion, ARTICULO, UNIDAD_ALMACEN, BODEGA_ORIGEN_REAL, LOCALIZACION_ORIGEN_REAL,
-               0 AS SubTotal, 0 AS TotalAmount
+               0 AS SubTotal, 0 AS TotalAmount,
+               CASE
+                 WHEN SUBSTRING(CLIENTE, PATINDEX('%[A-Za-z]%', CLIENTE), 1) NOT IN ('O','R')
+                   THEN 'CN' + CLIENTE ELSE CLIENTE
+               END AS Code_Account_Calc
         FROM BaseData WHERE CANTIDAD_BONIFICAD > 0
       )
       SELECT
@@ -474,10 +482,14 @@ class LoadsSQLService {
         RUBRO4 AS Order_Num, 'S' AS Type_Rec, @loadId AS Code_load,
         CONVERT(VARCHAR, FECHA_PROMETIDA, 112) AS Date_Delivery,
         CONVERT(VARCHAR, FECHA_PEDIDO, 112) AS Order_Date,
-        CASE
-          WHEN SUBSTRING(CLIENTE, PATINDEX('%[A-Za-z]%', CLIENTE), 1) NOT IN ('O','R')
-            THEN 'CN' + CLIENTE ELSE CLIENTE
-        END AS Code_Account,
+        Code_Account_Calc AS Code_Account,
+        -- Ruta de Reparto real del cliente (core_app.route_accounts_syncs,
+        -- Centro de Carga de Rutas) -- antes se mandaba el codigo del
+        -- Repartidor elegido en el Code_Route de IMPLT_loads_detail, que no
+        -- es lo mismo. Un repartidor entrega una sola ruta (segun los
+        -- clientes cargados en route_accounts_syncs), asi que toma el
+        -- Code_Route de cualquiera de los clientes de la carga.
+        ra.code_route AS Code_Route,
         ARTICULO AS Code_Product, '999999999' AS Lot_Number,
         CAST(Cantidad AS NUMERIC(11,3)) AS Quantity,
         CAST(Cantidad AS NUMERIC(11,3)) AS Quantity_Order,
@@ -497,7 +509,10 @@ class LoadsSQLService {
         BODEGA_ORIGEN_REAL AS Code_Warehouse_Orig,
         LOCALIZACION_ORIGEN_REAL AS Localizacion_Orig,
         TIPO_LINEA, LINEA_TIPO -- Mantener para trazabilidad interna
-      FROM Calc ORDER BY PEDIDO, PEDIDO_LINEA, LINEA_TIPO
+      FROM Calc
+      LEFT JOIN core_app.route_accounts_syncs ra
+        ON ra.code_account = Calc.Code_Account_Calc AND ra.assignment_type = 'REPARTO'
+      ORDER BY PEDIDO, PEDIDO_LINEA, LINEA_TIPO
     `;
 
         const result = await DatabaseServiceAdapter.query(connection, query, params);
