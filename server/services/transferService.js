@@ -1484,6 +1484,9 @@ class TransferService {
    * Inserta un registro - MIGRADO desde SqlService
    */
   async _insertRecord(connection, tableName, record) {
+    if (Object.prototype.hasOwnProperty.call(record, "Order_Num")) {
+      logger.info(`[DEBUG Order_Num] tabla=${tableName} valor=${JSON.stringify(record.Order_Num)} tipo=${typeof record.Order_Num}`);
+    }
     const columns = Object.keys(record);
     const values = Object.values(record);
 
