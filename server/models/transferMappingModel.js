@@ -92,10 +92,14 @@ const FieldMappingSchema = new Schema({
   
   // === CAMPOS DE TRANSFORMACIÓN ===
   transform: {
-    // Tipo de dato para transformación (diferente del fieldType de UI)
+    // Tipo de dato para transformación (diferente del fieldType de UI).
+    // "" = "Sin transformación" en FieldMappingModal.jsx — es el valor por
+    // defecto de todo campo y una opción real del <select>, no un hueco sin
+    // llenar, así que tiene que estar en el enum o cualquier mapeo que deje
+    // un campo sin transformar (la mayoría) falla al guardar.
     transformType: {
       type: String,
-      enum: ["string", "number", "date", "datetime", "boolean"],
+      enum: ["", "string", "number", "date", "datetime", "boolean"],
     },
     // Para strings
     toUpperCase: { type: Boolean, default: false },
