@@ -236,7 +236,7 @@ export function TransferTasks() {
           </span>
           {executionProgress.currentTasks?.length > 0 && (
             <span className="truncate text-blue-600 dark:text-blue-300">
-              — corriendo ahora: {executionProgress.currentTasks.join(", ")}
+              — último lote: {executionProgress.currentTasks.join(", ")}
             </span>
           )}
         </div>

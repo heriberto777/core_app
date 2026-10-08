@@ -248,8 +248,16 @@ const executeAutomaticTransfers = async () => {
     for (let i = 0; i < tasksToExecute.length; i += concurrencyLimit) {
       const batch = tasksToExecute.slice(i, i + concurrencyLimit);
 
+      // Se fija por lote (no se vacía entre tarea y tarea) para que durante
+      // la pausa de 30s entre lotes el banner siga mostrando el último lote
+      // ejecutado, en vez de quedar en blanco — la mayoria de las tareas
+      // terminan en segundos, asi que casi todo el tiempo real se va en esa
+      // pausa, no en ejecucion activa.
+      executionProgress.currentTasks = batch.map((item) =>
+        item.isGroup ? `${item.taskName} (grupo ${item.groupName})` : item.taskName
+      );
+
       const batchPromises = batch.map(async (item) => {
-        executionProgress.currentTasks.push(item.isGroup ? `${item.taskName} (grupo ${item.groupName})` : item.taskName);
         try {
           if (item.isGroup) {
             logger.info(
@@ -365,8 +373,6 @@ const executeAutomaticTransfers = async () => {
             errorDetail: itemError.message || "Error desconocido",
           });
         } finally {
-          const label = item.isGroup ? `${item.taskName} (grupo ${item.groupName})` : item.taskName;
-          executionProgress.currentTasks = executionProgress.currentTasks.filter((t) => t !== label);
           executionProgress.completed += 1;
         }
       });
