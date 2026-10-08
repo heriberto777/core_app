@@ -55,7 +55,7 @@ export function TransferTasks() {
     tasks, allTasks, availableGroups, loading, refreshing, filters, search,
     taskEstimates, setSearch, setFilters,
     handleFilterChange, fetchTasks,
-    deleteTask, executeTask, executeAllTasks, executingAll, cancelTask, getTaskHistory, saveTask, actionStates
+    deleteTask, executeTask, executeAllTasks, executingAll, executionProgress, cancelTask, getTaskHistory, saveTask, actionStates
   } = useTransferTask();
 
   const { hasPermission, isAdmin } = usePermissions();
@@ -227,6 +227,20 @@ export function TransferTasks() {
           </div>
         </div>
       </div>
+
+      {executionProgress?.isRunning && (
+        <div className="flex items-center gap-3 px-4 py-2.5 mb-4 rounded-lg border border-blue-200 bg-blue-50 dark:bg-blue-900/30 dark:border-blue-800 text-blue-800 dark:text-blue-200 text-[13px]">
+          <FaSync className="spinning shrink-0" />
+          <span className="font-semibold shrink-0">
+            Ejecutando {executionProgress.completed} de {executionProgress.total}
+          </span>
+          {executionProgress.currentTasks?.length > 0 && (
+            <span className="truncate text-blue-600 dark:text-blue-300">
+              — corriendo ahora: {executionProgress.currentTasks.join(", ")}
+            </span>
+          )}
+        </div>
+      )}
 
       <div className="relative min-h-[300px]">
         {refreshing && <LoadingUI overlay message="Actualizando estados..." />}

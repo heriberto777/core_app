@@ -28,6 +28,20 @@ let LinkedTasksService;
 let watchdogInterval = null;
 let mongoReconnectListenerAttached = false;
 
+// Progreso de la corrida en curso (cron diario o botón "Ejecutar Todo") —
+// permite que el frontend muestre "X de Y" y el nombre de la tarea actual
+// en vez de solo saber que "isRunning" es true, sin estado por run_id ya
+// que solo puede haber una corrida activa a la vez (ver guard de isRunning).
+let executionProgress = {
+  isRunning: false,
+  total: 0,
+  completed: 0,
+  currentTasks: [],
+  startedAt: null,
+};
+
+const getExecutionProgress = () => ({ ...executionProgress });
+
 const startCronJob = (hour, timezone) => {
   // Importaciones diferidas
   if (!transferService) {
@@ -221,12 +235,21 @@ const executeAutomaticTransfers = async () => {
       `🎯 Se ejecutarán ${tasksToExecute.length} elementos (individuales + grupos)`
     );
 
+    executionProgress = {
+      isRunning: true,
+      total: tasksToExecute.length,
+      completed: 0,
+      currentTasks: [],
+      startedAt: Date.now(),
+    };
+
     // **Segundo paso: Ejecutar con límite de concurrencia**
     const concurrencyLimit = 2; // Máximo 2 a la vez
     for (let i = 0; i < tasksToExecute.length; i += concurrencyLimit) {
       const batch = tasksToExecute.slice(i, i + concurrencyLimit);
 
       const batchPromises = batch.map(async (item) => {
+        executionProgress.currentTasks.push(item.isGroup ? `${item.taskName} (grupo ${item.groupName})` : item.taskName);
         try {
           if (item.isGroup) {
             logger.info(
@@ -341,6 +364,10 @@ const executeAutomaticTransfers = async () => {
             message: "Error en la ejecución automática",
             errorDetail: itemError.message || "Error desconocido",
           });
+        } finally {
+          const label = item.isGroup ? `${item.taskName} (grupo ${item.groupName})` : item.taskName;
+          executionProgress.currentTasks = executionProgress.currentTasks.filter((t) => t !== label);
+          executionProgress.completed += 1;
         }
       });
 
@@ -430,6 +457,13 @@ const executeAutomaticTransfers = async () => {
     }
   } finally {
     isRunning = false;
+    executionProgress = {
+      isRunning: false,
+      total: 0,
+      completed: 0,
+      currentTasks: [],
+      startedAt: null,
+    };
   }
 };
 
@@ -630,4 +664,5 @@ module.exports = {
   startSchedulerWatchdog,
   stopSchedulerWatchdog,
   runAllTasksNow,
+  getExecutionProgress,
 };

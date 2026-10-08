@@ -16,7 +16,9 @@ export const useTransferTask = () => {
     const [taskEstimates, setTaskEstimates] = useState({});
     const [notificationsEnabled, setNotificationsEnabled] = useState(false);
     const [executingAll, setExecutingAll] = useState(false);
+    const [executionProgress, setExecutionProgress] = useState(null);
     const previousTasksRef = useRef(null);
+    const executionPollRef = useRef(null);
 
     const [filters, setFilters] = useState({
         type: [], // array de tipos seleccionados ("manual"/"auto"/"both"); vacío = todos
@@ -195,16 +197,60 @@ export const useTransferTask = () => {
         }
     };
 
+    // Progreso agregado ("X de Y, corriendo: ...") de la corrida en curso —
+    // separado del refresco de la tabla en sí, porque esa lista no trae un
+    // conteo total/actual de la corrida bulk, solo el estado de cada tarea.
+    const startExecutionPolling = useCallback(() => {
+        if (executionPollRef.current) return; // ya hay un polling activo
+        const poll = async () => {
+            try {
+                const progress = await taskApi.getExecuteAllStatus(accessToken);
+                setExecutionProgress(progress);
+                if (!progress?.isRunning) {
+                    clearInterval(executionPollRef.current);
+                    executionPollRef.current = null;
+                    fetchTasks();
+                }
+            } catch {
+                clearInterval(executionPollRef.current);
+                executionPollRef.current = null;
+            }
+        };
+        poll();
+        executionPollRef.current = setInterval(poll, 4000);
+    }, [accessToken, fetchTasks]);
+
+    useEffect(() => {
+        return () => {
+            if (executionPollRef.current) clearInterval(executionPollRef.current);
+        };
+    }, []);
+
+    // Si al entrar a la pantalla ya hay una corrida en curso (disparada por
+    // el cron diario, no por este botón), engancharse igual para mostrarla.
+    useEffect(() => {
+        taskApi.getExecuteAllStatus(accessToken)
+            .then((progress) => {
+                if (progress?.isRunning) {
+                    setExecutionProgress(progress);
+                    startExecutionPolling();
+                }
+            })
+            .catch(() => { });
+        // eslint-disable-next-line react-hooks/exhaustive-deps
+    }, [accessToken]);
+
     // Corre todas las tareas activas que se pueden lanzar solas (mismo
     // recorrido que hace el cron diario, respetando grupos vinculados) — el
-    // backend responde de una vez sin esperar a que termine, el progreso se
-    // ve reflejado en cada fila de la tabla a medida que fetchTasks refresca.
+    // backend responde de una vez sin esperar a que termine; el progreso
+    // agregado se sigue vía polling de /execute-all/status.
     const executeAllTasks = async () => {
         setExecutingAll(true);
         try {
             const result = await taskApi.executeAllTasks(accessToken);
             showSuccess(result?.message || "Ejecución de todas las tareas iniciada");
             fetchTasks();
+            startExecutionPolling();
             return true;
         } catch (error) {
             showError("Error al ejecutar todas las tareas: " + error.message);
@@ -246,6 +292,7 @@ export const useTransferTask = () => {
         executeTask,
         executeAllTasks,
         executingAll,
+        executionProgress,
         cancelTask,
         getTaskHistory,
         saveTask,

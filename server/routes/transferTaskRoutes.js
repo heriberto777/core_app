@@ -5,6 +5,7 @@ const {
   deleteTransferTask,
   executeTransferTask,
   executeAllTasks,
+  getExecuteAllStatus,
   getConfigurarHora,
   updateConfig,
   getTaskStatus,
@@ -88,6 +89,7 @@ router.post("/execute-linked-group/:taskId", checkPermission("loads", "create"),
  */
 router.post("/execute/:taskId", checkPermission("loads", "create"), executeTransferTaskSchema, validate, executeTransferTask);
 router.post("/execute-all", checkPermission("loads", "create"), executeAllTasks);
+router.get("/execute-all/status", checkPermission("loads", "read"), getExecuteAllStatus);
 router.post("/cancel/:taskId", checkPermission("loads", "manage"), cancelTransferTask);
 router.get("/task-history/:taskId", checkPermission("loads", "read"), getTaskExecutionHistory);
 

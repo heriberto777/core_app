@@ -6,7 +6,7 @@ const {
   upsertTransferTask: upsertTransferTaskService,
 } = require("../services/transferService");
 const Config = require("../models/configModel");
-const { setSchedulerEnabled, getSchedulerStatus, runAllTasksNow } = require("../services/cronService");
+const { setSchedulerEnabled, getSchedulerStatus, runAllTasksNow, getExecutionProgress } = require("../services/cronService");
 const { executeDynamicSelect } = require("../services/dynamicQueryService");
 const { formatDateToYYYYMMDD } = require("../utils/formatDate");
 const { realizarTraspaso } = require("../services/traspasoService");
@@ -433,6 +433,21 @@ const executeAllTasks = async (req, res) => {
     });
   } catch (error) {
     logger.error(`❌ [executeAllTasks] Error: ${error.message}`);
+    return res.status(500).json({ success: false, message: "Error interno del servidor", error: error.message });
+  }
+};
+
+/**
+ * Progreso de la corrida en curso (cron diario o "Ejecutar Todo") — cuántas
+ * tareas/grupos ya terminaron sobre el total, y cuáles están corriendo ahora
+ * mismo. El frontend hace polling de este endpoint mientras isRunning sea
+ * true, en vez de solo confiar en el refresco único post-click.
+ */
+const getExecuteAllStatus = async (req, res) => {
+  try {
+    return res.status(200).json({ success: true, data: getExecutionProgress() });
+  } catch (error) {
+    logger.error(`❌ [getExecuteAllStatus] Error: ${error.message}`);
     return res.status(500).json({ success: false, message: "Error interno del servidor", error: error.message });
   }
 };
@@ -1173,6 +1188,7 @@ module.exports = {
   deleteTransferTask,
   executeTransferTask,
   executeAllTasks,
+  getExecuteAllStatus,
   getConfigurarHora,
   updateConfig,
   runTask,
