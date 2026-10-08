@@ -32,6 +32,10 @@ const FIELD_HELP = {
     targetTable: "Tabla destino para transferencias internas (Server1 → Server1).",
     executionMode: "Normal: ejecuta todo de una vez. Batches: procesa en lotes para grandes volúmenes de datos.",
     existenceCheck: "Tabla y campo clave para verificar existencia de registros y construir el WHERE del SQL Post-Ejecución.",
+    postUpdateMapping: "Si se completa, el campo clave acá ABAJO tiene prioridad sobre el 'Campo Clave' de Verificación de Existencia para construir el WHERE del SQL Post-Ejecución. Dejar vacío para usar el Campo Clave de arriba (lo normal). Útil solo cuando el nombre de la clave en la vista de origen es distinto al de la tabla que actualiza el Post-Ejecución.",
+    isCoordinator: "Si esta tarea pertenece a un grupo, marca si ES la coordinadora: solo la coordinadora ejecuta su SQL Post-Ejecución durante la corrida del grupo — el de las demás tareas del grupo se ignora. Debe haber exactamente una coordinadora por grupo, y debe tener SQL Post-Ejecución definido.",
+    coordinationConfig: "Configuración de cómo se coordina la ejecución dentro del grupo vinculado.",
+    fieldMapping: "Mapeo de campos para transferencias DOWN (Server2 → Server1) que no usan un SELECT directo con alias — permite redirigir la tabla destino y remapear nombres de columna. Dejar todo vacío si la query principal ya hace el SELECT con los alias correctos (lo normal).",
 };
 
 const FieldHelp = ({ field }) => (
@@ -54,22 +58,28 @@ const TABS = [
     { id: "advanced", label: "Avanzado", icon: FaVial },
 ];
 
+const DEFAULT_FORM_DATA = {
+    name: "", type: "manual", transferType: "general", executionMode: "normal",
+    active: true, clearBeforeInsert: false, updateOnDuplicate: false, query: "", parameters: "[]",
+    linkedGroup: "", linkedExecutionOrder: 0, executeLinkedTasks: false,
+    linkedTasks: [], postUpdateQuery: "",
+    validationRules: { requiredFields: [], existenceCheck: { table: "", key: "" } },
+    postUpdateMapping: { viewKey: null, tableKey: null },
+    linkingMetadata: { isCoordinator: false },
+    coordinationConfig: { waitForLinkedTasks: false, maxWaitTime: 300000, postUpdateStrategy: "individual" },
+    fieldMapping: { sourceTable: "", targetTable: "", sourceFields: "", targetFields: "", defaultValues: "[]" },
+};
+
 export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) => {
     const { showError } = useNotification();
     const [activeTab, setActiveTab] = useState("general");
     const [loading, setLoading] = useState(false);
-    const [formData, setFormData] = useState({
-        name: "", type: "manual", transferType: "general", executionMode: "normal",
-        active: true, clearBeforeInsert: false, updateOnDuplicate: false, query: "", parameters: "[]",
-        linkedGroup: "", linkedExecutionOrder: 0, executeLinkedTasks: false,
-        linkedTasks: [], postUpdateQuery: "",
-        validationRules: { requiredFields: [], existenceCheck: { table: "", key: "" } },
-        postUpdateMapping: { viewKey: null, tableKey: null }
-    });
+    const [formData, setFormData] = useState(DEFAULT_FORM_DATA);
 
     useEffect(() => {
         if (task) {
             setFormData({
+                ...DEFAULT_FORM_DATA,
                 ...task,
                 parameters: JSON.stringify(task.parameters || [], null, 2),
                 updateOnDuplicate: task.updateOnDuplicate || false,
@@ -77,18 +87,20 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                 linkedExecutionOrder: task.linkedExecutionOrder || 0,
                 linkedTasks: task.linkedTasks || [],
                 postUpdateQuery: task.postUpdateQuery || "",
-                validationRules: task.validationRules || { requiredFields: [], existenceCheck: { table: "", key: "" } },
-                postUpdateMapping: task.postUpdateMapping || { viewKey: null, tableKey: null }
+                validationRules: task.validationRules || DEFAULT_FORM_DATA.validationRules,
+                postUpdateMapping: task.postUpdateMapping || DEFAULT_FORM_DATA.postUpdateMapping,
+                linkingMetadata: task.linkingMetadata || DEFAULT_FORM_DATA.linkingMetadata,
+                coordinationConfig: task.coordinationConfig || DEFAULT_FORM_DATA.coordinationConfig,
+                fieldMapping: {
+                    ...DEFAULT_FORM_DATA.fieldMapping,
+                    ...(task.fieldMapping || {}),
+                    sourceFields: (task.fieldMapping?.sourceFields || []).join(', '),
+                    targetFields: (task.fieldMapping?.targetFields || []).join(', '),
+                    defaultValues: JSON.stringify(task.fieldMapping?.defaultValues || [], null, 2),
+                },
             });
         } else {
-            setFormData({
-                name: "", type: "manual", transferType: "general", executionMode: "normal",
-                active: true, clearBeforeInsert: false, updateOnDuplicate: false, query: "", parameters: "[]",
-                linkedGroup: "", linkedExecutionOrder: 0, executeLinkedTasks: false,
-                linkedTasks: [], postUpdateQuery: "",
-                validationRules: { requiredFields: [], existenceCheck: { table: "", key: "" } },
-                postUpdateMapping: { viewKey: null, tableKey: null }
-            });
+            setFormData(DEFAULT_FORM_DATA);
         }
         setActiveTab("general");
     }, [task, isOpen]);
@@ -145,6 +157,34 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
         }));
     };
 
+    const handlePostUpdateMappingChange = (field, value) => {
+        setFormData(prev => ({
+            ...prev,
+            postUpdateMapping: { ...prev.postUpdateMapping, [field]: value || null }
+        }));
+    };
+
+    const handleLinkingMetadataChange = (field, value) => {
+        setFormData(prev => ({
+            ...prev,
+            linkingMetadata: { ...prev.linkingMetadata, [field]: value }
+        }));
+    };
+
+    const handleCoordinationConfigChange = (field, value) => {
+        setFormData(prev => ({
+            ...prev,
+            coordinationConfig: { ...prev.coordinationConfig, [field]: value }
+        }));
+    };
+
+    const handleFieldMappingChange = (field, value) => {
+        setFormData(prev => ({
+            ...prev,
+            fieldMapping: { ...prev.fieldMapping, [field]: value }
+        }));
+    };
+
     const handleSave = async () => {
         let finalData;
         try {
@@ -152,10 +192,16 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                 ...formData,
                 parameters: JSON.parse(formData.parameters),
                 linkedExecutionOrder: parseInt(formData.linkedExecutionOrder, 10) || 0,
-                executeLinkedTasks: formData.linkedGroup !== ""
+                executeLinkedTasks: formData.linkedGroup !== "",
+                fieldMapping: {
+                    ...formData.fieldMapping,
+                    sourceFields: formData.fieldMapping.sourceFields.split(',').map(s => s.trim()).filter(Boolean),
+                    targetFields: formData.fieldMapping.targetFields.split(',').map(s => s.trim()).filter(Boolean),
+                    defaultValues: JSON.parse(formData.fieldMapping.defaultValues),
+                },
             };
         } catch (e) {
-            showError("El JSON de Parámetros no es válido: " + e.message);
+            showError("El JSON de Parámetros o de Valores por Defecto no es válido: " + e.message);
             return;
         }
 
@@ -305,6 +351,45 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                 </small>
                             </FormGroup>
 
+                            <label className={`flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded text-sm mb-4 ${formData.linkedGroup ? "cursor-pointer hover:border-primary-500" : "opacity-50 cursor-not-allowed"}`}>
+                                <input type="checkbox" checked={!!formData.linkingMetadata?.isCoordinator}
+                                    disabled={!formData.linkedGroup}
+                                    onChange={(e) => handleLinkingMetadataChange('isCoordinator', e.target.checked)}
+                                    className="w-4 h-4 cursor-pointer accent-primary-600" />
+                                <span>Es la Coordinadora del Grupo</span>
+                                <FieldHelp field="isCoordinator" />
+                            </label>
+
+                            {formData.linkedGroup && (
+                                <>
+                                    <SectionTitle>Configuración de Coordinación <FieldHelp field="coordinationConfig" /></SectionTitle>
+                                    <label className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded text-sm mb-3 cursor-pointer hover:border-primary-500">
+                                        <input type="checkbox" checked={!!formData.coordinationConfig?.waitForLinkedTasks}
+                                            onChange={(e) => handleCoordinationConfigChange('waitForLinkedTasks', e.target.checked)}
+                                            className="w-4 h-4 cursor-pointer accent-primary-600" />
+                                        <span>Esperar a que terminen las tareas vinculadas</span>
+                                    </label>
+                                    <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mb-3">
+                                        <FormGroup>
+                                            <Label>Tiempo Máximo de Espera (ms)</Label>
+                                            <UIInput type="number" min="0"
+                                                value={formData.coordinationConfig?.maxWaitTime ?? 300000}
+                                                onChange={(e) => handleCoordinationConfigChange('maxWaitTime', parseInt(e.target.value, 10) || 0)}
+                                                placeholder="300000" />
+                                        </FormGroup>
+                                        <FormGroup>
+                                            <Label>Estrategia de Post-Actualización</Label>
+                                            <Select value={formData.coordinationConfig?.postUpdateStrategy || 'individual'}
+                                                onChange={(e) => handleCoordinationConfigChange('postUpdateStrategy', e.target.value)}>
+                                                <option value="individual">Individual</option>
+                                                <option value="coordinated">Coordinada</option>
+                                                <option value="delayed">Diferida</option>
+                                            </Select>
+                                        </FormGroup>
+                                    </div>
+                                </>
+                            )}
+
                             <SectionTitle>Vinculación Directa (Alternativa al Grupo)</SectionTitle>
                             <FormGroup>
                                 <Label className="flex items-center gap-2">Seleccionar Tareas Vinculadas <FieldHelp field="linkedTasks" /></Label>
@@ -360,6 +445,28 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                 Tabla y campo PK para verificar existencia y construir el WHERE del SQL Post-Ejecución automáticamente.
                             </small>
 
+                            <SectionTitle>Mapeo de Post-Actualización (avanzado, opcional)</SectionTitle>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <FormGroup>
+                                    <Label className="flex items-center gap-2">Clave en Vista de Origen <FieldHelp field="postUpdateMapping" /></Label>
+                                    <UIInput
+                                        value={formData.postUpdateMapping?.viewKey || ''}
+                                        onChange={(e) => handlePostUpdateMappingChange('viewKey', e.target.value)}
+                                        placeholder="Ej: Code_ofClient" />
+                                </FormGroup>
+                                <FormGroup>
+                                    <Label className="flex items-center gap-2">Clave en Tabla Real <FieldHelp field="postUpdateMapping" /></Label>
+                                    <UIInput
+                                        value={formData.postUpdateMapping?.tableKey || ''}
+                                        onChange={(e) => handlePostUpdateMappingChange('tableKey', e.target.value)}
+                                        placeholder="Ej: code_ofclient" />
+                                </FormGroup>
+                            </div>
+                            <small className="text-slate-400 text-[11px] mb-3 block">
+                                Si Clave en Tabla Real tiene un valor, GANA sobre el Campo Clave de Verificación de Existencia de arriba
+                                para construir el WHERE del SQL Post-Ejecución. Dejar ambos vacíos en el caso normal.
+                            </small>
+
                             <SectionTitle>Consulta Post-Transferencia</SectionTitle>
                             <FormGroup>
                                 <Label className="flex items-center gap-2">SQL Post-Ejecución <FieldHelp field="postUpdateQuery" /></Label>
@@ -378,6 +485,49 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                     <option value="batchesSSE">Batches (SSE) - En lotes con progreso en tiempo real</option>
                                 </Select>
                             </FormGroup>
+
+                            <SectionTitle>Mapeo de Campos — Transferencias DOWN <FieldHelp field="fieldMapping" /></SectionTitle>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3">
+                                <FormGroup>
+                                    <Label>Tabla Origen (Server2)</Label>
+                                    <UIInput value={formData.fieldMapping?.sourceTable || ''}
+                                        onChange={(e) => handleFieldMappingChange('sourceTable', e.target.value)}
+                                        placeholder="Ej: FAC_ENC_PED" />
+                                </FormGroup>
+                                <FormGroup>
+                                    <Label>Tabla Destino (Server1)</Label>
+                                    <UIInput value={formData.fieldMapping?.targetTable || ''}
+                                        onChange={(e) => handleFieldMappingChange('targetTable', e.target.value)}
+                                        placeholder="Ej: IMPLT_users_fiscal" />
+                                </FormGroup>
+                            </div>
+                            <div className="grid grid-cols-1 md:grid-cols-2 gap-3 mt-3">
+                                <FormGroup>
+                                    <Label>Campos Origen (en orden)</Label>
+                                    <UIInput value={formData.fieldMapping?.sourceFields || ''}
+                                        onChange={(e) => handleFieldMappingChange('sourceFields', e.target.value)}
+                                        placeholder="VENDEDOR, RUTA, NCF" />
+                                </FormGroup>
+                                <FormGroup>
+                                    <Label>Campos Destino (mismo orden)</Label>
+                                    <UIInput value={formData.fieldMapping?.targetFields || ''}
+                                        onChange={(e) => handleFieldMappingChange('targetFields', e.target.value)}
+                                        placeholder="Code_Seller, Code_Route, N_Counter" />
+                                </FormGroup>
+                            </div>
+                            <small className="text-slate-400 text-[11px] mb-3 block">
+                                El campo N en &quot;Campos Origen&quot; se mapea al campo N en &quot;Campos Destino&quot; — deben tener la misma cantidad, en el mismo orden.
+                            </small>
+                            <FormGroup>
+                                <Label>Valores por Defecto (JSON)</Label>
+                                <Textarea value={formData.fieldMapping?.defaultValues ?? '[]'}
+                                    onChange={(e) => handleFieldMappingChange('defaultValues', e.target.value)}
+                                    height="h-20" className="font-mono text-[13px]"
+                                    placeholder='[{"field": "Transfer_status", "value": 1}]' />
+                            </FormGroup>
+                            <small className="text-slate-400 text-[11px] mb-3 block">
+                                Dejar todo esto vacío si la query principal ya hace el SELECT con los alias correctos (el caso normal, usado por la gran mayoría de las tareas).
+                            </small>
                         </>
                     )}
                 </div>
