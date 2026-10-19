@@ -137,6 +137,14 @@ class LoadsTrackingService {
     }
 
     /**
+     * Obtiene el tracking de una carga puntual (usado para la guarda de
+     * idempotencia al autorizar el despacho — ver loadsController.authorize).
+     */
+    static async getByLoadId(loadId) {
+        return LoadTracking.findOne({ loadId });
+    }
+
+    /**
      * Actualiza el estado de un tracking en MongoDB.
      */
     static async updateTrackingStatus(loadId, status, extra = {}) {

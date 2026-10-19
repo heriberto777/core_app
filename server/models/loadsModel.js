@@ -9,7 +9,13 @@ const LoadTrackingSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ["pending", "processing", "completed", "error", "cancelled"],
+    // "pendingWarehouseReview": agregado para el flujo de Revisión de Almacén —
+    // processOrderLoad para acá en vez de ejecutar el traspaso de una, queda
+    // esperando a que Almacén ajuste y autorice (ver loadsController: authorize).
+    // Nota: updateTrackingStatus no corre runValidators, así que el código ya
+    // usaba otros valores fuera de este enum (completed_with_warnings, etc.)
+    // sin que fallara — no se tocan acá, es deuda preexistente aparte.
+    enum: ["pending", "processing", "pendingWarehouseReview", "completed", "error", "cancelled"],
     default: "pending",
   },
   route: {

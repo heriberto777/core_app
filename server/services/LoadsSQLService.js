@@ -432,7 +432,16 @@ class LoadsSQLService {
         const query = `
       WITH BaseData AS (
         SELECT
-          pl.PEDIDO, pl.PEDIDO_LINEA, pl.CANTIDAD_PEDIDA, pl.CANTIDAD_BONIFICAD,
+          pl.PEDIDO, pl.PEDIDO_LINEA,
+          -- Ajuste de Almacen por faltante de stock (Revision de Almacen) --
+          -- nunca toca CATELLI.PEDIDO_LINEA, solo reemplaza la cantidad que
+          -- usamos para ESTA carga puntual. Vacio al momento del Despacho
+          -- inicial (sin filas en loads_orders_adjustments todavia), se llena
+          -- recien si Almacen ajusta antes de autorizar -- por eso esta misma
+          -- query sirve tanto para el insert inicial como para la
+          -- regeneracion del staging al autorizar.
+          COALESCE(adj.cantidad_ajustada, pl.CANTIDAD_PEDIDA) AS CANTIDAD_PEDIDA,
+          pl.CANTIDAD_BONIFICAD,
           pl.PRECIO_UNITARIO, pl.MONTO_DESCUENTO, pl.PORC_DESCUENTO,
           pl.PORC_IMPUESTO1, pl.PORC_IMPUESTO2,
           pe.RUBRO5, GETDATE() as FECHA_PROMETIDA, pe.FECHA_PEDIDO,
@@ -446,6 +455,8 @@ class LoadsSQLService {
         INNER JOIN CATELLI.CLIENTE AS cl ON cl.CLIENTE = pe.CLIENTE
         LEFT JOIN CATELLI.ARTICULO AS ar ON ar.ARTICULO = pl.ARTICULO
         LEFT JOIN CATELLI.VENDEDOR AS v ON v.VENDEDOR = pe.VENDEDOR
+        LEFT JOIN core_app.loads_orders_adjustments adj
+          ON adj.code_load = @loadId AND adj.pedido = pl.PEDIDO AND adj.pedido_linea = pl.PEDIDO_LINEA
         WHERE pe.PEDIDO IN (${pedidosList})
         AND pe.U_Code_Load = @loadId
       ),
@@ -529,7 +540,7 @@ class LoadsSQLService {
      * server2, y si la transaccion de server1 se revierte, esta fila se revierte
      * con ella — no hay nada que limpiar en server2 porque nunca llegó a existir.
      */
-    static async insertToLoadsOrdersStaging(connection, ordersData) {
+    static async insertToLoadsOrdersStaging(connection, ordersData, reviewStatus = "pending") {
         for (const order of ordersData) {
             await DatabaseServiceAdapter.query(connection, `
         INSERT INTO core_app.loads_orders_staging (
@@ -538,18 +549,30 @@ class LoadsSQLService {
           lot_number, quantity, quantity_order, unit_measure, price_br, price,
           total_amount, por_discount1, amount_discount1, por_tax1, amount_tax1,
           por_tax2, amount_tax2, code_currency, secuence, order_num_cli,
-          code_seller, sale_type, code_address, transport, transfer_status
+          code_seller, sale_type, code_address, transport, transfer_status, review_status
         ) VALUES (
           @Code_load, @Num_Line, @Code_Unit_Org, @Code_Sales_Org, @Order_Num_ofClient, @Order_Num,
           @Type_Rec, @Date_Delivery, @Order_Date, @Code_Account, @Code_Product,
           @Lot_Number, @Quantity, @Quantity_Order, @Unit_Measure, @Price_Br, @Price,
           @Total_Amount, @Por_Discount1, @Amount_Discount1, @Por_Tax1, @Amount_Tax1,
           @Por_Tax2, @Amount_Tax2, @Code_Currency, @Secuence, @Order_Num_Cli,
-          @Code_Seller, @Sale_Type, @Code_Address, @Transport, @Transfer_status
+          @Code_Seller, @Sale_Type, @Code_Address, @Transport, @Transfer_status, @Review_status
         )
-      `, order);
+      `, { ...order, Review_status: reviewStatus });
         }
-        logger.info(`${ordersData.length} registros insertados en core_app.loads_orders_staging`);
+        logger.info(`${ordersData.length} registros insertados en core_app.loads_orders_staging (review_status=${reviewStatus})`);
+    }
+
+    /**
+     * Borra el staging previo de una carga (ambas tablas) antes de regenerarlo
+     * al autorizar — las cantidades pueden haber cambiado por ajustes de
+     * Almacén, así que se reemplaza entero en vez de hacer UPDATE fila a fila.
+     */
+    static async clearStagingForLoad(connection, loadId) {
+        await DatabaseServiceAdapter.query(connection,
+            `DELETE FROM core_app.loads_orders_staging WHERE code_load = @loadId`, { loadId });
+        await DatabaseServiceAdapter.query(connection,
+            `DELETE FROM core_app.loads_detail_staging WHERE code = @loadId`, { loadId });
     }
 
     /**
@@ -557,7 +580,7 @@ class LoadsSQLService {
      * mismo motivo que insertToLoadsOrdersStaging: evitar filas huerfanas en
      * server2 cuando el traspaso falla despues del insert.
      */
-    static async insertToLoadsDetailStaging(connection, loadId, route, ordersData) {
+    static async insertToLoadsDetailStaging(connection, loadId, route, ordersData, reviewStatus = "pending") {
         if (!ordersData || ordersData.length === 0) return;
 
         const productMap = new Map();
@@ -582,10 +605,10 @@ class LoadsSQLService {
             await DatabaseServiceAdapter.query(connection, `
         INSERT INTO core_app.loads_detail_staging (
           code, num_line, lot_group, code_product, date_load, quantity, unit_type,
-          code_warehouse_sou, code_route, source_create, transfer_status
+          code_warehouse_sou, code_route, source_create, transfer_status, review_status
         ) VALUES (
           @Code, @Num_Line, '999999999', @Code_Product, @Date_Load, @Quantity, 'UND',
-          @warehouseSource, @route, '0', 1
+          @warehouseSource, @route, '0', 1, @reviewStatus
         )
       `, {
                 Code: loadId,
@@ -594,10 +617,140 @@ class LoadsSQLService {
                 Date_Load: product.Order_Date,
                 Quantity: product.Quantity,
                 warehouseSource: product.Code_Warehouse_Orig,
-                route
+                route,
+                reviewStatus
             });
         }
-        logger.info(`${lineNumber - 1} líneas insertadas en core_app.loads_detail_staging`);
+        logger.info(`${lineNumber - 1} líneas insertadas en core_app.loads_detail_staging (review_status=${reviewStatus})`);
+    }
+
+    // ─── Revisión de Almacén ───────────────────────────────────────────────────
+
+    /**
+     * Cargas armadas con staging en review_status='pending' — lista para la
+     * pantalla "Revisión de Almacén". Se agrupa sobre loads_orders_staging
+     * (ya tiene las líneas finales de la carga) en vez de volver a leer
+     * CATELLI, porque acá solo hace falta un resumen por carga.
+     */
+    static async getPendingReviewLoads() {
+        return await withConnection("server1", async (connection) => {
+            const query = `
+        SELECT
+          code_load,
+          COUNT(DISTINCT order_num_ofclient) AS totalPedidos,
+          COUNT(DISTINCT code_product) AS totalProductos,
+          MIN(order_date) AS fechaPedido,
+          MIN(date_delivery) AS fechaEntrega
+        FROM core_app.loads_orders_staging
+        WHERE review_status = 'pending'
+        GROUP BY code_load
+        ORDER BY MIN(date_delivery), code_load
+      `;
+            const result = await DatabaseServiceAdapter.query(connection, query, {});
+            return result.recordset;
+        });
+    }
+
+    /**
+     * Detalle de conciliación por producto de una carga: acumulado armado,
+     * empaque (CATELLI.ARTICULO.peso_bruto) y líneas por pedido/cliente, con
+     * el ajuste de Almacén ya aplicado si existe (core_app.loads_orders_adjustments).
+     * Se lee directo de CATELLI.PEDIDO_LINEA (no del staging) porque el staging
+     * no guarda PEDIDO_LINEA — solo así se puede referenciar la línea exacta
+     * a ajustar.
+     */
+    static async getLoadReviewDetail(loadId) {
+        return await withConnection("server1", async (connection) => {
+            const query = `
+        SELECT
+          pl.PEDIDO, pl.PEDIDO_LINEA, pl.ARTICULO AS Code_Product,
+          pl.CANTIDAD_PEDIDA AS cantidadOriginal,
+          COALESCE(adj.cantidad_ajustada, pl.CANTIDAD_PEDIDA) AS cantidadActual,
+          ar.DESCRIPCION AS descripcion,
+          ar.peso_bruto AS empaque,
+          ar.UNIDAD_ALMACEN AS unidadMedida,
+          pe.CLIENTE AS cliente,
+          cl.detalle_direccion AS direccionCliente,
+          adj.motivo, adj.ajustado_por AS ajustadoPor, adj.fecha AS fechaAjuste
+        FROM CATELLI.PEDIDO_LINEA pl
+        INNER JOIN CATELLI.PEDIDO pe ON pe.PEDIDO = pl.PEDIDO
+        INNER JOIN CATELLI.CLIENTE cl ON cl.CLIENTE = pe.CLIENTE
+        LEFT JOIN CATELLI.ARTICULO ar ON ar.ARTICULO = pl.ARTICULO
+        LEFT JOIN core_app.loads_orders_adjustments adj
+          ON adj.code_load = @loadId AND adj.pedido = pl.PEDIDO AND adj.pedido_linea = pl.PEDIDO_LINEA
+        WHERE pe.U_Code_Load = @loadId AND pl.CANTIDAD_PEDIDA <> 0
+        ORDER BY pl.ARTICULO, pl.PEDIDO, pl.PEDIDO_LINEA
+      `;
+            const result = await DatabaseServiceAdapter.query(connection, query, { loadId });
+
+            if (result.recordset.length === 0) {
+                throw new Error(`No se encontraron líneas de pedido para la carga ${loadId}`);
+            }
+
+            const productosMap = new Map();
+            for (const row of result.recordset) {
+                if (!productosMap.has(row.Code_Product)) {
+                    productosMap.set(row.Code_Product, {
+                        codigo: row.Code_Product,
+                        descripcion: row.descripcion || row.Code_Product,
+                        empaque: row.empaque || 1,
+                        unidadMedida: row.unidadMedida,
+                        totalOriginal: 0,
+                        totalActual: 0,
+                        lineas: [],
+                    });
+                }
+                const producto = productosMap.get(row.Code_Product);
+                producto.totalOriginal += Number(row.cantidadOriginal) || 0;
+                producto.totalActual += Number(row.cantidadActual) || 0;
+                producto.lineas.push({
+                    pedido: row.PEDIDO,
+                    pedidoLinea: row.PEDIDO_LINEA,
+                    cliente: row.cliente,
+                    direccionCliente: row.direccionCliente,
+                    cantidadOriginal: Number(row.cantidadOriginal) || 0,
+                    cantidadActual: Number(row.cantidadActual) || 0,
+                    motivo: row.motivo || null,
+                    ajustadoPor: row.ajustadoPor || null,
+                    fechaAjuste: row.fechaAjuste || null,
+                });
+            }
+
+            return { loadId, productos: Array.from(productosMap.values()) };
+        });
+    }
+
+    /**
+     * Crea o reemplaza el ajuste de una línea puntual (upsert por
+     * code_load+pedido+pedido_linea, ver UQ_loads_orders_adjustments_linea).
+     * No toca CATELLI.PEDIDO_LINEA.
+     */
+    static async upsertLineAdjustment(loadId, adjustment, userId) {
+        const { pedido, pedidoLinea, codeProduct, cantidadOriginal, cantidadAjustada, motivo } = adjustment;
+        return await withConnection("server1", async (connection) => {
+            await DatabaseServiceAdapter.query(connection, `
+        MERGE core_app.loads_orders_adjustments AS target
+        USING (SELECT @loadId AS code_load, @pedido AS pedido, @pedidoLinea AS pedido_linea) AS src
+          ON target.code_load = src.code_load AND target.pedido = src.pedido AND target.pedido_linea = src.pedido_linea
+        WHEN MATCHED THEN UPDATE SET
+          cantidad_original = @cantidadOriginal,
+          cantidad_ajustada = @cantidadAjustada,
+          code_product = @codeProduct,
+          motivo = @motivo,
+          ajustado_por = @userId,
+          fecha = GETDATE()
+        WHEN NOT MATCHED THEN INSERT (
+          code_load, pedido, pedido_linea, code_product, cantidad_original, cantidad_ajustada, motivo, ajustado_por, fecha
+        ) VALUES (
+          @loadId, @pedido, @pedidoLinea, @codeProduct, @cantidadOriginal, @cantidadAjustada, @motivo, @userId, GETDATE()
+        );
+      `, {
+                loadId, pedido, pedidoLinea, codeProduct,
+                cantidadOriginal, cantidadAjustada,
+                motivo: motivo || null,
+                userId,
+            });
+        });
     }
 
     // ─── Otras operaciones de pedidos ─────────────────────────────────────────

@@ -46,6 +46,31 @@ const deliveryPersonSchema = [
         .withMessage("La bodega asignada es obligatoria"),
 ];
 
+const lineAdjustmentSchema = [
+    param("loadId")
+        .notEmpty()
+        .withMessage("El loadId es requerido en la URL"),
+    body("pedido")
+        .notEmpty()
+        .withMessage("El pedido es obligatorio"),
+    body("pedidoLinea")
+        .isInt({ min: 1 })
+        .withMessage("pedidoLinea debe ser un entero positivo"),
+    body("codeProduct")
+        .trim()
+        .notEmpty()
+        .withMessage("codeProduct es obligatorio"),
+    body("cantidadOriginal")
+        .isFloat({ min: 0 })
+        .withMessage("cantidadOriginal debe ser un número mayor o igual a 0"),
+    body("cantidadAjustada")
+        .isFloat({ min: 0 })
+        .withMessage("cantidadAjustada debe ser un número mayor o igual a 0"),
+    body("motivo")
+        .optional()
+        .trim(),
+];
+
 const historySchema = [
     query("page")
         .optional()
@@ -66,4 +91,5 @@ module.exports = {
     removeOrderLinesSchema,
     deliveryPersonSchema,
     historySchema,
+    lineAdjustmentSchema,
 };

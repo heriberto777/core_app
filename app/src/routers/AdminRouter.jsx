@@ -7,6 +7,8 @@ import { usePermissions } from "../hooks/usePermissions";
 import { Dashboard } from "../components/templates/Dashboard";
 import { TransferTasks } from "../components/templates/TransferTask";
 import { LoadsManagement } from "../components/templates/LoadsManagement";
+import { WarehouseReview } from "../components/templates/WarehouseReview";
+import { WarehouseReviewDetail } from "../components/templates/WarehouseReviewDetail";
 import { LoadsResumen } from "../components/templates/LoadsResumen";
 import { LoadsTasks } from "../components/templates/LoadsTasks";
 import { Statistics } from "../components/templates/Statistics";
@@ -164,6 +166,26 @@ export function AdminRouter() {
         element={
           <ProtectedRoute resource="loads" action="read">
             <LayoutWrapper component={LoadsManagement} />
+          </ProtectedRoute>
+        }
+      />
+
+      {/* Revisión de Almacén: conciliación de cantidades antes de autorizar
+          el despacho (ver loadsService.processOrderLoad / authorizeDispatch).
+          Sin `title`: ambas plantillas dibujan su propio header. */}
+      <Route
+        path="/loads/revision"
+        element={
+          <ProtectedRoute resource="loads" action="read">
+            <LayoutWrapper component={WarehouseReview} />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/loads/revision/:loadId"
+        element={
+          <ProtectedRoute resource="loads" action="read">
+            <LayoutWrapper component={WarehouseReviewDetail} />
           </ProtectedRoute>
         }
       />

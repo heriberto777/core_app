@@ -447,6 +447,107 @@ class LoadsController {
   }
 
   // ================================================
+  // REVISIÓN DE ALMACÉN
+  // ================================================
+
+  /**
+   * Lista las cargas pendientes de revisión de Almacén.
+   */
+  static async getPendingReview(req, res) {
+    try {
+      const result = await LoadsService.getPendingReviewLoads();
+      return res.status(200).json({
+        success: true,
+        message: "Cargas pendientes de revisión obtenidas correctamente",
+        data: result,
+      });
+    } catch (error) {
+      logger.error("Error en getPendingReview:", error);
+      return res.status(500).json({
+        success: false,
+        message: "Error al obtener cargas pendientes de revisión",
+      });
+    }
+  }
+
+  /**
+   * Detalle de conciliación por producto de una carga.
+   */
+  static async getLoadReview(req, res) {
+    try {
+      const { loadId } = req.params;
+      const result = await LoadsService.getLoadReviewDetail(loadId);
+      return res.status(200).json({
+        success: true,
+        message: "Detalle de revisión obtenido correctamente",
+        data: result,
+      });
+    } catch (error) {
+      logger.error(`Error en getLoadReview (${req.params.loadId}):`, error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Error al obtener el detalle de revisión",
+      });
+    }
+  }
+
+  /**
+   * Guarda (upsert) el ajuste de Almacén de una línea de pedido puntual.
+   */
+  static async saveLineAdjustment(req, res) {
+    try {
+      const { loadId } = req.params;
+      const userId = req.user?.user_id || req.user?._id || "SYSTEM";
+      await LoadsService.saveLineAdjustment(loadId, req.body, String(userId));
+      return res.status(200).json({
+        success: true,
+        message: "Ajuste guardado correctamente",
+        data: null,
+      });
+    } catch (error) {
+      logger.error(`Error en saveLineAdjustment (${req.params.loadId}):`, error);
+      return res.status(500).json({
+        success: false,
+        message: "Error al guardar el ajuste",
+      });
+    }
+  }
+
+  /**
+   * Autoriza el despacho de una carga en Revisión de Almacén: regenera el
+   * staging con los ajustes aplicados y dispara el traspaso real.
+   */
+  static async authorizeDispatch(req, res) {
+    try {
+      const { loadId } = req.params;
+      const userId = req.user?.user_id || req.user?._id || "SYSTEM";
+
+      logger.info("Autorizando despacho de carga", {
+        operationType: "LOAD",
+        entityType: "CARGA",
+        entityId: loadId,
+        userId,
+        httpMethod: req.method,
+        httpPath: req.originalUrl,
+      });
+
+      const result = await LoadsService.authorizeDispatch(loadId, userId);
+
+      return res.status(200).json({
+        success: true,
+        message: result.message || "Despacho autorizado",
+        data: result.data,
+      });
+    } catch (error) {
+      logger.error(`Error en authorizeDispatch (${req.params.loadId}):`, error);
+      return res.status(409).json({
+        success: false,
+        message: error.message || "Error al autorizar el despacho",
+      });
+    }
+  }
+
+  // ================================================
   // MÉTODOS DE TRASPASO ADICIONALES
   // ================================================
 

@@ -14,7 +14,7 @@ const { realizarTraspaso, traspasoBodega } = require("./traspasoService");
 const LoadsSQLService = require("./LoadsSQLService");
 const LoadsTrackingService = require("./LoadsTrackingService");
 const ConsecutiveService = require("./ConsecutiveService");
-const { DeliveryPerson } = require("../models/loadsModel");
+const { DeliveryPerson, LoadTracking } = require("../models/loadsModel");
 
 class LoadsService {
   // ─── Métodos delegados a LoadsSQLService ────────────────────────────────
@@ -47,6 +47,112 @@ class LoadsService {
 
   static async getLoadHistory(filters = {}) {
     return await LoadsTrackingService.getLoadHistory(filters);
+  }
+
+  // ─── Revisión de Almacén ─────────────────────────────────────────────────
+
+  static async getPendingReviewLoads() {
+    const summaries = await LoadsSQLService.getPendingReviewLoads();
+    if (summaries.length === 0) return [];
+
+    const loadIds = summaries.map((s) => s.code_load);
+    const trackings = await LoadTracking.find({ loadId: { $in: loadIds } }).lean();
+    const trackingMap = new Map(trackings.map((t) => [t.loadId, t]));
+
+    return summaries.map((s) => {
+      const tracking = trackingMap.get(s.code_load);
+      return {
+        loadId: s.code_load,
+        totalPedidos: s.totalPedidos,
+        totalProductos: s.totalProductos,
+        fechaPedido: s.fechaPedido,
+        fechaEntrega: s.fechaEntrega,
+        route: tracking?.route || null,
+        bodega: tracking?.bodega || null,
+        createdAt: tracking?.createdAt || null,
+      };
+    });
+  }
+
+  static async getLoadReviewDetail(loadId) {
+    return await LoadsSQLService.getLoadReviewDetail(loadId);
+  }
+
+  static async saveLineAdjustment(loadId, adjustment, userId) {
+    return await LoadsSQLService.upsertLineAdjustment(loadId, adjustment, userId);
+  }
+
+  /**
+   * Autoriza el despacho de una carga que está en Revisión de Almacén:
+   * regenera el staging con los ajustes ya aplicados (review_status='approved')
+   * y recién ahí dispara el traspaso real de inventario.
+   *
+   * Guarda de idempotencia: realizarTraspaso no tiene ninguna propia (ver
+   * notas del plan), así que si el tracking ya no está en
+   * "pendingWarehouseReview" se rechaza acá, antes de tocar nada — evita
+   * generar un segundo TRA###### si alguien reintenta autorizar la misma carga.
+   */
+  static async authorizeDispatch(loadId, userId) {
+    const tracking = await LoadsTrackingService.getByLoadId(loadId);
+    if (!tracking) {
+      throw new Error(`Carga ${loadId} no encontrada`);
+    }
+    if (tracking.status !== "pendingWarehouseReview") {
+      throw new Error(`Carga ${loadId} no está pendiente de revisión (estado actual: ${tracking.status})`);
+    }
+
+    const bodegaDestino = tracking.bodega;
+
+    return await DatabaseServiceAdapter.withTransaction("server1", async (server1Connection) => {
+      const pedidosResult = await DatabaseServiceAdapter.query(server1Connection,
+        `SELECT PEDIDO FROM CATELLI.PEDIDO WHERE U_Code_Load = @loadId`, { loadId });
+      const selectedPedidos = pedidosResult.recordset.map((r) => r.PEDIDO);
+      if (selectedPedidos.length === 0) {
+        throw new Error(`No se encontraron pedidos para la carga ${loadId}`);
+      }
+
+      const ordersData = await LoadsSQLService.getTransformedOrdersData(server1Connection, selectedPedidos, loadId);
+      const traspasoData = LoadsSQLService.prepareTraspasoData(ordersData, bodegaDestino);
+
+      await LoadsSQLService.clearStagingForLoad(server1Connection, loadId);
+      await LoadsSQLService.insertToLoadsOrdersStaging(server1Connection, ordersData, "approved");
+
+      const codeRoute = ordersData[0]?.Code_Route;
+      await LoadsSQLService.insertToLoadsDetailStaging(server1Connection, loadId, codeRoute || tracking.route, ordersData, "approved");
+
+      const traspasoResult = await realizarTraspaso({
+        route: tracking.route,
+        salesData: traspasoData,
+        bodega_destino: bodegaDestino,
+      });
+
+      if (!traspasoResult || !traspasoResult.success) {
+        throw new Error(`Traspaso falló: ${traspasoResult?.mensaje || "Error desconocido"}`);
+      }
+
+      const trackingId = await LoadsTrackingService.saveTraspasoTracking(server1Connection, {
+        loadId, deliveryPersonCode: tracking.route,
+        warehouseOrigin: "MULTIPLE", warehouseDestination: bodegaDestino,
+        ordersData, traspasoResult, userId,
+      }, "completed");
+
+      await LoadsSQLService.updateEstadoProceso(server1Connection, selectedPedidos, "S", loadId);
+
+      await LoadsTrackingService.updateTrackingStatus(loadId, "completed", {
+        traspasoDocument: traspasoResult.documento_inv,
+        traspasoStatus: "completed",
+        traspasoTrackingId: trackingId,
+        warehouseOrigin: "MULTIPLE",
+        warehouseDestination: bodegaDestino,
+      });
+
+      return {
+        success: true,
+        loadId,
+        message: "Despacho autorizado — traspaso completado",
+        data: traspasoResult,
+      };
+    });
   }
 
   // ─── Gestión de Repartidores (Mongoose) ─────────────────────────────────
@@ -129,10 +235,6 @@ class LoadsService {
           ordersData = await LoadsSQLService.getTransformedOrdersData(server1Connection, selectedPedidos, loadId);
           logger.info(`${step}: ${ordersData.length} registros obtenidos`);
 
-          // PASO 3: Preparar datos de traspaso
-          step = "prepareTraspasoData";
-          const traspasoData = LoadsSQLService.prepareTraspasoData(ordersData, bodegaDestino);
-
           // PASOS 4 y 5: Insertar en staging (server1, misma transaccion) — una
           // tarea del motor de Tareas de Transferencia se encarga de empujarlo
           // a server2 despues. Antes esto insertaba directo en server2 en una
@@ -157,89 +259,25 @@ class LoadsService {
           logger.info(`${step}: Insertando en core_app.loads_detail_staging (Code_Route=${codeRoute || deliveryPersonCode})...`);
           await LoadsSQLService.insertToLoadsDetailStaging(server1Connection, loadId, codeRoute || deliveryPersonCode, ordersData);
 
-          // PASO 6: Ejecutar traspaso automático
-          step = "realizarTraspaso";
-          logger.info(`${step}: Ejecutando traspaso de inventario...`);
-          const traspasoResult = await realizarTraspaso({
-            route: deliveryPersonCode,
-            salesData: traspasoData,
-            bodega_destino: bodegaDestino,
-          });
-
-          // VALIDAR RESULTADO DEL TRASPASO
-          if (!traspasoResult || !traspasoResult.success) {
-            logger.warn(`Traspaso falló: ${traspasoResult?.mensaje || "Error desconocido"}`);
-            step = "markAsCancelled";
-            await LoadsSQLService.updateEstadoProceso(server1Connection, selectedPedidos, "C", loadId);
-
-            const trackingId = await LoadsTrackingService.saveTraspasoTracking(server1Connection, {
-              loadId, deliveryPersonCode, deliveryPersonName: deliveryPerson.name,
-              warehouseOrigin: "MULTIPLE", warehouseDestination: bodegaDestino,
-              ordersData, traspasoResult, userId
-            }, "failed");
-
-            await LoadsTrackingService.updateTrackingStatus(loadId, "completed_manual_transfer_required", {
-              processedOrders: selectedPedidos.length,
-              traspasoStatus: "execution_failed",
-              traspasoTrackingId: trackingId,
-              errorMessage: traspasoResult?.mensaje || "Error en traspaso",
-              warehouseOrigin: "MULTIPLE",
-              warehouseDestination: bodegaDestino
-            });
-
-            throw new Error(`Traspaso falló: ${traspasoResult?.mensaje || "Error desconocido"}`);
-          }
-
-          // VALIDAR FALLAS PARCIALES
-          const totalLineas = traspasoResult.totalLineas || 0;
-          const lineasExitosas = traspasoResult.lineasExitosas || 0;
-          const porcentajeExito = totalLineas > 0 ? (lineasExitosas / totalLineas) * 100 : 0;
-
-          if (porcentajeExito < 80 && traspasoResult.lineasFallidas > 0) {
-            logger.warn(`Traspaso con fallas significativas: ${lineasExitosas}/${totalLineas} (${porcentajeExito.toFixed(1)}%)`);
-            const trackingId = await LoadsTrackingService.saveTraspasoTracking(server1Connection, {
-              loadId, deliveryPersonCode, deliveryPersonName: deliveryPerson.name,
-              warehouseOrigin: "MULTIPLE", warehouseDestination: bodegaDestino,
-              ordersData, traspasoResult, userId
-            }, "completed");
-
-            step = "updateEstadoProcesoSuccess";
-            await LoadsSQLService.updateEstadoProceso(server1Connection, selectedPedidos, "S", loadId);
-
-            await LoadsTrackingService.updateTrackingStatus(loadId, "completed_with_warnings", {
-              processedOrders: selectedPedidos.length,
-              traspasoDocument: traspasoResult.documento_inv,
-              traspasoStatus: "partial_success",
-              traspasoTrackingId: trackingId,
-              warningMessage: `Traspaso parcial: ${lineasExitosas}/${totalLineas} líneas exitosas`,
-              warehouseOrigin: "MULTIPLE",
-              warehouseDestination: bodegaDestino
-            });
-
-            return { success: true, hasWarnings: true, loadId, message: "Carga completada con advertencias en inventario", result: traspasoResult };
-          }
-
-          // EXITO TOTAL
-          logger.info(`Traspaso completado exitosamente - Documento: ${traspasoResult.documento_inv}`);
-          const trackingId = await LoadsTrackingService.saveTraspasoTracking(server1Connection, {
-            loadId, deliveryPersonCode, deliveryPersonName: deliveryPerson.name,
-            warehouseOrigin: "MULTIPLE", warehouseDestination: bodegaDestino,
-            ordersData, traspasoResult, userId
-          }, "completed");
-
-          step = "updateEstadoProcesoSuccess";
+          // El traspaso de inventario (realizarTraspaso) ya no se ejecuta acá.
+          // Queda pendiente de Revisión de Almacén: el operador concilia cantidades
+          // (ver core_app.loads_orders_adjustments) y recién ahí autoriza el despacho
+          // desde loadsController.authorize, que es quien dispara el traspaso real.
+          step = "markAsPendingWarehouseReview";
           await LoadsSQLService.updateEstadoProceso(server1Connection, selectedPedidos, "S", loadId);
 
-          await LoadsTrackingService.updateTrackingStatus(loadId, "completed", {
+          await LoadsTrackingService.updateTrackingStatus(loadId, "pendingWarehouseReview", {
             processedOrders: selectedPedidos.length,
-            traspasoDocument: traspasoResult.documento_inv,
-            traspasoStatus: "completed",
-            traspasoTrackingId: trackingId,
             warehouseOrigin: "MULTIPLE",
             warehouseDestination: bodegaDestino
           });
 
-          return { success: true, loadId, message: "Proceso de carga completado exitosamente", data: traspasoResult };
+          return {
+            success: true,
+            loadId,
+            message: "Carga armada y enviada a Revisión de Almacén",
+            data: { bodegaDestino, totalOrders: selectedPedidos.length },
+          };
 
         } catch (transactionError) {
           logger.error(`Error en paso ${step} (transacción server1):`, transactionError);

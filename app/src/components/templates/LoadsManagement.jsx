@@ -91,8 +91,8 @@ export function LoadsManagement() {
 
       Swal.fire({
         icon: "success",
-        title: "¡Despacho Exitoso!",
-        html: `<div class="text-left p-2"><p>Se han procesado <b>${res.totalOrders}</b> pedidos.</p><p class="mt-2 text-primary-600 font-bold">Load ID: ${res.loadId || 'N/A'}</p></div>`,
+        title: "Carga enviada a Revisión de Almacén",
+        html: `<div class="text-left p-2"><p>Se han armado <b>${res.totalOrders}</b> pedidos.</p><p class="mt-2 text-primary-600 font-bold">Load ID: ${res.loadId || 'N/A'}</p><p class="mt-2 text-slate-500 text-sm">El traspaso de inventario se genera recién cuando Almacén autorice el despacho.</p></div>`,
         confirmButtonColor: "#6366f1",
         confirmButtonText: "Entendido"
       });

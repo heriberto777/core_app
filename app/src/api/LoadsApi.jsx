@@ -172,6 +172,103 @@ class LoadsApi {
   }
 
   // ========================================
+  // REVISIÓN DE ALMACÉN
+  // ========================================
+
+  /**
+   * Lista las cargas pendientes de revisión de Almacén.
+   */
+  async getPendingReview(accessToken) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/pending-review`;
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw result;
+      return result.data || result;
+    } catch (error) {
+      console.error("Error al obtener cargas pendientes de revisión:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Detalle de conciliación por producto de una carga.
+   */
+  async getLoadReviewDetail(accessToken, loadId) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/review/${loadId}`;
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw result;
+      return result.data || result;
+    } catch (error) {
+      console.error("Error al obtener el detalle de revisión:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Guarda (upsert) el ajuste de Almacén de una línea de pedido puntual.
+   */
+  async saveLineAdjustment(accessToken, loadId, adjustment) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/review/${loadId}/adjustments`;
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify(adjustment),
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw result;
+      return result.data || result;
+    } catch (error) {
+      console.error("Error al guardar el ajuste:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Autoriza el despacho de una carga en Revisión de Almacén.
+   */
+  async authorizeDispatch(accessToken, loadId) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/review/${loadId}/authorize`;
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw result;
+      return result.data || result;
+    } catch (error) {
+      console.error("Error al autorizar el despacho:", error);
+      throw error;
+    }
+  }
+
+  // ========================================
   // MÉTODOS PARA GESTIÓN DE TRASPASOS (CONSOLIDADOS)
   // ========================================
 

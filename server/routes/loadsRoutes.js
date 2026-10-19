@@ -11,7 +11,8 @@ const {
   cancelOrdersSchema,
   removeOrderLinesSchema,
   deliveryPersonSchema,
-  historySchema
+  historySchema,
+  lineAdjustmentSchema
 } = require("../validators/loadsValidator");
 
 // Middleware de autenticación para todas las rutas
@@ -115,6 +116,44 @@ router.get('/history',
 router.post('/inventory-transfer',
   checkPermission('loads', 'create'),
   LoadsController.processInventoryTransfer
+);
+
+// ================================================
+// REVISIÓN DE ALMACÉN
+// ================================================
+
+/**
+ * @route GET /api/loads/pending-review
+ */
+router.get('/pending-review',
+  checkPermission('loads', 'read'),
+  LoadsController.getPendingReview
+);
+
+/**
+ * @route GET /api/loads/review/:loadId
+ */
+router.get('/review/:loadId',
+  checkPermission('loads', 'read'),
+  LoadsController.getLoadReview
+);
+
+/**
+ * @route POST /api/loads/review/:loadId/adjustments
+ */
+router.post('/review/:loadId/adjustments',
+  checkPermission('loads', 'update'),
+  lineAdjustmentSchema,
+  validate,
+  LoadsController.saveLineAdjustment
+);
+
+/**
+ * @route POST /api/loads/review/:loadId/authorize
+ */
+router.post('/review/:loadId/authorize',
+  checkPermission('loads', 'manage'),
+  LoadsController.authorizeDispatch
 );
 
 // ================================================
