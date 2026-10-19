@@ -10,6 +10,20 @@ import {
 } from "../../index";
 
 /**
+ * fechaEntrega llega como 'YYYYMMDD' (CONVERT(..., 112) en
+ * getTransformedOrdersData) — new Date() directo sobre eso da "Invalid Date".
+ */
+function formatFechaEntrega(value) {
+  if (!value) return "—";
+  const str = String(value);
+  if (/^\d{8}$/.test(str)) {
+    return `${str.slice(6, 8)}/${str.slice(4, 6)}/${str.slice(0, 4)}`;
+  }
+  const date = new Date(value);
+  return Number.isNaN(date.getTime()) ? "—" : date.toLocaleDateString();
+}
+
+/**
  * WarehouseReview — lista de cargas pendientes de Revisión de Almacén.
  * Nada de lo que aparece acá subió todavía a server2: review_status sigue
  * en 'pending' hasta que se autorice el despacho desde el detalle.
@@ -82,7 +96,7 @@ export function WarehouseReview() {
                         <FaBoxes className="text-slate-400" /> {carga.totalProductos}
                       </td>
                       <td className="px-6 py-4 text-slate-600">
-                        {carga.fechaEntrega ? new Date(carga.fechaEntrega).toLocaleDateString() : "—"}
+                        {formatFechaEntrega(carga.fechaEntrega)}
                       </td>
                       <td className="px-6 py-4 text-right">
                         <Button

@@ -445,7 +445,7 @@ class LoadsSQLService {
           pl.PRECIO_UNITARIO, pl.MONTO_DESCUENTO, pl.PORC_DESCUENTO,
           pl.PORC_IMPUESTO1, pl.PORC_IMPUESTO2,
           pe.RUBRO5, GETDATE() as FECHA_PROMETIDA, pe.FECHA_PEDIDO,
-          pe.CLIENTE, pe.VENDEDOR, pe.RUBRO4,
+          pe.CLIENTE, pe.VENDEDOR, pe.RUBRO4, pe.RUBRO2,
           cl.detalle_direccion, ar.ARTICULO, ar.UNIDAD_ALMACEN,
           pl.BODEGA as BODEGA_LINEA,
           pl.LOCALIZACION as LOCALIZACION_ORIGEN_REAL,
@@ -464,7 +464,7 @@ class LoadsSQLService {
         SELECT PEDIDO, PEDIDO_LINEA, CAST(PEDIDO_LINEA AS VARCHAR(10)) + '-P' AS LINEA_TIPO,
                'P' AS TIPO_LINEA, CANTIDAD_PEDIDA AS Cantidad, PRECIO_UNITARIO,
                MONTO_DESCUENTO, PORC_DESCUENTO, PORC_IMPUESTO1, PORC_IMPUESTO2,
-               RUBRO5, FECHA_PROMETIDA, FECHA_PEDIDO, CLIENTE, VENDEDOR, RUBRO4,
+               RUBRO5, FECHA_PROMETIDA, FECHA_PEDIDO, CLIENTE, VENDEDOR, RUBRO4, RUBRO2,
                detalle_direccion, ARTICULO, UNIDAD_ALMACEN, BODEGA_ORIGEN_REAL, LOCALIZACION_ORIGEN_REAL,
                (CANTIDAD_PEDIDA * PRECIO_UNITARIO) AS SubTotal,
                ((CANTIDAD_PEDIDA * PRECIO_UNITARIO) - MONTO_DESCUENTO) AS TotalAmount,
@@ -477,7 +477,7 @@ class LoadsSQLService {
         SELECT PEDIDO, PEDIDO_LINEA, CAST(PEDIDO_LINEA AS VARCHAR(10)) + '-B' AS LINEA_TIPO,
                'B' AS TIPO_LINEA, CANTIDAD_BONIFICAD AS Cantidad, 0 AS PRECIO_UNITARIO,
                0 AS MONTO_DESCUENTO, 0 AS PORC_DESCUENTO, 0 AS PORC_IMPUESTO1, 0 AS PORC_IMPUESTO2,
-               RUBRO5, FECHA_PROMETIDA, FECHA_PEDIDO, CLIENTE, VENDEDOR, RUBRO4,
+               RUBRO5, FECHA_PROMETIDA, FECHA_PEDIDO, CLIENTE, VENDEDOR, RUBRO4, RUBRO2,
                detalle_direccion, ARTICULO, UNIDAD_ALMACEN, BODEGA_ORIGEN_REAL, LOCALIZACION_ORIGEN_REAL,
                0 AS SubTotal, 0 AS TotalAmount,
                CASE
@@ -490,7 +490,18 @@ class LoadsSQLService {
         'CATELLI' AS Code_Unit_Org, 'CATELLI' AS Code_Sales_Org,
         PEDIDO AS Order_Num_ofClient,
         ROW_NUMBER() OVER (ORDER BY PEDIDO, PEDIDO_LINEA, LINEA_TIPO) AS Num_Line,
-        RUBRO4 AS Order_Num, 'S' AS Type_Rec, @loadId AS Code_load,
+        -- RUBRO4 viene NULL en pedidos cargados internamente (no por
+        -- preventa). Mandar NULL tal cual a IMPLT_Orders hace que server2
+        -- le invente un numero propio (le vimos generar valores de 22
+        -- digitos) -- en vez de eso armamos uno del mismo largo que usa
+        -- Preventa (16 digitos: epoch-ms + 3 digitos), para que nunca
+        -- llegue NULL. Se arma sobre FECHA_PEDIDO (no GETDATE()) para que
+        -- de el mismo valor si esta query se vuelve a correr para el mismo
+        -- pedido (ver Revision de Almacen: se regenera al autorizar).
+        COALESCE(
+          RUBRO4,
+          CAST(DATEDIFF(SECOND, '19700101', FECHA_PEDIDO) AS VARCHAR(20)) + '000' + RIGHT(PEDIDO, 3)
+        ) AS Order_Num, 'S' AS Type_Rec, @loadId AS Code_load,
         CONVERT(VARCHAR, FECHA_PROMETIDA, 112) AS Date_Delivery,
         CONVERT(VARCHAR, FECHA_PEDIDO, 112) AS Order_Date,
         Code_Account_Calc AS Code_Account,
@@ -514,7 +525,7 @@ class LoadsSQLService {
         CAST(TotalAmount * (PORC_IMPUESTO1 / 100.0) AS NUMERIC(11,3)) AS Amount_Tax1,
         CAST(PORC_IMPUESTO2 AS NUMERIC(5,2)) AS Por_Tax2,
         CAST(TotalAmount * (PORC_IMPUESTO2 / 100.0) AS NUMERIC(11,3)) AS Amount_Tax2,
-        'RD' AS Code_Currency, '0' AS Secuence, PEDIDO AS Order_Num_Cli,
+        'RD' AS Code_Currency, '0' AS Secuence, RUBRO2 AS Order_Num_Cli,
         VENDEDOR AS Code_Seller, CASE WHEN TIPO_LINEA = 'B' THEN '1' ELSE '0' END AS Sale_Type,
         detalle_direccion AS Code_Address, '00' AS Transport, 1 AS Transfer_status,
         BODEGA_ORIGEN_REAL AS Code_Warehouse_Orig,
