@@ -9,6 +9,26 @@ real). El código ya está en el repo (backend: `loadsService.js`,
 rutas en `AdminRouter.jsx`, link en `TopNav.jsx`). Lo que falta es aplicar
 esquema + reconfigurar Mongo + desplegar, **en ese orden**.
 
+## Hallazgos de la auditoría (2026-10-20)
+
+Se investigó un número de 22 dígitos apareciendo en `Order_Num` río abajo
+(Telynet/Preventa). Verificado con datos reales contra server1/server2 (que
+resultaron ser la MISMA instancia física de SQL Server, bases `EXACTUS` y
+`TELYNET`):
+- `core_app.loads_orders_staging.order_num` y la query real de la tarea
+  `IMPLT_Orders` están limpios — no hay ningún código en este repo generando
+  ese número.
+- Existe una vista vieja `dbo.[IMPLT_Orders]` en `EXACTUS` (pre-rediseño, la
+  de `docs/vistas.txt`) que hardcodea `NULL AS Order_Num` — pero no la
+  referencia ningún job, stored procedure ni linked server hoy. Está
+  huérfana. **Pendiente, opcional**: hacer `DROP VIEW [dbo].[IMPLT_Orders]`
+  en `EXACTUS` en algún mantenimiento, para que no quede como trampa a
+  futuro (nadie la usa, pero alguien podría reactivarla por error).
+- **Verificar manualmente** (no se pudo desde acá): si el campo `Order_Num`
+  de la tarea `IMPLT_Orders` real tiene un "Consecutivo" asignado en la UI
+  de Gestión de Tareas — eso generaría un valor nuevo por fuera de lo que
+  mandamos en `order_num`, sin que el código de este repo tenga nada que ver.
+
 ## Por qué el orden importa
 
 Hay dos riesgos reales de producción si esto se hace en el orden equivocado:
@@ -40,12 +60,21 @@ nuevo (paso 3), no después.
 
 Correr `docs/sql/loads_warehouse_review_schema.sql` contra la base de
 producción. Es idempotente (todo con `IF NOT EXISTS`), se puede re-correr sin
-problema. Agrega:
-- Tabla nueva `core_app.loads_orders_adjustments` (vacía, sin impacto).
+problema, incluso si ya lo corriste antes con una versión anterior del
+archivo (trae su propia migración para agregar `tipo_linea` si la tabla ya
+existía sin esa columna). Agrega:
+- Tabla `core_app.loads_orders_adjustments`, con `tipo_linea` ('P'/'B') en
+  su clave única — necesaria para que Almacén pueda ajustar la cantidad
+  pagada y la bonificada de una misma línea por separado (no sabemos la
+  regla de promoción de Preventa para recalcular una a partir de la otra).
 - Columna `review_status` en ambas tablas de staging, default `'approved'`.
 
 No requiere downtime ni afecta el flujo actual — las tareas de push siguen
-funcionando exactamente igual que hoy hasta el paso 2.
+funcionando exactamente igual que hoy hasta el paso 2. El resto de los fixes
+de esta sesión (RUBRO2/RUBRO4 → Order_Num, bodega destino real en
+`authorizeDispatch`, fecha en la lista de Revisión) son solo código — no
+necesitan ningún paso extra en producción más allá de desplegar la imagen
+nueva (paso 3).
 
 ### 2. Agregar el gate a las tareas de push (Mongo, manual)
 
@@ -54,15 +83,12 @@ Buscar las tareas `IMPLT_Orders` e `IMPLT_loads_detail` (colección
 `AND review_status = 'approved'` al `WHERE` existente (el que ya filtra por
 `transfer_status = 1`).
 
-No tengo el texto exacto de esas dos queries a mano — intenté leerlo
-directo desde Mongo en esta sesión y la conexión dio error de autenticación.
-Dos formas de hacerlo:
-- **Desde la UI** ("Gestión de Tareas" → editar `IMPLT_Orders` /
-  `IMPLT_loads_detail`): agregar `AND review_status = 'approved'` al final
-  del `WHERE` en el editor de query, guardar.
-- **Pegame acá el `query` actual de esas dos tareas** (export o copy/paste
-  desde la UI o desde Mongo) y te devuelvo el texto exacto con el `AND` ya
-  insertado en el lugar correcto, para pegarlo de vuelta.
+**Actualización**: `IMPLT_Orders` ya tiene este filtro aplicado (confirmado
+2026-10-20, `WHERE transfer_status = 1 AND review_status = 'approved'`).
+Falta confirmar `IMPLT_loads_detail` de la misma forma — abrirla en
+"Gestión de Tareas" y chequear que su `WHERE` también tenga
+`AND review_status = 'approved'`; si no lo tiene, agregarlo igual que en
+`IMPLT_Orders`.
 
 Como todas las filas existentes y las que inserte el backend viejo quedan en
 `review_status='approved'` por el default del paso 1, este cambio no frena
