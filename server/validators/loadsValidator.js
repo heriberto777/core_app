@@ -56,6 +56,10 @@ const lineAdjustmentSchema = [
     body("pedidoLinea")
         .isInt({ min: 1 })
         .withMessage("pedidoLinea debe ser un entero positivo"),
+    body("tipoLinea")
+        .optional()
+        .isIn(["P", "B"])
+        .withMessage("tipoLinea debe ser 'P' (pagado) o 'B' (bonificado)"),
     body("codeProduct")
         .trim()
         .notEmpty()

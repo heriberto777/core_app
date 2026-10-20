@@ -433,15 +433,7 @@ class LoadsSQLService {
       WITH BaseData AS (
         SELECT
           pl.PEDIDO, pl.PEDIDO_LINEA,
-          -- Ajuste de Almacen por faltante de stock (Revision de Almacen) --
-          -- nunca toca CATELLI.PEDIDO_LINEA, solo reemplaza la cantidad que
-          -- usamos para ESTA carga puntual. Vacio al momento del Despacho
-          -- inicial (sin filas en loads_orders_adjustments todavia), se llena
-          -- recien si Almacen ajusta antes de autorizar -- por eso esta misma
-          -- query sirve tanto para el insert inicial como para la
-          -- regeneracion del staging al autorizar.
-          COALESCE(adj.cantidad_ajustada, pl.CANTIDAD_PEDIDA) AS CANTIDAD_PEDIDA,
-          pl.CANTIDAD_BONIFICAD,
+          pl.CANTIDAD_PEDIDA, pl.CANTIDAD_BONIFICAD,
           pl.PRECIO_UNITARIO, pl.MONTO_DESCUENTO, pl.PORC_DESCUENTO,
           pl.PORC_IMPUESTO1, pl.PORC_IMPUESTO2,
           pe.RUBRO5, GETDATE() as FECHA_PROMETIDA, pe.FECHA_PEDIDO,
@@ -455,36 +447,55 @@ class LoadsSQLService {
         INNER JOIN CATELLI.CLIENTE AS cl ON cl.CLIENTE = pe.CLIENTE
         LEFT JOIN CATELLI.ARTICULO AS ar ON ar.ARTICULO = pl.ARTICULO
         LEFT JOIN CATELLI.VENDEDOR AS v ON v.VENDEDOR = pe.VENDEDOR
-        LEFT JOIN core_app.loads_orders_adjustments adj
-          ON adj.code_load = @loadId AND adj.pedido = pl.PEDIDO AND adj.pedido_linea = pl.PEDIDO_LINEA
         WHERE pe.PEDIDO IN (${pedidosList})
         AND pe.U_Code_Load = @loadId
       ),
       Calc AS (
-        SELECT PEDIDO, PEDIDO_LINEA, CAST(PEDIDO_LINEA AS VARCHAR(10)) + '-P' AS LINEA_TIPO,
-               'P' AS TIPO_LINEA, CANTIDAD_PEDIDA AS Cantidad, PRECIO_UNITARIO,
-               MONTO_DESCUENTO, PORC_DESCUENTO, PORC_IMPUESTO1, PORC_IMPUESTO2,
-               RUBRO5, FECHA_PROMETIDA, FECHA_PEDIDO, CLIENTE, VENDEDOR, RUBRO4, RUBRO2,
-               detalle_direccion, ARTICULO, UNIDAD_ALMACEN, BODEGA_ORIGEN_REAL, LOCALIZACION_ORIGEN_REAL,
-               (CANTIDAD_PEDIDA * PRECIO_UNITARIO) AS SubTotal,
-               ((CANTIDAD_PEDIDA * PRECIO_UNITARIO) - MONTO_DESCUENTO) AS TotalAmount,
+        -- Ajuste de Almacen por faltante de stock (Revision de Almacen) --
+        -- nunca toca CATELLI.PEDIDO_LINEA, solo reemplaza la cantidad que
+        -- usamos para ESTA carga puntual. Vacio al momento del Despacho
+        -- inicial (sin filas en loads_orders_adjustments todavia), se llena
+        -- recien si Almacen ajusta antes de autorizar -- por eso esta misma
+        -- query sirve tanto para el insert inicial como para la
+        -- regeneracion del staging al autorizar. Pagado ('P') y bonificado
+        -- ('B') son ajustes independientes de la MISMA PEDIDO_LINEA -- no
+        -- sabemos la regla de promocion de Preventa para recalcular la
+        -- bonificacion sola, asi que Almacen la ajusta aparte si corresponde
+        -- (ver loads_orders_adjustments.tipo_linea).
+        SELECT bd.PEDIDO, bd.PEDIDO_LINEA, CAST(bd.PEDIDO_LINEA AS VARCHAR(10)) + '-P' AS LINEA_TIPO,
+               'P' AS TIPO_LINEA,
+               COALESCE(adjP.cantidad_ajustada, bd.CANTIDAD_PEDIDA) AS Cantidad,
+               bd.PRECIO_UNITARIO,
+               bd.MONTO_DESCUENTO, bd.PORC_DESCUENTO, bd.PORC_IMPUESTO1, bd.PORC_IMPUESTO2,
+               bd.RUBRO5, bd.FECHA_PROMETIDA, bd.FECHA_PEDIDO, bd.CLIENTE, bd.VENDEDOR, bd.RUBRO4, bd.RUBRO2,
+               bd.detalle_direccion, bd.ARTICULO, bd.UNIDAD_ALMACEN, bd.BODEGA_ORIGEN_REAL, bd.LOCALIZACION_ORIGEN_REAL,
+               (COALESCE(adjP.cantidad_ajustada, bd.CANTIDAD_PEDIDA) * bd.PRECIO_UNITARIO) AS SubTotal,
+               ((COALESCE(adjP.cantidad_ajustada, bd.CANTIDAD_PEDIDA) * bd.PRECIO_UNITARIO) - bd.MONTO_DESCUENTO) AS TotalAmount,
                CASE
-                 WHEN SUBSTRING(CLIENTE, PATINDEX('%[A-Za-z]%', CLIENTE), 1) NOT IN ('O','R')
-                   THEN 'CN' + CLIENTE ELSE CLIENTE
+                 WHEN SUBSTRING(bd.CLIENTE, PATINDEX('%[A-Za-z]%', bd.CLIENTE), 1) NOT IN ('O','R')
+                   THEN 'CN' + bd.CLIENTE ELSE bd.CLIENTE
                END AS Code_Account_Calc
-        FROM BaseData WHERE CANTIDAD_PEDIDA <> 0
+        FROM BaseData bd
+        LEFT JOIN core_app.loads_orders_adjustments adjP
+          ON adjP.code_load = @loadId AND adjP.pedido = bd.PEDIDO AND adjP.pedido_linea = bd.PEDIDO_LINEA AND adjP.tipo_linea = 'P'
+        WHERE COALESCE(adjP.cantidad_ajustada, bd.CANTIDAD_PEDIDA) <> 0
         UNION ALL
-        SELECT PEDIDO, PEDIDO_LINEA, CAST(PEDIDO_LINEA AS VARCHAR(10)) + '-B' AS LINEA_TIPO,
-               'B' AS TIPO_LINEA, CANTIDAD_BONIFICAD AS Cantidad, 0 AS PRECIO_UNITARIO,
+        SELECT bd.PEDIDO, bd.PEDIDO_LINEA, CAST(bd.PEDIDO_LINEA AS VARCHAR(10)) + '-B' AS LINEA_TIPO,
+               'B' AS TIPO_LINEA,
+               COALESCE(adjB.cantidad_ajustada, bd.CANTIDAD_BONIFICAD) AS Cantidad,
+               0 AS PRECIO_UNITARIO,
                0 AS MONTO_DESCUENTO, 0 AS PORC_DESCUENTO, 0 AS PORC_IMPUESTO1, 0 AS PORC_IMPUESTO2,
-               RUBRO5, FECHA_PROMETIDA, FECHA_PEDIDO, CLIENTE, VENDEDOR, RUBRO4, RUBRO2,
-               detalle_direccion, ARTICULO, UNIDAD_ALMACEN, BODEGA_ORIGEN_REAL, LOCALIZACION_ORIGEN_REAL,
+               bd.RUBRO5, bd.FECHA_PROMETIDA, bd.FECHA_PEDIDO, bd.CLIENTE, bd.VENDEDOR, bd.RUBRO4, bd.RUBRO2,
+               bd.detalle_direccion, bd.ARTICULO, bd.UNIDAD_ALMACEN, bd.BODEGA_ORIGEN_REAL, bd.LOCALIZACION_ORIGEN_REAL,
                0 AS SubTotal, 0 AS TotalAmount,
                CASE
-                 WHEN SUBSTRING(CLIENTE, PATINDEX('%[A-Za-z]%', CLIENTE), 1) NOT IN ('O','R')
-                   THEN 'CN' + CLIENTE ELSE CLIENTE
+                 WHEN SUBSTRING(bd.CLIENTE, PATINDEX('%[A-Za-z]%', bd.CLIENTE), 1) NOT IN ('O','R')
+                   THEN 'CN' + bd.CLIENTE ELSE bd.CLIENTE
                END AS Code_Account_Calc
-        FROM BaseData WHERE CANTIDAD_BONIFICAD > 0
+        FROM BaseData bd
+        LEFT JOIN core_app.loads_orders_adjustments adjB
+          ON adjB.code_load = @loadId AND adjB.pedido = bd.PEDIDO AND adjB.pedido_linea = bd.PEDIDO_LINEA AND adjB.tipo_linea = 'B'
+        WHERE bd.CANTIDAD_BONIFICAD > 0 AND COALESCE(adjB.cantidad_ajustada, bd.CANTIDAD_BONIFICAD) > 0
       )
       SELECT
         'CATELLI' AS Code_Unit_Org, 'CATELLI' AS Code_Sales_Org,
@@ -673,24 +684,46 @@ class LoadsSQLService {
     static async getLoadReviewDetail(loadId) {
         return await withConnection("server1", async (connection) => {
             const query = `
-        SELECT
-          pl.PEDIDO, pl.PEDIDO_LINEA, pl.ARTICULO AS Code_Product,
-          pl.CANTIDAD_PEDIDA AS cantidadOriginal,
-          COALESCE(adj.cantidad_ajustada, pl.CANTIDAD_PEDIDA) AS cantidadActual,
-          ar.DESCRIPCION AS descripcion,
-          ar.peso_bruto AS empaque,
-          ar.UNIDAD_ALMACEN AS unidadMedida,
-          pe.CLIENTE AS cliente,
-          cl.detalle_direccion AS direccionCliente,
-          adj.motivo, adj.ajustado_por AS ajustadoPor, adj.fecha AS fechaAjuste
-        FROM CATELLI.PEDIDO_LINEA pl
-        INNER JOIN CATELLI.PEDIDO pe ON pe.PEDIDO = pl.PEDIDO
-        INNER JOIN CATELLI.CLIENTE cl ON cl.CLIENTE = pe.CLIENTE
-        LEFT JOIN CATELLI.ARTICULO ar ON ar.ARTICULO = pl.ARTICULO
+        WITH BaseData AS (
+          SELECT
+            pl.PEDIDO, pl.PEDIDO_LINEA, pl.ARTICULO AS Code_Product,
+            pl.CANTIDAD_PEDIDA, pl.CANTIDAD_BONIFICAD,
+            ar.DESCRIPCION AS descripcion,
+            ar.peso_bruto AS empaque,
+            ar.UNIDAD_ALMACEN AS unidadMedida,
+            pe.CLIENTE AS cliente,
+            cl.detalle_direccion AS direccionCliente
+          FROM CATELLI.PEDIDO_LINEA pl
+          INNER JOIN CATELLI.PEDIDO pe ON pe.PEDIDO = pl.PEDIDO
+          INNER JOIN CATELLI.CLIENTE cl ON cl.CLIENTE = pe.CLIENTE
+          LEFT JOIN CATELLI.ARTICULO ar ON ar.ARTICULO = pl.ARTICULO
+          WHERE pe.U_Code_Load = @loadId
+        )
+        -- Pagado ('P') y bonificado ('B') de la MISMA PEDIDO_LINEA salen como
+        -- dos líneas editables independientes -- no sabemos la regla de
+        -- promoción de Preventa para recalcular la bonificación sola cuando
+        -- Almacén ajusta lo pagado, así que las dos quedan a criterio del
+        -- operador (ver loads_orders_adjustments.tipo_linea).
+        SELECT bd.PEDIDO, bd.PEDIDO_LINEA, bd.Code_Product, 'P' AS tipoLinea,
+               bd.CANTIDAD_PEDIDA AS cantidadOriginal,
+               COALESCE(adj.cantidad_ajustada, bd.CANTIDAD_PEDIDA) AS cantidadActual,
+               bd.descripcion, bd.empaque, bd.unidadMedida, bd.cliente, bd.direccionCliente,
+               adj.motivo, adj.ajustado_por AS ajustadoPor, adj.fecha AS fechaAjuste
+        FROM BaseData bd
         LEFT JOIN core_app.loads_orders_adjustments adj
-          ON adj.code_load = @loadId AND adj.pedido = pl.PEDIDO AND adj.pedido_linea = pl.PEDIDO_LINEA
-        WHERE pe.U_Code_Load = @loadId AND pl.CANTIDAD_PEDIDA <> 0
-        ORDER BY pl.ARTICULO, pl.PEDIDO, pl.PEDIDO_LINEA
+          ON adj.code_load = @loadId AND adj.pedido = bd.PEDIDO AND adj.pedido_linea = bd.PEDIDO_LINEA AND adj.tipo_linea = 'P'
+        WHERE bd.CANTIDAD_PEDIDA <> 0
+        UNION ALL
+        SELECT bd.PEDIDO, bd.PEDIDO_LINEA, bd.Code_Product, 'B' AS tipoLinea,
+               bd.CANTIDAD_BONIFICAD AS cantidadOriginal,
+               COALESCE(adj.cantidad_ajustada, bd.CANTIDAD_BONIFICAD) AS cantidadActual,
+               bd.descripcion, bd.empaque, bd.unidadMedida, bd.cliente, bd.direccionCliente,
+               adj.motivo, adj.ajustado_por AS ajustadoPor, adj.fecha AS fechaAjuste
+        FROM BaseData bd
+        LEFT JOIN core_app.loads_orders_adjustments adj
+          ON adj.code_load = @loadId AND adj.pedido = bd.PEDIDO AND adj.pedido_linea = bd.PEDIDO_LINEA AND adj.tipo_linea = 'B'
+        WHERE bd.CANTIDAD_BONIFICAD > 0
+        ORDER BY Code_Product, PEDIDO, PEDIDO_LINEA, tipoLinea
       `;
             const result = await DatabaseServiceAdapter.query(connection, query, { loadId });
 
@@ -717,6 +750,7 @@ class LoadsSQLService {
                 producto.lineas.push({
                     pedido: row.PEDIDO,
                     pedidoLinea: row.PEDIDO_LINEA,
+                    tipoLinea: row.tipoLinea,
                     cliente: row.cliente,
                     direccionCliente: row.direccionCliente,
                     cantidadOriginal: Number(row.cantidadOriginal) || 0,
@@ -733,16 +767,17 @@ class LoadsSQLService {
 
     /**
      * Crea o reemplaza el ajuste de una línea puntual (upsert por
-     * code_load+pedido+pedido_linea, ver UQ_loads_orders_adjustments_linea).
-     * No toca CATELLI.PEDIDO_LINEA.
+     * code_load+pedido+pedido_linea+tipo_linea, ver
+     * UQ_loads_orders_adjustments_linea). No toca CATELLI.PEDIDO_LINEA.
      */
     static async upsertLineAdjustment(loadId, adjustment, userId) {
-        const { pedido, pedidoLinea, codeProduct, cantidadOriginal, cantidadAjustada, motivo } = adjustment;
+        const { pedido, pedidoLinea, tipoLinea = "P", codeProduct, cantidadOriginal, cantidadAjustada, motivo } = adjustment;
         return await withConnection("server1", async (connection) => {
             await DatabaseServiceAdapter.query(connection, `
         MERGE core_app.loads_orders_adjustments AS target
-        USING (SELECT @loadId AS code_load, @pedido AS pedido, @pedidoLinea AS pedido_linea) AS src
-          ON target.code_load = src.code_load AND target.pedido = src.pedido AND target.pedido_linea = src.pedido_linea
+        USING (SELECT @loadId AS code_load, @pedido AS pedido, @pedidoLinea AS pedido_linea, @tipoLinea AS tipo_linea) AS src
+          ON target.code_load = src.code_load AND target.pedido = src.pedido
+             AND target.pedido_linea = src.pedido_linea AND target.tipo_linea = src.tipo_linea
         WHEN MATCHED THEN UPDATE SET
           cantidad_original = @cantidadOriginal,
           cantidad_ajustada = @cantidadAjustada,
@@ -751,12 +786,12 @@ class LoadsSQLService {
           ajustado_por = @userId,
           fecha = GETDATE()
         WHEN NOT MATCHED THEN INSERT (
-          code_load, pedido, pedido_linea, code_product, cantidad_original, cantidad_ajustada, motivo, ajustado_por, fecha
+          code_load, pedido, pedido_linea, tipo_linea, code_product, cantidad_original, cantidad_ajustada, motivo, ajustado_por, fecha
         ) VALUES (
-          @loadId, @pedido, @pedidoLinea, @codeProduct, @cantidadOriginal, @cantidadAjustada, @motivo, @userId, GETDATE()
+          @loadId, @pedido, @pedidoLinea, @tipoLinea, @codeProduct, @cantidadOriginal, @cantidadAjustada, @motivo, @userId, GETDATE()
         );
       `, {
-                loadId, pedido, pedidoLinea, codeProduct,
+                loadId, pedido, pedidoLinea, tipoLinea, codeProduct,
                 cantidadOriginal, cantidadAjustada,
                 motivo: motivo || null,
                 userId,

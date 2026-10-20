@@ -28,6 +28,17 @@ function toCajasUnidades(totalUnidades, empaque) {
   return { cajas, unidades };
 }
 
+/**
+ * pedidoLinea es un número local a CADA pedido (dos pedidos distintos suelen
+ * compartir el mismo número de línea), y una misma línea puede tener una
+ * parte pagada y otra bonificada (tipoLinea 'P'/'B') — por eso la clave de
+ * edición tiene que incluir las tres partes, si no, se pisa el estado entre
+ * líneas de distintos pedidos o entre lo pagado y lo bonificado.
+ */
+function lineKey(linea) {
+  return `${linea.pedido}-${linea.pedidoLinea}-${linea.tipoLinea}`;
+}
+
 function ProductoRow({ producto, onSaveLine, isSaving }) {
   const [expanded, setExpanded] = useState(false);
   const { cajas: cajasActuales, unidades: unidadesActuales } = toCajasUnidades(producto.totalActual, producto.empaque);
@@ -45,22 +56,41 @@ function ProductoRow({ producto, onSaveLine, isSaving }) {
     if (falta !== 0 && !expanded) setExpanded(true);
   };
 
-  const getLineValue = (linea) =>
-    lineEdits[linea.pedidoLinea] !== undefined ? lineEdits[linea.pedidoLinea] : linea.cantidadActual;
+  const getLineValue = (linea) => {
+    const key = lineKey(linea);
+    return lineEdits[key] !== undefined ? lineEdits[key] : linea.cantidadActual;
+  };
 
   const handleSaveLine = async (linea) => {
     const nuevaCantidad = Number(getLineValue(linea));
     if (Number.isNaN(nuevaCantidad) || nuevaCantidad < 0) return;
+    const esBonificado = linea.tipoLinea === "B";
     await onSaveLine({
       pedido: linea.pedido,
       pedidoLinea: linea.pedidoLinea,
+      tipoLinea: linea.tipoLinea,
       codeProduct: producto.codigo,
       cantidadOriginal: linea.cantidadOriginal,
       cantidadAjustada: nuevaCantidad,
-      motivo: tieneFaltante
-        ? `Ajustado de ${linea.cantidadActual} a ${nuevaCantidad} u — falta de stock`
-        : `Ajustado de ${linea.cantidadActual} a ${nuevaCantidad} u`,
+      motivo: esBonificado
+        ? `Bonificación ajustada de ${linea.cantidadActual} a ${nuevaCantidad} u`
+        : tieneFaltante
+          ? `Ajustado de ${linea.cantidadActual} a ${nuevaCantidad} u — falta de stock`
+          : `Ajustado de ${linea.cantidadActual} a ${nuevaCantidad} u`,
     });
+
+    // No sabemos la regla de promoción de Preventa para recalcular la
+    // bonificación cuando se recorta lo pagado por faltante de stock — en
+    // vez de adivinar, sugerimos 0 en la línea bonificada hermana (misma
+    // pedido+pedidoLinea) y dejamos que el operador la confirme o la cambie.
+    if (!esBonificado && nuevaCantidad < linea.cantidadOriginal) {
+      const hermanaBonificada = producto.lineas.find(
+        (l) => l.pedido === linea.pedido && l.pedidoLinea === linea.pedidoLinea && l.tipoLinea === "B"
+      );
+      if (hermanaBonificada) {
+        setLineEdits((prev) => ({ ...prev, [lineKey(hermanaBonificada)]: 0 }));
+      }
+    }
   };
 
   return (
@@ -119,6 +149,7 @@ function ProductoRow({ producto, onSaveLine, isSaving }) {
             <thead>
               <tr className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
                 <th className="text-left px-5 py-2">Pedido</th>
+                <th className="text-left px-5 py-2">Tipo</th>
                 <th className="text-left px-5 py-2">Cliente</th>
                 <th className="text-left px-5 py-2">Cantidad original</th>
                 <th className="text-left px-5 py-2">Cantidad a enviar</th>
@@ -128,8 +159,19 @@ function ProductoRow({ producto, onSaveLine, isSaving }) {
             </thead>
             <tbody>
               {producto.lineas.map((linea) => (
-                <tr key={`${linea.pedido}-${linea.pedidoLinea}`} className="border-t border-slate-100">
+                <tr key={lineKey(linea)} className="border-t border-slate-100">
                   <td className="px-5 py-3 font-semibold text-slate-800">{linea.pedido}</td>
+                  <td className="px-5 py-3">
+                    {linea.tipoLinea === "B" ? (
+                      <span className="inline-flex text-[11px] font-bold text-purple-700 bg-purple-100 px-2.5 py-1 rounded-full">
+                        Bonificado
+                      </span>
+                    ) : (
+                      <span className="inline-flex text-[11px] font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full">
+                        Pagado
+                      </span>
+                    )}
+                  </td>
                   <td className="px-5 py-3 text-slate-600">
                     {linea.cliente}
                     {linea.direccionCliente && (
@@ -143,7 +185,7 @@ function ProductoRow({ producto, onSaveLine, isSaving }) {
                       min="0"
                       value={getLineValue(linea)}
                       onChange={(e) =>
-                        setLineEdits((prev) => ({ ...prev, [linea.pedidoLinea]: e.target.value }))
+                        setLineEdits((prev) => ({ ...prev, [lineKey(linea)]: e.target.value }))
                       }
                       className="w-24 border border-slate-200 rounded-lg px-2 py-1.5 text-sm text-right"
                     />

@@ -11,6 +11,14 @@
 --    esto es solo el registro de "para esta carga puntual, la cantidad real
 --    armada fue X en vez de Y", auditado. getTransformedOrdersData hace
 --    LEFT JOIN + COALESCE contra esta tabla para calcular la cantidad final.
+--
+--    tipo_linea ('P'/'B'): una misma PEDIDO_LINEA de CATELLI puede generar
+--    DOS filas en el staging — la cantidad pagada (CANTIDAD_PEDIDA) y la
+--    bonificada/regalo (CANTIDAD_BONIFICAD), ver LINEA_TIPO en
+--    getTransformedOrdersData. Si Almacén ajusta la pagada por faltante de
+--    stock, la bonificada es una decisión aparte (no sabemos la regla de
+--    promoción de Preventa para recalcularla sola) — por eso el ajuste se
+--    guarda por tipo, no solo por pedido_linea.
 IF NOT EXISTS (
     SELECT 1 FROM sys.tables t
     INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
@@ -22,6 +30,7 @@ BEGIN
         code_load           VARCHAR(50)     NOT NULL,
         pedido              VARCHAR(20)     NOT NULL,
         pedido_linea        INT             NOT NULL,
+        tipo_linea          CHAR(1)         NOT NULL DEFAULT 'P',
         code_product        VARCHAR(50)     NOT NULL,
         cantidad_original   NUMERIC(11,3)   NOT NULL,
         cantidad_ajustada   NUMERIC(11,3)   NOT NULL,
@@ -29,11 +38,45 @@ BEGIN
         ajustado_por        VARCHAR(100)    NOT NULL,
         fecha               DATETIME        NOT NULL DEFAULT GETDATE(),
         CONSTRAINT UQ_loads_orders_adjustments_linea
-            UNIQUE (code_load, pedido, pedido_linea)
+            UNIQUE (code_load, pedido, pedido_linea, tipo_linea),
+        CONSTRAINT CK_loads_orders_adjustments_tipo_linea
+            CHECK (tipo_linea IN ('P', 'B'))
     );
 
     CREATE INDEX IX_loads_orders_adjustments_code_load
         ON core_app.loads_orders_adjustments (code_load);
+END
+GO
+
+-- Migracion sobre un ambiente donde la tabla ya se creo con el esquema
+-- viejo (sin tipo_linea) -- idempotente, no rompe si ya esta aplicada.
+IF EXISTS (
+    SELECT 1 FROM sys.tables t
+    INNER JOIN sys.schemas s ON s.schema_id = t.schema_id
+    WHERE s.name = 'core_app' AND t.name = 'loads_orders_adjustments'
+)
+AND NOT EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID('core_app.loads_orders_adjustments') AND name = 'tipo_linea'
+)
+BEGIN
+    ALTER TABLE core_app.loads_orders_adjustments
+        ADD tipo_linea CHAR(1) NOT NULL DEFAULT 'P';
+
+    ALTER TABLE core_app.loads_orders_adjustments
+        ADD CONSTRAINT CK_loads_orders_adjustments_tipo_linea CHECK (tipo_linea IN ('P', 'B'));
+
+    DECLARE @oldConstraint NVARCHAR(200) = (
+        SELECT kc.name FROM sys.key_constraints kc
+        WHERE kc.parent_object_id = OBJECT_ID('core_app.loads_orders_adjustments')
+          AND kc.type = 'UQ'
+    );
+    IF @oldConstraint IS NOT NULL
+        EXEC('ALTER TABLE core_app.loads_orders_adjustments DROP CONSTRAINT ' + @oldConstraint);
+
+    ALTER TABLE core_app.loads_orders_adjustments
+        ADD CONSTRAINT UQ_loads_orders_adjustments_linea
+            UNIQUE (code_load, pedido, pedido_linea, tipo_linea);
 END
 GO
 
