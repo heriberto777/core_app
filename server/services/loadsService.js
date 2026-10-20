@@ -101,7 +101,14 @@ class LoadsService {
       throw new Error(`Carga ${loadId} no está pendiente de revisión (estado actual: ${tracking.status})`);
     }
 
-    const bodegaDestino = tracking.bodega;
+    // tracking.bodega NO es la bodega destino real -- createLoadTracking lo
+    // graba como el literal "MULTIPLE" (bodegas de ORIGEN variadas entre
+    // las líneas de la carga, ver insertToLoadsDetailStaging). La bodega
+    // DESTINO del traspaso es la asignada al repartidor (U_BODEGA en
+    // CATELLI.VENDEDOR), la misma que resuelve processOrderLoad al
+    // despachar -- hay que recalcularla acá, no leerla de Mongo.
+    const deliveryPerson = await LoadsSQLService.validateDeliveryPerson(tracking.route);
+    const bodegaDestino = deliveryPerson.assignedWarehouse;
 
     return await DatabaseServiceAdapter.withTransaction("server1", async (server1Connection) => {
       const pedidosResult = await DatabaseServiceAdapter.query(server1Connection,
