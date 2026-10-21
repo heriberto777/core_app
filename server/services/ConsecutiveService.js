@@ -444,8 +444,16 @@ class ConsecutiveService {
         }
       }
 
-      // Obtener el siguiente valor
-      const nextValue = consecutive.getNextValue(segmentValue);
+      // Obtener el siguiente valor. El await es obligatorio acá: getNextValue
+      // ya hace su propio this.save() internamente (bloqueo pesimista +
+      // incremento), y el save() de abajo es uno SEGUNDO sobre el mismo
+      // documento (para persistir performedBy). Sin este await, los dos
+      // save() corrían en paralelo sobre la misma instancia de Mongoose y
+      // Mongoose tira ParallelSaveError -- intermitente, no en cada llamada,
+      // según qué tan rápido resolviera el primero. Esto rompía
+      // generateLoadId() (consecutivo "LOAD") y dejaba la carga con
+      // loadId undefined ("Load ID: N/A" en el frontend).
+      const nextValue = await consecutive.getNextValue(segmentValue);
 
       // Actualizar la información del usuario que realizó la acción
       if (user.id) {
