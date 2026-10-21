@@ -1,5 +1,5 @@
 import { StatusBadge, LoadsButton } from "../../index";
-import { FaEye, FaEdit, FaTrash, FaTruck, FaCalendar, FaUser, FaDollarSign } from "react-icons/fa";
+import { FaEye, FaTrash, FaTruck, FaCalendar, FaUser, FaDollarSign } from "react-icons/fa";
 
 /**
  * Corporate OrderCard (Tailwind Edition)
@@ -9,7 +9,6 @@ export function OrderCard({
   selected = false,
   onSelect,
   onView,
-  onEdit,
   onCancel,
   onLoad,
   showActions = true,
@@ -59,12 +58,22 @@ export function OrderCard({
             <p className="m-0 text-sm text-slate-500 font-medium">{order.cliente}</p>
           </div>
         </div>
-        <StatusBadge status={order.transferStatus}>
-          {order.transferStatus === 'pending' ? 'Pendiente' :
-           order.transferStatus === 'processing' ? 'Procesando' :
-           order.transferStatus === 'completed' ? 'Completado' :
-           order.transferStatus}
-        </StatusBadge>
+        <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
+          <StatusBadge status={order.transferStatus}>
+            {order.transferStatus === 'pending' ? 'Pendiente' :
+             order.transferStatus === 'processing' ? 'Procesando' :
+             order.transferStatus === 'completed' ? 'Completado' :
+             order.transferStatus}
+          </StatusBadge>
+          <button
+            type="button"
+            onClick={() => onView?.(order.pedido)}
+            title="Ver detalles"
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
+          >
+            <FaEye size={14} />
+          </button>
+        </div>
       </div>
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-3 mb-4">
@@ -97,25 +106,12 @@ export function OrderCard({
             <FaTruck /> Cargar
           </LoadsButton>
           <LoadsButton
-            variant="secondary"
-            size="small"
-            onClick={() => onView?.(order.pedido)}
-          >
-            <FaEye /> Ver
-          </LoadsButton>
-          <LoadsButton
-            variant="warning"
-            size="small"
-            onClick={() => onEdit?.(order.pedido)}
-          >
-            <FaEdit /> Editar
-          </LoadsButton>
-          <LoadsButton
             variant="danger"
             size="small"
             onClick={() => onCancel?.(order.pedido)}
+            disabled={order.transferStatus === 'completed' || order.transferStatus === 'cancelled'}
           >
-            <FaTrash /> Cancelar
+            <FaTrash /> Anular
           </LoadsButton>
         </div>
       )}

@@ -107,22 +107,24 @@ export function LoadsManagement() {
     }
   };
 
-  const handleBulkCancel = async () => {
-    // Anular saca pedidos de circulación en CATELLI (estado = 'C') de forma
-    // irreversible desde la app — por eso el motivo es obligatorio acá, no
-    // un default fijo como antes ("Cancelación manual" sin importar quién
-    // ni por qué).
+  // Anular saca pedidos de circulación en CATELLI (estado = 'C') de forma
+  // irreversible desde la app — por eso el motivo es obligatorio acá, no un
+  // default fijo como antes ("Cancelación manual" sin importar quién ni por
+  // qué). Mismo modal para la anulación masiva (banner) y la individual
+  // (botón "Anular" de cada tarjeta) — ids por defecto son los seleccionados.
+  const handleCancel = async (ids = selectedOrders) => {
+    if (!ids || ids.length === 0) return;
     const result = await Swal.fire({
-      title: "¿Anular pedidos seleccionados?",
-      html: `Se van a anular <b>${selectedOrders.length}</b> pedidos en el ERP. Esta acción no se puede deshacer desde la app.`,
+      title: ids.length === 1 ? "¿Anular este pedido?" : "¿Anular pedidos seleccionados?",
+      html: `Se va${ids.length === 1 ? "" : "n"} a anular <b>${ids.length}</b> pedido${ids.length === 1 ? "" : "s"} en el ERP. Esta acción no se puede deshacer desde la app.`,
       icon: "warning",
       input: "textarea",
       inputLabel: "Motivo de la anulación",
-      inputPlaceholder: "Explicá por qué se anulan estos pedidos...",
+      inputPlaceholder: "Explicá por qué se anula...",
       showCancelButton: true,
       confirmButtonColor: "#ef4444",
-      confirmButtonText: "Sí, anular selección",
-      cancelButtonText: "Mantener pedidos",
+      confirmButtonText: "Sí, anular",
+      cancelButtonText: "Mantener pedido" + (ids.length === 1 ? "" : "s"),
       inputValidator: (value) => {
         if (!value || !value.trim()) return "El motivo es obligatorio.";
       }
@@ -130,10 +132,10 @@ export function LoadsManagement() {
 
     if (result.isConfirmed) {
       try {
-        await actions.cancelOrders(selectedOrders, result.value.trim());
-        showSuccess("Pedidos anulados correctamente");
+        await actions.cancelOrders(ids, result.value.trim());
+        showSuccess("Pedido(s) anulado(s) correctamente");
       } catch (err) {
-        showError("Error al anular pedidos");
+        showError("Error al anular pedido(s)");
       }
     }
   };
@@ -205,8 +207,8 @@ export function LoadsManagement() {
                 </div>
               </div>
               <div className="flex gap-3 w-full sm:w-auto">
-                <button 
-                  onClick={handleBulkCancel}
+                <button
+                  onClick={() => handleCancel()}
                   className="flex-1 sm:flex-none px-6 py-3 rounded-xl bg-white/5 border border-white/10 text-sm font-bold hover:bg-red-500/10 hover:text-red-400 hover:border-red-500/30 transition-all flex items-center justify-center gap-2"
                 >
                   <FaTimes /> Anular
@@ -241,8 +243,9 @@ export function LoadsManagement() {
                 actions.selectAllOrders([id]);
                 setModals(prev => ({ ...prev, delivery: true }));
               }}
+              onCancel={(id) => handleCancel([id])}
               onBulkLoad={handleBulkLoad}
-              onBulkCancel={handleBulkCancel}
+              onBulkCancel={() => handleCancel()}
               loading={loading}
               isProcessing={isProcessing}
               viewMode="cards"

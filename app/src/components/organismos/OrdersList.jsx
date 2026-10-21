@@ -12,7 +12,6 @@ export function OrdersList({
   onOrderSelect,
   onSelectAll,
   onView,
-  onEdit,
   onCancel,
   onLoad,
   onBulkLoad,
@@ -108,7 +107,6 @@ export function OrdersList({
               selected={selectedOrders.includes(order.pedido)}
               onSelect={onOrderSelect}
               onView={onView}
-              onEdit={onEdit}
               onCancel={onCancel}
               onLoad={onLoad}
             />
