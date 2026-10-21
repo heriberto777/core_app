@@ -526,6 +526,27 @@ class TransferService {
    * @param {Object} options - Opciones adicionales (skipPostUpdate)
    */
   async executeTransferWithRetry(taskId, maxRetries = 3, options = {}) {
+    // Guarda atómica contra ejecuciones concurrentes de la MISMA tarea (cron
+    // y "Ejecutar" manual solapados, doble click, etc.). Antes no había
+    // ningún chequeo atómico de "no está corriendo ya" antes de marcar
+    // status="running" -- eso pasaba más abajo (executeTransfer) con un
+    // findByIdAndUpdate incondicional, dejando una ventana real donde dos
+    // corridas podían pasar el check casi al mismo tiempo y las dos
+    // terminaban insertando los mismos registros en destino (duplicados).
+    // Se hace ANTES del try/catch general: si se rechaza por carrera, NO
+    // tiene que caer en la lógica de abajo que marca status="failed" --
+    // eso pisaría el estado de la corrida legítima que sigue en curso.
+    const lockedTask = await TransferTask.findOneAndUpdate(
+      { _id: taskId, status: { $ne: "running" } },
+      { status: "running", progress: 0, lastExecutionDate: new Date() },
+      { new: true }
+    );
+    if (!lockedTask) {
+      throw new Error(
+        "La tarea ya está en ejecución (otra corrida en curso) — se aborta para no duplicar registros."
+      );
+    }
+
     const abortController = new AbortController();
     const { signal } = abortController;
     const skipPostUpdate = options?.skipPostUpdate === true;
@@ -2419,26 +2440,38 @@ class TransferService {
    * MIGRADO: Usa DatabaseServiceAdapter y transacciones
    */
   async executeTransferDown(taskId) {
-    try {
-      const task = await TransferTask.findById(taskId);
-      if (!task) {
-        throw new Error(`No se encontró la tarea con ID: ${taskId}`);
-      }
+    const task = await TransferTask.findById(taskId);
+    if (!task) {
+      throw new Error(`No se encontró la tarea con ID: ${taskId}`);
+    }
 
-      const transferName = task.name;
-      logger.info(
-        `Encontrada tarea de transferencia DOWN: ${transferName} (${taskId})`
+    const transferName = task.name;
+    logger.info(
+      `Encontrada tarea de transferencia DOWN: ${transferName} (${taskId})`
+    );
+
+    if (!task.active) {
+      logger.warn(`La tarea ${transferName} está inactiva.`);
+      return { success: false, message: "Tarea inactiva" };
+    }
+
+    // Guarda atómica contra ejecuciones concurrentes de la MISMA tarea --
+    // mismo motivo que en executeTransferWithRetry (ver comentario ahí).
+    // Va fuera del try/catch de abajo para que, si se rechaza por carrera,
+    // no caiga en la lógica que marca status="error" y pise el estado de
+    // la corrida legítima que sigue en curso.
+    const lockedTask = await TransferTask.findOneAndUpdate(
+      { _id: taskId, status: { $ne: "running" } },
+      { status: "running", progress: 0 },
+      { new: true }
+    );
+    if (!lockedTask) {
+      throw new Error(
+        "La tarea ya está en ejecución (otra corrida en curso) — se aborta para no duplicar registros."
       );
+    }
 
-      if (!task.active) {
-        logger.warn(`La tarea ${transferName} está inactiva.`);
-        return { success: false, message: "Tarea inactiva" };
-      }
-
-      await TransferTask.findByIdAndUpdate(taskId, {
-        status: "running",
-        progress: 0,
-      });
+    try {
       sendProgress(taskId, 0);
 
       // MIGRADO: Usar sistema de conexiones múltiples
