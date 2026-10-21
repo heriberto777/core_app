@@ -16,7 +16,7 @@ export function useLoadsManagement(accessToken) {
     const [selectedOrders, setSelectedOrders] = useState([]);
     const [search, setSearch] = useState("");
     const [filters, setFilters] = useState({
-        dateFrom: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split("T")[0],
+        dateFrom: new Date().toISOString().split("T")[0],
         dateTo: new Date().toISOString().split("T")[0],
         sellers: [],
         transferStatus: "all",
@@ -146,7 +146,7 @@ export function useLoadsManagement(accessToken) {
             },
             resetFilters: () => {
                 setFilters({
-                    dateFrom: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split("T")[0],
+                    dateFrom: new Date().toISOString().split("T")[0],
                     dateTo: new Date().toISOString().split("T")[0],
                     sellers: [],
                     transferStatus: "all",

@@ -1,7 +1,7 @@
-import { useEffect } from "react";
+import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
-import { FaSync, FaClipboardCheck, FaBoxes } from "react-icons/fa";
+import { FaSync, FaClipboardCheck, FaBoxes, FaSearch } from "react-icons/fa";
 import {
   useAuth,
   useWarehouseReview,
@@ -32,10 +32,21 @@ export function WarehouseReview() {
   const navigate = useNavigate();
   const { accessToken } = useAuth();
   const { loads, loading, refreshing, error, actions } = useWarehouseReview(accessToken);
+  const [search, setSearch] = useState("");
 
   useEffect(() => {
     if (accessToken) actions.fetchLoads();
   }, [accessToken]);
+
+  const filteredLoads = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return loads;
+    return loads.filter((carga) =>
+      carga.loadId?.toLowerCase().includes(term) ||
+      carga.route?.toLowerCase().includes(term) ||
+      carga.bodega?.toLowerCase().includes(term)
+    );
+  }, [loads, search]);
 
   return (
     <div className="min-h-dvh bg-slate-50/50 animate-fadeIn">
@@ -63,6 +74,17 @@ export function WarehouseReview() {
           </div>
         )}
 
+        <div className="relative max-w-md">
+          <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por carga, repartidor o bodega..."
+            className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+          />
+        </div>
+
         <div className="bg-white rounded-xl border border-slate-100 shadow-premium overflow-hidden">
           {loading && !refreshing ? (
             <LoadingUI message="Cargando cargas pendientes de revisión..." />
@@ -70,6 +92,11 @@ export function WarehouseReview() {
             <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-400">
               <FaClipboardCheck className="text-4xl" />
               <p className="font-semibold">No hay cargas pendientes de revisión</p>
+            </div>
+          ) : filteredLoads.length === 0 ? (
+            <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-400">
+              <FaSearch className="text-4xl" />
+              <p className="font-semibold">Ninguna carga coincide con la búsqueda</p>
             </div>
           ) : (
             <div className="overflow-x-auto">
@@ -86,7 +113,7 @@ export function WarehouseReview() {
                   </tr>
                 </thead>
                 <tbody>
-                  {loads.map((carga) => (
+                  {filteredLoads.map((carga) => (
                     <tr key={carga.loadId} className="border-t border-slate-100 hover:bg-slate-50/60">
                       <td className="px-6 py-4 font-semibold text-slate-900">{carga.loadId}</td>
                       <td className="px-6 py-4 text-slate-600">{carga.route || "—"}</td>

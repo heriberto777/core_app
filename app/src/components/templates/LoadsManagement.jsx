@@ -54,10 +54,11 @@ export function LoadsManagement() {
   });
   const [selectedOrderDetails, setSelectedOrderDetails] = React.useState(null);
 
-  // Carga inicial
+  // Solo metadatos (vendedores/repartidores) al entrar — los pedidos
+  // se cargan recién cuando el usuario aprieta Buscar/Sincronizar, nunca
+  // automático al abrir la pantalla.
   useEffect(() => {
     if (accessToken) {
-      actions.fetchOrders();
       actions.fetchMetadata();
     }
   }, [accessToken]);
@@ -107,19 +108,29 @@ export function LoadsManagement() {
   };
 
   const handleBulkCancel = async () => {
+    // Anular saca pedidos de circulación en CATELLI (estado = 'C') de forma
+    // irreversible desde la app — por eso el motivo es obligatorio acá, no
+    // un default fijo como antes ("Cancelación manual" sin importar quién
+    // ni por qué).
     const result = await Swal.fire({
       title: "¿Anular pedidos seleccionados?",
-      text: `Se cancelarán ${selectedOrders.length} pedidos. Esta acción no se puede deshacer.`,
+      html: `Se van a anular <b>${selectedOrders.length}</b> pedidos en el ERP. Esta acción no se puede deshacer desde la app.`,
       icon: "warning",
+      input: "textarea",
+      inputLabel: "Motivo de la anulación",
+      inputPlaceholder: "Explicá por qué se anulan estos pedidos...",
       showCancelButton: true,
       confirmButtonColor: "#ef4444",
       confirmButtonText: "Sí, anular selección",
-      cancelButtonText: "Mantener pedidos"
+      cancelButtonText: "Mantener pedidos",
+      inputValidator: (value) => {
+        if (!value || !value.trim()) return "El motivo es obligatorio.";
+      }
     });
 
     if (result.isConfirmed) {
       try {
-        await actions.cancelOrders(selectedOrders);
+        await actions.cancelOrders(selectedOrders, result.value.trim());
         showSuccess("Pedidos anulados correctamente");
       } catch (err) {
         showError("Error al anular pedidos");

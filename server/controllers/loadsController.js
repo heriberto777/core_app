@@ -292,7 +292,7 @@ class LoadsController {
 
       logger.info(`Cancelando ${selectedPedidos?.length || 0} pedidos. Razón: ${reason || "No especificada"} por ${userId}`);
 
-      const result = await LoadsService.cancelOrders(selectedPedidos, userId);
+      const result = await LoadsService.cancelOrders(selectedPedidos, userId, reason);
 
       return res.status(200).json({
         success: true,

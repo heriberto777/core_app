@@ -18,8 +18,9 @@ const cancelOrdersSchema = [
         .isArray({ min: 1 })
         .withMessage("Debe proporcionar un array de pedidos a cancelar"),
     body("reason")
-        .optional()
         .trim()
+        .notEmpty()
+        .withMessage("El motivo de la anulación es obligatorio"),
 ];
 
 const removeOrderLinesSchema = [

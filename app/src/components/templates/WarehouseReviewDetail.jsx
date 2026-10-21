@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useMemo, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { Helmet } from "react-helmet-async";
 import {
@@ -7,6 +7,7 @@ import {
   FaChevronUp,
   FaExclamationTriangle,
   FaCheckCircle,
+  FaSearch,
 } from "react-icons/fa";
 import Swal from "sweetalert2";
 import {
@@ -229,6 +230,20 @@ export function WarehouseReviewDetail() {
   const { accessToken } = useAuth();
   const { productos, loading, error, isSaving, isAuthorizing, actions } =
     useWarehouseReviewDetail(accessToken, loadId);
+  const [search, setSearch] = useState("");
+
+  const filteredProductos = useMemo(() => {
+    const term = search.trim().toLowerCase();
+    if (!term) return productos;
+    return productos.filter((producto) =>
+      producto.codigo?.toLowerCase().includes(term) ||
+      producto.descripcion?.toLowerCase().includes(term) ||
+      producto.lineas.some((linea) =>
+        linea.pedido?.toLowerCase().includes(term) ||
+        linea.cliente?.toLowerCase().includes(term)
+      )
+    );
+  }, [productos, search]);
 
   const handleAuthorize = async () => {
     const result = await Swal.fire({
@@ -296,11 +311,27 @@ export function WarehouseReviewDetail() {
           </div>
         )}
 
+        <div className="relative max-w-md">
+          <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+          <input
+            type="text"
+            value={search}
+            onChange={(e) => setSearch(e.target.value)}
+            placeholder="Buscar por producto, pedido o cliente..."
+            className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+          />
+        </div>
+
         {loading ? (
           <LoadingUI message="Cargando productos de la carga..." />
+        ) : filteredProductos.length === 0 ? (
+          <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-400 bg-white rounded-xl border border-slate-100">
+            <FaSearch className="text-4xl" />
+            <p className="font-semibold">Ningún producto coincide con la búsqueda</p>
+          </div>
         ) : (
           <div className="flex flex-col gap-3">
-            {productos.map((producto) => (
+            {filteredProductos.map((producto) => (
               <ProductoRow
                 key={producto.codigo}
                 producto={producto}
