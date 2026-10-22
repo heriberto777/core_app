@@ -236,7 +236,16 @@ class LoadsController {
         userId
       );
 
-      logger.info("Carga procesada correctamente", {
+      // LoadsService.processOrderLoad nunca tira excepción propia (captura sus
+      // errores internamente y devuelve {success:false,...}) -- este endpoint
+      // devolvía status 200 SIEMPRE, sin importar result.success. El cliente
+      // (LoadsApi.jsx) solo revisa response.ok (el status HTTP), nunca el
+      // success del body, así que un fallo real (ej. "Invalid column name")
+      // se mostraba en el frontend como "Carga enviada con éxito, Load ID:
+      // N/A" en vez de un error. Ahora el status refleja result.success.
+      const httpStatus = result.success === false ? 500 : 200;
+
+      logger.info(result.success === false ? "Carga NO procesada" : "Carga procesada correctamente", {
         operationType: "LOAD",
         entityType: "CARGA",
         entityId: result.loadId,
@@ -245,12 +254,12 @@ class LoadsController {
         durationMs: Date.now() - startTime,
         httpMethod: req.method,
         httpPath: req.originalUrl,
-        httpStatusCode: 200,
+        httpStatusCode: httpStatus,
       });
 
-      return res.status(200).json({
+      return res.status(httpStatus).json({
         success: result.success !== false,
-        message: result.message || "Proceso completado",
+        message: result.message || (result.success === false ? "Error al procesar la carga" : "Proceso completado"),
         data: {
           ...(result.data || {}),
           loadId: result.loadId,
