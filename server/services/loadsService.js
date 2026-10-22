@@ -137,9 +137,17 @@ class LoadsService {
         throw new Error(`Traspaso falló: ${traspasoResult?.mensaje || "Error desconocido"}`);
       }
 
+      // "MULTIPLE" era un texto fijo, sin importar si la carga de verdad tenía
+      // una sola bodega de origen o varias (ver bodegasOrigen más abajo, ya
+      // calculado por realizarTraspaso a partir de las bodegas reales
+      // usadas en las líneas) -- ahora se arma con el dato real.
+      const warehouseOriginLabel = traspasoResult.bodegasOrigen?.length
+        ? traspasoResult.bodegasOrigen.join(", ")
+        : "MULTIPLE";
+
       const trackingId = await LoadsTrackingService.saveTraspasoTracking(server1Connection, {
         loadId, deliveryPersonCode: tracking.route,
-        warehouseOrigin: "MULTIPLE", warehouseDestination: bodegaDestino,
+        warehouseOrigin: warehouseOriginLabel, warehouseDestination: bodegaDestino,
         ordersData, traspasoResult, userId,
       }, "completed");
 
@@ -149,7 +157,7 @@ class LoadsService {
         traspasoDocument: traspasoResult.documento_inv,
         traspasoStatus: "completed",
         traspasoTrackingId: trackingId,
-        warehouseOrigin: "MULTIPLE",
+        warehouseOrigin: warehouseOriginLabel,
         warehouseDestination: bodegaDestino,
       });
 

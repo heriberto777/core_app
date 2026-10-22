@@ -50,9 +50,15 @@ export function useLoadsManagement(accessToken) {
     const fetchMetadata = useCallback(async () => {
         if (!canRead || !accessToken) return;
         try {
+            // getSellers = vendedores de preventa (U_ESVENDEDOR='Si'), para el
+            // filtro "por vendedor" de pedidos. getDeliveryPersons = repartidores
+            // reales (U_ESVENDEDOR='Re'), para el selector de despacho -- antes
+            // esto traía el catálogo aparte de Mongo (getDeliveryPersonsFilter,
+            // usado en Traspasos) y además nadie lo conectaba al selector, que
+            // terminaba recibiendo metadata.sellers por error.
             const [sRes, dRes] = await Promise.all([
                 loadsApi.getSellers(accessToken),
-                loadsApi.getDeliveryPersonsFilter(accessToken)
+                loadsApi.getDeliveryPersons(accessToken)
             ]);
             setSellers(Array.isArray(sRes) ? sRes : sRes?.data || []);
             setDeliveryPersons(Array.isArray(dRes) ? dRes : dRes?.data || []);

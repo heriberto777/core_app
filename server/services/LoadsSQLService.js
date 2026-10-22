@@ -216,7 +216,12 @@ class LoadsSQLService {
     }
 
     /**
-     * Obtiene vendedores/repartidores activos con sus bodegas asignadas.
+     * Obtiene vendedores de preventa activos (U_ESVENDEDOR='Si') — CATELLI.VENDEDOR
+     * guarda vendedores Y repartidores en la misma tabla, distinguidos por ese
+     * flag ('Si'=vendedor, 'Re'=repartidor; ver RouteAccountsSQLService.js,
+     * donde ya estaba documentado). Antes esto no filtraba y devolvía ambos
+     * mezclados -- correcto para "filtrar pedidos por vendedor" (un pedido
+     * nunca tiene un repartidor como VENDEDOR), pero conceptualmente mal.
      */
     static async getSellers() {
         return await withConnection("server1", async (connection) => {
@@ -228,7 +233,7 @@ class LoadsSQLService {
           U_ESVENDEDOR as isVendedor,
           ACTIVO as isActive
         FROM CATELLI.VENDEDOR
-        WHERE ACTIVO = 'S'
+        WHERE ACTIVO = 'S' AND U_ESVENDEDOR = 'Si'
         ORDER BY NOMBRE
       `;
             try {
@@ -249,30 +254,55 @@ class LoadsSQLService {
         });
     }
 
-    /** Alias de getSellers — mantiene retrocompatibilidad. */
+    /**
+     * Repartidores activos (U_ESVENDEDOR='Re') — antes esto era un alias de
+     * getSellers() y devolvía vendedores de preventa mezclados con
+     * repartidores. El frontend (DeliveryPersonSelector) ya filtraba
+     * client-side por isVendedor==='Re', pero acá en el backend no había
+     * ningún filtro -- esta es la query real, separada.
+     */
     static async getDeliveryPersons() {
-        return LoadsSQLService.getSellers();
+        return await withConnection("server1", async (connection) => {
+            const query = `
+        SELECT
+          VENDEDOR as code,
+          NOMBRE as name,
+          U_BODEGA as assignedWarehouse,
+          U_ESVENDEDOR as isVendedor,
+          ACTIVO as isActive
+        FROM CATELLI.VENDEDOR
+        WHERE ACTIVO = 'S' AND U_ESVENDEDOR = 'Re'
+        ORDER BY NOMBRE
+      `;
+            const result = await DatabaseServiceAdapter.query(connection, query, {});
+            return { success: true, data: result.recordset };
+        });
     }
 
     /**
-     * Valida que el repartidor existe y está activo.
-     * Lanza error si no existe o no tiene bodega asignada.
+     * Valida que el repartidor existe, está activo y es REALMENTE un
+     * repartidor (U_ESVENDEDOR='Re'), no un vendedor de preventa cualquiera.
+     * Antes no se validaba esto acá -- el frontend filtraba el selector, pero
+     * nada impedía que una llamada directa a la API (o un selector futuro sin
+     * ese filtro) pasara el código de un vendedor normal, cuya U_BODEGA no
+     * necesariamente representa una bodega de reparto real.
+     * Lanza error si no existe, no es repartidor, o no tiene bodega asignada.
      */
     static async validateDeliveryPerson(deliveryPersonCode) {
         return await withConnection("server1", async (connection) => {
             const query = `
         SELECT
           VENDEDOR as code, NOMBRE as name,
-          U_BODEGA as assignedWarehouse, 
+          U_BODEGA as assignedWarehouse,
           U_BODEGA_CENTRAL as warehouseCentral,
           U_ESVENDEDOR as isVendedor, ACTIVO as isActive
         FROM CATELLI.VENDEDOR
-        WHERE VENDEDOR = @deliveryPersonCode AND ACTIVO = 'S'
+        WHERE VENDEDOR = @deliveryPersonCode AND ACTIVO = 'S' AND U_ESVENDEDOR = 'Re'
       `;
             const result = await DatabaseServiceAdapter.query(connection, query, { deliveryPersonCode });
 
             if (!result.recordset || result.recordset.length === 0) {
-                throw new Error(`Repartidor ${deliveryPersonCode} no encontrado o inactivo.`);
+                throw new Error(`Repartidor ${deliveryPersonCode} no encontrado, inactivo, o no está marcado como repartidor (U_ESVENDEDOR='Re').`);
             }
 
             const deliveryPerson = result.recordset[0];

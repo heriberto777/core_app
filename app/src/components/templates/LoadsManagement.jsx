@@ -267,7 +267,7 @@ export function LoadsManagement() {
           onClose={() => setModals(prev => ({ ...prev, delivery: false }))}
           onSelect={handleDeliverySelect}
           selectedOrders={orders.filter(o => selectedOrders.includes(o.pedido))}
-          deliveryPersons={metadata.sellers}
+          deliveryPersons={metadata.deliveryPersons}
           loading={loading}
         />
       </div>

@@ -89,6 +89,30 @@ class LoadsApi {
   }
 
   /**
+   * Obtiene lista de repartidores activos (CATELLI.VENDEDOR, U_ESVENDEDOR='Re')
+   * -- separado de getSellers() (vendedores de preventa) y de
+   * getDeliveryPersonsFilter() (catálogo aparte en Mongo, para Traspasos).
+   */
+  async getDeliveryPersons(accessToken) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/delivery-persons`;
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw result;
+      return result.data || result;
+    } catch (error) {
+      console.error("Error al obtener repartidores:", error);
+      throw error;
+    }
+  }
+
+  /**
    * Procesa la carga de pedidos seleccionados
    */
   async processOrderLoad(accessToken, selectedPedidos, vendedorCode) {
