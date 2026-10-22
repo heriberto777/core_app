@@ -315,7 +315,18 @@ class LoadsService {
           failedStep: step
         });
       }
-      return { success: false, message: "Error al procesar la carga", error: error.message, step };
+      // Antes "message" era un texto fijo ("Error al procesar la carga") y el
+      // detalle real quedaba solo en "error" -- el controller nunca lo leía,
+      // así que el frontend mostraba el genérico sin el motivo real. Ahora
+      // message incluye el paso y el error real (la transacción SQL ya hizo
+      // rollback de todo lo que se alcanzó a escribir -- los pedidos quedan
+      // intactos, no hay nada que "arreglar" en CATELLI por este fallo).
+      return {
+        success: false,
+        message: `No se pudo procesar la carga (paso "${step}"): ${error.message}. Si el problema persiste, contactá al administrador del sistema.`,
+        error: error.message,
+        step,
+      };
     }
   }
 
