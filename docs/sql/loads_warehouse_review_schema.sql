@@ -116,3 +116,46 @@ BEGIN
         ADD review_status VARCHAR(20) NOT NULL DEFAULT 'approved';
 END
 GO
+
+-- 3) code_warehouse_sou pasó a significar "bodega del repartidor" (destino
+--    real del traspaso, antes tomaba por error la bodega central del
+--    vendedor dueño de cada pedido). processInventoryTransfer (traspaso
+--    diferido manual) necesitaba seguir sabiendo la bodega ORIGEN real para
+--    hacer el traspaso correctamente -- se guarda aparte en esta columna
+--    nueva en server1.
+IF NOT EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID('core_app.loads_detail_staging') AND name = 'code_warehouse_orig'
+)
+BEGIN
+    ALTER TABLE core_app.loads_detail_staging
+        ADD code_warehouse_orig VARCHAR(20) NULL;
+END
+GO
+
+-- ============================================================================
+-- PENDIENTE EN SERVER2 (TELYNET) -- correr lo de abajo ahi, no en server1.
+-- ============================================================================
+-- executeTransferByLoadId (traspasoService.js, boton "Ejecutar" en Gestion de
+-- Traspasos) lee Code_Warehouse_Sou de dbo.IMPLT_loads_detail y lo usaba como
+-- bodega ORIGEN -- con el cambio de significado de arriba, ahi llegaria la
+-- bodega del repartidor en vez de la real. Hace falta:
+--   1) Esta columna nueva en dbo.IMPLT_loads_detail (server2/TELYNET):
+--
+--      IF NOT EXISTS (
+--          SELECT 1 FROM sys.columns
+--          WHERE object_id = OBJECT_ID('dbo.IMPLT_loads_detail') AND name = 'Code_Warehouse_Orig'
+--      )
+--      BEGIN
+--          ALTER TABLE dbo.IMPLT_loads_detail
+--              ADD Code_Warehouse_Orig VARCHAR(24) NULL;
+--      END
+--
+--   2) Agregar "code_warehouse_orig AS Code_Warehouse_Orig" al SELECT de la
+--      tarea Mongo "IMPLT_loads_detail" (mismo patron que "IMPLT_Orders" --
+--      pegame el query real de esa tarea y te devuelvo el texto exacto con
+--      el campo agregado, no lo edito yo directo en Mongo).
+--
+-- El codigo (traspasoService.js: executeTransferByLoadId) ya espera
+-- Code_Warehouse_Orig -- hasta que se apliquen estos dos pasos, esa funcion
+-- va a fallar o traer NULL para la bodega origen.

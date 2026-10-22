@@ -125,7 +125,7 @@ class LoadsService {
       await LoadsSQLService.insertToLoadsOrdersStaging(server1Connection, ordersData, "approved");
 
       const codeRoute = ordersData[0]?.Code_Route;
-      await LoadsSQLService.insertToLoadsDetailStaging(server1Connection, loadId, codeRoute || tracking.route, ordersData, "approved");
+      await LoadsSQLService.insertToLoadsDetailStaging(server1Connection, loadId, codeRoute || tracking.route, ordersData, bodegaDestino, "approved");
 
       const traspasoResult = await realizarTraspaso({
         route: tracking.route,
@@ -272,7 +272,7 @@ class LoadsService {
             logger.warn(`${step}: ningún cliente de la carga tiene Ruta de Reparto asignada en route_accounts_syncs — usando código de repartidor (${deliveryPersonCode}) como Code_Route de respaldo`);
           }
           logger.info(`${step}: Insertando en core_app.loads_detail_staging (Code_Route=${codeRoute || deliveryPersonCode})...`);
-          await LoadsSQLService.insertToLoadsDetailStaging(server1Connection, loadId, codeRoute || deliveryPersonCode, ordersData);
+          await LoadsSQLService.insertToLoadsDetailStaging(server1Connection, loadId, codeRoute || deliveryPersonCode, ordersData, bodegaDestino);
 
           // El traspaso de inventario (realizarTraspaso) ya no se ejecuta acá.
           // Queda pendiente de Revisión de Almacén: el operador concilia cantidades
@@ -327,12 +327,16 @@ class LoadsService {
    * processOrderLoad, mientras que server2 depende de que ya haya corrido la
    * tarea de push — si alguien reintenta el traspaso antes de esa corrida,
    * leer de server2 no encontraría nada.
+   *
+   * La bodega ORIGEN real sale de code_warehouse_orig, no de
+   * code_warehouse_sou -- ese campo pasó a significar "bodega del
+   * repartidor" (destino real del traspaso, ver insertToLoadsDetailStaging).
    */
   static async processInventoryTransfer(loadId, bodegaDestino) {
     try {
       const loadData = await withConnection("server1", async (connection) => {
         const query = `
-          SELECT code_product as codigo, quantity as cantidad, code_warehouse_sou as bodegaOrigen
+          SELECT code_product as codigo, quantity as cantidad, code_warehouse_orig as bodegaOrigen
           FROM core_app.loads_detail_staging WHERE code = @loadId
         `;
         const result = await DatabaseServiceAdapter.query(connection, query, { loadId });

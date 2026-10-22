@@ -631,8 +631,15 @@ class LoadsSQLService {
      * Inserta el resumen de la carga en core_app.loads_detail_staging (server1) —
      * mismo motivo que insertToLoadsOrdersStaging: evitar filas huerfanas en
      * server2 cuando el traspaso falla despues del insert.
+     *
+     * code_warehouse_sou = bodega del REPARTIDOR (bodegaDestino, destino real
+     * del traspaso) -- antes tomaba por error la bodega central del vendedor
+     * dueño de cada pedido (Code_Warehouse_Orig), que es la bodega ORIGEN real
+     * del traspaso, no la que recibe la mercancía. Esa bodega origen real se
+     * sigue guardando aparte en code_warehouse_orig (no se empuja a
+     * IMPLT_loads_detail, es de uso interno para processInventoryTransfer).
      */
-    static async insertToLoadsDetailStaging(connection, loadId, route, ordersData, reviewStatus = "pending") {
+    static async insertToLoadsDetailStaging(connection, loadId, route, ordersData, bodegaDestino, reviewStatus = "pending") {
         if (!ordersData || ordersData.length === 0) return;
 
         const productMap = new Map();
@@ -657,10 +664,10 @@ class LoadsSQLService {
             await DatabaseServiceAdapter.query(connection, `
         INSERT INTO core_app.loads_detail_staging (
           code, num_line, lot_group, code_product, date_load, quantity, unit_type,
-          code_warehouse_sou, code_route, source_create, transfer_status, review_status
+          code_warehouse_sou, code_warehouse_orig, code_route, source_create, transfer_status, review_status
         ) VALUES (
           @Code, @Num_Line, '999999999', @Code_Product, @Date_Load, @Quantity, 'UND',
-          @warehouseSource, @route, '0', 1, @reviewStatus
+          @warehouseSou, @warehouseOrig, @route, '0', 1, @reviewStatus
         )
       `, {
                 Code: loadId,
@@ -668,7 +675,8 @@ class LoadsSQLService {
                 Code_Product: product.Code_Product,
                 Date_Load: product.Order_Date,
                 Quantity: product.Quantity,
-                warehouseSource: product.Code_Warehouse_Orig,
+                warehouseSou: bodegaDestino || "01",
+                warehouseOrig: product.Code_Warehouse_Orig,
                 route,
                 reviewStatus
             });

@@ -881,12 +881,17 @@ async function executeTransferByLoadId(loadId, userId = null) {
   let route = "DEFAULT_ROUTE";
   try {
     // 1. Obtener salesData desde IMPLT_loads_detail
+    // Code_Warehouse_Sou es la bodega del REPARTIDOR (destino real del
+    // traspaso), no la bodega origen -- ver insertToLoadsDetailStaging en
+    // LoadsSQLService.js. La bodega origen real sale de Code_Warehouse_Orig
+    // (pendiente: agregar esa columna en dbo.IMPLT_loads_detail en server2 y
+    // que la tarea de push la incluya, ver docs/sql/loads_warehouse_review_schema.sql).
     const salesData = await withConnection("server2", async (connection) => {
       const query = `
         SELECT
           Code_Product,
           Quantity,
-          Code_Warehouse_Sou as bodega,
+          Code_Warehouse_Orig as bodega,
           Price,
           Code as Code_load
         FROM dbo.IMPLT_loads_detail
