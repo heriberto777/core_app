@@ -634,14 +634,16 @@ class LoadsSQLService {
      * mismo motivo que insertToLoadsOrdersStaging: evitar filas huerfanas en
      * server2 cuando el traspaso falla despues del insert.
      *
-     * code_warehouse_sou = bodega del REPARTIDOR (bodegaDestino, destino real
-     * del traspaso) -- antes tomaba por error la bodega central del vendedor
-     * dueño de cada pedido (Code_Warehouse_Orig), que es la bodega ORIGEN real
-     * del traspaso, no la que recibe la mercancía. Esa bodega origen real se
-     * sigue guardando aparte en code_warehouse_orig (no se empuja a
-     * IMPLT_loads_detail, es de uso interno para processInventoryTransfer).
+     * code_warehouse_sou = bodega de ORIGEN real (de donde sale la mercadería
+     * físicamente) -- se probó por un momento usar acá la bodega del
+     * repartidor, pero el usuario corrigió: Code_Warehouse_Sou tiene que ser
+     * el origen. ordersData ya trae el valor correcto en Code_Warehouse_Orig
+     * -- en el despacho inicial, la inferencia automática; al autorizar, lo
+     * que haya confirmado el operador en el selector de Revisión de Almacén
+     * (ver authorizeDispatch), que pisa Code_Warehouse_Orig en todas las
+     * líneas antes de llegar acá.
      */
-    static async insertToLoadsDetailStaging(connection, loadId, route, ordersData, bodegaDestino, reviewStatus = "pending") {
+    static async insertToLoadsDetailStaging(connection, loadId, route, ordersData, reviewStatus = "pending") {
         if (!ordersData || ordersData.length === 0) return;
 
         const productMap = new Map();
@@ -666,10 +668,10 @@ class LoadsSQLService {
             await DatabaseServiceAdapter.query(connection, `
         INSERT INTO core_app.loads_detail_staging (
           code, num_line, lot_group, code_product, date_load, quantity, unit_type,
-          code_warehouse_sou, code_warehouse_orig, code_route, source_create, transfer_status, review_status
+          code_warehouse_sou, code_route, source_create, transfer_status, review_status
         ) VALUES (
           @Code, @Num_Line, '999999999', @Code_Product, @Date_Load, @Quantity, 'UND',
-          @warehouseSou, @warehouseOrig, @route, '0', 1, @reviewStatus
+          @warehouseSou, @route, '0', 1, @reviewStatus
         )
       `, {
                 Code: loadId,
@@ -677,8 +679,7 @@ class LoadsSQLService {
                 Code_Product: product.Code_Product,
                 Date_Load: product.Order_Date,
                 Quantity: product.Quantity,
-                warehouseSou: bodegaDestino || "01",
-                warehouseOrig: product.Code_Warehouse_Orig,
+                warehouseSou: product.Code_Warehouse_Orig,
                 route,
                 reviewStatus
             });
@@ -801,24 +802,41 @@ class LoadsSQLService {
                 });
             }
 
-            // Bodega de origen sugerida: la más frecuente entre las líneas de
-            // la carga (U_BODEGA_CENTRAL del vendedor dueño de cada pedido,
-            // mismo criterio que getTransformedOrdersData) -- es solo una
-            // sugerencia para precargar el selector en Revisión de Almacén,
-            // el operador la confirma o la cambia antes de autorizar (ver
-            // authorizeDispatch, que valida contra CATELLI.BODEGA).
-            const bodegaSugeridaResult = await DatabaseServiceAdapter.query(connection, `
-        SELECT TOP 1 v.U_BODEGA_CENTRAL AS bodega, COUNT(*) AS cantidad
+            // Bodegas de origen detectadas: la bodega propia de cada línea
+            // (pl.BODEGA) SOLO cuando esa línea es la "regular" (CANTIDAD_PEDIDA
+            // <> 0) -- las líneas de oferta/bonificación pueden tener su propia
+            // BODEGA (ej. una bodega de oferta aparte) que no representa de
+            // dónde sale la mercadería real, así que se ignoran. Si un mismo
+            // pedido no tiene ninguna línea regular con bodega (caso raro), cae
+            // a U_BODEGA_CENTRAL del vendedor como respaldo. Esto es solo para
+            // sugerir/poblar el selector en Revisión de Almacén -- el operador
+            // confirma o cambia antes de autorizar (ver authorizeDispatch, que
+            // valida contra CATELLI.BODEGA de todas formas).
+            const bodegasDetectadasResult = await DatabaseServiceAdapter.query(connection, `
+        SELECT pl.BODEGA AS bodega, COUNT(*) AS cantidad
         FROM CATELLI.PEDIDO_LINEA pl
         INNER JOIN CATELLI.PEDIDO pe ON pe.PEDIDO = pl.PEDIDO
-        LEFT JOIN CATELLI.VENDEDOR v ON v.VENDEDOR = pe.VENDEDOR
-        WHERE pe.U_Code_Load = @loadId AND pl.CANTIDAD_PEDIDA <> 0 AND v.U_BODEGA_CENTRAL IS NOT NULL
-        GROUP BY v.U_BODEGA_CENTRAL
+        WHERE pe.U_Code_Load = @loadId AND pl.CANTIDAD_PEDIDA <> 0 AND pl.BODEGA IS NOT NULL
+        GROUP BY pl.BODEGA
         ORDER BY COUNT(*) DESC
       `, { loadId });
-            const bodegaOrigenSugerida = bodegaSugeridaResult.recordset[0]?.bodega || null;
+            const bodegasDetectadas = bodegasDetectadasResult.recordset.map((r) => r.bodega);
 
-            return { loadId, bodegaOrigenSugerida, productos: Array.from(productosMap.values()) };
+            let bodegaOrigenSugerida = bodegasDetectadas[0] || null;
+            if (!bodegaOrigenSugerida) {
+                const bodegaVendedorResult = await DatabaseServiceAdapter.query(connection, `
+          SELECT TOP 1 v.U_BODEGA_CENTRAL AS bodega, COUNT(*) AS cantidad
+          FROM CATELLI.PEDIDO_LINEA pl
+          INNER JOIN CATELLI.PEDIDO pe ON pe.PEDIDO = pl.PEDIDO
+          LEFT JOIN CATELLI.VENDEDOR v ON v.VENDEDOR = pe.VENDEDOR
+          WHERE pe.U_Code_Load = @loadId AND pl.CANTIDAD_PEDIDA <> 0 AND v.U_BODEGA_CENTRAL IS NOT NULL
+          GROUP BY v.U_BODEGA_CENTRAL
+          ORDER BY COUNT(*) DESC
+        `, { loadId });
+                bodegaOrigenSugerida = bodegaVendedorResult.recordset[0]?.bodega || null;
+            }
+
+            return { loadId, bodegasDetectadas, bodegaOrigenSugerida, productos: Array.from(productosMap.values()) };
         });
     }
 

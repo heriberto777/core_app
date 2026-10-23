@@ -228,9 +228,18 @@ export function WarehouseReviewDetail() {
   const { loadId } = useParams();
   const navigate = useNavigate();
   const { accessToken } = useAuth();
-  const { productos, loading, error, isSaving, isAuthorizing, warehouses, bodegaOrigen, actions } =
+  const { productos, loading, error, isSaving, isAuthorizing, warehouses, bodegasDetectadas, bodegaOrigen, actions } =
     useWarehouseReviewDetail(accessToken, loadId);
   const [search, setSearch] = useState("");
+
+  // El catálogo completo (getWarehouses) queda como alternativa por si
+  // ninguna detectada es la correcta -- pero las detectadas en las líneas
+  // regulares de esta carga (sin contar las de oferta/bonificación) van
+  // primero y resaltadas, para que el operador no tenga que buscarlas.
+  const otrasBodegas = useMemo(
+    () => warehouses.filter((w) => !bodegasDetectadas.includes(w.code)),
+    [warehouses, bodegasDetectadas]
+  );
 
   const filteredProductos = useMemo(() => {
     const term = search.trim().toLowerCase();
@@ -343,11 +352,25 @@ export function WarehouseReviewDetail() {
               className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
             >
               <option value="">Seleccionar...</option>
-              {warehouses.map((w) => (
-                <option key={w.code} value={w.code}>
-                  {w.code} — {w.name}
-                </option>
-              ))}
+              {bodegasDetectadas.length > 0 && (
+                <optgroup label="Detectadas en esta carga">
+                  {bodegasDetectadas.map((code) => {
+                    const w = warehouses.find((wh) => wh.code === code);
+                    return (
+                      <option key={code} value={code}>
+                        {code}{w ? ` — ${w.name}` : ""}
+                      </option>
+                    );
+                  })}
+                </optgroup>
+              )}
+              <optgroup label={bodegasDetectadas.length > 0 ? "Todas las bodegas" : "Bodegas"}>
+                {(bodegasDetectadas.length > 0 ? otrasBodegas : warehouses).map((w) => (
+                  <option key={w.code} value={w.code}>
+                    {w.code} — {w.name}
+                  </option>
+                ))}
+              </optgroup>
             </select>
           </div>
         </div>

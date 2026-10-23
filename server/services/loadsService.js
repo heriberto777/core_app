@@ -121,9 +121,10 @@ class LoadsService {
       const ordersData = await LoadsSQLService.getTransformedOrdersData(server1Connection, selectedPedidos, loadId);
 
       // Bodega de origen: Almacén la confirma o la cambia en Revisión de
-      // Almacén (sugerida automáticamente a partir de U_BODEGA_CENTRAL, ver
-      // getLoadReviewDetail) en vez de confiar ciegamente en esa inferencia
-      // -- ya nos jugó en contra una vez. Si viene, se valida contra
+      // Almacén (sugerida automáticamente a partir de las bodegas reales en
+      // las líneas regulares de la carga, ignorando las de oferta/
+      // bonificación -- ver getLoadReviewDetail) en vez de confiar
+      // ciegamente en una inferencia indirecta. Si viene, se valida contra
       // CATELLI.BODEGA y se aplica a TODAS las líneas de la carga.
       if (bodegaOrigen) {
         const bodegaValidation = await DatabaseServiceAdapter.query(server1Connection,
@@ -140,7 +141,7 @@ class LoadsService {
       await LoadsSQLService.insertToLoadsOrdersStaging(server1Connection, ordersData, "approved");
 
       const codeRoute = ordersData[0]?.Code_Route;
-      await LoadsSQLService.insertToLoadsDetailStaging(server1Connection, loadId, codeRoute || tracking.route, ordersData, bodegaDestino, "approved");
+      await LoadsSQLService.insertToLoadsDetailStaging(server1Connection, loadId, codeRoute || tracking.route, ordersData, "approved");
 
       const traspasoResult = await realizarTraspaso({
         route: tracking.route,
@@ -287,7 +288,7 @@ class LoadsService {
             logger.warn(`${step}: ningún cliente de la carga tiene Ruta de Reparto asignada en route_accounts_syncs — usando código de repartidor (${deliveryPersonCode}) como Code_Route de respaldo`);
           }
           logger.info(`${step}: Insertando en core_app.loads_detail_staging (Code_Route=${codeRoute || deliveryPersonCode})...`);
-          await LoadsSQLService.insertToLoadsDetailStaging(server1Connection, loadId, codeRoute || deliveryPersonCode, ordersData, bodegaDestino);
+          await LoadsSQLService.insertToLoadsDetailStaging(server1Connection, loadId, codeRoute || deliveryPersonCode, ordersData);
 
           // El traspaso de inventario (realizarTraspaso) ya no se ejecuta acá.
           // Queda pendiente de Revisión de Almacén: el operador concilia cantidades
@@ -354,15 +355,14 @@ class LoadsService {
    * tarea de push — si alguien reintenta el traspaso antes de esa corrida,
    * leer de server2 no encontraría nada.
    *
-   * La bodega ORIGEN real sale de code_warehouse_orig, no de
-   * code_warehouse_sou -- ese campo pasó a significar "bodega del
-   * repartidor" (destino real del traspaso, ver insertToLoadsDetailStaging).
+   * code_warehouse_sou es la bodega de ORIGEN real (de donde sale la
+   * mercadería).
    */
   static async processInventoryTransfer(loadId, bodegaDestino) {
     try {
       const loadData = await withConnection("server1", async (connection) => {
         const query = `
-          SELECT code_product as codigo, quantity as cantidad, code_warehouse_orig as bodegaOrigen
+          SELECT code_product as codigo, quantity as cantidad, code_warehouse_sou as bodegaOrigen
           FROM core_app.loads_detail_staging WHERE code = @loadId
         `;
         const result = await DatabaseServiceAdapter.query(connection, query, { loadId });

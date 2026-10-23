@@ -98,6 +98,7 @@ export function useWarehouseReviewDetail(accessToken, loadId) {
         isSaving,
         isAuthorizing,
         warehouses,
+        bodegasDetectadas: data?.bodegasDetectadas || [],
         bodegaOrigen,
         actions: {
             refresh: fetchData,

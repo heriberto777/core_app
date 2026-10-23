@@ -881,10 +881,8 @@ async function executeTransferByLoadId(loadId, userId = null) {
   let route = "DEFAULT_ROUTE";
   try {
     // 1. Obtener salesData desde IMPLT_loads_detail
-    // Code_Warehouse_Sou es la bodega del REPARTIDOR -- acá es justo lo que
-    // corresponde: este traspaso mueve lo que está en la bodega del
-    // repartidor hacia bodega_destino ("02"), no repite el traspaso
-    // origen->repartidor original.
+    // Code_Warehouse_Sou es la bodega de ORIGEN real (de donde sale la
+    // mercadería) -- este traspaso mueve desde ahí hacia bodega_destino ("02").
     const salesData = await withConnection("server2", async (connection) => {
       const query = `
         SELECT

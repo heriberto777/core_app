@@ -117,26 +117,24 @@ BEGIN
 END
 GO
 
--- 3) code_warehouse_sou pasó a significar "bodega del repartidor" (destino
---    real del traspaso, antes tomaba por error la bodega central del
---    vendedor dueño de cada pedido). processInventoryTransfer (traspaso
---    diferido manual, server1) necesitaba seguir sabiendo la bodega ORIGEN
---    real para hacer el traspaso correctamente -- se guarda aparte en esta
---    columna nueva, SOLO en server1 (core_app.loads_detail_staging). No se
---    lleva a server2/IMPLT_loads_detail -- ahí lo único que se llena es
---    Code_Warehouse_Sou (la bodega del repartidor), que es lo que ya
---    consume executeTransferByLoadId (traspasoService.js) para mover
---    inventario desde la bodega del repartidor hacia bodega_destino -- eso
---    queda bien con el significado nuevo, sin tocar nada en server2.
-IF NOT EXISTS (
-    SELECT 1 FROM sys.columns
-    WHERE object_id = OBJECT_ID('core_app.loads_detail_staging') AND name = 'code_warehouse_orig'
-)
-BEGIN
-    ALTER TABLE core_app.loads_detail_staging
-        ADD code_warehouse_orig VARCHAR(20) NULL;
-END
-GO
+-- 3) DEPRECADO / SIN USO. Se probó por un momento que code_warehouse_sou
+--    significara "bodega del repartidor" (destino), y esta columna se creó
+--    para guardar la bodega de ORIGEN real aparte. El usuario corrigió esa
+--    decisión: code_warehouse_sou volvió a ser la bodega ORIGEN real (su
+--    significado de siempre). code_warehouse_orig ya no se llena
+--    (insertToLoadsDetailStaging dejó de escribirla) ni se lee
+--    (processInventoryTransfer volvió a leer code_warehouse_sou). Si ya la
+--    corriste en algún ambiente, no hace falta revertirla -- queda como
+--    columna huérfana, sin impacto. No correr este bloque de nuevo.
+-- IF NOT EXISTS (
+--     SELECT 1 FROM sys.columns
+--     WHERE object_id = OBJECT_ID('core_app.loads_detail_staging') AND name = 'code_warehouse_orig'
+-- )
+-- BEGIN
+--     ALTER TABLE core_app.loads_detail_staging
+--         ADD code_warehouse_orig VARCHAR(20) NULL;
+-- END
+-- GO
 
 -- 4) Order_Num_Cli vuelve a ser PEDIDO (como era antes de un cambio reciente
 --    mal informado); RUBRO2 pasa a un campo NUEVO, Order_Alt_Num -- no un
@@ -171,42 +169,42 @@ GO
 --      "IMPLT_Orders", despues de la linea "order_num_cli AS Order_Num_Cli".
 --      Texto completo de la query actualizada:
 --
---      SELECT
---        code_load          AS Code_load,
---        num_line           AS Num_Line,
---        code_unit_org       AS Code_Unit_Org,
---        code_sales_org      AS Code_Sales_Org,
---        order_num_ofclient  AS Order_Num_ofClient,
---        order_num           AS Order_Num,
---        type_rec            AS Type_Rec,
---        date_delivery       AS Date_Delivery,
---        order_date          AS Order_Date,
---        code_account        AS Code_Account,
---        code_product        AS Code_Product,
---        lot_number          AS Lot_Number,
---        quantity            AS Quantity,
---        quantity_order      AS Quantity_Order,
---        unit_measure        AS Unit_Measure,
---        price_br            AS Price_Br,
---        price               AS Price,
---        total_amount        AS Total_Amount,
---        por_discount1       AS Por_Discount1,
---        amount_discount1    AS Amount_Discount1,
---        por_tax1            AS Por_Tax1,
---        amount_tax1         AS Amount_Tax1,
---        por_tax2            AS Por_Tax2,
---        amount_tax2         AS Amount_Tax2,
---        code_currency       AS Code_Currency,
---        secuence            AS Secuence,
---        order_num_cli       AS Order_Num_Cli,
---        order_alt_num       AS Order_Alt_Num,
---        CASE
---             WHEN code_seller NOT LIKE '%[A-Z]%' THEN 'C' + code_seller   -- puramente numerico
---              ELSE code_seller                                              -- tiene alguna letra: sin cambio
---        END AS Code_Seller,
---        sale_type           AS Sale_Type,
---        code_address        AS Code_Address,
---        transport           AS Transport,
---        transfer_status     AS Transfer_status
---      FROM core_app.loads_orders_staging
---      WHERE transfer_status = 1 AND review_status = 'approved'
+     SELECT
+       code_load          AS Code_load,
+       num_line           AS Num_Line,
+       code_unit_org       AS Code_Unit_Org,
+       code_sales_org      AS Code_Sales_Org,
+       order_num_ofclient  AS Order_Num_ofClient,
+       order_num           AS Order_Num,
+       type_rec            AS Type_Rec,
+       date_delivery       AS Date_Delivery,
+       order_date          AS Order_Date,
+       code_account        AS Code_Account,
+       code_product        AS Code_Product,
+       lot_number          AS Lot_Number,
+       quantity            AS Quantity,
+       quantity_order      AS Quantity_Order,
+       unit_measure        AS Unit_Measure,
+       price_br            AS Price_Br,
+       price               AS Price,
+       total_amount        AS Total_Amount,
+       por_discount1       AS Por_Discount1,
+       amount_discount1    AS Amount_Discount1,
+       por_tax1            AS Por_Tax1,
+       amount_tax1         AS Amount_Tax1,
+       por_tax2            AS Por_Tax2,
+       amount_tax2         AS Amount_Tax2,
+       code_currency       AS Code_Currency,
+       secuence            AS Secuence,
+       order_num_cli       AS Order_Num_Cli,
+       order_alt_num       AS Order_Alt_Num,
+       CASE
+            WHEN code_seller NOT LIKE '%[A-Z]%' THEN 'C' + code_seller   -- puramente numerico
+             ELSE code_seller                                              -- tiene alguna letra: sin cambio
+       END AS Code_Seller,
+       sale_type           AS Sale_Type,
+       code_address        AS Code_Address,
+       transport           AS Transport,
+       transfer_status     AS Transfer_status
+     FROM core_app.loads_orders_staging
+     WHERE transfer_status = 1 AND review_status = 'approved'
