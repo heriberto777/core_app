@@ -137,3 +137,76 @@ BEGIN
         ADD code_warehouse_orig VARCHAR(20) NULL;
 END
 GO
+
+-- 4) Order_Num_Cli vuelve a ser PEDIDO (como era antes de un cambio reciente
+--    mal informado); RUBRO2 pasa a un campo NUEVO, Order_Alt_Num -- no un
+--    reemplazo de Order_Num_Cli. Columna nueva en server1.
+IF NOT EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID('core_app.loads_orders_staging') AND name = 'order_alt_num'
+)
+BEGIN
+    ALTER TABLE core_app.loads_orders_staging
+        ADD order_alt_num VARCHAR(20) NULL;
+END
+GO
+
+-- ============================================================================
+-- PENDIENTE EN SERVER2 (TELYNET) -- correr esto ahi, no en server1.
+-- ============================================================================
+-- dbo.IMPLT_Orders no tiene columna para Order_Alt_Num todavia (confirmado
+-- con el usuario). Hace falta:
+--   1) Esta columna nueva en dbo.IMPLT_Orders (server2/TELYNET):
+--
+--      IF NOT EXISTS (
+--          SELECT 1 FROM sys.columns
+--          WHERE object_id = OBJECT_ID('dbo.IMPLT_Orders') AND name = 'Order_Alt_Num'
+--      )
+--      BEGIN
+--          ALTER TABLE dbo.IMPLT_Orders
+--              ADD Order_Alt_Num VARCHAR(20) NULL;
+--      END
+--
+--   2) Agregar "order_alt_num AS Order_Alt_Num" al SELECT de la tarea Mongo
+--      "IMPLT_Orders", despues de la linea "order_num_cli AS Order_Num_Cli".
+--      Texto completo de la query actualizada:
+--
+--      SELECT
+--        code_load          AS Code_load,
+--        num_line           AS Num_Line,
+--        code_unit_org       AS Code_Unit_Org,
+--        code_sales_org      AS Code_Sales_Org,
+--        order_num_ofclient  AS Order_Num_ofClient,
+--        order_num           AS Order_Num,
+--        type_rec            AS Type_Rec,
+--        date_delivery       AS Date_Delivery,
+--        order_date          AS Order_Date,
+--        code_account        AS Code_Account,
+--        code_product        AS Code_Product,
+--        lot_number          AS Lot_Number,
+--        quantity            AS Quantity,
+--        quantity_order      AS Quantity_Order,
+--        unit_measure        AS Unit_Measure,
+--        price_br            AS Price_Br,
+--        price               AS Price,
+--        total_amount        AS Total_Amount,
+--        por_discount1       AS Por_Discount1,
+--        amount_discount1    AS Amount_Discount1,
+--        por_tax1            AS Por_Tax1,
+--        amount_tax1         AS Amount_Tax1,
+--        por_tax2            AS Por_Tax2,
+--        amount_tax2         AS Amount_Tax2,
+--        code_currency       AS Code_Currency,
+--        secuence            AS Secuence,
+--        order_num_cli       AS Order_Num_Cli,
+--        order_alt_num       AS Order_Alt_Num,
+--        CASE
+--             WHEN code_seller NOT LIKE '%[A-Z]%' THEN 'C' + code_seller   -- puramente numerico
+--              ELSE code_seller                                              -- tiene alguna letra: sin cambio
+--        END AS Code_Seller,
+--        sale_type           AS Sale_Type,
+--        code_address        AS Code_Address,
+--        transport           AS Transport,
+--        transfer_status     AS Transfer_status
+--      FROM core_app.loads_orders_staging
+--      WHERE transfer_status = 1 AND review_status = 'approved'

@@ -566,7 +566,9 @@ class LoadsSQLService {
         CAST(TotalAmount * (PORC_IMPUESTO1 / 100.0) AS NUMERIC(11,3)) AS Amount_Tax1,
         CAST(PORC_IMPUESTO2 AS NUMERIC(5,2)) AS Por_Tax2,
         CAST(TotalAmount * (PORC_IMPUESTO2 / 100.0) AS NUMERIC(11,3)) AS Amount_Tax2,
-        'RD' AS Code_Currency, '0' AS Secuence, RUBRO2 AS Order_Num_Cli,
+        -- Order_Num_Cli vuelve a ser PEDIDO (como era originalmente); RUBRO2
+        -- pasa a Order_Alt_Num, un campo nuevo aparte -- no un reemplazo.
+        'RD' AS Code_Currency, '0' AS Secuence, PEDIDO AS Order_Num_Cli, RUBRO2 AS Order_Alt_Num,
         VENDEDOR AS Code_Seller, CASE WHEN TIPO_LINEA = 'B' THEN '1' ELSE '0' END AS Sale_Type,
         detalle_direccion AS Code_Address, '00' AS Transport, 1 AS Transfer_status,
         BODEGA_ORIGEN_REAL AS Code_Warehouse_Orig,
@@ -600,14 +602,14 @@ class LoadsSQLService {
           type_rec, date_delivery, order_date, code_account, code_product,
           lot_number, quantity, quantity_order, unit_measure, price_br, price,
           total_amount, por_discount1, amount_discount1, por_tax1, amount_tax1,
-          por_tax2, amount_tax2, code_currency, secuence, order_num_cli,
+          por_tax2, amount_tax2, code_currency, secuence, order_num_cli, order_alt_num,
           code_seller, sale_type, code_address, transport, transfer_status, review_status
         ) VALUES (
           @Code_load, @Num_Line, @Code_Unit_Org, @Code_Sales_Org, @Order_Num_ofClient, @Order_Num,
           @Type_Rec, @Date_Delivery, @Order_Date, @Code_Account, @Code_Product,
           @Lot_Number, @Quantity, @Quantity_Order, @Unit_Measure, @Price_Br, @Price,
           @Total_Amount, @Por_Discount1, @Amount_Discount1, @Por_Tax1, @Amount_Tax1,
-          @Por_Tax2, @Amount_Tax2, @Code_Currency, @Secuence, @Order_Num_Cli,
+          @Por_Tax2, @Amount_Tax2, @Code_Currency, @Secuence, @Order_Num_Cli, @Order_Alt_Num,
           @Code_Seller, @Sale_Type, @Code_Address, @Transport, @Transfer_status, @Review_status
         )
       `, { ...order, Review_status: reviewStatus });
@@ -799,7 +801,24 @@ class LoadsSQLService {
                 });
             }
 
-            return { loadId, productos: Array.from(productosMap.values()) };
+            // Bodega de origen sugerida: la más frecuente entre las líneas de
+            // la carga (U_BODEGA_CENTRAL del vendedor dueño de cada pedido,
+            // mismo criterio que getTransformedOrdersData) -- es solo una
+            // sugerencia para precargar el selector en Revisión de Almacén,
+            // el operador la confirma o la cambia antes de autorizar (ver
+            // authorizeDispatch, que valida contra CATELLI.BODEGA).
+            const bodegaSugeridaResult = await DatabaseServiceAdapter.query(connection, `
+        SELECT TOP 1 v.U_BODEGA_CENTRAL AS bodega, COUNT(*) AS cantidad
+        FROM CATELLI.PEDIDO_LINEA pl
+        INNER JOIN CATELLI.PEDIDO pe ON pe.PEDIDO = pl.PEDIDO
+        LEFT JOIN CATELLI.VENDEDOR v ON v.VENDEDOR = pe.VENDEDOR
+        WHERE pe.U_Code_Load = @loadId AND pl.CANTIDAD_PEDIDA <> 0 AND v.U_BODEGA_CENTRAL IS NOT NULL
+        GROUP BY v.U_BODEGA_CENTRAL
+        ORDER BY COUNT(*) DESC
+      `, { loadId });
+            const bodegaOrigenSugerida = bodegaSugeridaResult.recordset[0]?.bodega || null;
+
+            return { loadId, bodegaOrigenSugerida, productos: Array.from(productosMap.values()) };
         });
     }
 

@@ -92,7 +92,7 @@ class LoadsService {
    * "pendingWarehouseReview" se rechaza acá, antes de tocar nada — evita
    * generar un segundo TRA###### si alguien reintenta autorizar la misma carga.
    */
-  static async authorizeDispatch(loadId, userId) {
+  static async authorizeDispatch(loadId, userId, bodegaOrigen) {
     const tracking = await LoadsTrackingService.getByLoadId(loadId);
     if (!tracking) {
       throw new Error(`Carga ${loadId} no encontrada`);
@@ -119,6 +119,21 @@ class LoadsService {
       }
 
       const ordersData = await LoadsSQLService.getTransformedOrdersData(server1Connection, selectedPedidos, loadId);
+
+      // Bodega de origen: Almacén la confirma o la cambia en Revisión de
+      // Almacén (sugerida automáticamente a partir de U_BODEGA_CENTRAL, ver
+      // getLoadReviewDetail) en vez de confiar ciegamente en esa inferencia
+      // -- ya nos jugó en contra una vez. Si viene, se valida contra
+      // CATELLI.BODEGA y se aplica a TODAS las líneas de la carga.
+      if (bodegaOrigen) {
+        const bodegaValidation = await DatabaseServiceAdapter.query(server1Connection,
+          `SELECT BODEGA FROM CATELLI.BODEGA WHERE BODEGA = @bodegaOrigen`, { bodegaOrigen });
+        if (!bodegaValidation.recordset || bodegaValidation.recordset.length === 0) {
+          throw new Error(`La bodega de origen "${bodegaOrigen}" no existe en CATELLI.BODEGA`);
+        }
+        ordersData.forEach((order) => { order.Code_Warehouse_Orig = bodegaOrigen; });
+      }
+
       const traspasoData = LoadsSQLService.prepareTraspasoData(ordersData, bodegaDestino);
 
       await LoadsSQLService.clearStagingForLoad(server1Connection, loadId);

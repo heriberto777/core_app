@@ -271,7 +271,7 @@ class LoadsApi {
   /**
    * Autoriza el despacho de una carga en Revisión de Almacén.
    */
-  async authorizeDispatch(accessToken, loadId) {
+  async authorizeDispatch(accessToken, loadId, bodegaOrigen) {
     try {
       const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/review/${loadId}/authorize`;
 
@@ -281,6 +281,7 @@ class LoadsApi {
           Authorization: `Bearer ${accessToken}`,
           "Content-Type": "application/json",
         },
+        body: JSON.stringify({ bodegaOrigen }),
       });
 
       const result = await response.json();

@@ -76,6 +76,17 @@ const lineAdjustmentSchema = [
         .trim(),
 ];
 
+const authorizeDispatchSchema = [
+    param("loadId")
+        .notEmpty()
+        .withMessage("El loadId es requerido en la URL"),
+    body("bodegaOrigen")
+        .optional()
+        .trim()
+        .notEmpty()
+        .withMessage("bodegaOrigen no puede ser una cadena vacía si se envía"),
+];
+
 const historySchema = [
     query("page")
         .optional()
@@ -97,4 +108,5 @@ module.exports = {
     deliveryPersonSchema,
     historySchema,
     lineAdjustmentSchema,
+    authorizeDispatchSchema,
 };

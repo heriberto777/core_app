@@ -228,7 +228,7 @@ export function WarehouseReviewDetail() {
   const { loadId } = useParams();
   const navigate = useNavigate();
   const { accessToken } = useAuth();
-  const { productos, loading, error, isSaving, isAuthorizing, actions } =
+  const { productos, loading, error, isSaving, isAuthorizing, warehouses, bodegaOrigen, actions } =
     useWarehouseReviewDetail(accessToken, loadId);
   const [search, setSearch] = useState("");
 
@@ -246,6 +246,16 @@ export function WarehouseReviewDetail() {
   }, [productos, search]);
 
   const handleAuthorize = async () => {
+    if (!bodegaOrigen) {
+      Swal.fire({
+        icon: "warning",
+        title: "Falta la bodega de origen",
+        text: "Elegí de qué bodega sale la mercadería antes de autorizar el despacho.",
+        confirmButtonColor: "#6366f1",
+      });
+      return;
+    }
+
     const result = await Swal.fire({
       title: "¿Autorizar despacho?",
       text: "Se va a generar el traspaso de inventario real para esta carga. Esta acción no se puede deshacer.",
@@ -311,15 +321,35 @@ export function WarehouseReviewDetail() {
           </div>
         )}
 
-        <div className="relative max-w-md">
-          <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
-          <input
-            type="text"
-            value={search}
-            onChange={(e) => setSearch(e.target.value)}
-            placeholder="Buscar por producto, pedido o cliente..."
-            className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
-          />
+        <div className="flex flex-col md:flex-row gap-4">
+          <div className="relative flex-1 max-w-md">
+            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <input
+              type="text"
+              value={search}
+              onChange={(e) => setSearch(e.target.value)}
+              placeholder="Buscar por producto, pedido o cliente..."
+              className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+            />
+          </div>
+
+          <div className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 flex items-center gap-3">
+            <label className="text-xs font-bold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+              Bodega de origen
+            </label>
+            <select
+              value={bodegaOrigen}
+              onChange={(e) => actions.setBodegaOrigen(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+            >
+              <option value="">Seleccionar...</option>
+              {warehouses.map((w) => (
+                <option key={w.code} value={w.code}>
+                  {w.code} — {w.name}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
 
         {loading ? (

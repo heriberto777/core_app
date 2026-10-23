@@ -529,6 +529,7 @@ class LoadsController {
   static async authorizeDispatch(req, res) {
     try {
       const { loadId } = req.params;
+      const { bodegaOrigen } = req.body || {};
       const userId = req.user?.user_id || req.user?._id || "SYSTEM";
 
       logger.info("Autorizando despacho de carga", {
@@ -536,11 +537,12 @@ class LoadsController {
         entityType: "CARGA",
         entityId: loadId,
         userId,
+        bodegaOrigen,
         httpMethod: req.method,
         httpPath: req.originalUrl,
       });
 
-      const result = await LoadsService.authorizeDispatch(loadId, userId);
+      const result = await LoadsService.authorizeDispatch(loadId, userId, bodegaOrigen);
 
       return res.status(200).json({
         success: true,
