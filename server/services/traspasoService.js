@@ -42,9 +42,10 @@ async function obtenerDetalleProductos(connection, productos) {
       }));
     }
 
+    const schema = await DatabaseServiceAdapter.getErpSchema("server1");
     const query = `
       SELECT ARTICULO, DESCRIPCION
-      FROM CATELLI.ARTICULO
+      FROM ${schema}.ARTICULO
       WHERE ARTICULO IN (${placeholders.join(", ")})
     `;
 
@@ -89,12 +90,13 @@ async function validateBodega(connection, bodegaCode) {
 
   try {
     // ✅ USAR SqlService DIRECTAMENTE
+    const schema = await DatabaseServiceAdapter.getErpSchema("server1");
     const bodegaQuery = `
       SELECT
         BODEGA as code,
         NOMBRE as description,
         'S' as isActive
-      FROM CATELLI.BODEGA
+      FROM ${schema}.BODEGA
       WHERE BODEGA = @bodega
     `;
 
@@ -123,9 +125,10 @@ async function validateBodega(connection, bodegaCode) {
  */
 async function getValidLocation(connection, bodega) {
   try {
+    const schema = await DatabaseServiceAdapter.getErpSchema("server1");
     const query = `
       SELECT TOP 1 LOCALIZACION
-      FROM CATELLI.LOCALIZACION
+      FROM ${schema}.LOCALIZACION
       WHERE BODEGA = @bodega
       ORDER BY LOCALIZACION ASC
     `;
@@ -239,9 +242,10 @@ async function validateConsecutivoAvailable(connection) {
   };
 
   try {
+    const schema = await DatabaseServiceAdapter.getErpSchema("server1");
     const query = `
       SELECT TOP 1 SIGUIENTE_CONSEC
-      FROM CATELLI.CONSECUTIVO_CI
+      FROM ${schema}.CONSECUTIVO_CI
       WHERE CONSECUTIVO LIKE 'TR%'
       ORDER BY CONSECUTIVO DESC
     `;
@@ -271,9 +275,10 @@ async function validateBodegas(connection, bodegaOrigen, bodegaDestino) {
   };
 
   try {
+    const schema = await DatabaseServiceAdapter.getErpSchema("server1");
     const query = `
       SELECT BODEGA, NOMBRE, 'S' AS ACTIVA
-      FROM CATELLI.BODEGA
+      FROM ${schema}.BODEGA
       WHERE BODEGA IN (@bodegaOrigen, @bodegaDestino)
     `;
 
@@ -399,6 +404,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
 
     // 3. Ejecutar traspaso
     return await withConnection("server1", async (connection) => {
+      const schema = await DatabaseServiceAdapter.getErpSchema("server1");
       // Determinar localización válida para bodega destino (común para todas las líneas si bodega_destino es fija)
       const locDestinoValida = await getValidLocation(connection, bodega_destino);
       logger.info(`Localización destino resuelta: ${locDestinoValida} para bodega ${bodega_destino}`);
@@ -409,7 +415,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
       // Generar consecutivo
       const consultaConsecutivo = `
         SELECT TOP 1 SIGUIENTE_CONSEC
-        FROM CATELLI.CONSECUTIVO_CI
+        FROM ${schema}.CONSECUTIVO_CI
         WITH (UPDLOCK, ROWLOCK)
         WHERE CONSECUTIVO LIKE 'TR%'
         ORDER BY CONSECUTIVO DESC
@@ -435,7 +441,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
 
       const resultadoActualizacion = await DatabaseServiceAdapter.query(
         connection,
-        `UPDATE CATELLI.CONSECUTIVO_CI
+        `UPDATE ${schema}.CONSECUTIVO_CI
          SET SIGUIENTE_CONSEC = @nuevo
          WHERE SIGUIENTE_CONSEC = @actual`,
         actualizarConsecutivoParams
@@ -453,7 +459,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
       };
 
       const insertarDocumento = `
-        INSERT INTO CATELLI.DOCUMENTO_INV
+        INSERT INTO ${schema}.DOCUMENTO_INV
           (PAQUETE_INVENTARIO, DOCUMENTO_INV, CONSECUTIVO, REFERENCIA, FECHA_HOR_CREACION, FECHA_DOCUMENTO, SELECCIONADO, USUARIO)
         VALUES
           ('${config.paquete_inventario}', @documento, '${config.consecutivo_prefix}', @referencia, GETDATE(), GETDATE(), 'N', '${config.usuario_default}')
@@ -500,7 +506,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
           };
 
           const insertarLinea = `
-            INSERT INTO CATELLI.LINEA_DOC_INV
+            INSERT INTO ${schema}.LINEA_DOC_INV
               (PAQUETE_INVENTARIO, DOCUMENTO_INV, LINEA_DOC_INV, AJUSTE_CONFIG, ARTICULO,
                BODEGA, BODEGA_DESTINO, CANTIDAD, TIPO, SUBTIPO, SUBSUBTIPO,
                COSTO_TOTAL_LOCAL, COSTO_TOTAL_DOLAR, PRECIO_TOTAL_LOCAL, PRECIO_TOTAL_DOLAR,
@@ -528,7 +534,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
             const locOriFinal = producto.localizacionOrigen || await getValidLocation(connection, producto.bodegaOrigen);
 
             const insertarLineaDirecto = `
-              INSERT INTO CATELLI.LINEA_DOC_INV
+              INSERT INTO ${schema}.LINEA_DOC_INV
                 (PAQUETE_INVENTARIO, DOCUMENTO_INV, LINEA_DOC_INV, AJUSTE_CONFIG, ARTICULO,
                  BODEGA, BODEGA_DESTINO, CANTIDAD, TIPO, SUBTIPO, SUBSUBTIPO,
                  COSTO_TOTAL_LOCAL, COSTO_TOTAL_DOLAR, PRECIO_TOTAL_LOCAL, PRECIO_TOTAL_DOLAR,
@@ -811,10 +817,11 @@ async function getTraspasoDetails(traspasoId) {
   let lineas = [];
   if (tracking.documentoInv) {
     lineas = await withConnection("server1", async (connection) => {
+      const schema = await DatabaseServiceAdapter.getErpSchema("server1");
       const result = await DatabaseServiceAdapter.query(
         connection,
         `SELECT ARTICULO, BODEGA, BODEGA_DESTINO, CANTIDAD
-         FROM CATELLI.LINEA_DOC_INV
+         FROM ${schema}.LINEA_DOC_INV
          WHERE DOCUMENTO_INV = @documento`,
         { documento: tracking.documentoInv }
       );
@@ -951,12 +958,13 @@ async function executeTransferByLoadId(loadId, userId = null) {
 async function getWarehouses() {
   try {
     return await withConnection("server1", async (connection) => {
+      const schema = await DatabaseServiceAdapter.getErpSchema("server1");
       const query = `
         SELECT
           BODEGA as code,
           NOMBRE as name,
           'S' as isActive
-        FROM CATELLI.BODEGA
+        FROM ${schema}.BODEGA
         ORDER BY NOMBRE
       `;
 
