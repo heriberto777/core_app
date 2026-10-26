@@ -13,7 +13,8 @@ export const DBConnectionModal = ({ isOpen, onClose, onSave, onTest, initialData
         mssqlEncrypt: true,
         trustServerCertificate: true,
         connectTimeout: 30000,
-        type: "mssql"
+        type: "mssql",
+        erpSchema: "CATELLI"
     });
 
     const [testing, setTesting] = useState(false);
@@ -21,11 +22,11 @@ export const DBConnectionModal = ({ isOpen, onClose, onSave, onTest, initialData
     const [testResult, setTestResult] = useState(null);
 
     useEffect(() => {
-        if (initialData) setFormData(initialData);
+        if (initialData) setFormData({ erpSchema: "CATELLI", ...initialData });
         else setFormData({
             serverName: "", host: "", user: "", password: "", database: "",
             port: "1433", mssqlEncrypt: true, trustServerCertificate: true,
-            connectTimeout: 30000, type: "mssql"
+            connectTimeout: 30000, type: "mssql", erpSchema: "CATELLI"
         });
         setTestResult(null);
     }, [initialData, isOpen]);
@@ -124,6 +125,17 @@ export const DBConnectionModal = ({ isOpen, onClose, onSave, onTest, initialData
                             className="rounded-2xl border-slate-200 font-bold"
                         />
                     </div>
+
+                    {formData.serverName === "server1" && (
+                        <Input
+                            label="SCHEMA DEL ERP"
+                            icon={FaDatabase}
+                            placeholder="CATELLI"
+                            value={formData.erpSchema ?? "CATELLI"}
+                            onChange={e => setFormData({ ...formData, erpSchema: e.target.value })}
+                            className="rounded-2xl border-slate-200 font-bold"
+                        />
+                    )}
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                         <Input

@@ -599,6 +599,32 @@ class DatabaseService {
   }
 
   /**
+   * Cierra (y descarta del registro) el pool de un servidor puntual, sin
+   * tocar los demás ni requerir shutdown() completo. Se usa cuando cambia su
+   * DBConfig en Mongo (host, password, erpSchema, etc.) -- getConnection()
+   * recrea el pool solo on next uso, leyendo la config ya actualizada
+   * (ver flujo en getConnection: "if (!this.pools.has(serverKey))").
+   * Sin esto, el pool viejo (y el dbConfig cacheado en this.dbConfigs) se
+   * queda en memoria indefinidamente, aunque se edite la config en Mongo.
+   */
+  async closePool(serverKey) {
+    const pool = this.pools.get(serverKey);
+    if (pool) {
+      try {
+        if (!pool.isMongo) {
+          await pool.drain();
+          await pool.clear();
+        }
+      } catch (error) {
+        logger.warn(`Error cerrando pool ${serverKey}: ${error.message}`);
+      }
+      this.pools.delete(serverKey);
+    }
+    this.dbConfigs.delete(serverKey);
+    logger.info(`Pool ${serverKey} cerrado (se recreará en la próxima conexión)`);
+  }
+
+  /**
    * Cierra todos los pools y limpia recursos
    */
   async shutdown() {

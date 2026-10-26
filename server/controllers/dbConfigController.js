@@ -1,6 +1,7 @@
 const DBConfig = require("../models/dbConfigModel");
 const logger = require("../services/logger");
 const ConnectionCentralService = require("../services/ConnectionCentralService");
+const DatabaseServiceAdapter = require("../services/DatabaseServiceAdapter");
 
 const MASKED_PASSWORD = "••••••••";
 
@@ -41,6 +42,13 @@ const upsertDBConfig = async (req, res) => {
     const instance = rawInstance && String(rawInstance).trim() && String(rawInstance).trim().toLowerCase() !== "null"
       ? String(rawInstance).trim()
       : null;
+    // erpSchema solo aplica a server1 (el que habla con el ERP real) -- si no
+    // llega nada, se cae al default del modelo ("CATELLI") en vez de guardar
+    // un valor vacío que después fallaría la validación de getErpSchema().
+    const rawErpSchema = req.body.erpSchema;
+    const erpSchema = rawErpSchema && String(rawErpSchema).trim()
+      ? String(rawErpSchema).trim()
+      : "CATELLI";
     const existingConfig = await DBConfig.findOne({ serverName });
 
     if (existingConfig) {
@@ -50,7 +58,7 @@ const upsertDBConfig = async (req, res) => {
 
       const updatedConfig = await DBConfig.findOneAndUpdate(
         { serverName },
-        { type, user, password: passwordToSave, host, port, database, instance, options, updatedAt: new Date() },
+        { type, user, password: passwordToSave, host, port, database, instance, erpSchema, options, updatedAt: new Date() },
         { new: true, lean: true }
       );
 
@@ -59,9 +67,19 @@ const upsertDBConfig = async (req, res) => {
       // Guardar en Mongo no hace que el pool de conexión activo en memoria
       // se entere del cambio (mismo patrón de bug que el del scheduler) —
       // se fuerza a cerrar el pool actual para que la próxima conexión lo
-      // reconstruya ya con las credenciales/host nuevos.
+      // reconstruya ya con las credenciales/host/erpSchema nuevos.
+      // Hay DOS gestores de pools viviendo en paralelo hoy (migración
+      // incompleta, ver DatabaseService.js): ConnectionCentralService
+      // (legacy, todavía usado por algunos flujos) y DatabaseService (el que
+      // usa Cargas/Traspasos/Rutas/Camiones/ETL vía DatabaseServiceAdapter,
+      // que es donde vive el cache de erpSchema) -- hay que cerrar el pool
+      // en los dos, si no el cambio queda invisible para uno de ellos hasta
+      // reiniciar el backend.
       await ConnectionCentralService.closePool(serverName).catch((err) =>
-        logger.warn(`No se pudo cerrar el pool de ${serverName} tras actualizar: ${err.message}`)
+        logger.warn(`No se pudo cerrar el pool (ConnectionCentralService) de ${serverName} tras actualizar: ${err.message}`)
+      );
+      await DatabaseServiceAdapter.closePool(serverName).catch((err) =>
+        logger.warn(`No se pudo cerrar el pool (DatabaseService) de ${serverName} tras actualizar: ${err.message}`)
       );
 
       return res.status(200).json({
@@ -71,7 +89,7 @@ const upsertDBConfig = async (req, res) => {
       });
     }
 
-    const newConfig = new DBConfig({ serverName, type, user, password, host, port, database, instance, options });
+    const newConfig = new DBConfig({ serverName, type, user, password, host, port, database, instance, erpSchema, options });
     await newConfig.save();
 
     logger.info(`Nueva configuración de DB creada: ${serverName} por ${req.user?._id}`);

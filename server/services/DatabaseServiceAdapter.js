@@ -87,6 +87,15 @@ class DatabaseServiceAdapter {
     return DatabaseService.getErpSchema(serverKey);
   }
 
+  /**
+   * Cierra el pool de un servidor puntual para que se recree con la config
+   * actualizada de Mongo en la próxima conexión. Ver DatabaseService.closePool.
+   */
+  async closePool(serverKey) {
+    await this.initialize();
+    return DatabaseService.closePool(serverKey);
+  }
+
   async shutdown() {
     return await DatabaseService.shutdown();
   }
