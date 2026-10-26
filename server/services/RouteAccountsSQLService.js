@@ -47,6 +47,7 @@ class RouteAccountsSQLService {
   // vendedor de venta. Ver getRepartidores() para el otro caso.
   static async getSellers() {
     return await withConnection("server1", async (connection) => {
+      const schema = await DatabaseServiceAdapter.getErpSchema("server1");
       const query = `
         SELECT
           CASE
@@ -55,7 +56,7 @@ class RouteAccountsSQLService {
             ELSE VENDEDOR
           END AS code,
           NOMBRE AS name
-        FROM CATELLI.VENDEDOR
+        FROM ${schema}.VENDEDOR
         WHERE ACTIVO = 'S' AND U_ESVENDEDOR = 'Si'
         ORDER BY NOMBRE
       `;
@@ -78,6 +79,7 @@ class RouteAccountsSQLService {
   // contra la definición viva de IMPLT_sellers, no solo el docx).
   static async getRepartidores() {
     return await withConnection("server1", async (connection) => {
+      const schema = await DatabaseServiceAdapter.getErpSchema("server1");
       const query = `
         SELECT
           CASE
@@ -86,7 +88,7 @@ class RouteAccountsSQLService {
             ELSE VENDEDOR
           END AS code,
           NOMBRE AS name
-        FROM CATELLI.VENDEDOR
+        FROM ${schema}.VENDEDOR
         WHERE ACTIVO = 'S' AND U_ESVENDEDOR = 'Re'
         ORDER BY NOMBRE
       `;
@@ -108,6 +110,7 @@ class RouteAccountsSQLService {
   // mirando accounts_syncs + CLIENTE.RUTA (mismo join de getClients).
   static async getErpRoutes(seller) {
     return await withConnection("server1", async (connection) => {
+      const schema = await DatabaseServiceAdapter.getErpSchema("server1");
       let query;
       const params = {};
 
@@ -115,8 +118,8 @@ class RouteAccountsSQLService {
         query = `
           SELECT DISTINCT cl.RUTA AS code, r.DESCRIPCION AS description
           FROM core_app.accounts_syncs a
-          INNER JOIN CATELLI.CLIENTE cl ON cl.CLIENTE = a.code_ofclient OR 'CN' + cl.CLIENTE = a.code_ofclient
-          LEFT JOIN CATELLI.RUTA r ON r.RUTA = cl.RUTA
+          INNER JOIN ${schema}.CLIENTE cl ON cl.CLIENTE = a.code_ofclient OR 'CN' + cl.CLIENTE = a.code_ofclient
+          LEFT JOIN ${schema}.RUTA r ON r.RUTA = cl.RUTA
           WHERE a.code_seller = @seller AND cl.RUTA IS NOT NULL AND cl.RUTA <> ''
           ORDER BY cl.RUTA
         `;
@@ -124,7 +127,7 @@ class RouteAccountsSQLService {
       } else {
         query = `
           SELECT RUTA AS code, DESCRIPCION AS description
-          FROM CATELLI.RUTA
+          FROM ${schema}.RUTA
           WHERE RUTA <> 'ND'
           ORDER BY RUTA
         `;
@@ -137,6 +140,7 @@ class RouteAccountsSQLService {
 
   static async getClients(filters = {}) {
     return await withConnection("server1", async (connection) => {
+      const schema = await DatabaseServiceAdapter.getErpSchema("server1");
       // erp_route_* es SOLO de referencia/filtro para no cargar todo a una
       // ruta por error al migrar — nunca se guarda en route_accounts_syncs,
       // así que no hay forma de que termine yéndose a server2 más adelante.
@@ -167,8 +171,8 @@ class RouteAccountsSQLService {
           ON ra.code_account = a.code_ofclient AND ra.assignment_type = 'REPARTO'
         LEFT JOIN core_app.route_accounts_syncs sr
           ON sr.code_account = a.code_ofclient AND sr.assignment_type = 'VENTA'
-        LEFT JOIN CATELLI.CLIENTE cl ON cl.CLIENTE = a.code_ofclient OR 'CN' + cl.CLIENTE = a.code_ofclient
-        LEFT JOIN CATELLI.RUTA erp_r ON erp_r.RUTA = cl.RUTA
+        LEFT JOIN ${schema}.CLIENTE cl ON cl.CLIENTE = a.code_ofclient OR 'CN' + cl.CLIENTE = a.code_ofclient
+        LEFT JOIN ${schema}.RUTA erp_r ON erp_r.RUTA = cl.RUTA
         WHERE a.code_status = '1'
       `;
       const params = {};
