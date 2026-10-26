@@ -19,6 +19,7 @@ class LoadsSQLService {
     static async getPendingOrders(filters = {}) {
         return await withConnection("server1", async (connection) => {
             try {
+                const schema = await DatabaseServiceAdapter.getErpSchema("server1");
                 let baseQuery = `
           WITH BaseData AS (
             SELECT
@@ -31,11 +32,11 @@ class LoadsSQLService {
               ar.ARTICULO, ar.UNIDAD_ALMACEN,
               pl.BODEGA,
               v.NOMBRE as NOMBRE_VENDEDOR
-            FROM CATELLI.PEDIDO_LINEA AS pl
-            INNER JOIN CATELLI.PEDIDO AS pe ON pe.PEDIDO = pl.PEDIDO
-            INNER JOIN CATELLI.CLIENTE AS cl ON cl.CLIENTE = pe.CLIENTE
-            LEFT JOIN CATELLI.ARTICULO AS ar ON ar.ARTICULO = pl.ARTICULO
-            LEFT JOIN CATELLI.VENDEDOR AS v ON v.VENDEDOR = pe.VENDEDOR
+            FROM ${schema}.PEDIDO_LINEA AS pl
+            INNER JOIN ${schema}.PEDIDO AS pe ON pe.PEDIDO = pl.PEDIDO
+            INNER JOIN ${schema}.CLIENTE AS cl ON cl.CLIENTE = pe.CLIENTE
+            LEFT JOIN ${schema}.ARTICULO AS ar ON ar.ARTICULO = pl.ARTICULO
+            LEFT JOIN ${schema}.VENDEDOR AS v ON v.VENDEDOR = pe.VENDEDOR
             WHERE pe.estado = 'N'
         `;
 
@@ -163,6 +164,7 @@ class LoadsSQLService {
      */
     static async getOrderDetails(pedidoId) {
         return await withConnection("server1", async (connection) => {
+            const schema = await DatabaseServiceAdapter.getErpSchema("server1");
             const query = `
         WITH BaseData AS (
           SELECT
@@ -170,8 +172,8 @@ class LoadsSQLService {
             pl.PRECIO_UNITARIO, pl.MONTO_DESCUENTO,
             ar.ARTICULO, ar.DESCRIPCION as productDescription,
             ar.UNIDAD_ALMACEN as unitMeasure
-          FROM CATELLI.PEDIDO_LINEA pl
-          INNER JOIN CATELLI.ARTICULO ar ON pl.ARTICULO = ar.ARTICULO
+          FROM ${schema}.PEDIDO_LINEA pl
+          INNER JOIN ${schema}.ARTICULO ar ON pl.ARTICULO = ar.ARTICULO
           WHERE pl.PEDIDO = @pedidoId
         ),
         Details AS (
@@ -225,6 +227,7 @@ class LoadsSQLService {
      */
     static async getSellers() {
         return await withConnection("server1", async (connection) => {
+            const schema = await DatabaseServiceAdapter.getErpSchema("server1");
             const query = `
         SELECT
           VENDEDOR as code,
@@ -232,7 +235,7 @@ class LoadsSQLService {
           U_BODEGA as assignedWarehouse,
           U_ESVENDEDOR as isVendedor,
           ACTIVO as isActive
-        FROM CATELLI.VENDEDOR
+        FROM ${schema}.VENDEDOR
         WHERE ACTIVO = 'S' AND U_ESVENDEDOR = 'Si'
         ORDER BY NOMBRE
       `;
@@ -263,6 +266,7 @@ class LoadsSQLService {
      */
     static async getDeliveryPersons() {
         return await withConnection("server1", async (connection) => {
+            const schema = await DatabaseServiceAdapter.getErpSchema("server1");
             const query = `
         SELECT
           VENDEDOR as code,
@@ -270,7 +274,7 @@ class LoadsSQLService {
           U_BODEGA as assignedWarehouse,
           U_ESVENDEDOR as isVendedor,
           ACTIVO as isActive
-        FROM CATELLI.VENDEDOR
+        FROM ${schema}.VENDEDOR
         WHERE ACTIVO = 'S' AND U_ESVENDEDOR = 'Re'
         ORDER BY NOMBRE
       `;
@@ -290,13 +294,14 @@ class LoadsSQLService {
      */
     static async validateDeliveryPerson(deliveryPersonCode) {
         return await withConnection("server1", async (connection) => {
+            const schema = await DatabaseServiceAdapter.getErpSchema("server1");
             const query = `
         SELECT
           VENDEDOR as code, NOMBRE as name,
           U_BODEGA as assignedWarehouse,
           U_BODEGA_CENTRAL as warehouseCentral,
           U_ESVENDEDOR as isVendedor, ACTIVO as isActive
-        FROM CATELLI.VENDEDOR
+        FROM ${schema}.VENDEDOR
         WHERE VENDEDOR = @deliveryPersonCode AND ACTIVO = 'S' AND U_ESVENDEDOR = 'Re'
       `;
             const result = await DatabaseServiceAdapter.query(connection, query, { deliveryPersonCode });
@@ -325,6 +330,7 @@ class LoadsSQLService {
             throw new Error("selectedPedidos debe ser un array no vacío.");
         }
 
+        const schema = await DatabaseServiceAdapter.getErpSchema("server1");
         const pedidosList = selectedPedidos.map((_, i) => `@pedido${i}`).join(", ");
         const diagnosticParams = {};
         selectedPedidos.forEach((p, i) => { diagnosticParams[`pedido${i}`] = p; });
@@ -337,7 +343,7 @@ class LoadsSQLService {
           WHEN U_estado_proceso NOT IN ('N', 'P') AND U_estado_proceso IS NOT NULL THEN 'PROCESO_NO_VALIDO'
           ELSE 'ACTUALIZABLE'
         END as diagnostico
-      FROM CATELLI.PEDIDO WHERE PEDIDO IN (${pedidosList})
+      FROM ${schema}.PEDIDO WHERE PEDIDO IN (${pedidosList})
     `;
 
         const diagResult = await DatabaseServiceAdapter.query(connection, diagnosticQuery, diagnosticParams);
@@ -352,7 +358,7 @@ class LoadsSQLService {
         selectedPedidos.forEach((p, i) => { params[`pedido${i}`] = p; });
 
         const result = await DatabaseServiceAdapter.query(connection, `
-      UPDATE CATELLI.PEDIDO SET U_Code_Load = @loadId
+      UPDATE ${schema}.PEDIDO SET U_Code_Load = @loadId
       WHERE PEDIDO IN (${pedidosList})
         AND (U_Code_Load IS NULL OR U_Code_Load = '')
         AND estado = 'N'
@@ -374,12 +380,13 @@ class LoadsSQLService {
     static async clearUCodeLoad(connection, selectedPedidos, loadId) {
         if (!Array.isArray(selectedPedidos) || selectedPedidos.length === 0) return;
 
+        const schema = await DatabaseServiceAdapter.getErpSchema("server1");
         const pedidosList = selectedPedidos.map((_, i) => `@pedido${i}`).join(", ");
         const params = { loadId };
         selectedPedidos.forEach((p, i) => { params[`pedido${i}`] = p; });
 
         const result = await DatabaseServiceAdapter.query(connection, `
-      UPDATE CATELLI.PEDIDO SET U_Code_Load = NULL
+      UPDATE ${schema}.PEDIDO SET U_Code_Load = NULL
       WHERE PEDIDO IN (${pedidosList}) AND U_Code_Load = @loadId
     `, params);
 
@@ -398,13 +405,14 @@ class LoadsSQLService {
             throw new Error(`Estado inválido: ${estado}. Debe ser N, P, S o C`);
         }
 
+        const schema = await DatabaseServiceAdapter.getErpSchema("server1");
         const pedidosList = selectedPedidos.map((_, i) => `@pedido${i}`).join(", ");
         const params = { estado };
         selectedPedidos.forEach((p, i) => { params[`pedido${i}`] = p; });
         if (loadId) params.loadId = loadId;
 
         let query = `
-      UPDATE CATELLI.PEDIDO SET U_estado_proceso = @estado
+      UPDATE ${schema}.PEDIDO SET U_estado_proceso = @estado
       WHERE PEDIDO IN (${pedidosList}) AND estado = 'N'
     `;
 
@@ -455,6 +463,7 @@ class LoadsSQLService {
             throw new Error("selectedPedidos debe ser un array no vacío.");
         }
 
+        const schema = await DatabaseServiceAdapter.getErpSchema("server1");
         const pedidosList = selectedPedidos.map((_, i) => `@pedido${i}`).join(", ");
         const params = { loadId };
         selectedPedidos.forEach((p, i) => { params[`pedido${i}`] = p; });
@@ -472,11 +481,11 @@ class LoadsSQLService {
           pl.BODEGA as BODEGA_LINEA,
           pl.LOCALIZACION as LOCALIZACION_ORIGEN_REAL,
           v.U_BODEGA_CENTRAL as BODEGA_ORIGEN_REAL
-        FROM CATELLI.PEDIDO_LINEA AS pl
-        INNER JOIN CATELLI.PEDIDO AS pe ON pe.PEDIDO = pl.PEDIDO
-        INNER JOIN CATELLI.CLIENTE AS cl ON cl.CLIENTE = pe.CLIENTE
-        LEFT JOIN CATELLI.ARTICULO AS ar ON ar.ARTICULO = pl.ARTICULO
-        LEFT JOIN CATELLI.VENDEDOR AS v ON v.VENDEDOR = pe.VENDEDOR
+        FROM ${schema}.PEDIDO_LINEA AS pl
+        INNER JOIN ${schema}.PEDIDO AS pe ON pe.PEDIDO = pl.PEDIDO
+        INNER JOIN ${schema}.CLIENTE AS cl ON cl.CLIENTE = pe.CLIENTE
+        LEFT JOIN ${schema}.ARTICULO AS ar ON ar.ARTICULO = pl.ARTICULO
+        LEFT JOIN ${schema}.VENDEDOR AS v ON v.VENDEDOR = pe.VENDEDOR
         WHERE pe.PEDIDO IN (${pedidosList})
         AND pe.U_Code_Load = @loadId
       ),
@@ -724,6 +733,7 @@ class LoadsSQLService {
      */
     static async getLoadReviewDetail(loadId) {
         return await withConnection("server1", async (connection) => {
+            const schema = await DatabaseServiceAdapter.getErpSchema("server1");
             const query = `
         WITH BaseData AS (
           SELECT
@@ -734,10 +744,10 @@ class LoadsSQLService {
             ar.UNIDAD_ALMACEN AS unidadMedida,
             pe.CLIENTE AS cliente,
             cl.detalle_direccion AS direccionCliente
-          FROM CATELLI.PEDIDO_LINEA pl
-          INNER JOIN CATELLI.PEDIDO pe ON pe.PEDIDO = pl.PEDIDO
-          INNER JOIN CATELLI.CLIENTE cl ON cl.CLIENTE = pe.CLIENTE
-          LEFT JOIN CATELLI.ARTICULO ar ON ar.ARTICULO = pl.ARTICULO
+          FROM ${schema}.PEDIDO_LINEA pl
+          INNER JOIN ${schema}.PEDIDO pe ON pe.PEDIDO = pl.PEDIDO
+          INNER JOIN ${schema}.CLIENTE cl ON cl.CLIENTE = pe.CLIENTE
+          LEFT JOIN ${schema}.ARTICULO ar ON ar.ARTICULO = pl.ARTICULO
           WHERE pe.U_Code_Load = @loadId
         )
         -- Pagado ('P') y bonificado ('B') de la MISMA PEDIDO_LINEA salen como
@@ -814,8 +824,8 @@ class LoadsSQLService {
             // valida contra CATELLI.BODEGA de todas formas).
             const bodegasDetectadasResult = await DatabaseServiceAdapter.query(connection, `
         SELECT pl.BODEGA AS bodega, COUNT(*) AS cantidad
-        FROM CATELLI.PEDIDO_LINEA pl
-        INNER JOIN CATELLI.PEDIDO pe ON pe.PEDIDO = pl.PEDIDO
+        FROM ${schema}.PEDIDO_LINEA pl
+        INNER JOIN ${schema}.PEDIDO pe ON pe.PEDIDO = pl.PEDIDO
         WHERE pe.U_Code_Load = @loadId AND pl.CANTIDAD_PEDIDA <> 0 AND pl.BODEGA IS NOT NULL
         GROUP BY pl.BODEGA
         ORDER BY COUNT(*) DESC
@@ -826,9 +836,9 @@ class LoadsSQLService {
             if (!bodegaOrigenSugerida) {
                 const bodegaVendedorResult = await DatabaseServiceAdapter.query(connection, `
           SELECT TOP 1 v.U_BODEGA_CENTRAL AS bodega, COUNT(*) AS cantidad
-          FROM CATELLI.PEDIDO_LINEA pl
-          INNER JOIN CATELLI.PEDIDO pe ON pe.PEDIDO = pl.PEDIDO
-          LEFT JOIN CATELLI.VENDEDOR v ON v.VENDEDOR = pe.VENDEDOR
+          FROM ${schema}.PEDIDO_LINEA pl
+          INNER JOIN ${schema}.PEDIDO pe ON pe.PEDIDO = pl.PEDIDO
+          LEFT JOIN ${schema}.VENDEDOR v ON v.VENDEDOR = pe.VENDEDOR
           WHERE pe.U_Code_Load = @loadId AND pl.CANTIDAD_PEDIDA <> 0 AND v.U_BODEGA_CENTRAL IS NOT NULL
           GROUP BY v.U_BODEGA_CENTRAL
           ORDER BY COUNT(*) DESC
@@ -881,12 +891,13 @@ class LoadsSQLService {
      */
     static async cancelOrders(selectedPedidos, userId, reason) {
         return await withConnection("server1", async (connection) => {
+            const schema = await DatabaseServiceAdapter.getErpSchema("server1");
             const placeholders = selectedPedidos.map((_, i) => `@pedido${i}`).join(", ");
             const params = {};
             selectedPedidos.forEach((p, i) => { params[`pedido${i}`] = p; });
 
             const result = await DatabaseServiceAdapter.query(connection, `
-        UPDATE CATELLI.PEDIDO SET estado = 'C', U_estado_proceso = 'C'
+        UPDATE ${schema}.PEDIDO SET estado = 'C', U_estado_proceso = 'C'
         WHERE PEDIDO IN (${placeholders}) AND estado = 'N' AND U_Code_Load IS NULL
       `, params);
 
@@ -901,12 +912,13 @@ class LoadsSQLService {
      */
     static async removeOrderLines(pedidoId, selectedLines, userId) {
         return await withConnection("server1", async (connection) => {
+            const schema = await DatabaseServiceAdapter.getErpSchema("server1");
             const linesList = selectedLines.map((_, i) => `@line${i}`).join(", ");
             const params = { pedidoId, userId };
             selectedLines.forEach((l, i) => { params[`line${i}`] = l; });
 
             const result = await DatabaseServiceAdapter.query(connection, `
-        DELETE FROM CATELLI.PEDIDO_LINEA
+        DELETE FROM ${schema}.PEDIDO_LINEA
         WHERE PEDIDO = @pedidoId AND PEDIDO_LINEA IN (${linesList})
       `, params);
 

@@ -78,6 +78,15 @@ class DatabaseServiceAdapter {
     return DatabaseService.getStats();
   }
 
+  /**
+   * Nombre del schema del ERP configurado para ese server (default "CATELLI").
+   * Ver DatabaseService.getErpSchema para el detalle completo.
+   */
+  async getErpSchema(serverKey) {
+    await this.initialize();
+    return DatabaseService.getErpSchema(serverKey);
+  }
+
   async shutdown() {
     return await DatabaseService.shutdown();
   }

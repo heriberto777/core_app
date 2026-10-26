@@ -12,6 +12,13 @@ const dbConfigSchema = new mongoose.Schema({
   host: { type: String, required: true },
   port: { type: Number, required: true },
   database: { type: String, required: true },
+  // Nombre del schema del ERP dentro de esta base (ej. "CATELLI", o "GND" en
+  // una instalación futura con otra nomenclatura) -- antes estaba
+  // hardcodeado como "CATELLI" en ~74 lugares del código. Solo tiene sentido
+  // para server1 (el único que habla con el ERP real); en server2 no se usa.
+  // Default "CATELLI" para que ninguna instalación existente necesite
+  // migrar nada.
+  erpSchema: { type: String, default: "CATELLI" },
   instance: { type: String, default: null },
   options: {
     mssqlEncrypt: { type: Boolean, default: true },

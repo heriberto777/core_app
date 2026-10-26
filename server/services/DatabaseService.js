@@ -12,6 +12,12 @@ const MongoDbService = require("./mongoDbService");
 class DatabaseService {
   constructor() {
     this.pools = new Map();
+    // Los pools SQL guardan el pool de generic-pool "pelado" (sin el
+    // dbConfig original accesible después, a diferencia de los pools mongo
+    // que sí guardan {config, ...}) -- este Map aparte conserva el dbConfig
+    // completo de cada serverKey para poder leer cosas como erpSchema más
+    // tarde sin tener que volver a consultar Mongo en cada query.
+    this.dbConfigs = new Map();
     this.activeTransactions = new Map();
     this.connectionStats = {
       acquired: 0,
@@ -63,6 +69,8 @@ class DatabaseService {
    */
   async createPool(serverKey, dbConfig) {
     try {
+      this.dbConfigs.set(serverKey, dbConfig);
+
       if (dbConfig.type && dbConfig.type.toLowerCase() === "mongodb") {
         logger.info(`Registrando servidor MongoDB: ${serverKey}`);
         this.pools.set(serverKey, {
@@ -562,6 +570,32 @@ class DatabaseService {
       activeConnections: this.connectionStats.activeConnections.size,
       initialized: this._initialized,
     };
+  }
+
+  /**
+   * Nombre del schema del ERP configurado para un servidor (ej. "CATELLI" en
+   * server1, o "GND" en una instalación que lo haya configurado así en
+   * DBConfig.erpSchema). Reemplaza el literal "CATELLI" hardcodeado en
+   * decenas de queries -- default "CATELLI" si el servidor no tiene el
+   * campo seteado (ninguna instalación existente necesita migrar nada).
+   *
+   * Valida el valor contra un patrón estricto antes de devolverlo: el
+   * nombre del schema se interpola como texto directo en el SQL (no se
+   * puede parametrizar un identificador con @param), así que este es el
+   * único punto donde hay que confiar en el dato -- si viniera corrupto o
+   * con algo raro desde Mongo, mejor fallar acá que dejarlo llegar a una query.
+   */
+  getErpSchema(serverKey) {
+    const dbConfig = this.dbConfigs.get(serverKey);
+    const schema = dbConfig?.erpSchema || "CATELLI";
+
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(schema)) {
+      throw new Error(
+        `erpSchema inválido para ${serverKey}: "${schema}" -- debe ser un identificador SQL simple`
+      );
+    }
+
+    return schema;
   }
 
   /**
