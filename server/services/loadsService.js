@@ -111,8 +111,9 @@ class LoadsService {
     const bodegaDestino = deliveryPerson.assignedWarehouse;
 
     return await DatabaseServiceAdapter.withTransaction("server1", async (server1Connection) => {
+      const schema = await DatabaseServiceAdapter.getErpSchema("server1");
       const pedidosResult = await DatabaseServiceAdapter.query(server1Connection,
-        `SELECT PEDIDO FROM CATELLI.PEDIDO WHERE U_Code_Load = @loadId`, { loadId });
+        `SELECT PEDIDO FROM ${schema}.PEDIDO WHERE U_Code_Load = @loadId`, { loadId });
       const selectedPedidos = pedidosResult.recordset.map((r) => r.PEDIDO);
       if (selectedPedidos.length === 0) {
         throw new Error(`No se encontraron pedidos para la carga ${loadId}`);
@@ -125,12 +126,13 @@ class LoadsService {
       // las líneas regulares de la carga, ignorando las de oferta/
       // bonificación -- ver getLoadReviewDetail) en vez de confiar
       // ciegamente en una inferencia indirecta. Si viene, se valida contra
-      // CATELLI.BODEGA y se aplica a TODAS las líneas de la carga.
+      // el schema del ERP configurado (DBConfig.erpSchema).BODEGA y se
+      // aplica a TODAS las líneas de la carga.
       if (bodegaOrigen) {
         const bodegaValidation = await DatabaseServiceAdapter.query(server1Connection,
-          `SELECT BODEGA FROM CATELLI.BODEGA WHERE BODEGA = @bodegaOrigen`, { bodegaOrigen });
+          `SELECT BODEGA FROM ${schema}.BODEGA WHERE BODEGA = @bodegaOrigen`, { bodegaOrigen });
         if (!bodegaValidation.recordset || bodegaValidation.recordset.length === 0) {
-          throw new Error(`La bodega de origen "${bodegaOrigen}" no existe en CATELLI.BODEGA`);
+          throw new Error(`La bodega de origen "${bodegaOrigen}" no existe en ${schema}.BODEGA`);
         }
         ordersData.forEach((order) => { order.Code_Warehouse_Orig = bodegaOrigen; });
       }

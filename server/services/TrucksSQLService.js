@@ -28,6 +28,7 @@ const logger = require("./logger");
 class TrucksSQLService {
   static async getTrucks(filters = {}) {
     return await withConnection("server1", async (connection) => {
+      const schema = await DatabaseServiceAdapter.getErpSchema("server1");
       let query = `
         SELECT
           t.id, t.code, t.description, t.plate, t.code_seller,
@@ -35,7 +36,7 @@ class TrucksSQLService {
           v.NOMBRE AS seller_name,
           t.active, t.transfer_status, t.synced_at, t.created_at, t.updated_at
         FROM core_app.trucks t
-        LEFT JOIN CATELLI.VENDEDOR v ON t.code_seller IS NOT NULL AND (v.VENDEDOR = t.code_seller OR 'C' + v.VENDEDOR = t.code_seller)
+        LEFT JOIN ${schema}.VENDEDOR v ON t.code_seller IS NOT NULL AND (v.VENDEDOR = t.code_seller OR 'C' + v.VENDEDOR = t.code_seller)
         WHERE 1 = 1
       `;
       const params = {};
