@@ -926,9 +926,10 @@ const cancelTransferTask = async (req, res) => {
 const getVendedores = async (req, res) => {
   try {
     return await withConnection("server1", async (connection) => {
+      const schema = await DatabaseServiceAdapter.getErpSchema("server1");
       const query = `
         SELECT VENDEDOR, NOMBRE, U_BODEGA
-        FROM CATELLI.VENDEDOR
+        FROM ${schema}.VENDEDOR
         WHERE ACTIVO = 'S' and U_ESVENDEDOR = 'Re'
         ORDER BY VENDEDOR
       `;

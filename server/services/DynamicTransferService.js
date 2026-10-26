@@ -3108,17 +3108,28 @@ class DynamicTransferService {
       const problematicFields = [];
 
       // ✅ 2.1 OBTENER SCHEMA DE LA TABLA DESTINO PARA CONVERSIÓN DE TIPOS
+      // targetTable viene de la config de la tarea y puede traer cualquier
+      // prefijo de schema ("CATELLI.X", "dbo.X", "GND.X", o sin prefijo) --
+      // antes esto asumía 'CATELLI' fijo, así que para cualquier otro schema
+      // (incluido dbo, el más común en server2) la búsqueda no encontraba
+      // columnas y la conversión de tipos se saltaba en silencio (ver el
+      // catch de abajo, no lanza error). Se deriva el schema real del propio
+      // targetTable en vez de asumir uno fijo.
       let columnTypes = {};
       try {
+        const schemaMatch = targetTable.match(/^([A-Za-z_][A-Za-z0-9_]*)\./);
+        const tableSchema = schemaMatch ? schemaMatch[1] : "dbo";
+        const tableNameOnly = schemaMatch ? targetTable.slice(schemaMatch[0].length) : targetTable;
+
         const schemaQuery = `
           SELECT COLUMN_NAME, DATA_TYPE, NUMERIC_PRECISION, NUMERIC_SCALE, IS_NULLABLE
-          FROM INFORMATION_SCHEMA.COLUMNS 
-          WHERE TABLE_NAME = @tableName AND TABLE_SCHEMA = 'CATELLI'
+          FROM INFORMATION_SCHEMA.COLUMNS
+          WHERE TABLE_NAME = @tableName AND TABLE_SCHEMA = @tableSchema
         `;
         const schemaResult = await DatabaseServiceAdapter.query(
           targetConnection,
           schemaQuery,
-          { tableName: targetTable.replace('CATELLI.', '') }
+          { tableName: tableNameOnly, tableSchema }
         );
         
         if (schemaResult && schemaResult.recordset) {

@@ -270,9 +270,10 @@ const checkInventoryForReturns = async (req, res) => {
     if (!productCodes.length) return res.status(400).json({ success: false, message: "No hay productos que verificar" });
 
     return await withConnection("server1", async (connection) => {
+      const schema = await DatabaseServiceAdapter.getErpSchema("server1");
       const query = `
         SELECT ARTICULO AS Code_Product, SUM(CANTIDAD_DISPONIBLE) AS available_quantity
-        FROM CATELLI.EXPLT_FAC_DET_PED
+        FROM ${schema}.EXPLT_FAC_DET_PED
         WHERE ARTICULO IN (${productCodes.map((_, i) => `@p${i}`).join(", ")})
         GROUP BY ARTICULO
       `;
