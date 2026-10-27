@@ -475,7 +475,7 @@ class LoadsSQLService {
           pl.CANTIDAD_PEDIDA, pl.CANTIDAD_BONIFICAD,
           pl.PRECIO_UNITARIO, pl.MONTO_DESCUENTO, pl.PORC_DESCUENTO,
           pl.PORC_IMPUESTO1, pl.PORC_IMPUESTO2,
-          pe.RUBRO5, GETDATE() as FECHA_PROMETIDA, pe.FECHA_PEDIDO,
+          pe.RUBRO5, pe.FECHA_PROMETIDA, pe.FECHA_PEDIDO,
           pe.CLIENTE, pe.VENDEDOR, pe.RUBRO4, pe.RUBRO2,
           cl.detalle_direccion, ar.ARTICULO, ar.UNIDAD_ALMACEN,
           pl.BODEGA as BODEGA_LINEA,
@@ -651,8 +651,15 @@ class LoadsSQLService {
      * que haya confirmado el operador en el selector de Revisión de Almacén
      * (ver authorizeDispatch), que pisa Code_Warehouse_Orig en todas las
      * líneas antes de llegar acá.
+     *
+     * dateLoad = fecha de carga que el operador elige/confirma en pantalla
+     * (ver loadsService.processOrderLoad/authorizeDispatch) -- antes se
+     * derivaba de Date_Delivery de cada línea (que a su vez venía de
+     * GETDATE(), ver getTransformedOrdersData), así que terminaba siendo "el
+     * momento en que corrió la consulta" sin significado propio. Ahora es un
+     * único valor para toda la carga, no por producto.
      */
-    static async insertToLoadsDetailStaging(connection, loadId, route, ordersData, reviewStatus = "pending") {
+    static async insertToLoadsDetailStaging(connection, loadId, route, ordersData, dateLoad, reviewStatus = "pending") {
         if (!ordersData || ordersData.length === 0) return;
 
         const productMap = new Map();
@@ -666,7 +673,6 @@ class LoadsSQLService {
                 productMap.set(key, {
                     Code_Product: order.Code_Product,
                     Quantity: order.Quantity || 0,
-                    Order_Date: order.Date_Delivery,
                     Code_Warehouse_Orig: bodegaOrigen
                 });
             }
@@ -686,14 +692,14 @@ class LoadsSQLService {
                 Code: loadId,
                 Num_Line: lineNumber++,
                 Code_Product: product.Code_Product,
-                Date_Load: product.Order_Date,
+                Date_Load: dateLoad,
                 Quantity: product.Quantity,
                 warehouseSou: product.Code_Warehouse_Orig,
                 route,
                 reviewStatus
             });
         }
-        logger.info(`${lineNumber - 1} líneas insertadas en core_app.loads_detail_staging (review_status=${reviewStatus})`);
+        logger.info(`${lineNumber - 1} líneas insertadas en core_app.loads_detail_staging (review_status=${reviewStatus}, date_load=${dateLoad})`);
     }
 
     // ─── Revisión de Almacén ───────────────────────────────────────────────────
