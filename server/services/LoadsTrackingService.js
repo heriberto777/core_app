@@ -16,7 +16,7 @@ class LoadsTrackingService {
     /**
      * Crea el registro inicial de tracking en MongoDB cuando comienza una carga.
      */
-    static async createLoadTracking(loadId, route, bodega, totalOrders, userId) {
+    static async createLoadTracking(loadId, route, bodega, totalOrders, userId, dateLoad) {
         const loadTracking = new LoadTracking({
             loadId,
             route,
@@ -24,6 +24,7 @@ class LoadsTrackingService {
             totalOrders,
             createdBy: userId,
             status: "processing",
+            dateLoad,
         });
 
         await loadTracking.save();

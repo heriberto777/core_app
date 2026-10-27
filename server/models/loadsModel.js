@@ -26,6 +26,13 @@ const LoadTrackingSchema = new mongoose.Schema({
     type: String,
     required: true,
   },
+  // Fecha de carga que el operador elige/confirma en Despacho (formato
+  // YYYYMMDD, mismo que usa el resto del pipeline) -- se arrastra sin
+  // cambios hasta Revisión de Almacén/autorizar (ver loadsService.
+  // authorizeDispatch), para no perderla ni recalcularla con GETDATE().
+  dateLoad: {
+    type: String,
+  },
   totalOrders: {
     type: Number,
     default: 0,
