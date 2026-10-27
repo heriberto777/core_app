@@ -75,7 +75,7 @@ export function LoadsManagement() {
     setModals(prev => ({ ...prev, delivery: true }));
   };
 
-  const handleDeliverySelect = async (code) => {
+  const handleDeliverySelect = async (code, dateLoad) => {
     try {
       setModals(prev => ({ ...prev, delivery: false }));
 
@@ -88,7 +88,7 @@ export function LoadsManagement() {
         }
       });
 
-      const res = await actions.processLoad(code);
+      const res = await actions.processLoad(code, dateLoad);
 
       Swal.fire({
         icon: "success",

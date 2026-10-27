@@ -1,7 +1,9 @@
 // app/src/components/organismos/DeliveryPersonSelector.jsx - TAILWIND EDITION
 import { useState, useMemo } from "react";
 import { LoadsButton } from "../../index";
-import { FaTruck, FaWarehouse, FaTimes, FaUser, FaCheckCircle, FaCircle, FaInfoCircle, FaSearch } from "react-icons/fa";
+import { FaTruck, FaWarehouse, FaTimes, FaUser, FaCheckCircle, FaCircle, FaInfoCircle, FaSearch, FaCalendarAlt } from "react-icons/fa";
+
+const today = () => new Date().toISOString().split("T")[0];
 
 export function DeliveryPersonSelector({
   isOpen,
@@ -13,6 +15,11 @@ export function DeliveryPersonSelector({
 }) {
   const [selectedVendedor, setSelectedVendedor] = useState(null);
   const [searchQuery, setSearchQuery] = useState("");
+  // Fecha de carga: antes se copiaba automaticamente de Date_Delivery (la
+  // fecha prometida del pedido) -- a pedido del usuario, ahora la confirma el
+  // operador acá mismo (default hoy, editable) en vez de salir del reloj del
+  // servidor o de la fecha del pedido.
+  const [dateLoad, setDateLoad] = useState(today);
 
   // Filtrar solo repartidores (isVendedor = 'Re') y aplicar búsqueda
   const filteredDeliveryPersons = useMemo(() => {
@@ -49,13 +56,14 @@ export function DeliveryPersonSelector({
 
 
   const handleSelect = () => {
-    if (!selectedVendedor) return;
-    onSelect(selectedVendedor.code || selectedVendedor.VENDEDOR);
+    if (!selectedVendedor || !dateLoad) return;
+    onSelect(selectedVendedor.code || selectedVendedor.VENDEDOR, dateLoad);
   };
 
   const handleClose = () => {
     setSearchQuery("");
     setSelectedVendedor(null);
+    setDateLoad(today());
     onClose();
   };
 
@@ -126,6 +134,19 @@ export function DeliveryPersonSelector({
                 <FaTimes className="text-xs" />
               </button>
             )}
+          </div>
+
+          {/* Fecha de carga */}
+          <div className="mt-4 relative">
+            <label className="flex items-center gap-2 text-[10px] font-black text-slate-400 uppercase tracking-widest mb-2">
+              <FaCalendarAlt className="text-slate-300" /> Fecha de Carga
+            </label>
+            <input
+              type="date"
+              value={dateLoad}
+              onChange={(e) => setDateLoad(e.target.value)}
+              className="w-full px-5 py-3 bg-slate-50 border border-slate-100 rounded-2xl text-sm font-bold text-slate-800 focus:outline-none focus:border-indigo-500 focus:ring-4 focus:ring-indigo-500/10 transition-all"
+            />
           </div>
 
           {/* Contador de resultados */}
@@ -219,7 +240,7 @@ export function DeliveryPersonSelector({
             <LoadsButton
               variant="primary"
               onClick={handleSelect}
-              disabled={!selectedVendedor || loading}
+              disabled={!selectedVendedor || !dateLoad || loading}
               loading={loading}
               className="px-10 py-3 bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 text-xs font-black uppercase tracking-widest border-none"
             >

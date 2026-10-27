@@ -115,7 +115,7 @@ class LoadsApi {
   /**
    * Procesa la carga de pedidos seleccionados
    */
-  async processOrderLoad(accessToken, selectedPedidos, vendedorCode) {
+  async processOrderLoad(accessToken, selectedPedidos, vendedorCode, dateLoad) {
     try {
       const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/process-load`;
 
@@ -128,6 +128,7 @@ class LoadsApi {
         body: JSON.stringify({
           selectedPedidos,
           deliveryPersonCode: vendedorCode,
+          dateLoad,
         }),
       });
 

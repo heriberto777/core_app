@@ -75,11 +75,11 @@ export function useLoadsManagement(accessToken) {
     const selectAllOrders = (ids) => setSelectedOrders(ids);
 
     // Acciones
-    const processLoad = async (deliveryPersonCode) => {
+    const processLoad = async (deliveryPersonCode, dateLoad) => {
         if (!canCreate) throw new Error("No tienes permisos para procesar cargas");
         try {
             setIsProcessing(true);
-            const response = await loadsApi.processOrderLoad(accessToken, selectedOrders, deliveryPersonCode);
+            const response = await loadsApi.processOrderLoad(accessToken, selectedOrders, deliveryPersonCode, dateLoad);
             await fetchOrders();
             setSelectedOrders([]);
             return response;
