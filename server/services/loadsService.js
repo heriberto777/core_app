@@ -143,7 +143,10 @@ class LoadsService {
       await LoadsSQLService.insertToLoadsOrdersStaging(server1Connection, ordersData, "approved");
 
       const codeRoute = ordersData[0]?.Code_Route;
-      await LoadsSQLService.insertToLoadsDetailStaging(server1Connection, loadId, codeRoute || tracking.route, ordersData, "approved");
+      // dateLoad viene del Despacho inicial (tracking.dateLoad, ver
+      // processOrderLoad) -- se arrastra tal cual, no se vuelve a pedir ni
+      // se recalcula con GETDATE() al autorizar.
+      await LoadsSQLService.insertToLoadsDetailStaging(server1Connection, loadId, codeRoute || tracking.route, ordersData, tracking.dateLoad, "approved");
 
       const traspasoResult = await realizarTraspaso({
         route: tracking.route,
@@ -223,7 +226,7 @@ class LoadsService {
    * Proceso central de carga de pedidos.
    * Coordina validaciones, transacciones en múltiples servidores y tracking.
    */
-  static async processOrderLoad(deliveryPersonCode, selectedPedidos, userId) {
+  static async processOrderLoad(deliveryPersonCode, selectedPedidos, userId, dateLoad) {
     let step = "initialization";
     let loadId;
 
@@ -245,7 +248,7 @@ class LoadsService {
 
       // 3. Crear tracking inicial (MongoDB)
       step = "createLoadTracking";
-      await LoadsTrackingService.createLoadTracking(loadId, deliveryPersonCode, "MULTIPLE", selectedPedidos.length, userId);
+      await LoadsTrackingService.createLoadTracking(loadId, deliveryPersonCode, "MULTIPLE", selectedPedidos.length, userId, dateLoad);
 
       let ordersData = null;
 
@@ -290,7 +293,7 @@ class LoadsService {
             logger.warn(`${step}: ningún cliente de la carga tiene Ruta de Reparto asignada en route_accounts_syncs — usando código de repartidor (${deliveryPersonCode}) como Code_Route de respaldo`);
           }
           logger.info(`${step}: Insertando en core_app.loads_detail_staging (Code_Route=${codeRoute || deliveryPersonCode})...`);
-          await LoadsSQLService.insertToLoadsDetailStaging(server1Connection, loadId, codeRoute || deliveryPersonCode, ordersData);
+          await LoadsSQLService.insertToLoadsDetailStaging(server1Connection, loadId, codeRoute || deliveryPersonCode, ordersData, dateLoad);
 
           // El traspaso de inventario (realizarTraspaso) ya no se ejecuta acá.
           // Queda pendiente de Revisión de Almacén: el operador concilia cantidades
