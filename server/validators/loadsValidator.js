@@ -11,6 +11,13 @@ const processLoadSchema = [
     body("selectedPedidos")
         .isArray({ min: 1 })
         .withMessage("Debe proporcionar un array de pedidos no vacío"),
+    // Fecha de carga elegida por el operador (ver loadsService.processOrderLoad) --
+    // ya no se infiere de Date_Delivery/GETDATE(), la confirma quien despacha.
+    body("dateLoad")
+        .notEmpty()
+        .withMessage("La fecha de carga es obligatoria")
+        .matches(/^\d{4}-\d{2}-\d{2}$/)
+        .withMessage("La fecha de carga debe tener formato YYYY-MM-DD"),
 ];
 
 const cancelOrdersSchema = [

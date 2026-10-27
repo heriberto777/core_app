@@ -217,14 +217,20 @@ class LoadsController {
   static async processOrderLoad(req, res) {
     const startTime = Date.now();
     try {
-      const { selectedPedidos, deliveryPersonCode } = req.body;
+      const { selectedPedidos, deliveryPersonCode, dateLoad } = req.body;
       const userId = req.user?.user_id || req.user?._id || "SYSTEM";
+      // El resto del pipeline (loads_detail_staging, IMPLT_Loads_Detail) ya
+      // usa fechas en formato YYYYMMDD (estilo 112 de SQL Server, ver
+      // getTransformedOrdersData) -- se normaliza acá, una sola vez, en vez
+      // de que cada capa de abajo tenga que saber que el front manda ISO.
+      const dateLoadSql = dateLoad.replace(/-/g, "");
 
       logger.info("Procesando carga de pedidos", {
         operationType: "LOAD",
         entityType: "CARGA",
         affectedRecords: selectedPedidos?.length || 0,
         deliveryPersonCode,
+        dateLoad,
         userId,
         httpMethod: req.method,
         httpPath: req.originalUrl,
@@ -233,7 +239,8 @@ class LoadsController {
       const result = await LoadsService.processOrderLoad(
         deliveryPersonCode.trim(),
         selectedPedidos,
-        userId
+        userId,
+        dateLoadSql
       );
 
       // LoadsService.processOrderLoad nunca tira excepción propia (captura sus
