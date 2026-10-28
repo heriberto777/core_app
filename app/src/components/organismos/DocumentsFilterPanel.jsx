@@ -1,6 +1,7 @@
 import React from "react";
 import { FaSearch, FaSync, FaEraser } from "react-icons/fa";
 import { Button } from "../../index";
+import { toLocalDateInputValue, daysAgoLocalDateInputValue } from "../../utils/index";
 
 /**
  * Corporate DocumentsFilterPanel (Tailwind Edition)
@@ -21,8 +22,8 @@ export function DocumentsFilterPanel({
 
     const resetFilters = () => {
         setFilterValues({
-            dateFrom: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split("T")[0],
-            dateTo: new Date().toISOString().split("T")[0],
+            dateFrom: daysAgoLocalDateInputValue(30),
+            dateTo: toLocalDateInputValue(),
             status: "all",
             warehouse: "all",
             showProcessed: false,

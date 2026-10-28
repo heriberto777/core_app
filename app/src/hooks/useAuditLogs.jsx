@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect, useRef } from "react";
 import { AuditStatsApi } from "../api/index";
 import { useFetchData } from "./useFetchData";
+import { toLocalDateInputValue } from "../utils/index";
 
 const auditApi = new AuditStatsApi();
 
@@ -147,7 +148,7 @@ export const useAuditLogs = (accessToken, initialType = "system") => {
         const url = window.URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = `${logType}_logs_${new Date().toISOString().split('T')[0]}.csv`;
+        a.download = `${logType}_logs_${toLocalDateInputValue()}.csv`;
         a.click();
         window.URL.revokeObjectURL(url);
     };

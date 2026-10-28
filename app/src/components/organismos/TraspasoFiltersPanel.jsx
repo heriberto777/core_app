@@ -1,6 +1,7 @@
 import React, { useState } from "react";
 import { FaSearch, FaRedo, FaFilter, FaChevronDown, FaChevronUp, FaCalendarAlt } from "react-icons/fa";
 import { Button } from "../index";
+import { toLocalDateInputValue, daysAgoLocalDateInputValue } from "../../utils/index";
 
 export const TraspasoFiltersPanel = ({ filters, onFiltersChange, onReset, onSearch, loading, metadata }) => {
   const [isExpanded, setIsExpanded] = useState(true);
@@ -15,8 +16,8 @@ export const TraspasoFiltersPanel = ({ filters, onFiltersChange, onReset, onSear
   };
 
   const setPeriod = (days) => {
-    const to = new Date().toISOString().split("T")[0];
-    const from = new Date(Date.now() - days * 24 * 60 * 60 * 1000).toISOString().split("T")[0];
+    const to = toLocalDateInputValue();
+    const from = daysAgoLocalDateInputValue(days);
     const newF = { ...filters, dateFrom: from, dateTo: to };
     onFiltersChange(newF);
     onSearch();

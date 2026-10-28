@@ -13,6 +13,7 @@ import {
   TraspasoDetailModal,
   LoadingUI
 } from "../../index";
+import { toLocalDateInputValue, daysAgoLocalDateInputValue } from "../../utils/index";
 
 /**
  * TraspasoManagement (Tailwind Edition)
@@ -40,8 +41,8 @@ export function TraspasoManagement() {
   } = useTransferManagement();
 
   const getDefaultFilters = () => ({
-    dateFrom: new Date(Date.now() - 30 * 24 * 60 * 60 * 1000).toISOString().split("T")[0],
-    dateTo: new Date().toISOString().split("T")[0],
+    dateFrom: daysAgoLocalDateInputValue(30),
+    dateTo: toLocalDateInputValue(),
     status: "all",
     loadId: ""
   });

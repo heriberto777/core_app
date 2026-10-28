@@ -1,6 +1,7 @@
 import { useState, useCallback, useMemo, useEffect } from "react";
 import { useFetchData } from "./useFetchData";
 import { MappingApi } from "../api/index";
+import { toLocalDateInputValue, daysAgoLocalDateInputValue } from "../utils/index";
 
 const api = new MappingApi();
 
@@ -18,8 +19,8 @@ export function useDocumentsVisualization(accessToken) {
 
     // Filters state
     const [filterValues, setFilterValues] = useState({
-        dateFrom: new Date(new Date().setDate(new Date().getDate() - 30)).toISOString().split("T")[0],
-        dateTo: new Date().toISOString().split("T")[0],
+        dateFrom: daysAgoLocalDateInputValue(30),
+        dateTo: toLocalDateInputValue(),
         status: "all",
         warehouse: "all",
         showProcessed: false,
