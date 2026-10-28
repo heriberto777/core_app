@@ -77,6 +77,30 @@ export function nextOccurrenceInZone(hour, minute, timeZone, now = new Date()) {
   return candidate;
 }
 
+/**
+ * Fecha de HOY (o de `date`) en formato YYYY-MM-DD, armada con los
+ * componentes de fecha LOCALES del navegador -- NO usar
+ * `date.toISOString().split("T")[0]` para esto: toISOString() convierte a
+ * UTC primero, y República Dominicana (UTC-4, sin horario de verano) ya
+ * está en el día siguiente en UTC pasadas las 8pm hora local, así que ese
+ * patrón adelanta la fecha un día durante la noche. Mismo problema de fondo
+ * que resuelve nextOccurrenceInZone de acá arriba, aplicado a los valores
+ * por defecto de <input type="date">.
+ */
+export function toLocalDateInputValue(date = new Date()) {
+  const year = date.getFullYear();
+  const month = String(date.getMonth() + 1).padStart(2, "0");
+  const day = String(date.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
+}
+
+/** Fecha local de hace `days` días, mismo formato que toLocalDateInputValue. */
+export function daysAgoLocalDateInputValue(days) {
+  const d = new Date();
+  d.setDate(d.getDate() - days);
+  return toLocalDateInputValue(d);
+}
+
 /** Zonas horarias que puede elegir el usuario para la Programación Automática. */
 export const SCHEDULE_TIMEZONE_OPTIONS = [
   { value: "America/Santo_Domingo", label: "Santo Domingo (UTC-4)" },
