@@ -2,8 +2,7 @@
 import { useState, useMemo } from "react";
 import { LoadsButton } from "../../index";
 import { FaTruck, FaWarehouse, FaTimes, FaUser, FaCheckCircle, FaCircle, FaInfoCircle, FaSearch, FaCalendarAlt } from "react-icons/fa";
-
-const today = () => new Date().toISOString().split("T")[0];
+import { toLocalDateInputValue as today } from "../../utils/index";
 
 export function DeliveryPersonSelector({
   isOpen,

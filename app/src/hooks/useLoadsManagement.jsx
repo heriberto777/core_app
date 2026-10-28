@@ -2,6 +2,7 @@ import { useState, useCallback, useMemo, useEffect } from "react";
 import { LoadsApi } from "../api/index";
 import { usePermissions } from "./usePermissions";
 import { useFetchData } from "./useFetchData";
+import { toLocalDateInputValue } from "../utils/index";
 
 const loadsApi = new LoadsApi();
 
@@ -16,8 +17,8 @@ export function useLoadsManagement(accessToken) {
     const [selectedOrders, setSelectedOrders] = useState([]);
     const [search, setSearch] = useState("");
     const [filters, setFilters] = useState({
-        dateFrom: new Date().toISOString().split("T")[0],
-        dateTo: new Date().toISOString().split("T")[0],
+        dateFrom: toLocalDateInputValue(),
+        dateTo: toLocalDateInputValue(),
         sellers: [],
         transferStatus: "all",
         includeLoaded: false,
@@ -29,7 +30,16 @@ export function useLoadsManagement(accessToken) {
     // Fetch de pedidos pendientes
     const fetchOrdersCallback = useCallback(async () => {
         if (!canRead || !accessToken) return { data: [], totalRecords: 0 };
-        return await loadsApi.getPendingOrders(accessToken, filters);
+        // Un pedido solo llega a U_estado_proceso 'P'/'S'/'C' después de que se
+        // le asigna un U_Code_Load (ver processOrderLoad) -- si el filtro
+        // "Estado" pide cualquier cosa distinta de "Pendientes", incluir
+        // pedidos ya cargados es obligatorio, no una opción aparte que el
+        // operador tenga que activar él mismo.
+        const effectiveFilters = {
+            ...filters,
+            includeLoaded: filters.transferStatus !== "pending" ? true : filters.includeLoaded,
+        };
+        return await loadsApi.getPendingOrders(accessToken, effectiveFilters);
     }, [accessToken, filters, canRead]);
 
     const {
@@ -152,8 +162,8 @@ export function useLoadsManagement(accessToken) {
             },
             resetFilters: () => {
                 setFilters({
-                    dateFrom: new Date().toISOString().split("T")[0],
-                    dateTo: new Date().toISOString().split("T")[0],
+                    dateFrom: toLocalDateInputValue(),
+                    dateTo: toLocalDateInputValue(),
                     sellers: [],
                     transferStatus: "all",
                     includeLoaded: false,
