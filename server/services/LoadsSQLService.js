@@ -20,6 +20,12 @@ class LoadsSQLService {
         return await withConnection("server1", async (connection) => {
             try {
                 const schema = await DatabaseServiceAdapter.getErpSchema("server1");
+                // Los pedidos anulados explícitamente (LoadsSQLService.cancelOrders)
+                // quedan con PEDIDO.estado='C', no solo U_estado_proceso='C' -- si acá
+                // siempre exigiéramos estado='N', el filtro "Cancelados" nunca podría
+                // mostrarlos (solo vería los que llegaron a U_estado_proceso='C' por un
+                // rollback automático de processOrderLoad, que sí conservan estado='N').
+                const estadoCondition = filters.transferStatus === "cancelled" ? "pe.estado IN ('N', 'C')" : "pe.estado = 'N'";
                 let baseQuery = `
           WITH BaseData AS (
             SELECT
@@ -37,7 +43,7 @@ class LoadsSQLService {
             INNER JOIN ${schema}.CLIENTE AS cl ON cl.CLIENTE = pe.CLIENTE
             LEFT JOIN ${schema}.ARTICULO AS ar ON ar.ARTICULO = pl.ARTICULO
             LEFT JOIN ${schema}.VENDEDOR AS v ON v.VENDEDOR = pe.VENDEDOR
-            WHERE pe.estado = 'N'
+            WHERE ${estadoCondition}
         `;
 
                 const params = {};
