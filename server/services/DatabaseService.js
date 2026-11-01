@@ -817,6 +817,8 @@ class DatabaseService {
         clearTimeout(timeout);
         if (err) {
           logger.warn(`Rollback a savepoint '${name}' con advertencia: ${err.message}`);
+        } else {
+          logger.debug(`rollbackTransaction(name='${name}') completado sin error`);
         }
         resolve();
       }, name);

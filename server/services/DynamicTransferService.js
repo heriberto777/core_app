@@ -315,7 +315,9 @@ class DynamicTransferService {
               // propios savepoints ni cerrar la transacción del batch.
               try {
                 await DatabaseServiceAdapter.rollbackToSavepoint(targetConnection, savepointName);
+                logger.info(`Rollback a savepoint '${savepointName}' (target) ejecutado para documento ${documentId}`);
                 await DatabaseServiceAdapter.rollbackToSavepoint(sourceConnection, savepointName);
+                logger.info(`Rollback a savepoint '${savepointName}' (source) ejecutado para documento ${documentId}`);
               } catch (savepointError) {
                 logger.error(`No se pudo revertir al savepoint del documento ${documentId}: ${savepointError.message}`);
               }
@@ -646,12 +648,16 @@ class DynamicTransferService {
         secondaryReservations, // Pasar para confirmación en handleDocumentResult
       };
     } catch (error) {
-      return this.handleSingleDocumentError(
-        error,
-        documentId,
-        currentConsecutive,
-        mapping
-      );
+      // Antes: se devolvía {success:false} acá y el loop principal lo
+      // trataba como un resultado normal (handleDocumentResult), sin pasar
+      // nunca por el catch de processDocuments que hace rollbackToSavepoint.
+      // Resultado: ningún documento fallido se revertía jamás -- quedaba
+      // confirmado igual al hacer COMMIT del batch completo (confirmado
+      // 2026-10-31 contra 9R01260000010: fila huérfana real en
+      // CATELLI.FACTURA tras un fallo en FACTURA_LINEA). Se relanza para que
+      // el savepoint por documento cumpla lo que el diseño siempre asumió.
+      this.handleSingleDocumentError(error, documentId, currentConsecutive, mapping);
+      throw error;
     }
   }
 
@@ -1806,10 +1812,22 @@ class DynamicTransferService {
       );
     }
 
-    // Ejecutar lookup SOLO si no es detalle (los detalles ya tienen lookup aplicado)
+    // Ejecutar lookup contra target tanto en encabezado como en detalle.
+    // Antes esto se saltaba para isDetailTable=true bajo el supuesto de que
+    // "los detalles ya tienen lookup aplicado" -- pero el único mecanismo que
+    // existe para eso (más abajo, "Agregar campos de lookup que están en los
+    // datos") solo encuentra el valor si ya viene pre-inyectado en
+    // dataForProcessing con el mismo nombre del targetField, lo cual nunca
+    // pasa para un campo que no existe en la tabla origen (ej.
+    // FACTURA_LINEA.CUENTA_CONTABLE no existe en FAC_DET_PED). Confirmado
+    // 2026-10-31: ningún mapping real usaba lookupFromTarget en una tabla de
+    // detalle hasta CargarFacturaCompleta, así que no había forma de notar
+    // antes que esto nunca se ejecutaba.
     let lookupResults = {};
-    if (this.hasLookupFields(tableConfig) && !isDetailTable) {
-      logger.info("Ejecutando lookup para tabla de encabezado");
+    if (this.hasLookupFields(tableConfig)) {
+      logger.info(
+        `Ejecutando lookup para tabla ${isDetailTable ? "de detalle" : "de encabezado"}`
+      );
       const lookupExecution = await this.executeLookupInTarget(
         tableConfig,
         dataForProcessing,
@@ -1821,10 +1839,6 @@ class DynamicTransferService {
         );
       }
       lookupResults = lookupExecution.results;
-    } else if (isDetailTable) {
-      logger.debug(
-        "Omitiendo lookup interno para detalle (ya aplicado previamente)"
-      );
     }
 
     logger.debug(
@@ -2034,7 +2048,12 @@ class DynamicTransferService {
       );
     }
 
-    // Filtrar campos auxiliares antes de inserción
+    // Filtrar campos auxiliares antes de inserción. Cualquier targetField con
+    // prefijo "_" se trata como auxiliar/solo-visualización (convención ya
+    // usada por los de promociones de abajo) -- generalizado 2026-10-31 para
+    // poder agregar campos puramente informativos (ej. mostrar el primaryKey
+    // de origen como columna en la UI de documentos pendientes, ver
+    // AplicarRecibosCxC._DISPLAY_NUM_REC) sin tocar esta lista cada vez.
     const auxiliaryFields = [
       "Unit_Measure",
       "Factor_Conversion",
@@ -2045,6 +2064,8 @@ class DynamicTransferService {
       "_DETECTED_PROMOTION_CONFIG",
       "_PROMOTION_TYPE",
     ];
+    const isAuxiliaryField = (field) =>
+      auxiliaryFields.includes(field) || field.startsWith("_");
 
     const filteredTargetFields = [];
     const filteredTargetValues = [];
@@ -2052,7 +2073,7 @@ class DynamicTransferService {
     const filteredDirectSqlFields = new Set();
 
     targetFields.forEach((field, index) => {
-      if (!auxiliaryFields.includes(field)) {
+      if (!isAuxiliaryField(field)) {
         filteredTargetFields.push(field);
         filteredTargetValues.push(targetValues[index]);
 
@@ -2946,9 +2967,7 @@ class DynamicTransferService {
               level: "error",
               source: "transfer",
               operationType: "QUERY",
-              mappingId: mapping?._id?.toString(),
-              mappingName: mapping?.name,
-              fieldName: fieldMapping.targetField,
+              tableName: tableConfig?.name,
               tableTarget: tableConfig?.targetTable,
               failedValue: failedValue,
               query: fieldMapping.lookupQuery,
@@ -4675,6 +4694,20 @@ class DynamicTransferService {
       selectFields = tableInfo.availableColumns;
     }
 
+    // El primaryKey identifica el documento para la UI (columna "RECIBO"/etc.)
+    // y para processDocuments, pero no siempre es el sourceField de algún
+    // fieldMapping (ej. AplicarRecibosCxC.CXC_: NUM_REC es el primaryKey de
+    // origen, pero el campo destino DOCUMENTO se genera por consecutivo, sin
+    // sourceField) -- sin esto, buildDocumentQuery nunca lo seleccionaba y la
+    // UI mostraba "—" en vez del identificador real (confirmado 2026-10-31).
+    if (
+      mainTable.primaryKey &&
+      tableInfo.availableColumns.includes(mainTable.primaryKey) &&
+      !selectFields.includes(mainTable.primaryKey)
+    ) {
+      selectFields.push(mainTable.primaryKey);
+    }
+
     const limit = filters.limit || 100;
     const selectFieldsStr = selectFields.join(", ");
 
@@ -5421,6 +5454,16 @@ class DynamicTransferService {
         let params = { documentId };
 
         if (shouldMark) {
+          // 2026-11-01: se evaluó hacer este "= 1" configurable vía
+          // mapping.markProcessedValue (hoy ignorado por completo, dead
+          // config) pero se revirtió -- Carga_Fac_To_CC (legacy, ACTIVO)
+          // filtra su propio origen por "DOC_PRO LIKE '1'", dependiendo de
+          // que CargarFacturas (que corre antes en esa cadena) deje el
+          // literal '1'. Si CargarFacturas empezara a respetar su propio
+          // markProcessedValue:'S' configurado, Carga_Fac_To_CC dejaría de
+          // encontrar documentos para siempre. El '1' hardcodeado se queda
+          // tal cual -- es seguro porque este repo siempre filtra pendientes
+          // por "IS NULL", nunca por el valor exacto, excepto ese caso.
           let setClause = `${processedFieldName} = 1`;
           if (config.includeTimestamp && config.timestampField) {
             const timestampField = config.timestampField;
