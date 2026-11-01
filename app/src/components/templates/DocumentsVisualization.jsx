@@ -202,8 +202,20 @@ export function DocumentsVisualization() {
               {documentsLoading && !documentsRefreshing ? (
                 <div className="py-24 text-center font-semibold text-blue-500">Cargando documentos...</div>
               ) : documentsError ? (
-                <div className="py-24 text-center text-red-600 flex items-center justify-center gap-2">
-                  <FaExclamationTriangle /> {documentsError}
+                <div className="py-24 text-center text-red-600 flex flex-col items-center justify-center gap-3">
+                  <div className="flex items-center gap-2">
+                    <FaExclamationTriangle />
+                    {/* "no encontrada" pasa cuando el mapeo activo se borró/recreó
+                        (otro usuario, u otro proceso) mientras esta pantalla seguía
+                        abierta -- el mensaje crudo del backend no deja claro que la
+                        solución es simplemente volver a entrar desde la lista. */}
+                    {documentsError.includes("no encontrada")
+                      ? "Este mapeo ya no está disponible (pudo haber sido actualizado). Volvé a la lista y entrá de nuevo."
+                      : documentsError}
+                  </div>
+                  <Button variant="secondary" onClick={handleReturnToList}>
+                    <FaArrowLeft /> Volver a la lista
+                  </Button>
                 </div>
               ) : filteredDocuments.length === 0 ? (
                 <div className="py-24 text-center opacity-60">No se encontraron resultados con los filtros actuales.</div>

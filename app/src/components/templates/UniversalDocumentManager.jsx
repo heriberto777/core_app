@@ -53,7 +53,8 @@ export function UniversalDocumentManager() {
 
     const {
         mappings,
-        loading: mappingsLoading
+        loading: mappingsLoading,
+        loadMappings
     } = useMappings(accessToken);
 
     const {
@@ -82,6 +83,16 @@ export function UniversalDocumentManager() {
         setIsProcessing,
         actionStates
     } = useDocumentsVisualization(accessToken);
+
+    // "Volver al Lanzador" solo cambia la vista localmente -- la lista de
+    // mappings (useMappings) no se re-consulta, así que si un mapping fue
+    // borrado/recreado (cambia su _id) mientras esta pantalla estaba abierta,
+    // la lista sigue mostrando el _id viejo hasta un F5 completo. Se refresca
+    // la lista al volver para que esto nunca dependa de un reload manual.
+    const handleReturnToListAndRefresh = () => {
+        handleReturnToList();
+        loadMappings();
+    };
 
     const [isDetailsOpen, setIsDetailsOpen] = useState(false);
     const [isEditOpen, setIsEditOpen] = useState(false);
@@ -248,7 +259,7 @@ export function UniversalDocumentManager() {
     const renderManager = () => (
         <div className="flex flex-col gap-6">
             <div className="flex items-center justify-between p-5 bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-lg">
-                <Button variant="secondary" onClick={handleReturnToList}>
+                <Button variant="secondary" onClick={handleReturnToListAndRefresh}>
                     <FaArrowLeft /> Volver al Lanzador
                 </Button>
                 <h3 className="m-0 flex flex-col items-center gap-1 text-2xl font-extrabold text-gray-900 dark:text-white">
@@ -271,8 +282,20 @@ export function UniversalDocumentManager() {
                         <FaSync className="spinning inline-block mr-2" /> Cargando datos operacionales...
                     </div>
                 ) : documentsError ? (
-                    <div className="py-48 text-center text-red-500">
-                        <FaExclamationTriangle className="inline-block mr-2" /> {documentsError}
+                    <div className="py-48 text-center text-red-500 flex flex-col items-center justify-center gap-3">
+                        <div>
+                            <FaExclamationTriangle className="inline-block mr-2" />
+                            {/* "no encontrada" pasa cuando el mapeo activo se borró/recreó
+                                (otro usuario, u otro proceso) mientras esta pantalla seguía
+                                abierta -- el mensaje crudo del backend no deja claro que la
+                                solución es simplemente volver a entrar desde la lista. */}
+                            {documentsError.includes("no encontrada")
+                                ? "Este mapeo ya no está disponible (pudo haber sido actualizado). Volvé al Lanzador y entrá de nuevo."
+                                : documentsError}
+                        </div>
+                        <Button variant="secondary" onClick={handleReturnToListAndRefresh}>
+                            <FaArrowLeft /> Volver al Lanzador
+                        </Button>
                     </div>
                 ) : filteredDocuments.length === 0 ? (
                     <div className="py-48 text-center italic opacity-60">Excelente! No hay documentos pendientes por procesar.</div>
