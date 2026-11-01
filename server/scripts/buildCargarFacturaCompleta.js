@@ -50,6 +50,13 @@ const {
 
 const DRY_RUN = process.argv.includes("--dry-run");
 
+// El Consecutivo centralizado "RECIBO_FAC" es un documento de Mongo propio de
+// cada ambiente (no viaja con el código) -- en desarrollo quedó con este _id,
+// pero en producción hay que crear el equivalente y pasar su _id real acá vía
+// variable de entorno, sin tocar el código fuente en cada despliegue.
+const RECIBO_FAC_CONSECUTIVE_ID =
+  process.env.RECIBO_FAC_CONSECUTIVE_ID || "69b8cab9e8d79850941accaf";
+
 // ===============================
 // Helpers
 // ===============================
@@ -1539,7 +1546,7 @@ SELECT SALDO FROM @t`,
       fieldName: "DOCUMENTO",
       detailFieldName: "CREDITO",
       useCentralizedSystem: true,
-      selectedCentralizedConsecutive: "69b8cab9e8d79850941accaf", // Consecutive "RECIBO_FAC"
+      selectedCentralizedConsecutive: RECIBO_FAC_CONSECUTIVE_ID, // Consecutive "RECIBO_FAC" (por ambiente, ver RECIBO_FAC_CONSECUTIVE_ID)
       lastValue: 0,
       prefix: "",
       updateAfterTransfer: false,
