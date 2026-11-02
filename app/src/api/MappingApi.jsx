@@ -1,5 +1,22 @@
 import { ENV } from "../utils/index";
 
+// Si el proxy (nginx) rechaza el request antes de que llegue a Express (ej.
+// 413 por client_max_body_size, 502/504 de gateway), la respuesta es HTML,
+// no JSON -- response.json() tira "SyntaxError: JSON.parse: unexpected
+// character at line 1 column 1" que no dice nada del problema real. Se
+// intenta JSON primero (caso normal) y si falla se cae a texto plano para
+// un mensaje de error legible.
+async function parseResponse(response) {
+    const text = await response.text();
+    try {
+        return JSON.parse(text);
+    } catch {
+        throw new Error(
+            `Respuesta inesperada del servidor (status ${response.status}): ${text.slice(0, 200) || "(vacía)"}`
+        );
+    }
+}
+
 export class MappingApi {
     baseApi = ENV.BASE_API;
 
@@ -9,7 +26,7 @@ export class MappingApi {
             const response = await fetch(url, {
                 headers: { Authorization: `Bearer ${accessToken}` }
             });
-            const result = await response.json();
+            const result = await parseResponse(response);
             if (!response.ok) throw result;
             return result.data;
         } catch (error) {
@@ -24,7 +41,7 @@ export class MappingApi {
             const response = await fetch(url, {
                 headers: { Authorization: `Bearer ${accessToken}` }
             });
-            const result = await response.json();
+            const result = await parseResponse(response);
             if (!response.ok) throw result;
             return result.data;
         } catch (error) {
@@ -44,7 +61,7 @@ export class MappingApi {
                 },
                 body: JSON.stringify(mappingData),
             });
-            const result = await response.json();
+            const result = await parseResponse(response);
             if (response.status !== 201) throw result;
             return result;
         } catch (error) {
@@ -64,7 +81,7 @@ export class MappingApi {
                 },
                 body: JSON.stringify(mappingData),
             });
-            const result = await response.json();
+            const result = await parseResponse(response);
             if (!response.ok) throw result;
             return result;
         } catch (error) {
@@ -80,7 +97,7 @@ export class MappingApi {
                 method: "DELETE",
                 headers: { Authorization: `Bearer ${accessToken}` }
             });
-            const result = await response.json();
+            const result = await parseResponse(response);
             if (!response.ok) throw result;
             return result;
         } catch (error) {
@@ -103,7 +120,7 @@ export class MappingApi {
             const response = await fetch(finalUrl, {
                 headers: { Authorization: `Bearer ${accessToken}` }
             });
-            const result = await response.json();
+            const result = await parseResponse(response);
             if (!response.ok) throw result;
             return result.data || [];
         } catch (error) {
@@ -118,7 +135,7 @@ export class MappingApi {
             const response = await fetch(url, {
                 headers: { Authorization: `Bearer ${accessToken}` }
             });
-            const result = await response.json();
+            const result = await parseResponse(response);
             if (!response.ok) throw result;
             return result.data || { details: {} };
         } catch (error) {
@@ -134,7 +151,7 @@ export class MappingApi {
                 method: "POST",
                 headers: { Authorization: `Bearer ${accessToken}` }
             });
-            const result = await response.json();
+            const result = await parseResponse(response);
             if (!response.ok) throw result;
             return result;
         } catch (error) {
@@ -154,7 +171,7 @@ export class MappingApi {
                 },
                 body: JSON.stringify({ documentIds }),
             });
-            const result = await response.json();
+            const result = await parseResponse(response);
             if (!response.ok) throw result;
             return result;
         } catch (error) {
@@ -169,7 +186,7 @@ export class MappingApi {
             const response = await fetch(url, {
                 headers: { Authorization: `Bearer ${accessToken}` }
             });
-            const result = await response.json();
+            const result = await parseResponse(response);
             if (!response.ok) throw result;
             return result;
         } catch (error) {
@@ -189,7 +206,7 @@ export class MappingApi {
                 },
                 body: JSON.stringify(updateData),
             });
-            const result = await response.json();
+            const result = await parseResponse(response);
             if (!response.ok) throw result;
             return result;
         } catch (error) {
@@ -209,7 +226,7 @@ export class MappingApi {
                 },
                 body: JSON.stringify({ fieldConfig, currentData }),
             });
-            const result = await response.json();
+            const result = await parseResponse(response);
             if (!response.ok) throw result;
             return result;
         } catch (error) {
