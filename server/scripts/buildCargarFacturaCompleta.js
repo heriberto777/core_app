@@ -574,6 +574,33 @@ WHERE f.FACTURA = @NUM_PED`,
     ],
   };
 
+  // 2026-11-02: FACTURA.AUDIT_TRANS_INV (puntero de vuelta al registro de
+  // auditoría de inventario) quedaba siempre NULL -- se llena en el mismo
+  // paso [1] en que se inserta FACTURA, antes de que exista el registro real
+  // de AUDIT_TRANS_INV (paso [3], su PK es IDENTITY, recién se conoce al
+  // insertarse). Igual que TRANSACCION_INV.AUDIT_TRANS_INV (campo de arriba),
+  // se resuelve por re-consulta usando la clave de negocio ('FAC#'+NUM_PED),
+  // ya que para cuando corre este tableConfig (paso [4]) el INSERT de
+  // AUDIT_TRANS_INV del paso [3] ya está confirmado en la misma transacción.
+  // Campo auxiliar (prefijo '_', no genera columna real en el INSERT de
+  // TRANSACCION_INV) que hace el UPDATE de FACTURA como efecto secundario --
+  // mismo patrón que _UPDATE_SALDO_FAC en AplicarRecibosCxC. Se ejecuta una
+  // vez por línea (idempotente, mismo valor cada vez) porque TRANSACCION_INV
+  // es de detalle -- redundante pero inofensivo.
+  addField(transaccionInv, {
+    targetField: "_UPDATE_FACTURA_AUDIT_TRANS_INV",
+    lookupFromTarget: true,
+    lookupQuery: `DECLARE @t TABLE (FACTURA VARCHAR(50));
+UPDATE CATELLI.FACTURA
+SET AUDIT_TRANS_INV = (SELECT AUDIT_TRANS_INV FROM CATELLI.AUDIT_TRANS_INV WHERE APLICACION = ('FAC#' + @NUM_PED))
+OUTPUT INSERTED.FACTURA INTO @t
+WHERE FACTURA = @NUM_PED;
+SELECT FACTURA FROM @t`,
+    lookupParams: [{ sourceField: "NUM_PED", paramName: "NUM_PED" }],
+    validateExistence: true,
+    failIfNotFound: true,
+  });
+
   // 5. DOCUMENTOS_CC tipo FAC (de Carga_Fac_To_CC.FAC_TO_CC)
   const docCcFac = getTableConfig(cargaFacToCC, "FAC_TO_CC");
   docCcFac.name = "DOC_CC_FAC";
@@ -1025,8 +1052,23 @@ WHERE f.FACTURA = @NUM_PED`,
   // CATELLI.DIARIO. Se cambia a SUM(FACTURA_LINEA.PRECIO_TOTAL) -- la misma
   // fuente que usa TOTAL_DEBITO_LOC/CREDITO_LOC -- para garantizar balance
   // exacto siempre, sin depender de que el origen cuadre con nuestra suma.
-  // Sigue sin hacer falta discriminar bono/regular: PRECIO_TOTAL ya está bien
-  // calculado para ambos tipos de línea (ver SIBLING_REGULAR_PRICE arriba).
+  //
+  // 2026-11-02: BUG real encontrado en producción con la primera factura con
+  // línea bonificada (9R01260000028, asiento 2202448, desbalance real de
+  // $26.79 local / $0.73 dólar ya posteado). El comentario de arriba decía
+  // "PRECIO_TOTAL ya está bien calculado para ambos tipos de línea" -- eso es
+  // cierto para el cálculo de ASIENTO_TOTAL_LOC/DOL (que SÍ debe incluir el
+  // valor bruto de la línea de bono, porque DIARIO_BONO_CREDITO/DEBITO lo
+  // reflejan como un par que se cancela), pero NO es cierto para DIARIO_AR:
+  // el cliente nunca debe esa línea, así que sumarla acá la cobra de más sin
+  // ninguna contrapartida (DIARIO_BONO_CREDITO/DEBITO ya la cancelan aparte).
+  // Se excluye del DEBITO_LOCAL/DOLAR cualquier línea donde DESC_TOT_LINEA =
+  // PRECIO_TOTAL (> 0) -- la firma real de "100% de descuento" confirmada en
+  // el análisis de una factura nativa del ERP (ver DESC_TOT_LINEA más arriba,
+  // sección 9) para identificar una línea de bono dentro de FACTURA_LINEA sin
+  // depender de CANTIDAD_BONIFICADA (que no existe en esa tabla destino).
+  const DIARIO_AR_SUM_EXPR = `ISNULL(SUM(CASE WHEN DESC_TOT_LINEA = PRECIO_TOTAL AND PRECIO_TOTAL > 0 THEN 0 ELSE PRECIO_TOTAL END),0) + ISNULL(SUM(TOTAL_IMPUESTO1),0)`;
+  const DIARIO_AR_FROM = `FROM CATELLI.FACTURA_LINEA WHERE FACTURA=@NUM_PED`;
   const diarioAr = diarioBase({
     name: "DIARIO_AR",
     sourceTable: "FAC_ENC_PED",
@@ -1039,7 +1081,7 @@ WHERE f.FACTURA = @NUM_PED`,
         targetField: "DEBITO_LOCAL",
         fieldType: "number",
         lookupFromTarget: true,
-        lookupQuery: `SELECT ISNULL(SUM(PRECIO_TOTAL),0) + ISNULL(SUM(TOTAL_IMPUESTO1),0) FROM CATELLI.FACTURA_LINEA WHERE FACTURA=@NUM_PED`,
+        lookupQuery: `SELECT ${DIARIO_AR_SUM_EXPR} ${DIARIO_AR_FROM}`,
         lookupParams: [{ sourceField: "NUM_PED", paramName: "NUM_PED" }],
         validateExistence: true,
         failIfNotFound: true,
@@ -1048,7 +1090,7 @@ WHERE f.FACTURA = @NUM_PED`,
         targetField: "DEBITO_DOLAR",
         fieldType: "number",
         lookupFromTarget: true,
-        lookupQuery: `SELECT (ISNULL(SUM(PRECIO_TOTAL),0) + ISNULL(SUM(TOTAL_IMPUESTO1),0)) / ${EXCHANGE_RATE} FROM CATELLI.FACTURA_LINEA WHERE FACTURA=@NUM_PED`,
+        lookupQuery: `SELECT (${DIARIO_AR_SUM_EXPR}) / ${EXCHANGE_RATE} ${DIARIO_AR_FROM}`,
         lookupParams: [{ sourceField: "NUM_PED", paramName: "NUM_PED" }],
         validateExistence: true,
         failIfNotFound: true,
