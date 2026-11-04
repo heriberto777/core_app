@@ -16,6 +16,16 @@ const LoadsTrackingService = require("./LoadsTrackingService");
 const ConsecutiveService = require("./ConsecutiveService");
 const { DeliveryPerson, LoadTracking } = require("../models/loadsModel");
 
+/**
+ * dateLoad llega del selector de fecha como 'YYYY-MM-DD' (input type=date) —
+ * date_delivery/Date_Delivery usan 'YYYYMMDD' (CONVERT(...,112) en
+ * getTransformedOrdersData). Normaliza antes de pisar Date_Delivery con la
+ * fecha elegida por el operador.
+ */
+function toCompactDate(dateStr) {
+  return typeof dateStr === "string" ? dateStr.replace(/-/g, "") : dateStr;
+}
+
 class LoadsService {
   // ─── Métodos delegados a LoadsSQLService ────────────────────────────────
 
@@ -120,6 +130,13 @@ class LoadsService {
       }
 
       const ordersData = await LoadsSQLService.getTransformedOrdersData(server1Connection, selectedPedidos, loadId);
+
+      // Misma regla que en processOrderLoad: date_delivery se pisa con la
+      // fecha de carga ya elegida por el operador (tracking.dateLoad), no
+      // con FECHA_PROMETIDA del pedido.
+      const dateDeliveryCompact = toCompactDate(tracking.dateLoad);
+      ordersData.forEach((order) => { order.Date_Delivery = dateDeliveryCompact; });
+      logger.info(`authorizeDispatch: Date_Delivery sobreescrita con fecha de carga elegida (tracking.dateLoad=${tracking.dateLoad} -> ${dateDeliveryCompact})`);
 
       // Bodega de origen: Almacén la confirma o la cambia en Revisión de
       // Almacén (sugerida automáticamente a partir de las bodegas reales en
@@ -270,6 +287,15 @@ class LoadsService {
           logger.info(`${step}: Obteniendo datos transformados...`);
           ordersData = await LoadsSQLService.getTransformedOrdersData(server1Connection, selectedPedidos, loadId);
           logger.info(`${step}: ${ordersData.length} registros obtenidos`);
+
+          // Date_Delivery venía de FECHA_PROMETIDA (la promesa original del
+          // pedido en el ERP) — a pedido del usuario, la fecha que el
+          // operador elige acá pisa esa promesa: date_load (loads_detail) y
+          // date_delivery (loads_orders) deben quedar con la MISMA fecha
+          // elegida, no con la del pedido.
+          const dateDeliveryCompact = toCompactDate(dateLoad);
+          ordersData.forEach((order) => { order.Date_Delivery = dateDeliveryCompact; });
+          logger.info(`${step}: Date_Delivery sobreescrita con fecha de carga elegida (dateLoad=${dateLoad} -> ${dateDeliveryCompact})`);
 
           // PASOS 4 y 5: Insertar en staging (server1, misma transaccion) — una
           // tarea del motor de Tareas de Transferencia se encarga de empujarlo
