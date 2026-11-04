@@ -41,6 +41,17 @@ const LoadTrackingSchema = new mongoose.Schema({
     type: Number,
     default: 0,
   },
+  // Reverso desde Revisión de Almacén (ver loadsService.cancelLoadInReview) —
+  // solo se completan cuando status pasa a "cancelled".
+  cancelledBy: {
+    type: String,
+  },
+  cancelledReason: {
+    type: String,
+  },
+  cancelledAt: {
+    type: Date,
+  },
   createdBy: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "User",

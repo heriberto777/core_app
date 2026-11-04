@@ -13,7 +13,8 @@ const {
   deliveryPersonSchema,
   historySchema,
   lineAdjustmentSchema,
-  authorizeDispatchSchema
+  authorizeDispatchSchema,
+  cancelLoadReviewSchema
 } = require("../validators/loadsValidator");
 
 // Middleware de autenticación para todas las rutas
@@ -157,6 +158,24 @@ router.post('/review/:loadId/authorize',
   authorizeDispatchSchema,
   validate,
   LoadsController.authorizeDispatch
+);
+
+/**
+ * @route POST /api/loads/review/:loadId/cancel
+ */
+router.post('/review/:loadId/cancel',
+  checkPermission('loads', 'manage'),
+  cancelLoadReviewSchema,
+  validate,
+  LoadsController.cancelLoadReview
+);
+
+/**
+ * @route GET /api/loads/review/:loadId/print
+ */
+router.get('/review/:loadId/print',
+  checkPermission('loads', 'read'),
+  LoadsController.printLoadReview
 );
 
 // ================================================

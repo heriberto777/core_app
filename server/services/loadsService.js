@@ -26,6 +26,15 @@ function toCompactDate(dateStr) {
   return typeof dateStr === "string" ? dateStr.replace(/-/g, "") : dateStr;
 }
 
+/**
+ * Inverso de toCompactDate, para mostrar en la hoja imprimible de la carga
+ * (dateLoad se guarda como 'YYYYMMDD', ver LoadTrackingSchema).
+ */
+function formatCompactDate(dateStr) {
+  if (!dateStr || !/^\d{8}$/.test(dateStr)) return dateStr || "—";
+  return `${dateStr.slice(6, 8)}/${dateStr.slice(4, 6)}/${dateStr.slice(0, 4)}`;
+}
+
 class LoadsService {
   // ─── Métodos delegados a LoadsSQLService ────────────────────────────────
 
@@ -206,6 +215,100 @@ class LoadsService {
         data: traspasoResult,
       };
     });
+  }
+
+  /**
+   * Reversa una carga que está en Revisión de Almacén (antes de autorizar el
+   * despacho): libera el/los pedido(s) en CATELLI (U_Code_Load/U_estado_proceso
+   * vuelven al estado "disponible para armarse de nuevo", mismo mecanismo que
+   * ya existía para el caso de falla de processOrderLoad pero nunca se
+   * invocaba desde acá) y borra el staging de la carga.
+   *
+   * Misma guarda de idempotencia que authorizeDispatch: si la carga ya no
+   * está en "pendingWarehouseReview" (ya autorizada o ya reversada), se
+   * rechaza antes de tocar nada.
+   */
+  static async cancelLoadInReview(loadId, userId, reason) {
+    const tracking = await LoadsTrackingService.getByLoadId(loadId);
+    if (!tracking) {
+      throw new Error(`Carga ${loadId} no encontrada`);
+    }
+    if (tracking.status !== "pendingWarehouseReview") {
+      throw new Error(`Carga ${loadId} no está pendiente de revisión (estado actual: ${tracking.status})`);
+    }
+
+    const selectedPedidos = await DatabaseServiceAdapter.withTransaction("server1", async (server1Connection) => {
+      const schema = await DatabaseServiceAdapter.getErpSchema("server1");
+      const pedidosResult = await DatabaseServiceAdapter.query(server1Connection,
+        `SELECT PEDIDO FROM ${schema}.PEDIDO WHERE U_Code_Load = @loadId`, { loadId });
+      const pedidos = pedidosResult.recordset.map((r) => r.PEDIDO);
+      if (pedidos.length === 0) {
+        throw new Error(`No se encontraron pedidos para la carga ${loadId}`);
+      }
+
+      await LoadsSQLService.updateEstadoProceso(server1Connection, pedidos, "N", loadId);
+      await LoadsSQLService.clearStagingForLoad(server1Connection, loadId);
+      // Ajustes de Almacén de esta carga quedan huérfanos (ya no hay staging
+      // vivo al que apliquen) -- se limpian para no dejar basura acumulándose.
+      await DatabaseServiceAdapter.query(server1Connection,
+        `DELETE FROM core_app.loads_orders_adjustments WHERE code_load = @loadId`, { loadId });
+
+      return pedidos;
+    });
+
+    await LoadsTrackingService.updateTrackingStatus(loadId, "cancelled", {
+      cancelledBy: userId ? String(userId) : null,
+      cancelledReason: reason || null,
+      cancelledAt: new Date(),
+    });
+
+    logger.info(`Carga ${loadId} reversada por ${userId} (${selectedPedidos.length} pedidos liberados). Razón: ${reason}`);
+
+    return { success: true, loadId, cancelledPedidos: selectedPedidos.length };
+  }
+
+  /**
+   * Datos para la hoja imprimible de armado de una carga (ver
+   * loadsController.printLoadReview / PDFService.generateLoadReviewPDF) —
+   * combina el tracking (Mongo) con el detalle de conciliación (SQL Server).
+   */
+  static async getLoadPrintData(loadId) {
+    const tracking = await LoadsTrackingService.getByLoadId(loadId);
+    if (!tracking) {
+      throw new Error(`Carga ${loadId} no encontrada`);
+    }
+    const reviewDetail = await LoadsSQLService.getLoadReviewDetail(loadId);
+    const deliveryPerson = await LoadsSQLService.validateDeliveryPerson(tracking.route).catch(() => null);
+
+    const pedidosUnicos = new Set();
+    reviewDetail.productos.forEach((p) => p.lineas.forEach((l) => pedidosUnicos.add(l.pedido)));
+
+    // Handlebars no hace aritmética -- se precalcula cajas/unidades acá (mismo
+    // cálculo que ya hace toCajasUnidades en WarehouseReviewDetail.jsx) para
+    // que la plantilla solo imprima valores ya resueltos.
+    // Handlebars no soporta comparaciones (`{{#if (eq a b)}}`) sin registrar
+    // helpers custom, y EmailTemplateService no registra ninguno -- se
+    // precalcula el booleano acá en vez de comparar tipoLinea en la plantilla.
+    const productos = reviewDetail.productos.map((producto) => {
+      const empaque = producto.empaque > 0 ? producto.empaque : 1;
+      const cajas = Math.floor(producto.totalActual / empaque);
+      const unidadesSueltas = Math.round(producto.totalActual - cajas * empaque);
+      const lineas = producto.lineas.map((linea) => ({ ...linea, esBonificado: linea.tipoLinea === "B" }));
+      return { ...producto, cajas, unidadesSueltas, lineas };
+    });
+
+    return {
+      loadId,
+      dateLoad: tracking.dateLoad,
+      dateLoadFormatted: formatCompactDate(tracking.dateLoad),
+      route: tracking.route,
+      deliveryPersonName: deliveryPerson?.name || tracking.route,
+      bodegasDetectadas: reviewDetail.bodegasDetectadas,
+      bodegaOrigenSugerida: reviewDetail.bodegaOrigenSugerida,
+      totalPedidos: pedidosUnicos.size,
+      productos,
+      generatedAt: new Date().toLocaleString("es-DO"),
+    };
   }
 
   // ─── Gestión de Repartidores (Mongoose) ─────────────────────────────────

@@ -145,6 +145,19 @@ class PDFService {
   }
 
   /**
+   * Genera el PDF de la hoja de armado de una carga (Revisión de Almacén) —
+   * a diferencia de generateTraspasoPDF, no se guarda a disco: se devuelve
+   * directo como respuesta HTTP (ver loadsController.printLoadReview), no
+   * se adjunta a ningún correo.
+   * @param {Object} loadPrintData - Datos armados por LoadsService.getLoadPrintData
+   * @returns {Promise<Buffer>} - Buffer con el contenido del PDF
+   */
+  static async generateLoadReviewPDF(loadPrintData) {
+    const htmlContent = EmailTemplateService.renderTemplate("loadReviewSheet", loadPrintData);
+    return await this.generatePDF(htmlContent);
+  }
+
+  /**
    * Elimina un archivo PDF temporal
    * @param {string} filePath - Ruta del archivo a eliminar
    * @returns {Promise<boolean>} - true si se eliminó correctamente

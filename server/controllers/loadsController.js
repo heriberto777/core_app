@@ -1,5 +1,6 @@
 const LoadsService = require("../services/loadsService");
 const traspasoService = require('../services/traspasoService');
+const PDFService = require("../services/pdfService");
 const logger = require("../services/logger");
 
 class LoadsController {
@@ -561,6 +562,64 @@ class LoadsController {
       return res.status(409).json({
         success: false,
         message: error.message || "Error al autorizar el despacho",
+      });
+    }
+  }
+
+  /**
+   * Reversa una carga en Revisión de Almacén: libera el/los pedido(s) en
+   * CATELLI y borra el staging, para que pueda volver a armarse.
+   */
+  static async cancelLoadReview(req, res) {
+    try {
+      const { loadId } = req.params;
+      const { reason } = req.body || {};
+      const userId = req.user?.user_id || req.user?._id || "SYSTEM";
+
+      logger.info("Reversando carga en Revisión de Almacén", {
+        operationType: "LOAD",
+        entityType: "CARGA",
+        entityId: loadId,
+        userId,
+        reason,
+        httpMethod: req.method,
+        httpPath: req.originalUrl,
+      });
+
+      const result = await LoadsService.cancelLoadInReview(loadId, userId, reason);
+
+      return res.status(200).json({
+        success: true,
+        message: "Carga reversada correctamente",
+        data: result,
+      });
+    } catch (error) {
+      logger.error(`Error en cancelLoadReview (${req.params.loadId}):`, error);
+      return res.status(409).json({
+        success: false,
+        message: error.message || "Error al reversar la carga",
+      });
+    }
+  }
+
+  /**
+   * Genera y devuelve el PDF de la hoja de armado de una carga, para que
+   * Almacén la imprima y concilie contra el estado físico.
+   */
+  static async printLoadReview(req, res) {
+    try {
+      const { loadId } = req.params;
+      const data = await LoadsService.getLoadPrintData(loadId);
+      const pdfBuffer = await PDFService.generateLoadReviewPDF(data);
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="carga-${loadId}.pdf"`);
+      return res.status(200).send(pdfBuffer);
+    } catch (error) {
+      logger.error(`Error en printLoadReview (${req.params.loadId}):`, error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Error al generar el PDF",
       });
     }
   }

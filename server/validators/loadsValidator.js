@@ -94,6 +94,16 @@ const authorizeDispatchSchema = [
         .withMessage("bodegaOrigen no puede ser una cadena vacía si se envía"),
 ];
 
+const cancelLoadReviewSchema = [
+    param("loadId")
+        .notEmpty()
+        .withMessage("El loadId es requerido en la URL"),
+    body("reason")
+        .trim()
+        .notEmpty()
+        .withMessage("El motivo de la reversión es obligatorio"),
+];
+
 const historySchema = [
     query("page")
         .optional()
@@ -116,4 +126,5 @@ module.exports = {
     historySchema,
     lineAdjustmentSchema,
     authorizeDispatchSchema,
+    cancelLoadReviewSchema,
 };
