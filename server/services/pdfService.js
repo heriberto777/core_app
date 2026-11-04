@@ -53,7 +53,14 @@ class PDFService {
       // Generar PDF
       const pdfBuffer = await page.pdf(defaultOptions);
 
-      return pdfBuffer;
+      // page.pdf() en esta versión de Puppeteer devuelve un Uint8Array, no un
+      // Buffer de Node -- Express chequea Buffer.isBuffer() en res.send() y,
+      // si da false, serializa el contenido como JSON byte por byte en vez
+      // de mandar los bytes binarios reales (encontrado en printLoadReview:
+      // el PDF "se generaba" pero abría con 0 páginas / "no se puede abrir
+      // el archivo", el Content-Type decía application/pdf pero el body no
+      // era un PDF de verdad).
+      return Buffer.from(pdfBuffer);
     } catch (error) {
       logger.error(`Error al generar PDF: ${error.message}`, error);
       throw error;

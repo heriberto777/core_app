@@ -610,11 +610,7 @@ class LoadsController {
     try {
       const { loadId } = req.params;
       const data = await LoadsService.getLoadPrintData(loadId);
-      // DEBUG TEMPORAL -- diagnosticando PDF sin contenido (ver memoria
-      // project_cargas_repartidor_bodega_logic.md), quitar una vez resuelto.
-      logger.info(`[DEBUG printLoadReview] loadId=${loadId} productos=${data.productos?.length} totalPedidos=${data.totalPedidos} bodegas=${JSON.stringify(data.bodegasDetectadas)} dateLoadFormatted=${data.dateLoadFormatted}`);
       const pdfBuffer = await PDFService.generateLoadReviewPDF(data);
-      logger.info(`[DEBUG printLoadReview] loadId=${loadId} pdfBuffer isBuffer=${Buffer.isBuffer(pdfBuffer)} length=${pdfBuffer?.length}`);
 
       res.setHeader("Content-Type", "application/pdf");
       res.setHeader("Content-Disposition", `inline; filename="carga-${loadId}.pdf"`);
