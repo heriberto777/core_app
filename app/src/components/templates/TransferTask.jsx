@@ -34,6 +34,25 @@ const TASK_TYPE_OPTIONS = [
 
 const taskApi = new TransferTaskApi();
 
+// Mismo umbral que usa el vigilante del backend (cronService.js) para marcar
+// una tarea "running" como atascada -- si en algún momento se desincroniza,
+// no es grave: esto es solo para resaltar visualmente, el backend es quien
+// de verdad decide y libera el lock.
+const STALE_RUNNING_HOURS = 6;
+
+function formatElapsed(dateValue) {
+  const ms = Date.now() - new Date(dateValue).getTime();
+  if (ms < 0) return "0m";
+  const totalMinutes = Math.floor(ms / 60000);
+  const hours = Math.floor(totalMinutes / 60);
+  const minutes = totalMinutes % 60;
+  return hours === 0 ? `${minutes}m` : `${hours}h ${minutes}m`;
+}
+
+function isStaleRunning(dateValue) {
+  return Date.now() - new Date(dateValue).getTime() > STALE_RUNNING_HOURS * 60 * 60 * 1000;
+}
+
 function FilterButton({ children, active, onClick }) {
   return (
     <button
@@ -358,6 +377,17 @@ export function TransferTasks() {
                           <small className="text-blue-700">Restan {Math.floor(taskEstimates[task._id].remaining / 60000)}m</small>
                         )}
                       </div>
+                      {task.lastExecutionDate && (
+                        <div className={`flex items-center gap-1 mt-1 text-[11px] font-semibold ${
+                          isStaleRunning(task.lastExecutionDate) ? 'text-red-600' : 'text-slate-500'
+                        }`}>
+                          {isStaleRunning(task.lastExecutionDate) && <FaExclamationTriangle className="text-[10px]" />}
+                          <span>
+                            Corriendo desde hace {formatElapsed(task.lastExecutionDate)}
+                            {isStaleRunning(task.lastExecutionDate) && ' — parece atascada, revisar'}
+                          </span>
+                        </div>
+                      )}
                     </div>
                   )}
 
@@ -412,7 +442,14 @@ export function TransferTasks() {
                 {tasks.map(task => (
                   <tr key={task._id} className="border-b border-slate-200">
                     <td className="px-3 py-2"><strong>{task.name}</strong></td>
-                    <td className="px-3 py-2"><StatusBadge status={task.status || (task.active ? "active" : "inactive")} /></td>
+                    <td className="px-3 py-2">
+                      <StatusBadge status={task.status || (task.active ? "active" : "inactive")} />
+                      {task.status === "running" && task.lastExecutionDate && (
+                        <div className={`text-[10px] font-semibold mt-0.5 ${isStaleRunning(task.lastExecutionDate) ? 'text-red-600' : 'text-slate-500'}`}>
+                          {formatElapsed(task.lastExecutionDate)}{isStaleRunning(task.lastExecutionDate) ? ' — atascada' : ''}
+                        </div>
+                      )}
+                    </td>
                     <td className="px-3 py-2 capitalize">{task.type}</td>
                     <td className="px-3 py-2">
                       <div className="flex gap-2">
