@@ -294,6 +294,61 @@ class LoadsApi {
     }
   }
 
+  /**
+   * Reversa una carga en Revisión de Almacén: libera el/los pedido(s) en
+   * CATELLI y borra el staging, para que puedan volver a armarse.
+   */
+  async cancelLoadReview(accessToken, loadId, reason) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/review/${loadId}/cancel`;
+
+      const response = await fetch(url, {
+        method: "POST",
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+          "Content-Type": "application/json",
+        },
+        body: JSON.stringify({ reason }),
+      });
+
+      const result = await response.json();
+      if (!response.ok) throw result;
+      return result.data || result;
+    } catch (error) {
+      console.error("Error al reversar la carga:", error);
+      throw error;
+    }
+  }
+
+  /**
+   * Genera el PDF de la hoja de armado de una carga y devuelve una URL de
+   * objeto local para abrirlo — a diferencia del resto de los métodos acá, la
+   * respuesta es un blob PDF, no JSON (la ruta exige Authorization: Bearer,
+   * así que no se puede linkear directo con un <a href>).
+   */
+  async printLoadReview(accessToken, loadId) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/review/${loadId}/print`;
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        throw result;
+      }
+
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    } catch (error) {
+      console.error("Error al generar el PDF de la carga:", error);
+      throw error;
+    }
+  }
+
   // ========================================
   // MÉTODOS PARA GESTIÓN DE TRASPASOS (CONSOLIDADOS)
   // ========================================

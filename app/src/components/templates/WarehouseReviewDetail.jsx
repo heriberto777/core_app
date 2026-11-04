@@ -8,6 +8,8 @@ import {
   FaExclamationTriangle,
   FaCheckCircle,
   FaSearch,
+  FaPrint,
+  FaUndo,
 } from "react-icons/fa";
 import Swal from "sweetalert2";
 import {
@@ -228,7 +230,7 @@ export function WarehouseReviewDetail() {
   const { loadId } = useParams();
   const navigate = useNavigate();
   const { accessToken } = useAuth();
-  const { productos, loading, error, isSaving, isAuthorizing, warehouses, bodegasDetectadas, bodegaOrigen, actions } =
+  const { productos, loading, error, isSaving, isAuthorizing, isCancelling, isPrinting, warehouses, bodegasDetectadas, bodegaOrigen, actions } =
     useWarehouseReviewDetail(accessToken, loadId);
   const [search, setSearch] = useState("");
 
@@ -296,6 +298,54 @@ export function WarehouseReviewDetail() {
         icon: "error",
         title: "No se pudo autorizar",
         text: err.message || "Error al autorizar el despacho",
+        confirmButtonColor: "#ef4444",
+      });
+    }
+  };
+
+  const handlePrint = async () => {
+    try {
+      await actions.printLoad();
+    } catch (err) {
+      Swal.fire({
+        icon: "error",
+        title: "No se pudo generar el PDF",
+        text: err.message || "Error al generar la hoja de armado",
+        confirmButtonColor: "#ef4444",
+      });
+    }
+  };
+
+  const handleCancelLoad = async () => {
+    const { value: reason, isConfirmed } = await Swal.fire({
+      title: "¿Reversar esta carga?",
+      html: `<p class="text-left text-sm text-slate-600 mb-2">El/los pedido(s) vuelven a estar disponibles para armarse de nuevo en Gestión de Cargas. El armado y los ajustes de hoy se pierden.</p>`,
+      input: "textarea",
+      inputLabel: "Motivo de la reversión",
+      inputPlaceholder: "Ej: se armó con el repartidor equivocado...",
+      icon: "warning",
+      showCancelButton: true,
+      confirmButtonColor: "#ef4444",
+      confirmButtonText: "Sí, reversar carga",
+      cancelButtonText: "Cancelar",
+      inputValidator: (value) => (!value?.trim() ? "El motivo es obligatorio" : undefined),
+    });
+    if (!isConfirmed) return;
+
+    try {
+      await actions.cancelLoad(reason.trim());
+      Swal.fire({
+        icon: "success",
+        title: "Carga reversada",
+        text: "El/los pedido(s) ya están disponibles para armarse de nuevo.",
+        confirmButtonColor: "#6366f1",
+      });
+      navigate("/loads/revision");
+    } catch (err) {
+      Swal.fire({
+        icon: "error",
+        title: "No se pudo reversar la carga",
+        text: err.message || "Error al reversar la carga",
         confirmButtonColor: "#ef4444",
       });
     }
@@ -373,6 +423,10 @@ export function WarehouseReviewDetail() {
               </optgroup>
             </select>
           </div>
+
+          <Button variant="secondary" onClick={handlePrint} loading={isPrinting}>
+            <FaPrint /> Imprimir armado
+          </Button>
         </div>
 
         {loading ? (
@@ -397,13 +451,18 @@ export function WarehouseReviewDetail() {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-2xl z-50">
-        <div className="max-w-[1400px] mx-auto px-6 lg:px-10 py-4 flex justify-end gap-3">
-          <Button variant="secondary" onClick={() => navigate("/loads/revision")}>
-            Volver después
+        <div className="max-w-[1400px] mx-auto px-6 lg:px-10 py-4 flex justify-between gap-3">
+          <Button variant="danger" onClick={handleCancelLoad} loading={isCancelling}>
+            <FaUndo /> Reversar carga
           </Button>
-          <Button variant="primary" onClick={handleAuthorize} loading={isAuthorizing} className="!px-8">
-            Autorizar despacho →
-          </Button>
+          <div className="flex gap-3">
+            <Button variant="secondary" onClick={() => navigate("/loads/revision")}>
+              Volver después
+            </Button>
+            <Button variant="primary" onClick={handleAuthorize} loading={isAuthorizing} className="!px-8">
+              Autorizar despacho →
+            </Button>
+          </div>
         </div>
       </div>
     </div>

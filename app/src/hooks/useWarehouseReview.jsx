@@ -39,6 +39,8 @@ export function useWarehouseReview(accessToken) {
 export function useWarehouseReviewDetail(accessToken, loadId) {
     const [isSaving, setIsSaving] = useState(false);
     const [isAuthorizing, setIsAuthorizing] = useState(false);
+    const [isCancelling, setIsCancelling] = useState(false);
+    const [isPrinting, setIsPrinting] = useState(false);
     const [warehouses, setWarehouses] = useState([]);
     const [bodegaOrigen, setBodegaOrigen] = useState("");
 
@@ -91,12 +93,33 @@ export function useWarehouseReviewDetail(accessToken, loadId) {
         }
     };
 
+    const cancelLoad = async (reason) => {
+        setIsCancelling(true);
+        try {
+            return await loadsApi.cancelLoadReview(accessToken, loadId, reason);
+        } finally {
+            setIsCancelling(false);
+        }
+    };
+
+    const printLoad = async () => {
+        setIsPrinting(true);
+        try {
+            const objectUrl = await loadsApi.printLoadReview(accessToken, loadId);
+            window.open(objectUrl, "_blank");
+        } finally {
+            setIsPrinting(false);
+        }
+    };
+
     return {
         productos: data?.productos || [],
         loading,
         error,
         isSaving,
         isAuthorizing,
+        isCancelling,
+        isPrinting,
         warehouses,
         bodegasDetectadas: data?.bodegasDetectadas || [],
         bodegaOrigen,
@@ -104,6 +127,8 @@ export function useWarehouseReviewDetail(accessToken, loadId) {
             refresh: fetchData,
             saveAdjustment,
             authorize,
+            cancelLoad,
+            printLoad,
             setBodegaOrigen,
         },
     };
