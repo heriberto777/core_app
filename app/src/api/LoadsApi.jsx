@@ -349,6 +349,34 @@ class LoadsApi {
     }
   }
 
+  /**
+   * Genera el PDF de resumen de pedidos de una carga (para que el repartidor
+   * cierre la ruta) y devuelve una URL de objeto local -- mismo patrón que
+   * printLoadReview.
+   */
+  async printLoadOrdersSummary(accessToken, loadId) {
+    try {
+      const url = `${this.baseApi}/${ENV.API_ROUTERS.LOAD}/review/${loadId}/print-orders-summary`;
+
+      const response = await fetch(url, {
+        headers: {
+          Authorization: `Bearer ${accessToken}`,
+        },
+      });
+
+      if (!response.ok) {
+        const result = await response.json();
+        throw result;
+      }
+
+      const blob = await response.blob();
+      return URL.createObjectURL(blob);
+    } catch (error) {
+      console.error("Error al generar el resumen de pedidos de la carga:", error);
+      throw error;
+    }
+  }
+
   // ========================================
   // MÉTODOS PARA GESTIÓN DE TRASPASOS (CONSOLIDADOS)
   // ========================================

@@ -10,6 +10,7 @@ import {
   FaSearch,
   FaPrint,
   FaUndo,
+  FaClipboardList,
 } from "react-icons/fa";
 import Swal from "sweetalert2";
 import {
@@ -230,7 +231,7 @@ export function WarehouseReviewDetail() {
   const { loadId } = useParams();
   const navigate = useNavigate();
   const { accessToken } = useAuth();
-  const { productos, loading, error, isSaving, isAuthorizing, isCancelling, isPrinting, warehouses, bodegasDetectadas, bodegaOrigen, actions } =
+  const { productos, loading, error, isSaving, isAuthorizing, isCancelling, isPrinting, isPrintingSummary, warehouses, bodegasDetectadas, bodegaOrigen, actions } =
     useWarehouseReviewDetail(accessToken, loadId);
   const [search, setSearch] = useState("");
 
@@ -303,18 +304,19 @@ export function WarehouseReviewDetail() {
     }
   };
 
-  const handlePrint = async () => {
-    // La pestaña se abre ACÁ, sincrónicamente dentro del handler del click,
-    // antes de esperar el PDF -- si se abre después del await (como hacía
-    // antes), el navegador ya no lo asocia al click del usuario y la bloquea
-    // sin avisar (esto era el bug: "se queda pensando y no sale nada").
+  // La pestaña se abre ACÁ, sincrónicamente dentro del handler del click,
+  // antes de esperar el PDF -- si se abre después del await, el navegador ya
+  // no lo asocia al click del usuario y la bloquea sin avisar (esto era el
+  // bug: "se queda pensando y no sale nada"). Compartido por ambos PDFs
+  // (armado y resumen de pedidos).
+  const openPdfFromAction = async (actionFn, errorTitle) => {
     const printWindow = window.open("", "_blank");
     if (printWindow) {
       printWindow.document.write("<p style='font-family:sans-serif;padding:2rem;color:#64748b'>Generando PDF…</p>");
     }
 
     try {
-      const objectUrl = await actions.printLoad();
+      const objectUrl = await actionFn();
       if (printWindow) {
         printWindow.location.href = objectUrl;
       } else {
@@ -329,12 +331,15 @@ export function WarehouseReviewDetail() {
       if (printWindow) printWindow.close();
       Swal.fire({
         icon: "error",
-        title: "No se pudo generar el PDF",
-        text: err.message || "Error al generar la hoja de armado",
+        title: errorTitle,
+        text: err.message || "Error al generar el PDF",
         confirmButtonColor: "#ef4444",
       });
     }
   };
+
+  const handlePrint = () => openPdfFromAction(actions.printLoad, "No se pudo generar el PDF");
+  const handlePrintSummary = () => openPdfFromAction(actions.printOrdersSummary, "No se pudo generar el resumen de pedidos");
 
   const handleCancelLoad = async () => {
     const { value: reason, isConfirmed } = await Swal.fire({
@@ -446,6 +451,10 @@ export function WarehouseReviewDetail() {
 
           <Button variant="secondary" onClick={handlePrint} loading={isPrinting}>
             <FaPrint /> Imprimir armado
+          </Button>
+
+          <Button variant="secondary" onClick={handlePrintSummary} loading={isPrintingSummary}>
+            <FaClipboardList /> Resumen de pedidos
           </Button>
         </div>
 

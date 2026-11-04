@@ -41,6 +41,7 @@ export function useWarehouseReviewDetail(accessToken, loadId) {
     const [isAuthorizing, setIsAuthorizing] = useState(false);
     const [isCancelling, setIsCancelling] = useState(false);
     const [isPrinting, setIsPrinting] = useState(false);
+    const [isPrintingSummary, setIsPrintingSummary] = useState(false);
     const [warehouses, setWarehouses] = useState([]);
     const [bodegaOrigen, setBodegaOrigen] = useState("");
 
@@ -115,6 +116,15 @@ export function useWarehouseReviewDetail(accessToken, loadId) {
         }
     };
 
+    const printOrdersSummary = async () => {
+        setIsPrintingSummary(true);
+        try {
+            return await loadsApi.printLoadOrdersSummary(accessToken, loadId);
+        } finally {
+            setIsPrintingSummary(false);
+        }
+    };
+
     return {
         productos: data?.productos || [],
         loading,
@@ -123,6 +133,7 @@ export function useWarehouseReviewDetail(accessToken, loadId) {
         isAuthorizing,
         isCancelling,
         isPrinting,
+        isPrintingSummary,
         warehouses,
         bodegasDetectadas: data?.bodegasDetectadas || [],
         bodegaOrigen,
@@ -132,6 +143,7 @@ export function useWarehouseReviewDetail(accessToken, loadId) {
             authorize,
             cancelLoad,
             printLoad,
+            printOrdersSummary,
             setBodegaOrigen,
         },
     };
