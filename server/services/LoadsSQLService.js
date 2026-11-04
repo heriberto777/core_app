@@ -750,16 +750,19 @@ class LoadsSQLService {
         WITH BaseData AS (
           SELECT
             pl.PEDIDO, pl.PEDIDO_LINEA, pl.ARTICULO AS Code_Product,
-            pl.CANTIDAD_PEDIDA, pl.CANTIDAD_BONIFICAD,
+            pl.CANTIDAD_PEDIDA, pl.CANTIDAD_BONIFICAD, pl.PRECIO_UNITARIO,
             ar.DESCRIPCION AS descripcion,
             ar.peso_bruto AS empaque,
             ar.UNIDAD_ALMACEN AS unidadMedida,
+            ar.CLASIFICACION_1 AS categoriaCodigo,
+            COALESCE(cla.DESCRIPCION, ar.CLASIFICACION_1) AS categoriaDescripcion,
             pe.CLIENTE AS cliente,
             cl.detalle_direccion AS direccionCliente
           FROM ${schema}.PEDIDO_LINEA pl
           INNER JOIN ${schema}.PEDIDO pe ON pe.PEDIDO = pl.PEDIDO
           INNER JOIN ${schema}.CLIENTE cl ON cl.CLIENTE = pe.CLIENTE
           LEFT JOIN ${schema}.ARTICULO ar ON ar.ARTICULO = pl.ARTICULO
+          LEFT JOIN ${schema}.CLASIFICACION cla ON cla.CLASIFICACION = ar.CLASIFICACION_1
           WHERE pe.U_Code_Load = @loadId
         )
         -- Pagado ('P') y bonificado ('B') de la MISMA PEDIDO_LINEA salen como
@@ -770,17 +773,24 @@ class LoadsSQLService {
         SELECT bd.PEDIDO, bd.PEDIDO_LINEA, bd.Code_Product, 'P' AS tipoLinea,
                bd.CANTIDAD_PEDIDA AS cantidadOriginal,
                COALESCE(adj.cantidad_ajustada, bd.CANTIDAD_PEDIDA) AS cantidadActual,
-               bd.descripcion, bd.empaque, bd.unidadMedida, bd.cliente, bd.direccionCliente,
+               bd.PRECIO_UNITARIO AS precioUnitario,
+               bd.descripcion, bd.empaque, bd.unidadMedida, bd.categoriaCodigo, bd.categoriaDescripcion,
+               bd.cliente, bd.direccionCliente,
                adj.motivo, adj.ajustado_por AS ajustadoPor, adj.fecha AS fechaAjuste
         FROM BaseData bd
         LEFT JOIN core_app.loads_orders_adjustments adj
           ON adj.code_load = @loadId AND adj.pedido = bd.PEDIDO AND adj.pedido_linea = bd.PEDIDO_LINEA AND adj.tipo_linea = 'P'
         WHERE bd.CANTIDAD_PEDIDA <> 0
         UNION ALL
+        -- Bonificado no tiene precio (ver mismo criterio en getTransformedOrdersData:
+        -- PRECIO_UNITARIO se manda en 0 para la linea 'B'), asi que no aporta a
+        -- "Valor" en la hoja de armado -- es mercaderia de regalo, no de venta.
         SELECT bd.PEDIDO, bd.PEDIDO_LINEA, bd.Code_Product, 'B' AS tipoLinea,
                bd.CANTIDAD_BONIFICAD AS cantidadOriginal,
                COALESCE(adj.cantidad_ajustada, bd.CANTIDAD_BONIFICAD) AS cantidadActual,
-               bd.descripcion, bd.empaque, bd.unidadMedida, bd.cliente, bd.direccionCliente,
+               0 AS precioUnitario,
+               bd.descripcion, bd.empaque, bd.unidadMedida, bd.categoriaCodigo, bd.categoriaDescripcion,
+               bd.cliente, bd.direccionCliente,
                adj.motivo, adj.ajustado_por AS ajustadoPor, adj.fecha AS fechaAjuste
         FROM BaseData bd
         LEFT JOIN core_app.loads_orders_adjustments adj
@@ -802,14 +812,22 @@ class LoadsSQLService {
                         descripcion: row.descripcion || row.Code_Product,
                         empaque: row.empaque || 1,
                         unidadMedida: row.unidadMedida,
+                        // Sin categoria en CATELLI (ARTICULO.CLASIFICACION_1 NULL) --
+                        // cae a un grupo aparte en vez de romper el armado por categoria.
+                        categoriaCodigo: row.categoriaCodigo || "SIN-CAT",
+                        categoriaDescripcion: row.categoriaDescripcion || "Sin categoría",
                         totalOriginal: 0,
                         totalActual: 0,
+                        valorTotal: 0,
                         lineas: [],
                     });
                 }
                 const producto = productosMap.get(row.Code_Product);
+                const precioUnitario = Number(row.precioUnitario) || 0;
+                const cantidadActual = Number(row.cantidadActual) || 0;
                 producto.totalOriginal += Number(row.cantidadOriginal) || 0;
-                producto.totalActual += Number(row.cantidadActual) || 0;
+                producto.totalActual += cantidadActual;
+                producto.valorTotal += cantidadActual * precioUnitario;
                 producto.lineas.push({
                     pedido: row.PEDIDO,
                     pedidoLinea: row.PEDIDO_LINEA,
@@ -817,7 +835,8 @@ class LoadsSQLService {
                     cliente: row.cliente,
                     direccionCliente: row.direccionCliente,
                     cantidadOriginal: Number(row.cantidadOriginal) || 0,
-                    cantidadActual: Number(row.cantidadActual) || 0,
+                    cantidadActual,
+                    precioUnitario,
                     motivo: row.motivo || null,
                     ajustadoPor: row.ajustadoPor || null,
                     fechaAjuste: row.fechaAjuste || null,

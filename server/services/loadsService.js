@@ -35,6 +35,12 @@ function formatCompactDate(dateStr) {
   return `${dateStr.slice(6, 8)}/${dateStr.slice(4, 6)}/${dateStr.slice(0, 4)}`;
 }
 
+// Para la hoja de armado (getLoadPrintData) -- mismo formato que el resto de
+// reportes de Catelli ("RD$ 1,234.56").
+function formatMoney(value) {
+  return (Number(value) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+}
+
 class LoadsService {
   // ─── Métodos delegados a LoadsSQLService ────────────────────────────────
 
@@ -286,16 +292,42 @@ class LoadsService {
     // Handlebars no hace aritmética -- se precalcula cajas/unidades acá (mismo
     // cálculo que ya hace toCajasUnidades en WarehouseReviewDetail.jsx) para
     // que la plantilla solo imprima valores ya resueltos.
-    // Handlebars no soporta comparaciones (`{{#if (eq a b)}}`) sin registrar
-    // helpers custom, y EmailTemplateService no registra ninguno -- se
-    // precalcula el booleano acá en vez de comparar tipoLinea en la plantilla.
+    // Sin detalle de líneas/pedidos acá a propósito -- una carga de 100
+    // artículos generaría demasiadas páginas; esto es un resumen por producto
+    // para que Almacén reconcilie cantidades, no un desglose por pedido (ver
+    // getLoadOrdersSummaryData para el resumen por pedido, sin artículos).
     const productos = reviewDetail.productos.map((producto) => {
       const empaque = producto.empaque > 0 ? producto.empaque : 1;
       const cajas = Math.floor(producto.totalActual / empaque);
       const unidadesSueltas = Math.round(producto.totalActual - cajas * empaque);
-      const lineas = producto.lineas.map((linea) => ({ ...linea, esBonificado: linea.tipoLinea === "B" }));
-      return { ...producto, cajas, unidadesSueltas, lineas };
+      return {
+        ...producto,
+        cajas,
+        unidadesSueltas,
+        valorFormateado: formatMoney(producto.valorTotal),
+      };
     });
+
+    // Agrupadas por categoría (ARTICULO.CLASIFICACION_1 en CATELLI, ej. "C10
+    // BODY CARE") -- pedido del usuario 2026-11-04, mismo formato que el
+    // reporte "Lista de Empaque por Vendedor" que ya usa Almacén. Handlebars
+    // no agrupa por sí solo, así que se arma acá antes de pasarlo a la
+    // plantilla. Orden alfabético por código de categoría.
+    const categoriasMap = new Map();
+    for (const producto of productos) {
+      const key = producto.categoriaCodigo;
+      if (!categoriasMap.has(key)) {
+        categoriasMap.set(key, {
+          codigo: producto.categoriaCodigo,
+          descripcion: producto.categoriaDescripcion,
+          productos: [],
+        });
+      }
+      categoriasMap.get(key).productos.push(producto);
+    }
+    const categorias = Array.from(categoriasMap.values()).sort((a, b) => a.codigo.localeCompare(b.codigo));
+
+    const totalValor = productos.reduce((sum, p) => sum + p.valorTotal, 0);
 
     return {
       loadId,
@@ -306,8 +338,67 @@ class LoadsService {
       bodegasDetectadas: reviewDetail.bodegasDetectadas,
       bodegaOrigenSugerida: reviewDetail.bodegaOrigenSugerida,
       totalPedidos: pedidosUnicos.size,
-      productos,
+      totalProductos: productos.length,
+      categorias,
+      totalValorFormateado: formatMoney(totalValor),
       generatedAt: new Date().toLocaleString("es-DO"),
+      generatedDate: new Date().toLocaleDateString("es-DO"),
+      generatedTime: new Date().toLocaleTimeString("es-DO"),
+    };
+  }
+
+  /**
+   * Datos para el resumen de pedidos de una carga (ver
+   * loadsController.printLoadOrdersSummary) -- el complemento de
+   * getLoadPrintData: ahí es por producto sin pedidos, acá es por pedido sin
+   * productos. Pensado para que el repartidor cierre la ruta: pedido,
+   * cliente y valor bruto calculado; Devuelto/Cobrado/Pendiente quedan en
+   * blanco en la plantilla porque dependen de lo que pase en la calle, no
+   * los tenemos en el sistema todavía.
+   */
+  static async getLoadOrdersSummaryData(loadId) {
+    const tracking = await LoadsTrackingService.getByLoadId(loadId);
+    if (!tracking) {
+      throw new Error(`Carga ${loadId} no encontrada`);
+    }
+    const reviewDetail = await LoadsSQLService.getLoadReviewDetail(loadId);
+    const deliveryPerson = await LoadsSQLService.validateDeliveryPerson(tracking.route).catch(() => null);
+
+    const pedidosMap = new Map();
+    reviewDetail.productos.forEach((producto) => {
+      producto.lineas.forEach((linea) => {
+        if (!pedidosMap.has(linea.pedido)) {
+          pedidosMap.set(linea.pedido, {
+            pedido: linea.pedido,
+            cliente: linea.cliente,
+            direccionCliente: linea.direccionCliente,
+            valorBruto: 0,
+          });
+        }
+        // Bonificado tiene precioUnitario 0 (ver getLoadReviewDetail) -- no
+        // aporta a Valor Bruto, es mercadería de regalo, no de venta.
+        pedidosMap.get(linea.pedido).valorBruto += linea.cantidadActual * (linea.precioUnitario || 0);
+      });
+    });
+
+    const pedidos = Array.from(pedidosMap.values())
+      .sort((a, b) => a.pedido.localeCompare(b.pedido))
+      .map((p) => ({ ...p, valorBrutoFormateado: formatMoney(p.valorBruto) }));
+
+    const totalValorBruto = pedidos.reduce((sum, p) => sum + p.valorBruto, 0);
+
+    return {
+      loadId,
+      dateLoad: tracking.dateLoad,
+      dateLoadFormatted: formatCompactDate(tracking.dateLoad),
+      route: tracking.route,
+      deliveryPersonName: deliveryPerson?.name || tracking.route,
+      totalPedidos: pedidos.length,
+      pedidos,
+      totalValorBrutoFormateado: formatMoney(totalValorBruto),
+      generatedAt: new Date().toLocaleString("es-DO"),
+      generatedDate: new Date().toLocaleDateString("es-DO"),
+      generatedTime: new Date().toLocaleTimeString("es-DO"),
     };
   }
 

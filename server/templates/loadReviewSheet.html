@@ -7,224 +7,241 @@
     <style>
       body {
         font-family: Arial, sans-serif;
-        line-height: 1.6;
-        color: #333;
-        max-width: 900px;
-        margin: 0 auto;
-        padding: 20px;
+        color: #222;
+        font-size: 11px;
+        margin: 0;
+        padding: 20px 24px;
       }
-      .header {
-        text-align: center;
-        margin-bottom: 20px;
-        border-bottom: 2px solid #2c3e50;
-        padding-bottom: 10px;
-      }
-      .header h1 {
-        color: #2c3e50;
-        margin-bottom: 5px;
-      }
-      .header p {
-        color: #7f8c8d;
-        margin-top: 0;
-      }
-      .logo {
-        text-align: center;
-        margin-bottom: 20px;
-      }
-      .logo div {
-        font-size: 24px;
-        font-weight: bold;
-        border: 2px solid #333;
-        padding: 10px;
-        display: inline-block;
-      }
-      .summary {
-        background-color: #f9f9f9;
-        padding: 15px;
-        border-radius: 5px;
-        margin-bottom: 20px;
-        border: 1px solid #ddd;
-      }
-      .summary h2 {
-        margin-top: 0;
-        color: #2c3e50;
-        border-bottom: 1px solid #ddd;
+      .letterhead {
+        display: flex;
+        justify-content: space-between;
+        border-bottom: 2px solid #000;
         padding-bottom: 8px;
+        margin-bottom: 10px;
       }
-      .summary-grid {
+      .letterhead .company div:first-child {
+        font-weight: bold;
+        font-size: 13px;
+      }
+      .letterhead .meta {
+        text-align: right;
+      }
+      .letterhead .meta div {
+        white-space: nowrap;
+      }
+      .title {
+        text-align: center;
+        font-weight: bold;
+        font-size: 14px;
+        margin: 10px 0 2px;
+        text-transform: uppercase;
+      }
+      .subtitle {
+        text-align: center;
+        font-size: 11px;
+        margin-bottom: 10px;
+        color: #333;
+      }
+      .info-grid {
         display: flex;
         flex-wrap: wrap;
-        gap: 10px 30px;
+        gap: 4px 24px;
+        margin-bottom: 12px;
+        font-size: 11px;
       }
-      .summary-item {
-        min-width: 220px;
-      }
-      .summary-label {
-        font-weight: bold;
-        display: block;
-        font-size: 0.85em;
-        color: #7f8c8d;
-        text-transform: uppercase;
+      .info-grid b {
+        color: #000;
       }
       table {
         width: 100%;
         border-collapse: collapse;
-        margin-top: 20px;
+        margin-bottom: 4px;
       }
-      th {
-        background-color: #2c3e50;
-        color: white;
+      thead th {
+        border-top: 1px solid #000;
+        border-bottom: 1px solid #000;
+        padding: 4px 6px;
         text-align: left;
-        padding: 8px;
+        font-size: 10.5px;
       }
       td {
-        padding: 6px 8px;
-        border-bottom: 1px solid #ddd;
-        font-size: 0.92em;
+        padding: 3px 6px;
+        font-size: 10.5px;
+        vertical-align: top;
       }
-      tr.producto-row {
-        background-color: #eef2f7;
+      .col-num { text-align: right; width: 8%; }
+      .col-und { text-align: right; width: 10%; }
+      .col-caja { text-align: center; width: 14%; }
+      .col-unid { text-align: right; width: 12%; }
+      .col-valor { text-align: right; width: 14%; }
+      tr.categoria-row td {
+        font-weight: bold;
+        padding-top: 10px;
+        border-bottom: 1px solid #999;
+      }
+      tr.categoria-row .cat-codigo {
+        display: inline-block;
+        min-width: 40px;
       }
       tr.producto-row td {
+        border-bottom: 1px solid #eee;
+      }
+      .totales {
+        display: flex;
+        justify-content: space-between;
+        border-top: 2px solid #000;
+        padding-top: 8px;
+        margin-top: 6px;
         font-weight: bold;
       }
-      .badge {
+      .firmas {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 60px;
+      }
+      .firma-linea {
+        width: 30%;
+        text-align: center;
+        border-top: 1px solid #333;
+        padding-top: 4px;
+        font-size: 10.5px;
+      }
+      .bloque-operativo {
+        margin-top: 40px;
+        border-top: 2px solid #000;
+        padding-top: 10px;
+      }
+      .bloque-operativo h4 {
+        margin: 0 0 8px;
+        font-size: 12px;
+        text-transform: uppercase;
+      }
+      .bloque-operativo .fila {
+        display: flex;
+        gap: 40px;
+        align-items: center;
+        margin-bottom: 10px;
+        font-size: 11px;
+      }
+      .casilla {
         display: inline-block;
-        padding: 2px 8px;
-        border-radius: 10px;
-        font-size: 0.8em;
-        font-weight: bold;
+        width: 50px;
+        height: 18px;
+        border: 1px solid #333;
+        margin-left: 6px;
+        vertical-align: middle;
       }
-      .badge-pagado {
-        background-color: #e2e8f0;
-        color: #475569;
-      }
-      .badge-bonificado {
-        background-color: #ede9fe;
-        color: #6d28d9;
+      .linea-blanco {
+        display: inline-block;
+        width: 180px;
+        border-bottom: 1px solid #333;
+        margin-left: 6px;
       }
       .note {
         font-style: italic;
         color: #7f8c8d;
-        margin-top: 15px;
-        font-size: 0.85em;
-      }
-      .signature {
-        margin-top: 50px;
-        display: flex;
-        justify-content: space-around;
-      }
-      .signature-line {
-        text-align: center;
-        border-top: 1px solid #333;
-        width: 220px;
-        padding-top: 5px;
-      }
-      .footer {
-        margin-top: 30px;
-        border-top: 1px solid #ddd;
-        padding-top: 15px;
-        color: #7f8c8d;
-        font-size: 0.85em;
-        text-align: center;
+        margin: 10px 0;
+        font-size: 9.5px;
       }
     </style>
   </head>
   <body>
-    <div class="logo"><div>CATELLI</div></div>
-
-    <div class="header">
-      <h1>Hoja de Armado de Carga</h1>
-      <p>Carga {{loadId}} — generada el {{generatedAt}}</p>
-    </div>
-
-    <div class="summary">
-      <h2>Información de la Carga</h2>
-      <div class="summary-grid">
-        <div class="summary-item">
-          <span class="summary-label">Repartidor</span>
-          <span>{{deliveryPersonName}} ({{route}})</span>
-        </div>
-        <div class="summary-item">
-          <span class="summary-label">Fecha de carga</span>
-          <span>{{dateLoadFormatted}}</span>
-        </div>
-        <div class="summary-item">
-          <span class="summary-label">Bodega(s) de origen</span>
-          <span>
-            {{#if bodegasDetectadas.length}}
-              {{#each bodegasDetectadas}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
-            {{else}}
-              {{bodegaOrigenSugerida}}
-            {{/if}}
-          </span>
-        </div>
-        <div class="summary-item">
-          <span class="summary-label">Total pedidos</span>
-          <span>{{totalPedidos}}</span>
-        </div>
-        <div class="summary-item">
-          <span class="summary-label">Total productos</span>
-          <span>{{productos.length}}</span>
-        </div>
+    <div class="letterhead">
+      <div class="company">
+        <div>INVERSIONES CATELLI, S.A.S</div>
+        <div>Centro de Distribución — Catelli Core</div>
+      </div>
+      <div class="meta">
+        <div><b>Fecha:</b> {{generatedDate}}</div>
+        <div><b>Hora:</b> {{generatedTime}}</div>
+        <div><b>Carga:</b> {{loadId}}</div>
       </div>
     </div>
 
-    <h3>Detalle de Armado</h3>
+    <div class="title">Hoja de Armado — Reconteo de Almacén</div>
+    <div class="subtitle">Fecha de carga: {{dateLoadFormatted}}</div>
+
+    <div class="info-grid">
+      <div><b>Repartidor:</b> {{deliveryPersonName}} ({{route}})</div>
+      <div><b>Bodega(s) origen:</b>
+        {{#if bodegasDetectadas.length}}
+          {{#each bodegasDetectadas}}{{this}}{{#unless @last}}, {{/unless}}{{/each}}
+        {{else}}
+          {{bodegaOrigenSugerida}}
+        {{/if}}
+      </div>
+      <div><b>Total pedidos:</b> {{totalPedidos}}</div>
+      <div><b>Total productos:</b> {{totalProductos}}</div>
+    </div>
+
     <table>
       <thead>
         <tr>
-          <th style="width: 32%">Producto</th>
-          <th>Pedido</th>
-          <th>Tipo</th>
-          <th>Cliente</th>
-          <th style="text-align: right">Cant.</th>
+          <th style="width: 36%">Producto</th>
+          <th class="col-und">UND x Caja</th>
+          <th class="col-caja">Cajas</th>
+          <th class="col-unid">Unid. Sueltas</th>
+          <th class="col-valor">Valor RD$</th>
         </tr>
       </thead>
       <tbody>
+        {{#each categorias}}
+        <tr class="categoria-row">
+          <td colspan="5">
+            Categoría: <span class="cat-codigo">{{codigo}}</span> {{descripcion}}
+          </td>
+        </tr>
         {{#each productos}}
         <tr class="producto-row">
-          <td colspan="4">
-            {{codigo}} — {{descripcion}} (Empaque: {{empaque}} {{unidadMedida}}/caja)
-          </td>
-          <td style="text-align: right">{{cajas}} cj + {{unidadesSueltas}} u</td>
-        </tr>
-        {{#each lineas}}
-        <tr>
-          <td></td>
-          <td>{{pedido}}</td>
-          <td>
-            {{#if esBonificado}}
-              <span class="badge badge-bonificado">Bonificado</span>
-            {{else}}
-              <span class="badge badge-pagado">Pagado</span>
-            {{/if}}
-          </td>
-          <td>
-            {{cliente}}
-            {{#if direccionCliente}}<br /><small>{{direccionCliente}}</small>{{/if}}
-          </td>
-          <td style="text-align: right">{{cantidadActual}}</td>
+          <td>{{codigo}} — {{descripcion}}</td>
+          <td class="col-und">{{empaque}} {{unidadMedida}}</td>
+          <td class="col-caja">{{cajas}}</td>
+          <td class="col-unid">{{unidadesSueltas}}</td>
+          <td class="col-valor">{{valorFormateado}}</td>
         </tr>
         {{/each}}
         {{/each}}
       </tbody>
     </table>
 
+    <div class="totales">
+      <div>Cantidad de pedidos: {{totalPedidos}}</div>
+      <div>TOTAL GENERAL: RD$ {{totalValorFormateado}}</div>
+    </div>
+
     <div class="note">
-      <p>
-        Marcar en esta hoja cualquier diferencia encontrada entre lo armado y el estado físico
-        en bodega, y reportarla antes de autorizar el despacho en el sistema.
-      </p>
+      Marcar en esta hoja cualquier diferencia encontrada entre lo armado y el estado físico en
+      bodega, y reportarla antes de autorizar el despacho en el sistema.
     </div>
 
-    <div class="signature">
-      <div class="signature-line">Armado por</div>
-      <div class="signature-line">Revisado por</div>
+    <div class="firmas">
+      <div class="firma-linea">Recibido Por</div>
+      <div class="firma-linea">Entregado Por</div>
+      <div class="firma-linea">Encargado Almacén</div>
     </div>
 
-    <div class="footer">
-      <p>CATELLI — Hoja de Armado — Carga {{loadId}}</p>
+    <div class="bloque-operativo">
+      <h4>Despacho</h4>
+      <div class="fila">
+        <span>CAJAS <span class="casilla"></span></span>
+        <span>UNIDADES <span class="casilla"></span></span>
+      </div>
+      <div class="fila">
+        <span>Horas Inicio <span class="linea-blanco"></span></span>
+        <span>Hora Final <span class="linea-blanco"></span></span>
+      </div>
+
+      <h4>Certificación</h4>
+      <div class="fila">
+        <span>Horas Inicio <span class="linea-blanco"></span></span>
+        <span>Hora Final <span class="linea-blanco"></span></span>
+      </div>
+    </div>
+
+    <div class="firmas" style="margin-top: 50px;">
+      <div class="firma-linea">Despachado Por</div>
+      <div class="firma-linea">Certificado Por</div>
+      <div class="firma-linea">Ayudante</div>
     </div>
   </body>
 </html>

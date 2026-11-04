@@ -178,6 +178,14 @@ router.get('/review/:loadId/print',
   LoadsController.printLoadReview
 );
 
+/**
+ * @route GET /api/loads/review/:loadId/print-orders-summary
+ */
+router.get('/review/:loadId/print-orders-summary',
+  checkPermission('loads', 'read'),
+  LoadsController.printLoadOrdersSummary
+);
+
 // ================================================
 // RUTAS DE GESTIÓN DE TRASPASOS
 // ================================================

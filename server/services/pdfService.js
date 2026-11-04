@@ -165,6 +165,18 @@ class PDFService {
   }
 
   /**
+   * Genera el PDF de resumen de pedidos de una carga, para que el repartidor
+   * cierre la ruta -- complemento de generateLoadReviewPDF (esa es por
+   * producto, esta es por pedido).
+   * @param {Object} ordersSummaryData - Datos de LoadsService.getLoadOrdersSummaryData
+   * @returns {Promise<Buffer>}
+   */
+  static async generateLoadOrdersSummaryPDF(ordersSummaryData) {
+    const htmlContent = EmailTemplateService.renderTemplate("loadOrdersSummary", ordersSummaryData);
+    return await this.generatePDF(htmlContent);
+  }
+
+  /**
    * Elimina un archivo PDF temporal
    * @param {string} filePath - Ruta del archivo a eliminar
    * @returns {Promise<boolean>} - true si se eliminó correctamente

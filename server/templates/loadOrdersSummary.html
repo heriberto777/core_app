@@ -1,0 +1,164 @@
+<!DOCTYPE html>
+<html lang="es">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>Resumen de Pedidos — Carga {{loadId}}</title>
+    <style>
+      body {
+        font-family: Arial, sans-serif;
+        color: #222;
+        font-size: 11px;
+        margin: 0;
+        padding: 20px 24px;
+      }
+      .letterhead {
+        display: flex;
+        justify-content: space-between;
+        border-bottom: 2px solid #000;
+        padding-bottom: 8px;
+        margin-bottom: 10px;
+      }
+      .letterhead .company div:first-child {
+        font-weight: bold;
+        font-size: 13px;
+      }
+      .letterhead .meta {
+        text-align: right;
+      }
+      .letterhead .meta div {
+        white-space: nowrap;
+      }
+      .title {
+        text-align: center;
+        font-weight: bold;
+        font-size: 14px;
+        margin: 10px 0 2px;
+        text-transform: uppercase;
+      }
+      .subtitle {
+        text-align: center;
+        font-size: 11px;
+        margin-bottom: 10px;
+        color: #333;
+      }
+      .info-grid {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 4px 24px;
+        margin-bottom: 12px;
+        font-size: 11px;
+      }
+      .info-grid b {
+        color: #000;
+      }
+      table {
+        width: 100%;
+        border-collapse: collapse;
+        margin-bottom: 4px;
+      }
+      thead th {
+        border-top: 1px solid #000;
+        border-bottom: 1px solid #000;
+        padding: 4px 6px;
+        text-align: left;
+        font-size: 10.5px;
+      }
+      td {
+        padding: 4px 6px;
+        font-size: 10.5px;
+        border-bottom: 1px solid #eee;
+        vertical-align: top;
+      }
+      .col-valor { text-align: right; width: 14%; }
+      .col-blanco { width: 12%; }
+      .totales {
+        display: flex;
+        justify-content: space-between;
+        border-top: 2px solid #000;
+        padding-top: 8px;
+        margin-top: 6px;
+        font-weight: bold;
+      }
+      .firmas {
+        display: flex;
+        justify-content: space-between;
+        margin-top: 60px;
+      }
+      .firma-linea {
+        width: 30%;
+        text-align: center;
+        border-top: 1px solid #333;
+        padding-top: 4px;
+        font-size: 10.5px;
+      }
+      .note {
+        font-style: italic;
+        color: #7f8c8d;
+        margin: 10px 0;
+        font-size: 9.5px;
+      }
+    </style>
+  </head>
+  <body>
+    <div class="letterhead">
+      <div class="company">
+        <div>INVERSIONES CATELLI, S.A.S</div>
+        <div>Centro de Distribución — Catelli Core</div>
+      </div>
+      <div class="meta">
+        <div><b>Fecha:</b> {{generatedDate}}</div>
+        <div><b>Hora:</b> {{generatedTime}}</div>
+        <div><b>Carga:</b> {{loadId}}</div>
+      </div>
+    </div>
+
+    <div class="title">Resumen de Pedidos — Cierre de Ruta</div>
+    <div class="subtitle">Fecha de carga: {{dateLoadFormatted}}</div>
+
+    <div class="info-grid">
+      <div><b>Repartidor:</b> {{deliveryPersonName}} ({{route}})</div>
+      <div><b>Total pedidos:</b> {{totalPedidos}}</div>
+    </div>
+
+    <table>
+      <thead>
+        <tr>
+          <th style="width: 12%">Pedido</th>
+          <th>Cliente</th>
+          <th class="col-valor">Valor Bruto RD$</th>
+          <th class="col-blanco">Devuelto</th>
+          <th class="col-blanco">Cobrado</th>
+          <th class="col-blanco">Pendiente</th>
+        </tr>
+      </thead>
+      <tbody>
+        {{#each pedidos}}
+        <tr>
+          <td>{{pedido}}</td>
+          <td>{{cliente}}{{#if direccionCliente}}<br /><small>{{direccionCliente}}</small>{{/if}}</td>
+          <td class="col-valor">{{valorBrutoFormateado}}</td>
+          <td class="col-blanco"></td>
+          <td class="col-blanco"></td>
+          <td class="col-blanco"></td>
+        </tr>
+        {{/each}}
+      </tbody>
+    </table>
+
+    <div class="totales">
+      <div>Total pedidos: {{totalPedidos}}</div>
+      <div>TOTAL VALOR BRUTO: RD$ {{totalValorBrutoFormateado}}</div>
+    </div>
+
+    <div class="note">
+      Devuelto / Cobrado / Pendiente se completan a mano al cerrar la ruta.
+    </div>
+
+    <div class="firmas">
+      <div class="firma-linea">Entregado Por (Repartidor)</div>
+      <div class="firma-linea">Recibido Por (Caja)</div>
+      <div class="firma-linea">Supervisor</div>
+    </div>
+  </body>
+</html>

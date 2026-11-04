@@ -624,6 +624,29 @@ class LoadsController {
     }
   }
 
+  /**
+   * Genera y devuelve el PDF de resumen de pedidos de una carga, para que el
+   * repartidor cierre la ruta -- complemento de printLoadReview (esa es por
+   * producto sin pedidos, esta es por pedido sin productos).
+   */
+  static async printLoadOrdersSummary(req, res) {
+    try {
+      const { loadId } = req.params;
+      const data = await LoadsService.getLoadOrdersSummaryData(loadId);
+      const pdfBuffer = await PDFService.generateLoadOrdersSummaryPDF(data);
+
+      res.setHeader("Content-Type", "application/pdf");
+      res.setHeader("Content-Disposition", `inline; filename="resumen-pedidos-${loadId}.pdf"`);
+      return res.status(200).send(pdfBuffer);
+    } catch (error) {
+      logger.error(`Error en printLoadOrdersSummary (${req.params.loadId}):`, error);
+      return res.status(500).json({
+        success: false,
+        message: error.message || "Error al generar el PDF",
+      });
+    }
+  }
+
   // ================================================
   // MÉTODOS DE TRASPASO ADICIONALES
   // ================================================
