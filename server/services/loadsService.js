@@ -41,6 +41,13 @@ function formatMoney(value) {
   return (Number(value) || 0).toLocaleString("en-US", { minimumFractionDigits: 2, maximumFractionDigits: 2 });
 }
 
+// Nombre de la compañía para el letterhead de los PDF de Cargas -- configurable
+// por variable de entorno (sin UI dedicada todavía, pedido del usuario
+// 2026-11-04) en vez de quedar hardcodeado en cada plantilla .html.
+function getCompanyName() {
+  return process.env.COMPANY_NAME || "INVERSIONES CATELLI, S.A.S";
+}
+
 class LoadsService {
   // ─── Métodos delegados a LoadsSQLService ────────────────────────────────
 
@@ -329,14 +336,23 @@ class LoadsService {
 
     const totalValor = productos.reduce((sum, p) => sum + p.valorTotal, 0);
 
+    // Un armado puede traer pedidos de 2 o 3 vendedores distintos -- no hay
+    // un único código que mostrar, así que se listan todos los detectados
+    // (ver getLoadReviewDetail.vendedoresDetectados).
+    const vendedoresTexto = reviewDetail.vendedoresDetectados.length > 0
+      ? reviewDetail.vendedoresDetectados.map((v) => `${v.codigo} - ${v.nombre}`).join(", ")
+      : "—";
+
     return {
       loadId,
+      companyName: getCompanyName(),
       dateLoad: tracking.dateLoad,
       dateLoadFormatted: formatCompactDate(tracking.dateLoad),
       route: tracking.route,
       deliveryPersonName: deliveryPerson?.name || tracking.route,
       bodegasDetectadas: reviewDetail.bodegasDetectadas,
       bodegaOrigenSugerida: reviewDetail.bodegaOrigenSugerida,
+      vendedoresTexto,
       totalPedidos: pedidosUnicos.size,
       totalProductos: productos.length,
       categorias,
@@ -352,9 +368,11 @@ class LoadsService {
    * loadsController.printLoadOrdersSummary) -- el complemento de
    * getLoadPrintData: ahí es por producto sin pedidos, acá es por pedido sin
    * productos. Pensado para que el repartidor cierre la ruta: pedido,
-   * cliente y valor bruto calculado; Devuelto/Cobrado/Pendiente quedan en
-   * blanco en la plantilla porque dependen de lo que pase en la calle, no
-   * los tenemos en el sistema todavía.
+   * cliente y valor bruto calculado.
+   *
+   * Un armado puede traer pedidos de varios vendedores distintos -- pedido
+   * del usuario 2026-11-04: una hoja (página) por vendedor, no una lista
+   * mezclada, para que cada uno concilie solo lo suyo.
    */
   static async getLoadOrdersSummaryData(loadId) {
     const tracking = await LoadsTrackingService.getByLoadId(loadId);
@@ -371,7 +389,10 @@ class LoadsService {
           pedidosMap.set(linea.pedido, {
             pedido: linea.pedido,
             cliente: linea.cliente,
+            nombreCliente: linea.nombreCliente || "—",
             direccionCliente: linea.direccionCliente,
+            vendedorCodigo: linea.vendedorCodigo || "SIN-VENDEDOR",
+            vendedorNombre: linea.vendedorNombre || "Sin vendedor asignado",
             valorBruto: 0,
           });
         }
@@ -381,20 +402,49 @@ class LoadsService {
       });
     });
 
-    const pedidos = Array.from(pedidosMap.values())
-      .sort((a, b) => a.pedido.localeCompare(b.pedido))
-      .map((p) => ({ ...p, valorBrutoFormateado: formatMoney(p.valorBruto) }));
+    const pedidos = Array.from(pedidosMap.values()).map((p) => ({
+      ...p,
+      valorBrutoFormateado: formatMoney(p.valorBruto),
+    }));
+
+    // Agrupa por vendedor -- cada grupo es una página/hoja independiente en
+    // la plantilla (loadOrdersSummary.html), con su propio total y firmas.
+    const vendedoresMap = new Map();
+    for (const pedido of pedidos) {
+      const key = pedido.vendedorCodigo;
+      if (!vendedoresMap.has(key)) {
+        vendedoresMap.set(key, {
+          vendedorCodigo: pedido.vendedorCodigo,
+          vendedorNombre: pedido.vendedorNombre,
+          pedidos: [],
+          totalValorBruto: 0,
+        });
+      }
+      const grupo = vendedoresMap.get(key);
+      grupo.pedidos.push(pedido);
+      grupo.totalValorBruto += pedido.valorBruto;
+    }
+
+    const vendedores = Array.from(vendedoresMap.values())
+      .sort((a, b) => a.vendedorCodigo.localeCompare(b.vendedorCodigo))
+      .map((grupo) => ({
+        ...grupo,
+        pedidos: grupo.pedidos.sort((a, b) => a.pedido.localeCompare(b.pedido)),
+        totalPedidos: grupo.pedidos.length,
+        totalValorBrutoFormateado: formatMoney(grupo.totalValorBruto),
+      }));
 
     const totalValorBruto = pedidos.reduce((sum, p) => sum + p.valorBruto, 0);
 
     return {
       loadId,
+      companyName: getCompanyName(),
       dateLoad: tracking.dateLoad,
       dateLoadFormatted: formatCompactDate(tracking.dateLoad),
       route: tracking.route,
       deliveryPersonName: deliveryPerson?.name || tracking.route,
       totalPedidos: pedidos.length,
-      pedidos,
+      vendedores,
       totalValorBrutoFormateado: formatMoney(totalValorBruto),
       generatedAt: new Date().toLocaleString("es-DO"),
       generatedDate: new Date().toLocaleDateString("es-DO"),

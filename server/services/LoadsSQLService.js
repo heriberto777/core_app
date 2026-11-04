@@ -757,12 +757,16 @@ class LoadsSQLService {
             ar.CLASIFICACION_1 AS categoriaCodigo,
             COALESCE(cla.DESCRIPCION, ar.CLASIFICACION_1) AS categoriaDescripcion,
             pe.CLIENTE AS cliente,
-            cl.detalle_direccion AS direccionCliente
+            cl.NOMBRE AS nombreCliente,
+            cl.detalle_direccion AS direccionCliente,
+            pe.VENDEDOR AS vendedorCodigo,
+            v.NOMBRE AS vendedorNombre
           FROM ${schema}.PEDIDO_LINEA pl
           INNER JOIN ${schema}.PEDIDO pe ON pe.PEDIDO = pl.PEDIDO
           INNER JOIN ${schema}.CLIENTE cl ON cl.CLIENTE = pe.CLIENTE
           LEFT JOIN ${schema}.ARTICULO ar ON ar.ARTICULO = pl.ARTICULO
           LEFT JOIN ${schema}.CLASIFICACION cla ON cla.CLASIFICACION = ar.CLASIFICACION_1
+          LEFT JOIN ${schema}.VENDEDOR v ON v.VENDEDOR = pe.VENDEDOR
           WHERE pe.U_Code_Load = @loadId
         )
         -- Pagado ('P') y bonificado ('B') de la MISMA PEDIDO_LINEA salen como
@@ -775,7 +779,7 @@ class LoadsSQLService {
                COALESCE(adj.cantidad_ajustada, bd.CANTIDAD_PEDIDA) AS cantidadActual,
                bd.PRECIO_UNITARIO AS precioUnitario,
                bd.descripcion, bd.empaque, bd.unidadMedida, bd.categoriaCodigo, bd.categoriaDescripcion,
-               bd.cliente, bd.direccionCliente,
+               bd.cliente, bd.nombreCliente, bd.direccionCliente, bd.vendedorCodigo, bd.vendedorNombre,
                adj.motivo, adj.ajustado_por AS ajustadoPor, adj.fecha AS fechaAjuste
         FROM BaseData bd
         LEFT JOIN core_app.loads_orders_adjustments adj
@@ -790,7 +794,7 @@ class LoadsSQLService {
                COALESCE(adj.cantidad_ajustada, bd.CANTIDAD_BONIFICAD) AS cantidadActual,
                0 AS precioUnitario,
                bd.descripcion, bd.empaque, bd.unidadMedida, bd.categoriaCodigo, bd.categoriaDescripcion,
-               bd.cliente, bd.direccionCliente,
+               bd.cliente, bd.nombreCliente, bd.direccionCliente, bd.vendedorCodigo, bd.vendedorNombre,
                adj.motivo, adj.ajustado_por AS ajustadoPor, adj.fecha AS fechaAjuste
         FROM BaseData bd
         LEFT JOIN core_app.loads_orders_adjustments adj
@@ -805,7 +809,14 @@ class LoadsSQLService {
             }
 
             const productosMap = new Map();
+            const vendedoresMap = new Map();
             for (const row of result.recordset) {
+                if (row.vendedorCodigo && !vendedoresMap.has(row.vendedorCodigo)) {
+                    vendedoresMap.set(row.vendedorCodigo, {
+                        codigo: row.vendedorCodigo,
+                        nombre: row.vendedorNombre || row.vendedorCodigo,
+                    });
+                }
                 if (!productosMap.has(row.Code_Product)) {
                     productosMap.set(row.Code_Product, {
                         codigo: row.Code_Product,
@@ -833,7 +844,10 @@ class LoadsSQLService {
                     pedidoLinea: row.PEDIDO_LINEA,
                     tipoLinea: row.tipoLinea,
                     cliente: row.cliente,
+                    nombreCliente: row.nombreCliente || null,
                     direccionCliente: row.direccionCliente,
+                    vendedorCodigo: row.vendedorCodigo || null,
+                    vendedorNombre: row.vendedorNombre || null,
                     cantidadOriginal: Number(row.cantidadOriginal) || 0,
                     cantidadActual,
                     precioUnitario,
@@ -877,7 +891,15 @@ class LoadsSQLService {
                 bodegaOrigenSugerida = bodegaVendedorResult.recordset[0]?.bodega || null;
             }
 
-            return { loadId, bodegasDetectadas, bodegaOrigenSugerida, productos: Array.from(productosMap.values()) };
+            const vendedoresDetectados = Array.from(vendedoresMap.values()).sort((a, b) => a.codigo.localeCompare(b.codigo));
+
+            return {
+                loadId,
+                bodegasDetectadas,
+                bodegaOrigenSugerida,
+                vendedoresDetectados,
+                productos: Array.from(productosMap.values()),
+            };
         });
     }
 
