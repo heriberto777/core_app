@@ -136,6 +136,39 @@ GO
 -- END
 -- GO
 
+-- 3b) order_num_ofclient / order_num_cli / order_num en VARCHAR(15) se
+--    quedaban cortos: ambos primeros reciben PEDIDO tal cual (CATELLI.PEDIDO.
+--    PEDIDO es VARCHAR(50), valores reales de 16-21 caracteres ya vistos,
+--    ej. 'PRIP-000000000883560'); order_num tiene un fallback generado
+--    (epoch en segundos + sufijo) de 16 caracteres cuando RUBRO4 viene NULL.
+--    Mismo síntoma que order_alt_num: "String or binary data would be
+--    truncated" en insertToLoadsOrdersStaging (confirmado en dev 2026-11-04).
+--    Se ensanchan a VARCHAR(50) para que nunca truenen aunque cambie el
+--    formato de PEDIDO en CATELLI. Idempotente.
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('core_app.loads_orders_staging') AND name = 'order_num_ofclient')
+AND (SELECT max_length FROM sys.columns WHERE object_id = OBJECT_ID('core_app.loads_orders_staging') AND name = 'order_num_ofclient') < 50
+BEGIN
+    ALTER TABLE core_app.loads_orders_staging
+        ALTER COLUMN order_num_ofclient VARCHAR(50) NULL;
+END
+GO
+
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('core_app.loads_orders_staging') AND name = 'order_num_cli')
+AND (SELECT max_length FROM sys.columns WHERE object_id = OBJECT_ID('core_app.loads_orders_staging') AND name = 'order_num_cli') < 50
+BEGIN
+    ALTER TABLE core_app.loads_orders_staging
+        ALTER COLUMN order_num_cli VARCHAR(50) NULL;
+END
+GO
+
+IF EXISTS (SELECT 1 FROM sys.columns WHERE object_id = OBJECT_ID('core_app.loads_orders_staging') AND name = 'order_num')
+AND (SELECT max_length FROM sys.columns WHERE object_id = OBJECT_ID('core_app.loads_orders_staging') AND name = 'order_num') < 50
+BEGIN
+    ALTER TABLE core_app.loads_orders_staging
+        ALTER COLUMN order_num VARCHAR(50) NULL;
+END
+GO
+
 -- 4) Order_Num_Cli vuelve a ser PEDIDO (como era antes de un cambio reciente
 --    mal informado); RUBRO2 pasa a un campo NUEVO, Order_Alt_Num -- no un
 --    reemplazo de Order_Num_Cli. Columna nueva en server1.
@@ -145,7 +178,26 @@ IF NOT EXISTS (
 )
 BEGIN
     ALTER TABLE core_app.loads_orders_staging
-        ADD order_alt_num VARCHAR(20) NULL;
+        ADD order_alt_num VARCHAR(100) NULL;
+END
+GO
+
+-- VARCHAR(20) se quedó corto: RUBRO2 real en CATELLI.PEDIDO trae valores más
+-- largos y el INSERT fallaba con "String or binary data would be truncated"
+-- en vez de truncar en silencio (confirmado en dev 2026-11-04, después de
+-- correr la migración de arriba por primera vez). Idempotente -- no hace
+-- nada si ya está en VARCHAR(100) o más ancha.
+IF EXISTS (
+    SELECT 1 FROM sys.columns
+    WHERE object_id = OBJECT_ID('core_app.loads_orders_staging') AND name = 'order_alt_num'
+)
+AND (
+    SELECT max_length FROM sys.columns
+    WHERE object_id = OBJECT_ID('core_app.loads_orders_staging') AND name = 'order_alt_num'
+) < 100
+BEGIN
+    ALTER TABLE core_app.loads_orders_staging
+        ALTER COLUMN order_alt_num VARCHAR(100) NULL;
 END
 GO
 
