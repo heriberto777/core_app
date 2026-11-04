@@ -102,11 +102,14 @@ export function useWarehouseReviewDetail(accessToken, loadId) {
         }
     };
 
+    // Devuelve el objectUrl en vez de abrir la pestaña acá -- la ventana debe
+    // abrirse ANTES del await (ver WarehouseReviewDetail.handlePrint), si no
+    // los navegadores la bloquean en silencio por no verla parte del click
+    // original del usuario.
     const printLoad = async () => {
         setIsPrinting(true);
         try {
-            const objectUrl = await loadsApi.printLoadReview(accessToken, loadId);
-            window.open(objectUrl, "_blank");
+            return await loadsApi.printLoadReview(accessToken, loadId);
         } finally {
             setIsPrinting(false);
         }

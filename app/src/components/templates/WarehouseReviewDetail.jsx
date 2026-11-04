@@ -304,9 +304,29 @@ export function WarehouseReviewDetail() {
   };
 
   const handlePrint = async () => {
+    // La pestaña se abre ACÁ, sincrónicamente dentro del handler del click,
+    // antes de esperar el PDF -- si se abre después del await (como hacía
+    // antes), el navegador ya no lo asocia al click del usuario y la bloquea
+    // sin avisar (esto era el bug: "se queda pensando y no sale nada").
+    const printWindow = window.open("", "_blank");
+    if (printWindow) {
+      printWindow.document.write("<p style='font-family:sans-serif;padding:2rem;color:#64748b'>Generando PDF…</p>");
+    }
+
     try {
-      await actions.printLoad();
+      const objectUrl = await actions.printLoad();
+      if (printWindow) {
+        printWindow.location.href = objectUrl;
+      } else {
+        Swal.fire({
+          icon: "warning",
+          title: "El navegador bloqueó la pestaña",
+          text: "Habilitá las ventanas emergentes para este sitio e intentá de nuevo.",
+          confirmButtonColor: "#6366f1",
+        });
+      }
     } catch (err) {
+      if (printWindow) printWindow.close();
       Swal.fire({
         icon: "error",
         title: "No se pudo generar el PDF",
