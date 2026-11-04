@@ -243,8 +243,13 @@ const executeAutomaticTransfers = async () => {
       startedAt: Date.now(),
     };
 
-    // **Segundo paso: Ejecutar con límite de concurrencia**
-    const concurrencyLimit = 2; // Máximo 2 a la vez
+    // **Segundo paso: Ejecutar de forma estrictamente secuencial**
+    // Antes era 2 (dos tareas a la vez compitiendo por el mismo pool de
+    // conexiones a server1/server2). Se bajó a 1 para que una tarea nunca
+    // empiece hasta que la anterior termine (éxito o fallo) — reduce la
+    // posibilidad de agotar el pool entre tareas concurrentes, a costa de
+    // alargar la duración total de la corrida nocturna.
+    const concurrencyLimit = 1;
     for (let i = 0; i < tasksToExecute.length; i += concurrencyLimit) {
       const batch = tasksToExecute.slice(i, i + concurrencyLimit);
 
@@ -633,6 +638,82 @@ const resyncFromDatabase = async (trigger) => {
   }
 };
 
+// Cuánto tiempo puede llevar una tarea en "running" sin que nada la toque
+// antes de darla por atascada. Se vio en producción (ver incidente de
+// octubre/noviembre 2026) que un reinicio del proceso a mitad de una tarea
+// deja status:"running" pegado para siempre -- ya que nada la libera desde
+// afuera, bloquea esa tarea en todas las corridas automáticas futuras con el
+// error "La tarea ya está en ejecución", sin que nadie lo note entre decenas
+// de tareas. 6 horas da margen de sobra sobre la corrida más lenta observada
+// (167 minutos bajo contención severa de conexiones).
+const STALE_RUNNING_HOURS = Number(process.env.STALE_RUNNING_HOURS) || 6;
+const STALE_RUNNING_THRESHOLD_MS = STALE_RUNNING_HOURS * 60 * 60 * 1000;
+
+/**
+ * Busca TransferTask en status:"running" cuyo lastExecutionDate es más viejo
+ * que STALE_RUNNING_HOURS y las marca como "failed" -- libera el lock
+ * atómico de executeTransferWithRetry para que la tarea pueda volver a
+ * ejecutarse la próxima corrida, y notifica para que quede visible que fue
+ * una recuperación automática, no una ejecución real.
+ */
+const checkStaleRunningTasks = async () => {
+  try {
+    if (mongoose.connection.readyState !== 1) return;
+
+    const TransferTask = require("../models/transferTaskModel");
+    const staleThreshold = new Date(Date.now() - STALE_RUNNING_THRESHOLD_MS);
+
+    const staleTasks = await TransferTask.find({
+      status: "running",
+      lastExecutionDate: { $lt: staleThreshold },
+    }).select("_id name lastExecutionDate");
+
+    if (staleTasks.length === 0) return;
+
+    for (const task of staleTasks) {
+      const hoursStuck = (
+        (Date.now() - new Date(task.lastExecutionDate).getTime()) /
+        3600000
+      ).toFixed(1);
+
+      logger.warn(
+        `⏱️ Tarea "${task.name}" lleva ${hoursStuck}h en "running" sin actualizarse — probable caída del proceso que la ejecutaba. Marcándola como fallida para liberar el lock.`
+      );
+
+      await TransferTask.findByIdAndUpdate(task._id, {
+        status: "failed",
+        progress: -1,
+        lastExecutionResult: {
+          success: false,
+          message: `Marcada como fallida automáticamente por el vigilante: llevaba ${hoursStuck}h en "running" sin finalizar (probable caída del proceso que la ejecutaba)`,
+          errorDetails: `lastExecutionDate original: ${new Date(task.lastExecutionDate).toISOString()}`,
+        },
+      });
+    }
+
+    try {
+      if (!transferService) {
+        transferService = require("./transferService");
+      }
+      await notifyCriticalError(
+        `${staleTasks.length} tarea(s) quedaron atascadas en "running" y fueron marcadas como fallidas automáticamente por el vigilante: ${staleTasks
+          .map((t) => t.name)
+          .join(", ")}`,
+        {
+          additionalInfo:
+            "Esto suele pasar cuando el proceso que ejecutaba la tarea se reinició o se cayó a mitad de camino. Revisar Gestión de Tareas; la tarea ya quedó libre para volver a ejecutarse en la próxima corrida.",
+        }
+      );
+    } catch (notifyError) {
+      logger.warn(
+        `⚠️ No se pudo notificar tareas atascadas: ${notifyError.message}`
+      );
+    }
+  } catch (error) {
+    logger.warn(`⚠️ Error revisando tareas atascadas en "running": ${error.message}`);
+  }
+};
+
 const startSchedulerWatchdog = () => {
   if (!mongoReconnectListenerAttached) {
     mongoose.connection.on("reconnected", () =>
@@ -642,10 +723,15 @@ const startSchedulerWatchdog = () => {
   }
 
   if (!watchdogInterval) {
-    watchdogInterval = setInterval(
-      () => resyncFromDatabase("chequeo-periodico"),
-      5 * 60 * 1000
-    );
+    // Chequeo inmediato al arrancar el watchdog, sin esperar los 5 min del
+    // primer intervalo -- si el servidor estuvo apagado y hay una tarea
+    // atascada de antes, no tiene sentido hacerla esperar más.
+    checkStaleRunningTasks();
+
+    watchdogInterval = setInterval(() => {
+      resyncFromDatabase("chequeo-periodico");
+      checkStaleRunningTasks();
+    }, 5 * 60 * 1000);
     logger.info(
       "🩺 Watchdog del scheduler iniciado (revisión cada 5 min + al reconectar Mongo)"
     );
@@ -671,4 +757,5 @@ module.exports = {
   stopSchedulerWatchdog,
   runAllTasksNow,
   getExecutionProgress,
+  checkStaleRunningTasks,
 };
