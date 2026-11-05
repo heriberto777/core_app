@@ -1415,3 +1415,110 @@ con la tolerancia a huecos que ya tiene este esquema por los intentos fallidos a
 - Confirmar que `ALCXC_MOV_DIR.DOC_PRO` evita el reprocesamiento de la misma fila en una segunda
   corrida (Fase 3, punto 6) — ya se observó `DOC_PRO` marcándose correctamente tras cada éxito,
   pero falta la prueba explícita de "correr de nuevo y confirmar que no reprocesa".
+
+## 14. `BODEGA` real del repartidor en vez de `'01'` fijo — fix + 3 bugs reales del motor genérico (2026-11-05)
+
+**Pregunta original del usuario:** si `realizarTraspaso` mueve (documentalmente) mercadería de
+Bodega Central a la bodega del repartidor antes de facturar, ¿`CargarFacturaCompleta` no estaría
+descontando existencia dos veces al facturar también desde Bodega Central (`BODEGA='01'` fija,
+ver hallazgo de la sección 2/5, línea 183/307)?
+
+**Investigación: descartado — no hay doble descuento que revertir.** Se confirmó contra ~20
+traspasos reales de producción que `DOCUMENTO_INV.SELECCIONADO` queda `'N'` para siempre
+(`traspasoService.js` lo hardcodea así al insertar y no existe ningún `UPDATE` posterior en todo
+el archivo que lo cambie a `'S'`; `APROBADO` tiene **0 referencias** en ese archivo — nunca se lee
+ni se escribe). El traspaso nunca se "aplica" del lado de Catelli, así que hoy no tiene ningún
+efecto real sobre existencia — no hay nada que revertir al facturar.
+
+**El problema real sí era el hardcode de `BODEGA='01'`** (decisión temporal del 2026-10-30,
+sección 2/5 de este documento): toda factura de este pipeline registraba el movimiento de
+inventario contra Bodega Central sin importar que la mercancía ya estuviera (documentalmente) en
+la bodega del repartidor.
+
+### Fix: resolución de bodega en dos niveles
+
+1. **Primario:** `FAC_ENC_PED.COD_BOD` (poblado por el DTS de TelyNet desde una corrección
+   reciente; antes venía `NULL`).
+2. **Fallback si `COD_BOD` es `NULL`:** mismo mecanismo que
+   `LoadsSQLService.validateDeliveryPerson` — `SELECT U_BODEGA FROM CATELLI.VENDEDOR WHERE
+   VENDEDOR=@VENDEDOR AND ACTIVO='S' AND U_ESVENDEDOR='Re'`.
+3. **Si ninguno resuelve:** la fila debe fallar explícitamente (nada de default silencioso a
+   `'01'` ni a una bodega "pendiente").
+
+**Problema de propagación header→detalle:** `AUDIT_TRANS_INV`/`FACTURA_LINEA`/`TRANSACCION_INV`
+necesitan esta bodega, pero `COD_BOD`/`VENDEDOR` solo existen en el header `FAC_ENC_PED` — una
+tabla de detalle nunca recibe automáticamente valores del header (ver hallazgo de la sección 9
+sobre `NIT`, mismo patrón). Se reutilizó `CATELLI.AUDIT_TRANS_INV.REFERENCIA` (tabla sin columna
+`BODEGA` propia, 17 columnas fijas) como portador: `auditTransInv.REFERENCIA` ahora calcula
+`'Cliente: ' + COD_CLT + ' | Bodega: ' + COALESCE(COD_BOD, fallback)`, y `FACTURA_LINEA.BODEGA`/
+`TRANSACCION_INV.BODEGA` la releen vía `SUBSTRING`/`CHARINDEX` sobre esa `REFERENCIA`, igual
+patrón que el pivot ya usado para `NIT`. Se reordenó `executionOrder`: `auditTransInv` pasó de 3
+a 2 (antes de `FAC_DET`), `FAC_DET` de 2 a 3.
+
+### 3 bugs reales encontrados en el motor genérico durante las pruebas (no específicos de esta mapping)
+
+Probar el caso "ambos resuelven NULL" (`COD_BOD=NULL` + `VENDEDOR` no-repartidor) expuso 3 fallas
+reales en `DynamicTransferService.js`/`transferMappingModel.js`, los 3 ya corregidos:
+
+1. **Un `lookupParam` en `NULL` abortaba la query entera sin ejecutarla.** El motor trataba
+   cualquier parámetro `NULL` como "falta un parámetro requerido" y cancelaba el lookup antes de
+   que el `COALESCE` tuviera oportunidad de resolver el fallback. El flag `required: false` ya
+   existía pero no servía — aunque evitaba el abort, igual omitía el parámetro del bind SQL,
+   causando "Must declare the scalar variable". Fix: con `required: false` y valor `NULL`, ahora
+   se bindea `NULL` explícito en vez de omitir el parámetro.
+2. **`required: false` no se persistía en Mongo.** El sub-schema de `lookupParams` en
+   `transferMappingModel.js` no declaraba ese campo — Mongoose lo descartaba en silencio al
+   guardar (comportamiento estándar de Mongoose con un schema que no declara el path). Fix: se
+   agregó `required: { type: Boolean, default: true }` al sub-schema.
+3. **`failIfNotFound` no detectaba un valor `NULL` cuando la query sí devolvía una fila.** Un
+   `SELECT (expr)` sin `FROM` siempre devuelve exactamente 1 fila aunque `expr` evalúe `NULL` —
+   el chequeo `recordset.length > 0` lo daba por "éxito" con valor `null`, que el procesamiento de
+   campo reemplazaba después por el `defaultValue` (`""`), insertando una bodega vacía en vez de
+   fallar. Confirmado con datos reales: `9R01260000020` resultó tener **2 filas en `FAC_ENC_PED`
+   para el mismo `NUM_PED`** (dato preexistente, no causado por este fix) — la segunda fila con
+   `COD_BOD=NULL`/`VENDEDOR=12` (no repartidor) insertó `REFERENCIA=""` en vez de fallar. Fix: si
+   el valor resuelto es `NULL`/`undefined` y el campo tiene `failIfNotFound: true`, se trata igual
+   que "no se encontraron resultados".
+
+Las 3 correcciones son genéricas del motor — no hay otro código en el repo que use `required` en
+un `lookupParam` hoy, así que no rompen ningún otro mapping existente.
+
+### Verificación end-to-end completa (dev, 2026-11-05)
+
+1. `COD_BOD='R01'` poblado → `9R01260000024`: `FACTURA_LINEA.BODEGA`/`TRANSACCION_INV.BODEGA`/
+   `AUDIT_TRANS_INV.REFERENCIA` en `R01`, asiento balanceado exacto
+   (`87613.20`/`2384.27378740` débito=crédito), `FACTURA.AUDIT_TRANS_INV` autocompletado.
+2. `COD_BOD=NULL` + `VENDEDOR='1'` válido → `9R01260000025`: fallback resolvió `R01` vía
+   `CATELLI.VENDEDOR.U_BODEGA`, asiento balanceado (`116455.60`/`3169.95444140`).
+3. `COD_BOD=NULL` + `VENDEDOR='12'` no-repartidor → `1654000000000264`: falló limpio
+   (`"Fallos críticos en lookup": [{"field":"REFERENCIA","error":"El valor resuelto es NULL"}]`),
+   rollback a savepoint en origen y destino, 0 registros insertados.
+4. Reorden de `executionOrder` no rompió `ASIENTO_DE_DIARIO`/`DIARIO_*` (confirmado en los 2 casos
+   exitosos de arriba).
+5. El bug de desbalance en línea bonificada (sección 10/hallazgo del 2026-11-02) no se vio
+   afectado — no aplicó en estos casos de prueba (sin línea bonificada), pero el reorden no toca
+   esa lógica.
+
+### Hallazgo nuevo, pendiente aparte: `CATELLI.EXISTENCIA_BODEGA` probablemente nunca se actualiza
+
+Pregunta del usuario: ¿insertar en `TRANSACCION_INV` con la bodega correcta ahora sí actualiza el
+saldo físico real en `CATELLI.EXISTENCIA_BODEGA`? Se revisaron los 3 triggers reales habilitados
+sobre las tablas involucradas (`EXAUDIT_TRANS_INVIup`, `EXTRANSACCION_INVIup`,
+`EXEXISTENCIA_BODEGAIup`, los 3 `is_disabled=0`) y **los 3 son boilerplate estándar de Exactus**:
+solo actualizan `CreatedBy`/`CreateDate`/`UpdatedBy`/`RecordDate` de su propia tabla contra
+`inserted`/`deleted`. Ninguno lee ni escribe en otra tabla — en particular, el trigger de
+`TRANSACCION_INV` no toca `EXISTENCIA_BODEGA` en ningún punto.
+
+Combinado con el hallazgo ya confirmado de la sección 10 (no hay SQL Agent Jobs habilitados que
+toquen esto), **no queda ningún mecanismo automático a nivel de base de datos entre
+`TRANSACCION_INV` y `EXISTENCIA_BODEGA`**. Es probable que el saldo de inventario por bodega nunca
+se haya actualizado automáticamente para las facturas de este pipeline (ni con la versión vieja
+`BODEGA='01'` fija ni con la nueva bodega real) — requeriría un stored procedure nativo de
+Exactus (que este pipeline no invoca, al escribir directo a las tablas en vez de pasar por la capa
+de negocio real) o un proceso de recálculo de cardex aparte. **Queda pendiente, fuera de alcance
+de este fix:** confirmar con alguien que conozca el módulo de inventario de Exactus/Catelli si
+existe tal mecanismo, y si corresponde implementarlo.
+
+### Archivos modificados (sin commitear al momento de escribir esto)
+`server/scripts/buildCargarFacturaCompleta.js`, `server/services/DynamicTransferService.js`,
+`server/models/transferMappingModel.js`.
