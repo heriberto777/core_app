@@ -2901,6 +2901,12 @@ class DynamicTransferService {
                   );
                   allParamsAvailable = false;
                   break;
+                } else {
+                  // required:false -- el parámetro sí se referencia en el SQL
+                  // (ej. dentro de un COALESCE), así que hay que bindearlo como
+                  // NULL explícito en vez de omitirlo, o tedious falla con
+                  // "Must declare the scalar variable" al ejecutar la query.
+                  params[param.paramName] = null;
                 }
               } else {
                 params[param.paramName] = paramValue;
@@ -2939,10 +2945,28 @@ class DynamicTransferService {
 
           if (result.recordset && result.recordset.length > 0) {
             const lookupValue = Object.values(result.recordset[0])[0];
-            lookupResults[fieldMapping.targetField] = lookupValue;
-            logger.info(
-              `Lookup exitoso para ${fieldMapping.targetField}: ${lookupValue}`
-            );
+            // Un SELECT escalar sin FROM (ej. "SELECT (COALESCE(...))") siempre
+            // devuelve 1 fila aunque la expresión evalúe a NULL -- recordset.length>0
+            // por sí solo no detecta ese caso. Con failIfNotFound, un valor NULL debe
+            // tratarse igual que "no se encontraron resultados", no como éxito.
+            if (
+              (lookupValue === null || lookupValue === undefined) &&
+              fieldMapping.failIfNotFound
+            ) {
+              logger.warn(
+                `Lookup para ${fieldMapping.targetField} devolvió NULL`
+              );
+              failedLookups.push({
+                field: fieldMapping.targetField,
+                error: "El valor resuelto es NULL",
+                isCritical: true,
+              });
+            } else {
+              lookupResults[fieldMapping.targetField] = lookupValue;
+              logger.info(
+                `Lookup exitoso para ${fieldMapping.targetField}: ${lookupValue}`
+              );
+            }
           } else {
             logger.warn(
               `No se encontraron resultados para lookup ${fieldMapping.targetField}`
