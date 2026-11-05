@@ -41,6 +41,7 @@ const FieldMappingSchema = new Schema({
       sourceField: { type: String }, // Campo de origen para el parámetro
       paramName: { type: String }, // Nombre del parámetro en la consulta
       removePrefix: { type: String }, // Prefijo a eliminar del valor
+      required: { type: Boolean, default: true }, // false = permite NULL (bindeado como NULL en el SQL) en vez de abortar la query
     },
   ],
   validateExistence: { type: Boolean, default: false }, // Si debe validarse que existe el registro
