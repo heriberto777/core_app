@@ -171,6 +171,25 @@ function addField(tableConfig, overrides) {
 // existe, así que esta condición no puede matchear más de una fila.
 const SIBLING_REGULAR_PRICE = `(SELECT TOP 1 PRECIO_UNITARIO FROM CATELLI.FACTURA_LINEA WHERE FACTURA=@NUM_PED AND ARTICULO=@COD_ART AND PRECIO_UNITARIO > 0)`;
 
+// Bodega real del repartidor (hallazgo 2026-11-05, corrige la "DECISIÓN:
+// bodega fija 01 para todo" de la sección 3 -- ver docs/archive/
+// ANALISIS_MAPPING_CLIENTE_FACTURA.md sección 11): FACTURA_LINEA.BODEGA y
+// TRANSACCION_INV.BODEGA quedaban hardcodeados a '01' (Central), sin importar
+// que la mercancía ya esté documentalmente en la bodega del repartidor vía el
+// Traspaso -- el traspaso en sí nunca se aplica en Catelli
+// (DOCUMENTO_INV.SELECCIONADO queda 'N' para siempre, confirmado contra ~20
+// documentos reales), así que no hay doble descuento que reversar, pero sí
+// hace falta descontar de la bodega correcta.
+//
+// La bodega se calcula UNA sola vez, en AUDIT_TRANS_INV.REFERENCIA (paso 2,
+// ver abajo) -- el único campo de texto libre reutilizable de
+// CATELLI.AUDIT_TRANS_INV (17 columnas fijas, sin BODEGA propia) -- y se
+// relee por pivot acá, mismo patrón ya usado para AUDIT_TRANS_INV/NIT. Si la
+// resolución de bodega falla (ver REFERENCIA abajo), la concatenación con
+// NULL hace que todo el REFERENCIA salga NULL, lo cual ya dispara
+// failIfNotFound ahí -- no hace falta una validación aparte acá.
+const BODEGA_PIVOT = `SELECT RTRIM(SUBSTRING(REFERENCIA, CHARINDEX('Bodega: ', REFERENCIA) + 8, 10)) FROM CATELLI.AUDIT_TRANS_INV WHERE APLICACION = ('FAC#' + @NUM_PED)`;
+
 // Tasa de cambio fija del proyecto (ver plan aprobado, sección "Fuera de
 // alcance": "Tasa de cambio dinámica... hoy fija en 36.7, mejora futura, no
 // bloqueante"). Se usa únicamente para las columnas _DOLAR de DIARIO/
@@ -247,7 +266,9 @@ SELECT ASIENTO_DOCUMENTO FROM @t`,
 
   // 2. FACTURA_LINEA (de CargarFacturas.FAC_DET)
   const facDet = getTableConfig(cargarFacturas, "FAC_DET");
-  facDet.executionOrder = 2;
+  // pasa a 3 (después de AUDIT_TRANS_INV, ahora en 2) porque BODEGA (abajo)
+  // necesita releer el pivot que AUDIT_TRANS_INV ya escribió.
+  facDet.executionOrder = 3;
   // garantiza que la línea regular se inserte antes que su bono hermana,
   // requisito del lookup de PRECIO_UNITARIO/PRECIO_TOTAL de abajo.
   facDet.orderByColumn = "NUM_LN";
@@ -355,6 +376,18 @@ WHERE a.ARTICULO = @COD_ART`,
     ],
   });
 
+  // hallazgo 2026-11-05: BODEGA heredaba '01' fijo de CargarFacturas.FAC_DET
+  // -- ver comentario de BODEGA_PIVOT más arriba.
+  patchField(facDet, "BODEGA", {
+    sourceField: "",
+    defaultValue: "",
+    lookupFromTarget: true,
+    lookupQuery: BODEGA_PIVOT,
+    lookupParams: [{ sourceField: "NUM_PED", paramName: "NUM_PED" }],
+    validateExistence: true,
+    failIfNotFound: true,
+  });
+
   // 3. AUDIT_TRANS_INV (nuevo — sección 10, 1 fila por factura)
   const auditTransInv = {
     name: "AUDIT_TRANS_INV",
@@ -370,7 +403,9 @@ WHERE a.ARTICULO = @COD_ART`,
     filterCondition: "",
     customQuery: "",
     orderByColumn: "",
-    executionOrder: 3,
+    // pasa a 2 (justo después de FACTURA, orden 1) porque FACTURA_LINEA
+    // (ahora orden 3) necesita releer la bodega resuelta en REFERENCIA abajo.
+    executionOrder: 2,
     dependsOn: [],
     fieldMappings: [
       baseFieldMapping({ targetField: "USUARIO", defaultValue: "FAC1" }),
@@ -389,12 +424,32 @@ WHERE a.ARTICULO = @COD_ART`,
         validateExistence: true,
         failIfNotFound: true,
       }),
+      // hallazgo 2026-11-05: además del cliente, carga la bodega real del
+      // repartidor resuelta en dos niveles -- primario FAC_ENC_PED.COD_BOD
+      // (confirmado poblado por el DTS de TelyNet con un código de bodega
+      // real, ej. 'R01'), fallback vía CATELLI.VENDEDOR.U_BODEGA (mismo
+      // mecanismo que LoadsSQLService.validateDeliveryPerson) si COD_BOD
+      // viene NULL. Si ninguno de los dos resuelve, el COALESCE da NULL y la
+      // concatenación hace que TODO el REFERENCIA salga NULL -- failIfNotFound
+      // de abajo rechaza la fila en vez de insertar con bodega incorrecta.
+      // FACTURA_LINEA.BODEGA/TRANSACCION_INV.BODEGA releen este valor por
+      // pivot (ver BODEGA_PIVOT).
       baseFieldMapping({
         targetField: "REFERENCIA",
         lookupFromTarget: true,
-        lookupQuery: "SELECT ('Cliente: ' + @COD_CLT)",
+        lookupQuery: `SELECT ('Cliente: ' + @COD_CLT + ' | Bodega: ' +
+  COALESCE(@COD_BOD,
+    (SELECT TOP 1 U_BODEGA FROM CATELLI.VENDEDOR WHERE VENDEDOR = @VENDEDOR AND ACTIVO = 'S' AND U_ESVENDEDOR = 'Re')
+  )
+)`,
         lookupParams: [
           { sourceField: "COD_CLT", paramName: "COD_CLT", removePrefix: "CN" },
+          // required:false -- COD_BOD puede venir NULL en FAC_ENC_PED (antes de
+          // la corrección de TelyNet, o si vuelve a pasar); el motor por
+          // defecto trata cualquier param NULL como "falta parámetro" y aborta
+          // la query entera sin ejecutarla, nunca llega al COALESCE de abajo.
+          { sourceField: "COD_BOD", paramName: "COD_BOD", required: false },
+          { sourceField: "VENDEDOR", paramName: "VENDEDOR" },
         ],
         validateExistence: true,
         failIfNotFound: true,
@@ -456,7 +511,16 @@ WHERE t.AUDIT_TRANS_INV = (SELECT AUDIT_TRANS_INV FROM CATELLI.AUDIT_TRANS_INV W
         failIfNotFound: true,
       }),
       baseFieldMapping({ targetField: "ARTICULO", sourceField: "COD_ART" }),
-      baseFieldMapping({ targetField: "BODEGA", defaultValue: "01" }),
+      // hallazgo 2026-11-05: igual que FACTURA_LINEA.BODEGA -- ver
+      // comentario de BODEGA_PIVOT más arriba.
+      baseFieldMapping({
+        targetField: "BODEGA",
+        lookupFromTarget: true,
+        lookupQuery: BODEGA_PIVOT,
+        lookupParams: [{ sourceField: "NUM_PED", paramName: "NUM_PED" }],
+        validateExistence: true,
+        failIfNotFound: true,
+      }),
       baseFieldMapping({
         targetField: "CANTIDAD",
         sourceField: "CNT_MAX",
