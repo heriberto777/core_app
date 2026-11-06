@@ -1,6 +1,6 @@
 // src/api/LoadsApi.jsx - VERSIÓN CONSOLIDADA SIN DUPLICACIÓN
 
-import { ENV } from "../utils/index";
+import { ENV, parseApiResponse } from "../utils/index";
 
 class LoadsApi {
   baseApi = ENV.BASE_API;
@@ -35,7 +35,7 @@ class LoadsApi {
         },
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse(response);
       if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
@@ -57,7 +57,7 @@ class LoadsApi {
         },
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse(response);
       if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
@@ -79,7 +79,7 @@ class LoadsApi {
         },
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse(response);
       if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
@@ -103,7 +103,7 @@ class LoadsApi {
         },
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse(response);
       if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
@@ -132,7 +132,7 @@ class LoadsApi {
         }),
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse(response);
       if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
@@ -160,7 +160,7 @@ class LoadsApi {
         }),
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse(response);
       if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
@@ -187,7 +187,7 @@ class LoadsApi {
         }),
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse(response);
       if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
@@ -213,7 +213,7 @@ class LoadsApi {
         },
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse(response);
       if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
@@ -235,7 +235,7 @@ class LoadsApi {
         },
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse(response);
       if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
@@ -260,7 +260,7 @@ class LoadsApi {
         body: JSON.stringify(adjustment),
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse(response);
       if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
@@ -285,7 +285,7 @@ class LoadsApi {
         body: JSON.stringify({ bodegaOrigen }),
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse(response);
       if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
@@ -311,7 +311,7 @@ class LoadsApi {
         body: JSON.stringify({ reason }),
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse(response);
       if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
@@ -337,7 +337,7 @@ class LoadsApi {
       });
 
       if (!response.ok) {
-        const result = await response.json();
+        const result = await parseApiResponse(response);
         throw result;
       }
 
@@ -365,7 +365,7 @@ class LoadsApi {
       });
 
       if (!response.ok) {
-        const result = await response.json();
+        const result = await parseApiResponse(response);
         throw result;
       }
 
@@ -409,7 +409,7 @@ class LoadsApi {
         },
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse(response);
       if (!response.ok) throw result;
       return { transfers: result.data || [], pagination: result.pagination || {} };
     } catch (error) {
@@ -438,7 +438,7 @@ class LoadsApi {
         },
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse(response);
       if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
@@ -461,7 +461,7 @@ class LoadsApi {
         },
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse(response);
       if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
@@ -484,7 +484,7 @@ class LoadsApi {
         },
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse(response);
       if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
@@ -506,7 +506,7 @@ class LoadsApi {
         },
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse(response);
       if (!response.ok) throw result;
 
       return result.data?.warehouses || result.data || result || [];
@@ -534,7 +534,7 @@ class LoadsApi {
         },
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse(response);
       if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
@@ -559,7 +559,7 @@ class LoadsApi {
         body: JSON.stringify({ loadIds }),
       });
 
-      const result = await response.json();
+      const result = await parseApiResponse(response);
       if (!response.ok) throw result;
       return result.data || result;
     } catch (error) {
