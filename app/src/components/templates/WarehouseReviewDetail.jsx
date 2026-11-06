@@ -287,10 +287,18 @@ export function WarehouseReviewDetail() {
         didOpen: () => Swal.showLoading(),
       });
       const res = await actions.authorize();
+      const bodegaOrigenTexto = res?.bodegasOrigen?.length ? res.bodegasOrigen.join(", ") : "N/A";
+      const totalUnidades = (res?.detalleProductos || []).reduce((sum, p) => sum + (p.cantidad || 0), 0);
       Swal.fire({
         icon: "success",
         title: "Despacho autorizado",
-        html: `<div class="text-left p-2"><p>Documento generado:</p><p class="mt-2 text-primary-600 font-bold">${res?.documento_inv || "N/A"}</p></div>`,
+        html: `<div class="text-left p-2">
+          <p>Documento generado:</p>
+          <p class="mt-1 text-primary-600 font-bold">${res?.documento_inv || "N/A"}</p>
+          <p class="mt-3">Bodega: <strong>${bodegaOrigenTexto}</strong> &rarr; <strong>${res?.bodega_destino || "N/A"}</strong></p>
+          <p class="mt-1">Artículos movidos: <strong>${res?.lineasExitosas ?? 0}</strong> (${totalUnidades} unidades)</p>
+          <p class="mt-3 text-green-600 text-sm">&#10003; Inventario actualizado en Catelli</p>
+        </div>`,
         confirmButtonColor: "#6366f1",
       });
       navigate("/loads/revision");
