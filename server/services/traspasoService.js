@@ -342,7 +342,7 @@ function getTraspasoConfig() {
 /**
  * Realiza traspaso SIN validación previa
  */
-async function realizarTraspaso({ route, salesData, bodega_destino }) {
+async function realizarTraspaso({ route, salesData, bodega_destino, connection: externalConnection = null }) {
   let detalleProductos = [];
   let pdfPath = null;
 
@@ -403,7 +403,13 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
     logger.info(`Bodegas origen: ${[...new Set(productosArray.map(p => p.bodegaOrigen))].join(', ')}`);
 
     // 3. Ejecutar traspaso
-    return await withConnection("server1", async (connection) => {
+    // Si el caller ya tiene una conexión abierta (p.ej. authorizeDispatch, dentro de su propia
+    // transacción vía withTransaction), se reutiliza tal cual -- no se abre ni se libera una
+    // conexión propia, para que el insert del documento y el movimiento de EXISTENCIA_BODEGA
+    // participen de esa misma transacción externa. Si no, se mantiene el comportamiento
+    // original (conexión propia vía withConnection), usado por traspasoBodega/
+    // executeTransferByLoadId que no corren dentro de ninguna transacción externa.
+    const ejecutarTraspaso = async (connection) => {
       const schema = await DatabaseServiceAdapter.getErpSchema("server1");
       // Determinar localización válida para bodega destino (común para todas las líneas si bodega_destino es fija)
       const locDestinoValida = await getValidLocation(connection, bodega_destino);
@@ -467,13 +473,45 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
 
       await DatabaseServiceAdapter.query(connection, insertarDocumento, referenciaParams);
 
+      // Replica la aprobación nativa completa (ver plan "Traspaso automático: replicar la
+      // aprobación nativa completa", 2026-11-06): un AUDIT_TRANS_INV por documento, igual patrón
+      // que CargarFacturaCompleta para facturas pero con los códigos reales de traspaso
+      // confirmados contra TRA047777/TRA047918 aprobados a mano (MODULO_ORIGEN='CI',
+      // APLICACION=consecutivo sin prefijo, CONSECUTIVO='TR', PAQUETE_INVENTARIO='CS').
+      const insertarAuditTransInv = `
+        INSERT INTO ${schema}.AUDIT_TRANS_INV
+          (CONSECUTIVO, USUARIO, FECHA_HORA, MODULO_ORIGEN, APLICACION, REFERENCIA, PAQUETE_INVENTARIO)
+        VALUES
+          (@consecutivo, @usuario, GETDATE(), 'CI', @aplicacion, @referencia, @paquete_inventario)
+      `;
+      await DatabaseServiceAdapter.query(connection, insertarAuditTransInv, {
+        consecutivo: config.consecutivo_prefix,
+        usuario: config.usuario_default,
+        aplicacion: nuevoConsecutivo,
+        referencia: referenciaParams.referencia,
+        paquete_inventario: config.paquete_inventario,
+      });
+
+      // AUDIT_TRANS_INV es IDENTITY -- re-consultar por APLICACION (único, recién generado).
+      const auditTransInvResult = await DatabaseServiceAdapter.query(
+        connection,
+        `SELECT AUDIT_TRANS_INV FROM ${schema}.AUDIT_TRANS_INV WHERE APLICACION = @aplicacion`,
+        { aplicacion: nuevoConsecutivo }
+      );
+      const auditTransInvId = auditTransInvResult?.recordset?.[0]?.AUDIT_TRANS_INV;
+      if (!auditTransInvId) {
+        throw new Error(`No se pudo resolver AUDIT_TRANS_INV recién creado para ${nuevoConsecutivo}`);
+      }
+
       // Insertar líneas usando bodega origen específica de cada producto
       let lineasExitosas = 0;
       let lineasFallidas = 0;
+      let transaccionConsecutivo = 1;
 
       for (let i = 0; i < productosArray.length; i++) {
         const producto = productosArray[i];
         const lineaNumero = i + 1;
+        let lineaInsertada = false;
 
         try {
           const lineaParams = {
@@ -523,6 +561,7 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
           await DatabaseServiceAdapter.query(connection, insertarLinea, lineaParams);
 
           lineasExitosas++;
+          lineaInsertada = true;
           logger.debug(`Línea ${lineaNumero} insertada: ${producto.codigo} x ${producto.cantidad} (${producto.bodegaOrigen} → ${bodega_destino})`);
 
         } catch (lineError) {
@@ -551,9 +590,116 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
             await DatabaseServiceAdapter.query(connection, insertarLineaDirecto);
             lineasExitosas++;
             lineasFallidas--;
+            lineaInsertada = true;
             logger.debug(`Línea ${lineaNumero} insertada (fallback): ${codigoProducto} x ${producto.cantidad}`);
           } catch (fallbackError) {
             logger.error(`Fallo también en modo fallback para línea ${lineaNumero}:`, fallbackError);
+          }
+        }
+
+        // Movimiento real de EXISTENCIA_BODEGA (CANT_DISPONIBLE), solo si la línea sí quedó
+        // insertada en LINEA_DOC_INV -- a diferencia del estilo tolerante de arriba (una línea
+        // que falla en LINEA_DOC_INV no bloquea las demás), acá cualquier error SÍ aborta todo
+        // el traspaso: decisión explícita del usuario, mismo criterio fail-hard ya usado en
+        // CargarFacturaCompleta (_UPDATE_EXISTENCIA_BODEGA) para no mover inventario a medias.
+        if (lineaInsertada) {
+          const descontarOrigen = `
+            DECLARE @t TABLE (ARTICULO VARCHAR(50));
+            UPDATE ${schema}.EXISTENCIA_BODEGA
+            SET CANT_DISPONIBLE = CANT_DISPONIBLE - @cantidad
+            OUTPUT INSERTED.ARTICULO INTO @t
+            WHERE ARTICULO = @articulo AND BODEGA = @bodega_origen AND CANT_DISPONIBLE >= @cantidad;
+            SELECT ARTICULO FROM @t
+          `;
+          const resultadoOrigen = await DatabaseServiceAdapter.query(connection, descontarOrigen, {
+            articulo: producto.codigo,
+            bodega_origen: producto.bodegaOrigen,
+            cantidad: producto.cantidad,
+          });
+          if (!resultadoOrigen?.recordset?.length) {
+            throw new Error(
+              `Existencia insuficiente en bodega ${producto.bodegaOrigen} para el artículo ${producto.codigo} ` +
+              `(se requieren ${producto.cantidad} unidades disponibles)`
+            );
+          }
+
+          const existeDestino = await DatabaseServiceAdapter.query(
+            connection,
+            `SELECT 1 AS existe FROM ${schema}.EXISTENCIA_BODEGA WHERE ARTICULO = @articulo AND BODEGA = @bodega_destino`,
+            { articulo: producto.codigo, bodega_destino }
+          );
+          if (existeDestino?.recordset?.length) {
+            await DatabaseServiceAdapter.query(
+              connection,
+              `UPDATE ${schema}.EXISTENCIA_BODEGA
+               SET CANT_DISPONIBLE = CANT_DISPONIBLE + @cantidad
+               WHERE ARTICULO = @articulo AND BODEGA = @bodega_destino`,
+              { articulo: producto.codigo, bodega_destino, cantidad: producto.cantidad }
+            );
+          } else {
+            // Fila nueva -- confirmado con INFORMATION_SCHEMA.COLUMNS (2026-11-06) que estas 15
+            // columnas son NOT NULL sin default; el resto (costos, auditoría) ya tiene default
+            // propio y no hace falta poblarlo. CONGELADO/BLOQUEA_TRANS son un supuesto razonable
+            // ('N' = fila operativa normal, mismo patrón S/N del resto del schema) -- no
+            // confirmado contra un caso real, pendiente de validar si algo se comporta raro.
+            await DatabaseServiceAdapter.query(
+              connection,
+              `INSERT INTO ${schema}.EXISTENCIA_BODEGA
+                (ARTICULO, BODEGA, EXISTENCIA_MINIMA, EXISTENCIA_MAXIMA, PUNTO_DE_REORDEN,
+                 CANT_DISPONIBLE, CANT_RESERVADA, CANT_NO_APROBADA, CANT_VENCIDA, CANT_TRANSITO,
+                 CANT_PRODUCCION, CANT_PEDIDA, CANT_REMITIDA, CONGELADO, BLOQUEA_TRANS)
+               VALUES
+                (@articulo, @bodega_destino, 0, 0, 0,
+                 @cantidad, 0, 0, 0, 0,
+                 0, 0, 0, 'N', 'N')`,
+              { articulo: producto.codigo, bodega_destino, cantidad: producto.cantidad }
+            );
+          }
+
+          // Replica las 2 filas de TRANSACCION_INV que deja la aprobación nativa (salida +
+          // entrada), ligadas al AUDIT_TRANS_INV del documento (resuelto antes del loop). Costo
+          // con la cantidad absoluta, igual en ambas filas (no se niega en la de salida) --
+          // confirmado contra TRA047777/TRA047918 reales.
+          const costoResult = await DatabaseServiceAdapter.query(
+            connection,
+            `SELECT CAST(COSTO_ULT_LOC AS DECIMAL(18,4)) AS costoLoc, CAST(COSTO_ULT_DOL AS DECIMAL(18,4)) AS costoDol
+             FROM ${schema}.ARTICULO WHERE ARTICULO = @articulo`,
+            { articulo: producto.codigo }
+          );
+          const costoLoc = costoResult?.recordset?.[0]?.costoLoc ?? 0;
+          const costoDol = costoResult?.recordset?.[0]?.costoDol ?? 0;
+          const costoTotalLoc = costoLoc * producto.cantidad;
+          const costoTotalDol = costoDol * producto.cantidad;
+
+          const insertarTransaccionInv = `
+            INSERT INTO ${schema}.TRANSACCION_INV
+              (AUDIT_TRANS_INV, CONSECUTIVO, ARTICULO, BODEGA, TIPO, SUBTIPO, SUBSUBTIPO, NATURALEZA,
+               CANTIDAD, COSTO_TOT_FISC_LOC, COSTO_TOT_FISC_DOL, COSTO_TOT_COMP_LOC, COSTO_TOT_COMP_DOL,
+               PRECIO_TOTAL_LOCAL, PRECIO_TOTAL_DOLAR, CONTABILIZADA, FECHA, AJUSTE_CONFIG)
+            VALUES
+              (@auditTransInv, @consecutivo, @articulo, @bodega, 'T', 'D', @subsubtipo, @naturaleza,
+               @cantidad, @costoFiscLoc, @costoFiscDol, @costoCompLoc, @costoCompDol,
+               0, 0, 'N', GETDATE(), @ajusteConfig)
+          `;
+          const filasTransaccion = [
+            { bodega: producto.bodegaOrigen, naturaleza: "S", cantidad: -producto.cantidad },
+            { bodega: bodega_destino, naturaleza: "E", cantidad: producto.cantidad },
+          ];
+          for (const fila of filasTransaccion) {
+            await DatabaseServiceAdapter.query(connection, insertarTransaccionInv, {
+              auditTransInv: auditTransInvId,
+              consecutivo: transaccionConsecutivo++,
+              articulo: producto.codigo,
+              bodega: fila.bodega,
+              subsubtipo: config.subsubtipo,
+              naturaleza: fila.naturaleza,
+              cantidad: fila.cantidad,
+              costoFiscLoc: costoTotalLoc,
+              costoFiscDol: costoTotalDol,
+              costoCompLoc: costoTotalLoc,
+              costoCompDol: costoTotalDol,
+              ajusteConfig: config.ajuste_config,
+            });
           }
         }
       }
@@ -561,6 +707,22 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
       if (lineasExitosas === 0 && productosArray.length > 0) {
         throw new Error("No se pudo insertar ninguna línea de detalle en el documento");
       }
+
+      // El documento pendiente ya no hace falta -- se reemplazó por el AUDIT_TRANS_INV/
+      // TRANSACCION_INV de arriba, que replican lo que deja la aprobación nativa. Se borra para
+      // que no quede "pendiente de aprobar" visible en Catelli (evita que alguien lo apruebe
+      // también a mano y duplique el movimiento ya hecho) -- detalle antes que encabezado, mismo
+      // orden que el script de rollback manual ya documentado.
+      await DatabaseServiceAdapter.query(
+        connection,
+        `DELETE FROM ${schema}.LINEA_DOC_INV WHERE DOCUMENTO_INV = @documento`,
+        { documento: nuevoConsecutivo }
+      );
+      await DatabaseServiceAdapter.query(
+        connection,
+        `DELETE FROM ${schema}.DOCUMENTO_INV WHERE DOCUMENTO_INV = @documento`,
+        { documento: nuevoConsecutivo }
+      );
 
       // Preparar resultado exitoso
       const resultado = {
@@ -623,7 +785,12 @@ async function realizarTraspaso({ route, salesData, bodega_destino }) {
       }
 
       return resultado;
-    });
+    };
+
+    if (externalConnection) {
+      return await ejecutarTraspaso(externalConnection);
+    }
+    return await withConnection("server1", ejecutarTraspaso);
 
   } catch (error) {
     logger.error("Error en realizarTraspaso:", error);

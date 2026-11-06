@@ -187,10 +187,15 @@ class LoadsService {
       // se recalcula con GETDATE() al autorizar.
       await LoadsSQLService.insertToLoadsDetailStaging(server1Connection, loadId, codeRoute || tracking.route, ordersData, tracking.dateLoad, "approved");
 
+      // Se pasa server1Connection (ya dentro de la transacción de este withTransaction) para que
+      // el insert del traspaso y el movimiento de EXISTENCIA_BODEGA participen de la misma
+      // transacción que el resto del despacho -- antes corría en su propia conexión y se
+      // autocommiteaba aunque el resto de authorizeDispatch fallara después.
       const traspasoResult = await realizarTraspaso({
         route: tracking.route,
         salesData: traspasoData,
         bodega_destino: bodegaDestino,
+        connection: server1Connection,
       });
 
       if (!traspasoResult || !traspasoResult.success) {
