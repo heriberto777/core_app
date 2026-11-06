@@ -665,6 +665,52 @@ SELECT FACTURA FROM @t`,
     failIfNotFound: true,
   });
 
+  // 2026-11-06 (EXISTENCIA_BODEGA -- ver memoria
+  // project_existencia_bodega_sin_actualizacion_automatica): confirmado con
+  // una prueba real en Catelli (artículo 2901, traspaso TRA048047 Central->R01
+  // y una factura nativa posterior) que CANT_DISPONIBLE es la columna que una
+  // factura nativa de Catelli rebaja en la bodega donde se vendió -- y que
+  // este pipeline nunca la toca, porque inserta directo en TRANSACCION_INV sin
+  // pasar por el stored procedure nativo que hace ese UPDATE. Esto dejaba la
+  // bodega del repartidor inflada para siempre con todo lo transferido,
+  // nunca reflejaba lo realmente facturado.
+  //
+  // Campo auxiliar (mismo patrón que _UPDATE_FACTURA_AUDIT_TRANS_INV de
+  // arriba) que replica ese descuento: resta CANTIDAD de CANT_DISPONIBLE en
+  // (ARTICULO, BODEGA=repartidor) por cada línea de TRANSACCION_INV -- cubre
+  // también la línea bonificada sin caso especial, porque igual sale
+  // físicamente de la bodega. BODEGA se re-resuelve vía BODEGA_PIVOT (no se
+  // puede leer el targetField BODEGA ya calculado arriba en esta misma
+  // pasada -- misma limitación del motor que ya obligó a re-resolver
+  // CONSECUTIVO por subquery más arriba).
+  //
+  // Decisión explícita del usuario (2026-11-06): fallar la fila completa si
+  // no hay fila en EXISTENCIA_BODEGA para esa combinación (el traspaso de
+  // esta carga aún no se aplicó manualmente en Catelli) o si el saldo
+  // quedaría negativo (se facturó más de lo que el traspaso había movido) --
+  // el filtro CANT_DISPONIBLE >= @CANTIDAD maneja ambos casos con una sola
+  // condición: si no matchea ninguna fila, @t queda vacío y failIfNotFound
+  // aborta, igual que el resto del pipeline nunca asume ni degrada en
+  // silencio.
+  addField(transaccionInv, {
+    targetField: "_UPDATE_EXISTENCIA_BODEGA",
+    lookupFromTarget: true,
+    lookupQuery: `DECLARE @bod VARCHAR(10) = (${BODEGA_PIVOT});
+DECLARE @t TABLE (ARTICULO VARCHAR(50));
+UPDATE CATELLI.EXISTENCIA_BODEGA
+SET CANT_DISPONIBLE = CANT_DISPONIBLE - @CANTIDAD
+OUTPUT INSERTED.ARTICULO INTO @t
+WHERE ARTICULO = @COD_ART AND BODEGA = @bod AND CANT_DISPONIBLE >= @CANTIDAD;
+SELECT ARTICULO FROM @t`,
+    lookupParams: [
+      { sourceField: "NUM_PED", paramName: "NUM_PED" },
+      { sourceField: "COD_ART", paramName: "COD_ART" },
+      { sourceField: "CNT_MAX", paramName: "CANTIDAD" },
+    ],
+    validateExistence: true,
+    failIfNotFound: true,
+  });
+
   // 5. DOCUMENTOS_CC tipo FAC (de Carga_Fac_To_CC.FAC_TO_CC)
   const docCcFac = getTableConfig(cargaFacToCC, "FAC_TO_CC");
   docCcFac.name = "DOC_CC_FAC";
