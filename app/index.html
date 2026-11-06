@@ -8,6 +8,78 @@
   </head>
   <body>
     <div id="root"></div>
+    <script>
+      // Diagnóstico de arranque: no depende de React ni de que el módulo de abajo
+      // cargue bien, para poder ver qué pasó cuando la app queda en blanco (sin
+      // esto, un error de carga de módulo o de red no deja ningún rastro visible).
+      (function () {
+        var errors = [];
+        function record(info) {
+          try {
+            errors.push(info);
+          } catch (e) {}
+        }
+        window.addEventListener(
+          "error",
+          function (e) {
+            record({
+              tipo: "error",
+              mensaje: e.message || (e.target && (e.target.src || e.target.href)) || "recurso no pudo cargar",
+              archivo: e.filename || (e.target && (e.target.src || e.target.href)) || null,
+              linea: e.lineno || null,
+              columna: e.colno || null,
+            });
+          },
+          true
+        );
+        window.addEventListener("unhandledrejection", function (e) {
+          var reason = e.reason;
+          record({
+            tipo: "promesa_rechazada",
+            mensaje: (reason && (reason.message || String(reason))) || "unhandledrejection sin detalle",
+          });
+        });
+
+        setTimeout(function () {
+          try {
+            var root = document.getElementById("root");
+            if (root && root.children.length > 0) return;
+
+            var diagnostico = {
+              fecha: new Date().toISOString(),
+              url: window.location.href,
+              userAgent: navigator.userAgent,
+              conexion: (navigator.connection && navigator.connection.effectiveType) || "desconocida",
+              errores: errors,
+            };
+            var texto = JSON.stringify(diagnostico, null, 2);
+
+            var wrapper = document.createElement("div");
+            wrapper.style.cssText =
+              "font-family: sans-serif; padding: 24px; max-width: 480px; margin: 40px auto; color: #1f2937;";
+            wrapper.innerHTML =
+              '<h2 style="margin-bottom:8px;">No se pudo cargar la aplicación</h2>' +
+              '<p style="margin-bottom:16px;">Ocurrió un problema al iniciar. Probá recargar la página; si persiste, copiá el diagnóstico y enviálo a soporte.</p>' +
+              '<pre style="background:#f3f4f6; padding:12px; border-radius:6px; font-size:11px; white-space:pre-wrap; max-height:240px; overflow:auto;"></pre>' +
+              '<div style="display:flex; gap:8px; margin-top:16px;">' +
+              '<button id="__diag_reload" style="padding:8px 16px; background:#4338ca; color:#fff; border:none; border-radius:6px;">Recargar</button>' +
+              '<button id="__diag_copy" style="padding:8px 16px; background:#e5e7eb; color:#1f2937; border:none; border-radius:6px;">Copiar diagnóstico</button>' +
+              "</div>";
+            wrapper.querySelector("pre").textContent = texto;
+            root.appendChild(wrapper);
+
+            document.getElementById("__diag_reload").addEventListener("click", function () {
+              window.location.reload();
+            });
+            document.getElementById("__diag_copy").addEventListener("click", function () {
+              if (navigator.clipboard) {
+                navigator.clipboard.writeText(texto);
+              }
+            });
+          } catch (e) {}
+        }, 8000);
+      })();
+    </script>
     <script type="module" src="/src/main.jsx"></script>
   </body>
 </html>
