@@ -40,6 +40,11 @@
 // Uso:
 //   node scripts/buildCargarFacturaCompleta.js --dry-run   (solo imprime, no escribe Mongo)
 //   node scripts/buildCargarFacturaCompleta.js             (crea los 2 mappings, con active:false)
+//   node scripts/buildCargarFacturaCompleta.js --update    (sobrescribe tableConfigs de los 2
+//                                                            mappings YA existentes en este ambiente,
+//                                                            preserva _id/active/taskId -- para
+//                                                            sincronizar producción con fixes ya
+//                                                            validados en otro ambiente)
 
 const TransferMapping = require("../models/transferMappingModel");
 const DynamicTransferService = require("../services/DynamicTransferService");
@@ -49,6 +54,13 @@ const {
 } = require("../utils/database");
 
 const DRY_RUN = process.argv.includes("--dry-run");
+// --update: en vez de crear los mappings (falla si ya existen), sobrescribe
+// solo el campo tableConfigs de los mappings YA existentes en este ambiente,
+// preservando _id/active/taskId/createdAt. Pensado para sincronizar un
+// ambiente (producción) con los fixes de este script ya validados en otro
+// (desarrollo), sin tener que recrear el documento ni copiar un script
+// suelto vía 'docker cp' -- este archivo ya viaja con cada deploy normal.
+const UPDATE_MODE = process.argv.includes("--update");
 
 // El Consecutivo centralizado "RECIBO_FAC" es un documento de Mongo propio de
 // cada ambiente (no viaja con el código) -- en desarrollo quedó con este _id,
@@ -1751,6 +1763,39 @@ async function main() {
 
     if (DRY_RUN) {
       console.log("\n--dry-run: no se escribió nada en Mongo.");
+      return;
+    }
+
+    if (UPDATE_MODE) {
+      const existingUpdate1 = await TransferMapping.findOne({ name: cargarFacturaCompleta.name });
+      if (!existingUpdate1) {
+        throw new Error(
+          `No existe un mapping llamado '${cargarFacturaCompleta.name}' para actualizar -- correlo sin --update para crearlo primero.`
+        );
+      }
+      const existingUpdate2 = await TransferMapping.findOne({ name: aplicarRecibosCxC.name });
+      if (!existingUpdate2) {
+        throw new Error(
+          `No existe un mapping llamado '${aplicarRecibosCxC.name}' para actualizar -- correlo sin --update para crearlo primero.`
+        );
+      }
+
+      existingUpdate1.tableConfigs = cargarFacturaCompleta.tableConfigs;
+      existingUpdate1.markModified("tableConfigs");
+      await existingUpdate1.save();
+
+      existingUpdate2.tableConfigs = aplicarRecibosCxC.tableConfigs;
+      existingUpdate2.markModified("tableConfigs");
+      await existingUpdate2.save();
+
+      console.log(
+        `\n✅ Actualizado tableConfigs de '${existingUpdate1.name}' (_id ${existingUpdate1._id}, ` +
+          `active:${existingUpdate1.active}, ${existingUpdate1.tableConfigs.length} tableConfigs)`
+      );
+      console.log(
+        `✅ Actualizado tableConfigs de '${existingUpdate2.name}' (_id ${existingUpdate2._id}, ` +
+          `active:${existingUpdate2.active}, ${existingUpdate2.tableConfigs.length} tableConfigs)`
+      );
       return;
     }
 
