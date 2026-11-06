@@ -2,7 +2,7 @@
 export class NotificationService {
   constructor() {
     this.enabled = false;
-    this.permission = Notification.permission;
+    this.permission = "default";
     this.initialize();
   }
 
