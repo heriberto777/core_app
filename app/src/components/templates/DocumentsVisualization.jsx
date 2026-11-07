@@ -143,7 +143,7 @@ export function DocumentsVisualization() {
   };
 
   const ConfigSummary = ({ config }) => (
-    <div className="grid grid-cols-3 gap-4 p-4 bg-gray-50 dark:bg-slate-800/10 rounded-xl text-sm border-l-4 border-blue-500">
+    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4 p-4 bg-gray-50 dark:bg-slate-800/10 rounded-xl text-sm border-l-4 border-blue-500">
       <div><strong>Origen:</strong> {config.sourceServer} ({config.sourceDatabase})</div>
       <div><strong>Destino:</strong> {config.targetServer} ({config.targetDatabase})</div>
       <div><strong>Transferencia:</strong> {config.transferType}</div>

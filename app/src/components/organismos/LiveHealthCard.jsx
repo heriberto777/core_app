@@ -66,7 +66,7 @@ export function LiveHealthCard({ accessToken, className = "" }) {
         </span>
       </div>
 
-      <div className="grid grid-cols-2 gap-3.5">
+      <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
         <div className="bg-slate-50/50 p-3.5 rounded-2xl flex items-center gap-3">
           <div className="w-10 h-10 bg-primary-50 rounded-lg flex items-center justify-center text-primary-500">
             <FaBolt />

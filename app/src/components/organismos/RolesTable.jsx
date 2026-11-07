@@ -51,7 +51,7 @@ export const RolesTable = ({ data, onEdit, onDelete, onDuplicate, onToggleStatus
                     </div>
 
                     {/* STATS */}
-                    <div className="grid grid-cols-2 gap-4 pt-6 border-t border-slate-100">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 pt-6 border-t border-slate-100">
                         <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 flex items-center justify-center">
                               <FaUsers size={14} />

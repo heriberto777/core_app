@@ -58,7 +58,7 @@ export const ModulesTable = ({ data, onEdit, onDelete, onToggleStatus }) => {
                     </div>
 
                     {/* METADATA */}
-                    <div className="grid grid-cols-2 gap-4 py-5 border-y border-slate-100">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-5 border-y border-slate-100">
                         <div className="flex items-center gap-3">
                             <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 flex items-center justify-center">
                               <FaLayerGroup size={14} />
