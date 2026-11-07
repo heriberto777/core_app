@@ -7,22 +7,22 @@ export function SummaryDetailsModal({ isOpen, onClose, summary }) {
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[2000] p-4 animate-in fade-in duration-300">
-            <div className="bg-white w-full max-w-[850px] max-h-[90vh] rounded-xl overflow-hidden shadow-2xl border border-slate-100 flex flex-col animate-in zoom-in-95 duration-300">
+            <div className="bg-white dark:bg-slate-800 w-full max-w-[850px] max-h-[90vh] rounded-xl overflow-hidden shadow-2xl border border-slate-100 dark:border-slate-700 flex flex-col animate-in zoom-in-95 duration-300">
                 {/* Header */}
-                <div className="px-8 py-7 bg-white/80 backdrop-blur-md border-b border-slate-50 flex items-center justify-between sticky top-0 z-10">
+                <div className="px-8 py-7 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-50 dark:border-slate-700 flex items-center justify-between sticky top-0 z-10">
                     <div className="flex items-center gap-4">
                         <div className="w-12 h-12 bg-indigo-600 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-indigo-600/20">
                             <FaBoxOpen className="text-xl" />
                         </div>
                         <div className="flex flex-col">
-                            <h2 className="text-xl font-black text-slate-900 leading-tight">Auditoría de Carga</h2>
+                            <h2 className="text-xl font-black text-slate-900 dark:text-slate-100 leading-tight">Auditoría de Carga</h2>
                             <div className="flex items-center gap-2 mt-1">
-                                <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">ID Operativo:</span>
-                                <span className="text-[10px] font-black bg-indigo-50 text-indigo-600 px-2 py-0.5 rounded-md">#{summary.loadId}</span>
+                                <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">ID Operativo:</span>
+                                <span className="text-[10px] font-black bg-indigo-50 dark:bg-indigo-900/30 text-indigo-600 dark:text-indigo-300 px-2 py-0.5 rounded-md">#{summary.loadId}</span>
                             </div>
                         </div>
                     </div>
-                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500 transition-colors">
                         <FaTimes />
                     </button>
                 </div>
@@ -31,40 +31,40 @@ export function SummaryDetailsModal({ isOpen, onClose, summary }) {
                 <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-10">
                     {/* Header Info Cards */}
                     <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
-                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-xl flex flex-col gap-1 hover:bg-white transition-colors">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ruta / Vendedor</span>
-                            <span className="text-sm font-black text-slate-900">{summary.route}</span>
+                        <div className="p-6 bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 rounded-xl flex flex-col gap-1 hover:bg-white dark:hover:bg-slate-800 transition-colors">
+                            <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Ruta / Vendedor</span>
+                            <span className="text-sm font-black text-slate-900 dark:text-slate-100">{summary.route}</span>
                         </div>
-                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-xl flex flex-col gap-1 hover:bg-white transition-colors">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Documento Traspaso</span>
-                            <span className="text-sm font-black text-slate-900">{summary.documentId || "N/A"}</span>
+                        <div className="p-6 bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 rounded-xl flex flex-col gap-1 hover:bg-white dark:hover:bg-slate-800 transition-colors">
+                            <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Documento Traspaso</span>
+                            <span className="text-sm font-black text-slate-900 dark:text-slate-100">{summary.documentId || "N/A"}</span>
                         </div>
-                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-xl flex flex-col gap-1 hover:bg-white transition-colors">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1"><FaCalendarAlt className="text-[8px]" /> Fecha Carga</span>
-                            <span className="text-sm font-black text-slate-900">{new Date(summary.date).toLocaleDateString()}</span>
+                        <div className="p-6 bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 rounded-xl flex flex-col gap-1 hover:bg-white dark:hover:bg-slate-800 transition-colors">
+                            <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1"><FaCalendarAlt className="text-[8px]" /> Fecha Carga</span>
+                            <span className="text-sm font-black text-slate-900 dark:text-slate-100">{new Date(summary.date).toLocaleDateString()}</span>
                         </div>
-                        <div className="p-6 bg-slate-50 border border-slate-100 rounded-xl flex flex-col gap-1 hover:bg-white transition-colors">
-                            <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Estatus Operativo</span>
+                        <div className="p-6 bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 rounded-xl flex flex-col gap-1 hover:bg-white dark:hover:bg-slate-800 transition-colors">
+                            <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Estatus Operativo</span>
                             <span className={`text-[10px] font-black px-2 py-0.5 rounded-md self-start uppercase tracking-widest ${
-                                summary.status === 'completed' ? 'bg-emerald-50 text-emerald-600' : 'bg-amber-50 text-amber-600'
+                                summary.status === 'completed' ? 'bg-emerald-50 dark:bg-emerald-900/30 text-emerald-600 dark:text-emerald-300' : 'bg-amber-50 dark:bg-amber-900/30 text-amber-600 dark:text-amber-300'
                             }`}>{summary.status}</span>
                         </div>
                     </div>
 
                     {/* Return Data Banner */}
                     {summary.returnData && (
-                        <div className="p-6 bg-amber-50/50 border border-amber-100 rounded-xl space-y-4 animate-in slide-in-from-top-4 duration-500">
-                            <h4 className="text-[11px] font-black text-amber-600 uppercase tracking-[0.2em] flex items-center gap-3">
+                        <div className="p-6 bg-amber-50/50 dark:bg-amber-900/20 border border-amber-100 dark:border-amber-800 rounded-xl space-y-4 animate-in slide-in-from-top-4 duration-500">
+                            <h4 className="text-[11px] font-black text-amber-600 dark:text-amber-300 uppercase tracking-[0.2em] flex items-center gap-3">
                                 <FaInfoCircle /> Última Devolución Detectada
                             </h4>
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                                 <div className="flex flex-col gap-1">
-                                    <span className="text-[9px] font-black text-amber-400 uppercase tracking-widest">Referencia Retorno</span>
-                                    <span className="text-xs font-black text-amber-900">{summary.returnData.documentId}</span>
+                                    <span className="text-[9px] font-black text-amber-400 dark:text-amber-500 uppercase tracking-widest">Referencia Retorno</span>
+                                    <span className="text-xs font-black text-amber-900 dark:text-amber-200">{summary.returnData.documentId}</span>
                                 </div>
                                 <div className="flex flex-col gap-1">
-                                    <span className="text-[9px] font-black text-amber-400 uppercase tracking-widest">Motivo de Regreso</span>
-                                    <span className="text-xs font-bold text-amber-800 line-clamp-2">{summary.returnData.reason}</span>
+                                    <span className="text-[9px] font-black text-amber-400 dark:text-amber-500 uppercase tracking-widest">Motivo de Regreso</span>
+                                    <span className="text-xs font-bold text-amber-800 dark:text-amber-300 line-clamp-2">{summary.returnData.reason}</span>
                                 </div>
                             </div>
                         </div>
@@ -72,30 +72,30 @@ export function SummaryDetailsModal({ isOpen, onClose, summary }) {
 
                     {/* Items Breakdown Table */}
                     <div className="space-y-6">
-                        <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3 border-l-4 border-indigo-600 pl-4">
+                        <h4 className="text-[11px] font-black text-slate-900 dark:text-slate-100 uppercase tracking-[0.2em] flex items-center gap-3 border-l-4 border-indigo-600 pl-4">
                             <FaCubes className="text-indigo-600" /> Desglose Analítico de Ítems
                         </h4>
-                        
-                        <div className="rounded-xl border border-slate-100 overflow-hidden shadow-sm bg-white">
+
+                        <div className="rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden shadow-sm bg-white dark:bg-slate-800">
                             <div className="overflow-x-auto">
                                 <table className="w-full border-collapse">
-                                    <thead className="bg-slate-50/50">
+                                    <thead className="bg-slate-50/50 dark:bg-slate-900/50">
                                         <tr>
-                                            <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Código</th>
-                                            <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Descripción</th>
-                                            <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Original</th>
-                                            <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Devuelto</th>
-                                            <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-100">Neto</th>
+                                            <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-700">Código</th>
+                                            <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-700">Descripción</th>
+                                            <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-700">Original</th>
+                                            <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-700">Devuelto</th>
+                                            <th className="px-6 py-4 text-right text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-100 dark:border-slate-700">Neto</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-50">
+                                    <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
                                         {summary.products?.map((p, i) => (
-                                            <tr key={i} className="hover:bg-slate-50/30 transition-colors group">
-                                                <td className="px-6 py-4 text-xs font-black text-indigo-600 group-hover:scale-105 transition-transform">{p.code}</td>
-                                                <td className="px-6 py-4 text-xs font-bold text-slate-500 truncate max-w-[200px]">{p.description || "Sin descripción"}</td>
-                                                <td className="px-6 py-4 text-right text-xs font-black text-slate-900">{p.quantity}</td>
-                                                <td className="px-6 py-4 text-right text-xs font-black text-red-500">{p.returnedQuantity || 0}</td>
-                                                <td className="px-6 py-4 text-right text-xs font-black text-emerald-600">{p.quantity - (p.returnedQuantity || 0)}</td>
+                                            <tr key={i} className="hover:bg-slate-50/30 dark:hover:bg-slate-700/30 transition-colors group">
+                                                <td className="px-6 py-4 text-xs font-black text-indigo-600 dark:text-indigo-400 group-hover:scale-105 transition-transform">{p.code}</td>
+                                                <td className="px-6 py-4 text-xs font-bold text-slate-500 dark:text-slate-400 truncate max-w-[200px]">{p.description || "Sin descripción"}</td>
+                                                <td className="px-6 py-4 text-right text-xs font-black text-slate-900 dark:text-slate-100">{p.quantity}</td>
+                                                <td className="px-6 py-4 text-right text-xs font-black text-red-500 dark:text-red-400">{p.returnedQuantity || 0}</td>
+                                                <td className="px-6 py-4 text-right text-xs font-black text-emerald-600 dark:text-emerald-400">{p.quantity - (p.returnedQuantity || 0)}</td>
                                             </tr>
                                         ))}
                                     </tbody>
@@ -116,7 +116,7 @@ export function SummaryDetailsModal({ isOpen, onClose, summary }) {
                 </div>
 
                 {/* Footer */}
-                <div className="px-8 py-6 border-t border-slate-50 flex justify-end gap-3 bg-white/80 backdrop-blur-md sticky bottom-0 z-10">
+                <div className="px-8 py-6 border-t border-slate-50 dark:border-slate-700 flex justify-end gap-3 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md sticky bottom-0 z-10">
                     <Button 
                         variant="primary" 
                         onClick={onClose}

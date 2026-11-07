@@ -19,20 +19,20 @@ export const ModulesTable = ({ data, onEdit, onDelete, onToggleStatus }) => {
     return (
         <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-8">
             {data.map(module => (
-                <div 
-                  key={module._id} 
+                <div
+                  key={module._id}
                   className={`
-                    bg-white rounded-xl p-6 border transition-all duration-300 group hover:-translate-y-1
-                    ${module.isSystem 
-                      ? 'border-primary-200 bg-primary-50/10 shadow-primary-900/5' 
-                      : 'border-slate-100 shadow-soft hover:shadow-lg'}
+                    bg-white dark:bg-slate-800 rounded-xl p-6 border transition-all duration-300 group hover:-translate-y-1
+                    ${module.isSystem
+                      ? 'border-primary-200 dark:border-primary-800 bg-primary-50/10 dark:bg-primary-900/10 shadow-primary-900/5'
+                      : 'border-slate-100 dark:border-slate-700 shadow-soft hover:shadow-lg'}
                   `}
                 >
                     {/* CARD HEADER */}
                     <div className="flex justify-between items-start mb-6">
                         <div className={`
                           w-14 h-14 rounded-2xl flex items-center justify-center text-2xl shadow-inner transition-transform group-hover:scale-110 duration-300
-                          ${module.isSystem ? "bg-primary-100 text-primary-600" : "bg-slate-100 text-slate-500"}
+                          ${module.isSystem ? "bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-300" : "bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-400"}
                         `}>
                             <FaCog />
                         </div>
@@ -48,42 +48,42 @@ export const ModulesTable = ({ data, onEdit, onDelete, onToggleStatus }) => {
 
                     {/* MODULE INFO */}
                     <div className="space-y-2 mb-6">
-                        <h3 className="text-lg font-extrabold text-slate-800">{module.displayName}</h3>
-                        <p className="text-sm text-slate-500 font-medium leading-relaxed line-clamp-2 min-h-[40px]">
+                        <h3 className="text-lg font-extrabold text-slate-800 dark:text-slate-100">{module.displayName}</h3>
+                        <p className="text-sm text-slate-500 dark:text-slate-400 font-medium leading-relaxed line-clamp-2 min-h-[40px]">
                           {module.description || "Módulo base del ecosistema CORE."}
                         </p>
-                        <div className="inline-block px-2 py-0.5 bg-blue-50 rounded text-[10px] font-bold text-blue-500 uppercase tracking-widest border border-blue-100">
+                        <div className="inline-block px-2 py-0.5 bg-blue-50 dark:bg-blue-900/30 rounded text-[10px] font-bold text-blue-500 dark:text-blue-300 uppercase tracking-widest border border-blue-100 dark:border-blue-800">
                           {module.name}
                         </div>
                     </div>
 
                     {/* METADATA */}
-                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-5 border-y border-slate-100">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 py-5 border-y border-slate-100 dark:border-slate-700">
                         <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 flex items-center justify-center">
+                            <div className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-900/50 text-slate-400 dark:text-slate-500 flex items-center justify-center">
                               <FaLayerGroup size={14} />
                             </div>
                             <div className="flex flex-col">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Categoría</span>
-                              <span className="text-xs font-extrabold text-slate-700 truncate max-w-[100px]">{module.uiConfig?.category || "OTROS"}</span>
+                              <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tighter">Categoría</span>
+                              <span className="text-xs font-extrabold text-slate-700 dark:text-slate-200 truncate max-w-[100px]">{module.uiConfig?.category || "OTROS"}</span>
                             </div>
                         </div>
                         <div className="flex items-center gap-3">
-                            <div className="w-8 h-8 rounded-lg bg-slate-50 text-slate-400 flex items-center justify-center">
+                            <div className="w-8 h-8 rounded-lg bg-slate-50 dark:bg-slate-900/50 text-slate-400 dark:text-slate-500 flex items-center justify-center">
                               <FaCubes size={14} />
                             </div>
                             <div className="flex flex-col">
-                              <span className="text-[10px] font-bold text-slate-400 uppercase tracking-tighter">Prioridad</span>
-                              <span className="text-xs font-extrabold text-slate-700">Nivel {module.uiConfig?.order || 0}</span>
+                              <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-tighter">Prioridad</span>
+                              <span className="text-xs font-extrabold text-slate-700 dark:text-slate-200">Nivel {module.uiConfig?.order || 0}</span>
                             </div>
                         </div>
                     </div>
 
                     {/* CAPABILITIES (EXPANDABLE) */}
                     <div className="mt-4">
-                        <button 
+                        <button
                           onClick={() => toggleExpand(module._id)}
-                          className="w-full flex justify-between items-center py-2 text-[10px] font-extrabold text-slate-400 uppercase tracking-widest hover:text-slate-600 transition-colors"
+                          className="w-full flex justify-between items-center py-2 text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-widest hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
                         >
                             <span>Capacidades ({module.actions?.length || 0})</span>
                             {expanded[module._id] ? <FaChevronUp /> : <FaChevronDown />}
@@ -94,7 +94,7 @@ export const ModulesTable = ({ data, onEdit, onDelete, onToggleStatus }) => {
                                     const label = typeof action === 'string' ? action : (action.displayName || action.name);
                                     const key = typeof action === 'string' ? action : (action._id || action.name);
                                     return (
-                                      <span key={key} className="px-2 py-0.5 bg-slate-50 text-slate-500 rounded-md text-[9px] font-extrabold uppercase border border-slate-100">
+                                      <span key={key} className="px-2 py-0.5 bg-slate-50 dark:bg-slate-900/50 text-slate-500 dark:text-slate-400 rounded-md text-[9px] font-extrabold uppercase border border-slate-100 dark:border-slate-700">
                                         {label}
                                       </span>
                                     );
@@ -104,25 +104,25 @@ export const ModulesTable = ({ data, onEdit, onDelete, onToggleStatus }) => {
                     </div>
 
                     {/* CONTROL BAR */}
-                    <div className="flex gap-2 justify-end mt-6 pt-4 border-t border-slate-50 opacity-0 group-hover:opacity-100 transition-opacity">
+                    <div className="flex gap-2 justify-end mt-6 pt-4 border-t border-slate-50 dark:border-slate-700 opacity-0 group-hover:opacity-100 transition-opacity">
                         <button
                           onClick={() => onEdit(module)}
-                          className="p-2.5 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-all"
+                          className="p-2.5 text-slate-400 dark:text-slate-500 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 rounded-xl transition-all"
                           title="Editar servicio"
                         >
                             <FaEdit size={16} />
                         </button>
                         <button
                             onClick={() => onToggleStatus(module)}
-                            className={`p-2.5 rounded-xl transition-all ${module.isActive ? "text-amber-500 hover:bg-amber-50" : "text-emerald-500 hover:bg-emerald-50"}`}
+                            className={`p-2.5 rounded-xl transition-all ${module.isActive ? "text-amber-500 hover:bg-amber-50 dark:hover:bg-amber-900/20" : "text-emerald-500 hover:bg-emerald-50 dark:hover:bg-emerald-900/20"}`}
                             title={module.isActive ? "Desactivar" : "Activar"}
                         >
                             {module.isActive ? <FaToggleOn size={18} /> : <FaToggleOff size={18} />}
                         </button>
                         {!module.isSystem && (
-                            <button 
+                            <button
                               onClick={() => onDelete(module)}
-                              className="p-2.5 text-slate-400 hover:text-red-500 hover:bg-red-50 rounded-xl transition-all"
+                              className="p-2.5 text-slate-400 dark:text-slate-500 hover:text-red-500 dark:hover:text-red-400 hover:bg-red-50 dark:hover:bg-red-900/20 rounded-xl transition-all"
                               title="Extirpar servicio"
                             >
                                 <FaTrash size={16} />

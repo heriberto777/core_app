@@ -114,8 +114,8 @@ export function ModuleManager() {
             {/* HEADER */}
             <header className="flex flex-col md:flex-row justify-between items-start gap-6">
                 <div>
-                    <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Arquitectura Modular</h1>
-                    <p className="text-slate-500 mt-2 font-medium">Supervisa y configura los micro-servicios y capacidades del ecosistema.</p>
+                    <h1 className="text-3xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">Arquitectura Modular</h1>
+                    <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Supervisa y configura los micro-servicios y capacidades del ecosistema.</p>
                 </div>
                 {isAdmin && (
                     <div className="flex gap-2">
@@ -127,14 +127,14 @@ export function ModuleManager() {
             </header>
 
             {/* TOOLBAR */}
-            <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-soft flex flex-col lg:flex-row lg:items-center justify-between gap-4">
+            <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-soft flex flex-col lg:flex-row lg:items-center justify-between gap-4">
                 <div className="relative flex-1 max-w-lg">
-                    <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                    <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
                     <input
                         placeholder="Buscar por servicio, categoría o slug..."
                         value={searchTerm}
                         onChange={e => setSearchTerm(e.target.value)}
-                        className="w-full py-3 pl-11 pr-4 rounded-xl border border-slate-200 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all text-sm font-medium"
+                        className="w-full py-3 pl-11 pr-4 rounded-xl border border-slate-200 dark:border-slate-600 dark:bg-slate-900 dark:text-slate-100 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all text-sm font-medium"
                     />
                 </div>
                 {canCreate && (
@@ -146,17 +146,17 @@ export function ModuleManager() {
 
             {/* CONTENT */}
             {loading && modules.length === 0 ? (
-                <div className="flex flex-col items-center justify-center p-32 text-center gap-6 bg-white rounded-xl border border-slate-200 border-dashed">
-                    <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center text-slate-300">
+                <div className="flex flex-col items-center justify-center p-32 text-center gap-6 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 border-dashed">
+                    <div className="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-900/50 flex items-center justify-center text-slate-300 dark:text-slate-600">
                       <FaCogs size={32} />
                     </div>
                     <div>
-                      <p className="text-lg font-bold text-slate-800">Escaneando infraestructura modular...</p>
-                      <p className="text-sm text-slate-400 mt-1">Identificando servicios y dependencias.</p>
+                      <p className="text-lg font-bold text-slate-800 dark:text-slate-100">Escaneando infraestructura modular...</p>
+                      <p className="text-sm text-slate-400 dark:text-slate-500 mt-1">Identificando servicios y dependencias.</p>
                     </div>
                 </div>
             ) : (
-                <div className="bg-white rounded-xl border border-slate-200 shadow-soft overflow-hidden">
+                <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-soft overflow-hidden">
                     <ModulesTable
                         data={modules}
                         onEdit={handleEdit}

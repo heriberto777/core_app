@@ -39,11 +39,11 @@ export function Statistics() {
       {/* HEADER SECTION */}
       <header className="flex flex-col md:flex-row justify-between items-start gap-6">
         <div>
-          <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Centro de Inteligencia</h1>
-          <p className="text-slate-500 mt-2 font-medium">Análisis métrico de operaciones y salud de infraestructura en tiempo real.</p>
+          <h1 className="text-3xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">Centro de Inteligencia</h1>
+          <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Análisis métrico de operaciones y salud de infraestructura en tiempo real.</p>
         </div>
 
-        <div className="flex flex-wrap items-center gap-3 bg-white p-2 rounded-2xl border border-slate-100 shadow-soft">
+        <div className="flex flex-wrap items-center gap-3 bg-white dark:bg-slate-800 p-2 rounded-2xl border border-slate-100 dark:border-slate-700 shadow-soft">
           <div className="flex flex-wrap gap-1">
             {ranges.map(r => (
               <button
@@ -53,18 +53,18 @@ export function Statistics() {
                   px-4 py-2 rounded-xl text-xs font-extrabold uppercase tracking-widest transition-all
                   ${filters.timeRange === r.value 
                     ? 'bg-primary-500 text-white shadow-lg shadow-primary-500/20' 
-                    : 'text-slate-400 hover:text-slate-600 hover:bg-slate-50'}
+                    : 'text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700'}
                 `}
               >
                 {r.label}
               </button>
             ))}
           </div>
-          <div className="w-px h-6 bg-slate-100 mx-1" />
+          <div className="w-px h-6 bg-slate-100 dark:bg-slate-700 mx-1" />
           <button
             onClick={actions.refreshStats}
             disabled={refreshing}
-            className={`p-2.5 rounded-xl text-slate-400 hover:text-primary-500 hover:bg-primary-50 transition-all ${refreshing ? 'animate-spin' : ''}`}
+            className={`p-2.5 rounded-xl text-slate-400 dark:text-slate-500 hover:text-primary-500 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20 transition-all ${refreshing ? 'animate-spin' : ''}`}
             title="Sincronizar métricas"
           >
             <FaSync size={14} />
@@ -76,9 +76,9 @@ export function Statistics() {
       {loading && !refreshing ? (
         <LoadingUI message="Analizando macro-métricas del ecosistema..." />
       ) : error ? (
-        <div className="flex flex-col items-center justify-center p-20 gap-5 text-center bg-white rounded-3xl border border-slate-100">
-          <FaExclamationTriangle size={40} className="text-red-500" />
-          <p className="font-bold text-red-500">{error}</p>
+        <div className="flex flex-col items-center justify-center p-20 gap-5 text-center bg-white dark:bg-slate-800 rounded-3xl border border-slate-100 dark:border-slate-700">
+          <FaExclamationTriangle size={40} className="text-red-500 dark:text-red-400" />
+          <p className="font-bold text-red-500 dark:text-red-400">{error}</p>
           <Button variant="primary" onClick={actions.refreshStats}>Reintentar</Button>
         </div>
       ) : (
@@ -89,7 +89,7 @@ export function Statistics() {
 
       {/* FOOTER INFO */}
       {!loading && (
-        <footer className="mt-8 pt-8 border-t border-slate-100 flex flex-col sm:flex-row gap-1.5 sm:gap-0 justify-between items-center text-[10px] font-bold text-slate-300 uppercase tracking-[0.2em]">
+        <footer className="mt-8 pt-8 border-t border-slate-100 dark:border-slate-700 flex flex-col sm:flex-row gap-1.5 sm:gap-0 justify-between items-center text-[10px] font-bold text-slate-300 dark:text-slate-600 uppercase tracking-[0.2em]">
           <span>&copy; {new Date().getFullYear()} Catelli Intelligence Engine</span>
           <span>Sincronizado: {new Date().toLocaleTimeString()}</span>
         </footer>

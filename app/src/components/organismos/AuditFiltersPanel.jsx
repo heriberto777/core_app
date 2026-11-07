@@ -59,9 +59,9 @@ export function AuditFiltersPanel({
     const isSystem = logType === "system";
 
     return (
-        <div className={`bg-white border border-slate-200 rounded-xl p-6 mb-6 shadow-soft ${className}`}>
+        <div className={`bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl p-6 mb-6 shadow-soft ${className}`}>
             {isSystem && (
-                <div className="flex flex-wrap gap-2 mb-6 border-b border-slate-200 pb-4">
+                <div className="flex flex-wrap gap-2 mb-6 border-b border-slate-200 dark:border-slate-700 pb-4">
                     {LEVEL_TABS.map(tab => (
                         <button
                             key={tab.id}
@@ -69,8 +69,8 @@ export function AuditFiltersPanel({
                             className={`
                                 flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-bold cursor-pointer transition-all
                                 ${(filters.level || "all") === tab.id
-                                    ? "bg-primary-50 text-primary-600"
-                                    : "text-slate-500 hover:bg-slate-50"}
+                                    ? "bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-300"
+                                    : "text-slate-500 dark:text-slate-400 hover:bg-slate-50 dark:hover:bg-slate-700"}
                             `}
                         >
                             {tab.icon}
@@ -84,81 +84,81 @@ export function AuditFiltersPanel({
                 {isSystem ? (
                     <>
                         <div className="flex flex-col gap-2">
-                            <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                            <label className="text-[11px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                                 <FaFilter size={10} /> Tipo de Evento
                             </label>
                             <select
                                 value={draft.operationType || "all"}
                                 onChange={(e) => setDraftField("operationType", e.target.value)}
-                                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+                                className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
                             >
                                 {OPERATION_TYPES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
                         </div>
 
                         <div className="flex flex-col gap-2">
-                            <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Buscar Mensaje</label>
+                            <label className="text-[11px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Buscar Mensaje</label>
                             <input
                                 type="text"
                                 value={draft.search || ""}
                                 onChange={(e) => setDraftField("search", e.target.value)}
                                 onKeyDown={(e) => e.key === "Enter" && applyDraft()}
                                 placeholder="Ej: timeout, conexión rechazada..."
-                                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+                                className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
                             />
                         </div>
                     </>
                 ) : (
                     <>
                         <div className="flex flex-col gap-2">
-                            <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider flex items-center gap-1.5">
+                            <label className="text-[11px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider flex items-center gap-1.5">
                                 <FaFilter size={10} /> Estado
                             </label>
                             <select
                                 value={draft.status || "all"}
                                 onChange={(e) => setDraftField("status", e.target.value)}
-                                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+                                className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
                             >
                                 {TRANSFER_STATUSES.map(o => <option key={o.value} value={o.value}>{o.label}</option>)}
                             </select>
                         </div>
 
                         <div className="flex flex-col gap-2">
-                            <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Nombre de Tarea</label>
+                            <label className="text-[11px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Nombre de Tarea</label>
                             <input
                                 type="text"
                                 value={draft.taskName || ""}
                                 onChange={(e) => setDraftField("taskName", e.target.value)}
                                 onKeyDown={(e) => e.key === "Enter" && applyDraft()}
                                 placeholder="Buscar tarea..."
-                                className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+                                className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
                             />
                         </div>
                     </>
                 )}
 
                 <div className="flex flex-col gap-2">
-                    <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Fecha Desde</label>
+                    <label className="text-[11px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Fecha Desde</label>
                     <input
                         type="date"
                         value={draft.dateFrom || ""}
                         onChange={(e) => setDraftField("dateFrom", e.target.value)}
-                        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+                        className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
                     />
                 </div>
 
                 <div className="flex flex-col gap-2">
-                    <label className="text-[11px] font-extrabold text-slate-500 uppercase tracking-wider">Fecha Hasta</label>
+                    <label className="text-[11px] font-extrabold text-slate-500 dark:text-slate-400 uppercase tracking-wider">Fecha Hasta</label>
                     <input
                         type="date"
                         value={draft.dateTo || ""}
                         onChange={(e) => setDraftField("dateTo", e.target.value)}
-                        className="w-full px-3 py-2.5 border border-slate-200 rounded-lg text-sm bg-white text-slate-800 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+                        className="w-full px-3 py-2.5 border border-slate-200 dark:border-slate-600 rounded-lg text-sm bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
                     />
                 </div>
             </div>
 
-            <div className="flex flex-col sm:flex-row flex-wrap gap-3 mt-6 pt-5 border-t border-slate-200 sm:justify-end">
+            <div className="flex flex-col sm:flex-row flex-wrap gap-3 mt-6 pt-5 border-t border-slate-200 dark:border-slate-700 sm:justify-end">
                 <Button variant="secondary" onClick={onRefresh} disabled={loading} className="w-full sm:w-auto">
                     <FaSync className={loading ? "animate-spin" : ""} /> Actualizar
                 </Button>

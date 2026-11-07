@@ -221,12 +221,12 @@ const UserRoleManager = () => {
   if (!canRead) {
     return (
       <div className="p-20 text-center flex flex-col items-center gap-6 animate-in fade-in duration-500">
-        <div className="w-20 h-20 bg-red-50 text-red-500 rounded-3xl flex items-center justify-center">
+        <div className="w-20 h-20 bg-red-50 dark:bg-red-900/30 text-red-500 dark:text-red-400 rounded-3xl flex items-center justify-center">
             <FaShieldAlt className="text-4xl" />
         </div>
         <div className="space-y-2">
-            <h3 className="text-xl font-black text-slate-900">Acceso Restringido</h3>
-            <p className="text-sm font-bold text-slate-400 uppercase tracking-widest">No tiene permisos de lectura para la gestión de usuarios</p>
+            <h3 className="text-xl font-black text-slate-900 dark:text-slate-100">Acceso Restringido</h3>
+            <p className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">No tiene permisos de lectura para la gestión de usuarios</p>
         </div>
       </div>
     );
@@ -236,32 +236,32 @@ const UserRoleManager = () => {
     <div className="p-8 max-w-7xl mx-auto space-y-12 animate-in fade-in duration-700">
       <div className="flex flex-col md:flex-row justify-between items-start gap-8">
         <div className="space-y-3">
-          <h2 className="text-3xl font-black text-slate-900 flex items-center gap-4">
+          <h2 className="text-3xl font-black text-slate-900 dark:text-slate-100 flex items-center gap-4">
             <FaUserShield className="text-blue-600" /> Control de Acceso Maestro
           </h2>
-          <p className="text-sm font-bold text-slate-400 uppercase tracking-widest max-w-xl">Gestione privilegios y roles de seguridad para la infraestructura de usuarios del ERP</p>
+          <p className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest max-w-xl">Gestione privilegios y roles de seguridad para la infraestructura de usuarios del ERP</p>
         </div>
 
         <div className="flex items-center gap-4">
-          <button 
-            onClick={loadUsers} 
+          <button
+            onClick={loadUsers}
             disabled={loading}
-            className="px-6 py-3 bg-white border border-slate-200 text-slate-900 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:border-blue-600 hover:text-blue-600 transition-all shadow-sm flex items-center gap-3 disabled:opacity-50"
+            className="px-6 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:border-blue-600 dark:hover:border-blue-500 hover:text-blue-600 dark:hover:text-blue-400 transition-all shadow-sm flex items-center gap-3 disabled:opacity-50"
           >
             <FaSync className={loading ? "animate-spin" : ""} /> {loading ? "Sincronizando..." : "Actualizar Lista"}
           </button>
         </div>
       </div>
 
-      <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto] gap-6 items-center bg-white/50 backdrop-blur-xl p-8 rounded-xl border border-slate-100 shadow-sm">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto] gap-6 items-center bg-white/50 dark:bg-slate-800/50 backdrop-blur-xl p-8 rounded-xl border border-slate-100 dark:border-slate-700 shadow-sm">
         <div className="relative group">
-          <FaSearch className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
+          <FaSearch className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 group-focus-within:text-blue-600 dark:group-focus-within:text-blue-400 transition-colors" />
           <input
             type="text"
             placeholder="Filtrar por nombre, apellido o email..."
             value={searchTerm}
             onChange={(e) => setSearchTerm(e.target.value)}
-            className="w-full pl-12 pr-6 py-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
+            className="w-full pl-12 pr-6 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100 rounded-2xl text-sm font-bold focus:outline-none focus:border-blue-500 focus:ring-4 focus:ring-blue-500/10 transition-all"
           />
         </div>
 
@@ -269,7 +269,7 @@ const UserRoleManager = () => {
           <select
             value={selectedRole}
             onChange={(e) => setSelectedRole(e.target.value)}
-            className="pl-6 pr-12 py-4 bg-white border border-slate-200 rounded-2xl text-sm font-bold focus:outline-none focus:border-blue-500 transition-all appearance-none min-w-[220px]"
+            className="pl-6 pr-12 py-4 bg-white dark:bg-slate-900 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100 rounded-2xl text-sm font-bold focus:outline-none focus:border-blue-500 transition-all appearance-none min-w-[220px]"
           >
             <option value="">Seleccionar Rol...</option>
             {roles.map((role) => (
@@ -278,7 +278,7 @@ const UserRoleManager = () => {
               </option>
             ))}
           </select>
-          <FaFilter className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 pointer-events-none" />
+          <FaFilter className="absolute right-5 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600 pointer-events-none" />
         </div>
 
         <div className="flex gap-3">
@@ -300,9 +300,9 @@ const UserRoleManager = () => {
         </div>
       </div>
 
-      <div className="flex flex-wrap justify-between items-center gap-3 px-8 py-4 bg-slate-50 border border-slate-100 rounded-2xl">
-        <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
-          <span className="text-blue-600">{selectedUsers.length}</span> usuarios seleccionados de {filteredUsers.length} totales
+      <div className="flex flex-wrap justify-between items-center gap-3 px-8 py-4 bg-slate-50 dark:bg-slate-900/50 border border-slate-100 dark:border-slate-700 rounded-2xl">
+        <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">
+          <span className="text-blue-600 dark:text-blue-400">{selectedUsers.length}</span> usuarios seleccionados de {filteredUsers.length} totales
         </span>
         {selectedUsers.length > 0 && (
           <button
@@ -318,24 +318,24 @@ const UserRoleManager = () => {
         {filteredUsers.map((user) => (
           <div
             key={user._id}
-            className={`bg-white rounded-xl p-6 border-2 transition-all duration-300 hover:shadow-xl cursor-pointer group relative ${
-                selectedUsers.includes(user._id) ? "border-blue-600 ring-4 ring-blue-500/10 translate-y-[-4px]" : "border-slate-100"
+            className={`bg-white dark:bg-slate-800 rounded-xl p-6 border-2 transition-all duration-300 hover:shadow-xl cursor-pointer group relative ${
+                selectedUsers.includes(user._id) ? "border-blue-600 ring-4 ring-blue-500/10 translate-y-[-4px]" : "border-slate-100 dark:border-slate-700"
             }`}
             onClick={() => handleUserSelection(user._id)}
           >
             <div className="flex items-center gap-4 mb-6">
-              <div className="w-12 h-12 bg-slate-900 rounded-xl flex items-center justify-center text-white font-black group-hover:bg-blue-600 transition-colors">
+              <div className="w-12 h-12 bg-slate-900 dark:bg-slate-700 rounded-xl flex items-center justify-center text-white font-black group-hover:bg-blue-600 transition-colors">
                 {user.name?.charAt(0)?.toUpperCase() || "U"}
               </div>
               <div className="flex-1 truncate">
-                <div className="text-sm font-black text-slate-900 truncate flex items-center gap-2">
+                <div className="text-sm font-black text-slate-900 dark:text-slate-100 truncate flex items-center gap-2">
                   {user.name} {user.lastname}
                   {user.isAdmin && <FaCrown className="text-amber-500 text-xs shrink-0" />}
                 </div>
-                <div className="text-[10px] font-bold text-slate-400 truncate uppercase tracking-tight">{user.email}</div>
+                <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 truncate uppercase tracking-tight">{user.email}</div>
               </div>
               <div className={`w-6 h-6 rounded-lg border-2 flex items-center justify-center transition-all ${
-                  selectedUsers.includes(user._id) ? "bg-blue-600 border-blue-600 text-white" : "border-slate-200 bg-white"
+                  selectedUsers.includes(user._id) ? "bg-blue-600 border-blue-600 text-white" : "border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900"
               }`}>
                 {selectedUsers.includes(user._id) && <FaCheck className="text-[10px]" />}
               </div>
@@ -345,13 +345,13 @@ const UserRoleManager = () => {
               {user.roles && user.roles.length > 0 ? (
                 user.roles.map((role) => (
                   <span key={role._id} className={`px-3 py-1 rounded-full text-[9px] font-black uppercase tracking-widest border transition-all ${
-                      role.isActive ? "bg-blue-50 border-blue-100 text-blue-700" : "bg-slate-50 border-slate-200 text-slate-400 opacity-60"
+                      role.isActive ? "bg-blue-50 dark:bg-blue-900/30 border-blue-100 dark:border-blue-800 text-blue-700 dark:text-blue-300" : "bg-slate-50 dark:bg-slate-900/50 border-slate-200 dark:border-slate-700 text-slate-400 dark:text-slate-500 opacity-60"
                   }`}>
                     {role.displayName}
                   </span>
                 ))
               ) : (
-                <span className="text-[10px] font-bold text-slate-300 italic">Sin roles vinculados</span>
+                <span className="text-[10px] font-bold text-slate-300 dark:text-slate-600 italic">Sin roles vinculados</span>
               )}
             </div>
           </div>
@@ -362,7 +362,7 @@ const UserRoleManager = () => {
         <div className="flex flex-col items-center justify-center py-20 text-center opacity-30 gap-6">
             <FaUsers className="text-6xl" />
             <div className="space-y-1">
-                <h3 className="text-lg font-black text-slate-900">Búsqueda sin resultados</h3>
+                <h3 className="text-lg font-black text-slate-900 dark:text-slate-100">Búsqueda sin resultados</h3>
                 <p className="text-xs font-bold uppercase tracking-widest">No se encontraron usuarios con el término: "{searchTerm}"</p>
             </div>
         </div>

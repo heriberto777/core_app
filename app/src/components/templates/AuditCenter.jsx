@@ -43,8 +43,8 @@ export function AuditCenter() {
         <div className="flex flex-col gap-8 w-full max-w-[1440px] mx-auto p-6 lg:p-10 animate-fadeIn">
             {/* WELCOME SECTION */}
             <header className="mb-2">
-                <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Central de Auditoría</h1>
-                <p className="text-slate-500 mt-2 font-medium">Supervisión integral de eventos del sistema y transferencias logísticas.</p>
+                <h1 className="text-3xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">Central de Auditoría</h1>
+                <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">Supervisión integral de eventos del sistema y transferencias logísticas.</p>
             </header>
 
             {/* FILTERS PANEL */}
@@ -66,7 +66,7 @@ export function AuditCenter() {
             </div>
 
             {/* DATA TABLE */}
-            <div className="bg-white rounded-xl border border-slate-200 shadow-soft overflow-hidden min-h-[500px]">
+            <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 shadow-soft overflow-hidden min-h-[500px]">
               <AuditDataTable
                   data={logs}
                   type={logType}

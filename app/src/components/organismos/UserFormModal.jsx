@@ -86,34 +86,34 @@ export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, rol
 
     return (
         <div className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn" onClick={onClose}>
-            <div className="bg-white w-full max-w-3xl max-h-[95vh] rounded-xl shadow-premium flex flex-col overflow-hidden animate-slideUp" onClick={e => e.stopPropagation()}>
+            <div className="bg-white dark:bg-slate-800 w-full max-w-3xl max-h-[95vh] rounded-xl shadow-premium flex flex-col overflow-hidden animate-slideUp" onClick={e => e.stopPropagation()}>
                 {/* HEADER */}
-                <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                    <h3 className="text-xl font-extrabold text-slate-800 flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-primary-100 text-primary-600 flex items-center justify-center">
+                <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+                    <h3 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-3">
+                      <div className="w-10 h-10 rounded-xl bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-300 flex items-center justify-center">
                         <FaShieldAlt size={18} />
                       </div>
                       {initialData ? "Configurar Identidad" : "Nueva Identidad"}
                     </h3>
-                    <button onClick={onClose} className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all">
+                    <button onClick={onClose} className="p-2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-all">
                         <FaTimes />
                     </button>
                 </div>
 
                 {/* TABS */}
-                <div className="px-8 bg-slate-50/50 flex border-b border-slate-100">
-                    <button 
+                <div className="px-8 bg-slate-50/50 dark:bg-slate-900/50 flex border-b border-slate-100 dark:border-slate-700">
+                    <button
                       onClick={() => setActiveTab('info')}
-                      className={`px-6 py-4 text-sm font-bold border-b-2 transition-all ${activeTab === 'info' ? 'border-primary-500 text-primary-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                      className={`px-6 py-4 text-sm font-bold border-b-2 transition-all ${activeTab === 'info' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}
                     >Información</button>
-                    <button 
+                    <button
                       onClick={() => setActiveTab('roles')}
-                      className={`px-6 py-4 text-sm font-bold border-b-2 transition-all ${activeTab === 'roles' ? 'border-primary-500 text-primary-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                      className={`px-6 py-4 text-sm font-bold border-b-2 transition-all ${activeTab === 'roles' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}
                     >Roles</button>
                     {resources.length > 0 && (
-                      <button 
+                      <button
                         onClick={() => setActiveTab('permissions')}
-                        className={`px-6 py-4 text-sm font-bold border-b-2 transition-all ${activeTab === 'permissions' ? 'border-primary-500 text-primary-600' : 'border-transparent text-slate-400 hover:text-slate-600'}`}
+                        className={`px-6 py-4 text-sm font-bold border-b-2 transition-all ${activeTab === 'permissions' ? 'border-primary-500 text-primary-600 dark:text-primary-400' : 'border-transparent text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300'}`}
                       >Privilegios</button>
                     )}
                 </div>
@@ -134,19 +134,19 @@ export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, rol
                                     </div>
                                 )}
 
-                                <div className="md:col-span-2 p-5 bg-amber-50 rounded-2xl border border-amber-100 flex items-center gap-4">
+                                <div className="md:col-span-2 p-5 bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-100 dark:border-amber-800 flex items-center gap-4">
                                     <input
                                         type="checkbox"
                                         checked={formData.isAdmin}
                                         onChange={e => setFormData({ ...formData, isAdmin: e.target.checked })}
                                         disabled={!viewerIsAdmin}
-                                        className="w-6 h-6 rounded-lg text-amber-600 border-amber-200 focus:ring-amber-500 disabled:opacity-50 disabled:cursor-not-allowed"
+                                        className="w-6 h-6 rounded-lg text-amber-600 border-amber-200 dark:border-amber-700 focus:ring-amber-500 disabled:opacity-50 disabled:cursor-not-allowed"
                                     />
                                     <div>
-                                        <div className="text-sm font-extrabold text-amber-900 flex items-center gap-2">
+                                        <div className="text-sm font-extrabold text-amber-900 dark:text-amber-200 flex items-center gap-2">
                                           <FaUserShield className="text-amber-500" /> Administrador de Sistema
                                         </div>
-                                        <div className="text-xs font-medium text-amber-700/70">
+                                        <div className="text-xs font-medium text-amber-700/70 dark:text-amber-400/80">
                                           {viewerIsAdmin
                                             ? "Otorga acceso total a todas las funciones del ERP."
                                             : "Solo un administrador puede otorgar o quitar este privilegio."}
@@ -161,7 +161,7 @@ export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, rol
                                                 <FaLock /> Cambiar Contraseña
                                             </Button>
                                         ) : (
-                                            <div className="space-y-4 animate-fadeIn bg-slate-50 p-6 rounded-2xl border border-slate-100">
+                                            <div className="space-y-4 animate-fadeIn bg-slate-50 dark:bg-slate-900/50 p-6 rounded-2xl border border-slate-100 dark:border-slate-700">
                                                 <Input label="Nueva Contraseña" type="password" value={newPassword} onChange={e => setNewPassword(e.target.value)} placeholder="Mínimo 6 caracteres" />
                                                 <Button variant="ghost" size="sm" onClick={() => { setShowPasswordChange(false); setNewPassword(""); }}>Cancelar Cambio</Button>
                                             </div>
@@ -174,16 +174,16 @@ export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, rol
                         {activeTab === 'roles' && (
                             <div className="space-y-6 animate-fadeIn">
                                 <div className="flex flex-col gap-1.5 w-full">
-                                    <label className="text-[13px] font-semibold text-slate-500 ml-1">Asignar Roles</label>
-                                    <p className="text-[10px] text-slate-400 mb-2 ml-1 uppercase tracking-widest font-bold">(Ctrl+Click para selección múltiple)</p>
-                                    <select 
-                                      multiple 
+                                    <label className="text-[13px] font-semibold text-slate-500 dark:text-slate-400 ml-1">Asignar Roles</label>
+                                    <p className="text-[10px] text-slate-400 dark:text-slate-500 mb-2 ml-1 uppercase tracking-widest font-bold">(Ctrl+Click para selección múltiple)</p>
+                                    <select
+                                      multiple
                                       value={formData.roles}
                                       onChange={e => setFormData({ ...formData, roles: Array.from(e.target.selectedOptions, o => o.value) })}
-                                      className="w-full py-2.5 px-4 text-sm rounded-2xl border border-slate-200 bg-white focus:border-primary-500 outline-none min-h-[200px] custom-scrollbar"
+                                      className="w-full py-2.5 px-4 text-sm rounded-2xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900 text-slate-800 dark:text-slate-100 focus:border-primary-500 outline-none min-h-[200px] custom-scrollbar"
                                     >
                                         {roles.map(role => (
-                                            <option key={role._id} value={role._id} className="py-2 px-3 hover:bg-slate-50 rounded-lg cursor-pointer">
+                                            <option key={role._id} value={role._id} className="py-2 px-3 hover:bg-slate-50 dark:hover:bg-slate-700 rounded-lg cursor-pointer">
                                                 {role.displayName}
                                             </option>
                                         ))}
@@ -194,14 +194,14 @@ export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, rol
 
                         {activeTab === 'permissions' && (
                             <div className="space-y-6 animate-fadeIn">
-                                <div className="p-4 bg-primary-50 rounded-2xl border border-primary-100 text-xs font-bold text-primary-700">
+                                <div className="p-4 bg-primary-50 dark:bg-primary-900/30 rounded-2xl border border-primary-100 dark:border-primary-800 text-xs font-bold text-primary-700 dark:text-primary-300">
                                     Los permisos asignados aquí se sumarán a los que el usuario ya posea por sus roles.
                                 </div>
                                 {resources.map(res => (
-                                    <div key={res.id} className="bg-white rounded-2xl border border-slate-100 p-5 shadow-sm space-y-4">
+                                    <div key={res.id} className="bg-white dark:bg-slate-800 rounded-2xl border border-slate-100 dark:border-slate-700 p-5 shadow-sm space-y-4">
                                         <div className="flex flex-col">
-                                            <h4 className="text-sm font-extrabold text-slate-800">{res.name}</h4>
-                                            <p className="text-[11px] text-slate-400 font-medium">{res.description}</p>
+                                            <h4 className="text-sm font-extrabold text-slate-800 dark:text-slate-100">{res.name}</h4>
+                                            <p className="text-[11px] text-slate-400 dark:text-slate-500 font-medium">{res.description}</p>
                                         </div>
                                         <div className="flex flex-wrap gap-2">
                                             {/* getAvailableResources() devuelve {id, name, actions: [nombres de acción]}
@@ -219,7 +219,7 @@ export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, rol
                                                         px-3 py-1.5 rounded-xl text-[11px] font-extrabold uppercase tracking-tight cursor-pointer transition-all border
                                                         ${isChecked
                                                           ? 'bg-primary-500 border-primary-500 text-white shadow-md'
-                                                          : 'bg-slate-50 border-slate-100 text-slate-400 hover:bg-slate-100'}
+                                                          : 'bg-slate-50 dark:bg-slate-900/50 border-slate-100 dark:border-slate-700 text-slate-400 dark:text-slate-500 hover:bg-slate-100 dark:hover:bg-slate-700'}
                                                     `}>
                                                         <input type="checkbox" className="hidden" checked={isChecked || false} onChange={() => handleTogglePermission(res.id, action)} />
                                                         {action}
@@ -235,7 +235,7 @@ export const UserFormModal = ({ isOpen, onClose, onSave, initialData = null, rol
                 </div>
 
                 {/* FOOTER */}
-                <div className="px-8 py-6 bg-slate-50/50 border-t border-slate-100 flex justify-end gap-3">
+                <div className="px-8 py-6 bg-slate-50/50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3">
                     <Button variant="secondary" onClick={onClose}>Cancelar</Button>
                     <Button variant="primary" type="submit" form="user-form" loading={loading}>
                         {initialData ? "Actualizar Perfil" : "Crear Identidad"}
