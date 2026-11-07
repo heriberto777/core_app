@@ -21,7 +21,7 @@ export const Modal = ({ children, isOpen, onClose, maxWidth = "max-w-lg" }) => {
   return ReactDOM.createPortal(
     <div className="fixed inset-0 bg-black/60 backdrop-blur-sm flex items-center justify-center z-[9999] p-4" onClick={onClose}>
       <div
-        className={`bg-white rounded-2xl w-[95%] ${maxWidth} max-h-[90vh] flex flex-col overflow-hidden relative shadow-2xl border border-slate-200`}
+        className={`bg-white dark:bg-slate-800 rounded-2xl w-[95%] ${maxWidth} max-h-[90vh] flex flex-col overflow-hidden relative shadow-2xl border border-slate-200 dark:border-slate-700`}
         onClick={(e) => e.stopPropagation()}
       >
         {children}
@@ -36,13 +36,13 @@ export const Modal = ({ children, isOpen, onClose, maxWidth = "max-w-lg" }) => {
 // contenido largo (ej. historial con muchas filas) el header desaparecía
 // al hacer scroll en vez de quedar fijo arriba.
 export const ModalHeader = ({ children, className = "", ...props }) => (
-  <div className={`flex justify-between items-center mb-4 pb-3 border-b border-slate-200 shrink-0 ${className}`} {...props}>
+  <div className={`flex justify-between items-center mb-4 pb-3 border-b border-slate-200 dark:border-slate-700 shrink-0 ${className}`} {...props}>
     {children}
   </div>
 );
 
 export const ModalTitle = ({ children, className = "", ...props }) => (
-  <h2 className={`m-0 text-lg text-slate-800 ${className}`} {...props}>
+  <h2 className={`m-0 text-lg text-slate-800 dark:text-slate-100 ${className}`} {...props}>
     {children}
   </h2>
 );
@@ -54,7 +54,7 @@ export const ModalBody = ({ children, className = "", ...props }) => (
 );
 
 export const ModalFooter = ({ children, className = "", ...props }) => (
-  <div className={`flex justify-end gap-2.5 pt-4 border-t border-slate-200 shrink-0 ${className}`} {...props}>
+  <div className={`flex justify-end gap-2.5 pt-4 border-t border-slate-200 dark:border-slate-700 shrink-0 ${className}`} {...props}>
     {children}
   </div>
 );
@@ -62,9 +62,9 @@ export const ModalFooter = ({ children, className = "", ...props }) => (
 export const UIInput = ({ className = "", ...props }) => (
   <input
     className={`
-      px-4 py-2.5 border border-slate-300 rounded text-sm text-slate-800 bg-white w-full
+      px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded text-sm text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-800 w-full
       focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20
-      disabled:bg-slate-100 disabled:cursor-not-allowed
+      disabled:bg-slate-100 dark:disabled:bg-slate-900 disabled:cursor-not-allowed
       ${className}
     `}
     {...props}
@@ -78,7 +78,7 @@ export const FormGroup = ({ children, className = "", ...props }) => (
 );
 
 export const Label = ({ children, className = "", ...props }) => (
-  <label className={`block mb-1 font-medium text-sm text-slate-700 ${className}`} {...props}>
+  <label className={`block mb-1 font-medium text-sm text-slate-700 dark:text-slate-300 ${className}`} {...props}>
     {children}
   </label>
 );
@@ -86,7 +86,7 @@ export const Label = ({ children, className = "", ...props }) => (
 export const Select = ({ className = "", ...props }) => (
   <select
     className={`
-      px-4 py-2.5 border border-slate-300 rounded text-sm text-slate-800 bg-white w-full
+      px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded text-sm text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-800 w-full
       focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20
       ${className}
     `}
@@ -97,7 +97,7 @@ export const Select = ({ className = "", ...props }) => (
 export const Textarea = ({ className = "", height = "h-24", ...props }) => (
   <textarea
     className={`
-      px-4 py-2.5 border border-slate-300 rounded text-sm text-slate-800 bg-white w-full
+      px-4 py-2.5 border border-slate-300 dark:border-slate-600 rounded text-sm text-slate-800 dark:text-slate-100 bg-white dark:bg-slate-800 w-full
       ${height} resize-y
       focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20
       ${className}

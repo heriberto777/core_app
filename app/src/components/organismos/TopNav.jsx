@@ -1,7 +1,8 @@
-import React, { useState, useMemo, useRef, useEffect } from "react";
+import React, { useState, useMemo, useRef, useEffect, useContext } from "react";
 import { useAuth, usePermissions, DataUser } from "../../index";
 import { NavLink, useLocation } from "react-router-dom";
-import { FaChevronDown, FaBars, FaTimes } from "react-icons/fa";
+import { FaChevronDown, FaBars, FaTimes, FaSun, FaMoon } from "react-icons/fa";
+import { ThemeContext } from "../../App";
 
 /**
  * TopNav (dirección "Grid")
@@ -11,6 +12,7 @@ import { FaChevronDown, FaBars, FaTimes } from "react-icons/fa";
 export function TopNav({ userMenuOpen, setUserMenuOpen }) {
   const { hasPermission, isAdmin } = usePermissions();
   const location = useLocation();
+  const { theme, toggleTheme } = useContext(ThemeContext) || {};
 
   const [openCategory, setOpenCategory] = useState(null);
   const [mobileOpen, setMobileOpen] = useState(false);
@@ -84,11 +86,11 @@ export function TopNav({ userMenuOpen, setUserMenuOpen }) {
   }, [location.pathname]);
 
   return (
-    <header ref={navRef} className="sticky top-0 z-40 bg-white border-b border-slate-200">
+    <header ref={navRef} className="sticky top-0 z-40 bg-white dark:bg-slate-800 border-b border-slate-200 dark:border-slate-700">
       <div className="h-16 px-6 flex items-center justify-between gap-6">
         {/* BRAND + NAV (desktop) */}
         <div className="flex items-center gap-8 min-w-0">
-          <span className="text-base font-extrabold tracking-tight text-slate-900 shrink-0">CATELLI</span>
+          <span className="text-base font-extrabold tracking-tight text-slate-900 dark:text-slate-100 shrink-0">CATELLI</span>
 
           <nav className="hidden lg:flex items-center gap-1">
             {groupedRoutes.map(({ category, routes }) => {
@@ -102,7 +104,7 @@ export function TopNav({ userMenuOpen, setUserMenuOpen }) {
                     title={route.description || route.name}
                     className={({ isActive }) =>
                       `px-3 py-2 text-sm font-semibold rounded transition-colors ${
-                        isActive ? "text-primary-600" : "text-slate-500 hover:text-slate-900"
+                        isActive ? "text-primary-600" : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
                       }`
                     }
                   >
@@ -118,7 +120,7 @@ export function TopNav({ userMenuOpen, setUserMenuOpen }) {
                   <button
                     onClick={() => setOpenCategory(isOpen ? null : category)}
                     className={`flex items-center gap-1.5 px-3 py-2 text-sm font-semibold rounded transition-colors ${
-                      active || isOpen ? "text-primary-600" : "text-slate-500 hover:text-slate-900"
+                      active || isOpen ? "text-primary-600" : "text-slate-500 dark:text-slate-400 hover:text-slate-900 dark:hover:text-slate-100"
                     }`}
                   >
                     {category}
@@ -126,7 +128,7 @@ export function TopNav({ userMenuOpen, setUserMenuOpen }) {
                   </button>
 
                   {isOpen && (
-                    <div className="absolute top-full left-0 mt-1 min-w-[220px] bg-white border border-slate-200 shadow-xl py-1 z-50">
+                    <div className="absolute top-full left-0 mt-1 min-w-[220px] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 shadow-xl py-1 z-50">
                       {routes.map((route) => (
                         <NavLink
                           key={route.path}
@@ -134,7 +136,7 @@ export function TopNav({ userMenuOpen, setUserMenuOpen }) {
                           title={route.description || ""}
                           className={({ isActive }) =>
                             `block px-4 py-2.5 text-sm font-medium transition-colors ${
-                              isActive ? "text-primary-600 bg-primary-50" : "text-slate-600 hover:bg-slate-50 hover:text-slate-900"
+                              isActive ? "text-primary-600 bg-primary-50 dark:bg-primary-900/30" : "text-slate-600 dark:text-slate-300 hover:bg-slate-50 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100"
                             }`
                           }
                         >
@@ -152,8 +154,14 @@ export function TopNav({ userMenuOpen, setUserMenuOpen }) {
         {/* RIGHT: theme + user (desktop) / hamburger (mobile) */}
         <div className="flex items-center gap-4">
           <div className="hidden lg:flex items-center gap-3">
-            {/* Toggle claro/oscuro oculto hasta implementar un modo oscuro real
-                para Grid (hoy no hace nada: ver TaskFormModal/estilos legado). */}
+            <button
+              onClick={toggleTheme}
+              className="p-2 rounded-lg text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-700 hover:text-slate-900 dark:hover:text-slate-100 transition-colors"
+              aria-label={theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+              title={theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+            >
+              {theme === "dark" ? <FaSun size={16} /> : <FaMoon size={16} />}
+            </button>
             <DataUser
               stateConfig={{
                 openstate: userMenuOpen,
@@ -163,8 +171,16 @@ export function TopNav({ userMenuOpen, setUserMenuOpen }) {
           </div>
 
           <button
+            onClick={toggleTheme}
+            className="lg:hidden p-2 text-slate-500 dark:text-slate-400"
+            aria-label={theme === "dark" ? "Cambiar a modo claro" : "Cambiar a modo oscuro"}
+          >
+            {theme === "dark" ? <FaSun size={16} /> : <FaMoon size={16} />}
+          </button>
+
+          <button
             onClick={() => (mobileOpen ? setMobileOpen(false) : openMobileMenu())}
-            className="lg:hidden p-2 text-slate-600"
+            className="lg:hidden p-2 text-slate-600 dark:text-slate-300"
             aria-label={mobileOpen ? "Cerrar menú" : "Abrir menú"}
           >
             {mobileOpen ? <FaTimes size={18} /> : <FaBars size={18} />}
@@ -176,14 +192,14 @@ export function TopNav({ userMenuOpen, setUserMenuOpen }) {
           de Configuraciones: cada categoría se puede plegar/desplegar en
           vez de mostrar las ~13 rutas de las 6 categorías siempre abiertas. */}
       {mobileOpen && (
-        <nav className="lg:hidden border-t border-slate-200 px-4 py-3 flex flex-col gap-2 max-h-[70vh] overflow-y-auto">
+        <nav className="lg:hidden border-t border-slate-200 dark:border-slate-700 px-4 py-3 flex flex-col gap-2 max-h-[70vh] overflow-y-auto">
           {groupedRoutes.map(({ category, routes }) => {
             const isExpanded = expandedMobileCategories.has(category);
             return (
               <div key={category} className="flex flex-col gap-0.5">
                 <button
                   onClick={() => toggleMobileCategory(category)}
-                  className="flex items-center gap-2 py-2 text-[11px] font-bold text-slate-400 uppercase tracking-wider"
+                  className="flex items-center gap-2 py-2 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-wider"
                   aria-expanded={isExpanded}
                 >
                   <span className="flex-1 text-left">{category}</span>
@@ -200,7 +216,7 @@ export function TopNav({ userMenuOpen, setUserMenuOpen }) {
                         key={route.path}
                         to={route.path}
                         className={({ isActive }) =>
-                          `px-2 py-2 text-sm font-semibold rounded ${isActive ? "text-primary-600 bg-primary-50" : "text-slate-600"}`
+                          `px-2 py-2 text-sm font-semibold rounded ${isActive ? "text-primary-600 bg-primary-50 dark:bg-primary-900/30" : "text-slate-600 dark:text-slate-300"}`
                         }
                       >
                         {route.name}

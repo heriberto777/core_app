@@ -25,7 +25,7 @@ export const LoadingUI = ({ message = "Cargando...", fullPage = false }) => {
  */
 export const Skeleton = ({ width = "100%", height = "20px", className = "" }) => (
   <div
-    className={`bg-slate-200 rounded-lg animate-pulse ${className}`}
+    className={`bg-slate-200 dark:bg-slate-700 rounded-lg animate-pulse ${className}`}
     style={{ width: width, height: height }}
   />
 );

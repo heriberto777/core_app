@@ -14,8 +14,8 @@ export const ContentHeader = ({ title, description, children, className = "", ..
   >
     {(title || description) && (
       <div>
-        {title && <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">{title}</h1>}
-        {description && <p className="text-slate-500 mt-1 text-sm font-medium">{description}</p>}
+        {title && <h1 className="text-3xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">{title}</h1>}
+        {description && <p className="text-slate-500 dark:text-slate-400 mt-1 text-sm font-medium">{description}</p>}
       </div>
     )}
     {children}

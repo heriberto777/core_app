@@ -15,11 +15,11 @@ export const Button = React.forwardRef(({ children, variant = "primary", size = 
   
   const variants = {
     primary: "bg-primary-600 text-white shadow-soft hover:bg-primary-700 hover:shadow-md",
-    secondary: "bg-white text-slate-700 border border-slate-200 hover:bg-slate-50 hover:border-slate-300",
+    secondary: "bg-white dark:bg-slate-800 text-slate-700 dark:text-slate-200 border border-slate-200 dark:border-slate-700 hover:bg-slate-50 dark:hover:bg-slate-700 hover:border-slate-300 dark:hover:border-slate-600",
     danger: "bg-red-500 text-white shadow-soft hover:bg-red-600",
     success: "bg-emerald-500 text-white shadow-soft hover:bg-emerald-600",
-    ghost: "bg-transparent text-slate-500 hover:bg-slate-100 hover:text-slate-900",
-    outline: "bg-transparent border-2 border-primary-600 text-primary-600 hover:bg-primary-50",
+    ghost: "bg-transparent text-slate-500 dark:text-slate-400 hover:bg-slate-100 dark:hover:bg-slate-800 hover:text-slate-900 dark:hover:text-slate-100",
+    outline: "bg-transparent border-2 border-primary-600 dark:border-primary-500 text-primary-600 dark:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/20",
   };
 
   const currentVariant = variants[variant] || variants.primary;

@@ -88,7 +88,7 @@ export function MultiSelectInput({
   return (
     <div ref={selectRef} className={`relative w-full ${className}`}>
       {label && (
-        <label className="text-xs font-medium text-slate-500 block mb-1">
+        <label className="text-xs font-medium text-slate-500 dark:text-slate-400 block mb-1">
           {label}
         </label>
       )}
@@ -97,13 +97,13 @@ export function MultiSelectInput({
         type="button"
         onClick={handleToggle}
         className={`
-          w-full px-3 py-2 border rounded-md bg-white text-left cursor-pointer flex justify-between items-center
+          w-full px-3 py-2 border rounded-md bg-white dark:bg-slate-800 text-left cursor-pointer flex justify-between items-center
           transition-colors duration-200
-          ${isOpen ? "border-primary-500 ring-2 ring-primary-500/20" : "border-slate-300 hover:border-slate-400"}
+          ${isOpen ? "border-primary-500 ring-2 ring-primary-500/20" : "border-slate-300 dark:border-slate-600 hover:border-slate-400 dark:hover:border-slate-500"}
         `}
         {...props}
       >
-        <span className={`flex-1 overflow-hidden text-ellipsis whitespace-nowrap ${value.length > 0 ? "text-slate-800" : "text-slate-400"}`}>
+        <span className={`flex-1 overflow-hidden text-ellipsis whitespace-nowrap ${value.length > 0 ? "text-slate-800 dark:text-slate-200" : "text-slate-400 dark:text-slate-500"}`}>
           {getDisplayText()}
           {value.length > 1 && (
             <span className="ml-1.5 bg-primary-500 text-white rounded-full px-1.5 py-0.5 text-[11px] font-medium">
@@ -111,7 +111,7 @@ export function MultiSelectInput({
             </span>
           )}
         </span>
-        <FaChevronDown className={`text-slate-400 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
+        <FaChevronDown className={`text-slate-400 dark:text-slate-500 transition-transform duration-200 ${isOpen ? "rotate-180" : ""}`} />
       </button>
 
       {showTags && value.length > 0 && (
@@ -121,19 +121,19 @@ export function MultiSelectInput({
             .map((option) => (
               <div
                 key={option.value}
-                className="flex items-center gap-1 bg-primary-50 text-primary-600 border border-primary-200/30 rounded px-1.5 py-0.5 text-[11px] max-w-[150px]"
+                className="flex items-center gap-1 bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 border border-primary-200/30 dark:border-primary-800/50 rounded px-1.5 py-0.5 text-[11px] max-w-[150px]"
               >
                 <span className="overflow-hidden text-ellipsis whitespace-nowrap">{option.label}</span>
                 <button
                   onClick={(e) => handleRemoveTag(option.value, e)}
-                  className="text-primary-500 hover:opacity-70 p-0 bg-transparent border-none cursor-pointer"
+                  className="text-primary-500 dark:text-primary-400 hover:opacity-70 p-0 bg-transparent border-none cursor-pointer"
                 >
                   <FaTimes size={8} />
                 </button>
               </div>
             ))}
           {value.length > maxTagsShown && (
-            <div className="flex items-center gap-1 bg-primary-50 text-primary-600 border border-primary-200/30 rounded px-1.5 py-0.5 text-[11px]">
+            <div className="flex items-center gap-1 bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 border border-primary-200/30 dark:border-primary-800/50 rounded px-1.5 py-0.5 text-[11px]">
               <span>+{value.length - maxTagsShown} más</span>
             </div>
           )}
@@ -141,11 +141,11 @@ export function MultiSelectInput({
       )}
 
       {isOpen && (
-        <div className="absolute top-full left-0 right-0 z-[1000] bg-white border border-slate-200 rounded-md shadow-lg mt-0.5 max-h-[250px] overflow-y-auto">
+        <div className="absolute top-full left-0 right-0 z-[1000] bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md shadow-lg mt-0.5 max-h-[250px] overflow-y-auto">
           {showSearch && (
-            <div className="sticky top-0 bg-white p-2 border-b border-slate-200">
+            <div className="sticky top-0 bg-white dark:bg-slate-800 p-2 border-b border-slate-200 dark:border-slate-700">
               <div className="relative">
-                <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 text-xs" />
+                <FaSearch className="absolute left-2.5 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 text-xs" />
                 <input
                   ref={searchInputRef}
                   type="text"
@@ -153,7 +153,7 @@ export function MultiSelectInput({
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   onClick={(e) => e.stopPropagation()}
-                  className="w-full pl-7 pr-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:border-primary-500"
+                  className="w-full pl-7 pr-2 py-1.5 text-sm border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded focus:outline-none focus:border-primary-500"
                 />
               </div>
             </div>
@@ -163,14 +163,14 @@ export function MultiSelectInput({
               <div
                 key={option.value}
                 onClick={() => handleOptionClick(option.value)}
-                className="px-3 py-2 cursor-pointer flex items-center gap-2 hover:bg-slate-50 transition-colors"
+                className="px-3 py-2 cursor-pointer flex items-center gap-2 hover:bg-slate-50 dark:hover:bg-slate-700 transition-colors"
               >
-                <FaCheck className={`text-primary-500 text-xs ${value.includes(option.value) ? "opacity-100" : "opacity-0"}`} />
-                <span className="flex-1 text-sm text-slate-800">{option.label}</span>
+                <FaCheck className={`text-primary-500 dark:text-primary-400 text-xs ${value.includes(option.value) ? "opacity-100" : "opacity-0"}`} />
+                <span className="flex-1 text-sm text-slate-800 dark:text-slate-200">{option.label}</span>
               </div>
             ))
           ) : (
-            <div className="px-3 py-4 text-center text-slate-400 text-sm">
+            <div className="px-3 py-4 text-center text-slate-400 dark:text-slate-500 text-sm">
               Sin resultados
             </div>
           )}

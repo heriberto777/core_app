@@ -17,10 +17,10 @@ export const NotificationContainer = () => {
   };
 
   const variants = {
-    success: "bg-emerald-50 border-emerald-100 text-emerald-900 shadow-emerald-900/5",
-    error: "bg-red-50 border-red-100 text-red-900 shadow-red-900/5",
-    warning: "bg-amber-50 border-amber-100 text-amber-900 shadow-amber-900/5",
-    info: "bg-primary-50 border-primary-100 text-primary-900 shadow-primary-900/5"
+    success: "bg-emerald-50 dark:bg-emerald-900/40 border-emerald-100 dark:border-emerald-800 text-emerald-900 dark:text-emerald-200 shadow-emerald-900/5",
+    error: "bg-red-50 dark:bg-red-900/40 border-red-100 dark:border-red-800 text-red-900 dark:text-red-200 shadow-red-900/5",
+    warning: "bg-amber-50 dark:bg-amber-900/40 border-amber-100 dark:border-amber-800 text-amber-900 dark:text-amber-200 shadow-amber-900/5",
+    info: "bg-primary-50 dark:bg-primary-900/40 border-primary-100 dark:border-primary-800 text-primary-900 dark:text-primary-200 shadow-primary-900/5"
   };
 
   return (
@@ -52,9 +52,9 @@ export const NotificationContainer = () => {
             )}
           </div>
 
-          <button 
+          <button
             onClick={() => hideNotification(notification.id)}
-            className="p-1 text-slate-400 hover:text-slate-600 hover:bg-white/50 rounded-lg transition-all"
+            className="p-1 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-white/50 dark:hover:bg-slate-900/30 rounded-lg transition-all"
           >
             <FaTimes size={14} />
           </button>

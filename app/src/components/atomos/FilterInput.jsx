@@ -77,10 +77,10 @@ export const FilterInput = ({
   };
 
   const baseInputClasses = `
-    w-full px-3 py-2 text-sm rounded-md border bg-white transition-all duration-200
+    w-full px-3 py-2 text-sm rounded-md border bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 transition-all duration-200
     focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20
-    disabled:bg-slate-100 disabled:text-slate-400 disabled:cursor-not-allowed disabled:border-slate-200
-    ${error ? "border-red-500 focus:border-red-500 focus:ring-red-500/20" : "border-slate-300 hover:border-slate-400"}
+    disabled:bg-slate-100 dark:disabled:bg-slate-900 disabled:text-slate-400 dark:disabled:text-slate-600 disabled:cursor-not-allowed disabled:border-slate-200 dark:disabled:border-slate-700
+    ${error ? "border-red-500 dark:border-red-600 focus:border-red-500 focus:ring-red-500/20" : "border-slate-300 dark:border-slate-600 hover:border-slate-400 dark:hover:border-slate-500"}
   `;
 
   const renderInput = () => {
@@ -97,12 +97,12 @@ export const FilterInput = ({
               >
                 {selectedOption?.label || placeholder || "Seleccionar..."}
               </div>
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 dark:text-slate-500">
                 <FaChevronDown className={`transition-transform ${isSelectOpen ? "rotate-180" : ""}`} size={12} />
               </div>
               {isSelectOpen && (
-                <div className="absolute top-full left-0 right-0 mt-1 bg-white border border-slate-200 rounded-md shadow-lg z-[1000] max-h-[200px] overflow-y-auto">
-                  <div className="sticky top-0 bg-white p-2 border-b border-slate-200">
+                <div className="absolute top-full left-0 right-0 mt-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-md shadow-lg z-[1000] max-h-[200px] overflow-y-auto">
+                  <div className="sticky top-0 bg-white dark:bg-slate-800 p-2 border-b border-slate-200 dark:border-slate-700">
                     <input
                       type="text"
                       placeholder="Buscar..."
@@ -110,7 +110,7 @@ export const FilterInput = ({
                       onChange={(e) => setSelectSearch(e.target.value)}
                       onClick={(e) => e.stopPropagation()}
                       autoFocus
-                      className="w-full px-2 py-1.5 text-sm border border-slate-200 rounded focus:outline-none focus:border-primary-500"
+                      className="w-full px-2 py-1.5 text-sm border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-900 dark:text-slate-100 rounded focus:outline-none focus:border-primary-500"
                     />
                   </div>
                   {filteredOptions.length > 0 ? (
@@ -118,13 +118,13 @@ export const FilterInput = ({
                       <div
                         key={option.value}
                         onClick={() => handleSelectOptionClick(option.value)}
-                        className={`px-3 py-2 cursor-pointer text-sm hover:bg-slate-50 ${option.value === value ? "bg-primary-50 text-primary-600" : "text-slate-700"}`}
+                        className={`px-3 py-2 cursor-pointer text-sm hover:bg-slate-50 dark:hover:bg-slate-700 ${option.value === value ? "bg-primary-50 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400" : "text-slate-700 dark:text-slate-300"}`}
                       >
                         {option.label}
                       </div>
                     ))
                   ) : (
-                    <div className="px-3 py-4 text-center text-slate-400 text-sm">Sin resultados</div>
+                    <div className="px-3 py-4 text-center text-slate-400 dark:text-slate-500 text-sm">Sin resultados</div>
                   )}
                 </div>
               )}
@@ -149,7 +149,7 @@ export const FilterInput = ({
                 </option>
               ))}
             </select>
-            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400">
+            <div className="absolute right-3 top-1/2 -translate-y-1/2 pointer-events-none text-slate-400 dark:text-slate-500">
               <FaChevronDown size={12} />
             </div>
           </div>
@@ -184,7 +184,7 @@ export const FilterInput = ({
               {...props}
             />
             {(icon || showSearchIcon) && (
-              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 pointer-events-none">
+              <div className="absolute right-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 pointer-events-none">
                 {icon || <FaSearch size={14} />}
               </div>
             )}
@@ -196,16 +196,16 @@ export const FilterInput = ({
   return (
     <div className={`flex flex-col gap-1 ${className}`}>
       {label && (
-        <label className="text-sm font-medium text-slate-700">
+        <label className="text-sm font-medium text-slate-700 dark:text-slate-300">
           {label}
-          {required && <span className="text-red-500 ml-0.5">*</span>}
+          {required && <span className="text-red-500 dark:text-red-400 ml-0.5">*</span>}
         </label>
       )}
 
       {renderInput()}
 
-      {error && <div className="text-xs text-red-500 mt-1">{error}</div>}
-      {helpText && !error && <div className="text-xs text-slate-500 mt-1">{helpText}</div>}
+      {error && <div className="text-xs text-red-500 dark:text-red-400 mt-1">{error}</div>}
+      {helpText && !error && <div className="text-xs text-slate-500 dark:text-slate-400 mt-1">{helpText}</div>}
     </div>
   );
 };
