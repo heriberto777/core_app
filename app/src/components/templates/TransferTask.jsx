@@ -59,7 +59,7 @@ function FilterButton({ children, active, onClick }) {
       className={`px-3.5 py-1.5 text-[12px] font-semibold rounded-full border cursor-pointer transition-all ${
         active 
           ? 'bg-blue-500 text-white border-blue-500 hover:bg-blue-600' 
-          : 'bg-white text-slate-600 border-slate-300 hover:bg-slate-100 hover:border-slate-400'
+          : 'bg-white dark:bg-slate-800 text-slate-600 dark:text-slate-300 border-slate-300 dark:border-slate-600 hover:bg-slate-100 dark:hover:bg-slate-700 hover:border-slate-400 dark:hover:border-slate-500'
       }`}
       onClick={onClick}
     >
@@ -299,11 +299,11 @@ export function TransferTasks() {
                 <div className="p-4 flex flex-col gap-3">
                   <div className="grid grid-cols-2 gap-2 bg-slate-50/50 dark:bg-slate-700/50 p-2.5 rounded-lg">
                     <div className="flex justify-between text-[13px]">
-                      <span className="text-slate-500 font-medium">Tipo</span>
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">Tipo</span>
                       <span className="text-slate-800 dark:text-white font-semibold capitalize">{task.type}</span>
                     </div>
                     <div className="flex justify-between text-[13px]">
-                      <span className="text-slate-500 font-medium">Transfer</span>
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">Transfer</span>
                       <span className="text-slate-800 dark:text-white font-semibold">
                         {task.transferType === 'up' && '↑ Up'}
                         {task.transferType === 'down' && '↓ Down'}
@@ -313,9 +313,9 @@ export function TransferTasks() {
                       </span>
                     </div>
                     <div className="flex justify-between text-[13px]">
-                      <span className="text-slate-500 font-medium">Vinculada</span>
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">Vinculada</span>
                       <div className="flex items-center gap-2">
-                        <span className={`font-semibold ${task.linkedGroup || (task.linkedTasks?.length > 0) ? 'text-emerald-500' : 'text-slate-400'}`}>
+                        <span className={`font-semibold ${task.linkedGroup || (task.linkedTasks?.length > 0) ? 'text-emerald-500' : 'text-slate-400 dark:text-slate-500'}`}>
                           {task.linkedGroup ? `Grupo: ${task.linkedGroup}` : (task.linkedTasks?.length > 0 ? `${task.linkedTasks.length} tareas` : 'No')}
                         </span>
                         {(task.linkedTasks?.length > 0 || task.linkedGroup) && (
@@ -331,7 +331,7 @@ export function TransferTasks() {
                       </div>
                     </div>
                     <div className="flex justify-between text-[13px]">
-                      <span className="text-slate-500 font-medium">Última Ejecución</span>
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">Última Ejecución</span>
                       <span className="font-semibold">
                         {(task.lastExecutionResult?.success === false || task.status === 'error') && task.lastExecutionResult?.errorDetails ? (
                           <span 
@@ -353,12 +353,12 @@ export function TransferTasks() {
                         ) : task.status === 'running' ? (
                           <span className="text-blue-600 text-[11px]">Ejecutando... {task.progress || 0}%</span>
                         ) : (
-                          <span className="text-slate-400 text-[11px]">Sin ejecuciones</span>
+                          <span className="text-slate-400 dark:text-slate-500 text-[11px]">Sin ejecuciones</span>
                         )}
                       </span>
                     </div>
                     <div className="flex justify-between text-[13px]">
-                      <span className="text-slate-500 font-medium">Ejecuciones</span>
+                      <span className="text-slate-500 dark:text-slate-400 font-medium">Ejecuciones</span>
                       <span className="text-slate-800 dark:text-white font-semibold">{task.executionCount || 0}</span>
                     </div>
                   </div>
@@ -379,7 +379,7 @@ export function TransferTasks() {
                       </div>
                       {task.lastExecutionDate && (
                         <div className={`flex items-center gap-1 mt-1 text-[11px] font-semibold ${
-                          isStaleRunning(task.lastExecutionDate) ? 'text-red-600' : 'text-slate-500'
+                          isStaleRunning(task.lastExecutionDate) ? 'text-red-600' : 'text-slate-500 dark:text-slate-400'
                         }`}>
                           {isStaleRunning(task.lastExecutionDate) && <FaExclamationTriangle className="text-[10px]" />}
                           <span>
@@ -396,7 +396,7 @@ export function TransferTasks() {
                   </div>
 
                   {task.lastExecutionDate && (
-                    <div className="text-[10px] text-slate-400 mt-2 text-right">
+                    <div className="text-[10px] text-slate-400 dark:text-slate-500 mt-2 text-right">
                       Última: {new Date(task.lastExecutionDate).toLocaleString()}
                     </div>
                   )}
@@ -428,24 +428,24 @@ export function TransferTasks() {
             ))}
           </div>
         ) : (
-          <div className="bg-white rounded-lg border border-slate-200 overflow-hidden">
+          <div className="bg-white dark:bg-slate-800 rounded-lg border border-slate-200 dark:border-slate-700 overflow-hidden">
             <table className="w-full border-collapse">
               <thead>
-                <tr className="bg-slate-100 text-left">
-                  <th className="px-3 py-2 border-b border-slate-200">Tarea</th>
-                  <th className="px-3 py-2 border-b border-slate-200">Estado</th>
-                  <th className="px-3 py-2 border-b border-slate-200">Tipo</th>
-                  <th className="px-3 py-2 border-b border-slate-200">Acciones</th>
+                <tr className="bg-slate-100 dark:bg-slate-700 text-left">
+                  <th className="px-3 py-2 border-b border-slate-200 dark:border-slate-600">Tarea</th>
+                  <th className="px-3 py-2 border-b border-slate-200 dark:border-slate-600">Estado</th>
+                  <th className="px-3 py-2 border-b border-slate-200 dark:border-slate-600">Tipo</th>
+                  <th className="px-3 py-2 border-b border-slate-200 dark:border-slate-600">Acciones</th>
                 </tr>
               </thead>
               <tbody>
                 {tasks.map(task => (
-                  <tr key={task._id} className="border-b border-slate-200">
+                  <tr key={task._id} className="border-b border-slate-200 dark:border-slate-700">
                     <td className="px-3 py-2"><strong>{task.name}</strong></td>
                     <td className="px-3 py-2">
                       <StatusBadge status={task.status || (task.active ? "active" : "inactive")} />
                       {task.status === "running" && task.lastExecutionDate && (
-                        <div className={`text-[10px] font-semibold mt-0.5 ${isStaleRunning(task.lastExecutionDate) ? 'text-red-600' : 'text-slate-500'}`}>
+                        <div className={`text-[10px] font-semibold mt-0.5 ${isStaleRunning(task.lastExecutionDate) ? 'text-red-600' : 'text-slate-500 dark:text-slate-400'}`}>
                           {formatElapsed(task.lastExecutionDate)}{isStaleRunning(task.lastExecutionDate) ? ' — atascada' : ''}
                         </div>
                       )}
@@ -524,7 +524,7 @@ export function TransferTasks() {
               ))}
             </div>
           ) : (
-            <p className="text-center text-slate-400">
+            <p className="text-center text-slate-400 dark:text-slate-500">
               {linkedTasksModal.task?.linkedGroup
                 ? 'No hay tareas en este grupo'
                 : 'No hay tareas vinculadas'}
@@ -605,7 +605,7 @@ export function TransferTasks() {
 
               if (filteredData.length === 0) {
                 return (
-                  <div className="text-center py-10 text-slate-400">
+                  <div className="text-center py-10 text-slate-400 dark:text-slate-500">
                     No hay historial de ejecuciones para esta tarea
                   </div>
                 );
@@ -660,7 +660,7 @@ export function TransferTasks() {
                       ))}
                     </tbody>
                   </table>
-                  <div className="mt-2 text-xs text-slate-500">
+                  <div className="mt-2 text-xs text-slate-500 dark:text-slate-400">
                     Mostrando {filteredData.length} de {dataArray.length} registros
                   </div>
                 </div>

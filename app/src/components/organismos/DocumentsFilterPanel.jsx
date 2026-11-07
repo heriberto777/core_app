@@ -32,33 +32,33 @@ export function DocumentsFilterPanel({
     };
 
     return (
-        <div className={`bg-white p-6 rounded-2xl border border-slate-200 backdrop-blur-md flex flex-col gap-5 shadow-premium ${className}`}>
+        <div className={`bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 backdrop-blur-md flex flex-col gap-5 shadow-premium ${className}`}>
             <div className="relative w-full">
-                <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+                <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
                 <input
                     type="text"
                     placeholder="Buscar documento por cualquier campo (Nro, Cliente, ERP...)"
                     value={search}
                     onChange={(e) => setSearch(e.target.value)}
-                    className="w-full py-3 px-11 rounded-xl border border-slate-200 bg-white text-slate-800 text-[15px] transition-all duration-200 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+                    className="w-full py-3 px-11 rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 text-[15px] transition-all duration-200 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
                 />
             </div>
 
             <div className="grid grid-cols-[repeat(auto-fit,minmax(180px,1fr))] gap-4 items-end">
                 <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Fecha Desde</label>
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Fecha Desde</label>
                     <input type="date" name="dateFrom" value={filterValues.dateFrom} onChange={handleChange}
-                        className="py-2.5 px-3.5 rounded-lg border border-slate-200 bg-white text-slate-800 text-sm" />
+                        className="py-2.5 px-3.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 text-sm" />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Fecha Hasta</label>
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Fecha Hasta</label>
                     <input type="date" name="dateTo" value={filterValues.dateTo} onChange={handleChange}
-                        className="py-2.5 px-3.5 rounded-lg border border-slate-200 bg-white text-slate-800 text-sm" />
+                        className="py-2.5 px-3.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 text-sm" />
                 </div>
                 <div className="flex flex-col gap-1.5">
-                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-500">Estado Documento</label>
+                    <label className="text-xs font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400">Estado Documento</label>
                     <select name="status" value={filterValues.status} onChange={handleChange}
-                        className="py-2.5 px-3.5 rounded-lg border border-slate-200 bg-white text-slate-800 text-sm cursor-pointer">
+                        className="py-2.5 px-3.5 rounded-lg border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 text-slate-800 dark:text-slate-100 text-sm cursor-pointer">
                         <option value="all">Todos los estados</option>
                         <option value="P">Pendientes (P)</option>
                         <option value="F">Facturados (F)</option>
@@ -67,7 +67,7 @@ export function DocumentsFilterPanel({
                 </div>
 
                 <div className="flex flex-col gap-1.5">
-                    <label className="flex items-center gap-2.5 cursor-pointer p-2.5 bg-slate-50/50 rounded-lg border border-slate-200 text-sm text-slate-800 transition-all duration-200 hover:bg-slate-100 hover:border-primary-500/40">
+                    <label className="flex items-center gap-2.5 cursor-pointer p-2.5 bg-slate-50/50 dark:bg-slate-900/30 rounded-lg border border-slate-200 dark:border-slate-600 text-sm text-slate-800 dark:text-slate-100 transition-all duration-200 hover:bg-slate-100 dark:hover:bg-slate-700 hover:border-primary-500/40">
                         <input type="checkbox" name="showProcessed" checked={filterValues.showProcessed} onChange={handleChange} className="w-4 h-4 accent-primary-500" />
                         <span>Mostrar ya procesados</span>
                     </label>

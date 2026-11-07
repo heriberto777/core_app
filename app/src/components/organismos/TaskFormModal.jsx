@@ -41,7 +41,7 @@ const FIELD_HELP = {
 const FieldHelp = ({ field }) => (
     <span className="relative inline-flex group/help cursor-help text-primary-500">
         <FaQuestionCircle size={12} />
-        <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/help:block w-64 bg-slate-900 text-white text-xs font-normal normal-case tracking-normal leading-relaxed rounded px-3 py-2 z-20 shadow-xl">
+        <span className="pointer-events-none absolute bottom-full left-1/2 -translate-x-1/2 mb-2 hidden group-hover/help:block w-64 bg-slate-900 dark:bg-slate-700 text-white text-xs font-normal normal-case tracking-normal leading-relaxed rounded px-3 py-2 z-20 shadow-xl">
             {FIELD_HELP[field]}
         </span>
     </span>
@@ -221,21 +221,21 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                 <div className="px-6 pt-6">
                     <ModalHeader className="mb-0 pb-4">
                         <ModalTitle>{task ? "Editar Tarea de Transferencia" : "Nueva Tarea de Transferencia"}</ModalTitle>
-                        <button onClick={onClose} className="text-slate-400 hover:text-slate-700 transition-colors" aria-label="Cerrar">
+                        <button onClick={onClose} className="text-slate-400 dark:text-slate-500 hover:text-slate-700 dark:hover:text-slate-300 transition-colors" aria-label="Cerrar">
                             <FaTimes />
                         </button>
                     </ModalHeader>
                 </div>
 
-                <div className="flex border-b border-slate-200 px-6">
+                <div className="flex border-b border-slate-200 dark:border-slate-700 px-6">
                     {TABS.map(({ id, label, icon: Icon }) => (
                         <button
                             key={id}
                             onClick={() => setActiveTab(id)}
                             className={`flex items-center justify-center gap-2 flex-1 py-3 text-[13px] font-semibold border-b-2 transition-colors ${
                                 activeTab === id
-                                    ? "text-primary-600 border-primary-600"
-                                    : "text-slate-500 border-transparent hover:text-slate-800"
+                                    ? "text-primary-600 dark:text-primary-400 border-primary-600 dark:border-primary-400"
+                                    : "text-slate-500 dark:text-slate-400 border-transparent hover:text-slate-800 dark:hover:text-slate-200"
                             }`}
                         >
                             <Icon size={12} /> {label}
@@ -272,17 +272,17 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                             </div>
 
                             <div className="flex gap-3 flex-wrap mt-1 mb-4">
-                                <label className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded text-sm cursor-pointer hover:border-primary-500 transition-colors">
+                                <label className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-sm cursor-pointer hover:border-primary-500 transition-colors">
                                     <input type="checkbox" name="active" checked={formData.active} onChange={handleChange} className="w-4 h-4 cursor-pointer accent-primary-600" />
                                     <span>Tarea Activa</span>
                                     <FieldHelp field="active" />
                                 </label>
-                                <label className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded text-sm cursor-pointer hover:border-primary-500 transition-colors">
+                                <label className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-sm cursor-pointer hover:border-primary-500 transition-colors">
                                     <input type="checkbox" name="clearBeforeInsert" checked={formData.clearBeforeInsert} onChange={handleChange} className="w-4 h-4 cursor-pointer accent-primary-600" />
                                     <span>Borrar antes de insertar</span>
                                     <FieldHelp field="clearBeforeInsert" />
                                 </label>
-                                <label className={`flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded text-sm transition-colors ${formData.clearBeforeInsert ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:border-primary-500"}`}>
+                                <label className={`flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-sm transition-colors ${formData.clearBeforeInsert ? "opacity-50 cursor-not-allowed" : "cursor-pointer hover:border-primary-500"}`}>
                                     <input type="checkbox" name="updateOnDuplicate" checked={formData.updateOnDuplicate} onChange={handleChange} disabled={formData.clearBeforeInsert} className="w-4 h-4 cursor-pointer accent-primary-600" />
                                     <span>Actualizar si ya existe</span>
                                     <FieldHelp field="updateOnDuplicate" />
@@ -309,7 +309,7 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                 <Textarea name="parameters" value={formData.parameters} onChange={handleChange} height="h-32" className="font-mono text-[13px]"
                                     placeholder='[{"field": "ESTADO", "operator": "=", "value": "A"}, {"field": "FECHA_PED", "operator": ">=", "value": "2024-01-01"}]' />
                             </FormGroup>
-                            <div className="bg-primary-50 border border-primary-100 text-primary-700 rounded p-3 text-xs">
+                            <div className="bg-primary-50 dark:bg-primary-900/20 border border-primary-100 dark:border-primary-800 text-primary-700 dark:text-primary-300 rounded p-3 text-xs">
                                 <strong>Operadores disponibles:</strong> =, !=, &gt;, &lt;, &ge;, &le;, LIKE, IN, NOT IN
                             </div>
                         </>
@@ -335,7 +335,7 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                         <option key={name} value={name} />
                                     ))}
                                 </datalist>
-                                <small className="text-slate-400 text-[11px]">
+                                <small className="text-slate-400 dark:text-slate-500 text-[11px]">
                                     Las tareas con el mismo nombre de grupo se ejecutarán de forma coordinada.
                                     {existingGroupNames.length > 0 && " Empieza a escribir para ver los grupos existentes."}
                                 </small>
@@ -344,14 +344,14 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                 <Label className="flex items-center gap-2">Orden de Ejecución <FieldHelp field="linkedExecutionOrder" /></Label>
                                 <UIInput type="number" name="linkedExecutionOrder" value={formData.linkedExecutionOrder} onChange={handleChange}
                                     min="0" placeholder="0" />
-                                <small className="text-slate-400 text-[11px]">
+                                <small className="text-slate-400 dark:text-slate-500 text-[11px]">
                                     Las tareas se ejecutan en orden ascendente (0 → 1 → 2...). Al elegir un grupo
                                     existente se sugiere automáticamente el siguiente orden disponible — podés
                                     cambiarlo si necesitás una posición distinta.
                                 </small>
                             </FormGroup>
 
-                            <label className={`flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded text-sm mb-4 ${formData.linkedGroup ? "cursor-pointer hover:border-primary-500" : "opacity-50 cursor-not-allowed"}`}>
+                            <label className={`flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-sm mb-4 ${formData.linkedGroup ? "cursor-pointer hover:border-primary-500" : "opacity-50 cursor-not-allowed"}`}>
                                 <input type="checkbox" checked={!!formData.linkingMetadata?.isCoordinator}
                                     disabled={!formData.linkedGroup}
                                     onChange={(e) => handleLinkingMetadataChange('isCoordinator', e.target.checked)}
@@ -363,7 +363,7 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                             {formData.linkedGroup && (
                                 <>
                                     <SectionTitle>Configuración de Coordinación <FieldHelp field="coordinationConfig" /></SectionTitle>
-                                    <label className="flex items-center gap-2 px-3 py-2 bg-white border border-slate-200 rounded text-sm mb-3 cursor-pointer hover:border-primary-500">
+                                    <label className="flex items-center gap-2 px-3 py-2 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded text-sm mb-3 cursor-pointer hover:border-primary-500">
                                         <input type="checkbox" checked={!!formData.coordinationConfig?.waitForLinkedTasks}
                                             onChange={(e) => handleCoordinationConfigChange('waitForLinkedTasks', e.target.checked)}
                                             className="w-4 h-4 cursor-pointer accent-primary-600" />
@@ -404,7 +404,7 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                         <option key={t._id} value={t._id}>{t.name}</option>
                                     ))}
                                 </Select>
-                                <small className="text-slate-400 text-[11px]">
+                                <small className="text-slate-400 dark:text-slate-500 text-[11px]">
                                     Estas tareas se ejecutarán automáticamente después de completar la actual
                                 </small>
                             </FormGroup>
@@ -419,7 +419,7 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                 <UIInput value={formData.validationRules.requiredFields.join(', ')}
                                     onChange={(e) => handleValidationChange('requiredFields', e.target.value.split(',').map(s => s.trim()).filter(s => s))}
                                     placeholder="CAMPO1, CAMPO2, CAMPO3" />
-                                <small className="text-slate-400 text-[11px]">
+                                <small className="text-slate-400 dark:text-slate-500 text-[11px]">
                                     Lista de campos que no pueden estar vacíos. Separados por coma.
                                 </small>
                             </FormGroup>
@@ -441,7 +441,7 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                         placeholder="Code_ofClient" />
                                 </FormGroup>
                             </div>
-                            <small className="text-slate-400 text-[11px] mb-3 block">
+                            <small className="text-slate-400 dark:text-slate-500 text-[11px] mb-3 block">
                                 Tabla y campo PK para verificar existencia y construir el WHERE del SQL Post-Ejecución automáticamente.
                             </small>
 
@@ -462,7 +462,7 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                         placeholder="Ej: code_ofclient" />
                                 </FormGroup>
                             </div>
-                            <small className="text-slate-400 text-[11px] mb-3 block">
+                            <small className="text-slate-400 dark:text-slate-500 text-[11px] mb-3 block">
                                 Si Clave en Tabla Real tiene un valor, GANA sobre el Campo Clave de Verificación de Existencia de arriba
                                 para construir el WHERE del SQL Post-Ejecución. Dejar ambos vacíos en el caso normal.
                             </small>
@@ -472,7 +472,7 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                 <Label className="flex items-center gap-2">SQL Post-Ejecución <FieldHelp field="postUpdateQuery" /></Label>
                                 <Textarea name="postUpdateQuery" value={formData.postUpdateQuery} onChange={handleChange} className="font-mono text-[13px]"
                                     placeholder="UPDATE CATELLI.CLIENTE SET U_TRANSFER_STATUS = 'Normal'" />
-                                <small className="text-slate-400 text-[11px]">
+                                <small className="text-slate-400 dark:text-slate-500 text-[11px]">
                                     NO incluir WHERE. Se agregará automáticamente usando el Campo Clave de verificación de existencia.
                                 </small>
                             </FormGroup>
@@ -515,7 +515,7 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                         placeholder="Code_Seller, Code_Route, N_Counter" />
                                 </FormGroup>
                             </div>
-                            <small className="text-slate-400 text-[11px] mb-3 block">
+                            <small className="text-slate-400 dark:text-slate-500 text-[11px] mb-3 block">
                                 El campo N en &quot;Campos Origen&quot; se mapea al campo N en &quot;Campos Destino&quot; — deben tener la misma cantidad, en el mismo orden.
                             </small>
                             <FormGroup>
@@ -525,7 +525,7 @@ export const TaskFormModal = ({ task, isOpen, onClose, onSave, allTasks = [] }) 
                                     height="h-20" className="font-mono text-[13px]"
                                     placeholder='[{"field": "Transfer_status", "value": 1}]' />
                             </FormGroup>
-                            <small className="text-slate-400 text-[11px] mb-3 block">
+                            <small className="text-slate-400 dark:text-slate-500 text-[11px] mb-3 block">
                                 Dejar todo esto vacío si la query principal ya hace el SELECT con los alias correctos (el caso normal, usado por la gran mayoría de las tareas).
                             </small>
                         </>

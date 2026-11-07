@@ -76,25 +76,25 @@ export function DocumentsDataTable({
     const someSelected = selectedIds.length > 0 && selectedIds.length < documents.length;
 
     return (
-        <div className={`w-full overflow-x-auto rounded-2xl border border-slate-200 bg-white shadow-premium ${className}`}>
+        <div className={`w-full overflow-x-auto rounded-2xl border border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 shadow-premium ${className}`}>
             <table className="w-full border-collapse text-sm">
-                <thead className="bg-slate-50/50 sticky top-0 z-10">
+                <thead className="bg-slate-50/50 dark:bg-slate-900/30 sticky top-0 z-10">
                     <tr>
-                        <th className="p-4 text-left text-slate-500 font-extrabold border-b-2 border-slate-200 w-12 align-middle">
+                        <th className="p-4 text-left text-slate-500 dark:text-slate-400 font-extrabold border-b-2 border-slate-200 dark:border-slate-700 w-12 align-middle">
                             <input
                                 type="checkbox"
                                 checked={allSelected}
                                 ref={el => el && (el.indeterminate = someSelected)}
                                 onChange={(e) => onSelectAll?.(e.target.checked)}
-                                className="w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 transition-all cursor-pointer"
+                                className="w-5 h-5 rounded border-slate-300 dark:border-slate-600 dark:bg-slate-700 text-primary-600 focus:ring-primary-500 transition-all cursor-pointer"
                             />
                         </th>
                         {columns.map(col => (
-                            <th key={col.key} className="p-4 text-left text-slate-500 font-extrabold border-b-2 border-slate-200">
+                            <th key={col.key} className="p-4 text-left text-slate-500 dark:text-slate-400 font-extrabold border-b-2 border-slate-200 dark:border-slate-700">
                                 {col.label}
                             </th>
                         ))}
-                        <th className="p-4 text-right text-slate-500 font-extrabold border-b-2 border-slate-200">Acciones</th>
+                        <th className="p-4 text-right text-slate-500 dark:text-slate-400 font-extrabold border-b-2 border-slate-200 dark:border-slate-700">Acciones</th>
                     </tr>
                 </thead>
                 <tbody>
@@ -102,13 +102,13 @@ export function DocumentsDataTable({
                         const docId = doc[idField];
                         const isSelected = selectedIds.includes(docId);
                         return (
-                            <tr key={docId || idx} className={`hover:bg-slate-50/40 transition-colors group ${isSelected ? "bg-primary-50/20" : ""}`}>
-                                <td className="p-4 border-b border-slate-100 align-middle">
+                            <tr key={docId || idx} className={`hover:bg-slate-50/40 dark:hover:bg-slate-700/40 transition-colors group ${isSelected ? "bg-primary-50/20 dark:bg-primary-900/20" : ""}`}>
+                                <td className="p-4 border-b border-slate-100 dark:border-slate-700 align-middle">
                                     <input
                                         type="checkbox"
                                         checked={isSelected}
                                         onChange={() => onSelect?.(docId)}
-                                        className="w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 transition-all cursor-pointer"
+                                        className="w-5 h-5 rounded border-slate-300 dark:border-slate-600 dark:bg-slate-700 text-primary-600 focus:ring-primary-500 transition-all cursor-pointer"
                                     />
                                 </td>
                                 {columns.map(col => {
@@ -124,12 +124,12 @@ export function DocumentsDataTable({
 
                                     // Si la llave del targetKey o sourceKey existen pero tienen valor null, displayVal será null.
                                     return (
-                                        <td key={col.key} className="p-4 border-b border-slate-100 text-slate-700">
+                                        <td key={col.key} className="p-4 border-b border-slate-100 dark:border-slate-700 text-slate-700 dark:text-slate-200">
                                             {displayVal != null && displayVal !== '' ? String(displayVal) : '—'}
                                         </td>
                                     );
                                 })}
-                                <td className="p-4 border-b border-slate-100">
+                                <td className="p-4 border-b border-slate-100 dark:border-slate-700">
                                     <div className="flex gap-2 justify-end">
                                         {onViewDetails && (
                                             <Button variant="ghost" size="small" onClick={() => onViewDetails(doc)}>

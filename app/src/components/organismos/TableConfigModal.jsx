@@ -88,18 +88,18 @@ export function TableConfigModal({ isOpen, onClose, onSave, initialData }) {
           className="fixed inset-0 z-[2000] flex items-center justify-center p-4 bg-slate-900/60 backdrop-blur-sm animate-fadeIn"
           onClick={onClose}
         >
-            <div 
-              className="bg-white w-full max-w-2xl max-h-[90vh] rounded-xl shadow-premium flex flex-col overflow-hidden animate-slideUp"
+            <div
+              className="bg-white dark:bg-slate-800 w-full max-w-2xl max-h-[90vh] rounded-xl shadow-premium flex flex-col overflow-hidden animate-slideUp"
               onClick={e => e.stopPropagation()}
             >
                 {/* HEADER */}
-                <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-                    <h3 className="text-xl font-extrabold text-slate-800">
+                <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/30">
+                    <h3 className="text-xl font-extrabold text-slate-800 dark:text-slate-100">
                       {initialData ? "Editar Tabla" : "Añadir Tabla"}
                     </h3>
-                    <button 
+                    <button
                       onClick={onClose}
-                      className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all"
+                      className="p-2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-all"
                     >
                         <FaTimes />
                     </button>
@@ -113,24 +113,24 @@ export function TableConfigModal({ isOpen, onClose, onSave, initialData }) {
                     </div>
 
                     <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
-                        <Input 
-                          label="Tabla Origen (Externo)" 
-                          name="sourceTable" 
-                          value={formData.sourceTable} 
-                          onChange={handleChange} 
-                          placeholder="Ej: FAC_ENC_PED" 
-                          disabled={formData.isDetailTable && formData.useSameSourceTable} 
+                        <Input
+                          label="Tabla Origen (Externo)"
+                          name="sourceTable"
+                          value={formData.sourceTable}
+                          onChange={handleChange}
+                          placeholder="Ej: FAC_ENC_PED"
+                          disabled={formData.isDetailTable && formData.useSameSourceTable}
                         />
                         <div className="flex flex-col gap-1.5 w-full mb-3">
-                          <label className="text-[13px] font-semibold text-slate-500 ml-1">Filtro SQL Adicional</label>
-                          <input 
-                            name="filterCondition" 
-                            value={formData.filterCondition} 
-                            onChange={handleChange} 
-                            placeholder="Ej: TIP_DOC = 'F'..." 
-                            className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 bg-white focus:border-primary-500 outline-none transition-all"
+                          <label className="text-[13px] font-semibold text-slate-500 dark:text-slate-400 ml-1">Filtro SQL Adicional</label>
+                          <input
+                            name="filterCondition"
+                            value={formData.filterCondition}
+                            onChange={handleChange}
+                            placeholder="Ej: TIP_DOC = 'F'..."
+                            className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-slate-100 focus:border-primary-500 outline-none transition-all"
                           />
-                          <p className="text-[10px] font-medium text-slate-400 mt-1 ml-1 uppercase tracking-wider">Use operadores SQL: AND, OR, IS NULL, etc.</p>
+                          <p className="text-[10px] font-medium text-slate-400 dark:text-slate-500 mt-1 ml-1 uppercase tracking-wider">Use operadores SQL: AND, OR, IS NULL, etc.</p>
                         </div>
                     </div>
 
@@ -139,16 +139,16 @@ export function TableConfigModal({ isOpen, onClose, onSave, initialData }) {
                         <Input label="Clave Primaria Destino" name="targetPrimaryKey" value={formData.targetPrimaryKey} onChange={handleChange} placeholder="Ej: PEDIDO" />
                     </div>
 
-                    <div className="flex items-center gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-100">
-                        <input 
-                          type="checkbox" 
-                          name="isDetailTable" 
-                          id="isDetailTable" 
-                          checked={formData.isDetailTable} 
+                    <div className="flex items-center gap-3 p-4 bg-slate-50 dark:bg-slate-900/30 rounded-2xl border border-slate-100 dark:border-slate-700">
+                        <input
+                          type="checkbox"
+                          name="isDetailTable"
+                          id="isDetailTable"
+                          checked={formData.isDetailTable}
                           onChange={handleChange}
                           className="w-5 h-5 rounded-lg text-primary-600 focus:ring-primary-500"
                         />
-                        <label htmlFor="isDetailTable" className="text-sm font-bold text-slate-700 cursor-pointer">Es tabla de detalle</label>
+                        <label htmlFor="isDetailTable" className="text-sm font-bold text-slate-700 dark:text-slate-200 cursor-pointer">Es tabla de detalle</label>
                     </div>
 
                     {formData.isDetailTable && (
@@ -160,12 +160,12 @@ export function TableConfigModal({ isOpen, onClose, onSave, initialData }) {
                             <div className="grid grid-cols-1 md:grid-cols-2 gap-6">
                                 <Input label="Clave Foránea (Relación)" name="foreignKey" value={formData.foreignKey} onChange={handleChange} placeholder="Ej: NUM_PED" />
                                 <div className="flex flex-col gap-1.5 w-full">
-                                  <label className="text-[13px] font-semibold text-slate-500 ml-1">Tipo de Join</label>
-                                  <select 
-                                    name="joinType" 
-                                    value={formData.joinType} 
+                                  <label className="text-[13px] font-semibold text-slate-500 dark:text-slate-400 ml-1">Tipo de Join</label>
+                                  <select
+                                    name="joinType"
+                                    value={formData.joinType}
                                     onChange={handleChange}
-                                    className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 bg-white focus:border-primary-500 outline-none"
+                                    className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-700 dark:text-slate-100 focus:border-primary-500 outline-none"
                                   >
                                       <option value="INNER">INNER JOIN</option>
                                       <option value="LEFT">LEFT JOIN</option>
@@ -173,23 +173,23 @@ export function TableConfigModal({ isOpen, onClose, onSave, initialData }) {
                                   </select>
                                 </div>
                             </div>
-                            <div className="flex items-center gap-3 p-4 bg-primary-50/50 rounded-2xl border border-primary-100">
-                                <input 
-                                  type="checkbox" 
-                                  name="useSameSourceTable" 
-                                  id="useSameSourceTable" 
-                                  checked={formData.useSameSourceTable} 
+                            <div className="flex items-center gap-3 p-4 bg-primary-50/50 dark:bg-primary-900/20 rounded-2xl border border-primary-100 dark:border-primary-800">
+                                <input
+                                  type="checkbox"
+                                  name="useSameSourceTable"
+                                  id="useSameSourceTable"
+                                  checked={formData.useSameSourceTable}
                                   onChange={handleChange}
                                   className="w-5 h-5 rounded-lg text-primary-600 focus:ring-primary-500"
                                 />
-                                <label htmlFor="useSameSourceTable" className="text-sm font-bold text-primary-700 cursor-pointer">Usar misma tabla origen que padre</label>
+                                <label htmlFor="useSameSourceTable" className="text-sm font-bold text-primary-700 dark:text-primary-300 cursor-pointer">Usar misma tabla origen que padre</label>
                             </div>
                         </div>
                     )}
                 </div>
 
                 {/* FOOTER */}
-                <div className="px-8 py-6 bg-slate-50/50 border-t border-slate-100 flex justify-end gap-3">
+                <div className="px-8 py-6 bg-slate-50/50 dark:bg-slate-900/30 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3">
                     <Button variant="secondary" onClick={onClose}>Cancelar</Button>
                     <Button variant="primary" onClick={handleSubmit} loading={loading}>
                         <FaSave /> {initialData ? "Actualizar" : "Añadir"}

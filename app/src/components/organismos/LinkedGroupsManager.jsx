@@ -175,20 +175,20 @@ const LinkedGroupsManager = ({
     g.groupName.toLowerCase().includes(searchTerm.trim().toLowerCase())
   );
 
-  if (loading) return <div className="p-20 text-center text-xs font-black text-slate-400 uppercase tracking-[0.2em] animate-pulse">Analizando dependencias de red...</div>;
+  if (loading) return <div className="p-20 text-center text-xs font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] animate-pulse">Analizando dependencias de red...</div>;
 
   return (
     <div className="p-8 max-w-7xl mx-auto space-y-8 animate-in fade-in duration-700">
       <div className="text-center space-y-3">
-        <h2 className="text-3xl font-black text-slate-900 flex items-center justify-center gap-4">
-          <FaLink className="text-primary-600" /> Gestión de Grupos Vinculados
+        <h2 className="text-3xl font-black text-slate-900 dark:text-slate-100 flex items-center justify-center gap-4">
+          <FaLink className="text-primary-600 dark:text-primary-400" /> Gestión de Grupos Vinculados
         </h2>
-        <p className="text-sm font-bold text-slate-400 uppercase tracking-widest max-w-2xl mx-auto">Administre la orquestación de tareas encadenadas y sus configuraciones de post-actualización masiva</p>
+        <p className="text-sm font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest max-w-2xl mx-auto">Administre la orquestación de tareas encadenadas y sus configuraciones de post-actualización masiva</p>
       </div>
 
       {error && (
-        <div className="p-8 bg-red-50 border border-red-100 rounded-xl text-center space-y-6 animate-bounce-short">
-          <p className="text-red-700 font-bold">{error}</p>
+        <div className="p-8 bg-red-50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-xl text-center space-y-6 animate-bounce-short">
+          <p className="text-red-700 dark:text-red-300 font-bold">{error}</p>
           <Button variant="primary" onClick={fetchGroups} className="px-10 bg-red-600 border-none shadow-lg shadow-red-600/20">Reintentar Conexión</Button>
         </div>
       )}
@@ -196,18 +196,18 @@ const LinkedGroupsManager = ({
       {!error && groups.length > 0 && (
         <div className="flex flex-col sm:flex-row gap-3 items-stretch sm:items-center justify-between max-w-2xl mx-auto">
           <div className="relative flex-1">
-            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 text-sm" />
+            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-300 dark:text-slate-600 text-sm" />
             <input
               type="text"
               value={searchTerm}
               onChange={(e) => setSearchTerm(e.target.value)}
               placeholder="Buscar grupo por nombre..."
-              className="w-full pl-11 pr-4 py-3 bg-white border border-slate-200 rounded-xl text-sm font-semibold text-slate-800 placeholder:text-slate-300 focus:outline-none focus:border-primary-400 transition-all"
+              className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-sm font-semibold text-slate-800 dark:text-slate-100 placeholder:text-slate-300 dark:placeholder:text-slate-600 focus:outline-none focus:border-primary-400 transition-all"
             />
           </div>
           <button
             onClick={fetchGroups}
-            className="shrink-0 px-4 py-3 bg-white border border-slate-200 rounded-xl text-slate-500 hover:text-primary-600 hover:border-primary-300 transition-all flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-widest"
+            className="shrink-0 px-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl text-slate-500 dark:text-slate-400 hover:text-primary-600 dark:hover:text-primary-400 hover:border-primary-300 dark:hover:border-primary-700 transition-all flex items-center justify-center gap-2 text-[11px] font-black uppercase tracking-widest"
           >
             <FaSync /> Actualizar
           </button>
@@ -215,23 +215,23 @@ const LinkedGroupsManager = ({
       )}
 
       {!error && groups.length === 0 ? (
-        <div className="p-24 bg-slate-50/50 border border-dashed border-slate-200 rounded-xl flex flex-col items-center gap-6 text-center group transition-all hover:bg-white hover:border-primary-200">
-          <div className="w-20 h-20 bg-white rounded-xl flex items-center justify-center text-slate-300 shadow-sm group-hover:text-primary-500 transition-colors">
+        <div className="p-24 bg-slate-50/50 dark:bg-slate-900/30 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl flex flex-col items-center gap-6 text-center group transition-all hover:bg-white dark:hover:bg-slate-800 hover:border-primary-200 dark:hover:border-primary-700">
+          <div className="w-20 h-20 bg-white dark:bg-slate-800 rounded-xl flex items-center justify-center text-slate-300 dark:text-slate-600 shadow-sm group-hover:text-primary-500 dark:group-hover:text-primary-400 transition-colors">
             <FaUsers className="text-4xl" />
           </div>
           <div className="space-y-2">
-            <h3 className="text-lg font-black text-slate-900">Arquitectura Plana</h3>
-            <p className="text-sm text-slate-400 font-medium max-w-sm">No se han detectado vínculos entre tareas. Puede crear grupos asignando el mismo nombre de grupo en la edición de tareas.</p>
+            <h3 className="text-lg font-black text-slate-900 dark:text-slate-100">Arquitectura Plana</h3>
+            <p className="text-sm text-slate-400 dark:text-slate-500 font-medium max-w-sm">No se han detectado vínculos entre tareas. Puede crear grupos asignando el mismo nombre de grupo en la edición de tareas.</p>
           </div>
         </div>
       ) : !error && filteredGroups.length === 0 ? (
-        <div className="p-16 bg-slate-50/50 border border-dashed border-slate-200 rounded-xl text-center">
-          <p className="text-sm text-slate-400 font-bold">Ningún grupo coincide con "{searchTerm}".</p>
+        <div className="p-16 bg-slate-50/50 dark:bg-slate-900/30 border border-dashed border-slate-200 dark:border-slate-700 rounded-xl text-center">
+          <p className="text-sm text-slate-400 dark:text-slate-500 font-bold">Ningún grupo coincide con "{searchTerm}".</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 md:grid-cols-2 gap-8">
           {filteredGroups.map((group) => (
-            <div key={group.groupName} className="bg-white rounded-xl overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 border border-slate-100 flex flex-col group/card">
+            <div key={group.groupName} className="bg-white dark:bg-slate-800 rounded-xl overflow-hidden shadow-sm hover:shadow-2xl hover:-translate-y-2 transition-all duration-500 border border-slate-100 dark:border-slate-700 flex flex-col group/card">
               <div className="p-8 bg-primary-600 text-white relative overflow-hidden">
                 <div className="absolute -right-8 -bottom-8 opacity-10 group-hover/card:scale-110 transition-transform duration-700">
                     <FaLink size={120} />
@@ -252,12 +252,12 @@ const LinkedGroupsManager = ({
               <div className="p-8 flex-1 space-y-4">
                 <div className="space-y-2">
                     {group.tasks.slice(0, 3).map((task, idx) => (
-                      <div key={task.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all hover:bg-slate-50 ${task.isCoordinator ? "bg-emerald-50/30 border-emerald-100" : "bg-white border-slate-100"}`}>
+                      <div key={task.id} className={`flex items-center justify-between p-4 rounded-2xl border transition-all hover:bg-slate-50 dark:hover:bg-slate-700/50 ${task.isCoordinator ? "bg-emerald-50/30 dark:bg-emerald-900/20 border-emerald-100 dark:border-emerald-800" : "bg-white dark:bg-slate-800 border-slate-100 dark:border-slate-700"}`}>
                         <div className="flex items-center gap-3 min-w-0">
-                          <span className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-slate-900 text-white text-[10px] font-black">{idx + 1}</span>
+                          <span className="shrink-0 w-6 h-6 flex items-center justify-center rounded-full bg-slate-900 dark:bg-slate-700 text-white text-[10px] font-black">{idx + 1}</span>
                           <div className="flex flex-col min-w-0">
-                              <span className="text-xs font-black text-slate-800 break-words" title={task.name}>{withBreakOpportunities(task.name)}</span>
-                              <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest flex items-center gap-1.5">
+                              <span className="text-xs font-black text-slate-800 dark:text-slate-100 break-words" title={task.name}>{withBreakOpportunities(task.name)}</span>
+                              <span className="text-[9px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest flex items-center gap-1.5">
                                 <span className={`w-1.5 h-1.5 rounded-full ${STATUS_DOT[task.status] || "bg-slate-300"}`} />
                                 {task.status || "pendiente"}
                               </span>
@@ -268,22 +268,22 @@ const LinkedGroupsManager = ({
                     ))}
                     {group.totalTasks > 3 && (
                       <div className="text-center py-2">
-                        <span className="text-[10px] font-black text-slate-400 uppercase tracking-[0.2em] italic">+ {group.totalTasks - 3} adicionales</span>
+                        <span className="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] italic">+ {group.totalTasks - 3} adicionales</span>
                       </div>
                     )}
                 </div>
               </div>
 
-              <div className="p-8 bg-slate-50/50 border-t border-slate-50 flex gap-3">
+              <div className="p-8 bg-slate-50/50 dark:bg-slate-900/30 border-t border-slate-50 dark:border-slate-700 flex gap-3">
                 <button
                   onClick={() => viewGroupDetails(group.groupName)}
-                  className="flex-1 bg-white border border-slate-200 text-slate-900 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:border-primary-600 hover:text-primary-600 transition-all shadow-sm"
+                  className="flex-1 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 py-3 rounded-2xl text-[10px] font-black uppercase tracking-widest hover:border-primary-600 dark:hover:border-primary-500 hover:text-primary-600 dark:hover:text-primary-400 transition-all shadow-sm"
                 >
                   <FaEye className="inline mr-2" /> Ver detalle
                 </button>
                 <button
                   onClick={() => deleteGroup(group.groupName)}
-                  className="w-12 h-12 flex items-center justify-center bg-red-50 text-red-500 rounded-2xl hover:bg-red-600 hover:text-white transition-all shadow-sm border border-red-100"
+                  className="w-12 h-12 flex items-center justify-center bg-red-50 dark:bg-red-900/20 text-red-500 dark:text-red-400 rounded-2xl hover:bg-red-600 hover:text-white transition-all shadow-sm border border-red-100 dark:border-red-800"
                 >
                   <FaTrash />
                 </button>

@@ -4,32 +4,32 @@ import { ScheduleConfigButton } from "../../index";
 
 export function SchedulerPanel({ nextRun, timezone, onConfigSuccess, loading }) {
     return (
-        <div className="bg-white rounded-xl p-8 border border-slate-100 shadow-sm flex flex-col gap-8 flex-1 animate-in fade-in duration-700 group/card">
+        <div className="bg-white dark:bg-slate-800 rounded-xl p-8 border border-slate-100 dark:border-slate-700 shadow-sm flex flex-col gap-8 flex-1 animate-in fade-in duration-700 group/card">
             {/* Header */}
-            <h3 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3 border-l-4 border-indigo-600 pl-4">
-                <FaCalendarAlt className="text-indigo-600" /> Programación Automática
+            <h3 className="text-[11px] font-black text-slate-900 dark:text-slate-100 uppercase tracking-[0.2em] flex items-center gap-3 border-l-4 border-indigo-600 dark:border-indigo-500 pl-4">
+                <FaCalendarAlt className="text-indigo-600 dark:text-indigo-400" /> Programación Automática
             </h3>
 
             {/* Main Content */}
-            <div className="flex flex-col items-center justify-center py-10 gap-4 bg-slate-50 border border-slate-100 rounded-xl relative overflow-hidden transition-all duration-500 group-hover/card:bg-indigo-50/30 group-hover/card:border-indigo-100">
+            <div className="flex flex-col items-center justify-center py-10 gap-4 bg-slate-50 dark:bg-slate-900/30 border border-slate-100 dark:border-slate-700 rounded-xl relative overflow-hidden transition-all duration-500 group-hover/card:bg-indigo-50/30 dark:group-hover/card:bg-indigo-900/20 group-hover/card:border-indigo-100 dark:group-hover/card:border-indigo-800">
                 {/* Decorative background element */}
-                <div className="absolute -right-8 -bottom-8 opacity-[0.03] text-9xl text-indigo-600 group-hover/card:scale-110 group-hover/card:opacity-[0.05] transition-all duration-700">
+                <div className="absolute -right-8 -bottom-8 opacity-[0.03] text-9xl text-indigo-600 dark:text-indigo-400 group-hover/card:scale-110 group-hover/card:opacity-[0.05] transition-all duration-700">
                     <FaClock />
                 </div>
 
                 <div className="flex flex-col items-center relative z-10">
-                    <div className="text-5xl font-black text-indigo-600 tracking-tighter group-hover/card:scale-110 transition-transform duration-500">
+                    <div className="text-5xl font-black text-indigo-600 dark:text-indigo-400 tracking-tighter group-hover/card:scale-110 transition-transform duration-500">
                         {/* Sin timeZone explícito, el navegador formatea nextRun (un
                             instante absoluto correcto) en SU propia zona horaria local,
                             que puede no coincidir con la zona configurada del negocio. */}
                         {nextRun ? nextRun.toLocaleTimeString("es-DO", { hour: '2-digit', minute: '2-digit', timeZone: timezone }) : "--:--"}
                     </div>
-                    <div className="text-sm font-black text-slate-900 uppercase tracking-widest mt-2 px-6 py-2 bg-white rounded-full shadow-sm border border-slate-100 group-hover/card:border-indigo-200 transition-colors">
+                    <div className="text-sm font-black text-slate-900 dark:text-slate-100 uppercase tracking-widest mt-2 px-6 py-2 bg-white dark:bg-slate-800 rounded-full shadow-sm border border-slate-100 dark:border-slate-700 group-hover/card:border-indigo-200 dark:group-hover/card:border-indigo-700 transition-colors">
                         {nextRun ? nextRun.toLocaleDateString("es-DO", { weekday: 'long', day: 'numeric', month: 'long', timeZone: timezone }) : "Sin programación activa"}
                     </div>
                 </div>
 
-                <div className="text-[10px] font-bold text-slate-400 text-center max-w-[220px] leading-relaxed uppercase tracking-widest flex items-center gap-2 justify-center mt-4">
+                <div className="text-[10px] font-bold text-slate-400 dark:text-slate-500 text-center max-w-[220px] leading-relaxed uppercase tracking-widest flex items-center gap-2 justify-center mt-4">
                     <FaClock className="text-[8px]" /> Ejecución global de tareas configuradas.
                 </div>
             </div>

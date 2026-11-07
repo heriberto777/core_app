@@ -81,12 +81,12 @@ function showConfigModal(initialTime, initialEnabled, initialTimezone, accessTok
 
     const generateHTML = () => `
       <div class="text-left space-y-8 mt-6">
-        <div class="flex items-center justify-between p-6 bg-slate-50 rounded-xl border border-slate-100">
+        <div class="flex items-center justify-between p-6 bg-slate-50 dark:bg-slate-900/30 rounded-xl border border-slate-100 dark:border-slate-700">
             <div class="flex flex-col gap-1">
-                <span class="text-sm font-black text-slate-900">Estado del Planificador</span>
-                <span class="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Activar ejecución automática diaria</span>
+                <span class="text-sm font-black text-slate-900 dark:text-slate-100">Estado del Planificador</span>
+                <span class="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Activar ejecución automática diaria</span>
             </div>
-            <button id="toggleScheduler" class="px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm ${modalEnabled ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500"}">
+            <button id="toggleScheduler" class="px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm ${modalEnabled ? "bg-emerald-600 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-300"}">
               ${modalEnabled ? '<i class="fas fa-play"></i> Activado' : '<i class="fas fa-pause"></i> Pausado'}
             </button>
         </div>
@@ -94,26 +94,26 @@ function showConfigModal(initialTime, initialEnabled, initialTimezone, accessTok
         <div class="space-y-4">
             <div class="flex items-center gap-2 px-2">
                 <i class="fas fa-clock text-indigo-500 text-xs"></i>
-                <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Hora de ejecución automática</span>
+                <span class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Hora de ejecución automática</span>
             </div>
             <input
               id="timeInput"
               type="time"
               value="${modalTime}"
               ${!modalEnabled ? "disabled" : ""}
-              class="w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl text-xl font-black text-center focus:outline-none focus:border-indigo-500 transition-all ${!modalEnabled ? "opacity-30 grayscale cursor-not-allowed" : ""}"
+              class="w-full px-6 py-4 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl text-xl font-black text-center dark:text-slate-100 focus:outline-none focus:border-indigo-500 transition-all ${!modalEnabled ? "opacity-30 grayscale cursor-not-allowed" : ""}"
             />
         </div>
 
         <div class="space-y-4">
             <div class="flex items-center gap-2 px-2">
                 <i class="fas fa-globe-americas text-indigo-500 text-xs"></i>
-                <span class="text-[10px] font-black text-slate-400 uppercase tracking-widest">Zona horaria</span>
+                <span class="text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest">Zona horaria</span>
             </div>
             <select
               id="timezoneSelect"
               ${!modalEnabled ? "disabled" : ""}
-              class="w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl text-sm font-bold text-center focus:outline-none focus:border-indigo-500 transition-all ${!modalEnabled ? "opacity-30 grayscale cursor-not-allowed" : ""}"
+              class="w-full px-6 py-4 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl text-sm font-bold text-center dark:text-slate-100 focus:outline-none focus:border-indigo-500 transition-all ${!modalEnabled ? "opacity-30 grayscale cursor-not-allowed" : ""}"
             >
               ${SCHEDULE_TIMEZONE_OPTIONS.map(
                 (tz) => `<option value="${tz.value}" ${tz.value === modalTimezone ? "selected" : ""}>${tz.label}</option>`
@@ -121,22 +121,22 @@ function showConfigModal(initialTime, initialEnabled, initialTimezone, accessTok
             </select>
         </div>
 
-        <div class="p-6 rounded-xl border border-indigo-100 bg-indigo-50/30 flex items-start gap-4">
+        <div class="p-6 rounded-xl border border-indigo-100 dark:border-indigo-800 bg-indigo-50/30 dark:bg-indigo-900/20 flex items-start gap-4">
             <div class="w-10 h-10 bg-indigo-600 rounded-xl flex items-center justify-center text-white shrink-0 shadow-lg shadow-indigo-600/20">
                 <i class="fas fa-calendar-alt"></i>
             </div>
             <div class="flex flex-col gap-1">
-                <span class="text-[10px] font-black text-indigo-400 uppercase tracking-widest">Próxima Sincronización</span>
-                <span id="nextRunDisplay" class="text-lg font-black text-indigo-900">${getNextExecutionDisplay()}</span>
-                <p id="scheduleDesc" class="text-[10px] font-bold text-indigo-600 leading-relaxed mt-1">
+                <span class="text-[10px] font-black text-indigo-400 dark:text-indigo-300 uppercase tracking-widest">Próxima Sincronización</span>
+                <span id="nextRunDisplay" class="text-lg font-black text-indigo-900 dark:text-indigo-200">${getNextExecutionDisplay()}</span>
+                <p id="scheduleDesc" class="text-[10px] font-bold text-indigo-600 dark:text-indigo-400 leading-relaxed mt-1">
                     ${modalEnabled ? 'Las tareas automáticas se procesarán en la ventana de mantenimiento definida.' : 'El procesamiento automático está inactivo.'}
                 </p>
             </div>
         </div>
 
-        <div class="flex gap-4 p-4 bg-amber-50 rounded-2xl border border-amber-100">
+        <div class="flex gap-4 p-4 bg-amber-50 dark:bg-amber-900/20 rounded-2xl border border-amber-100 dark:border-amber-800">
             <i class="fas fa-info-circle text-amber-500 mt-0.5"></i>
-            <p class="text-[10px] font-bold text-amber-800 leading-relaxed uppercase tracking-tight">
+            <p class="text-[10px] font-bold text-amber-800 dark:text-amber-300 leading-relaxed uppercase tracking-tight">
                 El motor solo ejecutará tareas marcadas como "Automático" o "Ambas". Las manuales requieren intervención del operador.
             </p>
         </div>
@@ -152,10 +152,10 @@ function showConfigModal(initialTime, initialEnabled, initialTimezone, accessTok
       cancelButtonText: "Cancelar",
       showLoaderOnConfirm: true,
       customClass: {
-          popup: 'rounded-xl p-8',
-          title: 'text-2xl font-black text-slate-900',
+          popup: 'rounded-xl p-8 dark:bg-slate-800',
+          title: 'text-2xl font-black text-slate-900 dark:text-slate-100',
           confirmButton: 'px-10 py-4 bg-slate-900 text-white rounded-2xl font-black uppercase tracking-widest text-[10px] shadow-xl hover:bg-black transition-all border-none ml-2',
-          cancelButton: 'px-10 py-4 bg-slate-100 text-slate-600 rounded-2xl font-black uppercase tracking-widest text-[10px] border-none mr-2'
+          cancelButton: 'px-10 py-4 bg-slate-100 dark:bg-slate-700 text-slate-600 dark:text-slate-300 rounded-2xl font-black uppercase tracking-widest text-[10px] border-none mr-2'
       },
       buttonsStyling: false,
       didOpen: (popup) => {
@@ -177,16 +177,16 @@ function showConfigModal(initialTime, initialEnabled, initialTimezone, accessTok
 
         toggleButton?.addEventListener("click", () => {
           modalEnabled = !modalEnabled;
-          toggleButton.className = `px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm ${modalEnabled ? "bg-emerald-600 text-white" : "bg-slate-200 text-slate-500"}`;
+          toggleButton.className = `px-6 py-2.5 rounded-2xl font-black text-[10px] uppercase tracking-widest flex items-center gap-2 transition-all shadow-sm ${modalEnabled ? "bg-emerald-600 text-white" : "bg-slate-200 dark:bg-slate-700 text-slate-500 dark:text-slate-300"}`;
           toggleButton.innerHTML = modalEnabled ? '<i class="fas fa-play"></i> Activado' : '<i class="fas fa-pause"></i> Pausado';
 
           if (timeInput) {
               timeInput.disabled = !modalEnabled;
-              timeInput.className = `w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl text-xl font-black text-center focus:outline-none focus:border-indigo-500 transition-all ${!modalEnabled ? "opacity-30 grayscale cursor-not-allowed" : ""}`;
+              timeInput.className = `w-full px-6 py-4 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl text-xl font-black text-center dark:text-slate-100 focus:outline-none focus:border-indigo-500 transition-all ${!modalEnabled ? "opacity-30 grayscale cursor-not-allowed" : ""}`;
           }
           if (timezoneSelect) {
               timezoneSelect.disabled = !modalEnabled;
-              timezoneSelect.className = `w-full px-6 py-4 bg-white border-2 border-slate-100 rounded-2xl text-sm font-bold text-center focus:outline-none focus:border-indigo-500 transition-all ${!modalEnabled ? "opacity-30 grayscale cursor-not-allowed" : ""}`;
+              timezoneSelect.className = `w-full px-6 py-4 bg-white dark:bg-slate-800 border-2 border-slate-100 dark:border-slate-700 rounded-2xl text-sm font-bold text-center dark:text-slate-100 focus:outline-none focus:border-indigo-500 transition-all ${!modalEnabled ? "opacity-30 grayscale cursor-not-allowed" : ""}`;
           }
           if (nextRunDisplay) nextRunDisplay.textContent = getNextExecutionDisplay();
           if (scheduleDesc) scheduleDesc.textContent = modalEnabled ? 'Las tareas automáticas se procesarán en la ventana de mantenimiento definida.' : 'El procesamiento automático está inactivo.';

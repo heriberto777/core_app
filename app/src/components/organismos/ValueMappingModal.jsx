@@ -20,21 +20,21 @@ export function ValueMappingModal({ isOpen, onClose, onSave, initialData }) {
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-sm flex items-center justify-center z-[2500] p-4 animate-in fade-in duration-200" onClick={onClose}>
-            <div className="bg-white w-full max-w-[400px] rounded-xl border border-slate-200 shadow-2xl p-6 flex flex-col gap-6 animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
+            <div className="bg-white dark:bg-slate-800 w-full max-w-[400px] rounded-xl border border-slate-200 dark:border-slate-700 shadow-2xl p-6 flex flex-col gap-6 animate-in zoom-in-95 duration-200" onClick={e => e.stopPropagation()}>
                 <div className="flex items-center justify-between">
-                    <h3 className="text-lg font-extrabold text-slate-900 flex items-center gap-2">
-                        <FaExchangeAlt className="text-blue-500 text-sm" /> Mapeo de Valor
+                    <h3 className="text-lg font-extrabold text-slate-900 dark:text-slate-100 flex items-center gap-2">
+                        <FaExchangeAlt className="text-blue-500 dark:text-blue-400 text-sm" /> Mapeo de Valor
                     </h3>
-                    <button onClick={onClose} className="text-slate-400 hover:text-slate-600 transition-colors">
+                    <button onClick={onClose} className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors">
                         <FaTimes />
                     </button>
                 </div>
 
                 <div className="flex flex-col gap-4">
                     <div className="flex flex-col gap-2">
-                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 px-1">Valor Origen</label>
+                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 px-1">Valor Origen</label>
                         <input
-                            className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 font-bold transition-all"
+                            className="w-full px-4 py-3 border border-slate-200 dark:border-slate-600 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 dark:bg-slate-900/40 dark:text-slate-100 font-bold transition-all"
                             value={formData.sourceValue}
                             onChange={e => setFormData(prev => ({ ...prev, sourceValue: e.target.value }))}
                             placeholder="Ej: P"
@@ -42,15 +42,15 @@ export function ValueMappingModal({ isOpen, onClose, onSave, initialData }) {
                     </div>
 
                     <div className="flex justify-center -my-2 relative z-10">
-                        <div className="bg-white p-2 rounded-full border border-slate-100 shadow-sm">
-                            <FaExchangeAlt className="text-slate-300 text-xs rotate-90" />
+                        <div className="bg-white dark:bg-slate-800 p-2 rounded-full border border-slate-100 dark:border-slate-700 shadow-sm">
+                            <FaExchangeAlt className="text-slate-300 dark:text-slate-600 text-xs rotate-90" />
                         </div>
                     </div>
 
                     <div className="flex flex-col gap-2">
-                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 px-1">Valor Destino</label>
+                        <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 dark:text-slate-500 px-1">Valor Destino</label>
                         <input
-                            className="w-full px-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 font-bold transition-all"
+                            className="w-full px-4 py-3 border border-slate-200 dark:border-slate-600 rounded-xl text-sm focus:outline-none focus:border-blue-500 bg-slate-50 dark:bg-slate-900/40 dark:text-slate-100 font-bold transition-all"
                             value={formData.targetValue}
                             onChange={e => setFormData(prev => ({ ...prev, targetValue: e.target.value }))}
                             placeholder="Ej: PENDIENTE"

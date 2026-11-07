@@ -9,19 +9,19 @@ export function SourceDataViewerModal({ isOpen, onClose, data }) {
 
     return (
         <div className="fixed inset-0 bg-slate-900/60 backdrop-blur-md flex items-center justify-center z-[2000] p-4 animate-in fade-in duration-300">
-            <div className="bg-white w-full max-w-[800px] max-h-[85vh] rounded-xl border border-slate-100 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
+            <div className="bg-white dark:bg-slate-800 w-full max-w-[800px] max-h-[85vh] rounded-xl border border-slate-100 dark:border-slate-700 shadow-2xl flex flex-col overflow-hidden animate-in zoom-in-95 duration-300">
                 {/* Header */}
-                <div className="px-8 py-7 bg-white/80 backdrop-blur-md border-b border-slate-50 flex items-center justify-between">
+                <div className="px-8 py-7 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md border-b border-slate-50 dark:border-slate-700 flex items-center justify-between">
                     <div className="flex items-center gap-4">
-                        <div className="w-12 h-12 bg-slate-900 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-slate-900/20">
+                        <div className="w-12 h-12 bg-slate-900 dark:bg-slate-700 rounded-2xl flex items-center justify-center text-white shadow-lg shadow-slate-900/20">
                             <FaTerminal className="text-xl" />
                         </div>
                         <div className="flex flex-col">
-                            <h3 className="text-xl font-black text-slate-900 leading-tight">Inspector de Datos Fuente</h3>
-                            <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest mt-1">Vista Cruda de Base de Datos</span>
+                            <h3 className="text-xl font-black text-slate-900 dark:text-slate-100 leading-tight">Inspector de Datos Fuente</h3>
+                            <span className="text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest mt-1">Vista Cruda de Base de Datos</span>
                         </div>
                     </div>
-                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-100 text-slate-400 transition-colors">
+                    <button onClick={onClose} className="w-10 h-10 flex items-center justify-center rounded-xl hover:bg-slate-100 dark:hover:bg-slate-700 text-slate-400 dark:text-slate-500 transition-colors">
                         <FaTimes />
                     </button>
                 </div>
@@ -29,24 +29,24 @@ export function SourceDataViewerModal({ isOpen, onClose, data }) {
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto p-8">
                     {dataEntries.length > 0 ? (
-                        <div className="rounded-xl border border-slate-100 overflow-hidden shadow-sm bg-slate-50/50">
+                        <div className="rounded-xl border border-slate-100 dark:border-slate-700 overflow-hidden shadow-sm bg-slate-50/50 dark:bg-slate-900/30">
                             <div className="overflow-x-auto">
                                 <table className="w-full border-collapse">
-                                    <thead className="bg-slate-100/50">
+                                    <thead className="bg-slate-100/50 dark:bg-slate-900/50">
                                         <tr>
-                                            <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-200/50">Columna Origen</th>
-                                            <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 uppercase tracking-widest border-b border-slate-200/50">Valor en Tabla</th>
+                                            <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-200/50 dark:border-slate-700">Columna Origen</th>
+                                            <th className="px-6 py-4 text-left text-[10px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-widest border-b border-slate-200/50 dark:border-slate-700">Valor en Tabla</th>
                                         </tr>
                                     </thead>
-                                    <tbody className="divide-y divide-slate-100/50">
+                                    <tbody className="divide-y divide-slate-100/50 dark:divide-slate-700">
                                         {dataEntries.map(([key, val]) => (
-                                            <tr key={key} className="hover:bg-white transition-colors group">
+                                            <tr key={key} className="hover:bg-white dark:hover:bg-slate-800 transition-colors group">
                                                 <td className="px-6 py-4">
-                                                    <span className="text-xs font-black text-blue-600 uppercase tracking-wider">{key}</span>
+                                                    <span className="text-xs font-black text-blue-600 dark:text-blue-400 uppercase tracking-wider">{key}</span>
                                                 </td>
                                                 <td className="px-6 py-4">
-                                                    <code className="text-sm font-bold text-slate-700 bg-white px-3 py-1 rounded-lg border border-slate-100 shadow-sm">
-                                                        {val !== null && val !== undefined ? String(val) : <em className="text-slate-300 font-normal">N/A (Null)</em>}
+                                                    <code className="text-sm font-bold text-slate-700 dark:text-slate-200 bg-white dark:bg-slate-800 px-3 py-1 rounded-lg border border-slate-100 dark:border-slate-700 shadow-sm">
+                                                        {val !== null && val !== undefined ? String(val) : <em className="text-slate-300 dark:text-slate-600 font-normal">N/A (Null)</em>}
                                                     </code>
                                                 </td>
                                             </tr>
@@ -64,7 +64,7 @@ export function SourceDataViewerModal({ isOpen, onClose, data }) {
                 </div>
 
                 {/* Footer */}
-                <div className="px-8 py-6 border-t border-slate-50 flex justify-end gap-3 bg-white/80 backdrop-blur-md">
+                <div className="px-8 py-6 border-t border-slate-50 dark:border-slate-700 flex justify-end gap-3 bg-white/80 dark:bg-slate-800/80 backdrop-blur-md">
                     <Button 
                         variant="secondary" 
                         onClick={onClose}
