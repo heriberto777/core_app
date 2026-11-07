@@ -83,7 +83,7 @@ export function EmailConfigFormModal({ isOpen, onClose, config, onSave }) {
                     </h3>
 
                     {/* Grid */}
-                    <div className="grid grid-cols-2 gap-5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <div className="flex flex-col gap-2">
                             <label className="text-[13px] font-extrabold text-slate-400 uppercase tracking-wide flex items-center gap-1">
                                 Nombre de la Cuenta <span className="text-red-500">*</span>
@@ -159,7 +159,7 @@ export function EmailConfigFormModal({ isOpen, onClose, config, onSave }) {
                     </h3>
 
                     {/* Grid */}
-                    <div className="grid grid-cols-2 gap-5">
+                    <div className="grid grid-cols-1 md:grid-cols-2 gap-5">
                         <div className="flex flex-col gap-2">
                             <label className="text-[13px] font-extrabold text-slate-400 uppercase tracking-wide flex items-center gap-1">
                                 Usuario / Email <span className="text-red-500">*</span>

@@ -126,7 +126,7 @@ export function ConsecutiveAssignModal({ isOpen, onClose, onAssign, consecutive,
                         <label className="text-[11px] font-black uppercase tracking-[0.2em] text-slate-400 flex items-center gap-2">
                             <FaShieldAlt className="text-blue-500" /> Permisos de Operación
                         </label>
-                        <div className="grid grid-cols-2 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-4 bg-slate-50 rounded-2xl border border-slate-200">
                             {[
                                 { id: 'read', label: 'Lectura' },
                                 { id: 'increment', label: 'Incremento' },

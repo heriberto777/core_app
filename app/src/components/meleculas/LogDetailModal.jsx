@@ -126,7 +126,7 @@ export const LogDetailModal = ({ log, onClose }) => {
                 </Header>
                 <Body>
                     {/* Sección 1: Información básica */}
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         <DetailRow>
                             <Label>Nivel</Label>
                             <StatusBadge status={log.level}>{log.level}</StatusBadge>
@@ -143,7 +143,7 @@ export const LogDetailModal = ({ log, onClose }) => {
 
                     {/* Sección 2: Información operacional */}
                     {(log.operationType || log.entityType) && (
-                        <div className="grid grid-cols-4 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
                             {log.operationType && (
                                 <DetailRow>
                                     <Label>Tipo de Operación</Label>
@@ -195,7 +195,7 @@ export const LogDetailModal = ({ log, onClose }) => {
 
                     {/* Sección 5: Contexto HTTP */}
                     {(log.httpMethod || log.httpPath) && (
-                        <div className="grid grid-cols-3 gap-4">
+                        <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                             {log.httpMethod && (
                                 <DetailRow>
                                     <Label>Método HTTP</Label>
@@ -240,7 +240,7 @@ export const LogDetailModal = ({ log, onClose }) => {
                     {/* Sección 8: Context Details - Collapsible */}
                     {(log.mappingId || log.mappingName || log.fieldName || log.tableSource || log.tableTarget || log.stepName) && (
                         <CollapsibleSection title="Detalles del Mapping" defaultOpen={true}>
-                            <div className="grid grid-cols-2 gap-3">
+                            <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
                                 {log.mappingId && (
                                     <DetailRow>
                                         <Label>Mapping ID</Label>

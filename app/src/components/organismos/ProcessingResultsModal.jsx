@@ -52,7 +52,7 @@ export function ProcessingResultsModal({ isOpen, onClose, results }) {
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto p-8 space-y-10">
                     {/* Summary Cards */}
-                    <div className="grid grid-cols-3 gap-4">
+                    <div className="grid grid-cols-1 sm:grid-cols-3 gap-4">
                         {[
                             { label: "Procesados", val: processed, color: "emerald", icon: <FaCheckCircle /> },
                             { label: "Fallidos", val: failed, color: "red", icon: <FaTimes /> },

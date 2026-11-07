@@ -515,7 +515,7 @@ export function TransferTasks() {
                     <strong>{task.name}</strong>
                     <StatusBadge status={task.status} />
                   </div>
-                  <div className="text-xs text-slate-600 dark:text-slate-400 grid grid-cols-2 gap-2">
+                  <div className="text-xs text-slate-600 dark:text-slate-400 grid grid-cols-1 sm:grid-cols-2 gap-2">
                     <div><strong>Tipo:</strong> {task.type}</div>
                     {task.order !== undefined && <div><strong>Orden:</strong> {task.order}</div>}
                     {task.isCoordinator && <div className="text-amber-600 font-bold">Coordinador</div>}
