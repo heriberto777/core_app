@@ -49,7 +49,7 @@ export function WarehouseReview() {
   }, [loads, search]);
 
   return (
-    <div className="min-h-dvh bg-slate-50/50 animate-fadeIn">
+    <div className="min-h-dvh bg-slate-50/50 dark:bg-slate-900 animate-fadeIn">
       <Helmet>
         <title>Revisión de Almacén | Catelli Core</title>
       </Helmet>
@@ -57,8 +57,8 @@ export function WarehouseReview() {
       <div className="max-w-[1400px] mx-auto p-6 lg:p-10 flex flex-col gap-8">
         <header className="flex flex-col xl:flex-row justify-between items-start gap-6">
           <div className="max-w-2xl">
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight">Revisión de Almacén</h1>
-            <p className="text-slate-500 mt-2 text-lg font-medium leading-relaxed">
+            <h1 className="text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tight">Revisión de Almacén</h1>
+            <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg font-medium leading-relaxed">
               Cargas armadas pendientes de conciliar antes de autorizar el despacho. Nada se envía
               a server2 hasta autorizar.
             </p>
@@ -69,32 +69,32 @@ export function WarehouseReview() {
         </header>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-sm font-medium">
+          <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl p-4 text-sm font-medium">
             {error}
           </div>
         )}
 
         <div className="relative max-w-md">
-          <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+          <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
           <input
             type="text"
             value={search}
             onChange={(e) => setSearch(e.target.value)}
             placeholder="Buscar por carga, repartidor o bodega..."
-            className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+            className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
           />
         </div>
 
-        <div className="bg-white rounded-xl border border-slate-100 shadow-premium overflow-hidden">
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 shadow-premium overflow-hidden">
           {loading && !refreshing ? (
             <LoadingUI message="Cargando cargas pendientes de revisión..." />
           ) : loads.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-400">
+            <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-400 dark:text-slate-500">
               <FaClipboardCheck className="text-4xl" />
               <p className="font-semibold">No hay cargas pendientes de revisión</p>
             </div>
           ) : filteredLoads.length === 0 ? (
-            <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-400">
+            <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-400 dark:text-slate-500">
               <FaSearch className="text-4xl" />
               <p className="font-semibold">Ninguna carga coincide con la búsqueda</p>
             </div>
@@ -102,7 +102,7 @@ export function WarehouseReview() {
             <div className="overflow-x-auto">
               <table className="w-full text-sm">
                 <thead>
-                  <tr className="bg-slate-50 text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+                  <tr className="bg-slate-50 dark:bg-slate-900/50 text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
                     <th className="text-left px-6 py-3">Carga</th>
                     <th className="text-left px-6 py-3">Repartidor</th>
                     <th className="text-left px-6 py-3">Bodega</th>
@@ -114,15 +114,15 @@ export function WarehouseReview() {
                 </thead>
                 <tbody>
                   {filteredLoads.map((carga) => (
-                    <tr key={carga.loadId} className="border-t border-slate-100 hover:bg-slate-50/60">
-                      <td className="px-6 py-4 font-semibold text-slate-900">{carga.loadId}</td>
-                      <td className="px-6 py-4 text-slate-600">{carga.route || "—"}</td>
-                      <td className="px-6 py-4 text-slate-600">{carga.bodega || "—"}</td>
-                      <td className="px-6 py-4 text-slate-600">{carga.totalPedidos}</td>
-                      <td className="px-6 py-4 text-slate-600 flex items-center gap-2">
-                        <FaBoxes className="text-slate-400" /> {carga.totalProductos}
+                    <tr key={carga.loadId} className="border-t border-slate-100 dark:border-slate-700 hover:bg-slate-50/60 dark:hover:bg-slate-700/40">
+                      <td className="px-6 py-4 font-semibold text-slate-900 dark:text-slate-100">{carga.loadId}</td>
+                      <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{carga.route || "—"}</td>
+                      <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{carga.bodega || "—"}</td>
+                      <td className="px-6 py-4 text-slate-600 dark:text-slate-300">{carga.totalPedidos}</td>
+                      <td className="px-6 py-4 text-slate-600 dark:text-slate-300 flex items-center gap-2">
+                        <FaBoxes className="text-slate-400 dark:text-slate-500" /> {carga.totalProductos}
                       </td>
-                      <td className="px-6 py-4 text-slate-600">
+                      <td className="px-6 py-4 text-slate-600 dark:text-slate-300">
                         {formatFechaEntrega(carga.fechaEntrega)}
                       </td>
                       <td className="px-6 py-4 text-right">

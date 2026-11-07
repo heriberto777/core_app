@@ -98,49 +98,49 @@ function ProductoRow({ producto, onSaveLine, isSaving }) {
   };
 
   return (
-    <div className="border border-slate-100 rounded-xl overflow-hidden">
-      <div className="flex flex-wrap items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 bg-white">
+    <div className="border border-slate-100 dark:border-slate-700 rounded-xl overflow-hidden">
+      <div className="flex flex-wrap items-center gap-3 sm:gap-4 px-4 sm:px-5 py-4 bg-white dark:bg-slate-800">
         <button
           type="button"
           onClick={() => setExpanded((v) => !v)}
-          className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg bg-slate-100 text-slate-500 hover:bg-slate-200"
+          className="w-8 h-8 shrink-0 flex items-center justify-center rounded-lg bg-slate-100 dark:bg-slate-700 text-slate-500 dark:text-slate-300 hover:bg-slate-200 dark:hover:bg-slate-600"
         >
           {expanded ? <FaChevronUp /> : <FaChevronDown />}
         </button>
 
         <div className="flex-1 min-w-[160px]">
-          <div className="font-bold text-slate-900">{producto.codigo} — {producto.descripcion}</div>
-          <div className="text-xs text-slate-500 mt-0.5">
+          <div className="font-bold text-slate-900 dark:text-slate-100">{producto.codigo} — {producto.descripcion}</div>
+          <div className="text-xs text-slate-500 dark:text-slate-400 mt-0.5">
             Empaque: {producto.empaque} u/caja · Acumulado preventa: {producto.totalActual} u
           </div>
         </div>
 
         <div className="flex items-center gap-2 shrink-0">
-          <label className="text-xs font-semibold text-slate-500">Cajas</label>
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Cajas</label>
           <input
             type="number"
             min="0"
             value={armadoCajas}
             onChange={(e) => handleArmadoChange("cajas", e.target.value)}
-            className="w-16 border border-slate-200 rounded-lg px-2 py-1.5 text-sm text-right"
+            className="w-16 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100 rounded-lg px-2 py-1.5 text-sm text-right"
           />
-          <label className="text-xs font-semibold text-slate-500">Unid.</label>
+          <label className="text-xs font-semibold text-slate-500 dark:text-slate-400">Unid.</label>
           <input
             type="number"
             min="0"
             value={armadoUnidades}
             onChange={(e) => handleArmadoChange("unidades", e.target.value)}
-            className="w-16 border border-slate-200 rounded-lg px-2 py-1.5 text-sm text-right"
+            className="w-16 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100 rounded-lg px-2 py-1.5 text-sm text-right"
           />
         </div>
 
         <div className="shrink-0">
           {tieneFaltante ? (
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 bg-amber-100 px-3 py-1.5 rounded-full">
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-amber-700 dark:text-amber-300 bg-amber-100 dark:bg-amber-900/30 px-3 py-1.5 rounded-full">
               <FaExclamationTriangle /> Falta {falta} u
             </span>
           ) : (
-            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 bg-emerald-100 px-3 py-1.5 rounded-full">
+            <span className="inline-flex items-center gap-1.5 text-xs font-bold text-emerald-700 dark:text-emerald-300 bg-emerald-100 dark:bg-emerald-900/30 px-3 py-1.5 rounded-full">
               <FaCheckCircle /> Completo
             </span>
           )}
@@ -148,10 +148,10 @@ function ProductoRow({ producto, onSaveLine, isSaving }) {
       </div>
 
       {expanded && (
-        <div className="border-t border-slate-100 bg-slate-50/60 overflow-x-auto">
+        <div className="border-t border-slate-100 dark:border-slate-700 bg-slate-50/60 dark:bg-slate-900/50 overflow-x-auto">
           <table className="w-full text-sm">
             <thead>
-              <tr className="text-[11px] font-bold text-slate-500 uppercase tracking-widest">
+              <tr className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase tracking-widest">
                 <th className="text-left px-5 py-2">Pedido</th>
                 <th className="text-left px-5 py-2">Tipo</th>
                 <th className="text-left px-5 py-2">Cliente</th>
@@ -163,26 +163,26 @@ function ProductoRow({ producto, onSaveLine, isSaving }) {
             </thead>
             <tbody>
               {producto.lineas.map((linea) => (
-                <tr key={lineKey(linea)} className="border-t border-slate-100">
-                  <td className="px-5 py-3 font-semibold text-slate-800">{linea.pedido}</td>
+                <tr key={lineKey(linea)} className="border-t border-slate-100 dark:border-slate-700">
+                  <td className="px-5 py-3 font-semibold text-slate-800 dark:text-slate-200">{linea.pedido}</td>
                   <td className="px-5 py-3">
                     {linea.tipoLinea === "B" ? (
-                      <span className="inline-flex text-[11px] font-bold text-purple-700 bg-purple-100 px-2.5 py-1 rounded-full">
+                      <span className="inline-flex text-[11px] font-bold text-purple-700 dark:text-purple-300 bg-purple-100 dark:bg-purple-900/30 px-2.5 py-1 rounded-full">
                         Bonificado
                       </span>
                     ) : (
-                      <span className="inline-flex text-[11px] font-bold text-slate-600 bg-slate-100 px-2.5 py-1 rounded-full">
+                      <span className="inline-flex text-[11px] font-bold text-slate-600 dark:text-slate-300 bg-slate-100 dark:bg-slate-700 px-2.5 py-1 rounded-full">
                         Pagado
                       </span>
                     )}
                   </td>
-                  <td className="px-5 py-3 text-slate-600">
+                  <td className="px-5 py-3 text-slate-600 dark:text-slate-300">
                     {linea.cliente}
                     {linea.direccionCliente && (
-                      <div className="text-xs text-slate-400">{linea.direccionCliente}</div>
+                      <div className="text-xs text-slate-400 dark:text-slate-500">{linea.direccionCliente}</div>
                     )}
                   </td>
-                  <td className="px-5 py-3 text-slate-500">{linea.cantidadOriginal}</td>
+                  <td className="px-5 py-3 text-slate-500 dark:text-slate-400">{linea.cantidadOriginal}</td>
                   <td className="px-5 py-3">
                     <input
                       type="number"
@@ -191,12 +191,12 @@ function ProductoRow({ producto, onSaveLine, isSaving }) {
                       onChange={(e) =>
                         setLineEdits((prev) => ({ ...prev, [lineKey(linea)]: e.target.value }))
                       }
-                      className="w-24 border border-slate-200 rounded-lg px-2 py-1.5 text-sm text-right"
+                      className="w-24 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 text-slate-900 dark:text-slate-100 rounded-lg px-2 py-1.5 text-sm text-right"
                     />
                   </td>
-                  <td className="px-5 py-3 text-xs text-slate-500">
+                  <td className="px-5 py-3 text-xs text-slate-500 dark:text-slate-400">
                     {linea.motivo ? (
-                      <span className="text-amber-700 font-medium">{linea.motivo}</span>
+                      <span className="text-amber-700 dark:text-amber-300 font-medium">{linea.motivo}</span>
                     ) : (
                       "—"
                     )}
@@ -385,7 +385,7 @@ export function WarehouseReviewDetail() {
   };
 
   return (
-    <div className="min-h-dvh bg-slate-50/50 animate-fadeIn pb-52 sm:pb-28">
+    <div className="min-h-dvh bg-slate-50/50 dark:bg-slate-900 animate-fadeIn pb-52 sm:pb-28">
       <Helmet>
         <title>Revisión de Almacén — {loadId} | Catelli Core</title>
       </Helmet>
@@ -394,13 +394,13 @@ export function WarehouseReviewDetail() {
         <header className="flex flex-col gap-4">
           <button
             onClick={() => navigate("/loads/revision")}
-            className="flex items-center gap-2 text-sm font-semibold text-slate-500 hover:text-slate-800 w-fit"
+            className="flex items-center gap-2 text-sm font-semibold text-slate-500 dark:text-slate-400 hover:text-slate-800 dark:hover:text-slate-200 w-fit"
           >
             <FaArrowLeft /> Volver a Revisión de Almacén
           </button>
           <div>
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight">Carga {loadId}</h1>
-            <p className="text-slate-500 mt-2 text-lg font-medium leading-relaxed">
+            <h1 className="text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tight">Carga {loadId}</h1>
+            <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg font-medium leading-relaxed">
               Ingresá el armado real en Cajas + Unidades sueltas por producto. Si falta stock,
               ajustá las líneas de los pedidos que corresponda antes de autorizar.
             </p>
@@ -408,31 +408,31 @@ export function WarehouseReviewDetail() {
         </header>
 
         {error && (
-          <div className="bg-red-50 border border-red-200 text-red-700 rounded-xl p-4 text-sm font-medium">
+          <div className="bg-red-50 dark:bg-red-900/30 border border-red-200 dark:border-red-800 text-red-700 dark:text-red-300 rounded-xl p-4 text-sm font-medium">
             {error}
           </div>
         )}
 
         <div className="flex flex-col md:flex-row flex-wrap gap-4">
           <div className="relative flex-1 max-w-md">
-            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
+            <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500" />
             <input
               type="text"
               value={search}
               onChange={(e) => setSearch(e.target.value)}
               placeholder="Buscar por producto, pedido o cliente..."
-              className="w-full pl-11 pr-4 py-3 border border-slate-200 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
+              className="w-full pl-11 pr-4 py-3 bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 text-slate-900 dark:text-slate-100 placeholder-slate-400 dark:placeholder-slate-500 rounded-xl text-sm focus:outline-none focus:ring-2 focus:ring-indigo-500/30 focus:border-indigo-400"
             />
           </div>
 
-          <div className="bg-white border border-slate-200 rounded-xl px-4 py-2.5 flex items-center gap-3">
-            <label className="text-xs font-bold text-slate-500 uppercase tracking-wide whitespace-nowrap">
+          <div className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-xl px-4 py-2.5 flex items-center gap-3">
+            <label className="text-xs font-bold text-slate-500 dark:text-slate-400 uppercase tracking-wide whitespace-nowrap">
               Bodega de origen
             </label>
             <select
               value={bodegaOrigen}
               onChange={(e) => actions.setBodegaOrigen(e.target.value)}
-              className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm font-semibold text-slate-800 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
+              className="bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-600 rounded-lg px-3 py-1.5 text-sm font-semibold text-slate-800 dark:text-slate-200 focus:outline-none focus:ring-2 focus:ring-indigo-500/30"
             >
               <option value="">Seleccionar...</option>
               {bodegasDetectadas.length > 0 && (
@@ -469,7 +469,7 @@ export function WarehouseReviewDetail() {
         {loading ? (
           <LoadingUI message="Cargando productos de la carga..." />
         ) : filteredProductos.length === 0 ? (
-          <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-400 bg-white rounded-xl border border-slate-100">
+          <div className="flex flex-col items-center justify-center gap-3 py-20 text-slate-400 dark:text-slate-500 bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700">
             <FaSearch className="text-4xl" />
             <p className="font-semibold">Ningún producto coincide con la búsqueda</p>
           </div>
@@ -487,7 +487,7 @@ export function WarehouseReviewDetail() {
         )}
       </div>
 
-      <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-2xl z-50">
+      <div className="fixed bottom-0 left-0 right-0 bg-white dark:bg-slate-800 border-t border-slate-200 dark:border-slate-700 shadow-2xl z-50">
         <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-10 py-3 sm:py-4 flex flex-col sm:flex-row sm:justify-between gap-3">
           <Button variant="danger" onClick={handleCancelLoad} loading={isCancelling} className="w-full sm:w-auto">
             <FaUndo /> Reversar carga

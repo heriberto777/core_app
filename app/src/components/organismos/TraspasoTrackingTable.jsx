@@ -25,8 +25,8 @@ export const TraspasoTrackingTable = ({
   if (loading && transfers.length === 0) {
     return (
       <div className="p-32 flex flex-col items-center justify-center text-center gap-6">
-        <div className="w-16 h-16 border-4 border-slate-100 border-t-primary-500 rounded-full animate-spin" />
-        <p className="text-lg font-extrabold text-slate-800 uppercase tracking-widest">Consultando bitácora operativa...</p>
+        <div className="w-16 h-16 border-4 border-slate-100 dark:border-slate-700 border-t-primary-500 rounded-full animate-spin" />
+        <p className="text-lg font-extrabold text-slate-800 dark:text-slate-200 uppercase tracking-widest">Consultando bitácora operativa...</p>
       </div>
     );
   }
@@ -35,19 +35,19 @@ export const TraspasoTrackingTable = ({
     <div className="overflow-x-auto animate-fadeIn">
       <table className="w-full text-left border-collapse">
         <thead>
-          <tr className="bg-slate-50/50 border-b border-slate-100">
-            <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Trazabilidad / Estado</th>
-            <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Identificador</th>
-            <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Documento</th>
-            <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Ratio de Éxito</th>
-            <th className="px-6 py-5 text-[11px] font-bold text-slate-400 uppercase tracking-widest">Cronología</th>
-            <th className="px-6 py-5 text-right text-[11px] font-bold text-slate-400 uppercase tracking-widest">Control</th>
+          <tr className="bg-slate-50/50 dark:bg-slate-900/50 border-b border-slate-100 dark:border-slate-700">
+            <th className="px-6 py-5 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Trazabilidad / Estado</th>
+            <th className="px-6 py-5 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Identificador</th>
+            <th className="px-6 py-5 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Documento</th>
+            <th className="px-6 py-5 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Ratio de Éxito</th>
+            <th className="px-6 py-5 text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Cronología</th>
+            <th className="px-6 py-5 text-right text-[11px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest">Control</th>
           </tr>
         </thead>
-        <tbody className="divide-y divide-slate-50">
+        <tbody className="divide-y divide-slate-50 dark:divide-slate-700">
           {transfers.length === 0 ? (
             <tr>
-              <td colSpan="6" className="p-32 text-center text-slate-400">
+              <td colSpan="6" className="p-32 text-center text-slate-400 dark:text-slate-500">
                 <div className="flex flex-col items-center gap-4">
                   <FaEye size={48} className="opacity-10" />
                   <p className="font-bold">No se encontraron traspasos para este criterio.</p>
@@ -58,7 +58,7 @@ export const TraspasoTrackingTable = ({
             transfers.map(t => (
               <tr
                 key={t.id}
-                className="hover:bg-slate-50/40 transition-colors"
+                className="hover:bg-slate-50/40 dark:hover:bg-slate-700/40 transition-colors"
               >
                 <td className="px-6 py-4">
                   <div className="flex items-center gap-3">
@@ -70,7 +70,7 @@ export const TraspasoTrackingTable = ({
                         {t.status_description || t.status}
                       </StatusBadge>
                       {t.is_return === 1 && (
-                        <span className="mt-1 px-1.5 py-0.5 bg-red-100 text-red-600 rounded text-[9px] font-black uppercase tracking-widest w-fit border border-red-200">
+                        <span className="mt-1 px-1.5 py-0.5 bg-red-100 dark:bg-red-900/30 text-red-600 dark:text-red-300 rounded text-[9px] font-black uppercase tracking-widest w-fit border border-red-200 dark:border-red-800">
                           Devolución
                         </span>
                       )}
@@ -78,7 +78,7 @@ export const TraspasoTrackingTable = ({
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  <code className="px-2.5 py-1 bg-slate-100 rounded-lg text-slate-700 text-xs font-black border border-slate-200 font-mono">
+                  <code className="px-2.5 py-1 bg-slate-100 dark:bg-slate-700 rounded-lg text-slate-700 dark:text-slate-200 text-xs font-black border border-slate-200 dark:border-slate-600 font-mono">
                     {t.load_id}
                   </code>
                 </td>
@@ -87,10 +87,10 @@ export const TraspasoTrackingTable = ({
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex flex-col gap-1.5">
-                    <div className="text-[10px] font-black text-slate-600 uppercase tracking-tighter">
-                      {t.success_percentage}% <span className="text-slate-400 font-bold">({t.lines_successful}/{t.total_products})</span>
+                    <div className="text-[10px] font-black text-slate-600 dark:text-slate-300 uppercase tracking-tighter">
+                      {t.success_percentage}% <span className="text-slate-400 dark:text-slate-500 font-bold">({t.lines_successful}/{t.total_products})</span>
                     </div>
-                    <div className="w-24 h-1.5 bg-slate-100 rounded-full overflow-hidden border border-slate-200/50">
+                    <div className="w-24 h-1.5 bg-slate-100 dark:bg-slate-700 rounded-full overflow-hidden border border-slate-200/50 dark:border-slate-600/50">
                       <div
                         className={`h-full transition-all duration-1000 ${
                           t.success_percentage >= 90 ? "bg-emerald-500" : t.success_percentage >= 50 ? "bg-amber-500" : "bg-red-500"
@@ -100,8 +100,8 @@ export const TraspasoTrackingTable = ({
                   </div>
                 </td>
                 <td className="px-6 py-4">
-                  <div className="text-xs font-bold text-slate-700">{new Date(t.created_at).toLocaleDateString()}</div>
-                  <div className="text-[10px] font-extrabold text-slate-400 uppercase tracking-tighter">{new Date(t.created_at).toLocaleTimeString()}</div>
+                  <div className="text-xs font-bold text-slate-700 dark:text-slate-200">{new Date(t.created_at).toLocaleDateString()}</div>
+                  <div className="text-[10px] font-extrabold text-slate-400 dark:text-slate-500 uppercase tracking-tighter">{new Date(t.created_at).toLocaleTimeString()}</div>
                 </td>
                 <td className="px-6 py-4">
                   <div className="flex gap-1 justify-end">
@@ -109,17 +109,17 @@ export const TraspasoTrackingTable = ({
                       <button
                         onClick={() => onViewDetails(t.id)}
                         disabled={actionStates[t.id] === 'details'}
-                        className="p-2.5 text-slate-400 hover:text-primary-600 hover:bg-primary-50 rounded-xl transition-all"
+                        className="p-2.5 text-slate-400 dark:text-slate-500 hover:text-primary-600 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-xl transition-all"
                         title="Ver detalle"
                       >
                         {actionStates[t.id] === 'details' ? <FaSpinner className="animate-spin" /> : <FaEye size={14} />}
                       </button>
                     )}
                     {t.status !== 'completed' && (
-                      <button 
+                      <button
                         onClick={() => onExecute(t.load_id)}
                         disabled={actionStates[t.load_id] === 'executing'}
-                        className="p-2.5 text-primary-500 hover:bg-primary-50 rounded-xl transition-all"
+                        className="p-2.5 text-primary-500 hover:bg-primary-50 dark:hover:bg-primary-900/30 rounded-xl transition-all"
                         title="Reintentar ejecución"
                       >
                         {actionStates[t.load_id] === 'executing' ? <FaSpinner className="animate-spin" /> : <FaPlay size={12} />}

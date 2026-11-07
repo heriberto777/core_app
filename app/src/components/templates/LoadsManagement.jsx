@@ -149,7 +149,7 @@ export function LoadsManagement() {
   };
 
   return (
-    <div className="min-h-dvh bg-slate-50/50 animate-fadeIn">
+    <div className="min-h-dvh bg-slate-50/50 dark:bg-slate-900 animate-fadeIn">
       <Helmet>
         <title>Gestión de Despachos | Catelli Core</title>
       </Helmet>
@@ -158,8 +158,8 @@ export function LoadsManagement() {
         {/* PAGE HEADER */}
         <header className="flex flex-col xl:flex-row justify-between items-start gap-6">
           <div className="max-w-2xl">
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight">Despacho de Cargas</h1>
-            <p className="text-slate-500 mt-2 text-lg font-medium leading-relaxed">
+            <h1 className="text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tight">Despacho de Cargas</h1>
+            <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg font-medium leading-relaxed">
               Orquesta la logística de salida. Filtra pedidos pendientes, asigna transportistas y genera certificados de carga en segundos.
             </p>
           </div>
@@ -177,7 +177,7 @@ export function LoadsManagement() {
         <LoadsStatsGrid stats={stats} loading={loading} />
 
         {/* FILTERS */}
-        <div className="bg-white rounded-xl border border-slate-100 shadow-soft p-2">
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 shadow-soft p-2">
           <FiltersPanel
             filters={filters}
             onFiltersChange={actions.updateFilters}
@@ -229,7 +229,7 @@ export function LoadsManagement() {
         )}
 
         {/* LISTING */}
-        <div className="bg-white rounded-xl border border-slate-100 shadow-premium overflow-hidden">
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 shadow-premium overflow-hidden">
           {loading && !refreshing ? (
             <LoadingUI message="Cargando pedidos pendientes de despacho..." />
           ) : (

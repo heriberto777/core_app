@@ -106,7 +106,7 @@ export function TraspasoManagement() {
   };
 
   return (
-    <div className="min-h-dvh bg-slate-50/50 animate-fadeIn">
+    <div className="min-h-dvh bg-slate-50/50 dark:bg-slate-900 animate-fadeIn">
       <Helmet>
         <title>Gestión de Traspasos | Catelli Core</title>
       </Helmet>
@@ -115,8 +115,8 @@ export function TraspasoManagement() {
         {/* PAGE HEADER */}
         <header className="flex flex-col xl:flex-row justify-between items-start gap-6">
           <div className="max-w-2xl">
-            <h1 className="text-4xl font-black text-slate-900 tracking-tight">Gestión de Traspasos</h1>
-            <p className="text-slate-500 mt-2 text-lg font-medium leading-relaxed">
+            <h1 className="text-4xl font-black text-slate-900 dark:text-slate-100 tracking-tight">Gestión de Traspasos</h1>
+            <p className="text-slate-500 dark:text-slate-400 mt-2 text-lg font-medium leading-relaxed">
               Monitoreo y ejecución de transferencias de inventario entre bodegas. Supervisa el éxito de los procesos post-carga y gestiona discrepancias.
             </p>
           </div>
@@ -134,7 +134,7 @@ export function TraspasoManagement() {
         <TraspasoStatsGrid stats={stats} loading={loading} />
 
         {/* FILTERS */}
-        <div className="bg-white rounded-xl border border-slate-100 shadow-soft p-2">
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 shadow-soft p-2">
           <TraspasoFiltersPanel
             filters={filters}
             onFiltersChange={setFilters}
@@ -146,7 +146,7 @@ export function TraspasoManagement() {
         </div>
 
         {/* LISTING / TABLE */}
-        <div className="bg-white rounded-xl border border-slate-100 shadow-premium overflow-hidden">
+        <div className="bg-white dark:bg-slate-800 rounded-xl border border-slate-100 dark:border-slate-700 shadow-premium overflow-hidden">
           {loading && !refreshing ? (
             <LoadingUI message="Consultando bitácora de transferencias..." />
           ) : (
