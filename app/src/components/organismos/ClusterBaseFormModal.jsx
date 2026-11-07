@@ -49,19 +49,19 @@ export function ClusterBaseFormModal({ isOpen, onClose, onSave, initialData }) {
       onClick={onClose}
     >
       <div
-        className="bg-white w-full max-w-md rounded-xl shadow-premium flex flex-col overflow-hidden animate-slideUp"
+        className="bg-white dark:bg-slate-800 w-full max-w-md rounded-xl shadow-premium flex flex-col overflow-hidden animate-slideUp"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-          <h3 className="text-xl font-extrabold text-slate-800 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary-100 text-primary-600 flex items-center justify-center">
+        <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+          <h3 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 flex items-center justify-center">
               <FaBullseye size={18} />
             </div>
             {isEditing ? "Editar Objetivos Base" : "Nuevos Objetivos Base"}
           </h3>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all"
+            className="p-2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-all"
           >
             <FaTimes />
           </button>
@@ -102,14 +102,14 @@ export function ClusterBaseFormModal({ isOpen, onClose, onSave, initialData }) {
           </div>
 
           {isEditing && (
-            <p className="text-xs text-slate-400 -mt-1">
+            <p className="text-xs text-slate-400 dark:text-slate-500 -mt-1">
               La organización no se puede editar una vez creada la fila. Para
               eliminarla, usá el botón de eliminar en la lista.
             </p>
           )}
         </div>
 
-        <div className="px-8 py-6 bg-slate-50/50 border-t border-slate-100 flex justify-end gap-3">
+        <div className="px-8 py-6 bg-slate-50/50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>
             Cancelar
           </Button>

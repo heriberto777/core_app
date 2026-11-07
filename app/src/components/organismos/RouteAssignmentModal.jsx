@@ -89,45 +89,45 @@ export function RouteAssignmentModal({ isOpen, onClose, onSave, selectedCount, a
       onClick={onClose}
     >
       <div
-        className="bg-white w-full max-w-lg rounded-xl shadow-premium flex flex-col overflow-hidden animate-slideUp"
+        className="bg-white dark:bg-slate-800 w-full max-w-lg rounded-xl shadow-premium flex flex-col overflow-hidden animate-slideUp"
         onClick={(e) => e.stopPropagation()}
       >
-        <div className="px-8 py-6 border-b border-slate-100 flex justify-between items-center bg-slate-50/50">
-          <h3 className="text-xl font-extrabold text-slate-800 flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-primary-100 text-primary-600 flex items-center justify-center">
+        <div className="px-8 py-6 border-b border-slate-100 dark:border-slate-700 flex justify-between items-center bg-slate-50/50 dark:bg-slate-900/50">
+          <h3 className="text-xl font-extrabold text-slate-800 dark:text-slate-100 flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-primary-100 dark:bg-primary-900/30 text-primary-600 dark:text-primary-400 flex items-center justify-center">
               <FaRoute size={18} />
             </div>
             Asignar Ruta de Reparto
           </h3>
           <button
             onClick={onClose}
-            className="p-2 text-slate-400 hover:text-slate-600 hover:bg-slate-100 rounded-full transition-all"
+            className="p-2 text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 hover:bg-slate-100 dark:hover:bg-slate-700 rounded-full transition-all"
           >
             <FaTimes />
           </button>
         </div>
 
         <div className="p-8 space-y-5">
-          <p className="text-sm font-semibold text-primary-600 bg-primary-50 px-3 py-2 rounded-lg">
+          <p className="text-sm font-semibold text-primary-600 dark:text-primary-300 bg-primary-50 dark:bg-primary-900/30 px-3 py-2 rounded-lg">
             Se va a aplicar a {selectedCount} cliente{selectedCount === 1 ? "" : "s"} seleccionado{selectedCount === 1 ? "" : "s"}.
           </p>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-[13px] font-semibold text-slate-500 ml-1">Organización</label>
+            <label className="text-[13px] font-semibold text-slate-500 dark:text-slate-400 ml-1">Organización</label>
             <input
               value={organization}
               onChange={(e) => setOrganization(e.target.value.toUpperCase())}
               placeholder="Ej: CATELLI"
-              className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 bg-white focus:border-primary-500 outline-none uppercase"
+              className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900/50 dark:text-slate-100 focus:border-primary-500 outline-none uppercase"
             />
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-[13px] font-semibold text-slate-500 ml-1">Repartidor</label>
+            <label className="text-[13px] font-semibold text-slate-500 dark:text-slate-400 ml-1">Repartidor</label>
             <select
               value={codeRepartidor}
               onChange={(e) => setCodeRepartidor(e.target.value)}
-              className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 bg-white focus:border-primary-500 outline-none"
+              className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900/50 dark:text-slate-100 focus:border-primary-500 outline-none"
             >
               <option value="">-- Seleccionar repartidor --</option>
               {repartidores.map((r) => (
@@ -139,11 +139,11 @@ export function RouteAssignmentModal({ isOpen, onClose, onSave, selectedCount, a
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-[13px] font-semibold text-slate-500 ml-1">Ruta</label>
+            <label className="text-[13px] font-semibold text-slate-500 dark:text-slate-400 ml-1">Ruta</label>
             <select
               value={codeRoute}
               onChange={(e) => setCodeRoute(e.target.value)}
-              className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 bg-white focus:border-primary-500 outline-none"
+              className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900/50 dark:text-slate-100 focus:border-primary-500 outline-none"
             >
               <option value="">-- Seleccionar ruta --</option>
               {routes.map((r) => (
@@ -155,7 +155,7 @@ export function RouteAssignmentModal({ isOpen, onClose, onSave, selectedCount, a
           </div>
 
           <div className="flex flex-col gap-1.5">
-            <label className="text-[13px] font-semibold text-slate-500 ml-1">Días de Visita</label>
+            <label className="text-[13px] font-semibold text-slate-500 dark:text-slate-400 ml-1">Días de Visita</label>
             <div className="flex flex-wrap gap-2">
               {DAYS.map((d) => (
                 <button
@@ -165,7 +165,7 @@ export function RouteAssignmentModal({ isOpen, onClose, onSave, selectedCount, a
                   className={`px-4 py-2 rounded-xl text-sm font-bold border transition-all ${
                     days[d.key]
                       ? "bg-primary-500 border-primary-500 text-white"
-                      : "bg-white border-slate-200 text-slate-500 hover:border-primary-300"
+                      : "bg-white dark:bg-slate-900/50 border-slate-200 dark:border-slate-600 text-slate-500 dark:text-slate-400 hover:border-primary-300 dark:hover:border-primary-600"
                   }`}
                 >
                   {d.label}
@@ -176,14 +176,14 @@ export function RouteAssignmentModal({ isOpen, onClose, onSave, selectedCount, a
 
           <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
             <div className="flex flex-col gap-1.5">
-              <label className="text-[13px] font-semibold text-slate-500 ml-1">Frecuencia</label>
+              <label className="text-[13px] font-semibold text-slate-500 dark:text-slate-400 ml-1">Frecuencia</label>
               <select
                 value={codeFrecuency}
                 onChange={(e) => {
                   setCodeFrecuency(e.target.value);
                   setCodeWeek("");
                 }}
-                className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 bg-white focus:border-primary-500 outline-none"
+                className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900/50 dark:text-slate-100 focus:border-primary-500 outline-none"
               >
                 <option value="S">Semanal</option>
                 <option value="Q">Quincenal</option>
@@ -193,11 +193,11 @@ export function RouteAssignmentModal({ isOpen, onClose, onSave, selectedCount, a
 
             {codeFrecuency === "Q" && (
               <div className="flex flex-col gap-1.5">
-                <label className="text-[13px] font-semibold text-slate-500 ml-1">Semana</label>
+                <label className="text-[13px] font-semibold text-slate-500 dark:text-slate-400 ml-1">Semana</label>
                 <select
                   value={codeWeek}
                   onChange={(e) => setCodeWeek(e.target.value)}
-                  className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 bg-white focus:border-primary-500 outline-none"
+                  className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900/50 dark:text-slate-100 focus:border-primary-500 outline-none"
                 >
                   <option value="">-- Elegir --</option>
                   <option value="0">Semana par</option>
@@ -208,11 +208,11 @@ export function RouteAssignmentModal({ isOpen, onClose, onSave, selectedCount, a
 
             {codeFrecuency === "M" && (
               <div className="flex flex-col gap-1.5">
-                <label className="text-[13px] font-semibold text-slate-500 ml-1">N° de Semana</label>
+                <label className="text-[13px] font-semibold text-slate-500 dark:text-slate-400 ml-1">N° de Semana</label>
                 <select
                   value={codeWeek}
                   onChange={(e) => setCodeWeek(e.target.value)}
-                  className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 bg-white focus:border-primary-500 outline-none"
+                  className="w-full py-2.5 px-4 text-sm rounded-xl border border-slate-200 dark:border-slate-600 bg-white dark:bg-slate-900/50 dark:text-slate-100 focus:border-primary-500 outline-none"
                 >
                   <option value="">-- Elegir --</option>
                   {[1, 2, 3, 4, 5].map((n) => (
@@ -226,11 +226,11 @@ export function RouteAssignmentModal({ isOpen, onClose, onSave, selectedCount, a
           </div>
 
           {!hasAnyDay && (
-            <p className="text-xs text-amber-600">Seleccioná al menos un día de visita.</p>
+            <p className="text-xs text-amber-600 dark:text-amber-400">Seleccioná al menos un día de visita.</p>
           )}
         </div>
 
-        <div className="px-8 py-6 bg-slate-50/50 border-t border-slate-100 flex justify-end gap-3">
+        <div className="px-8 py-6 bg-slate-50/50 dark:bg-slate-900/50 border-t border-slate-100 dark:border-slate-700 flex justify-end gap-3">
           <Button variant="secondary" onClick={onClose}>
             Cancelar
           </Button>

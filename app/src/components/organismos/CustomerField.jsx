@@ -19,23 +19,23 @@ export function CustomerField({
 
     const baseInputClasses = `
         flex-1 px-4 py-3 rounded-xl border text-sm font-semibold transition-all duration-200
-        ${isReadOnly 
-            ? "bg-slate-50/50 border-slate-200/40 text-slate-500" 
-            : "border-slate-200 bg-white text-slate-800 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 outline-none"}
-        placeholder:text-slate-400/60
+        ${isReadOnly
+            ? "bg-slate-50/50 dark:bg-slate-900/40 border-slate-200/40 dark:border-slate-700/60 text-slate-500 dark:text-slate-400"
+            : "border-slate-200 dark:border-slate-700 bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20 outline-none"}
+        placeholder:text-slate-400/60 dark:placeholder:text-slate-500/60
     `;
 
     const renderInput = () => {
         if (type === "boolean" || typeof value === "boolean") {
             return (
-                <label className="flex items-center gap-3 px-4 py-3 cursor-pointer bg-slate-50/50 rounded-xl border border-slate-200/40">
+                <label className="flex items-center gap-3 px-4 py-3 cursor-pointer bg-slate-50/50 dark:bg-slate-900/40 rounded-xl border border-slate-200/40 dark:border-slate-700/60">
                     <input
                         type="checkbox"
                         name={fieldName}
                         checked={Boolean(value)}
                         onChange={onChange}
                         disabled={loading || isReadOnly}
-                        className="w-5 h-5 rounded border-slate-300 text-primary-600 focus:ring-primary-500 transition-all cursor-pointer"
+                        className="w-5 h-5 rounded border-slate-300 dark:border-slate-600 text-primary-600 focus:ring-primary-500 transition-all cursor-pointer"
                     />
                     <span className="text-sm font-bold">{displayName}</span>
                 </label>
@@ -87,7 +87,7 @@ export function CustomerField({
     return (
         <div className={`flex flex-col gap-2 flex-1 basis-[250px] min-w-[250px] ${className}`}>
             <div className="flex items-center justify-between">
-                <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 flex items-center gap-1.5">
+                <label className="text-[11px] font-extrabold uppercase tracking-wider text-slate-500 dark:text-slate-400 flex items-center gap-1.5">
                     {displayName}
                     {meta.isRequired && <span className="text-red-500">*</span>}
                 </label>
@@ -113,12 +113,12 @@ export function CustomerField({
 
             <div className="flex flex-col gap-0.5">
                 {meta.originalField && (
-                    <div className="text-[10px] font-extrabold text-slate-400/60 flex items-center gap-1">
+                    <div className="text-[10px] font-extrabold text-slate-400/60 dark:text-slate-500/80 flex items-center gap-1">
                         <FaInfoCircle size={10} /> Mapeado de: <strong>{meta.originalField}</strong>
                     </div>
                 )}
                 {meta.queryType === "sequence" && meta.currentValue !== undefined && (
-                    <div className="text-[10px] font-extrabold text-slate-400/60">
+                    <div className="text-[10px] font-extrabold text-slate-400/60 dark:text-slate-500/80">
                         Val. Actual Seq: {meta.currentValue}
                     </div>
                 )}

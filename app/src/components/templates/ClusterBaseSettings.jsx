@@ -77,13 +77,13 @@ export function ClusterBaseSettings() {
   return (
     <div className="flex flex-col gap-8 w-full max-w-[1440px] mx-auto p-6 lg:p-10 animate-fadeIn">
       <header>
-        <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Objetivos Base</h1>
-        <p className="text-slate-500 mt-2 font-medium">
+        <h1 className="text-3xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">Objetivos Base</h1>
+        <p className="text-slate-500 dark:text-slate-400 mt-2 font-medium">
           Metas Bronze / Silver / Gold por organización.
         </p>
       </header>
 
-      <div className="bg-white p-5 rounded-xl border border-slate-200 shadow-soft flex justify-end">
+      <div className="bg-white dark:bg-slate-800 p-5 rounded-xl border border-slate-200 dark:border-slate-700 shadow-soft flex justify-end">
         {canCreate && (
           <Button variant="primary" onClick={handleAdd}>
             <FaPlus /> Nuevos Objetivos Base
@@ -92,11 +92,11 @@ export function ClusterBaseSettings() {
       </div>
 
       {loading && rows.length === 0 ? (
-        <div className="flex flex-col items-center justify-center p-32 text-center gap-6 bg-white rounded-xl border border-slate-200 border-dashed">
-          <div className="w-16 h-16 rounded-full bg-slate-50 flex items-center justify-center text-slate-300">
+        <div className="flex flex-col items-center justify-center p-32 text-center gap-6 bg-white dark:bg-slate-800 rounded-xl border border-slate-200 dark:border-slate-700 border-dashed">
+          <div className="w-16 h-16 rounded-full bg-slate-50 dark:bg-slate-700 flex items-center justify-center text-slate-300 dark:text-slate-500">
             <FaBullseye size={32} />
           </div>
-          <p className="text-lg font-bold text-slate-800">Cargando objetivos base...</p>
+          <p className="text-lg font-bold text-slate-800 dark:text-slate-100">Cargando objetivos base...</p>
         </div>
       ) : (
         <ClusterBaseTable rows={rows} loading={loading} onEdit={handleEdit} onDelete={handleDelete} />

@@ -73,7 +73,7 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
     return (
       <div className="flex flex-col items-center justify-center p-15 gap-5 text-center">
         <LoadingSpinner />
-        <p className="text-slate-500 font-semibold">Configurando entorno de edición técnica...</p>
+        <p className="text-slate-500 dark:text-slate-400 font-semibold">Configurando entorno de edición técnica...</p>
       </div>
     );
   }
@@ -92,10 +92,10 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
     <div className="flex flex-col gap-6 p-5 bg-white dark:bg-slate-900 rounded-3xl shadow-sm">
       <div className="flex justify-between items-center gap-5 flex-wrap md:flex-nowrap">
         <div className="flex flex-col gap-1">
-          <h3 className="m-0 text-2xl font-extrabold text-slate-800 dark:text-white">
+          <h3 className="m-0 text-2xl font-extrabold text-slate-800 dark:text-slate-100">
             Edición de {mapping?.entityType === "customers" ? "Cliente" : "Documento"}
           </h3>
-          <span className="text-[11px] font-extrabold text-blue-600 bg-blue-600/10 px-2 py-0.5 rounded-lg self-start">
+          <span className="text-[11px] font-extrabold text-blue-600 dark:text-blue-400 bg-blue-600/10 dark:bg-blue-500/20 px-2 py-0.5 rounded-lg self-start">
             Mapping: {mapping?.name || mappingId}
           </span>
         </div>
@@ -109,7 +109,7 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
 
       {originalSourceData && (
         <div className="bg-blue-500/10 border border-dashed border-blue-500/30 px-5 py-3 rounded-2xl flex justify-between items-center flex-wrap gap-2.5">
-          <span className="text-[13px] font-semibold text-slate-500">Los datos del formulario están vinculados a un registro fuente en la base de datos.</span>
+          <span className="text-[13px] font-semibold text-slate-500 dark:text-slate-400">Los datos del formulario están vinculados a un registro fuente en la base de datos.</span>
           <Button
             variant="ghost"
             size="small"
