@@ -99,7 +99,7 @@ export function DeliveryPersonSelector({
             <h4 className="text-[11px] font-black text-slate-900 uppercase tracking-[0.2em] flex items-center gap-3 border-l-4 border-indigo-600 pl-4">
               Resumen de la Carga
             </h4>
-            <div className="grid grid-cols-3 gap-6">
+            <div className="grid grid-cols-2 sm:grid-cols-3 gap-4 sm:gap-6">
               <div className="text-center group">
                 <div className="text-2xl font-black text-indigo-600 leading-none mb-1">{orderCount}</div>
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Pedidos</div>
@@ -108,7 +108,7 @@ export function DeliveryPersonSelector({
                 <div className="text-2xl font-black text-indigo-600 leading-none mb-1">{totalLines}</div>
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Líneas</div>
               </div>
-              <div className="text-center group">
+              <div className="text-center group col-span-2 sm:col-span-1">
                 <div className="text-xl font-black text-indigo-600 leading-none mb-1 truncate px-2">{formatCurrency(totalAmount)}</div>
                 <div className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Total DOP</div>
               </div>
@@ -234,14 +234,14 @@ export function DeliveryPersonSelector({
             </div>
           )}
 
-          <div className="flex justify-end gap-3">
-            <LoadsButton variant="ghost" onClick={handleClose} className="font-bold">Cancelar</LoadsButton>
+          <div className="flex flex-col sm:flex-row sm:justify-end gap-3">
+            <LoadsButton variant="ghost" onClick={handleClose} className="font-bold w-full sm:w-auto">Cancelar</LoadsButton>
             <LoadsButton
               variant="primary"
               onClick={handleSelect}
               disabled={!selectedVendedor || !dateLoad || loading}
               loading={loading}
-              className="px-10 py-3 bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 text-xs font-black uppercase tracking-widest border-none"
+              className="px-10 py-3 bg-indigo-600 hover:bg-indigo-700 shadow-lg shadow-indigo-600/20 text-xs font-black uppercase tracking-widest border-none w-full sm:w-auto"
             >
               <FaTruck className="mr-2" /> Asignar y Procesar ({orderCount})
             </LoadsButton>

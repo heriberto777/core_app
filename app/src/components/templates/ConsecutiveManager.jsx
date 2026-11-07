@@ -174,7 +174,7 @@ export function ConsecutiveManager() {
           <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Gestión de Consecutivos</h1>
           <p className="text-slate-500 mt-2 font-medium">Control centralizado de folios, numeración y segmentación de documentos.</p>
         </div>
-        <div className="flex items-center gap-3 w-full xl:w-auto">
+        <div className="flex flex-col sm:flex-row items-stretch sm:items-center gap-3 w-full xl:w-auto">
           <div className="relative flex-1 xl:w-80">
             <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -184,20 +184,22 @@ export function ConsecutiveManager() {
               className="w-full py-3 pl-11 pr-4 rounded-xl border border-slate-200 focus:border-primary-500 focus:ring-4 focus:ring-primary-500/10 outline-none transition-all text-sm font-medium"
             />
           </div>
-          <Button variant="secondary" onClick={() => setShowDashboard(!showDashboard)} className="whitespace-nowrap">
-            {showDashboard ? <><FaHistory /> Lista</> : <><FaChartLine /> Dashboard</>}
-          </Button>
-          {canUpdate && (
-            <Button variant="primary" onClick={openCreate} className="whitespace-nowrap">
-              <FaPlus /> Nuevo Folio
+          <div className="flex items-center gap-3 flex-wrap">
+            <Button variant="secondary" onClick={() => setShowDashboard(!showDashboard)} className="whitespace-nowrap">
+              {showDashboard ? <><FaHistory /> Lista</> : <><FaChartLine /> Dashboard</>}
             </Button>
-          )}
-          <button 
-            onClick={loadConsecutives} 
-            className={`w-12 h-12 rounded-xl bg-white border border-slate-200 text-slate-400 flex items-center justify-center hover:bg-slate-50 hover:text-primary-500 transition-all ${loading ? 'animate-spin' : ''}`}
-          >
-            <FaSync />
-          </button>
+            {canUpdate && (
+              <Button variant="primary" onClick={openCreate} className="whitespace-nowrap">
+                <FaPlus /> Nuevo Folio
+              </Button>
+            )}
+            <button
+              onClick={loadConsecutives}
+              className={`w-12 h-12 shrink-0 rounded-xl bg-white border border-slate-200 text-slate-400 flex items-center justify-center hover:bg-slate-50 hover:text-primary-500 transition-all ${loading ? 'animate-spin' : ''}`}
+            >
+              <FaSync />
+            </button>
+          </div>
         </div>
       </header>
 

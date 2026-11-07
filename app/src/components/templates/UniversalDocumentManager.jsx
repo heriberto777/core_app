@@ -258,15 +258,15 @@ export function UniversalDocumentManager() {
 
     const renderManager = () => (
         <div className="flex flex-col gap-6">
-            <div className="flex items-center justify-between p-5 bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-lg">
-                <Button variant="secondary" onClick={handleReturnToListAndRefresh}>
+            <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-5 bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-lg">
+                <Button variant="secondary" onClick={handleReturnToListAndRefresh} className="self-start sm:self-auto">
                     <FaArrowLeft /> Volver al Lanzador
                 </Button>
-                <h3 className="m-0 flex flex-col items-center gap-1 text-2xl font-extrabold text-gray-900 dark:text-white">
-                    {activeMappingName}
+                <h3 className="m-0 flex flex-col items-center gap-1 text-xl sm:text-2xl font-extrabold text-gray-900 dark:text-white text-center min-w-0 max-w-full">
+                    <span className="truncate max-w-full">{activeMappingName}</span>
                     <span className="text-xs px-3 py-1 rounded-full bg-blue-500 text-white">{entityType.toUpperCase()}</span>
                 </h3>
-                <div className="w-36" />
+                <div className="hidden sm:block w-36" />
             </div>
 
             <DocumentsFilterPanel
@@ -334,12 +334,12 @@ export function UniversalDocumentManager() {
         if (isEditOpen && editingDoc) {
             return (
                 <div className="flex flex-col gap-6">
-                    <div className="flex items-center justify-between p-5 bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-lg">
-                        <Button variant="secondary" onClick={() => setIsEditOpen(false)}>
+                    <div className="flex flex-col sm:flex-row items-center justify-between gap-3 p-5 bg-white dark:bg-slate-800 rounded-2xl border border-gray-200 dark:border-slate-700 shadow-lg">
+                        <Button variant="secondary" onClick={() => setIsEditOpen(false)} className="self-start sm:self-auto">
                             <FaArrowLeft /> Volver a la Lista
                         </Button>
-                        <h3 className="m-0 text-2xl font-extrabold text-gray-900 dark:text-white">Editando Documento técnico</h3>
-                        <div className="w-36" />
+                        <h3 className="m-0 text-xl sm:text-2xl font-extrabold text-gray-900 dark:text-white text-center truncate max-w-full">Editando Documento técnico</h3>
+                        <div className="hidden sm:block w-36" />
                     </div>
                     <CustomerEditor
                         customer={editingDoc}

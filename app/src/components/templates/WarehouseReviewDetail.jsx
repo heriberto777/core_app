@@ -385,7 +385,7 @@ export function WarehouseReviewDetail() {
   };
 
   return (
-    <div className="min-h-dvh bg-slate-50/50 animate-fadeIn pb-28">
+    <div className="min-h-dvh bg-slate-50/50 animate-fadeIn pb-52 sm:pb-28">
       <Helmet>
         <title>Revisión de Almacén — {loadId} | Catelli Core</title>
       </Helmet>
@@ -413,7 +413,7 @@ export function WarehouseReviewDetail() {
           </div>
         )}
 
-        <div className="flex flex-col md:flex-row gap-4">
+        <div className="flex flex-col md:flex-row flex-wrap gap-4">
           <div className="relative flex-1 max-w-md">
             <FaSearch className="absolute left-4 top-1/2 -translate-y-1/2 text-slate-400" />
             <input
@@ -488,15 +488,15 @@ export function WarehouseReviewDetail() {
       </div>
 
       <div className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 shadow-2xl z-50">
-        <div className="max-w-[1400px] mx-auto px-6 lg:px-10 py-4 flex justify-between gap-3">
-          <Button variant="danger" onClick={handleCancelLoad} loading={isCancelling}>
+        <div className="max-w-[1400px] mx-auto px-4 sm:px-6 lg:px-10 py-3 sm:py-4 flex flex-col sm:flex-row sm:justify-between gap-3">
+          <Button variant="danger" onClick={handleCancelLoad} loading={isCancelling} className="w-full sm:w-auto">
             <FaUndo /> Reversar carga
           </Button>
-          <div className="flex gap-3">
-            <Button variant="secondary" onClick={() => navigate("/loads/revision")}>
+          <div className="flex flex-col sm:flex-row gap-3">
+            <Button variant="secondary" onClick={() => navigate("/loads/revision")} className="w-full sm:w-auto">
               Volver después
             </Button>
-            <Button variant="primary" onClick={handleAuthorize} loading={isAuthorizing} className="!px-8">
+            <Button variant="primary" onClick={handleAuthorize} loading={isAuthorizing} className="w-full sm:w-auto !px-8">
               Autorizar despacho →
             </Button>
           </div>

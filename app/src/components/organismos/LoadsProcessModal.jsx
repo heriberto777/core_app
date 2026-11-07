@@ -269,37 +269,37 @@ export const LoadsProcessModal = ({
                 </div>
 
                 {/* Footer */}
-                <div className="px-6 py-5 bg-slate-50 border-t border-slate-200 flex justify-between items-center">
-                    <Button variant="ghost" onClick={onClose} disabled={loading}>
+                <div className="px-4 sm:px-6 py-5 bg-slate-50 border-t border-slate-200 flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3">
+                    <Button variant="ghost" onClick={onClose} disabled={loading} className="w-full sm:w-auto">
                         Cancelar Proceso
                     </Button>
-                    <div className="flex gap-3">
+                    <div className="flex flex-col sm:flex-row gap-3">
                         {step === 2 && salesData.length > 0 && (
-                            <Button variant="success" className="px-8 shadow-lg shadow-emerald-500/20" onClick={() => setStep(3)}>
+                            <Button variant="success" className="px-8 shadow-lg shadow-emerald-500/20 w-full sm:w-auto" onClick={() => setStep(3)}>
                                 Continuar <FaArrowRight className="ml-2" />
                             </Button>
                         )}
                         {step === 3 && (
                             <>
-                                <Button variant="ghost" onClick={() => setStep(2)}>
+                                <Button variant="ghost" onClick={() => setStep(2)} className="w-full sm:w-auto">
                                     <FaArrowLeft className="mr-2" /> Atrás
                                 </Button>
-                                <Button variant="primary" className="px-8 shadow-lg shadow-blue-500/20" onClick={handleConfirmOrders}>
+                                <Button variant="primary" className="px-8 shadow-lg shadow-blue-500/20 w-full sm:w-auto" onClick={handleConfirmOrders}>
                                     Confirmar y Generar <FaDatabase className="ml-2" />
                                 </Button>
                             </>
                         )}
                         {step === 4 && (
-                            <Button variant="primary" className="px-10 shadow-lg shadow-blue-500/20" onClick={handleConfirmLoadDetail} disabled={!loadParams.route}>
+                            <Button variant="primary" className="px-10 shadow-lg shadow-blue-500/20 w-full sm:w-auto" onClick={handleConfirmLoadDetail} disabled={!loadParams.route}>
                                 Finalizar y Guardar <FaCheck className="ml-2" />
                             </Button>
                         )}
                         {step === 5 && (
                             <>
-                                <Button variant="ghost" onClick={() => handleExecuteTraspaso(false)}>
+                                <Button variant="ghost" onClick={() => handleExecuteTraspaso(false)} className="w-full sm:w-auto">
                                     Solo Guardar Local
                                 </Button>
-                                <Button variant="primary" className="px-8 bg-purple-600 hover:bg-purple-700 shadow-lg shadow-purple-500/20" onClick={() => handleExecuteTraspaso(true)}>
+                                <Button variant="primary" className="px-8 bg-purple-600 hover:bg-purple-700 shadow-lg shadow-purple-500/20 w-full sm:w-auto" onClick={() => handleExecuteTraspaso(true)}>
                                     Sincronizar con ERP <FaExchangeAlt className="ml-2" />
                                 </Button>
                             </>

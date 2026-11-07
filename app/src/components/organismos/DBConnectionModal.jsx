@@ -168,22 +168,22 @@ export const DBConnectionModal = ({ isOpen, onClose, onSave, onTest, initialData
                 </div>
 
                 {/* Footer */}
-                <div className="px-8 py-6 bg-slate-50/50 backdrop-blur-md border-t border-slate-100 flex justify-between gap-3">
-                    <Button 
-                        variant="outline" 
-                        onClick={handleTest} 
+                <div className="px-4 sm:px-8 py-6 bg-slate-50/50 backdrop-blur-md border-t border-slate-100 flex flex-col sm:flex-row sm:justify-between gap-3">
+                    <Button
+                        variant="outline"
+                        onClick={handleTest}
                         loading={testing}
-                        className="px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] border-slate-200 hover:bg-white transition-all"
+                        className="px-6 py-3 rounded-2xl font-black text-[10px] uppercase tracking-[0.2em] border-slate-200 hover:bg-white transition-all w-full sm:w-auto"
                     >
                         Validar Conectividad
                     </Button>
-                    <div className="flex gap-3">
-                        <Button variant="ghost" onClick={onClose} className="font-bold">Cancelar</Button>
-                        <Button 
-                            variant="primary" 
-                            onClick={handleSave} 
+                    <div className="flex flex-col sm:flex-row gap-3">
+                        <Button variant="ghost" onClick={onClose} className="font-bold w-full sm:w-auto">Cancelar</Button>
+                        <Button
+                            variant="primary"
+                            onClick={handleSave}
                             loading={saving}
-                            className="px-10 py-3 shadow-lg shadow-slate-900/20 font-black text-[10px] uppercase tracking-[0.2em] bg-slate-900 hover:bg-black border-none"
+                            className="px-10 py-3 shadow-lg shadow-slate-900/20 font-black text-[10px] uppercase tracking-[0.2em] bg-slate-900 hover:bg-black border-none w-full sm:w-auto"
                         >
                             Guardar Nodo
                         </Button>

@@ -120,11 +120,11 @@ export function TraspasoManagement() {
               Monitoreo y ejecución de transferencias de inventario entre bodegas. Supervisa el éxito de los procesos post-carga y gestiona discrepancias.
             </p>
           </div>
-          <div className="flex gap-3 shrink-0">
-            <Button variant="secondary" onClick={() => navigate("/loads/cargas")} className="!px-6">
+          <div className="flex flex-col sm:flex-row gap-3 w-full sm:w-auto shrink-0">
+            <Button variant="secondary" onClick={() => navigate("/loads/cargas")} className="!px-6 w-full sm:w-auto">
               <FaHistory /> Historial de Cargas
             </Button>
-            <Button variant="primary" onClick={handleRefresh} loading={refreshing} className="!px-8 shadow-primary-500/20">
+            <Button variant="primary" onClick={handleRefresh} loading={refreshing} className="!px-8 shadow-primary-500/20 w-full sm:w-auto">
               <FaSync /> Actualizar
             </Button>
           </div>

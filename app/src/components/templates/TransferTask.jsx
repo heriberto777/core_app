@@ -182,13 +182,13 @@ export function TransferTasks() {
       {showMetrics && <TaskMetricsPanel tasks={allTasks} />}
 
       <div className="relative z-20 flex flex-wrap gap-4 items-center justify-between bg-white dark:bg-slate-800 p-4 rounded-xl border border-slate-200 dark:border-slate-700 backdrop-blur-sm">
-        <div className="flex gap-4 flex-1">
+        <div className="flex flex-wrap gap-4 flex-1">
           <FilterInput
             placeholder="Buscar por nombre de tarea..."
             value={search}
             onChange={(e) => setSearch(e.target.value)}
           />
-          <div className="flex gap-2 items-center">
+          <div className="flex flex-wrap gap-2 items-center">
             <div className="w-44">
               <MultiSelectInput
                 value={filters.type}
@@ -222,7 +222,7 @@ export function TransferTasks() {
           </div>
         </div>
 
-        <div className="flex gap-2.5">
+        <div className="flex flex-wrap gap-2.5">
           {canCreateTask && (
             <Button variant="success" onClick={handleCreate}><FaPlus /> Nueva Tarea</Button>
           )}
