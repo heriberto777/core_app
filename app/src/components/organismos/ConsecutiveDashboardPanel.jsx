@@ -12,9 +12,9 @@ export function ConsecutiveDashboardPanel({ data, onClose }) {
     return (
         <div className="flex flex-col gap-8 animate-in fade-in duration-500 slide-in-from-top-4">
             {/* Header */}
-            <div className="flex justify-between items-center px-8 py-6 bg-white/50 backdrop-blur-xl border border-slate-200 rounded-xl shadow-sm">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-4 px-4 sm:px-8 py-6 bg-white/50 backdrop-blur-xl border border-slate-200 rounded-xl shadow-sm">
                 <div className="flex items-center gap-4">
-                    <div className="w-10 h-10 bg-red-50 rounded-xl flex items-center justify-center text-red-500">
+                    <div className="w-10 h-10 shrink-0 bg-red-50 rounded-xl flex items-center justify-center text-red-500">
                         <FaHeartbeat className="text-xl animate-pulse" />
                     </div>
                     <div className="flex flex-col">
@@ -22,7 +22,7 @@ export function ConsecutiveDashboardPanel({ data, onClose }) {
                         <span className="text-[10px] font-bold text-slate-400 uppercase tracking-widest">Monitoreo de disponibilidad y reservas</span>
                     </div>
                 </div>
-                <Button variant="ghost" onClick={onClose} className="text-slate-500 font-bold hover:text-red-500">
+                <Button variant="ghost" onClick={onClose} className="text-slate-500 font-bold hover:text-red-500 self-start sm:self-auto">
                     <FaTimes className="mr-2" /> Cerrar Dashboard
                 </Button>
             </div>

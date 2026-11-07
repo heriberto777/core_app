@@ -9,7 +9,7 @@ export function SummaryFilterPanel({ filters, onUpdate, onClear, onSearch, loadi
     };
 
     return (
-        <div className="bg-white border border-slate-200 rounded-xl p-8 shadow-sm flex flex-col gap-8 animate-in fade-in slide-in-from-top-4 duration-500">
+        <div className="bg-white border border-slate-200 rounded-xl p-4 sm:p-8 shadow-sm flex flex-col gap-8 animate-in fade-in slide-in-from-top-4 duration-500">
             <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-5 gap-6">
                 <div className="flex flex-col gap-2">
                     <label className="text-[10px] font-black uppercase tracking-[0.2em] text-slate-400 px-1 flex items-center gap-2">
@@ -81,15 +81,15 @@ export function SummaryFilterPanel({ filters, onUpdate, onClear, onSearch, loadi
                 </div>
             </div>
 
-            <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
-                <Button variant="ghost" onClick={onClear} disabled={loading} className="font-bold">
+            <div className="flex flex-col sm:flex-row sm:justify-end gap-3 pt-6 border-t border-slate-100">
+                <Button variant="ghost" onClick={onClear} disabled={loading} className="font-bold w-full sm:w-auto">
                     <FaSync className="mr-2 text-xs" /> Limpiar
                 </Button>
-                <Button 
-                    variant="primary" 
-                    onClick={onSearch} 
+                <Button
+                    variant="primary"
+                    onClick={onSearch}
                     loading={loading}
-                    className="px-10 shadow-lg shadow-blue-600/20"
+                    className="px-10 shadow-lg shadow-blue-600/20 w-full sm:w-auto"
                 >
                     <FaSearch className="mr-2 text-xs" /> Aplicar Filtros
                 </Button>

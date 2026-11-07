@@ -43,8 +43,8 @@ export function Statistics() {
           <p className="text-slate-500 mt-2 font-medium">Análisis métrico de operaciones y salud de infraestructura en tiempo real.</p>
         </div>
 
-        <div className="flex items-center gap-3 bg-white p-2 rounded-2xl border border-slate-100 shadow-soft">
-          <div className="flex gap-1">
+        <div className="flex flex-wrap items-center gap-3 bg-white p-2 rounded-2xl border border-slate-100 shadow-soft">
+          <div className="flex flex-wrap gap-1">
             {ranges.map(r => (
               <button
                 key={r.value}

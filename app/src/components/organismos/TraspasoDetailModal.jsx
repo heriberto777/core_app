@@ -49,7 +49,7 @@ export function TraspasoDetailModal({ traspaso, onClose }) {
         </div>
 
         <div className="px-6 py-5 overflow-y-auto flex-1 flex flex-col gap-5">
-          <div className="grid grid-cols-2 sm:grid-cols-3 gap-4">
+          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
             <Field label="Estado">
               <StatusBadge status={status === "completed" ? "ACTIVE" : "INACTIVE"}>
                 {status === "completed" ? "Completado" : "Fallido"}

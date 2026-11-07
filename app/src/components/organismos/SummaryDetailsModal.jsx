@@ -30,7 +30,7 @@ export function SummaryDetailsModal({ isOpen, onClose, summary }) {
                 {/* Body */}
                 <div className="flex-1 overflow-y-auto p-8 custom-scrollbar space-y-10">
                     {/* Header Info Cards */}
-                    <div className="grid grid-cols-2 md:grid-cols-4 gap-6">
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-6">
                         <div className="p-6 bg-slate-50 border border-slate-100 rounded-xl flex flex-col gap-1 hover:bg-white transition-colors">
                             <span className="text-[9px] font-black text-slate-400 uppercase tracking-widest">Ruta / Vendedor</span>
                             <span className="text-sm font-black text-slate-900">{summary.route}</span>

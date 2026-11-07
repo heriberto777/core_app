@@ -122,20 +122,20 @@ export const TraspasoFiltersPanel = ({ filters, onFiltersChange, onReset, onSear
             </div>
 
             {/* Actions */}
-            <div className="flex justify-end gap-3 pt-6 border-t border-slate-100">
-              <Button 
-                variant="ghost" 
-                onClick={onReset} 
+            <div className="flex flex-col sm:flex-row sm:justify-end gap-3 pt-6 border-t border-slate-100">
+              <Button
+                variant="ghost"
+                onClick={onReset}
                 disabled={loading}
-                className="px-6 font-bold"
+                className="px-6 font-bold w-full sm:w-auto"
               >
                 <FaRedo className="mr-2 text-xs" /> Limpiar Filtros
               </Button>
-              <Button 
-                variant="primary" 
-                onClick={onSearch} 
+              <Button
+                variant="primary"
+                onClick={onSearch}
                 loading={loading}
-                className="px-10 shadow-lg shadow-blue-600/20"
+                className="px-10 shadow-lg shadow-blue-600/20 w-full sm:w-auto"
               >
                 <FaSearch className="mr-2 text-xs" /> Buscar Traspasos
               </Button>

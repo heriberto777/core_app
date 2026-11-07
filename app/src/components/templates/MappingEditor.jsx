@@ -169,21 +169,21 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
 
         {activeTab === "documentTypes" && (
           <div className="space-y-6">
-            <div className="flex justify-between items-center pb-4 border-b border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 pb-4 border-b border-slate-100">
               <div>
                 <h3 className="text-xl font-bold text-slate-800">Reglas de Negocio</h3>
                 <p className="text-sm text-slate-500 mt-1">Defina condiciones basadas en campos de origen para segmentar lógicas específicas.</p>
               </div>
-              <Button variant="primary" onClick={() => openModal('docRule')}><FaPlus /> Añadir Regla</Button>
+              <Button variant="primary" onClick={() => openModal('docRule')} className="w-full sm:w-auto justify-center"><FaPlus /> Añadir Regla</Button>
             </div>
             <div className="grid grid-cols-1 gap-3">
               {mapping.documentTypeRules.map((rule, idx) => (
-                <div key={idx} className="flex justify-between items-center p-4 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-200 transition-all group">
+                <div key={idx} className="flex flex-wrap justify-between items-center gap-3 p-4 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-200 transition-all group">
                   <div>
                     <div className="font-bold text-slate-800">{rule.name}</div>
                     <div className="text-xs text-slate-500 font-medium">{rule.sourceField}: <span className="text-primary-600">{rule.sourceValues.join(', ')}</span></div>
                   </div>
-                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                     <Button variant="ghost" className="bg-white p-2" onClick={() => openModal('docRule', rule, idx)}><FaEdit /></Button>
                     <Button variant="ghost" className="bg-white p-2 text-red-500 hover:bg-red-50" onClick={() => removeDocumentTypeRule(idx)}><FaTrash /></Button>
                   </div>
@@ -195,21 +195,21 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
 
         {activeTab === "dependencies" && (
           <div className="space-y-6">
-            <div className="flex justify-between items-center pb-4 border-b border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 pb-4 border-b border-slate-100">
               <div>
                 <h3 className="text-xl font-bold text-slate-800">Integridad Referencial (FK)</h3>
                 <p className="text-sm text-slate-500 mt-1">Configure las dependencias de claves foráneas para asegurar integridad.</p>
               </div>
-              <Button variant="primary" onClick={() => openModal('dependency')}><FaPlus /> Añadir Dependencia</Button>
+              <Button variant="primary" onClick={() => openModal('dependency')} className="w-full sm:w-auto justify-center"><FaPlus /> Añadir Dependencia</Button>
             </div>
             <div className="grid grid-cols-1 gap-3">
               {mapping.foreignKeyDependencies.map((dep, idx) => (
-                <div key={idx} className="flex justify-between items-center p-4 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-200 transition-all group">
+                <div key={idx} className="flex flex-wrap justify-between items-center gap-3 p-4 bg-slate-50 hover:bg-slate-100/80 rounded-2xl border border-slate-200 transition-all group">
                   <div>
                     <div className="font-bold text-slate-800">{dep.fieldName} <span className="text-slate-400 mx-2">→</span> {dep.dependentTable}</div>
                     <div className="text-xs text-slate-500 font-medium">Orden: {dep.executionOrder} | {dep.insertIfNotExists ? "Auto-Insertar" : "Validar"}</div>
                   </div>
-                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                     <Button variant="ghost" className="bg-white p-2" onClick={() => openModal('dependency', dep, idx)}><FaEdit /></Button>
                     <Button variant="ghost" className="bg-white p-2 text-red-500 hover:bg-red-50" onClick={() => removeForeignKeyDependency(idx)}><FaTrash /></Button>
                   </div>
@@ -221,12 +221,12 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
 
         {activeTab === "tables" && (
           <div className="space-y-8">
-            <div className="flex justify-between items-center pb-4 border-b border-slate-100">
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 pb-4 border-b border-slate-100">
               <div>
                 <h3 className="text-xl font-bold text-slate-800">Estructura de Tablas</h3>
                 <p className="text-sm text-slate-500 mt-1">Mapee las tablas de origen con sus correspondientes en el destino.</p>
               </div>
-              <Button variant="primary" onClick={() => openModal('table')}><FaPlus /> Añadir Tabla</Button>
+              <Button variant="primary" onClick={() => openModal('table')} className="w-full sm:w-auto justify-center"><FaPlus /> Añadir Tabla</Button>
             </div>
             
             {mapping.tableConfigs.map((table, tIdx) => {
@@ -238,18 +238,18 @@ export function MappingEditor({ mappingId, onSave, onCancel }) {
               return (
                 <div key={tIdx} className="bg-white border border-slate-200 rounded-2xl overflow-hidden shadow-sm hover:shadow-md transition-shadow">
                   {/* TABLA HEADER */}
-                  <div className="p-5 bg-slate-50/50 border-b border-slate-100 flex justify-between items-center">
+                  <div className="p-5 bg-slate-50/50 border-b border-slate-100 flex flex-wrap justify-between items-center gap-3">
                     <div className="flex items-center gap-4">
-                      <div className="w-10 h-10 rounded-xl bg-primary-100 text-primary-600 flex items-center justify-center">
+                      <div className="w-10 h-10 shrink-0 rounded-xl bg-primary-100 text-primary-600 flex items-center justify-center">
                         <FaTable size={20} />
                       </div>
                       <div>
                         <h4 className="text-lg font-bold text-slate-800 flex items-center gap-2">
-                          {table.name} 
+                          {table.name}
                           {table.isDetailTable && <span className="px-2 py-0.5 bg-sky-100 text-sky-700 text-[10px] font-bold uppercase rounded-full">Detalle</span>}
                         </h4>
                         <div className="text-xs text-slate-500 font-medium">
-                          {table.sourceTable || 'Padre'} <span className="text-slate-300 mx-1">→</span> {table.targetTable} 
+                          {table.sourceTable || 'Padre'} <span className="text-slate-300 mx-1">→</span> {table.targetTable}
                           <span className="ml-3 text-primary-500">({totalFields} campos)</span>
                         </div>
                       </div>

@@ -253,7 +253,7 @@ const UserRoleManager = () => {
         </div>
       </div>
 
-      <div className="grid grid-cols-1 md:grid-cols-[1fr_auto_auto] gap-6 items-center bg-white/50 backdrop-blur-xl p-8 rounded-xl border border-slate-100 shadow-sm">
+      <div className="grid grid-cols-1 lg:grid-cols-[1fr_auto_auto] gap-6 items-center bg-white/50 backdrop-blur-xl p-8 rounded-xl border border-slate-100 shadow-sm">
         <div className="relative group">
           <FaSearch className="absolute left-5 top-1/2 -translate-y-1/2 text-slate-400 group-focus-within:text-blue-600 transition-colors" />
           <input
@@ -300,7 +300,7 @@ const UserRoleManager = () => {
         </div>
       </div>
 
-      <div className="flex justify-between items-center px-8 py-4 bg-slate-50 border border-slate-100 rounded-2xl">
+      <div className="flex flex-wrap justify-between items-center gap-3 px-8 py-4 bg-slate-50 border border-slate-100 rounded-2xl">
         <span className="text-[10px] font-black text-slate-400 uppercase tracking-widest">
           <span className="text-blue-600">{selectedUsers.length}</span> usuarios seleccionados de {filteredUsers.length} totales
         </span>

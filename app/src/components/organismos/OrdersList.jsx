@@ -69,8 +69,8 @@ export function OrdersList({
           Pedidos Identificados <span className="text-primary-500 bg-primary-50 px-2 py-0.5 rounded-lg text-xs">{orders.length}</span>
         </h3>
         
-        <div className="flex items-center gap-4 w-full md:w-auto">
-          <div className="flex items-center gap-3 text-xs font-extrabold text-slate-400 uppercase tracking-widest border-r border-slate-100 pr-4">
+        <div className="flex flex-wrap items-center gap-4 w-full md:w-auto">
+          <div className="flex flex-wrap items-center gap-3 text-xs font-extrabold text-slate-400 uppercase tracking-widest border-r border-slate-100 pr-4">
             <span className={selectedOrders.length > 0 ? "text-primary-600" : ""}>{selectedOrders.length} seleccionados</span>
             <button 
               onClick={handleSelectAll}

@@ -228,14 +228,14 @@ const WorkflowConfigSection = ({ mapping = {}, handleChange, accessToken }) => {
 
       {/* NEXT MAPPINGS LIST */}
       <div className="space-y-4 animate-in slide-in-from-bottom-4 duration-500">
-        <div className="flex justify-between items-center pb-4 border-b border-emerald-100">
+        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 pb-4 border-b border-emerald-100">
           <div>
             <h4 className="text-lg font-bold text-slate-800">Siguientes Mapeos</h4>
             <p className="text-sm text-slate-500 font-medium mt-1">
               {workflowConfig.nextMappings?.length || 0} mapeos configurados
             </p>
           </div>
-          <Button variant="primary" onClick={addNextMapping} className="flex items-center gap-2">
+          <Button variant="primary" onClick={addNextMapping} className="flex items-center gap-2 w-full sm:w-auto justify-center">
             <FaPlus /> Añadir Siguiente
           </Button>
         </div>
@@ -264,7 +264,7 @@ const WorkflowConfigSection = ({ mapping = {}, handleChange, accessToken }) => {
                       )}
                     </div>
                   </div>
-                  <div className="flex gap-2 opacity-0 group-hover:opacity-100 transition-opacity">
+                  <div className="flex gap-2 opacity-100 lg:opacity-0 lg:group-hover:opacity-100 transition-opacity">
                     <Button variant="ghost" className="bg-white p-2" onClick={() => editNextMapping(idx)}>
                       <FaEdit />
                     </Button>
@@ -287,9 +287,9 @@ const WorkflowConfigSection = ({ mapping = {}, handleChange, accessToken }) => {
 
       {/* STOP ON ERROR CONFIG */}
       <div className="mt-8 p-6 bg-white/80 backdrop-blur-sm border border-emerald-100 rounded-2xl shadow-sm">
-        <div className="flex items-center justify-between">
+        <div className="flex flex-col sm:flex-row sm:items-center sm:justify-between gap-4">
           <div className="flex items-center gap-4">
-            <div className="w-12 h-12 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
+            <div className="w-12 h-12 shrink-0 bg-emerald-100 text-emerald-600 rounded-xl flex items-center justify-center">
               <FaExclamationTriangle />
             </div>
             <div>

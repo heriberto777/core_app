@@ -124,7 +124,7 @@ export function ControlPlanilla() {
               Configura quién recibe reportes de traspasos, fallos técnicos y resúmenes de carga.
             </p>
           </div>
-          <div className="flex gap-3">
+          <div className="flex flex-wrap gap-3">
             {canManage && (
               <Button variant="outline" onClick={handleInitialize}>
                 <FaTools /> Inicializar Defaults
@@ -138,17 +138,17 @@ export function ControlPlanilla() {
           </div>
         </div>
 
-        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 mb-6 flex items-center gap-5">
-          <div className="w-12 h-12 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-2xl">
+        <div className="bg-white dark:bg-slate-800 p-6 rounded-2xl border border-slate-200 dark:border-slate-700 mb-6 flex items-center gap-5 flex-wrap">
+          <div className="w-12 h-12 shrink-0 rounded-xl bg-blue-500/10 text-blue-500 flex items-center justify-center text-2xl">
             <FaBell />
           </div>
-          <div>
+          <div className="min-w-0 flex-1">
             <h4 className="m-0 mb-1 text-base font-semibold">Canales Activos</h4>
             <p className="m-0 text-sm opacity-70">
               Actualmente hay <b>{recipients.length}</b> destinatarios configurados en la red de alertas logísticas.
             </p>
           </div>
-          <div className="ml-auto">
+          <div className="ml-auto shrink-0">
             <Button variant="ghost" onClick={() => actions.fetchRecipients(true)} loading={refreshing}>
               <FaSync />
             </Button>

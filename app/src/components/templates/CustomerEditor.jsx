@@ -100,7 +100,7 @@ export function CustomerEditor({ customer, mappingId, onSave, onCancel }) {
           </span>
         </div>
 
-        <div className="flex gap-3">
+        <div className="flex flex-wrap gap-3">
           <Button variant="ghost" icon={<FaDatabase />} onClick={handleUpdateFromSource} loading={fieldLoading}>Sincronizar Origen</Button>
           <Button variant="outline" icon={<FaTimes />} onClick={onCancel} disabled={isSaving}>Cancelar</Button>
           <Button variant="primary" icon={<FaSave />} onClick={onConfirmSave} loading={isSaving}>Guardar Cambios</Button>

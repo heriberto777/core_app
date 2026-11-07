@@ -8,8 +8,8 @@ import { StatusBadge, Button } from "../../index";
  */
 export function RecentActivitiesTable({ transfers, className = "" }) {
     return (
-        <div className={`bg-white rounded-3xl border border-slate-200 p-6 flex flex-col gap-5 shadow-md grid-column-1/-1 ${className}`}>
-            <div className="flex justify-between items-center border-b-2 border-primary-500/20 pb-3">
+        <div className={`bg-white rounded-3xl border border-slate-200 p-6 flex flex-col gap-5 shadow-md ${className}`}>
+            <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center gap-3 border-b-2 border-primary-500/20 pb-3">
                 <h3 className="m-0 text-base font-extrabold flex items-center gap-2.5 text-slate-800">
                     <FaHistory className="text-primary-500" /> Últimas Actividades
                 </h3>
