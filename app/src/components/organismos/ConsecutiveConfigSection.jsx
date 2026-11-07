@@ -403,7 +403,7 @@ const ConsecutiveConfigSection = ({ mapping = {}, handleChange }) => {
           </div>
           Configuración de Consecutivos
         </h3>
-        <p className="text-sm text-slate-500 font-medium ml-13">
+        <p className="text-sm text-slate-500 font-medium ml-[52px]">
           Gestione la numeración automática para sus documentos y registros en el sistema de destino.
         </p>
       </div>

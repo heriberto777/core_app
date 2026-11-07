@@ -158,14 +158,14 @@ export function AuditFiltersPanel({
                 </div>
             </div>
 
-            <div className="flex gap-3 mt-6 pt-5 border-t border-slate-200 justify-end flex-wrap">
-                <Button variant="secondary" onClick={onRefresh} disabled={loading}>
+            <div className="flex flex-col sm:flex-row flex-wrap gap-3 mt-6 pt-5 border-t border-slate-200 sm:justify-end">
+                <Button variant="secondary" onClick={onRefresh} disabled={loading} className="w-full sm:w-auto">
                     <FaSync className={loading ? "animate-spin" : ""} /> Actualizar
                 </Button>
-                <Button variant="secondary" onClick={onExport}>
+                <Button variant="secondary" onClick={onExport} className="w-full sm:w-auto">
                     <FaDownload /> Exportar
                 </Button>
-                <Button variant="primary" onClick={applyDraft} disabled={loading}>
+                <Button variant="primary" onClick={applyDraft} disabled={loading} className="w-full sm:w-auto">
                     <FaSearch /> Buscar
                 </Button>
             </div>

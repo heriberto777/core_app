@@ -126,7 +126,7 @@ export function ScheduleConfiguration() {
             </div>
             Programación Automática
           </h2>
-          <p className="text-sm text-slate-500 font-medium ml-13">
+          <p className="text-sm text-slate-500 font-medium ml-[52px]">
             Configura la hora de ejecución automática y monitorea el estado del orquestador.
           </p>
         </div>
