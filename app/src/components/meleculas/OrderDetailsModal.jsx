@@ -90,21 +90,21 @@ const SectionTitle = (props) => (
 const LinesTable = (props) => (
   <div
     {...props}
-    className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-hidden"
+    className="border border-slate-200 dark:border-slate-700 rounded-lg overflow-x-auto"
   />
 );
 
 const TableHeader = (props) => (
   <div
     {...props}
-    className="grid grid-cols-auto-1fr-80px-100px-120px-80px bg-slate-100 dark:bg-slate-800 px-3 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide"
+    className="grid grid-cols-[auto_1fr_80px_100px_120px_80px] gap-2 min-w-[580px] bg-slate-100 dark:bg-slate-800 px-3 py-3 text-xs font-semibold text-slate-500 dark:text-slate-400 uppercase tracking-wide"
   />
 );
 
 const TableRow = (props) => (
   <div
     {...props}
-    className="grid grid-cols-auto-1fr-80px-100px-120px-80px border-t border-slate-200 dark:border-slate-700 align-center transition-colors bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700"
+    className="grid grid-cols-[auto_1fr_80px_100px_120px_80px] gap-2 min-w-[580px] items-center px-3 py-2 border-t border-slate-200 dark:border-slate-700 transition-colors bg-white dark:bg-slate-800 hover:bg-slate-50 dark:hover:bg-slate-700"
   />
 );
 
