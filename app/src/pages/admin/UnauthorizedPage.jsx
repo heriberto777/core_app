@@ -119,7 +119,7 @@ const ActionButton = ({ children, primary = false, onClick }) => (
     className={`flex items-center gap-2 px-4 py-2 rounded-md text-sm font-medium cursor-pointer transition-all transform hover:translate-y-[-2px] ${
       primary
         ? "border-0 bg-indigo-600 hover:bg-indigo-700 text-white"
-        : "border border-slate-200 dark:border-slate-600 bg-white hover:bg-slate-50 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100"
+        : "border border-slate-200 dark:border-slate-700 bg-white hover:bg-slate-50 text-slate-700 dark:bg-slate-800 dark:hover:bg-slate-700 dark:text-slate-100"
     }`}
   >
     {children}

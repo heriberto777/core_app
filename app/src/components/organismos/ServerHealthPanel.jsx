@@ -19,26 +19,26 @@ export function ServerHealthPanel({ status, className = "" }) {
   };
 
   return (
-    <div className={`bg-white rounded-3xl border border-slate-200 p-6 flex flex-col gap-5 shadow-md flex-1 ${className}`}>
-      <h3 className="m-0 text-base font-extrabold flex items-center gap-2.5 text-slate-800 pb-3">
+    <div className={`bg-white dark:bg-slate-800 rounded-3xl border border-slate-200 dark:border-slate-700 p-6 flex flex-col gap-5 shadow-md flex-1 ${className}`}>
+      <h3 className="m-0 text-base font-extrabold flex items-center gap-2.5 text-slate-800 dark:text-slate-100 pb-3">
         <FaWifi className="text-primary-500" /> Salud de la Infraestructura
       </h3>
       <div className="flex flex-col gap-4">
         {servers.map(s => {
           const sData = status[s.id] || { status: 'unknown' };
           return (
-            <div key={s.id} className="flex items-center justify-between p-3 bg-slate-50/50 rounded-2xl border border-slate-200/40">
+            <div key={s.id} className="flex items-center justify-between p-3 bg-slate-50/50 dark:bg-slate-900/50 rounded-2xl border border-slate-200/40 dark:border-slate-700/40">
               <div className="flex items-center gap-3">
                 <div className={`w-2.5 h-2.5 rounded-full ${getStatusColor(sData.status)} ${sData.status === 'online' ? 'animate-pulse' : ''}`} />
                 <div className="flex flex-col">
-                  <span className="text-sm font-bold text-slate-800">{s.name}</span>
-                  <span className="text-[11px] text-slate-500">
+                  <span className="text-sm font-bold text-slate-800 dark:text-slate-100">{s.name}</span>
+                  <span className="text-[11px] text-slate-500 dark:text-slate-400">
                     {sData.status === 'online' ? `Conectado - Latencia: ${sData.responseTime || 0}ms` :
                       sData.status === 'offline' ? 'Sin respuesta del host' : 'Estado: ' + sData.status}
                   </span>
                 </div>
               </div>
-              <div className="text-slate-300 opacity-30">{s.icon}</div>
+              <div className="text-slate-300 dark:text-slate-600 opacity-30">{s.icon}</div>
             </div>
           );
         })}

@@ -37,7 +37,7 @@ export function Dashboard() {
   const handleScheduleSuccess = () => fetchDashboardData(true);
 
   return (
-    <div className="flex flex-col min-h-dvh bg-slate-50 animate-fadeIn">
+    <div className="flex flex-col min-h-dvh bg-slate-50 dark:bg-slate-900 animate-fadeIn">
       <Helmet>
         <title>Dashboard - Sistema Core ERP</title>
       </Helmet>
@@ -46,8 +46,8 @@ export function Dashboard() {
         {/* HEADER DE BIENVENIDA */}
         <header className="flex flex-col md:flex-row md:items-end justify-between gap-6 py-2">
           <div>
-            <h1 className="text-3xl font-extrabold text-slate-900 tracking-tight">Panel de Control</h1>
-            <p className="text-sm font-semibold text-slate-500 mt-1">Sistema de Transferencia de Datos Inteligente</p>
+            <h1 className="text-3xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight">Panel de Control</h1>
+            <p className="text-sm font-semibold text-slate-500 dark:text-slate-400 mt-1">Sistema de Transferencia de Datos Inteligente</p>
           </div>
           <Button
             variant="secondary"
@@ -66,9 +66,9 @@ export function Dashboard() {
             <span className="text-lg font-bold text-primary-600 animate-pulse">Optimizando telemetría del sistema...</span>
           </div>
         ) : error ? (
-          <div className="flex flex-col items-center justify-center p-16 bg-red-50/50 border border-red-100 rounded-xl text-center gap-4">
+          <div className="flex flex-col items-center justify-center p-16 bg-red-50/50 dark:bg-red-900/20 border border-red-100 dark:border-red-800 rounded-xl text-center gap-4">
             <div className="text-4xl">🔌</div>
-            <p className="text-red-600 font-bold text-lg">{error}</p>
+            <p className="text-red-600 dark:text-red-400 font-bold text-lg">{error}</p>
             <Button variant="primary" onClick={() => fetchDashboardData()}>Reintentar Conexión</Button>
           </div>
         ) : (

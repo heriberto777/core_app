@@ -7,8 +7,8 @@ import {
 const COLORS = ["#10b981", "#ef4444", "#3b82f6", "#f59e0b"];
 
 const ChartCard = ({ title, children }) => (
-    <div className="bg-white/70 backdrop-blur-xl border border-slate-200 rounded-xl p-8 min-h-[450px] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-500 group">
-        <h3 className="text-[11px] font-black text-slate-400 uppercase tracking-[0.2em] mb-10 border-b border-slate-50 pb-4 group-hover:text-slate-600 transition-colors">
+    <div className="bg-white/70 dark:bg-slate-800/70 backdrop-blur-xl border border-slate-200 dark:border-slate-700 rounded-xl p-8 min-h-[450px] shadow-sm hover:shadow-xl hover:-translate-y-1 transition-all duration-500 group">
+        <h3 className="text-[11px] font-black text-slate-400 dark:text-slate-500 uppercase tracking-[0.2em] mb-10 border-b border-slate-50 dark:border-slate-700 pb-4 group-hover:text-slate-600 dark:group-hover:text-slate-300 transition-colors">
             {title}
         </h3>
         <div className="w-full h-[300px]">

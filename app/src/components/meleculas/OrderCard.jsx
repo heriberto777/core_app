@@ -38,9 +38,9 @@ export function OrderCard({
   return (
     <div
       className={`
-        bg-white border rounded-lg p-4 cursor-pointer transition-all duration-200
+        bg-white dark:bg-slate-800 border rounded-lg p-4 cursor-pointer transition-all duration-200
         hover:shadow-lg hover:-translate-y-0.5
-        ${selected ? "border-primary-500 ring-2 ring-primary-500/20" : "border-slate-200"}
+        ${selected ? "border-primary-500 ring-2 ring-primary-500/20" : "border-slate-200 dark:border-slate-700"}
         ${className}
       `}
       onClick={handleCardClick}
@@ -54,8 +54,8 @@ export function OrderCard({
             className="w-4 h-4 cursor-pointer"
           />
           <div>
-            <h4 className="m-0 text-base font-semibold text-slate-800 mb-1">Pedido #{order.pedido}</h4>
-            <p className="m-0 text-sm text-slate-500 font-medium">{order.cliente}</p>
+            <h4 className="m-0 text-base font-semibold text-slate-800 dark:text-slate-100 mb-1">Pedido #{order.pedido}</h4>
+            <p className="m-0 text-sm text-slate-500 dark:text-slate-400 font-medium">{order.cliente}</p>
           </div>
         </div>
         <div className="flex items-center gap-2 shrink-0" onClick={e => e.stopPropagation()}>
@@ -69,7 +69,7 @@ export function OrderCard({
             type="button"
             onClick={() => onView?.(order.pedido)}
             title="Ver detalles"
-            className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 hover:text-primary-600 hover:bg-primary-50 transition-colors"
+            className="w-7 h-7 flex items-center justify-center rounded-lg text-slate-400 dark:text-slate-500 hover:text-primary-600 dark:hover:text-primary-400 hover:bg-primary-50 dark:hover:bg-primary-900/30 transition-colors"
           >
             <FaEye size={14} />
           </button>
@@ -77,21 +77,21 @@ export function OrderCard({
       </div>
 
       <div className="grid grid-cols-[repeat(auto-fit,minmax(120px,1fr))] gap-3 mb-4">
-        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+        <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
           <FaCalendar className="text-primary-500" />
-          <span className="font-medium text-slate-800">{formatDate(order.fechaPedido)}</span>
+          <span className="font-medium text-slate-800 dark:text-slate-100">{formatDate(order.fechaPedido)}</span>
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+        <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
           <FaUser className="text-primary-500" />
-          <span className="font-medium text-slate-800">{order.nombreVendedor}</span>
+          <span className="font-medium text-slate-800 dark:text-slate-100">{order.nombreVendedor}</span>
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+        <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
           <FaDollarSign className="text-primary-500" />
-          <span className="font-medium text-slate-800">{formatCurrency(order.totalPedido)}</span>
+          <span className="font-medium text-slate-800 dark:text-slate-100">{formatCurrency(order.totalPedido)}</span>
         </div>
-        <div className="flex items-center gap-1.5 text-xs text-slate-500">
+        <div className="flex items-center gap-1.5 text-xs text-slate-500 dark:text-slate-400">
           <FaTruck className="text-primary-500" />
-          <span className="font-medium text-slate-800">{order.totalLineas} líneas</span>
+          <span className="font-medium text-slate-800 dark:text-slate-100">{order.totalLineas} líneas</span>
         </div>
       </div>
 

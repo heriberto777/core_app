@@ -43,8 +43,8 @@ export function FiltersPanel({
     }));
 
   return (
-    <div className={`bg-white border border-slate-200 rounded-lg p-4 mb-5 ${className}`}>
-      <div className="flex items-center gap-2 mb-4 text-slate-800 font-semibold">
+    <div className={`bg-white dark:bg-slate-800 border border-slate-200 dark:border-slate-700 rounded-lg p-4 mb-5 ${className}`}>
+      <div className="flex items-center gap-2 mb-4 text-slate-800 dark:text-slate-100 font-semibold">
         <FaFilter />
         Filtros de Búsqueda
       </div>
@@ -84,13 +84,13 @@ export function FiltersPanel({
 
       <div className="flex gap-3 flex-wrap">
         <div className="relative flex-1 min-w-[200px]">
-          <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 text-sm" />
+          <FaSearch className="absolute left-3 top-1/2 -translate-y-1/2 text-slate-400 dark:text-slate-500 text-sm" />
           <input
             type="text"
             placeholder="Buscar por pedido, cliente..."
             value={search}
             onChange={(e) => onSearchChange(e.target.value)}
-            className="w-full px-3 py-2 pl-9 border border-slate-200 rounded-md text-sm bg-white text-slate-800 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
+            className="w-full px-3 py-2 pl-9 border border-slate-200 dark:border-slate-700 rounded-md text-sm bg-white dark:bg-slate-800 text-slate-800 dark:text-slate-100 focus:outline-none focus:border-primary-500 focus:ring-2 focus:ring-primary-500/20"
           />
         </div>
 

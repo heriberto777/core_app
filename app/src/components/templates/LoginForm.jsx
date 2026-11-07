@@ -26,7 +26,7 @@ export function LoginForm() {
   const [showPassword, setShowPassword] = useState(false);
 
   return (
-    <div className="flex min-h-dvh w-full bg-slate-50">
+    <div className="flex min-h-dvh w-full bg-slate-50 dark:bg-slate-900">
       <Helmet>
         <title>Login - Core ERP</title>
       </Helmet>
@@ -58,8 +58,8 @@ export function LoginForm() {
           </div>
 
           <div className="mb-8">
-            <h1 className="text-2xl font-extrabold text-slate-900 tracking-tight mb-1.5">Bienvenido</h1>
-            <p className="text-slate-500 text-sm font-medium">Ingresa tus credenciales para continuar</p>
+            <h1 className="text-2xl font-extrabold text-slate-900 dark:text-slate-100 tracking-tight mb-1.5">Bienvenido</h1>
+            <p className="text-slate-500 dark:text-slate-400 text-sm font-medium">Ingresa tus credenciales para continuar</p>
           </div>
 
           {status && (
@@ -67,8 +67,8 @@ export function LoginForm() {
               role="alert"
               className={`flex items-start gap-2.5 w-full px-4 py-3 rounded-xl text-sm font-medium mb-6 border animate-fadeIn ${
                 status.type === "error"
-                  ? "bg-red-50 border-red-200 text-red-700"
-                  : "bg-emerald-50 border-emerald-200 text-emerald-700"
+                  ? "bg-red-50 dark:bg-red-900/30 border-red-200 dark:border-red-800 text-red-700 dark:text-red-300"
+                  : "bg-emerald-50 dark:bg-emerald-900/30 border-emerald-200 dark:border-emerald-800 text-emerald-700 dark:text-emerald-300"
               }`}
             >
               {status.type === "error" ? (
@@ -111,7 +111,7 @@ export function LoginForm() {
                 <button
                   type="button"
                   onClick={() => setShowPassword((prev) => !prev)}
-                  className="text-slate-400 hover:text-slate-600 transition-colors"
+                  className="text-slate-400 dark:text-slate-500 hover:text-slate-600 dark:hover:text-slate-300 transition-colors"
                   tabIndex={-1}
                   aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
                 >
@@ -125,7 +125,7 @@ export function LoginForm() {
             </Button>
           </form>
 
-          <footer className="lg:hidden mt-12 text-[10px] font-bold text-slate-400 uppercase tracking-widest text-center">
+          <footer className="lg:hidden mt-12 text-[10px] font-bold text-slate-400 dark:text-slate-500 uppercase tracking-widest text-center">
             &copy; {new Date().getFullYear()} CIGUADR
             <br />
             <span className="opacity-70 mt-1 block">Soluciones de Software de Alto Rendimiento</span>

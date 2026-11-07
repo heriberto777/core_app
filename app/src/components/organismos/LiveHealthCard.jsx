@@ -41,23 +41,23 @@ export function LiveHealthCard({ accessToken, className = "" }) {
   }, [accessToken]);
 
   if (loading && !metrics) {
-    return <div className="h-[200px] bg-slate-50/50 rounded-3xl animate-pulse" />;
+    return <div className="h-[200px] bg-slate-50/50 dark:bg-slate-900/50 rounded-3xl animate-pulse" />;
   }
 
   const healthScore = calculateHealthScore(metrics);
-  
+
   const getStatusColor = (score) => {
-    if (score > 90) return { bg: "bg-emerald-50", text: "text-emerald-600", border: "border-emerald-200" };
-    if (score > 70) return { bg: "bg-amber-50", text: "text-amber-600", border: "border-amber-200" };
-    return { bg: "bg-red-50", text: "text-red-600", border: "border-red-200" };
+    if (score > 90) return { bg: "bg-emerald-50 dark:bg-emerald-900/30", text: "text-emerald-600 dark:text-emerald-400", border: "border-emerald-200 dark:border-emerald-800" };
+    if (score > 70) return { bg: "bg-amber-50 dark:bg-amber-900/30", text: "text-amber-600 dark:text-amber-400", border: "border-amber-200 dark:border-amber-800" };
+    return { bg: "bg-red-50 dark:bg-red-900/30", text: "text-red-600 dark:text-red-400", border: "border-red-200 dark:border-red-800" };
   };
 
   const colors = getStatusColor(healthScore);
 
   return (
-    <div className={`bg-white backdrop-blur-md border border-slate-200 rounded-3xl p-6 flex flex-col gap-5 transition-transform hover:-translate-y-1 ${className}`}>
+    <div className={`bg-white dark:bg-slate-800 backdrop-blur-md border border-slate-200 dark:border-slate-700 rounded-3xl p-6 flex flex-col gap-5 transition-transform hover:-translate-y-1 ${className}`}>
       <div className="flex justify-between items-center">
-        <div className="flex items-center gap-3 text-base font-bold text-slate-800">
+        <div className="flex items-center gap-3 text-base font-bold text-slate-800 dark:text-slate-100">
           <FaHeartbeat className="text-red-500 animate-heartbeat" />
           <span>Salud del Sistema</span>
         </div>
@@ -67,33 +67,33 @@ export function LiveHealthCard({ accessToken, className = "" }) {
       </div>
 
       <div className="grid grid-cols-1 sm:grid-cols-2 gap-3.5">
-        <div className="bg-slate-50/50 p-3.5 rounded-2xl flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary-50 rounded-lg flex items-center justify-center text-primary-500">
+        <div className="bg-slate-50/50 dark:bg-slate-900/50 p-3.5 rounded-2xl flex items-center gap-3">
+          <div className="w-10 h-10 bg-primary-50 dark:bg-primary-900/30 rounded-lg flex items-center justify-center text-primary-500">
             <FaBolt />
           </div>
           <div className="flex flex-col">
-            <span className="text-[11px] font-bold text-slate-500 uppercase">Registros/Seg</span>
-            <span className="text-lg font-bold text-slate-800">{metrics?.transfers?.recordsProcessed || 0}</span>
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase">Registros/Seg</span>
+            <span className="text-lg font-bold text-slate-800 dark:text-slate-100">{metrics?.transfers?.recordsProcessed || 0}</span>
           </div>
         </div>
-        <div className="bg-slate-50/50 p-3.5 rounded-2xl flex items-center gap-3">
-          <div className="w-10 h-10 bg-primary-50 rounded-lg flex items-center justify-center text-primary-500">
+        <div className="bg-slate-50/50 dark:bg-slate-900/50 p-3.5 rounded-2xl flex items-center gap-3">
+          <div className="w-10 h-10 bg-primary-50 dark:bg-primary-900/30 rounded-lg flex items-center justify-center text-primary-500">
             <FaDatabase />
           </div>
           <div className="flex flex-col">
-            <span className="text-[11px] font-bold text-slate-500 uppercase">Latencia SQL</span>
-            <span className="text-lg font-bold text-slate-800">{metrics?.performance?.avgQueryTime?.toFixed(0) || 0}ms</span>
+            <span className="text-[11px] font-bold text-slate-500 dark:text-slate-400 uppercase">Latencia SQL</span>
+            <span className="text-lg font-bold text-slate-800 dark:text-slate-100">{metrics?.performance?.avgQueryTime?.toFixed(0) || 0}ms</span>
           </div>
         </div>
       </div>
 
       {error && (
-        <div className="bg-red-500/10 text-red-600 p-2.5 rounded-lg text-sm flex items-center gap-2.5">
+        <div className="bg-red-500/10 dark:bg-red-900/20 text-red-600 dark:text-red-400 p-2.5 rounded-lg text-sm flex items-center gap-2.5">
           <FaExclamationTriangle /> {error}
         </div>
       )}
 
-      <div className="mt-2.5 flex items-center gap-2 text-xs text-slate-500">
+      <div className="mt-2.5 flex items-center gap-2 text-xs text-slate-500 dark:text-slate-400">
         <div className={`w-2 h-2 rounded-full ${error ? "bg-red-400" : "bg-emerald-500 shadow-lg shadow-emerald-500/50"}`} />
         <span>{error ? "Sin datos de telemetría" : "Monitoreo en vivo activo"}</span>
       </div>
