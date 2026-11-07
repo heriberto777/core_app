@@ -316,7 +316,12 @@ class LoadsService {
         ...producto,
         cajas,
         unidadesSueltas,
-        valorFormateado: formatMoney(producto.valorTotal),
+        // Con ITBIS incluido (producto.valorTotalConImpuesto, ver
+        // LoadsSQLService.getLoadReviewDetail) -- pedido del usuario
+        // 2026-11-07: el reporte que se entrega a los operadores debe
+        // mostrar el valor con impuesto, aunque la carga/traspaso real
+        // (sin impuesto) no cambia.
+        valorFormateado: formatMoney(producto.valorTotalConImpuesto),
       };
     });
 
@@ -339,7 +344,7 @@ class LoadsService {
     }
     const categorias = Array.from(categoriasMap.values()).sort((a, b) => a.codigo.localeCompare(b.codigo));
 
-    const totalValor = productos.reduce((sum, p) => sum + p.valorTotal, 0);
+    const totalValor = productos.reduce((sum, p) => sum + p.valorTotalConImpuesto, 0);
 
     // Un armado puede traer pedidos de 2 o 3 vendedores distintos -- no hay
     // un único código que mostrar, así que se listan todos los detectados
@@ -403,7 +408,11 @@ class LoadsService {
         }
         // Bonificado tiene precioUnitario 0 (ver getLoadReviewDetail) -- no
         // aporta a Valor Bruto, es mercadería de regalo, no de venta.
-        pedidosMap.get(linea.pedido).valorBruto += linea.cantidadActual * (linea.precioUnitario || 0);
+        // Con ITBIS incluido (linea.valorConImpuesto, ver
+        // LoadsSQLService.getLoadReviewDetail) -- mismo criterio que
+        // getLoadPrintData: el reporte para operadores va con impuesto, la
+        // carga/traspaso real no cambia.
+        pedidosMap.get(linea.pedido).valorBruto += linea.valorConImpuesto;
       });
     });
 

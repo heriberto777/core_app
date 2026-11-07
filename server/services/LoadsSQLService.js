@@ -751,6 +751,7 @@ class LoadsSQLService {
           SELECT
             pl.PEDIDO, pl.PEDIDO_LINEA, pl.ARTICULO AS Code_Product,
             pl.CANTIDAD_PEDIDA, pl.CANTIDAD_BONIFICAD, pl.PRECIO_UNITARIO,
+            pl.PORC_IMPUESTO1, pl.PORC_IMPUESTO2,
             ar.DESCRIPCION AS descripcion,
             ar.peso_bruto AS empaque,
             ar.UNIDAD_ALMACEN AS unidadMedida,
@@ -778,6 +779,7 @@ class LoadsSQLService {
                bd.CANTIDAD_PEDIDA AS cantidadOriginal,
                COALESCE(adj.cantidad_ajustada, bd.CANTIDAD_PEDIDA) AS cantidadActual,
                bd.PRECIO_UNITARIO AS precioUnitario,
+               bd.PORC_IMPUESTO1 AS porcImpuesto1, bd.PORC_IMPUESTO2 AS porcImpuesto2,
                bd.descripcion, bd.empaque, bd.unidadMedida, bd.categoriaCodigo, bd.categoriaDescripcion,
                bd.cliente, bd.nombreCliente, bd.direccionCliente, bd.vendedorCodigo, bd.vendedorNombre,
                adj.motivo, adj.ajustado_por AS ajustadoPor, adj.fecha AS fechaAjuste
@@ -793,6 +795,7 @@ class LoadsSQLService {
                bd.CANTIDAD_BONIFICAD AS cantidadOriginal,
                COALESCE(adj.cantidad_ajustada, bd.CANTIDAD_BONIFICAD) AS cantidadActual,
                0 AS precioUnitario,
+               0 AS porcImpuesto1, 0 AS porcImpuesto2,
                bd.descripcion, bd.empaque, bd.unidadMedida, bd.categoriaCodigo, bd.categoriaDescripcion,
                bd.cliente, bd.nombreCliente, bd.direccionCliente, bd.vendedorCodigo, bd.vendedorNombre,
                adj.motivo, adj.ajustado_por AS ajustadoPor, adj.fecha AS fechaAjuste
@@ -829,16 +832,29 @@ class LoadsSQLService {
                         categoriaDescripcion: row.categoriaDescripcion || "Sin categoría",
                         totalOriginal: 0,
                         totalActual: 0,
+                        // valorTotal: sin ITBIS, mismo criterio que Total_Amount en
+                        // getTransformedOrdersData -- la carga/traspaso real se sigue
+                        // calculando y enviando así, sin impuesto.
                         valorTotal: 0,
+                        // valorTotalConImpuesto: con ITBIS incluido (PORC_IMPUESTO1 +
+                        // PORC_IMPUESTO2, mismo criterio que Amount_Tax1/Amount_Tax2 de
+                        // getTransformedOrdersData), solo para los reportes PDF que se
+                        // entregan a los operadores -- pedido del usuario 2026-11-07.
+                        valorTotalConImpuesto: 0,
                         lineas: [],
                     });
                 }
                 const producto = productosMap.get(row.Code_Product);
                 const precioUnitario = Number(row.precioUnitario) || 0;
+                const porcImpuesto1 = Number(row.porcImpuesto1) || 0;
+                const porcImpuesto2 = Number(row.porcImpuesto2) || 0;
                 const cantidadActual = Number(row.cantidadActual) || 0;
+                const valorLinea = cantidadActual * precioUnitario;
+                const valorLineaConImpuesto = valorLinea * (1 + (porcImpuesto1 + porcImpuesto2) / 100);
                 producto.totalOriginal += Number(row.cantidadOriginal) || 0;
                 producto.totalActual += cantidadActual;
-                producto.valorTotal += cantidadActual * precioUnitario;
+                producto.valorTotal += valorLinea;
+                producto.valorTotalConImpuesto += valorLineaConImpuesto;
                 producto.lineas.push({
                     pedido: row.PEDIDO,
                     pedidoLinea: row.PEDIDO_LINEA,
@@ -851,6 +867,9 @@ class LoadsSQLService {
                     cantidadOriginal: Number(row.cantidadOriginal) || 0,
                     cantidadActual,
                     precioUnitario,
+                    porcImpuesto1,
+                    porcImpuesto2,
+                    valorConImpuesto: valorLineaConImpuesto,
                     motivo: row.motivo || null,
                     ajustadoPor: row.ajustadoPor || null,
                     fechaAjuste: row.fechaAjuste || null,
